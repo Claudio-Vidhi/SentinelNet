@@ -7,37 +7,10 @@ import jwt
 KEY_FILE = "secret.key"
 GITIGNORE_FILE = ".gitignore"
 
-def ensure_key_and_gitignore():
-    """Genera la chiave Fernet se non esiste e assicura che sia in .gitignore."""
-    # 1. Verifica/Generazione chiave
-    if not os.path.exists(KEY_FILE):
-        key = Fernet.generate_key()
-        with open(KEY_FILE, "wb") as f:
-            f.write(key)
-    else:
-        with open(KEY_FILE, "rb") as f:
-            key = f.read()
+from crypto_vault import encrypt_password, decrypt_password, load_or_create_key
 
-    # 2. Verifica/Aggiornamento .gitignore
-    if os.path.exists(GITIGNORE_FILE):
-        with open(GITIGNORE_FILE, "r", encoding="utf-8") as f:
-            content = f.read()
-        if KEY_FILE not in content:
-            # Assicura nuova linea prima di aggiungere
-            sep = "" if content.endswith("\n") else "\n"
-            with open(GITIGNORE_FILE, "a", encoding="utf-8") as f:
-                f.write(f"{sep}# Key file\n{KEY_FILE}\n")
-    else:
-        with open(GITIGNORE_FILE, "w", encoding="utf-8") as f:
-            f.write(f"# Key file\n{KEY_FILE}\n")
-
-    return key
-
-# Inizializza al caricamento del modulo
-_key = ensure_key_and_gitignore()
-_fernet = Fernet(_key)
-
-# Chiave JWT derivata in modo deterministico dalla chiave Fernet
+# Chiave JWT derivata in modo deterministico dalla chiave Fernet caricata da crypto_vault
+_key = load_or_create_key()
 JWT_SECRET_KEY = hashlib.sha256(_key).hexdigest()
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -45,25 +18,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 # --- CRYPTOGRAPHY ---
 
 def encrypt_credentials(plain_text: str) -> str:
-    """Cifra una stringa di credenziali usando Fernet."""
-    if not plain_text:
-        return ""
-    try:
-        cipher_text_bytes = _fernet.encrypt(plain_text.encode('utf-8'))
-        return cipher_text_bytes.decode('utf-8')
-    except Exception:
-        return plain_text
+    """Cifra una stringa di credenziali delegando a crypto_vault."""
+    return encrypt_password(plain_text)
 
 def decrypt_credentials(cipher_text: str) -> str:
-    """Decifra una stringa usando Fernet. Ritorna il testo originale in caso di fallimento (retrocompatibilità)."""
+    """Decifra una stringa usando crypto_vault, con fallback per retrocompatibilità."""
     if not cipher_text:
         return ""
-    try:
-        decrypted_bytes = _fernet.decrypt(cipher_text.encode('utf-8'))
-        return decrypted_bytes.decode('utf-8')
-    except Exception:
-        # Fallback al testo originale (es. dati non ancora cifrati sul disco)
-        return cipher_text
+    decrypted = decrypt_password(cipher_text)
+    if decrypted == "decryption_error":
+        return cipher_text  # Fallback al testo originale (dati in chiaro)
+    return decrypted
 
 # --- JWT AUTHENTICATION ---
 
