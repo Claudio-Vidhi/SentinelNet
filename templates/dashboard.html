@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Net Manager Alfa & Threat Intel</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&f[]=jetbrains-mono@400,600&display=swap" rel="stylesheet">
+  <style>
+    /* Si ereditano le variabili CSS grafiche originali del progetto euvd_dashboard */
+    :root, [data-theme="light"] {
+      --color-bg: #f5f6f8; --color-surface: #ffffff; --color-surface-2: #f0f2f5; --color-border: rgba(24,34,48,0.12);
+      --color-text: #15202b; --color-text-muted: #5f6b7a; --color-primary: #0c7a81; --radius-md: 0.875rem; --font-body: 'Satoshi', sans-serif;
+    }
+    [data-theme="dark"] {
+      --color-bg: #0b1015; --color-surface: #111821; --color-surface-2: #16202c; --color-border: rgba(177,196,214,0.14);
+      --color-text: #edf3fa; --color-text-muted: #a8b3c2; --color-primary: #2cbcc3;
+    }
+    body { font-family: var(--font-body); background: var(--color-bg); color: var(--color-text); margin:0; padding:20px; display: grid; grid-template-columns: 340px 1fr; gap:20px; }
+    aside, main { background: var(--color-surface); padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display:block; font-size:12px; margin-bottom:4px; color: var(--color-text-muted); text-transform:uppercase; }
+    .form-group input, .form-group select { width: 100%; padding: 8px; box-sizing:border-box; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-surface-2); color: inherit; }
+    .btn { width: 100%; padding: 10px; background: var(--color-primary); border: none; color: #000; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 8px; }
+    .device-list { margin-top: 15px; max-height: 200px; overflow-y: auto; font-size: 14px; }
+    .device-item { padding: 6px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; }
+    .console-log { background: #000; color: #00ff00; font-family: monospace; padding: 10px; border-radius: 6px; height: 150px; overflow-y: auto; margin-top: 10px; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <aside>
+    <h2>Net Manager Controls</h2>
+    
+    <div style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 15px;">
+      <h3>Aggiungi Apparato</h3>
+      <div class="form-group"><label>IP Apparato</label><input id="devIp" type="text" placeholder="10.0.0.1" /></div>
+      <div class="form-group"><label>Vendor</label><select id="devVendor"><option value="cisco">Cisco</option><option value="hpe">HPE</option></select></div>
+      <div class="form-group"><label>Username</label><input id="devUser" type="text" /></div>
+      <div class="form-group"><label>Password</label><input id="devPass" type="password" /></div>
+      <div class="form-group"><label>Enable Secret</label><input id="devSecret" type="password" /></div>
+      <button class="btn" id="btnSaveDevice">Salva Dispositivo</button>
+    </div>
+
+    <div>
+      <h3>Azioni Automatiche</h3>
+      <button class="btn" id="btnRunTriage" style="background:#efad4d;">Esegui Backup & Scan</button>
+      
+      <h3 style="margin-top:20px;">Terminale CLI Rapido</h3>
+      <div class="form-group">
+        <label>Seleziona IP</label>
+        <select id="cliTargetSelect"><option value="">-- Carica Inventario --</option></select>
+      </div>
+      <div class="form-group"><label>Comando CLI</label><input id="cliCommand" type="text" placeholder="show version" /></div>
+      <button class="btn" id="btnSendCli">Invia Comando</button>
+    </div>
+  </aside>
+
+  <main>
+    <h2>Inventario Rete & Stato Firmware Rilevati</h2>
+    <div id="inventoryContainer" class="device-list">Caricamento inventario...</div>
+    
+    <h3>Output Console CLI</h3>
+    <div id="consoleOutput" class="console-log">> In attesa di comandi...</div>
+
+    <h3 style="margin-top: 30px;">Threat Intel Database (EUVD Watch)</h3>
+    <p style="font-size:14px; color:var(--color-text-muted);">Usa i controlli a sinistra per raccogliere le versioni reali. Le API di backend interrogheranno automaticamente il feed europeo ENISA per rilevare le CVE corrispondenti.</p>
+  </main>
+
+  <script>
+    // Carica dispositivi correnti all'avvio
+    async function loadInventory() {
+        try {
+            const res = await fetch('/api/local-devices');
+            const data = await res.json();
+            const container = document.getElementById('inventoryContainer');
+            const select = document.getElementById('cliTargetSelect');
+            
+            container.innerHTML = '';
+            select.innerHTML = '<option value="">-- Seleziona Apparato --</option>';
+            
+            if (data.devices.length === 0) {
+                container.innerHTML = '<p>Nessun dispositivo in inventario.</p>';
+                return;
+            }
+
+            data.devices.forEach(d => {
+                const verInfo = data.detected_versions[d.IP] ? data.detected_versions[d.IP].version : "Non Scansionato";
+                
+                // Popola lista grafica
+                const item = document.createElement('div');
+                item.className = 'device-item';
+                item.innerHTML = `<span><strong>${d.IP}</strong> (${d.Vendor.toUpperCase()})</span> <span>FW: <code>${verInfo}</code></span>`;
+                container.appendChild(item);
+                
+                // Popola select del terminale
+                const opt = document.createElement('option');
+                opt.value = d.IP;
+                opt.textContent = `${d.IP} (${d.Vendor})`;
+                select.appendChild(opt);
+            });
+        } catch (e) {
+            document.getElementById('inventoryContainer').textContent = "Errore nel caricamento dell'inventario.";
+        }
+    }
+
+    // Evento salvataggio apparato
+    document.getElementById('btnSaveDevice').addEventListener('click', async () => {
+        const payload = {
+            ip: document.getElementById('devIp').value,
+            vendor: document.getElementById('devVendor').value,
+            username: document.getElementById('devUser').value,
+            password: document.getElementById('devPass').value,
+            enable_secret: document.getElementById('devSecret').value
+        };
+        
+        if(!payload.ip) { alert("Inserisci un indirizzo IP valido"); return; }
+
+        const res = await fetch('/api/add-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const rData = await res.json();
+        if(rData.status === 'success') {
+            alert("Dispositivo salvato nel file network_hosts.csv!");
+            loadInventory();
+        }
+    });
+
+    // Evento esecuzione Triage/Backup
+    document.getElementById('btnRunTriage').addEventListener('click', async () => {
+        const consoleOut = document.getElementById('consoleOutput');
+        consoleOut.innerHTML += "\n> Avvio del Job di Triage e Backup di rete su tutti i nodi...";
+        
+        const res = await fetch('/api/run-triage', { method: 'POST' });
+        const data = await res.json();
+        
+        consoleOut.innerHTML += `\n> Job Completato. Stato: ${data.status}`;
+        loadInventory();
+    });
+
+    // Evento invio comando CLI singolo
+    document.getElementById('btnSendCli').addEventListener('click', async () => {
+        const ip = document.getElementById('cliTargetSelect').value;
+        const cmd = document.getElementById('cliCommand').value;
+        const consoleOut = document.getElementById('consoleOutput');
+        
+        if(!ip || !cmd) { alert("Seleziona un IP e inserisci un comando valido."); return; }
+        
+        consoleOut.innerHTML += `\n> Invio del comando "${cmd}" a ${ip}...`;
+        
+        const res = await fetch('/api/send-command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip: ip, command: cmd })
+        });
+        const data = await res.json();
+        
+        if(data.status === 'success') {
+            consoleOut.innerHTML += `\n--- Output da ${ip} ---\n${data.output}\n------------------------`;
+        } else {
+            consoleOut.innerHTML += `\n[ERRORE] ${data.message}`;
+        }
+        consoleOut.scrollTop = consoleOut.scrollHeight;
+    });
+
+    // Inizializzazione al caricamento pagina
+    window.onload = loadInventory;
+  </script>
+</body>
+</html>

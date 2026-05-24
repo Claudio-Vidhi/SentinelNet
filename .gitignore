@@ -1,0 +1,24 @@
+# Python compiled files
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Sensitive data (Device credentials and inventories)
+network_hosts.csv
+detected_versions.json
+
+# Network Backup configs
+backup-config/
+
+# Logging
+error_log.txt
+
+# PyInstaller / Compilation output
+build/
+dist/
+*.spec
