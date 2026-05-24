@@ -1,6 +1,6 @@
 # Net Manager Alfa
 
-**Net Manager Alfa** è un'applicazione centralizzata per l'automazione, il backup delle configurazioni e il Vulnerability Check dei dispositivi di rete (Cisco e HPE). Il sistema recupera automaticamente le versioni dei firmware in esecuzione e le confronta con il database europeo delle minacce e vulnerabilità ENISA EUVD, fornendo una console di gestione unificata tramite un'interfaccia grafica Web (Web UI).
+**Net Manager Alfa** è un'applicazione centralizzata per l'automazione, il backup delle configurazioni e il Vulnerability Check dei dispositivi di rete. Il sistema recupera automaticamente le versioni dei firmware in esecuzione e le confronta con il database europeo delle minacce e vulnerabilità ENISA EUVD, fornendo una console di gestione unificata tramite un'interfaccia grafica Web (Web UI).
 
 ---
 
