@@ -83,13 +83,14 @@ class NetManagerAPIHandler(BaseHTTPRequestHandler):
         # 1. API: Inserimento nuovo dispositivo da form Web UI
         if self.path == "/api/add-device":
             inventory_manager.add_device_to_csv(
-                data['ip'], data['username'], data['password'], data['enable_secret'], data['vendor']
+                data['ip'], data['vendor'], data['profile'],
+                data.get('username', ''), data.get('password', ''), data.get('enable_secret', '')
             )
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self._cors()
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "success", "message": "Dispositivo configurato"}).encode('utf-8'))
+            self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
             return
 
         # 2. API: Avvio Scan Automazione e Backup globale
