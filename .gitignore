@@ -11,6 +11,7 @@ ENV/
 # Sensitive data (Device credentials and inventories)
 network_hosts.csv
 detected_versions.json
+users.json
 
 # Network Backup configs
 backup-config/

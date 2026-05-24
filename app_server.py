@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 import inventory_manager
 import core_engine
 import topology_engine
+import user_manager
 from security_manager import create_access_token, verify_access_token
 
 PORT = 8765
@@ -124,14 +125,35 @@ def read_index():
 
 # --- ROTTE DI AUTENTICAZIONE (JWT) ---
 
+@app.get("/api/auth/status")
+@app.get("/api/auth/setup-status")
+def setup_status():
+    return {
+        "has_users": user_manager.has_any_user(),
+        "has_user": user_manager.has_any_user()
+    }
+
+@app.post("/api/auth/register")
+@app.post("/api/auth/setup")
+def setup_admin(payload: LoginRequest):
+    if user_manager.has_any_user():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Setup già completato. Registrazione non consentita."
+        )
+    success = user_manager.create_user(payload.username, payload.password)
+    if success:
+        return {"status": "success", "message": "Primo account amministratore creato correttamente."}
+    raise HTTPException(status_code=400, detail="Impossibile creare l'account.")
+
 @app.post("/api/auth/login")
 def login(payload: LoginRequest):
-    if payload.username == "admin" and payload.password == "admin":
+    if user_manager.verify_user(payload.username, payload.password):
         access_token = create_access_token(data={"sub": payload.username})
         return {"access_token": access_token, "token_type": "bearer"}
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, 
-        detail="Credenziali amministratore non valide."
+        detail="Credenziali amministratore non valide o utente non registrato."
     )
 
 # --- ROTTE DISPOSITIVI (INVENTARIO) ---

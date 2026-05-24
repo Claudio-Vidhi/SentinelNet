@@ -61,14 +61,14 @@
     ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
 
-    /* Login Page Glassmorphism */
-    #login-overlay {
+    /* Login / Setup Glassmorphic Overlay */
+    #authOverlay {
       position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
+      top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(7, 10, 14, 0.85);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      z-index: 1000;
+      z-index: 9999;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -82,12 +82,11 @@
       padding: 40px;
       width: 420px;
       box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-      text-align: center;
       animation: fadeInUp 0.4s ease;
     }
 
     .login-card h2 {
-      font-size: 26px;
+      font-size: 24px;
       margin-bottom: 8px;
       color: var(--text);
       font-weight: 900;
@@ -95,8 +94,9 @@
 
     .login-card p {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: 13px;
       margin-bottom: 25px;
+      line-height: 1.5;
     }
 
     /* Base Layout */
@@ -571,37 +571,68 @@
 </head>
 <body>
 
-  <!-- Overlay Login Glassmorphic -->
-  <div id="login-overlay">
+  <!-- Overlay Login Glassmorphic / Setup Wizard -->
+  <div id="authOverlay">
     <div class="login-card">
-      <div style="font-size: 40px; color: var(--primary); margin-bottom: 15px;">
-        <i class="fa-solid fa-shield-halved fa-bounce"></i>
+      <div style="font-size: 40px; color: var(--primary); margin-bottom: 15px; text-align: center;">
+        <i class="fa-solid fa-shield-halved fa-bounce" id="overlayIcon"></i>
       </div>
-      <h2>Net Manager Alfa</h2>
-      <p>Enterprise Console v3.0</p>
       
-      <div class="form-group" style="text-align: left;">
-        <label>Username</label>
-        <div class="input-wrapper">
-          <i class="fa-solid fa-user"></i>
-          <input id="loginUser" type="text" placeholder="admin" value="admin">
+      <!-- Sezione Registrazione Primo Account -->
+      <div id="wizardSection" style="display: none;">
+        <h2 id="wizTitle" style="text-align: center;">🚀 Primo Accesso rilevato</h2>
+        <p id="wizSubtitle" style="text-align: center;">Benvenuto in Net Manager Alfa. Crea il tuo account Amministratore locale per iniziare a gestire la tua infrastruttura di rete.</p>
+        
+        <div class="form-group" style="text-align: left;">
+          <label>Crea Username Amministratore</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-user"></i>
+            <input id="wizUser" type="text" placeholder="Es. claudio_admin">
+          </div>
         </div>
-      </div>
-      
-      <div class="form-group" style="text-align: left; margin-bottom: 25px;">
-        <label>Password</label>
-        <div class="input-wrapper">
-          <i class="fa-solid fa-lock"></i>
-          <input id="loginPass" type="password" placeholder="••••••••" value="admin">
+        
+        <div class="form-group" style="text-align: left; margin-bottom: 25px;">
+          <label>Imposta Password Sicura</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="wizPass" type="password" placeholder="Minimo 6 caratteri">
+          </div>
         </div>
+        
+        <button class="btn btn-primary" id="btnRegisterAdmin" style="background: #5ecf8d; color: #000;">
+          <i class="fa-solid fa-user-plus"></i> Completa Configurazione ed Entra
+        </button>
+      </div>
+
+      <!-- Sezione Login Standard -->
+      <div id="loginSection" style="display: none;">
+        <h2 id="overlayTitle" style="text-align: center;">🔒 Controllo Accesso Rete</h2>
+        <p id="overlaySubtitle" style="text-align: center;">Inserisci le tue credenziali cifrate locali per accedere ai pannelli di triage operativo ed automazione.</p>
+        
+        <div class="form-group" style="text-align: left;">
+          <label>Username</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-user"></i>
+            <input id="loginUser" type="text" placeholder="Inserisci username">
+          </div>
+        </div>
+        
+        <div class="form-group" style="text-align: left; margin-bottom: 25px;">
+          <label>Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="loginPass" type="password" placeholder="Inserisci password">
+          </div>
+        </div>
+        
+        <button class="btn btn-primary" id="btnLogin">
+          <i class="fa-solid fa-right-to-bracket"></i> Autenticati
+        </button>
       </div>
       
-      <button class="btn btn-primary" id="btnLogin">
-        <i class="fa-solid fa-right-to-bracket"></i> Accedi
-      </button>
-      
-      <div id="loginError" style="color: var(--danger); font-size: 13px; margin-top: 15px; display: none;">
-        Credenziali non corrette. Riprova.
+      <!-- Div Messaggi di Errore -->
+      <div id="loginError" style="color: var(--danger); font-size: 13px; margin-top: 15px; text-align: center; display: none;">
+        Credenziali non corrette o errore di sistema. Riprova.
       </div>
     </div>
   </div>
@@ -869,50 +900,95 @@ Consiglio: invia un comando come "show version", "show run" o "show ip interface
         return token ? { "Authorization": `Bearer ${token}` } : {};
     }
 
-    function checkAuth() {
+    async function checkAuthRequirements() {
+        // Interroga lo stato del setup/utenti nel sistema
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        
+        const overlay = document.getElementById('authOverlay');
         const token = localStorage.getItem("net_token");
-        if (!token) {
-            document.getElementById("login-overlay").style.display = "flex";
+
+        if (!data.has_users) {
+            // Nessun utente su disco: mostriamo la procedura guidata di primo setup
+            document.getElementById('wizardSection').style.display = 'block';
+            document.getElementById('loginSection').style.display = 'none';
+            overlay.style.display = 'flex';
             return false;
+        } else {
+            // Esiste già un amministratore: mostriamo la maschera di login standard
+            document.getElementById('wizardSection').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'block';
+            if (!token) {
+                overlay.style.display = 'flex';
+                return false;
+            }
+            overlay.style.display = 'none';
+            return true;
         }
-        document.getElementById("login-overlay").style.display = "none";
-        return true;
     }
 
-    document.getElementById("btnLogin").addEventListener("click", async () => {
-        const payload = {
-            username: document.getElementById("loginUser").value,
-            password: document.getElementById("loginPass").value
-        };
-        try {
-            const res = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                const data = await res.json();
+    // Evento per la registrazione guidata del primo utente amministratore
+    document.getElementById('btnRegisterAdmin').addEventListener('click', async () => {
+        const user = document.getElementById('wizUser').value.trim();
+        const pass = document.getElementById('wizPass').value.trim();
+        
+        if(!user || !pass) { alert("Compila tutti i campi richiesti!"); return; }
+        
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, password: pass })
+        });
+        
+        if (res.ok) {
+            alert("Account configurato con successo! Esegui adesso il tuo primo login.");
+            checkAuthRequirements(); // Aggiorna lo stato per passare al form di login
+        } else {
+            const err = await res.json();
+            alert("Errore: " + (err.detail || "Impossibile creare l'account."));
+        }
+    });
+
+    // Evento per il Login Standard
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+        const user = document.getElementById('loginUser').value.trim();
+        const pass = document.getElementById('loginPass').value.trim();
+        const errDiv = document.getElementById('loginError');
+        
+        if(!user || !pass) { errDiv.innerText = "Compila tutti i campi!"; errDiv.style.display = 'block'; return; }
+        errDiv.style.display = 'none';
+        
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, password: pass })
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            // Salva il token JWT per autenticare le chiamate API successive
+            if (data.access_token) {
                 localStorage.setItem("net_token", data.access_token);
-                document.getElementById("loginError").style.display = "none";
-                document.getElementById("login-overlay").style.display = "none";
-                appInit();
-            } else {
-                document.getElementById("loginError").style.display = "block";
             }
-        } catch {
-            document.getElementById("loginError").style.display = "block";
+            // Sblocca la UI nascondendo la schermata oscurante
+            document.getElementById('authOverlay').style.display = 'none';
+            appInit(); // Avvia il caricamento dei dispositivi di rete
+        } else {
+            errDiv.innerText = "Accesso negato: credenziali errate o utente inesistente.";
+            errDiv.style.display = 'block';
         }
     });
 
     function logout() {
         localStorage.removeItem("net_token");
-        document.getElementById("login-overlay").style.display = "flex";
+        checkAuthRequirements();
     }
 
     // --- INITIALIZATION ---
 
     async function appInit() {
-        if (!checkAuth()) return;
+        const isAuth = await checkAuthRequirements();
+        if (!isAuth) return;
         
         try {
             const res = await fetch('/api/local-devices', { headers: getAuthHeaders() });
@@ -1398,7 +1474,9 @@ Consiglio: invia un comando come "show version", "show run" o "show ip interface
         reader.readAsText(file);
     });
 
-    window.onload = appInit;
+    window.onload = () => {
+        checkAuthRequirements();
+    };
   </script>
 </body>
 </html>
