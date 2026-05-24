@@ -323,7 +323,7 @@ def main():
         os.makedirs("templates")
         
     threading.Thread(target=open_browser, daemon=True).start()
-    uvicorn.run("app_server:app", host="127.0.0.1", port=PORT, log_level="info")
+    uvicorn.run("app_server_fastapi:app", host="127.0.0.1", port=PORT, log_level="info")
 
 if __name__ == "__main__":
     main()
