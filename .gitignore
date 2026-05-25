@@ -18,6 +18,7 @@ backup-config/
 
 # Logging
 error_log.txt
+audit.log
 
 # PyInstaller / Compilation output
 build/
