@@ -1790,104 +1790,223 @@
         const res = await apiFetch('/api/local-devices');
         if (!res) return;
         const data = await res.json();
-        
+
         const onlineDevices = data.devices.filter(d => {
             const scan = data.detected_versions[d.IP];
             return scan && scan.status === 'online' && scan.version !== 'Non Scansionato' && scan.version !== 'Unknown';
         });
 
-        if (onlineDevices.length === 0) {
-            container.innerHTML = `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted);">
-                Nessun apparato online con firmware rilevato. Esegui prima un <strong>Triage Globale</strong>.
-            </div>`;
-            return;
-        }
-
         container.innerHTML = "";
 
-        // Popola inizialmente tutti i widget con caricamento
-        const promises = onlineDevices.map(async (d) => {
-            const scan = data.detected_versions[d.IP];
-            const safeIpId = d.IP.replace(/\./g, '-');
-            
-            const devCard = document.createElement("div");
-            devCard.className = "vuln-card";
-            devCard.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <div>
-                        <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
-                        <span class="badge" style="margin-left: 10px;">${d.Vendor.toUpperCase()}</span>
-                        <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${scan.version}</code></span>
+        // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
+        if (onlineDevices.length === 0) {
+            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
+                Nessun apparato online con firmware rilevato. Esegui prima un <strong>Triage Globale</strong>.
+            </div>`;
+        } else {
+            const promises = onlineDevices.map(async (d) => {
+                const scan = data.detected_versions[d.IP];
+                const safeIpId = d.IP.replace(/\./g, '-');
+
+                const devCard = document.createElement("div");
+                devCard.className = "vuln-card";
+                devCard.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div>
+                            <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
+                            <span class="badge" style="margin-left: 10px;">${d.Vendor.toUpperCase()}</span>
+                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${scan.version}</code></span>
+                        </div>
+                        <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);">
+                            <i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...
+                        </div>
                     </div>
-                    <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);">
-                        <i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...
-                    </div>
-                </div>
-                <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px;"></div>
+                    <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px;"></div>
+                `;
+                container.appendChild(devCard);
+                await runEuvdQuery(safeIpId, d.Vendor, scan.version);
+            });
+            await Promise.all(promises);
+        }
+
+        // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – selezione manuale ──────────
+        const mapRes = await apiFetch('/api/network-map');
+        if (!mapRes || !mapRes.ok) return;
+        const mapData = await mapRes.json();
+
+        const discoveredWithVersion = (mapData.nodes || []).filter(n =>
+            n.status === 'discovered' && n.version && n.version.trim() !== ''
+        );
+
+        if (discoveredWithVersion.length === 0) return;
+
+        // Header sezione
+        const sectionHeader = document.createElement("div");
+        sectionHeader.innerHTML = `
+            <div style="border-top: 1px solid var(--border); margin: 25px 0 15px 0; padding-top: 20px;">
+                <h3 style="font-size:16px; margin-bottom:6px;">
+                    <i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i>
+                    Vicini Scoperti via CDP/LLDP
+                </h3>
+                <p style="font-size:13px; color:var(--text-muted);">
+                    Questi apparati non sono in inventario ma sono stati rilevati tramite neighbor discovery.
+                    Seleziona quelli da analizzare per vulnerabilità note.
+                </p>
+            </div>
+        `;
+        container.appendChild(sectionHeader);
+
+        // Griglia di card selezionabili
+        const grid = document.createElement("div");
+        grid.style.cssText = "display:grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px; margin-bottom:18px;";
+        container.appendChild(grid);
+
+        discoveredWithVersion.forEach(n => {
+            const safeId = n.id.replace(/[^a-zA-Z0-9]/g, '-');
+            const versionShort = extractReadableVersion(n.version);
+
+            const card = document.createElement("div");
+            card.id = `disc-card-${safeId}`;
+            card.style.cssText = `
+                background: var(--surface-2);
+                border: 2px solid var(--border);
+                border-radius: 10px;
+                padding: 14px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                user-select: none;
             `;
-            container.appendChild(devCard);
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                    <div>
+                        <div style="font-weight:700; font-size:15px;">${n.label}</div>
+                        <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${n.id}</div>
+                    </div>
+                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
+                    <code style="font-size:11px; color:var(--primary);">${versionShort}</code>
+                </div>
+                <button
+                    id="btn-disc-${safeId}"
+                    onclick="runDiscoveredVulnCheck('${n.id}', '${n.label}', \`${n.version.replace(/`/g,"'")}\`, '${versionShort.replace(/'/g,"\\'")}', this)"
+                    style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--warning); color:#000; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                    <i class="fa-solid fa-magnifying-glass-chart"></i> Analizza Vulnerabilità
+                </button>
+            `;
+            card.onmouseenter = () => card.style.borderColor = 'var(--warning)';
+            card.onmouseleave = () => {
+                if (!card.dataset.checked) card.style.borderColor = 'var(--border)';
+            };
+            grid.appendChild(card);
 
-            const queryUrl = `/api/search?vendor=${encodeURIComponent(d.Vendor)}&text=${encodeURIComponent(scan.version)}&size=3`;
-            
-            try {
-                const deviceRes = await apiFetch(queryUrl);
-                const statusLabel = document.getElementById(`status-${safeIpId}`);
-                const resultsContainer = document.getElementById(`results-${safeIpId}`);
-
-                if (deviceRes && deviceRes.ok) {
-                    const vulnData = await deviceRes.json();
-                    const items = vulnData.results || vulnData.content || vulnData || [];
-
-                    if (items.length > 0) {
-                        statusLabel.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${items.length} Vulnerabilità Rilevate</span>`;
-                        resultsContainer.innerHTML = "";
-                        items.slice(0, 3).forEach(v => {
-                            const enisaId = v.enisaId || v.id || "EUVD-Unknown";
-                            const cveId = v.cveId || v.cve || "N/A";
-                            const description = v.description || v.summary || "Descrizione non disponibile.";
-                            const score = v.cvssScore || v.score || "N/A";
-                            
-                            let severity = "MEDIUM";
-                            if (score !== "N/A") {
-                                const num = parseFloat(score);
-                                if (num >= 9.0) severity = "CRITICAL";
-                                else if (num >= 7.0) severity = "HIGH";
-                                else if (num >= 4.0) severity = "MEDIUM";
-                                else severity = "LOW";
-                            }
-
-                            resultsContainer.innerHTML += `
-                                <div style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
-                                        <div>
-                                            <strong style="color:var(--primary);">${enisaId}</strong> 
-                                            <span style="color:var(--text-muted); margin-left:8px;">(CVE: ${cveId})</span>
-                                        </div>
-                                        <span class="severity-pill severity-${severity}">CVSS: ${score}</span>
-                                    </div>
-                                    <div style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${description}</div>
-                                    <div style="font-size:10px; color:var(--primary);"><i class="fa-solid fa-scale-balanced"></i> Rilevante per NIS2</div>
-                                </div>
-                            `;
-                        });
-                    } else {
-                        statusLabel.innerHTML = `<span style="color: var(--success);"><i class="fa-solid fa-circle-check"></i> Release Sicura</span>`;
-                        resultsContainer.innerHTML = `<div style="color:var(--text-muted); font-size:13px; font-style:italic;">Nessuna minaccia nota trovata nel database europeo ENISA EUVD per questa release.</div>`;
-                    }
-                } else {
-                    if (statusLabel) {
-                        statusLabel.innerHTML = `<span style="color: var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> Errore match</span>`;
-                    }
-                }
-            } catch (err) {
-                const statusLabel = document.getElementById(`status-${safeIpId}`);
-                if (statusLabel) {
-                    statusLabel.innerHTML = `<span style="color: var(--danger);">Errore scansione</span>`;
-                }
-            }
+            const resultArea = document.createElement("div");
+            resultArea.id = `disc-results-${safeId}`;
+            resultArea.style.cssText = "display:none; grid-column:1/-1;";
+            grid.appendChild(resultArea);
         });
+    }
 
-        await Promise.all(promises);
+    function extractReadableVersion(sysDesc) {
+        if (!sysDesc) return "Versione non disponibile";
+        const ciscoMatch = sysDesc.match(/Version\s+([\w.()]+)/i);
+        if (ciscoMatch) return `IOS Version ${ciscoMatch[1]}`;
+        const linuxMatch = sysDesc.match(/^(Ubuntu|Debian|CentOS|RHEL|Rocky|Alpine)\s+([\d.\w]+)/i);
+        if (linuxMatch) return `${linuxMatch[1]} ${linuxMatch[2]}`;
+        return sysDesc.substring(0, 60).trim();
+    }
+
+    async function runDiscoveredVulnCheck(nodeId, label, fullVersion, versionShort, btnEl) {
+        const safeId = nodeId.replace(/[^a-zA-Z0-9]/g, '-');
+        const card = document.getElementById(`disc-card-${safeId}`);
+        const resultArea = document.getElementById(`disc-results-${safeId}`);
+        if (!resultArea) return;
+
+        btnEl.disabled = true;
+        btnEl.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione EUVD...`;
+        card.style.borderColor = 'var(--primary)';
+        card.dataset.checked = '1';
+
+        const vendor = /cisco/i.test(fullVersion) ? 'cisco' : /hpe|procurve|aruba/i.test(fullVersion) ? 'hpe' : label;
+
+        resultArea.style.display = "block";
+        resultArea.innerHTML = `
+            <div class="vuln-card" style="border-color:var(--primary); margin-top: 8px;">
+                <div style="font-weight:700; margin-bottom:10px;">
+                    <i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i>
+                    ${label} <span style="color:var(--text-muted); font-size:12px; font-weight:400;">(${nodeId})</span>
+                    <span id="disc-status-${safeId}" style="float:right; font-size:13px; color:var(--text-muted);">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> Interrogando ENISA EUVD...
+                    </span>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                    System Description: <code style="color:var(--primary); font-size:11px;">${versionShort}</code>
+                </div>
+                <div id="disc-vuln-${safeId}"></div>
+            </div>
+        `;
+
+        await runEuvdQuery(`disc-${safeId}`, vendor, versionShort, `disc-status-${safeId}`, `disc-vuln-${safeId}`);
+
+        btnEl.disabled = false;
+        btnEl.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Riscansiona`;
+    }
+
+    async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId) {
+        const statusEl  = document.getElementById(statusElId  || `status-${safeId}`);
+        const resultsEl = document.getElementById(resultsElId || `results-${safeId}`);
+        if (!statusEl || !resultsEl) return;
+
+        const queryUrl = `/api/search?vendor=${encodeURIComponent(vendor)}&text=${encodeURIComponent(version)}&size=3`;
+
+        try {
+            const deviceRes = await apiFetch(queryUrl);
+            if (deviceRes && deviceRes.ok) {
+                const vulnData = await deviceRes.json();
+                const items = vulnData.results || vulnData.content || vulnData || [];
+
+                if (items.length > 0) {
+                    statusEl.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${items.length} Vulnerabilità Rilevate</span>`;
+                    resultsEl.innerHTML = "";
+                    items.slice(0, 3).forEach(v => {
+                        const enisaId    = v.enisaId || v.id || "EUVD-Unknown";
+                        const cveId      = v.cveId   || v.cve || "N/A";
+                        const description = v.description || v.summary || "Descrizione non disponibile.";
+                        const score      = v.cvssScore || v.score || "N/A";
+
+                        let severity = "MEDIUM";
+                        if (score !== "N/A") {
+                            const num = parseFloat(score);
+                            if (num >= 9.0)      severity = "CRITICAL";
+                            else if (num >= 7.0) severity = "HIGH";
+                            else if (num >= 4.0) severity = "MEDIUM";
+                            else                 severity = "LOW";
+                        }
+
+                        resultsEl.innerHTML += `
+                            <div style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                                    <div>
+                                        <strong style="color:var(--primary);">${enisaId}</strong>
+                                        <span style="color:var(--text-muted); margin-left:8px;">(CVE: ${cveId})</span>
+                                    </div>
+                                    <span class="severity-pill severity-${severity}">CVSS: ${score}</span>
+                                </div>
+                                <div style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${description}</div>
+                                <div style="font-size:10px; color:var(--primary);"><i class="fa-solid fa-scale-balanced"></i> Rilevante per NIS2</div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    statusEl.innerHTML = `<span style="color: var(--success);"><i class="fa-solid fa-circle-check"></i> Release Sicura</span>`;
+                    resultsEl.innerHTML = `<div style="color:var(--text-muted); font-size:13px; font-style:italic;">Nessuna minaccia nota trovata nel database europeo ENISA EUVD per questa release.</div>`;
+                }
+            } else {
+                statusEl.innerHTML = `<span style="color: var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> Errore match</span>`;
+            }
+        } catch (err) {
+            statusEl.innerHTML = `<span style="color: var(--danger);">Errore scansione</span>`;
+        }
     }
 
     async function downloadBackup(ip) {
