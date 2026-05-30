@@ -292,6 +292,12 @@ def generate_network_map(group_filter=None) -> dict:
             return "ap"
         elif "rtr" in name_lower or "router" in name_lower or "fw" in name_lower or "firewall" in name_lower:
             return "router"
+        elif "phone" in name_lower or "ipphone" in name_lower or "tel" in name_lower:
+            return "phone"
+        elif "srv" in name_lower or "server" in name_lower or "esxi" in name_lower or "host" in name_lower or "nas" in name_lower:
+            return "server"
+        elif "pc" in name_lower or "workstation" in name_lower or "client" in name_lower or "desktop" in name_lower or "laptop" in name_lower:
+            return "pc"
         else:
             return "switch"
             
@@ -355,7 +361,8 @@ def generate_network_map(group_filter=None) -> dict:
             "label": label,
             "group": d.get('Group', 'Generale'),
             "status": status,
-            "device_type": get_device_type(label)
+            "device_type": get_device_type(label),
+            "vendor": d.get('Vendor', 'cisco')
         }
 
     # 4. Secondo passaggio: Costruisce i Collegamenti (Links) e scopre nodi non censiti
@@ -391,7 +398,8 @@ def generate_network_map(group_filter=None) -> dict:
                     "label": neigh_id,
                     "group": "Discovered",
                     "status": "discovered",
-                    "device_type": get_device_type(neigh_id)
+                    "device_type": get_device_type(neigh_id),
+                    "vendor": "discovered"
                 }
 
             # Assicuriamo una chiave univoca per evitare duplicati bidirezionali (es. A->B e B->A)
