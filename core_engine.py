@@ -280,6 +280,29 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
             "remote_port": port_id.strip()
         })
 
+    # 5. Parsing di "show lldp neighbors" classico (Cisco)
+    lldp_cisco_section = re.search(r'--- SHOW LLDP NEIGHBORS ---\s*\n(.*?)(\n---|\Z)', content, re.DOTALL | re.IGNORECASE)
+    if lldp_cisco_section:
+        lines = lldp_cisco_section.group(1).strip().split('\n')
+        started = False
+        for line in lines:
+            if "Device ID" in line or "Local Intf" in line:
+                started = True
+                continue
+            if not started or not line.strip() or line.startswith("Capability") or line.startswith("---") or "Total entries" in line:
+                continue
+            parts = re.split(r'\s{2,}', line.strip())
+            if len(parts) >= 5:
+                dev_id = parts[0]
+                local_port = parts[1]
+                remote_port = parts[-1]
+                neighbors.append({
+                    "neighbor_id": dev_id.strip(),
+                    "neighbor_ip": None,
+                    "local_port": local_port.strip(),
+                    "remote_port": remote_port.strip()
+                })
+
     return neighbors
 
 def generate_network_map(group_filter=None) -> dict:
@@ -294,7 +317,7 @@ def generate_network_map(group_filter=None) -> dict:
             return "router"
         elif "phone" in name_lower or "ipphone" in name_lower or "tel" in name_lower:
             return "phone"
-        elif "srv" in name_lower or "server" in name_lower or "esxi" in name_lower or "host" in name_lower or "nas" in name_lower:
+        elif "srv" in name_lower or "server" in name_lower or "esxi" in name_lower or "host" in name_lower or "nas" in name_lower or "ubuntu" in name_lower or "debian" in name_lower or "linux" in name_lower:
             return "server"
         elif "pc" in name_lower or "workstation" in name_lower or "client" in name_lower or "desktop" in name_lower or "laptop" in name_lower:
             return "pc"
