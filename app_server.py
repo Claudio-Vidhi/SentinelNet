@@ -107,6 +107,13 @@ class CommandRequest(BaseModel):
     ip: str
     command: str
 
+class DeviceReassignSchema(BaseModel):
+    ip: str
+    new_group: str
+
+class PingCheckRequest(BaseModel):
+    group: str = "all"
+
 # --- STATO DEI JOB DI TRIAGE IN BACKGROUND CON LOCK ---
 
 triage_lock = threading.Lock()
@@ -417,6 +424,59 @@ def get_ws_token(current_user = Depends(get_current_user)):
     otp = _secrets.token_urlsafe(32)
     _ws_tokens[otp] = (current_user.get("sub"), time.time())
     return {"ws_token": otp}
+
+@app.post("/api/reassign-device")
+def reassign_device(payload: DeviceReassignSchema, current_user = Depends(get_current_user)):
+    """Sposta un dispositivo in un gruppo diverso aggiornando solo il campo Group nel CSV."""
+    devices = inventory_manager.get_all_devices()
+    groups  = inventory_manager.get_all_groups()
+
+    target = next((d for d in devices if d['IP'] == payload.ip), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Dispositivo non trovato in inventario.")
+    if payload.new_group not in groups:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Gruppo '{payload.new_group}' non esiste. Crealo prima."
+        )
+
+    old_group = target.get('Group', 'Generale')
+    target['Group'] = payload.new_group
+    inventory_manager.safe_write_hosts_csv(devices)
+
+    log_audit(
+        f"Dispositivo '{payload.ip}' spostato dal gruppo '{old_group}' "
+        f"al gruppo '{payload.new_group}' dall'utente '{current_user.get('sub')}'."
+    )
+    return {"status": "success", "message": f"Dispositivo spostato in '{payload.new_group}'"}
+
+
+@app.post("/api/ping-check")
+def ping_check(payload: PingCheckRequest, current_user = Depends(get_current_user)):
+    """
+    Verifica la raggiungibilità SSH (porta 22) di tutti i dispositivi
+    nel gruppo selezionato, in parallelo con ThreadPoolExecutor.
+    """
+    from core_engine import is_reachable
+
+    devices = inventory_manager.get_all_devices()
+    if payload.group != "all":
+        devices = [d for d in devices if d.get('Group') == payload.group]
+
+    results: dict[str, bool] = {}
+
+    def _ping(d):
+        results[d['IP']] = is_reachable(d['IP'], timeout=3)
+
+    max_workers = min(20, len(devices)) if devices else 1
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        list(executor.map(_ping, devices))
+
+    log_audit(
+        f"Ping check completato su {len(devices)} dispositivi "
+        f"(gruppo: '{payload.group}') dall'utente '{current_user.get('sub')}')."
+    )
+    return {"results": results, "group": payload.group, "total": len(devices)}
 
 @app.websocket("/api/ws-terminal/{ip}")
 async def ws_terminal(websocket: WebSocket, ip: str):
