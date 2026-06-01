@@ -10,7 +10,7 @@ JWT_KEY_FILE = "jwt_secret.key"
 def load_or_create_jwt_secret() -> str:
     """Carica o genera una chiave segreta separata ed indipendente per i token JWT."""
     # 1. Priorità massima alla variabile d'ambiente per deployment cloud o containerizzati
-    env_secret = os.getenv("NET_MANAGER_JWT_SECRET")
+    env_secret = os.getenv("SENTINELNET_JWT_SECRET")
     if env_secret:
         return hashlib.sha256(env_secret.encode('utf-8')).hexdigest()
         

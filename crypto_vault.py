@@ -7,7 +7,7 @@ KEY_FILE = "secret.key"
 
 def load_or_create_key():
     # 1. Tenta prima di caricare la Master Key dalla variabile d'ambiente
-    env_key = os.getenv("NET_MANAGER_MASTER_KEY")
+    env_key = os.getenv("SENTINELNET_MASTER_KEY")
     if env_key:
         # Genera deterministica chiave Fernet valida a 32 byte base64-encoded tramite hashing SHA-256
         hashed = hashlib.sha256(env_key.encode('utf-8')).digest()

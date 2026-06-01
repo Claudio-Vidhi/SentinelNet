@@ -15,9 +15,9 @@ logging.basicConfig(filename='error_log.txt', level=logging.ERROR, format='%(asc
 if not os.path.exists(BACKUP_FOLDER):
     os.makedirs(BACKUP_FOLDER)
 
-DEFAULT_USERNAME = os.getenv("NET_MANAGER_ADMIN_USER", "Admin")
-DEFAULT_PASSWORD = os.getenv("NET_MANAGER_ADMIN_PASS", "admin")
-DEFAULT_SECRET   = os.getenv("NET_MANAGER_ADMIN_SECRET", "admin")
+DEFAULT_USERNAME = os.getenv("SENTINELNET_ADMIN_USER", "Admin")
+DEFAULT_PASSWORD = os.getenv("SENTINELNET_ADMIN_PASS", "admin")
+DEFAULT_SECRET   = os.getenv("SENTINELNET_ADMIN_SECRET", "admin")
 
 DANGEROUS_COMMANDS = ["write erase", "reload", "delete", "format", "no boot", "erase"]
 

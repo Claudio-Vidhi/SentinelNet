@@ -31,7 +31,7 @@ from security_manager import (
 PORT = 8765
 BASE_URL = "https://euvdservices.enisa.europa.eu"
 
-app = FastAPI(title="Net Manager Alfa API", version="2.0.0")
+app = FastAPI(title="SentinelNet API", version="2.0.0")
 
 _ws_tokens: dict[str, tuple[str, float]] = {}  # otp -> (username, timestamp)
 
