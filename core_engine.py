@@ -8,9 +8,10 @@ from drivers.cisco_ios import CiscoIosDriver
 from drivers.hp_procurve import HpProcurveDriver
 from crypto_vault import decrypt_password
 from security_manager import log_audit
+import data_config
 
-BACKUP_FOLDER = 'backup-config'
-logging.basicConfig(filename='error_log.txt', level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
+BACKUP_FOLDER = data_config.get_path('backup-config')
+logging.basicConfig(filename=data_config.get_path('error_log.txt'), level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if not os.path.exists(BACKUP_FOLDER):
     os.makedirs(BACKUP_FOLDER)

@@ -2,8 +2,9 @@ import os
 import base64
 import hashlib
 from cryptography.fernet import Fernet
+import data_config
 
-KEY_FILE = "secret.key"
+KEY_FILE = data_config.get_path("secret.key")
 
 def load_or_create_key():
     # 1. Tenta prima di caricare la Master Key dalla variabile d'ambiente

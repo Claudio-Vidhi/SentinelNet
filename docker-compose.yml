@@ -1,17 +1,18 @@
 services:
   sentinelnet:
+    image: claudiovidhi/sentinelnet:latest
     build: .
     container_name: sentinelnet
     ports:
       - "8765:8765"
     volumes:
-      # Monta la cartella corrente per la massima facilità d'uso: tutte le configurazioni, i backup dei dispositivi
-      # e i database locali (users.json, network_hosts.csv, ecc.) persistono direttamente sul tuo host.
-      # Questo permette di alternare l'esecuzione nativa e quella Docker senza perdere dati.
-      - .:/app
+      # Monta solo la cartella dei dati persistenti (db di autenticazione, credenziali degli apparati, chiavi crittografiche, backup)
+      # Questo consente di distribuire ed eseguire l'applicazione come immagine standalone pre-compilata da Docker Hub
+      # senza sovrascrivere o aver bisogno del codice sorgente Python locale.
+      - ./data:/app/data
     environment:
-      # (Opzionale) Definisci le chiavi crittografiche o le credenziali di default.
-      # Se non specificate, verranno generate automaticamente e persistite sul file system locale.
+      # Forza l'applicazione a salvare database, chiavi e backup all'interno della directory del volume condiviso
+      - SENTINELNET_DATA_DIR=/app/data
       - SENTINELNET_HOST=0.0.0.0
       - SENTINELNET_PORT=8765
       - SENTINELNET_NO_BROWSER=true

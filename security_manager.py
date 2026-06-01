@@ -4,8 +4,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
 import jwt
+import data_config
 
-JWT_KEY_FILE = "jwt_secret.key"
+JWT_KEY_FILE = data_config.get_path("jwt_secret.key")
 
 def load_or_create_jwt_secret() -> str:
     """Carica o genera una chiave segreta separata ed indipendente per i token JWT."""
@@ -44,7 +45,7 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # Configurazione logger di Audit protetto
-AUDIT_LOG_FILE = "audit.log"
+AUDIT_LOG_FILE = data_config.get_path("audit.log")
 audit_logger = logging.getLogger("audit")
 audit_logger.setLevel(logging.INFO)
 

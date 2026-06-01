@@ -1,8 +1,9 @@
 import json
 import os
 import bcrypt
+import data_config
 
-USERS_JSON = "users.json"
+USERS_JSON = data_config.get_path("users.json")
 
 def get_users():
     if not os.path.exists(USERS_JSON):

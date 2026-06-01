@@ -23,7 +23,11 @@ COPY . .
 ENV PYTHONUNBUFFERED=1 \
     SENTINELNET_HOST=0.0.0.0 \
     SENTINELNET_PORT=8765 \
-    SENTINELNET_NO_BROWSER=true
+    SENTINELNET_NO_BROWSER=true \
+    SENTINELNET_DATA_DIR=/app/data
+
+# Dichiara la directory dati come volume per la persistenza standalone
+VOLUME /app/data
 
 # Espone la porta del server FastAPI
 EXPOSE 8765

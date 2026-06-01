@@ -3,10 +3,11 @@ import os
 import csv
 import re
 import crypto_vault
+import data_config
 
-HOSTS_CSV = "network_hosts.csv"
-GROUPS_JSON = "groups.json"
-VERSION_DATA_FILE = "detected_versions.json"
+HOSTS_CSV = data_config.get_path("network_hosts.csv")
+GROUPS_JSON = data_config.get_path("groups.json")
+VERSION_DATA_FILE = data_config.get_path("detected_versions.json")
 
 IP_PATTERN = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 
