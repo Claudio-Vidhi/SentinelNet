@@ -20,9 +20,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from pydantic import BaseModel, Field
 
+import uuid
+
 import inventory_manager
 import core_engine
 import user_manager
+from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
     is_locked_out, record_failed_attempt, reset_failed_attempts
@@ -114,7 +117,17 @@ class DeviceReassignSchema(BaseModel):
 class PingCheckRequest(BaseModel):
     group: str = "all"
 
+class SubnetScanRequest(BaseModel):
+    network: str
+    vendor: str = "cisco"
+    group: str = "Generale"
+    auto_add: bool = False
+    use_default_creds: bool = True
+
 # --- STATO DEI JOB DI TRIAGE IN BACKGROUND CON LOCK ---
+
+_scan_jobs: dict[str, dict] = {}
+_scan_jobs_lock = threading.Lock()
 
 triage_lock = threading.Lock()
 triage_job = {
@@ -164,6 +177,45 @@ def run_triage_background():
     with triage_lock:
         triage_job["status"] = "complete"
         triage_job["current_device"] = ""
+
+def _run_scan_job(job_id: str, req: SubnetScanRequest):
+    credentials = {
+        "username": core_engine.DEFAULT_USERNAME,
+        "password": core_engine.DEFAULT_PASSWORD,
+        "secret":   core_engine.DEFAULT_SECRET,
+    }
+    try:
+        results = scan_subnet(
+            address=req.network,
+            vendor_hint=req.vendor,
+            credentials=credentials,
+        )
+
+        if req.auto_add:
+            for r in results:
+                if r["ssh_ok"] and not r["added"]:
+                    try:
+                        inventory_manager.add_or_update_device(
+                            r["ip"], r["vendor"], "custom",
+                            credentials["username"],
+                            credentials["password"],
+                            credentials["secret"],
+                            req.group,
+                        )
+                        r["added"] = True
+                    except Exception:
+                        pass
+
+        with _scan_jobs_lock:
+            _scan_jobs[job_id]["status"]   = "done"
+            _scan_jobs[job_id]["results"]  = results
+            _scan_jobs[job_id]["progress"] = len(results)
+
+    except Exception as exc:
+        with _scan_jobs_lock:
+            _scan_jobs[job_id]["status"] = "error"
+            _scan_jobs[job_id]["error"]  = str(exc)
+
 
 # --- ROTTE PRINCIPALI & INTERFACCIA WEB ---
 
@@ -653,6 +705,60 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+# --- SCANSIONE SUBNET IN BACKGROUND ---
+
+@app.post("/api/scan-subnet")
+def start_subnet_scan(
+    payload: SubnetScanRequest,
+    background_tasks: BackgroundTasks,
+    current_user = Depends(get_current_user),
+):
+    try:
+        hosts = parse_network(payload.network)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    job_id = str(uuid.uuid4())
+    with _scan_jobs_lock:
+        _scan_jobs[job_id] = {
+            "status":     "running",
+            "results":    [],
+            "progress":   0,
+            "total":      len(hosts),
+            "started_at": time.time(),
+        }
+
+    background_tasks.add_task(_run_scan_job, job_id, payload)
+
+    log_audit(
+        f"Scansione subnet '{payload.network}' avviata dall'utente "
+        f"'{current_user.get('sub')}' (job_id: {job_id}, host totali: {len(hosts)})."
+    )
+    return {"job_id": job_id, "status": "started", "total_hosts": len(hosts)}
+
+
+@app.get("/api/scan-subnet/{job_id}")
+def get_subnet_scan_status(job_id: str, current_user = Depends(get_current_user)):
+    with _scan_jobs_lock:
+        stale = [k for k, v in _scan_jobs.items() if time.time() - v.get("started_at", 0) > 600]
+        for k in stale:
+            del _scan_jobs[k]
+        job = _scan_jobs.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' non trovato.")
+
+    log_audit(
+        f"Stato job scansione '{job_id}' richiesto dall'utente '{current_user.get('sub')}'."
+    )
+    return {
+        "status":   job["status"],
+        "results":  job.get("results", []),
+        "progress": job.get("progress", 0),
+        "total":    job.get("total", 0),
+    }
+
 
 # --- AVVIO E BROWSER AUTOMATICO ---
 

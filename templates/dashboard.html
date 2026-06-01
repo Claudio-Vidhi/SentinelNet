@@ -781,6 +781,11 @@
               style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);">
             <i class="fa-solid fa-wifi"></i> Ping Sede
           </button>
+          <button class="btn btn-secondary btn-small"
+              onclick="openSubnetScanModal()"
+              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);">
+            <i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet
+          </button>
         </div>
       </div>
       
@@ -790,6 +795,7 @@
             <tr>
               <th>Stato</th>
               <th>Gruppo</th>
+              <th>Hostname</th>
               <th>Indirizzo IP</th>
               <th>Vendor</th>
               <th>Firmware</th>
@@ -922,6 +928,80 @@
     </div>
   </div>
 
+  <!-- Subnet Scanner Modal -->
+  <div class="modal-overlay" id="subnetScanModal">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-magnifying-glass-location" style="color: var(--primary);"></i> Scansione Subnet</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="closeSubnetScanModal()"></i>
+      </div>
+
+      <div class="form-group">
+        <label>Indirizzo di Rete</label>
+        <input id="scanNetworkInput" type="text"
+               placeholder="es. 192.168.1.0/24 oppure 192.168.1.0 255.255.255.0"
+               style="font-family: 'JetBrains Mono', monospace; font-size: 13px;
+                      padding: 10px 12px; border-radius: 8px;
+                      background: var(--surface-2); border: 1px solid var(--border);
+                      color: var(--text); width: 100%; box-sizing: border-box;
+                      outline: none; transition: var(--transition);"
+               onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
+               onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Vendor</label>
+          <select id="scanVendorSelect"
+                  style="padding: 10px 12px; border-radius: 8px;
+                         background: var(--surface-2); border: 1px solid var(--border);
+                         color: var(--text); font-family: inherit; font-size: 13px;
+                         cursor: pointer; outline: none; width: 100%; transition: var(--transition);">
+            <option value="cisco">Cisco</option>
+            <option value="hpe">HPE</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label>Gruppo / Sede</label>
+          <select id="scanGroupSelect"
+                  style="padding: 10px 12px; border-radius: 8px;
+                         background: var(--surface-2); border: 1px solid var(--border);
+                         color: var(--text); font-family: inherit; font-size: 13px;
+                         cursor: pointer; outline: none; width: 100%; transition: var(--transition);">
+            <option value="Generale">Generale</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin: 16px 0 20px;">
+        <input type="checkbox" id="scanAutoAdd"
+               style="width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0;">
+        <label for="scanAutoAdd"
+               style="font-size: 13px; color: var(--text-muted); cursor: pointer; user-select: none;">
+          Aggiungi automaticamente i dispositivi trovati all'inventario
+        </label>
+      </div>
+
+      <button class="btn btn-primary" id="btnAvviaScan"
+              onclick="startSubnetScan()"
+              style="width: 100%; margin: 0;">
+        <i class="fa-solid fa-satellite-dish"></i> Avvia Scansione
+      </button>
+
+      <div id="subnetScanResults" style="display: none; margin-top: 20px;">
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;"
+             id="subnetScanStatus"></div>
+        <div style="height: 4px; background: var(--surface-3); border-radius: 2px; margin-bottom: 10px; overflow: hidden;">
+          <div id="subnetScanProgressBar"
+               style="height: 100%; width: 0%; background: var(--primary); border-radius: 2px; transition: width 0.4s ease;"></div>
+        </div>
+        <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border);
+                    border-radius: 8px; background: var(--surface-2);"
+             id="subnetScanResultsTable"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Terminal CLI Modale Rapido -->
   <div class="modal-overlay" id="cliModalOverlay">
     <div class="modal" style="width: 800px; max-width: 95%;">
@@ -944,6 +1024,7 @@
     let isTriagePolling = false;
     let appLoading = false;
     let wasTriageRunning = false;
+    let _scanJobInterval = null;
 
     // --- AUTENTICAZIONE E UTILITY ---
 
@@ -1196,6 +1277,7 @@
                     </select>
                   </div>
                 </td>
+                <td style="font-family:monospace; font-size:12px;">${d.Hostname || '<span style="color:var(--text-muted)">—</span>'}</td>
                 <td><strong>${d.IP}</strong></td>
                 <td>${d.Vendor.toUpperCase()}</td>
                 <td><code>${scan.version}</code></td>
@@ -1812,6 +1894,155 @@
         } catch {
             isTriagePolling = false;
         }
+    }
+
+    // --- SUBNET SCANNER ---
+
+    function openSubnetScanModal() {
+        // Populate group select from current globalGroups cache
+        const sel = document.getElementById('scanGroupSelect');
+        sel.innerHTML = '';
+        Object.keys(globalGroups).forEach(g => {
+            const opt = document.createElement('option');
+            opt.value = g;
+            opt.textContent = g;
+            if (g === 'Generale') opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        document.getElementById('subnetScanResults').style.display = 'none';
+        document.getElementById('subnetScanResultsTable').innerHTML = '';
+        document.getElementById('subnetScanStatus').textContent = '';
+        document.getElementById('scanNetworkInput').value = '';
+        document.getElementById('scanAutoAdd').checked = false;
+        document.getElementById('btnAvviaScan').disabled = false;
+        document.getElementById('subnetScanModal').style.display = 'flex';
+    }
+
+    function closeSubnetScanModal() {
+        if (_scanJobInterval) { clearInterval(_scanJobInterval); _scanJobInterval = null; }
+        document.getElementById('subnetScanModal').style.display = 'none';
+    }
+
+    async function startSubnetScan() {
+        if (_scanJobInterval) { clearInterval(_scanJobInterval); _scanJobInterval = null; }
+
+        const network = document.getElementById('scanNetworkInput').value.trim();
+        const vendor  = document.getElementById('scanVendorSelect').value;
+        const group   = document.getElementById('scanGroupSelect').value;
+        const autoAdd = document.getElementById('scanAutoAdd').checked;
+        if (!network) { document.getElementById('scanNetworkInput').focus(); return; }
+
+        const btn = document.getElementById('btnAvviaScan');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Avvio...';
+        document.getElementById('subnetScanResults').style.display = 'block';
+        document.getElementById('subnetScanStatus').textContent = 'Avvio scansione...';
+        document.getElementById('subnetScanResultsTable').innerHTML = '';
+        document.getElementById('subnetScanProgressBar').style.width = '0%';
+
+        const res = await apiFetch('/api/scan-subnet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ network, vendor, group, auto_add: autoAdd, use_default_creds: true }),
+        });
+        if (!res || !res.ok) {
+            const err = res ? await res.json() : { detail: 'Errore di rete' };
+            document.getElementById('subnetScanStatus').textContent =
+                'Errore: ' + (err.detail || 'impossibile avviare la scansione.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+            return;
+        }
+        const { job_id, total_hosts } = await res.json();
+        document.getElementById('subnetScanStatus').textContent =
+            `Scansione avviata — ${total_hosts} host da verificare...`;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
+        pollScanJob(job_id, total_hosts);
+    }
+
+    function pollScanJob(jobId, totalHosts) {
+        _scanJobInterval = setInterval(async () => {
+            const res = await apiFetch(`/api/scan-subnet/${jobId}`);
+            if (!res || !res.ok) {
+                clearInterval(_scanJobInterval); _scanJobInterval = null;
+                document.getElementById('subnetScanStatus').textContent = 'Errore durante il polling.';
+                const b = document.getElementById('btnAvviaScan');
+                b.disabled = false;
+                b.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+                return;
+            }
+            const data = await res.json();
+            const pct  = totalHosts > 0 ? Math.round((data.progress / totalHosts) * 100) : 0;
+            document.getElementById('subnetScanProgressBar').style.width = `${pct}%`;
+            document.getElementById('subnetScanStatus').textContent =
+                `Scansione in corso — ${data.progress}/${totalHosts} host elaborati...`;
+
+            if (data.status !== 'running') {
+                clearInterval(_scanJobInterval); _scanJobInterval = null;
+                const b = document.getElementById('btnAvviaScan');
+                b.disabled = false;
+                b.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+                document.getElementById('subnetScanProgressBar').style.width = '100%';
+                if (data.status === 'error') {
+                    document.getElementById('subnetScanStatus').textContent = 'Scansione terminata con errore.';
+                    return;
+                }
+                renderScanResults(data.results || []);
+            }
+        }, 2000);
+    }
+
+    function renderScanResults(results) {
+        const reachable = results.filter(r => r.reachable);
+        const sshOk     = results.filter(r => r.ssh_ok);
+        const added     = results.filter(r => r.added);
+        document.getElementById('subnetScanStatus').textContent =
+            `Completata — ${reachable.length} raggiungibili, ${sshOk.length} SSH ok, ${added.length} aggiunti all'inventario.`;
+
+        if (sshOk.length === 0) {
+            document.getElementById('subnetScanResultsTable').innerHTML =
+                '<div style="padding:14px; color:var(--text-muted); font-size:13px;">Nessun host risponde via SSH.</div>';
+            return;
+        }
+        const rows = sshOk.map(r => {
+            const safeIp  = r.ip.replace(/'/g, '');
+            const safeHn  = (r.hostname || '').replace(/'/g, "\\'");
+            const addCell = (!r.added)
+                ? `<button class="btn btn-primary btn-small"
+                       style="margin:0; padding:3px 8px; width:auto;"
+                       onclick="addDiscoveredDevice('${safeIp}','${safeHn}','${r.vendor}')">
+                       Aggiungi
+                   </button>`
+                : `<span style="color:var(--text-muted); font-size:11px;">In inventario</span>`;
+            return `<div style="display:grid; grid-template-columns:130px 1fr 56px 24px 90px;
+                        align-items:center; gap:8px; padding:8px 12px;
+                        border-bottom:1px solid var(--border); font-size:12px;">
+                <span style="font-family:'JetBrains Mono',monospace; color:var(--primary);">${r.ip}</span>
+                <span>${r.hostname || '<span style="color:var(--text-muted)">—</span>'}</span>
+                <span style="text-transform:uppercase; color:var(--text-muted);">${r.vendor}</span>
+                <span style="text-align:center; color:${r.ssh_ok ? 'var(--primary)' : 'var(--danger)'};">${r.ssh_ok ? '✓' : '✗'}</span>
+                ${addCell}
+              </div>`;
+        }).join('');
+        document.getElementById('subnetScanResultsTable').innerHTML = rows;
+        if (added.length > 0) appInit();
+    }
+
+    async function addDiscoveredDevice(ip, hostname, vendor) {
+        const group = document.getElementById('scanGroupSelect').value;
+        const res = await apiFetch('/api/add-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip, vendor, profile: 'default', username: '', password: '', enable_secret: '', group }),
+        });
+        if (!res || !res.ok) return;
+        document.querySelectorAll('#subnetScanResultsTable button').forEach(b => {
+            if (b.getAttribute('onclick')?.includes(`'${ip}'`)) {
+                b.outerHTML = '<span style="color:var(--text-muted); font-size:11px;">In inventario</span>';
+            }
+        });
+        appInit();
     }
 
     // --- VULNERABILITY ADVISORY (EUVD) ---

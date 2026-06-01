@@ -3,7 +3,7 @@ import re
 import logging
 import socket
 from netmiko import ConnectHandler
-from inventory_manager import update_version_inventory, get_all_devices, get_detected_versions
+from inventory_manager import update_version_inventory, get_all_devices, get_detected_versions, update_device_hostname
 from drivers.cisco_ios import CiscoIosDriver
 from drivers.hp_procurve import HpProcurveDriver
 from crypto_vault import decrypt_password
@@ -80,6 +80,7 @@ def run_backup_and_triage(device):
     try:
         with ConnectHandler(**device_params) as net_connect:
             net_connect.enable()
+            live_hostname = net_connect.find_prompt().strip().rstrip('#>').strip()
 
             try:
                 driver = driver_factory(vendor, net_connect)
@@ -119,15 +120,17 @@ def run_backup_and_triage(device):
                     except Exception:
                         pass
 
-            hostname_match = re.search(r'hostname\s+(\S+)', config_out, re.IGNORECASE | re.MULTILINE)
-            sys_name = hostname_match.group(1).strip() if hostname_match else f"{vendor}_{ip}"
+            hostname_from_cfg = extract_hostname_from_config(config_out)
+            sys_name = hostname_from_cfg or live_hostname or f"{vendor}_{ip}"
+
+            update_device_hostname(ip, sys_name)
 
             file_path = os.path.join(BACKUP_FOLDER, f"{sanitize_filename(sys_name)}-{ip}.txt")
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(config_out)
 
             log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' (Firmware: '{version}').")
-            return {"status": "success", "version": version, "file": file_path}
+            return {"status": "success", "version": version, "hostname": sys_name, "file": file_path}
 
     except Exception as e:
         logging.error(f"Errore su {ip}: {str(e)}")

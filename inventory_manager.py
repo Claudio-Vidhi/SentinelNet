@@ -69,7 +69,7 @@ def safe_write_hosts_csv(devices):
     temp_filename = HOSTS_CSV + ".tmp"
     try:
         with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
-            fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group']
+            fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for d in devices:
@@ -79,7 +79,7 @@ def safe_write_hosts_csv(devices):
         except PermissionError:
             # Fallback per sistemi Windows
             with open(HOSTS_CSV, mode='w', newline='', encoding='utf-8') as f:
-                fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group']
+                fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 for d in devices:
@@ -147,6 +147,18 @@ def update_version_inventory(ip, vendor, version, status="online"):
     data = get_detected_versions()
     data[ip] = {"vendor": vendor, "version": version, "status": status}
     safe_json_write(VERSION_DATA_FILE, data)
+
+def update_device_hostname(ip: str, hostname: str):
+    devices = get_all_devices()
+    changed = False
+    for d in devices:
+        if d['IP'] == ip:
+            if d.get('Hostname') != hostname:
+                d['Hostname'] = hostname
+                changed = True
+            break
+    if changed:
+        safe_write_hosts_csv(devices)
 
 # --- UTILITIES GESTIONE GRUPPI (CRUD) ---
 
