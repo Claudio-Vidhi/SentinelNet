@@ -770,8 +770,16 @@ def main():
     if not os.path.exists("templates"): 
         os.makedirs("templates")
         
-    threading.Thread(target=open_browser, daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")
+    host = os.environ.get("SENTINELNET_HOST", "127.0.0.1")
+    port = int(os.environ.get("SENTINELNET_PORT", PORT))
+    
+    # Disabilita l'apertura automatica del browser in ambiente Docker/containerizzato
+    no_browser = os.environ.get("SENTINELNET_NO_BROWSER", "false").lower() == "true" or host == "0.0.0.0"
+    
+    if not no_browser:
+        threading.Thread(target=open_browser, daemon=True).start()
+        
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 if __name__ == "__main__":
     main()

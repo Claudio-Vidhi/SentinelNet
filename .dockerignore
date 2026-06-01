@@ -1,0 +1,35 @@
+# Escludi file di tracciamento Git
+.git
+.gitignore
+
+# Escludi cartelle di ambiente virtuale e configurazione editor
+.venv
+venv
+ENV
+.claude
+.idea
+.vscode
+
+# Escludi cache di compilazione Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Escludi file di log locali
+*.log
+error_log.txt
+
+# Escludi cache e file di dati sensibili locali (gestiti tramite volume a runtime)
+secret.key
+jwt_secret.key
+network_hosts.csv
+users.json
+groups.json
+detected_versions.json
+backup-config/
+
+# Escludi cartelle di build dell'eseguibile desktop
+build/
+dist/
+*.spec
