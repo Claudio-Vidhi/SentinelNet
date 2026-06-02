@@ -1,0 +1,3160 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinelNet</title>
+  
+  <!-- Satoshi & JetBrains Mono Fonts -->
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,600,700,900&f[]=jetbrains-mono@400,700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  
+  <!-- Vis.js Standalone for beautiful Interactive Topologies -->
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+  <!-- Xterm.js CDNs for interactive SSH terminal -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+
+  <style>
+    :root {
+      --bg: #070a0e;
+      --surface: #0f141c;
+      --surface-2: #161e2a;
+      --surface-3: #1d2837;
+      --border: rgba(147, 172, 206, 0.12);
+      --text: #f0f4f9;
+      --text-muted: #8d9bb0;
+      --primary: #4f8ef7;
+      --primary-glow: rgba(79, 142, 247, 0.35);
+      --success: #3be188;
+      --success-glow: rgba(59, 225, 136, 0.35);
+      --danger: #ff6b7c;
+      --danger-glow: rgba(255, 107, 124, 0.35);
+      --warning: #ffb84d;
+      --discovered: #a3a3a3;
+      --radius: 12px;
+      --font-main: 'Satoshi', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-code: 'JetBrains Mono', monospace;
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+    /* Login / Setup Glassmorphic Overlay */
+    #authOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(7, 10, 14, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: var(--transition);
+    }
+
+    .login-card {
+      background: rgba(15, 20, 28, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      width: 420px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      animation: fadeInUp 0.4s ease;
+    }
+
+    .login-card h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: var(--text);
+      font-weight: 900;
+    }
+
+    .login-card p {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-bottom: 25px;
+      line-height: 1.5;
+    }
+
+    /* Base Layout */
+    aside, main {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    aside {
+      gap: 20px;
+      position: sticky;
+      top: 20px;
+      height: calc(100vh - 40px);
+      overflow-y: auto; /* Abilita lo scorrimento autonomo del form sui monitor piccoli o elenchi lunghi */
+      scrollbar-width: thin;
+    }
+
+    h2, h3 {
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .aside-header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .user-badge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Forms elements */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper i {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 10px 12px 10px 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+
+    .form-group select {
+      cursor: pointer;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: var(--transition);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #05080c;
+    }
+
+    .btn-primary:hover {
+      background: #39cfd7;
+      box-shadow: 0 0 15px var(--primary-glow);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--surface-3);
+      border-color: var(--text-muted);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background: #ff8593;
+      box-shadow: 0 0 15px var(--danger-glow);
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      width: auto;
+    }
+
+    /* Tabs Navigation */
+    .tab-nav {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .tab-button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 15px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition);
+    }
+
+    .tab-button:hover {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+
+    .tab-button.active {
+      color: var(--primary);
+      background: var(--surface-2);
+      box-shadow: inset 0 -2px 0 var(--primary);
+    }
+
+    .tab-content {
+      display: none;
+      flex-grow: 1;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Status led */
+    .led-container {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .led {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .led-online {
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+
+    .led-offline {
+      background: var(--danger);
+      box-shadow: 0 0 10px var(--danger);
+    }
+
+    .led-auth_failed {
+      background: var(--warning);
+      box-shadow: 0 0 10px var(--warning);
+    }
+
+    .led-discovered {
+      background: var(--discovered);
+      box-shadow: 0 0 10px var(--discovered);
+    }
+
+    /* Table Styles */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface-2);
+      text-align: left;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    th {
+      font-weight: 700;
+      color: var(--text-muted);
+      background: var(--surface-3);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .badge {
+      background: var(--surface-3);
+      color: var(--primary);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+    }
+
+    .actions-cell {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Network Map Container */
+    #networkGraphContainer {
+      width: 100%;
+      height: 600px;
+      background: #090d13;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      position: relative;
+    }
+
+    /* Stile personalizzato per i Tooltip di Vis.js */
+    div.vis-tooltip {
+      background: rgba(11, 15, 23, 0.96) !important;
+      border: 1px solid var(--border) !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(44, 188, 195, 0.15) !important;
+      color: var(--text) !important;
+      font-family: var(--font-main) !important;
+      padding: 14px 18px !important;
+      border-radius: var(--radius) !important;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      z-index: 1000 !important;
+      border-color: rgba(44, 188, 195, 0.35) !important;
+      transition: opacity 0.2s ease-in-out;
+    }
+
+    .network-legend {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      background: rgba(15, 20, 28, 0.85);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .topology-container {
+      background: #000;
+      height: 380px;
+      border-radius: var(--radius);
+      padding: 20px;
+      overflow-y: auto;
+      font-family: var(--font-code);
+      color: #00ff00;
+      border: 1px solid var(--border);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* Vulnerability check panel */
+    .vuln-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 15px;
+    }
+
+    .vuln-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+
+    .severity-pill {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .severity-CRITICAL { background: #3c0000; color: #ff5252; border: 1px solid #ff5252; }
+    .severity-HIGH { background: #3d1c00; color: #ffa726; border: 1px solid #ffa726; }
+    .severity-MEDIUM { background: #3b3a00; color: #ffee58; border: 1px solid #ffee58; }
+    .severity-LOW { background: #003604; color: #66bb6a; border: 1px solid #66bb6a; }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(7, 10, 14, 0.8);
+      backdrop-filter: blur(10px);
+      z-index: 900;
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      width: 480px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
+      animation: zoomIn 0.3s ease;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+
+    .modal-close {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 18px;
+      transition: var(--transition);
+    }
+
+    .modal-close:hover {
+      color: var(--text);
+    }
+
+    /* Background Jobs Monitor Bar */
+    .progress-overlay {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      background: var(--surface-2);
+      border: 2px solid var(--primary);
+      box-shadow: 0 10px 30px var(--primary-glow);
+      padding: 20px;
+      border-radius: 12px;
+      width: 380px;
+      z-index: 800;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: var(--surface-3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+      transition: width 0.3s ease;
+    }
+
+    /* Templates / Code Area */
+    .template-box {
+      background: #05080c;
+      border: 1px solid var(--border);
+      color: #61afef;
+      font-family: var(--font-code);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 15px;
+      overflow-x: auto;
+    }
+
+    /* Keyframes Animations */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes zoomIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Overlay Login Glassmorphic / Setup Wizard -->
+  <div id="authOverlay">
+    <div class="login-card">
+      <div style="font-size: 40px; color: var(--primary); margin-bottom: 15px; text-align: center;">
+        <i class="fa-solid fa-shield-halved fa-bounce" id="overlayIcon"></i>
+      </div>
+      
+      <!-- Sezione Registrazione Primo Account -->
+      <div id="wizardSection" style="display: none;">
+        <h2 id="wizTitle" style="text-align: center;" data-i18n="wizTitle">🚀 Primo Accesso rilevato</h2>
+        <p id="wizSubtitle" style="text-align: center;" data-i18n="wizSubtitle">Benvenuto in SentinelNet. Crea il tuo account Amministratore locale per iniziare a gestire la tua infrastruttura di rete.</p>
+        
+        <div class="form-group" style="text-align: left;">
+          <label data-i18n="lblWizUser">Crea Username Amministratore</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-user"></i>
+            <input id="wizUser" type="text" placeholder="Es. claudio_admin" data-i18n-placeholder="wizUserPl">
+          </div>
+        </div>
+        
+        <div class="form-group" style="text-align: left; margin-bottom: 25px;">
+          <label data-i18n="lblWizPass">Imposta Password Sicura</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="wizPass" type="password" placeholder="Minimo 6 caratteri" data-i18n-placeholder="wizPassPl">
+          </div>
+        </div>
+        
+        <button class="btn btn-primary" id="btnRegisterAdmin" style="background: #5ecf8d; color: #000;" data-i18n="btnRegisterAdmin">
+          <i class="fa-solid fa-user-plus"></i> Completa Configurazione ed Entra
+        </button>
+      </div>
+
+      <!-- Sezione Login Standard -->
+      <div id="loginSection" style="display: none;">
+        <h2 id="overlayTitle" style="text-align: center;" data-i18n="overlayTitle">SentinelNet — Secure Access</h2>
+        <p id="overlaySubtitle" style="text-align: center;" data-i18n="overlaySubtitle">Inserisci le tue credenziali cifrate locali per accedere ai pannelli di triage operativo ed automazione.</p>
+        
+        <div class="form-group" style="text-align: left;">
+          <label data-i18n="lblUser">Username</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-user"></i>
+            <input id="loginUser" type="text" placeholder="Inserisci username" data-i18n-placeholder="loginUserPl">
+          </div>
+        </div>
+        
+        <div class="form-group" style="text-align: left; margin-bottom: 25px;">
+          <label data-i18n="lblPass">Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="loginPass" type="password" placeholder="Inserisci password" data-i18n-placeholder="loginPassPl">
+          </div>
+        </div>
+        
+        <button class="btn btn-primary" id="btnLogin" data-i18n="btnLogin">
+          <i class="fa-solid fa-right-to-bracket"></i> Autenticati
+        </button>
+      </div>
+      
+      <!-- Div Messaggi di Errore -->
+      <div id="loginError" style="color: var(--danger); font-size: 13px; margin-top: 15px; text-align: center; display: none;" data-i18n="loginError">
+        Credenziali non corrette o errore di sistema. Riprova.
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar di Provisioning & Gruppi -->
+  <aside>
+    <div class="aside-header">
+      <h2><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> SentinelNet</h2>
+      <span style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Network Intelligence Platform</span>
+    </div>
+    
+    <div class="user-badge">
+      <span data-i18n="badgeAdmin"><i class="fa-solid fa-user-shield"></i> Amministratore</span>
+      <a href="#" onclick="logout()" style="color: var(--danger); text-decoration: none; font-weight: 700;" data-i18n="btnExit"><i class="fa-solid fa-power-off"></i> Esci</a>
+    </div>
+
+    <div>
+      <h3 style="margin-bottom: 12px; font-size: 16px;" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
+      
+      <div class="form-group">
+        <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
+        <select id="devGroupSelect"></select>
+      </div>
+      
+      <div class="form-group">
+        <label data-i18n="lblIp">IP Apparato</label>
+        <div class="input-wrapper">
+          <i class="fa-solid fa-server"></i>
+          <input id="devIp" type="text" placeholder="10.0.0.1">
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label data-i18n="lblVendor">Vendor Engine</label>
+        <div class="input-wrapper">
+          <i class="fa-solid fa-gears"></i>
+          <select id="devVendor" style="padding-left:36px;"></select>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label data-i18n="lblProfile">Profilo Credenziali</label>
+        <div class="input-wrapper">
+          <i class="fa-solid fa-key"></i>
+          <select id="devProfile" style="padding-left:36px;">
+            <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
+            <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
+          </select>
+        </div>
+      </div>
+      
+      <div id="customCredsForm" style="display:none; border-left: 2px solid var(--primary); padding-left: 10px; margin-bottom: 10px;">
+        <div class="form-group">
+          <label data-i18n="lblUser">Username</label>
+          <input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label data-i18n="lblPass">Password</label>
+          <input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
+        </div>
+        <div class="form-group">
+          <label data-i18n="lblSecret">Enable Secret</label>
+          <input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
+        </div>
+      </div>
+      
+      <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
+        <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
+      </button>
+    </div>
+    
+    <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: auto;">
+      <h3 style="font-size: 14px; margin-bottom: 10px;" data-i18n="titleAddGroup"><i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo</h3>
+      <div class="form-group">
+        <label data-i18n="lblGroupName">Nome Gruppo</label>
+        <input id="newGroupName" type="text" placeholder="Es. Sede_Torino" style="padding-left:12px;">
+      </div>
+      <button class="btn btn-primary" id="btnCreateGroup" style="background:#5ecf8d; color:#000;" data-i18n="btnCreateGroup">
+        <i class="fa-solid fa-folder-plus"></i> Crea Gruppo
+      </button>
+    </div>
+  </aside>
+
+  <!-- Area Centrale Principale -->
+  <main>
+    <div class="tab-nav">
+      <button class="tab-button active" onclick="switchTab('tab-devices', this)" data-i18n="tabInventory">
+        <i class="fa-solid fa-list-check"></i> Network Inventory
+      </button>
+      <button class="tab-button" onclick="switchTab('tab-groups', this)" data-i18n="tabGroups">
+        <i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi
+      </button>
+      <button class="tab-button" onclick="switchTab('tab-map', this)" data-i18n="tabMap">
+        <i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List
+      </button>
+      <button class="tab-button" onclick="switchTab('tab-map-interactive', this)" data-i18n="tabInteractive">
+        <i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D
+      </button>
+      <button class="tab-button" onclick="switchTab('tab-security', this)" data-i18n="tabSecurity">
+        <i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)
+      </button>
+      <button class="tab-button" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
+        <i class="fa-solid fa-file-csv"></i> Importazione CSV
+      </button>
+    </div>
+
+    <!-- TAB 1: Network Inventory (Dispositivi) -->
+    <div id="tab-devices" class="tab-content active">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
+        <div style="display:flex; align-items:center; gap: 15px;">
+          <h3 data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
+          <select id="filterGroupSelect" onchange="renderDeviceTable()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-small" id="btnRunTriage" style="background: var(--warning); color: #000; width: auto; margin: 0;" data-i18n="btnRunTriage">
+            <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
+          </button>
+          <button class="btn btn-secondary btn-small" id="btnPingCheck"
+              onclick="runPingCheck()"
+              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
+              data-i18n="btnPingCheck">
+            <i class="fa-solid fa-wifi"></i> Ping Sede
+          </button>
+          <button class="btn btn-secondary btn-small"
+              onclick="openSubnetScanModal()"
+              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
+              data-i18n="btnSubnetScan">
+            <i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet
+          </button>
+          <button class="btn btn-secondary btn-small"
+              onclick="exportDeviceCsv()"
+              style="width:auto; margin:0;"
+              data-i18n="btnExportCsv">
+            <i class="fa-solid fa-file-csv"></i> Esporta CSV
+          </button>
+        </div>
+      </div>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="thStatus">Stato</th>
+              <th data-i18n="thGroup">Gruppo</th>
+              <th data-i18n="thHostname">Hostname</th>
+              <th data-i18n="thIp">Indirizzo IP</th>
+              <th data-i18n="thVendor">Vendor</th>
+              <th data-i18n="thFirmware">Firmware</th>
+              <th data-i18n="thActions">Azioni / Utility</th>
+            </tr>
+          </thead>
+          <tbody id="deviceTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: Gestione Gruppi/Sedi -->
+    <div id="tab-groups" class="tab-content">
+      <h3 data-i18n="titleGroupsRegistry">Anagrafica Gruppi, Clienti e Sedi Locali</h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descGroupsRegistry">
+        I gruppi organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un gruppo sposta i dispositivi associati nel gruppo Generale.
+      </p>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="thGroupName">Nome Sede / Cliente</th>
+              <th data-i18n="thGroupDesc">Descrizione Metadati</th>
+              <th data-i18n="thGroupActions">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="groupsTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Gestione Vendor -->
+      <div style="margin-top: 30px;">
+        <h3 style="margin-bottom: 8px; font-size: 16px;" data-i18n="titleVendorRegistry"><i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Gestione Vendor</h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descVendorRegistry">
+          Registro dei vendor supportati. Il campo EUVD Term è usato nelle query al database europeo delle vulnerabilità ENISA.
+        </p>
+        <div class="table-container" style="margin-bottom: 20px;">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="thVendorName">Nome</th>
+                <th data-i18n="thVendorTerm">EUVD Term</th>
+                <th data-i18n="thVendorDriver">Driver Netmiko</th>
+                <th data-i18n="thVendorActions">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="vendorTableBody"></tbody>
+          </table>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label data-i18n="lblVendorName">Nome Vendor</label>
+            <input id="newVendorName" type="text" placeholder="es. mikrotik" data-i18n-placeholder="placeholderVendorName" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label data-i18n="lblVendorTerm">EUVD Term</label>
+            <input id="newVendorTerm" type="text" placeholder="es. mikrotik" data-i18n-placeholder="placeholderVendorTerm" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label data-i18n="lblVendorDriver">Driver Netmiko (opzionale)</label>
+            <input id="newVendorDriver" type="text" placeholder="es. mikrotik_routeros" data-i18n-placeholder="placeholderVendorDriver" style="padding-left:12px;">
+          </div>
+          <button class="btn btn-primary btn-small" onclick="addVendor()" style="margin:0; white-space:nowrap;" data-i18n="btnAdd">
+            <i class="fa-solid fa-plus"></i> Aggiungi
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Mappa Topologica Adjacency List -->
+    <div id="tab-map" class="tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
+        <div style="display:flex; align-items:center; gap: 15px;">
+          <h3 data-i18n="titleAdjacencyMap">Mappa Topologica Adjacency List (Deducibile dai Backup)</h3>
+          <select id="topologyGroupSelect" onchange="loadTopology()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+        </div>
+        <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0; background: var(--danger); color: #fff;" data-i18n="btnResetTopology">
+          <i class="fa-solid fa-trash-can"></i> Reset Topologia
+        </button>
+      </div>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descAdjacencyMap">
+        Il sistema estrae le relazioni di prossimità fisiche analizzando le tabelle dei vicini all'interno delle configurazioni di backup salvate.
+      </p>
+      <div id="topologyView" class="topology-container" data-i18n="txtTopologyWaiting">> In attesa di elaborazione...</div>
+    </div>
+
+    <!-- TAB 4: Mappa Topologia 2D (Premium Vis.js) -->
+    <div id="tab-map-interactive" class="tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
+        <div style="display:flex; align-items:center; gap: 15px;">
+          <h3 data-i18n="title2DMap">Topologia Dinamica 2D Interactive</h3>
+          <select id="interactiveGroupSelect" onchange="loadInteractiveMap()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+          
+          <!-- Interruttore di visualizzazione dispositivi terminali non di rete -->
+          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
+            <input type="checkbox" id="toggleEndDevices" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; border-radius: 4px;">
+            <span data-i18n="lblShowEndDevices">Mostra Terminali (Server, Telefoni, PC)</span>
+          </label>
+        </div>
+        <div style="display:flex; gap: 8px;">
+          <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0; background: var(--danger); color: #fff;" data-i18n="btnResetTopology">
+            <i class="fa-solid fa-trash-can"></i> Reset Topologia
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="loadInteractiveMap()" style="width: auto; margin: 0;" data-i18n="btnRefreshMap">
+            <i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="downloadTopology()" style="width:auto; margin:0;" data-i18n="btnDownloadMap">
+            <i class="fa-solid fa-download"></i> Scarica Mappa
+          </button>
+        </div>
+      </div>
+      
+      <div style="position: relative; flex-grow: 1;">
+        <div id="networkGraphContainer"></div>
+        <div class="network-legend">
+          <div class="legend-item"><span class="led led-online"></span><span data-i18n="legendOnline">Dispositivo Online</span></div>
+          <div class="legend-item"><span class="led led-offline"></span><span data-i18n="legendOffline">Dispositivo Offline</span></div>
+          <div class="legend-item"><span class="led led-auth_failed"></span><span data-i18n="legendAuthFailed">Autenticazione Fallita</span></div>
+          <div class="legend-item"><span class="led led-discovered"></span><span data-i18n="legendDiscovered">Vicino Discoperto (CDP/LLDP)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: Threat Intel (EUVD ENISA) -->
+    <div id="tab-security" class="tab-content">
+      <div style="margin-bottom: 20px;">
+        <h3 data-i18n="titleThreatIntel">Vulnerability Matcher (EUVD ENISA)</h3>
+        <p style="font-size: 14px; color: var(--text-muted); margin-top: 5px;" data-i18n="descThreatIntel">
+          Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).
+        </p>
+      </div>
+      
+      <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
+        <!-- Popolato in dinamico con i match delle vulnerabilità -->
+      </div>
+    </div>
+
+    <!-- TAB 6: Importazione CSV -->
+    <div id="tab-import" class="tab-content">
+      <h3 data-i18n="titleImportCsv">Importazione Massiva da CSV</h3>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descImportCsv">
+        Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.
+      </p>
+      <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Vendor
+192.168.1.1,admin,Mypass123!,enablepass,SW-Milano-01,Sede_Milano,cisco
+192.168.2.1,manager,Pwd456!,secret,SW-Roma-Core,Sede_Roma,hpe</div>
+      
+      <div class="form-group" style="margin-top: 20px; margin-bottom: 20px;">
+        <label data-i18n="lblSelectCsv">Seleziona file CSV</label>
+        <input type="file" id="csvFileInput" accept=".csv" style="padding-left: 12px; cursor: pointer;">
+      </div>
+      <button class="btn btn-primary" id="btnUploadCsv" data-i18n="btnUploadCsv">
+        <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
+      </button>
+    </div>
+  </main>
+
+  <!-- Progress Box dei Job in Background -->
+  <div class="progress-overlay" id="triageProgressBox">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h4 style="color: var(--primary); font-size: 15px;" data-i18n="titleTriageProgress"><i class="fa-solid fa-circle-notch fa-spin"></i> Triage in Corso...</h4>
+      <span id="triageProgressPct" style="font-weight: 700;">0%</span>
+    </div>
+    <div style="font-size: 12px; color: var(--text-muted);" id="triageProgressMsg" data-i18n="txtTriageProgressStart">Avvio scansione...</div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="triageProgressBarFill"></div>
+    </div>
+  </div>
+
+  <!-- Subnet Scanner Modal -->
+  <div class="modal-overlay" id="subnetScanModal">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleSubnetScan"><i class="fa-solid fa-magnifying-glass-location" style="color: var(--primary);"></i> Scansione Subnet</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="closeSubnetScanModal()"></i>
+      </div>
+
+      <div class="form-group">
+        <label data-i18n="lblNetworkAddr">Indirizzo di Rete</label>
+        <input id="scanNetworkInput" type="text"
+               placeholder="es. 192.168.1.0/24 oppure 192.168.1.0 255.255.255.0"
+               data-i18n-placeholder="placeholderNetworkInput"
+               style="font-family: 'JetBrains Mono', monospace; font-size: 13px;
+                      padding: 10px 12px; border-radius: 8px;
+                      background: var(--surface-2); border: 1px solid var(--border);
+                      color: var(--text); width: 100%; box-sizing: border-box;
+                      outline: none; transition: var(--transition);"
+               onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
+               onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label data-i18n="lblVendor">Vendor</label>
+          <select id="scanVendorSelect"
+                  style="padding: 10px 12px; border-radius: 8px;
+                         background: var(--surface-2); border: 1px solid var(--border);
+                         color: var(--text); font-family: inherit; font-size: 13px;
+                         cursor: pointer; outline: none; width: 100%; transition: var(--transition);"></select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label data-i18n="lblGroup">Gruppo / Sede</label>
+          <select id="scanGroupSelect"
+                  style="padding: 10px 12px; border-radius: 8px;
+                         background: var(--surface-2); border: 1px solid var(--border);
+                         color: var(--text); font-family: inherit; font-size: 13px;
+                         cursor: pointer; outline: none; width: 100%; transition: var(--transition);">
+            <option value="Generale">Generale</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin: 16px 0 20px;">
+        <input type="checkbox" id="scanAutoAdd"
+               style="width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0;">
+        <label for="scanAutoAdd" data-i18n="lblScanAutoAdd"
+               style="font-size: 13px; color: var(--text-muted); cursor: pointer; user-select: none;">
+          Aggiungi automaticamente i dispositivi trovati all'inventario
+        </label>
+      </div>
+
+      <button class="btn btn-primary" id="btnAvviaScan"
+              onclick="startSubnetScan()"
+              style="width: 100%; margin: 0;"
+              data-i18n="btnStartScan">
+        <i class="fa-solid fa-satellite-dish"></i> Avvia Scansione
+      </button>
+
+      <div id="subnetScanResults" style="display: none; margin-top: 20px;">
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;"
+             id="subnetScanStatus"></div>
+        <div style="height: 4px; background: var(--surface-3); border-radius: 2px; margin-bottom: 10px; overflow: hidden;">
+          <div id="subnetScanProgressBar"
+               style="height: 100%; width: 0%; background: var(--primary); border-radius: 2px; transition: width 0.4s ease;"></div>
+        </div>
+        <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border);
+                    border-radius: 8px; background: var(--surface-2);"
+             id="subnetScanResultsTable"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal CLI Modale Rapido -->
+  <div class="modal-overlay" id="cliModalOverlay">
+    <div class="modal" style="width: 800px; max-width: 95%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleInteractiveTerminal"><i class="fa-solid fa-terminal" style="color: var(--primary);"></i> Terminale SSH Interattivo</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="closeCliModal()"></i>
+      </div>
+      <div style="margin-bottom: 12px; font-size: 14px;">
+        <span data-i18n="lblTargetDevice">Dispositivo target:</span> <strong id="cliTargetIp">10.0.0.1</strong>
+      </div>
+      
+      <div id="terminal-container" style="background:#070a0e; border-radius: 8px; padding: 10px; height: 400px; border: 1px solid var(--border); overflow: hidden;"></div>
+    </div>
+  </div>
+
+  <script>
+    // --- GESTIONE MULTILINGUA (i18n) ---
+    const i18n = {
+      it: {
+        wizTitle: "🚀 Primo Accesso rilevato",
+        wizSubtitle: "Benvenuto in SentinelNet. Crea il tuo account Amministratore locale per iniziare a gestire la tua infrastruttura di rete.",
+        lblWizUser: "Crea Username Amministratore",
+        wizUserPl: "Es. claudio_admin",
+        lblWizPass: "Imposta Password Sicura",
+        wizPassPl: "Minimo 6 caratteri",
+        btnRegisterAdmin: '<i class="fa-solid fa-user-plus"></i> Completa Configurazione ed Entra',
+        overlayTitle: "SentinelNet — Secure Access",
+        overlaySubtitle: "Inserisci le tue credenziali cifrate locali per accedere ai pannelli di triage operativo ed automazione.",
+        lblUser: "Username",
+        loginUserPl: "Inserisci username",
+        lblPass: "Password",
+        loginPassPl: "Inserisci password",
+        btnLogin: '<i class="fa-solid fa-right-to-bracket"></i> Autenticati',
+        loginError: "Credenziali non corrette o errore di sistema. Riprova.",
+        
+        // Sidebar
+        badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Amministratore',
+        btnExit: '<i class="fa-solid fa-power-off"></i> Esci',
+        titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Provisioning Apparato',
+        lblGroup: "Assegna a Gruppo/Sede",
+        lblIp: "IP Apparato",
+        lblVendor: "Vendor Engine",
+        lblProfile: "Profilo Credenziali",
+        optProfileDefault: "Profilo Rete Standard",
+        optProfileCustom: "Credenziali dedicate...",
+        btnSaveDevice: '<i class="fa-solid fa-floppy-disk"></i> Salva Apparato',
+        titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo',
+        lblGroupName: "Nome Gruppo",
+        btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Crea Gruppo',
+        
+        // Tabs
+        tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
+        tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi',
+        tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
+        tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D',
+        tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
+        tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
+        
+        // Tab 1
+        titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
+        optFilterAll: "Filtra per Sede: Tutte",
+        btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale',
+        btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Sede',
+        btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet',
+        btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Esporta CSV',
+        thStatus: "Stato",
+        thGroup: "Gruppo",
+        thHostname: "Hostname",
+        thIp: "Indirizzo IP",
+        thVendor: "Vendor",
+        thFirmware: "Firmware",
+        thActions: "Azioni / Utility",
+        
+        // Tab 2
+        titleGroupsRegistry: "Anagrafica Gruppi, Clienti e Sedi Locali",
+        descGroupsRegistry: "I gruppi organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un gruppo sposta i dispositivi associati nel gruppo Generale.",
+        thGroupName: "Nome Sede / Cliente",
+        thGroupDesc: "Descrizione Metadati",
+        thGroupActions: "Azioni",
+        btnDeleteGroup: '<i class="fa-solid fa-trash-can"></i> Elimina Sede',
+        titleVendorRegistry: '<i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Gestione Vendor',
+        descVendorRegistry: "Registro dei vendor supportati. Il campo EUVD Term è usato nelle query al database europeo delle vulnerabilità ENISA.",
+        thVendorName: "Nome",
+        thVendorTerm: "EUVD Term",
+        thVendorDriver: "Driver Netmiko",
+        thVendorActions: "Azioni",
+        lblVendorName: "Nome Vendor",
+        lblVendorTerm: "EUVD Term",
+        lblVendorDriver: "Driver Netmiko (opzionale)",
+        btnAdd: '<i class="fa-solid fa-plus"></i> Aggiungi',
+        placeholderVendorName: "es. mikrotik",
+        placeholderVendorTerm: "es. mikrotik",
+        placeholderVendorDriver: "es. mikrotik_routeros",
+        
+        // Tab 3
+        titleAdjacencyMap: "Mappa Topologica Adjacency List (Deducibile dai Backup)",
+        btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topologia',
+        descAdjacencyMap: "Il sistema estrae le relazioni di prossimità fisiche analizzando le tabelle dei vicini all'interno delle configurazioni di backup salvate.",
+        txtTopologyWaiting: '> In attesa di elaborazione...',
+        
+        // Tab 4
+        title2DMap: "Topologia Dinamica 2D Interactive",
+        lblShowEndDevices: "Mostra Terminali (Server, Telefoni, PC)",
+        btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
+        btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
+        legendOnline: "Dispositivo Online",
+        legendOffline: "Dispositivo Offline",
+        legendAuthFailed: "Autenticazione Fallita",
+        legendDiscovered: "Vicino Discoperto (CDP/LLDP)",
+        
+        // Tab 5
+        titleThreatIntel: "Vulnerability Matcher (EUVD ENISA)",
+        descThreatIntel: "Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).",
+        
+        // Tab 6
+        titleImportCsv: "Importazione Massiva da CSV",
+        descImportCsv: "Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.",
+        lblSelectCsv: "Seleziona file CSV",
+        btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa',
+        
+        // Modals / Progress
+        titleTriageProgress: '<i class="fa-solid fa-circle-notch fa-spin"></i> Triage in Corso...',
+        txtTriageProgressStart: "Avvio scansione...",
+        titleSubnetScan: '<i class="fa-solid fa-magnifying-glass-location" style="color: var(--primary);"></i> Scansione Subnet',
+        lblNetworkAddr: "Indirizzo di Rete",
+        placeholderNetworkInput: "es. 192.168.1.0/24 oppure 192.168.1.0 255.255.255.0",
+        lblScanAutoAdd: "Aggiungi automaticamente i dispositivi trovati all'inventario",
+        btnStartScan: '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione',
+        titleInteractiveTerminal: '<i class="fa-solid fa-terminal" style="color: var(--primary);"></i> Terminale SSH Interattivo',
+        lblTargetDevice: "Dispositivo target:",
+
+        // JS Alerts / Confirm Dialogs / Additional Strings
+        confirmReset: "Sei sicuro? Questa azione eliminerà tutti i backup e azzererà la mappa di rete.",
+        confirmDeleteDevice: "Sicuro di voler rimuovere il dispositivo {ip}?",
+        confirmDeleteGroup: "Eliminare la sede {name}? Tutti i dispositivi associati passeranno al gruppo Generale.",
+        confirmDeleteVendor: "Eliminare vendor \"{name}\"?",
+        alertNoTopology: "Nessuna mappa caricata. Esegui prima un Triage.",
+        alertEnterIp: "Inserisci l'IP del dispositivo.",
+        alertVendorRequired: "Nome e EUVD term obbligatori.",
+        alertFirstSetupFill: "Compila tutti i campi richiesti!",
+        alertFirstSetupSuccess: "Account configurato con successo! Esegui adesso il tuo primo login.",
+        alertFirstSetupError: "Errore: ",
+        alertLoginFill: "Compila tutti i campi!",
+        alertLoginDenied: "Accesso negato: credenziali errate o utente inesistente.",
+        txtTopologyAnalyzing: "> Analisi euristica dei vicini CDP/LLDP in corso...\n",
+        txtTopologyNoLinks: "> Nessun collegamento fisicamente individuato.\nAssicurati che i backup configurazione contengano tabelle dei vicini LLDP/CDP.",
+        txtTopologyTitle: "=== COLLEGAMENTI INFRASTRUTTURA FISICA RILEVATI ===\n\n",
+        txtTopologyLink: "[Nodo: {source}] <-------- INTERCONNESSIONE CDP/LLDP --------> [Nodo: {target}]\n",
+        txtTopologyError: "> Errore durante il caricamento della topologia: ",
+        
+        // Dynamic UI / JS Alerts
+        noDevicesText: "Nessun apparato online con firmware rilevato. Esegui prima un <strong>Triage Globale</strong>.",
+        discoveredNeighborsTitle: '<i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i> Vicini Scoperti via CDP/LLDP',
+        discoveredNeighborsDesc: "Questi apparati non sono in inventario ma sono stati rilevati tramite neighbor discovery. Seleziona quelli da analizzare per vulnerabilità note.",
+        btnAnalyzeVuln: '<i class="fa-solid fa-magnifying-glass-chart"></i> Analizza Vulnerabilità',
+        versionNotAvailable: "Versione non disponibile",
+        scanningEuvd: '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione EUVD...',
+        queryingEnisa: '<i class="fa-solid fa-circle-notch fa-spin"></i> Interrogando ENISA EUVD...',
+        btnRescan: '<i class="fa-solid fa-arrows-rotate"></i> Riscansiona',
+        vulnerabilitiesDetected: "Vulnerabilità Rilevate",
+        descriptionNotAvailable: "Descrizione non disponibile.",
+        relevantNis2: '<i class="fa-solid fa-scale-balanced"></i> Rilevante per NIS2',
+        safeRelease: "Release Sicura",
+        noThreatsFound: "Nessuna minaccia nota trovata nel database europeo ENISA EUVD per questa release.",
+        errorMatch: "Errore match",
+        errorScan: "Errore scansione",
+        alertDownloadError: "Errore durante il download del backup o sessione scaduta.",
+        alertNetworkDownloadError: "Errore di rete durante il download.",
+        alertExportError: "Errore durante l'export.",
+        alertSelectCsv: "Seleziona un file CSV.",
+        csvImportSuccess: "Importazione completata!\nDispositivi importati con successo: {importedCount}",
+        csvImportFailedRows: "\n\nRighe fallite: {failedCount}\n\nDettaglio errori:\n",
+        csvImportRowDetail: "- Riga {row} ({ip}): {error}\n",
+        alertImportCsvError: "Errore durante l'importazione del file CSV.",
+        alertError: "Errore: ",
+        alertReassignmentError: "Errore riassegnazione: ",
+        alertNetworkReassignmentError: "Errore di rete durante la riassegnazione.",
+        alertTriageFailed: "Triage fallito: ",
+        alertGroupCreateError: "Errore durante la creazione del gruppo.",
+        alertGroupDeleteError: "Impossibile eliminare il gruppo.",
+        alertSaveDeviceError: "Impossibile salvare il dispositivo",
+        topologyResetSuccessMsg: '> Topologia resettata. Avvia un Triage per ricostruire la mappa di rete.',
+        alertTopologyResetError: "Errore durante il reset della topologia.",
+        alertPingError: "Errore durante il ping check.",
+        allSites: "tutte le sedi",
+        pingingBtnText: "Ping {group}..."
+      },
+      en: {
+        wizTitle: "🚀 First Access Detected",
+        wizSubtitle: "Welcome to SentinelNet. Create your local Administrator account to start managing your network infrastructure.",
+        lblWizUser: "Create Administrator Username",
+        wizUserPl: "e.g. admin_user",
+        lblWizPass: "Set Secure Password",
+        wizPassPl: "Minimum 6 characters",
+        btnRegisterAdmin: '<i class="fa-solid fa-user-plus"></i> Complete Setup and Enter',
+        overlayTitle: "SentinelNet — Secure Access",
+        overlaySubtitle: "Enter your local encrypted credentials to access the operational triage and automation panels.",
+        lblUser: "Username",
+        loginUserPl: "Enter username",
+        lblPass: "Password",
+        loginPassPl: "Enter password",
+        btnLogin: '<i class="fa-solid fa-right-to-bracket"></i> Log In',
+        loginError: "Incorrect credentials or system error. Please try again.",
+        
+        // Sidebar
+        badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Administrator',
+        btnExit: '<i class="fa-solid fa-power-off"></i> Logout',
+        titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Device Provisioning',
+        lblGroup: "Assign to Group/Site",
+        lblIp: "Device IP",
+        lblVendor: "Vendor Engine",
+        lblProfile: "Credentials Profile",
+        optProfileDefault: "Standard Network Profile",
+        optProfileCustom: "Dedicated credentials...",
+        btnSaveDevice: '<i class="fa-solid fa-floppy-disk"></i> Save Device',
+        titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Add New Group',
+        lblGroupName: "Group Name",
+        btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Create Group',
+        
+        // Tabs
+        tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
+        tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Groups/Sites',
+        tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
+        tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> 2D Topology Map',
+        tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
+        tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
+        
+        // Tab 1
+        titleInventoryTable: "Monitored Network Devices",
+        optFilterAll: "Filter by Site: All",
+        btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run Global Triage',
+        btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Site',
+        btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Subnet Scan',
+        btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Export CSV',
+        thStatus: "Status",
+        thGroup: "Group",
+        thHostname: "Hostname",
+        thIp: "IP Address",
+        thVendor: "Vendor",
+        thFirmware: "Firmware",
+        thActions: "Actions / Utilities",
+        
+        // Tab 2
+        titleGroupsRegistry: "Groups, Clients and Local Sites Registry",
+        descGroupsRegistry: "Groups logically organize your asset topology. Deleting a group moves its associated devices to the General group.",
+        thGroupName: "Site / Client Name",
+        thGroupDesc: "Metadata Description",
+        thGroupActions: "Actions",
+        btnDeleteGroup: '<i class="fa-solid fa-trash-can"></i> Delete Site',
+        titleVendorRegistry: '<i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Vendor Management',
+        descVendorRegistry: "Registry of supported vendors. The EUVD Term field is used in queries to the European ENISA vulnerability database.",
+        thVendorName: "Name",
+        thVendorTerm: "EUVD Term",
+        thVendorDriver: "Netmiko Driver",
+        thVendorActions: "Actions",
+        lblVendorName: "Vendor Name",
+        lblVendorTerm: "EUVD Term",
+        lblVendorDriver: "Netmiko Driver (optional)",
+        btnAdd: '<i class="fa-solid fa-plus"></i> Add',
+        placeholderVendorName: "e.g. mikrotik",
+        placeholderVendorTerm: "e.g. mikrotik",
+        placeholderVendorDriver: "e.g. mikrotik_routeros",
+        
+        // Tab 3
+        titleAdjacencyMap: "CDP/LLDP Adjacency List Topology Map (Deduced from Backups)",
+        btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topology',
+        descAdjacencyMap: "The system extracts physical adjacency relationships by analyzing neighbor tables inside saved backup configurations.",
+        txtTopologyWaiting: '> Waiting for processing...',
+        
+        // Tab 4
+        title2DMap: "Dynamic 2D Interactive Topology",
+        lblShowEndDevices: "Show End Devices (Servers, Phones, PCs)",
+        btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
+        btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
+        legendOnline: "Device Online",
+        legendOffline: "Device Offline",
+        legendAuthFailed: "Authentication Failed",
+        legendDiscovered: "Discovered Neighbor (CDP/LLDP)",
+        
+        // Tab 5
+        titleThreatIntel: "Vulnerability Matcher (EUVD ENISA)",
+        descThreatIntel: "Checks in real time the firmware vulnerabilities detected on active devices by comparing them with the European Vulnerability Database (EUVD).",
+        
+        // Tab 6
+        titleImportCsv: "Bulk CSV Import",
+        descImportCsv: "The CSV file must strictly contain the header specified below.",
+        lblSelectCsv: "Select CSV file",
+        btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Process and Import',
+        
+        // Modals / Progress
+        titleTriageProgress: '<i class="fa-solid fa-circle-notch fa-spin"></i> Triage in Progress...',
+        txtTriageProgressStart: "Starting scan...",
+        titleSubnetScan: '<i class="fa-solid fa-magnifying-glass-location" style="color: var(--primary);"></i> Subnet Scan',
+        lblNetworkAddr: "Network Address",
+        placeholderNetworkInput: "e.g. 192.168.1.0/24 or 192.168.1.0 255.255.255.0",
+        lblScanAutoAdd: "Automatically add discovered devices to the inventory",
+        btnStartScan: '<i class="fa-solid fa-satellite-dish"></i> Start Scan',
+        titleInteractiveTerminal: '<i class="fa-solid fa-terminal" style="color: var(--primary);"></i> Interactive SSH Terminal',
+        lblTargetDevice: "Target device:",
+
+        // JS Alerts / Confirm Dialogs / Additional Strings
+        confirmReset: "Are you sure? This action will delete all backups and reset the network map.",
+        confirmDeleteDevice: "Are you sure you want to remove the device {ip}?",
+        confirmDeleteGroup: "Delete the site {name}? All associated devices will be moved to the General group.",
+        confirmDeleteVendor: "Delete vendor \"{name}\"?",
+        alertNoTopology: "No map loaded. Please run a Triage first.",
+        alertEnterIp: "Please enter the device IP.",
+        alertVendorRequired: "Name and EUVD term are required.",
+        alertFirstSetupFill: "Fill in all required fields!",
+        alertFirstSetupSuccess: "Account configured successfully! Please log in now.",
+        alertFirstSetupError: "Error: ",
+        alertLoginFill: "Fill in all fields!",
+        alertLoginDenied: "Access denied: incorrect credentials or user does not exist.",
+        txtTopologyAnalyzing: "> Heuristic analysis of CDP/LLDP neighbors in progress...\n",
+        txtTopologyNoLinks: "> No links physically identified.\nEnsure configuration backups contain LLDP/CDP neighbor tables.",
+        txtTopologyTitle: "=== PHYSICAL INFRASTRUCTURE LINKS DETECTED ===\n\n",
+        txtTopologyLink: "[Node: {source}] <-------- CDP/LLDP INTERCONNECTION --------> [Node: {target}]\n",
+        txtTopologyError: "> Error during topology loading: ",
+        
+        // Dynamic UI / JS Alerts
+        noDevicesText: "No online devices with detected firmware. Please run a <strong>Global Triage</strong> first.",
+        discoveredNeighborsTitle: '<i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i> Discovered Neighbors via CDP/LLDP',
+        discoveredNeighborsDesc: "These devices are not in the inventory but have been detected via neighbor discovery. Select those to analyze for known vulnerabilities.",
+        btnAnalyzeVuln: '<i class="fa-solid fa-magnifying-glass-chart"></i> Analyze Vulnerabilities',
+        versionNotAvailable: "Version not available",
+        scanningEuvd: '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning EUVD...',
+        queryingEnisa: '<i class="fa-solid fa-circle-notch fa-spin"></i> Querying ENISA EUVD...',
+        btnRescan: '<i class="fa-solid fa-arrows-rotate"></i> Rescan',
+        vulnerabilitiesDetected: "Vulnerabilities Detected",
+        descriptionNotAvailable: "Description not available.",
+        relevantNis2: '<i class="fa-solid fa-scale-balanced"></i> Relevant for NIS2',
+        safeRelease: "Safe Release",
+        noThreatsFound: "No known threats found in the European ENISA EUVD database for this release.",
+        errorMatch: "Error matching",
+        errorScan: "Scan error",
+        alertDownloadError: "Error downloading backup or session expired.",
+        alertNetworkDownloadError: "Network error during download.",
+        alertExportError: "Error during export.",
+        alertSelectCsv: "Please select a CSV file.",
+        csvImportSuccess: "Import completed!\nDevices successfully imported: {importedCount}",
+        csvImportFailedRows: "\n\nFailed rows: {failedCount}\n\nError details:\n",
+        csvImportRowDetail: "- Row {row} ({ip}): {error}\n",
+        alertImportCsvError: "Error importing CSV file.",
+        alertError: "Error: ",
+        alertReassignmentError: "Reassignment error: ",
+        alertNetworkReassignmentError: "Network error during reassignment.",
+        alertTriageFailed: "Triage failed: ",
+        alertGroupCreateError: "Error creating group.",
+        alertGroupDeleteError: "Unable to delete group.",
+        alertSaveDeviceError: "Unable to save device",
+        topologyResetSuccessMsg: '> Topology reset. Run Triage to reconstruct the network map.',
+        alertTopologyResetError: "Error resetting topology.",
+        alertPingError: "Error during ping check.",
+        allSites: "all sites",
+        pingingBtnText: "Ping {group}..."
+      }
+    };
+
+    let currentLang = localStorage.getItem("sentinelnet_lang") || "it";
+
+    function changeLanguage(lang) {
+        currentLang = lang;
+        localStorage.setItem("sentinelnet_lang", lang);
+        document.documentElement.lang = lang;
+
+        const langSel = document.getElementById("langSelect");
+        if (langSel) langSel.value = lang;
+        
+        // Traduci elementi con attributo data-i18n
+        document.querySelectorAll("[data-i18n]").forEach(el => {
+            const key = el.getAttribute("data-i18n");
+            if (i18n[lang] && i18n[lang][key]) {
+                el.innerHTML = i18n[lang][key];
+            }
+        });
+
+        // Traduci elementi con attributo data-i18n-placeholder
+        document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+            const key = el.getAttribute("data-i18n-placeholder");
+            if (i18n[lang] && i18n[lang][key]) {
+                el.setAttribute("placeholder", i18n[lang][key]);
+            }
+        });
+
+        // Ridisegna componenti dinamici se caricati
+        if (globalDevices.length > 0) {
+            // Aggiorna opzioni Filtro Sede
+            const filterSelect = document.getElementById('filterGroupSelect');
+            if (filterSelect) {
+                const prev = filterSelect.value;
+                filterSelect.options[0].text = i18n[lang].optFilterAll;
+                filterSelect.value = prev;
+            }
+            const topoSelect = document.getElementById('topologyGroupSelect');
+            if (topoSelect) {
+                const prev = topoSelect.value;
+                topoSelect.options[0].text = i18n[lang].optFilterAll;
+                topoSelect.value = prev;
+            }
+            const interSelect = document.getElementById('interactiveGroupSelect');
+            if (interSelect) {
+                const prev = interSelect.value;
+                interSelect.options[0].text = i18n[lang].optFilterAll;
+                interSelect.value = prev;
+            }
+
+            renderDeviceTable();
+            renderGroupsTable();
+        }
+    }
+
+    function initLanguageSelector() {
+        const asideHeader = document.querySelector('.aside-header');
+        if (asideHeader && !document.getElementById("langSelect")) {
+            const langContainer = document.createElement('div');
+            langContainer.style.cssText = "display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px;";
+            
+            const h2 = asideHeader.querySelector('h2');
+            if (h2) {
+                langContainer.appendChild(h2);
+            }
+            
+            const select = document.createElement('select');
+            select.id = "langSelect";
+            select.style.cssText = "padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 11px; cursor: pointer; outline: none;";
+            select.innerHTML = `
+                <option value="it">IT</option>
+                <option value="en">EN</option>
+            `;
+            select.value = currentLang;
+            select.onchange = (e) => changeLanguage(e.target.value);
+            
+            langContainer.appendChild(select);
+            asideHeader.insertBefore(langContainer, asideHeader.firstChild);
+        }
+        changeLanguage(currentLang);
+    }
+
+    let globalDevices = [];
+    let globalGroups = {};
+    let globalVendors = {};
+    let globalVersions = {}; // Cache globale per lo stato delle scansioni (ottimizzazione UI)
+    let isTriagePolling = false;
+    let appLoading = false;
+    let wasTriageRunning = false;
+    let _scanJobInterval = null;
+
+    // --- AUTENTICAZIONE E UTILITY ---
+
+    function getAuthHeaders() {
+        const token = sessionStorage.getItem("net_token");
+        return token ? { "Authorization": `Bearer ${token}` } : {};
+    }
+
+    // Funzione centralizzata per iniettare e controllare gli header di autenticazione ed evitare disallineamenti della UI
+    async function apiFetch(url, options = {}) {
+        options.headers = options.headers || {};
+        Object.assign(options.headers, getAuthHeaders());
+        
+        try {
+            const res = await fetch(url, options);
+            if (res.status === 401) {
+                console.warn("[AUTH] Sessione scaduta o non valida (401). Forzatura Logout.");
+                logout();
+                return null;
+            }
+            return res;
+        } catch (err) {
+            console.error(`[ApiFetch Error] ${url}:`, err);
+            return null;
+        }
+    }
+
+    async function checkAuthRequirements() {
+        // Interroga lo stato del setup/utenti nel sistema
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        
+        const overlay = document.getElementById('authOverlay');
+        const token = sessionStorage.getItem("net_token");
+
+        if (!data.has_users) {
+            // Nessun utente su disco: mostriamo la procedura guidata di primo setup
+            document.getElementById('wizardSection').style.display = 'block';
+            document.getElementById('loginSection').style.display = 'none';
+            overlay.style.display = 'flex';
+            return false;
+        } else {
+            // Esiste già un amministratore: mostriamo la maschera di login standard
+            document.getElementById('wizardSection').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'block';
+            if (!token) {
+                overlay.style.display = 'flex';
+                return false;
+            }
+            overlay.style.display = 'none';
+            return true;
+        }
+    }
+
+    // Evento per la registrazione guidata del primo utente amministratore
+    document.getElementById('btnRegisterAdmin').addEventListener('click', async () => {
+        const user = document.getElementById('wizUser').value.trim();
+        const pass = document.getElementById('wizPass').value.trim();
+        
+        if(!user || !pass) { alert(i18n[currentLang].alertFirstSetupFill); return; }
+        
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, password: pass })
+        });
+        
+        if (res.ok) {
+            alert(i18n[currentLang].alertFirstSetupSuccess);
+            checkAuthRequirements(); // Aggiorna lo stato per passare al form di login
+        } else {
+            const err = await res.json();
+            alert(i18n[currentLang].alertFirstSetupError + (err.detail || "Impossibile creare l'account."));
+        }
+    });
+
+    // Evento per il Login Standard
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+        const user = document.getElementById('loginUser').value.trim();
+        const pass = document.getElementById('loginPass').value.trim();
+        const errDiv = document.getElementById('loginError');
+        
+        if(!user || !pass) { errDiv.innerText = i18n[currentLang].alertLoginFill; errDiv.style.display = 'block'; return; }
+        errDiv.style.display = 'none';
+        
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, password: pass })
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            // Salva il token JWT per autenticare le chiamate API successive
+            if (data.access_token) {
+                sessionStorage.setItem("net_token", data.access_token);
+            }
+            // Sblocca la UI nascondendo la schermata oscurante
+            document.getElementById('authOverlay').style.display = 'none';
+            appInit(); // Avvia il caricamento dei dispositivi di rete
+        } else {
+            errDiv.innerText = i18n[currentLang].alertLoginDenied;
+            errDiv.style.display = 'block';
+        }
+    });
+
+    function logout() {
+        sessionStorage.removeItem("net_token");
+        checkAuthRequirements();
+    }
+
+    // --- INITIALIZATION ---
+
+    async function appInit() {
+        appLoading = true;
+        initLanguageSelector();
+        const isAuth = await checkAuthRequirements();
+        if (!isAuth) {
+            appLoading = false;
+            return;
+        }
+        
+        try {
+            const res = await apiFetch('/api/local-devices');
+            if (!res) {
+                appLoading = false;
+                return;
+            }
+            const data = await res.json();
+            
+            globalDevices = data.devices;
+            globalGroups = data.groups;
+            globalVersions = data.detected_versions; // Cache globale delle versioni rilevate
+
+            const vRes = await apiFetch('/api/vendors');
+            if (vRes && vRes.ok) globalVendors = await vRes.json();
+
+            // Popola tendine Vendor
+            const devVendorSel = document.getElementById('devVendor');
+            if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
+            const scanVendorSel = document.getElementById('scanVendorSelect');
+            if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
+            renderVendorTable();
+
+            // Popola tendina Gruppi nel form
+            const groupSelect = document.getElementById('devGroupSelect');
+            groupSelect.innerHTML = '';
+            Object.keys(globalGroups).forEach(g => {
+                groupSelect.innerHTML += `<option value="${g}">${g}</option>`;
+            });
+
+            // Memorizza la selezione corrente del filtro se esiste
+            const filterSelect = document.getElementById('filterGroupSelect');
+            const prevFilter = filterSelect ? filterSelect.value : 'all';
+            
+            // Popola tendina Filtro Gruppi nella tabella dell'inventario
+            if (filterSelect) {
+                filterSelect.innerHTML = '<option value="all">Filtra per Sede: Tutte</option>';
+                Object.keys(globalGroups).forEach(g => {
+                    filterSelect.innerHTML += `<option value="${g}">${g}</option>`;
+                });
+                filterSelect.value = prevFilter;
+            }
+
+            // Popola tendina Filtro Gruppi in TAB 3
+            const topoSelect = document.getElementById('topologyGroupSelect');
+            if (topoSelect) {
+                const prevTopoFilter = topoSelect.value || 'all';
+                topoSelect.innerHTML = '<option value="all">Filtra per Sede: Tutte</option>';
+                Object.keys(globalGroups).forEach(g => {
+                    topoSelect.innerHTML += `<option value="${g}">${g}</option>`;
+                });
+                topoSelect.value = prevTopoFilter;
+            }
+
+            // Popola tendina Filtro Gruppi in TAB 4
+            const interSelect = document.getElementById('interactiveGroupSelect');
+            if (interSelect) {
+                const prevInterFilter = interSelect.value || 'all';
+                interSelect.innerHTML = '<option value="all">Filtra per Sede: Tutte</option>';
+                Object.keys(globalGroups).forEach(g => {
+                    interSelect.innerHTML += `<option value="${g}">${g}</option>`;
+                });
+                interSelect.value = prevInterFilter;
+            }
+
+            // Popola Tabella Dispositivi tramite la nuova funzione autonoma filtrabile
+            renderDeviceTable();
+
+            // Popola Tabella Gestione Gruppi
+            renderGroupsTable();
+
+        // Forza il reload delle mappe se le tab sono attive
+        const activeTabId = document.querySelector('.tab-content.active')?.id;
+        if (activeTabId === 'tab-map') {
+            await loadTopology();
+        } else if (activeTabId === 'tab-map-interactive') {
+            await loadInteractiveMap();
+        } else if (activeTabId === 'tab-security') {
+            loadThreatIntel();
+        }
+        
+        startTriageStatusPolling();
+
+        } catch (err) {
+            console.error(err);
+        } finally {
+            appLoading = false;
+        }
+    }
+
+    function renderGroupsTable() {
+        const groupBody = document.getElementById('groupsTableBody');
+        if (!groupBody) return;
+        groupBody.innerHTML = '';
+        Object.keys(globalGroups).forEach(g => {
+            let desc = globalGroups[g].description || "Sede Logica";
+            if (currentLang === 'en' && desc === "Sede Principale predefinita") {
+                desc = "Default Main Site";
+            } else if (currentLang === 'en' && desc.startsWith("Sede secondaria ")) {
+                desc = desc.replace("Sede secondaria ", "Secondary Site ");
+            }
+            const btnText = currentLang === 'en' ? '<i class="fa-solid fa-trash-can"></i> Delete Site' : '<i class="fa-solid fa-trash-can"></i> Elimina Sede';
+            const reservedText = currentLang === 'en' ? 'System Reserved' : 'System Reserved';
+
+            groupBody.innerHTML += `<tr>
+                <td><strong>${g}</strong></td>
+                <td><span style="color:var(--text-muted); font-size:13px;">${desc}</span></td>
+                <td>${g !== 'Generale' ? `<button onclick="deleteGroup('${g}')" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText}</td>
+            </tr>`;
+        });
+    }
+
+    function renderDeviceTable() {
+        const filterSelect  = document.getElementById('filterGroupSelect');
+        const selectedGroup = filterSelect ? filterSelect.value : 'all';
+
+        const devBody = document.getElementById('deviceTableBody');
+        if (!devBody) return;
+
+        devBody.innerHTML = '';
+        globalDevices.forEach(d => {
+            if (selectedGroup !== 'all' && d.Group !== selectedGroup) return;
+
+            const scan = globalVersions[d.IP] || { version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato", status: "unknown" };
+            let ledClass = "led-offline";
+            if (scan.status === "online")           ledClass = "led-online";
+            else if (scan.status === "auth_failed") ledClass = "led-auth_failed";
+
+            const groupOptions = Object.keys(globalGroups).map(g =>
+                `<option value="${g}" ${g === d.Group ? "selected" : ""}>${g}</option>`
+            ).join("");
+            const safeIp = d.IP.replace(/\./g, "_");
+
+            let versionText = scan.version;
+            if (currentLang === 'en') {
+                if (versionText === 'Non Scansionato') versionText = 'Not Scanned';
+                if (versionText === 'Non Rilevata') versionText = 'Not Detected';
+            }
+
+            const deleteText = currentLang === 'en' ? 'Delete' : 'Elimina';
+
+            devBody.innerHTML += `<tr>
+                <td>
+                  <span class="led-container">
+                    <span class="led ${ledClass}"></span>
+                    ${scan.status.toUpperCase()}
+                  </span>
+                </td>
+                <td>
+                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    <span class="badge" id="badge_${safeIp}">${d.Group}</span>
+                    <select
+                      id="grpsel_${safeIp}"
+                      onchange="reassignDevice('${d.IP}', this.value, this)"
+                      title="Sposta in altro gruppo senza eliminare"
+                      style="font-size:11px; padding:3px 6px; border-radius:6px;
+                             border:1px solid var(--border); background:var(--surface-3);
+                             color:var(--text-muted); cursor:pointer; outline:none;
+                             max-width:120px; transition:var(--transition);">
+                      ${groupOptions}
+                    </select>
+                  </div>
+                </td>
+                <td style="font-family:monospace; font-size:12px;">${d.Hostname || '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td><strong>${d.IP}</strong></td>
+                <td>${d.Vendor.toUpperCase()}</td>
+                <td><code>${versionText}</code></td>
+                <td class="actions-cell">
+                    <button class="btn btn-secondary btn-small"
+                        style="margin:0; padding:4px 8px;"
+                        onclick="pingSingleDevice('${d.IP}', this)"
+                        title="Ping dispositivo">
+                      <i class="fa-solid fa-wifi"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-small"
+                        style="margin:0; padding:4px 8px; color:var(--warning);"
+                        onclick="triageSingleDevice('${d.IP}', this)"
+                        title="Triage dispositivo">
+                      <i class="fa-solid fa-bolt-lightning"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
+                        onclick="openCliModal('${d.IP}')">
+                        <i class="fa-solid fa-terminal"></i> CLI
+                    </button>
+                    <button class="btn btn-primary btn-small"
+                        style="margin:0; width:auto; background:#3be188; color:#000; padding:4px 8px;"
+                        onclick="downloadBackup('${d.IP}')">
+                        <i class="fa-solid fa-download"></i>
+                    </button>
+                    <button class="btn btn-danger btn-small"
+                        style="margin:0; padding:4px 8px; background:none; border:none;
+                               color:var(--danger); cursor:pointer;"
+                        onclick="deleteDevice('${d.IP}')">
+                        <i class="fa-solid fa-trash-can"></i> ${deleteText}
+                    </button>
+                </td>
+            </tr>`;
+        });
+    }
+
+    // --- DEVICE CRUD ---
+
+    document.getElementById('devProfile').addEventListener('change', (e) => {
+        document.getElementById('customCredsForm').style.display = e.target.value === 'custom' ? 'block' : 'none';
+    });
+
+    document.getElementById('btnSaveDevice').addEventListener('click', async () => {
+        const payload = {
+            ip: document.getElementById('devIp').value.trim(),
+            vendor: document.getElementById('devVendor').value,
+            profile: document.getElementById('devProfile').value,
+            username: document.getElementById('devUser').value,
+            password: document.getElementById('devPass').value,
+            enable_secret: document.getElementById('devSecret').value,
+            group: document.getElementById('devGroupSelect').value
+        };
+
+        if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
+
+        const res = await apiFetch('/api/add-device', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify(payload) 
+        });
+        if(res && res.ok) {
+            document.getElementById('devIp').value = '';
+            document.getElementById('devProfile').value = 'default';
+            document.getElementById('customCredsForm').style.display = 'none';
+            appInit();
+        } else if (res) {
+            const err = await res.json();
+            alert(`${i18n[currentLang].alertFirstSetupError}${err.detail || i18n[currentLang].alertSaveDeviceError}`);
+        }
+    });
+
+    async function deleteDevice(ip) {
+        if(confirm(i18n[currentLang].confirmDeleteDevice.replace("{ip}", ip))) {
+            const res = await apiFetch('/api/delete-device', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ ip: ip }) 
+            });
+            if (res && res.ok) {
+                appInit();
+            }
+        }
+    }
+
+    // --- GRUPPI CRUD ---
+
+    document.getElementById('btnCreateGroup').addEventListener('click', async () => {
+        const name = document.getElementById('newGroupName').value.trim();
+        if(!name) return;
+        
+        const description = currentLang === 'en' ? `Secondary Site ${name}` : `Sede secondaria ${name}`;
+        const res = await apiFetch('/api/groups', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({ name: name, description: description }) 
+        });
+        if(res && res.ok) {
+            document.getElementById('newGroupName').value = '';
+            appInit();
+        } else if (res) {
+            alert(i18n[currentLang].alertGroupCreateError);
+        }
+    });
+
+    async function deleteGroup(name) {
+        if(confirm(i18n[currentLang].confirmDeleteGroup.replace("{name}", name))) {
+            const res = await apiFetch('/api/groups/delete', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ name: name }) 
+            });
+            if(res && res.ok) {
+                appInit();
+            } else if (res) {
+                alert(i18n[currentLang].alertGroupDeleteError);
+            }
+        }
+    }
+
+    // --- VENDOR CRUD ---
+
+    function buildVendorOptions(selected) {
+        const builtins = ["cisco","hpe"];
+        const all = [...new Set([...builtins, ...Object.keys(globalVendors)])];
+        return all.map(v =>
+            `<option value="${v}" ${v===selected?"selected":""}>${v.toUpperCase()}</option>`
+        ).join("");
+    }
+
+    function renderVendorTable() {
+        const body = document.getElementById('vendorTableBody');
+        if (!body) return;
+        body.innerHTML = '';
+        Object.entries(globalVendors).forEach(([name, meta]) => {
+            const isSystem = name === 'cisco' || name === 'hpe';
+            const systemText = currentLang === 'en' ? 'System' : 'Sistema';
+            const deleteText = currentLang === 'en' ? 'Delete' : 'Elimina';
+            body.innerHTML += `<tr>
+                <td><strong>${name}</strong></td>
+                <td><span style="font-family:var(--font-code); font-size:12px; color:var(--primary);">${meta.euvd_term || '—'}</span></td>
+                <td><span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${meta.driver || '—'}</span></td>
+                <td>${isSystem
+                    ? `<span style="color:var(--text-muted); font-size:12px;">${systemText}</span>`
+                    : `<button onclick="deleteVendor('${name}')" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`
+                }</td>
+            </tr>`;
+        });
+    }
+
+    async function loadVendors() {
+        const res = await apiFetch('/api/vendors');
+        if (!res || !res.ok) return;
+        globalVendors = await res.json();
+        renderVendorTable();
+        const devVendorSel = document.getElementById('devVendor');
+        if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
+        const scanVendorSel = document.getElementById('scanVendorSelect');
+        if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
+    }
+
+    async function addVendor() {
+        const name = document.getElementById('newVendorName').value.trim().toLowerCase();
+        const term = document.getElementById('newVendorTerm').value.trim();
+        const drv  = document.getElementById('newVendorDriver').value.trim() || null;
+        if (!name || !term) { alert(i18n[currentLang].alertVendorRequired); return; }
+        const res = await apiFetch('/api/vendors', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({name, euvd_term: term, driver: drv})
+        });
+        if (res && res.ok) {
+            document.getElementById('newVendorName').value = '';
+            document.getElementById('newVendorTerm').value = '';
+            document.getElementById('newVendorDriver').value = '';
+            await loadVendors();
+        }
+    }
+
+    async function deleteVendor(name) {
+        if (!confirm(i18n[currentLang].confirmDeleteVendor.replace("{name}", name))) return;
+        const res = await apiFetch('/api/vendors/delete', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({name})
+        });
+        if (res && res.ok) { await loadVendors(); }
+    }
+
+    // --- TABS & TOPOLOGY LIST VIEW ---
+
+    function switchTab(tabId, clickedBtn) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        if (clickedBtn) {
+            clickedBtn.classList.add('active');
+        }
+        
+        if (tabId === 'tab-devices') {
+            renderDeviceTable();
+        } else if(tabId === 'tab-map') loadTopology();
+        else if(tabId === 'tab-map-interactive') loadInteractiveMap();
+        else if(tabId === 'tab-security' && !appLoading) {
+            loadThreatIntel();
+        }
+    }
+
+    async function loadTopology() {
+        const view = document.getElementById('topologyView');
+        view.innerHTML = i18n[currentLang].txtTopologyAnalyzing;
+        
+        const groupSelect = document.getElementById('topologyGroupSelect');
+        const selectedGroup = groupSelect ? groupSelect.value : 'all';
+        
+        try {
+            const res = await apiFetch('/api/topology?group=' + encodeURIComponent(selectedGroup));
+            if (!res) return;
+            const data = await res.json();
+            
+            if(!data.links || data.links.length === 0) {
+                view.innerHTML = i18n[currentLang].txtTopologyNoLinks;
+                return;
+            }
+            
+            view.innerHTML = i18n[currentLang].txtTopologyTitle;
+            data.links.forEach(l => {
+                view.innerHTML += i18n[currentLang].txtTopologyLink.replace("{source}", l.source).replace("{target}", l.target);
+            });
+        } catch(e) {
+            view.innerHTML = `${i18n[currentLang].txtTopologyError}${e}`;
+        }
+    }
+
+    // --- VIS.JS TOPOLOGY GRAPH VIEW ---
+
+    let networkInstance = null;
+
+    // Generatore dinamico di schede SVG ad alta tecnologia per i nodi del network
+    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor) {
+        let statusColor = "#8d9bb0";
+        let statusBg = "rgba(141, 155, 176, 0.1)";
+        let statusGlow = "rgba(141, 155, 176, 0.2)";
+        let statusText = "OFFLINE";
+        
+        if (status === "online") {
+            statusColor = "#3be188"; // verde neon
+            statusBg = "rgba(59, 225, 136, 0.15)";
+            statusGlow = "rgba(59, 225, 136, 0.4)";
+            statusText = "ONLINE";
+        } else if (status === "offline") {
+            statusColor = "#ff6b7c"; // rosso neon
+            statusBg = "rgba(255, 107, 124, 0.15)";
+            statusGlow = "rgba(255, 107, 124, 0.4)";
+            statusText = "OFFLINE";
+        } else if (status === "auth_failed") {
+            statusColor = "#ffb84d"; // arancio neon
+            statusBg = "rgba(255, 184, 77, 0.15)";
+            statusGlow = "rgba(255, 184, 77, 0.4)";
+            statusText = "AUTH ERR";
+        } else if (status === "discovered") {
+            statusColor = "#a3a3a3"; // grigio vicini scoperti
+            statusBg = "rgba(163, 163, 163, 0.15)";
+            statusGlow = "rgba(163, 163, 163, 0.2)";
+            statusText = currentLang === 'en' ? "DISCOVERED" : "RILEVATO";
+        }
+
+        if (isBoundary) {
+            statusColor = "#4a5568";
+            statusBg = "rgba(74, 85, 104, 0.15)";
+            statusGlow = "transparent";
+            statusText = currentLang === 'en' ? "EXTERNAL" : "ESTERNO";
+        }
+
+        // Colore tema per il bordo sfumato della scheda basato sullo stato del nodo
+        let borderGradStart = statusColor;
+        let borderGradEnd = "#1d2837";
+        
+        // Carica icone vettoriali moderne basate sulla tipologia di apparato
+        let iconSvg = "";
+        if (deviceType === "router") {
+            // Icona router
+            iconSvg = `<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="${statusColor}"/>`;
+        } else if (deviceType === "ap") {
+            // Icona Access Point (Wi-Fi)
+            iconSvg = `<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15.92c-.32.05-.65.08-1 .08s-.68-.03-1-.08v-2.12c.32.08.65.12 1 .12s.68-.04 1-.12v2.12zm0-4.22c-.32.12-.65.18-1 .18s-.68-.06-1-.18v-3.8c.32.18.65.28 1 .28s.68-.1 1-.28v3.8zm0-5.8c-.32.22-.65.34-1 .34s-.68-.12-1-.34V4.18c.32.28.65.44 1 .44s.68-.16 1-.44v3.28z" fill="${statusColor}"/>`;
+        } else if (deviceType === "server") {
+            // Icona Server 2U Rack
+            iconSvg = `<path d="M19 13H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zm-8 4H5v-2h6v2zm8 0h-2v-2h2v2zm0-10H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm-8 4H5V9h6v2zm8 0h-2V9h2v2z" fill="${statusColor}"/>`;
+        } else if (deviceType === "phone") {
+            // Icona Telefono IP
+            iconSvg = `<path d="M20 15.5c-1.2 0-2.4-.2-3.6-.6-.3-.1-.7 0-1 .2l-2.2 2.2c-2.8-1.4-5.1-3.8-6.6-6.6l2.2-2.2c.3-.3.4-.7.2-1-.4-1.2-.6-2.4-.6-3.6 0-.6-.4-1-1-1H3.5c-.6 0-1 .4-1 1C2.5 17 7 21.5 16.5 21.5c.6 0 1-.4 1-1V16.5c0-.6-.4-1-1-1z" fill="${statusColor}"/>`;
+        } else if (deviceType === "pc") {
+            // Icona Workstation PC
+            iconSvg = `<path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z" fill="${statusColor}"/>`;
+        } else {
+            // Icona Switch rack standard
+            iconSvg = `<path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm3 2h2v2H7V8zm0 4h2v2H7v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2z" fill="${statusColor}"/>`;
+        }
+
+        const escapedLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const escapedIp = ip.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const escapedVendor = (vendor && vendor !== 'discovered' ? vendor : (currentLang === 'en' ? 'Neighbor' : 'Vicino')).toUpperCase();
+        
+        // Stringa ID per gradienti isolati per ciascun apparato per prevenire conflitti DOM
+        const gradId = escapedIp.replace(/[^a-zA-Z0-9]/g, '_');
+
+        const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="240" height="84" viewBox="0 0 240 84">
+          <defs>
+            <linearGradient id="cardGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#111827" />
+              <stop offset="100%" stop-color="#0b0f17" />
+            </linearGradient>
+            <linearGradient id="borderGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="${borderGradStart}" />
+              <stop offset="100%" stop-color="${borderGradEnd}" />
+            </linearGradient>
+          </defs>
+          
+          <!-- Sfondo della scheda con gradiente scuro e bordo lucido nello stato corrente -->
+          <rect x="2" y="2" width="236" height="80" rx="12" fill="url(#cardGrad_${gradId})" stroke="url(#borderGrad_${gradId})" stroke-width="1.5" />
+          
+          <!-- Barra d'accento laterale colorata in base allo stato -->
+          <path d="M2 14C2 7.37 7.37 2 14 2H18V82H14C7.37 82 2 76.63 2 70V14Z" fill="${statusColor}" opacity="0.85" />
+          
+          <!-- Cerchio contenitore per l'icona dell'apparato -->
+          <circle cx="44" cy="42" r="22" fill="#161e2a" stroke="${statusColor}" stroke-dasharray="1.5" stroke-width="1.5" />
+          
+          <!-- Posizionamento SVG dell'icona -->
+          <g transform="translate(32, 30)">
+            <svg width="24" height="24" viewBox="0 0 24 24">
+                ${iconSvg}
+            </svg>
+          </g>
+          
+          <!-- Informazioni testuali: Hostname e Indirizzo IP -->
+          <text x="78" y="32" font-family="'Satoshi', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="#ffffff" letter-spacing="-0.3">${escapedLabel}</text>
+          <text x="78" y="49" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="700" fill="#8d9bb0">${escapedIp}</text>
+          
+          <!-- Badge del Vendor (Cisco, HPE) -->
+          <rect x="78" y="58" width="55" height="14" rx="4" fill="rgba(44, 188, 195, 0.1)" stroke="rgba(44, 188, 195, 0.2)" stroke-width="1" />
+          <text x="105.5" y="68" font-family="'Satoshi', 'Inter', sans-serif" font-size="9" font-weight="900" fill="#2cbcc3" text-anchor="middle" letter-spacing="0.5">${escapedVendor}</text>
+          
+          <!-- Badge dello Stato Operativo (ONLINE, OFFLINE...) -->
+          <rect x="139" y="58" width="70" height="14" rx="4" fill="${statusBg}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+          <text x="174" y="68" font-family="'Satoshi', 'Inter', sans-serif" font-size="8" font-weight="900" fill="${statusColor}" text-anchor="middle" letter-spacing="0.5">${statusText}</text>
+          
+        </svg>
+        `;
+        return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    }
+
+    // Generatore dinamico del Tooltip HTML premium per ciascun apparato (al passaggio del mouse)
+    function createNodeTooltip(n, scan, resolvedVendor) {
+        let statusLed = "";
+        if (n.status === "online") statusLed = `<span style="color: #3be188; font-weight: bold;">● ONLINE</span>`;
+        else if (n.status === "offline") statusLed = `<span style="color: #ff6b7c; font-weight: bold;">● OFFLINE</span>`;
+        else if (n.status === "auth_failed") statusLed = `<span style="color: #ffb84d; font-weight: bold;">● AUTH FAILED</span>`;
+        else if (n.status === "discovered") statusLed = `<span style="color: #a3a3a3; font-weight: bold;">● DISCOVERED</span>`;
+        
+        const firmware = (n.version) ? n.version : ((scan && scan.version) ? scan.version : (currentLang === 'en' ? "Not detected / Offline" : "Non rilevato / Offline"));
+        const vendorName = (resolvedVendor && resolvedVendor !== 'discovered') ? resolvedVendor : (currentLang === 'en' ? "LLDP/CDP Neighbor" : "Vicino LLDP/CDP");
+        
+        const titleText = currentLang === 'en' ? 'Device Metadata' : 'Metadati Apparato';
+        const labelIpText = currentLang === 'en' ? 'IP Address:' : 'Indirizzo IP:';
+        const labelGroupText = currentLang === 'en' ? 'Site/Group:' : 'Sede/Gruppo:';
+        const labelStatusText = currentLang === 'en' ? 'Network Status:' : 'Stato Rete:';
+
+        const htmlString = `
+        <div style="font-family: var(--font-main); min-width: 230px; color: var(--text);">
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; color: var(--primary); display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-network-wired"></i> ${titleText}
+          </div>
+          <table style="width: 100%; border-collapse: collapse; background: transparent;">
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${n.label}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${n.id}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${vendorName}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${n.group}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelStatusText}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${statusLed}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${firmware}</code></td></tr>
+          </table>
+        </div>
+        `;
+        const container = document.createElement("div");
+        container.innerHTML = htmlString;
+        return container;
+    }
+
+    async function loadInteractiveMap() {
+        const groupSelect = document.getElementById('interactiveGroupSelect');
+        const selectedGroup = groupSelect ? groupSelect.value : 'all';
+        
+        const res = await apiFetch("/api/network-map?group=" + encodeURIComponent(selectedGroup));
+        if (!res || !res.ok) return;
+        const data = await res.json();
+
+        // Rileva lo stato del toggle per visualizzare i dispositivi terminali non di rete
+        const showEndDevices = document.getElementById("toggleEndDevices")?.checked || false;
+        
+        let filteredNodesData = data.nodes;
+        let filteredLinksData = data.links;
+        
+        if (!showEndDevices) {
+            // Filtra via server, telefoni IP e PC generici
+            filteredNodesData = data.nodes.filter(n => n.device_type !== 'phone' && n.device_type !== 'server' && n.device_type !== 'pc');
+            
+            // Filtra i link ad essi associati
+            const validNodeIds = new Set(filteredNodesData.map(n => n.id));
+            filteredLinksData = data.links.filter(l => validNodeIds.has(l.source) && validNodeIds.has(l.target));
+        }
+
+        // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
+        const nodes = filteredNodesData.map(n => {
+            const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            
+            // Risolve robustamente il vendor sul client confrontando l'IP con l'anagrafica di globalDevices
+            const matchedDev = globalDevices.find(d => d.IP === n.id);
+            const resolvedVendor = (n.vendor && n.vendor !== 'discovered')
+                ? n.vendor
+                : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
+
+            return {
+                id: n.id,
+                shape: "image",
+                image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor),
+                title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
+                size: 38
+            };
+        });
+
+        // Trasforma archi filtrati per Vis.js con indicazioni di porta super leggibili ed eleganti
+        const edges = filteredLinksData.map(l => {
+            // visualizza le porte collegate come etichetta fluttuante sul cavo
+            const portLabel = l.local_port && l.local_port !== 'Vicino' && l.local_port !== 'Neighbor' ? `${l.local_port} ⇄ ${l.remote_port}` : '';
+            
+            // Generatore del Tooltip HTML premium al passaggio sul collegamento
+            const linkTooltip = `
+            <div style="font-family: var(--font-main); min-width: 240px; color: var(--text);">
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; color: var(--primary); display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-circle-nodes"></i> ${currentLang === 'en' ? 'Interconnection Link' : 'Link di Interconnessione'}
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 30px 1fr; gap: 8px; align-items: center; font-size: 11px; line-height: 1.4;">
+                <div>
+                  <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Source' : 'Origine'}</span>
+                  <strong style="font-size:11px; color:#fff;">${l.source}</strong>
+                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${l.local_port || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                </div>
+                <div style="color: var(--primary); font-size: 14px; text-align: center;"><i class="fa-solid fa-right-left"></i></div>
+                <div style="text-align: right;">
+                  <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Destination' : 'Destinazione'}</span>
+                  <strong style="font-size:11px; color:#fff;">${l.target}</strong>
+                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${l.remote_port || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                </div>
+              </div>
+            </div>
+            `;
+            const container = document.createElement("div");
+            container.innerHTML = linkTooltip;
+
+            return {
+                from: l.source,
+                to: l.target,
+                label: portLabel,
+                title: container, // HTML Tooltip DOM element
+                font: { 
+                    color: "#2cbcc3", 
+                    size: 11, 
+                    face: "'JetBrains Mono', monospace", 
+                    strokeWidth: 0,
+                    background: "#090d13" // Combacia con lo sfondo della mappa
+                },
+                color: { 
+                    color: "rgba(44, 188, 195, 0.35)", 
+                    highlight: "#2cbcc3",
+                    hover: "#3be188" 
+                },
+                arrows: { to: { enabled: false } },
+                width: 3.5,
+                hoverWidth: 1.5
+            };
+        });
+
+        const container = document.getElementById("networkGraphContainer");
+        const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+        
+        // Opzioni Vis.js per stabilizzazione fisica veloce all'avvio e splendida interattività
+        const options = {
+            physics: {
+                stabilization: {
+                    enabled: true,
+                    iterations: 120, // si stabilizza rapidamente in background
+                    updateInterval: 20,
+                    onlyDynamicEdges: false,
+                    fit: true
+                },
+                barnesHut: {
+                    gravitationalConstant: -4500,
+                    centralGravity: 0.18,
+                    springLength: 200,
+                    springConstant: 0.04,
+                    damping: 0.09,
+                    avoidOverlap: 1
+                }
+            },
+            interaction: { 
+                hover: true,
+                hoverConnectedEdges: true,
+                selectConnectedEdges: true,
+                tooltipDelay: 150
+            },
+            nodes: {
+                shadow: {
+                    enabled: true,
+                    color: "rgba(0,0,0,0.5)",
+                    size: 10,
+                    x: 0,
+                    y: 4
+                }
+            },
+            edges: {
+                smooth: { 
+                    type: 'cubicBezier', 
+                    forceDirection: 'none', 
+                    roundness: 0.5 
+                },
+                shadow: {
+                    enabled: true,
+                    color: "rgba(0,0,0,0.4)",
+                    size: 4,
+                    x: 0,
+                    y: 2
+                }
+            }
+        };
+
+        if (networkInstance) {
+            networkInstance.destroy();
+        }
+        networkInstance = new vis.Network(container, graphData, options);
+    }
+
+    function downloadTopology() {
+        if (!networkInstance) {
+            alert(i18n[currentLang].alertNoTopology);
+            return;
+        }
+        const canvas = networkInstance.canvas.frame.canvas;
+        const link = document.createElement("a");
+        link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".png";
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+    }
+
+    async function resetTopology() {
+        if (!confirm(i18n[currentLang].confirmReset)) return;
+
+        const res = await apiFetch('/api/topology/reset', { method: 'POST' });
+        if (!res || !res.ok) {
+            alert(i18n[currentLang].alertTopologyResetError);
+            return;
+        }
+
+        // 1. Distruggi istanza vis.js e pulisci il container
+        if (networkInstance) {
+            networkInstance.destroy();
+            networkInstance = null;
+        }
+        const graphContainer = document.getElementById('networkGraphContainer');
+        if (graphContainer) graphContainer.innerHTML = '';
+
+        // 2. Pulisci la vista adjacency list
+        const topoView = document.getElementById('topologyView');
+        if (topoView) {
+            topoView.innerHTML = i18n[currentLang].topologyResetSuccessMsg;
+        }
+
+        // 3. Ricarica inventario (aggiorna stati LED nella tabella)
+        await appInit();
+
+        // 4. Forza reload di ENTRAMBE le mappe indipendentemente dalla tab attiva
+        await loadTopology();
+        await loadInteractiveMap();
+
+        const data = await res.json();
+        console.info(`[Reset] Eliminati ${data.deleted} file cache.`);
+    }
+
+    // --- TERMINAL CLI INTERACTIVE (WebSockets + Xterm.js) ---
+
+    let termInstance = null;
+    let wsSocket = null;
+
+    async function openCliModal(ip) {
+        document.getElementById("cliTargetIp").innerText = ip;
+        document.getElementById("cliModalOverlay").style.display = "flex";
+
+        const container = document.getElementById("terminal-container");
+        container.innerHTML = "";
+
+        termInstance = new Terminal({
+            cursorBlink: true,
+            theme: {
+                background: '#070a0e',
+                foreground: '#f0f4f9',
+                cursor: '#2cbcc3',
+                selection: 'rgba(44, 188, 195, 0.3)'
+            },
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 14,
+            rows: 24,
+            cols: 80
+        });
+        termInstance.open(container);
+        termInstance.write(currentLang === 'en' ? "Initializing terminal session...\r\n" : "Inizializzazione sessione terminale...\r\n");
+
+        // Fetch a single-use OTP before opening the WebSocket
+        const otpRes = await apiFetch("/api/ws-token", { method: "POST" });
+        if (!otpRes || !otpRes.ok) {
+            termInstance.write(currentLang === 'en' ? "[Error] Unable to obtain OTP token — JWT session expired or invalid.\r\n" : "[Errore] Impossibile ottenere il token OTP — sessione JWT scaduta o non valida.\r\n");
+            return;
+        }
+        const { ws_token } = await otpRes.json();
+
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/api/ws-terminal/${ip}?token=${encodeURIComponent(ws_token)}`;
+
+        wsSocket = new WebSocket(wsUrl);
+
+        wsSocket.onopen = () => {
+            termInstance.write(currentLang === 'en' ? "[WebSocket connection established]\r\n" : "[Connessione WebSocket stabilita]\r\n");
+        };
+        wsSocket.onmessage = (event) => {
+            termInstance.write(event.data);
+        };
+        wsSocket.onclose = (event) => {
+            const noReason = currentLang === 'en' ? "No reason provided" : "Nessun motivo fornito";
+            termInstance.write(`\r\n[${currentLang === 'en' ? 'Terminal connection closed' : 'Connessione terminale chiusa'}: ${event.reason || noReason}]\r\n`);
+        };
+        wsSocket.onerror = () => {
+            termInstance.write(currentLang === 'en' ? `\r\n[WebSocket Error] Connection interrupted.\r\n` : `\r\n[Errore WebSocket] Connessione interrotta.\r\n`);
+        };
+        termInstance.onData((data) => {
+            if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+                wsSocket.send(data);
+            }
+        });
+    }
+
+    function closeCliModal() {
+        document.getElementById("cliModalOverlay").style.display = "none";
+
+        // Rilascio pulito delle risorse per evitare memory leak e connessioni orfane
+        if (wsSocket) {
+            try {
+                wsSocket.close();
+            } catch (e) {
+                console.error("Errore durante la chiusura del WebSocket:", e);
+            }
+            wsSocket = null;
+        }
+
+        if (termInstance) {
+            try {
+                termInstance.dispose();
+            } catch (e) {
+                console.error("Errore durante il dispose di Xterm.js:", e);
+            }
+            termInstance = null;
+        }
+    }
+
+    // --- BACKGROUND JOBS (polling triage in background) ---
+
+    document.getElementById("btnRunTriage").addEventListener("click", async () => {
+        const res = await apiFetch("/api/run-triage", { method: "POST" });
+        if (res && res.ok) {
+            startTriageStatusPolling();
+        }
+    });
+
+    function startTriageStatusPolling() {
+        if (isTriagePolling) return;
+        isTriagePolling = true;
+        pollTriageStatus();
+    }
+
+    async function pollTriageStatus() {
+        try {
+            const res = await apiFetch("/api/triage-status");
+            if (!res || !res.ok) { isTriagePolling = false; return; }
+            const statusData = await res.json();
+            
+            const pbox = document.getElementById("triageProgressBox");
+            if (statusData.status === "running") {
+                wasTriageRunning = true;
+                pbox.style.display = "flex";
+                const total = statusData.total || 1;
+                const progress = statusData.progress || 0;
+                const pct = Math.round((progress / total) * 100);
+                
+                document.getElementById("triageProgressPct").innerText = `${pct}%`;
+                const processingText = currentLang === 'en' ? 'Processing' : 'Elaborazione';
+                document.getElementById("triageProgressMsg").innerText = `${processingText}: ${statusData.current_device} (${progress}/${total})`;
+                document.getElementById("triageProgressBarFill").style.width = `${pct}%`;
+                
+                setTimeout(pollTriageStatus, 1500);
+            } else {
+                pbox.style.display = "none";
+                isTriagePolling = false;
+                if (wasTriageRunning) {
+                    wasTriageRunning = false;
+                    appInit();
+                }
+            }
+        } catch {
+            isTriagePolling = false;
+        }
+    }
+
+    // --- SUBNET SCANNER ---
+
+    function openSubnetScanModal() {
+        // Populate group select from current globalGroups cache
+        const sel = document.getElementById('scanGroupSelect');
+        sel.innerHTML = '';
+        Object.keys(globalGroups).forEach(g => {
+            const opt = document.createElement('option');
+            opt.value = g;
+            opt.textContent = g;
+            if (g === 'Generale') opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        document.getElementById('subnetScanResults').style.display = 'none';
+        document.getElementById('subnetScanResultsTable').innerHTML = '';
+        document.getElementById('subnetScanStatus').textContent = '';
+        document.getElementById('scanNetworkInput').value = '';
+        document.getElementById('scanAutoAdd').checked = false;
+        document.getElementById('btnAvviaScan').disabled = false;
+        document.getElementById('subnetScanModal').style.display = 'flex';
+    }
+
+    function closeSubnetScanModal() {
+        if (_scanJobInterval) { clearInterval(_scanJobInterval); _scanJobInterval = null; }
+        document.getElementById('subnetScanModal').style.display = 'none';
+    }
+
+    async function startSubnetScan() {
+        if (_scanJobInterval) { clearInterval(_scanJobInterval); _scanJobInterval = null; }
+
+        const network = document.getElementById('scanNetworkInput').value.trim();
+        const vendor  = document.getElementById('scanVendorSelect').value;
+        const group   = document.getElementById('scanGroupSelect').value;
+        const autoAdd = document.getElementById('scanAutoAdd').checked;
+        if (!network) { document.getElementById('scanNetworkInput').focus(); return; }
+
+        const btn = document.getElementById('btnAvviaScan');
+        btn.disabled = true;
+        btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Starting...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Avvio...';
+        document.getElementById('subnetScanResults').style.display = 'block';
+        document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Starting scan...' : 'Avvio scansione...';
+        document.getElementById('subnetScanResultsTable').innerHTML = '';
+        document.getElementById('subnetScanProgressBar').style.width = '0%';
+
+        const res = await apiFetch('/api/scan-subnet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ network, vendor, group, auto_add: autoAdd, use_default_creds: true }),
+        });
+        if (!res || !res.ok) {
+            const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
+            document.getElementById('subnetScanStatus').textContent =
+                (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || (currentLang === 'en' ? 'unable to start scan.' : 'impossibile avviare la scansione.'));
+            btn.disabled = false;
+            btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan' : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+            return;
+        }
+        const { job_id, total_hosts } = await res.json();
+        document.getElementById('subnetScanStatus').textContent =
+            currentLang === 'en' ? `Scan started — ${total_hosts} hosts to verify...` : `Scansione avviata — ${total_hosts} host da verificare...`;
+        btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
+        pollScanJob(job_id, total_hosts);
+    }
+
+    function pollScanJob(jobId, totalHosts) {
+        _scanJobInterval = setInterval(async () => {
+            const res = await apiFetch(`/api/scan-subnet/${jobId}`);
+            if (!res || !res.ok) {
+                clearInterval(_scanJobInterval); _scanJobInterval = null;
+                document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
+                const b = document.getElementById('btnAvviaScan');
+                b.disabled = false;
+                b.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan' : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+                return;
+            }
+            const data = await res.json();
+            const pct  = totalHosts > 0 ? Math.round((data.progress / totalHosts) * 100) : 0;
+            document.getElementById('subnetScanProgressBar').style.width = `${pct}%`;
+            document.getElementById('subnetScanStatus').textContent =
+                currentLang === 'en' ? `Scanning in progress — ${data.progress}/${totalHosts} hosts processed...` : `Scansione in corso — ${data.progress}/${totalHosts} host elaborati...`;
+
+            if (data.status !== 'running') {
+                clearInterval(_scanJobInterval); _scanJobInterval = null;
+                const b = document.getElementById('btnAvviaScan');
+                b.disabled = false;
+                b.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan' : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+                document.getElementById('subnetScanProgressBar').style.width = '100%';
+                if (data.status === 'error') {
+                    document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Scan finished with error.' : 'Scansione terminata con errore.';
+                    return;
+                }
+                renderScanResults(data.results || []);
+            }
+        }, 2000);
+    }
+
+    function renderScanResults(results) {
+        const reachable = results.filter(r => r.reachable);
+        const sshOk     = results.filter(r => r.ssh_ok);
+        const added     = results.filter(r => r.added);
+        document.getElementById('subnetScanStatus').textContent =
+            currentLang === 'en'
+                ? `Completed — ${reachable.length} reachable, ${sshOk.length} SSH ok, ${added.length} added to inventory.`
+                : `Completata — ${reachable.length} raggiungibili, ${sshOk.length} SSH ok, ${added.length} aggiunti all'inventario.`;
+
+        if (sshOk.length === 0) {
+            const noHostText = currentLang === 'en' ? 'No hosts responding via SSH.' : 'Nessun host risponde via SSH.';
+            document.getElementById('subnetScanResultsTable').innerHTML =
+                `<div style="padding:14px; color:var(--text-muted); font-size:13px;">${noHostText}</div>`;
+            return;
+        }
+        const rows = sshOk.map(r => {
+            const safeIp  = r.ip.replace(/'/g, '');
+            const safeHn  = (r.hostname || '').replace(/'/g, "\\'");
+            const addText = currentLang === 'en' ? 'Add' : 'Aggiungi';
+            const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
+            const addCell = (!r.added)
+                ? `<button class="btn btn-primary btn-small"
+                       style="margin:0; padding:3px 8px; width:auto;"
+                       onclick="addDiscoveredDevice('${safeIp}','${safeHn}','${r.vendor}')">
+                       ${addText}
+                   </button>`
+                : `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
+            return `<div style="display:grid; grid-template-columns:130px 1fr 56px 24px 90px;
+                        align-items:center; gap:8px; padding:8px 12px;
+                        border-bottom:1px solid var(--border); font-size:12px;">
+                <span style="font-family:'JetBrains Mono',monospace; color:var(--primary);">${r.ip}</span>
+                <span>${r.hostname || '<span style="color:var(--text-muted)">—</span>'}</span>
+                <span style="text-transform:uppercase; color:var(--text-muted);">${r.vendor}</span>
+                <span style="text-align:center; color:${r.ssh_ok ? 'var(--primary)' : 'var(--danger)'};">${r.ssh_ok ? '✓' : '✗'}</span>
+                ${addCell}
+              </div>`;
+        }).join('');
+        document.getElementById('subnetScanResultsTable').innerHTML = rows;
+        if (added.length > 0) appInit();
+    }
+
+    async function addDiscoveredDevice(ip, hostname, vendor) {
+        const group = document.getElementById('scanGroupSelect').value;
+        const res = await apiFetch('/api/add-device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip, vendor, profile: 'default', username: '', password: '', enable_secret: '', group }),
+        });
+        if (!res || !res.ok) return;
+        document.querySelectorAll('#subnetScanResultsTable button').forEach(b => {
+            if (b.getAttribute('onclick')?.includes(`'${ip}'`)) {
+                const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
+                b.outerHTML = `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
+            }
+        });
+        appInit();
+    }
+
+    // --- VULNERABILITY ADVISORY (EUVD) ---
+
+    // Parallelizzazione delle query ENISA tramite Promise.all (Ottimizzazione Performance)
+    async function loadThreatIntel() {
+        const container = document.getElementById("securityTriageContainer");
+        if (!container) return;
+
+        const queryingText = i18n[currentLang].queryingEnisa.replace(/<[^>]*>/g, '');
+        container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${queryingText}</div>`;
+
+        const res = await apiFetch('/api/local-devices');
+        if (!res) return;
+        const data = await res.json();
+
+        const onlineDevices = data.devices.filter(d => {
+            const scan = data.detected_versions[d.IP];
+            return scan && scan.status === 'online' && scan.version !== 'Non Scansionato' && scan.version !== 'Unknown';
+        });
+
+        container.innerHTML = "";
+
+        // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
+        if (onlineDevices.length === 0) {
+            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
+                ${i18n[currentLang].noDevicesText}
+            </div>`;
+        } else {
+            const promises = onlineDevices.map(async (d) => {
+                const scan = data.detected_versions[d.IP];
+                const safeIpId = d.IP.replace(/\./g, '-');
+                const scanningText = currentLang === 'en' ? 'Scanning...' : 'Scansione...';
+
+                const devCard = document.createElement("div");
+                devCard.className = "vuln-card";
+                devCard.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div>
+                            <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
+                            <span class="badge" style="margin-left: 10px;">${d.Vendor.toUpperCase()}</span>
+                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${scan.version}</code></span>
+                        </div>
+                        <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);">
+                            <i class="fa-solid fa-circle-notch fa-spin"></i> ${scanningText}
+                        </div>
+                    </div>
+                    <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px;"></div>
+                `;
+                container.appendChild(devCard);
+                await runEuvdQuery(safeIpId, d.Vendor, scan.version);
+            });
+            await Promise.all(promises);
+        }
+
+        // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – selezione manuale ──────────
+        const mapRes = await apiFetch('/api/network-map');
+        if (!mapRes || !mapRes.ok) return;
+        const mapData = await mapRes.json();
+
+        const discoveredWithVersion = (mapData.nodes || []).filter(n =>
+            n.status === 'discovered' && n.version && n.version.trim() !== ''
+        );
+
+        if (discoveredWithVersion.length === 0) return;
+
+        // Header sezione
+        const sectionHeader = document.createElement("div");
+        sectionHeader.innerHTML = `
+            <div style="border-top: 1px solid var(--border); margin: 25px 0 15px 0; padding-top: 20px;">
+                <h3 style="font-size:16px; margin-bottom:6px;">
+                    ${i18n[currentLang].discoveredNeighborsTitle}
+                </h3>
+                <p style="font-size:13px; color:var(--text-muted);">
+                    ${i18n[currentLang].discoveredNeighborsDesc}
+                </p>
+            </div>
+        `;
+        container.appendChild(sectionHeader);
+
+        // Griglia di card selezionabili
+        const grid = document.createElement("div");
+        grid.style.cssText = "display:grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px; margin-bottom:18px;";
+        container.appendChild(grid);
+
+        discoveredWithVersion.forEach(n => {
+            const safeId = n.id.replace(/[^a-zA-Z0-9]/g, '-');
+            const versionShort = extractReadableVersion(n.version);
+
+            const card = document.createElement("div");
+            card.id = `disc-card-${safeId}`;
+            card.style.cssText = `
+                background: var(--surface-2);
+                border: 2px solid var(--border);
+                border-radius: 10px;
+                padding: 14px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                user-select: none;
+            `;
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                    <div>
+                        <div style="font-weight:700; font-size:15px;">${n.label}</div>
+                        <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${n.id}</div>
+                    </div>
+                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
+                    <code style="font-size:11px; color:var(--primary);">${versionShort}</code>
+                </div>
+                <button
+                    id="btn-disc-${safeId}"
+                    onclick="runDiscoveredVulnCheck('${n.id}', '${n.label}', \`${n.version.replace(/`/g,"'")}\`, '${versionShort.replace(/'/g,"\\'")}', this)"
+                    style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--warning); color:#000; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                    ${i18n[currentLang].btnAnalyzeVuln}
+                </button>
+            `;
+            card.onmouseenter = () => card.style.borderColor = 'var(--warning)';
+            card.onmouseleave = () => {
+                if (!card.dataset.checked) card.style.borderColor = 'var(--border)';
+            };
+            grid.appendChild(card);
+
+            const resultArea = document.createElement("div");
+            resultArea.id = `disc-results-${safeId}`;
+            resultArea.style.cssText = "display:none; grid-column:1/-1;";
+            grid.appendChild(resultArea);
+        });
+    }
+
+    function extractReadableVersion(sysDesc) {
+        if (!sysDesc) return i18n[currentLang].versionNotAvailable;
+        const ciscoMatch = sysDesc.match(/Version\s+([\w.()]+)/i);
+        if (ciscoMatch) return `IOS Version ${ciscoMatch[1]}`;
+        const linuxMatch = sysDesc.match(/^(Ubuntu|Debian|CentOS|RHEL|Rocky|Alpine)\s+([\d.\w]+)/i);
+        if (linuxMatch) return `${linuxMatch[1]} ${linuxMatch[2]}`;
+        return sysDesc.substring(0, 60).trim();
+    }
+
+    async function runDiscoveredVulnCheck(nodeId, label, fullVersion, versionShort, btnEl) {
+        const safeId = nodeId.replace(/[^a-zA-Z0-9]/g, '-');
+        const card = document.getElementById(`disc-card-${safeId}`);
+        const resultArea = document.getElementById(`disc-results-${safeId}`);
+        if (!resultArea) return;
+
+        btnEl.disabled = true;
+        btnEl.innerHTML = i18n[currentLang].scanningEuvd;
+        card.style.borderColor = 'var(--primary)';
+        card.dataset.checked = '1';
+
+        const vendor = /cisco/i.test(fullVersion) ? 'cisco' : /hpe|procurve|aruba/i.test(fullVersion) ? 'hpe' : label;
+
+        resultArea.style.display = "block";
+        resultArea.innerHTML = `
+            <div class="vuln-card" style="border-color:var(--primary); margin-top: 8px;">
+                <div style="font-weight:700; margin-bottom:10px;">
+                    <i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i>
+                    ${label} <span style="color:var(--text-muted); font-size:12px; font-weight:400;">(${nodeId})</span>
+                    <span id="disc-status-${safeId}" style="float:right; font-size:13px; color:var(--text-muted);">
+                        ${i18n[currentLang].queryingEnisa}
+                    </span>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+                    System Description: <code style="color:var(--primary); font-size:11px;">${versionShort}</code>
+                </div>
+                <div id="disc-vuln-${safeId}"></div>
+            </div>
+        `;
+
+        await runEuvdQuery(`disc-${safeId}`, vendor, versionShort, `disc-status-${safeId}`, `disc-vuln-${safeId}`);
+
+        btnEl.disabled = false;
+        btnEl.innerHTML = i18n[currentLang].btnRescan;
+    }
+
+    async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId) {
+        const statusEl  = document.getElementById(statusElId  || `status-${safeId}`);
+        const resultsEl = document.getElementById(resultsElId || `results-${safeId}`);
+        if (!statusEl || !resultsEl) return;
+
+        const queryUrl = `/api/search?vendor=${encodeURIComponent(vendor)}&text=${encodeURIComponent(version)}&size=3`;
+
+        try {
+            const deviceRes = await apiFetch(queryUrl);
+            if (deviceRes && deviceRes.ok) {
+                const vulnData = await deviceRes.json();
+                const items = vulnData.results || vulnData.content || vulnData || [];
+
+                if (items.length > 0) {
+                    statusEl.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${items.length} ${i18n[currentLang].vulnerabilitiesDetected}</span>`;
+                    resultsEl.innerHTML = "";
+                    items.slice(0, 3).forEach(v => {
+                        const enisaId    = v.enisaId || v.id || "EUVD-Unknown";
+                        const cveId      = v.cveId   || v.cve || "N/A";
+                        const description = v.description || v.summary || i18n[currentLang].descriptionNotAvailable;
+                        const score      = v.cvssScore || v.score || "N/A";
+
+                        let severity = "MEDIUM";
+                        if (score !== "N/A") {
+                            const num = parseFloat(score);
+                            if (num >= 9.0)      severity = "CRITICAL";
+                            else if (num >= 7.0) severity = "HIGH";
+                            else if (num >= 4.0) severity = "MEDIUM";
+                            else                 severity = "LOW";
+                        }
+
+                        resultsEl.innerHTML += `
+                            <div style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                                    <div>
+                                        <strong style="color:var(--primary);">${enisaId}</strong>
+                                        <span style="color:var(--text-muted); margin-left:8px;">(CVE: ${cveId})</span>
+                                    </div>
+                                    <span class="severity-pill severity-${severity}">CVSS: ${score}</span>
+                                </div>
+                                <div style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${description}</div>
+                                <div style="font-size:10px; color:var(--primary);">${i18n[currentLang].relevantNis2}</div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    statusEl.innerHTML = `<span style="color: var(--success);"><i class="fa-solid fa-circle-check"></i> ${i18n[currentLang].safeRelease}</span>`;
+                    resultsEl.innerHTML = `<div style="color:var(--text-muted); font-size:13px; font-style:italic;">${i18n[currentLang].noThreatsFound}</div>`;
+                }
+            } else {
+                statusEl.innerHTML = `<span style="color: var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> ${i18n[currentLang].errorMatch}</span>`;
+            }
+        } catch (err) {
+            statusEl.innerHTML = `<span style="color: var(--danger);">${i18n[currentLang].errorScan}</span>`;
+        }
+    }
+
+    async function downloadBackup(ip) {
+        try {
+            const res = await apiFetch(`/api/download-backup/${ip}`);
+            if (!res || !res.ok) {
+                alert(i18n[currentLang].alertDownloadError);
+                return;
+            }
+            const blob = await res.blob();
+            const disposition = res.headers.get('content-disposition');
+            let filename = `${ip}.txt`;
+            if (disposition && disposition.indexOf('attachment') !== -1) {
+                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                const matches = filenameRegex.exec(disposition);
+                if (matches != null && matches[1]) { 
+                    filename = matches[1].replace(/['"]/g, '');
+                }
+            }
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (err) {
+            alert(i18n[currentLang].alertNetworkDownloadError);
+        }
+    }
+
+    async function exportDeviceCsv() {
+        const res = await apiFetch("/api/export/devices");
+        if (!res || !res.ok) {
+            alert(i18n[currentLang].alertExportError);
+            return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "sentinelnet-devices-" + new Date().toISOString().slice(0,10) + ".csv";
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // --- CSV UPLOAD ---
+
+    document.getElementById('btnUploadCsv').addEventListener('click', async () => {
+        const fileInput = document.getElementById('csvFileInput');
+        if (fileInput.files.length === 0) { alert(i18n[currentLang].alertSelectCsv); return; }
+        
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            const text = e.target.result;
+            try {
+                const res = await apiFetch('/api/import-csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ csv_data: text })
+                });
+                if(res && res.ok) {
+                    const result = await res.json();
+                    const importedCount = result.imported ? result.imported.length : 0;
+                    const failedCount = result.failed ? result.failed.length : 0;
+                    
+                    let msg = i18n[currentLang].csvImportSuccess.replace("{importedCount}", importedCount);
+                    if (failedCount > 0) {
+                        msg += i18n[currentLang].csvImportFailedRows.replace("{failedCount}", failedCount);
+                        result.failed.forEach(f => {
+                            msg += i18n[currentLang].csvImportRowDetail
+                                .replace("{row}", f.row)
+                                .replace("{ip}", f.ip)
+                                .replace("{error}", f.error);
+                        });
+                    }
+                    alert(msg);
+                    fileInput.value = "";
+                    appInit();
+                    switchTab('tab-devices');
+                } else if (res) {
+                    alert(i18n[currentLang].alertImportCsvError);
+                }
+            } catch (err) {
+                alert(`${i18n[currentLang].alertError}${err}`);
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    async function reassignDevice(ip, newGroup, selectEl) {
+        const dev = globalDevices.find(d => d.IP === ip);
+        const originalGroup = dev?.Group;
+        if (!dev || newGroup === originalGroup) return;
+
+        selectEl.disabled = true;
+        const safeIp = ip.replace(/\./g, "_");
+
+        try {
+            const res = await apiFetch("/api/reassign-device", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ip, new_group: newGroup })
+            });
+
+            if (res && res.ok) {
+                dev.Group = newGroup;
+                const badge = document.getElementById(`badge_${safeIp}`);
+                if (badge) badge.textContent = newGroup;
+                const filterSelect = document.getElementById("filterGroupSelect");
+                const selectedGroup = filterSelect ? filterSelect.value : "all";
+                if (selectedGroup !== "all" && newGroup !== selectedGroup) {
+                    const row = selectEl.closest("tr");
+                    if (row) {
+                        row.style.transition = "opacity 0.4s";
+                        row.style.opacity = "0";
+                        setTimeout(() => row.remove(), 400);
+                    }
+                }
+            } else {
+                const err = res ? await res.json() : null;
+                const errDetail = err?.detail || (currentLang === 'en' ? "Unknown error" : "Errore sconosciuto");
+                alert(`${i18n[currentLang].alertReassignmentError}${errDetail}`);
+                selectEl.value = originalGroup;
+            }
+        } catch (err) {
+            alert(i18n[currentLang].alertNetworkReassignmentError);
+            selectEl.value = originalGroup;
+        }
+        selectEl.disabled = false;
+    }
+
+    let pingInProgress = false;
+
+    async function pingSingleDevice(ip, btnEl) {
+        const safeIp = ip.replace(/\./g, "_");
+        const row = document.querySelector(`#grpsel_${safeIp}`)?.closest("tr");
+        const led = row?.cells[0]?.querySelector(".led");
+
+        btnEl.disabled = true;
+        btnEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+        if (led) { led.className = "led led-auth_failed"; }
+
+        try {
+            const res = await apiFetch(`/api/ping/${ip}`);
+            if (res && res.ok) {
+                const data = await res.json();
+                if (led) {
+                    led.className = data.reachable ? "led led-online" : "led led-offline";
+                    // only auto-reset if offline — online stays green
+                    if (!data.reachable) {
+                        setTimeout(() => {
+                            const prevStatus = globalVersions[ip]?.status;
+                            led.className = `led ${prevStatus === "online" ? "led-online" : "led-offline"}`;
+                        }, 4000);
+                    }
+                }
+            }
+        } catch(e) {}
+
+        btnEl.disabled = false;
+        btnEl.innerHTML = '<i class="fa-solid fa-wifi"></i>';
+    }
+
+    async function triageSingleDevice(ip, btnEl) {
+        const safeIp = ip.replace(/\./g, "_");
+        const row = document.querySelector(`#grpsel_${safeIp}`)?.closest("tr");
+        const led          = row?.cells[0]?.querySelector(".led");
+        const hostnameCell = row?.cells[2];                    // Hostname column
+        const verCell      = row?.cells[5]?.querySelector("code"); // Firmware column (was cells[4] — off by one after Hostname added)
+
+        btnEl.disabled = true;
+        btnEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+        if (led) led.className = "led led-auth_failed";
+
+        try {
+            const res = await apiFetch(`/api/triage/${ip}`, { method: "POST" });
+            if (res && res.ok) {
+                const data = await res.json();
+                if (data.status === "success") {
+                    if (led) led.className = "led led-online";
+
+                    if (verCell && data.version) verCell.textContent = data.version;
+
+                    if (hostnameCell && data.hostname) {
+                        hostnameCell.style.fontFamily = "monospace";
+                        hostnameCell.style.fontSize   = "12px";
+                        hostnameCell.textContent      = data.hostname;
+                    }
+
+                    if (globalVersions[ip]) {
+                        globalVersions[ip].version = data.version || globalVersions[ip].version;
+                        globalVersions[ip].status  = "online";
+                    }
+                    const dev = globalDevices.find(d => d.IP === ip);
+                    if (dev && data.hostname) dev.Hostname = data.hostname;
+
+                } else {
+                    if (led) led.className = "led led-offline";
+                    const msgDetail = data.message || (currentLang === 'en' ? "Unknown error" : "Errore sconosciuto");
+                    alert(`${i18n[currentLang].alertTriageFailed}${msgDetail}`);
+                }
+            }
+        } catch(e) {
+            if (led) led.className = "led led-offline";
+        }
+
+        btnEl.disabled = false;
+        btnEl.innerHTML = '<i class="fa-solid fa-bolt-lightning"></i>';
+    }
+
+    async function runPingCheck() {
+        if (pingInProgress) return;
+        pingInProgress = true;
+
+        const btn = document.getElementById("btnPingCheck");
+        const filterSelect = document.getElementById("filterGroupSelect");
+        const group = filterSelect ? filterSelect.value : "all";
+        const groupLabel = group === "all" ? i18n[currentLang].allSites : group;
+
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${i18n[currentLang].pingingBtnText.replace("{group}", groupLabel)}`;
+
+        try {
+            const res = await apiFetch("/api/ping-check", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ group })
+            });
+            if (res && res.ok) {
+                const data = await res.json();
+                applyPingResultsToTable(data.results);
+            } else {
+                alert(i18n[currentLang].alertPingError);
+            }
+        } catch (err) {
+            console.error("Ping check error:", err);
+        }
+
+        btn.innerHTML = i18n[currentLang].btnPingCheck;
+        btn.disabled = false;
+        pingInProgress = false;
+    }
+
+    function applyPingResultsToTable(results) {
+        const rows = document.querySelectorAll("#deviceTableBody tr");
+        rows.forEach(row => {
+            const ipCell = row.cells[3]; // IP is at index 3 — Hostname column shifted it right
+            if (!ipCell) return;
+            const ip = ipCell.querySelector("strong")?.textContent?.trim();
+            if (!ip || !(ip in results)) return;
+
+            const ledContainer = row.cells[0].querySelector(".led-container");
+            if (!ledContainer) return;
+
+            const alive     = results[ip];
+            const ledClass  = alive ? "led-online" : "led-offline";
+            const statusTxt = alive ? "ONLINE" : "OFFLINE";
+
+            const led = ledContainer.querySelector(".led");
+            if (led) led.className = `led ${ledClass}`;
+
+            Array.from(ledContainer.childNodes)
+                .filter(n => n.nodeType === Node.TEXT_NODE)
+                .forEach(n => n.remove());
+            ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
+        });
+    }
+
+    window.onload = () => {
+        appInit();
+    };
+  </script>
+</body>
+</html>

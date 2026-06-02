@@ -1,0 +1,26 @@
+{
+    "cisco": {
+        "euvd_term": "cisco",
+        "driver": "cisco_ios"
+    },
+    "hpe": {
+        "euvd_term": "hewlett packard enterprise",
+        "driver": "hp_procurve"
+    },
+    "juniper": {
+        "euvd_term": "juniper networks",
+        "driver": null
+    },
+    "aruba": {
+        "euvd_term": "aruba networks",
+        "driver": null
+    },
+    "fortinet": {
+        "euvd_term": "fortinet",
+        "driver": null
+    },
+    "paloalto": {
+        "euvd_term": "palo alto networks",
+        "driver": null
+    }
+}
