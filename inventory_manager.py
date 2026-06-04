@@ -2,6 +2,7 @@ import json
 import os
 import csv
 import re
+import threading
 import crypto_vault
 import data_config
 
@@ -11,6 +12,12 @@ VERSION_DATA_FILE = data_config.get_path("detected_versions.json")
 VENDORS_FILE = data_config.get_path("vendors.json")
 
 IP_PATTERN = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
+
+# Lock rientrante che serializza le sequenze read-modify-write sui file di stato
+# condivisi (CSV inventario e JSON versioni/gruppi). Necessario perché il triage
+# e la scansione subnet eseguono fino a 50 worker concorrenti che altrimenti
+# sovrascriverebbero gli aggiornamenti reciproci (lost update).
+_io_lock = threading.RLock()
 
 def safe_json_write(filepath: str, data: dict):
     """Scrittura atomica con pattern temp-then-rename e fallback Windows."""
@@ -115,24 +122,31 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
         raise ValueError(f"IP non valido: {ip}")
 
-    devices = get_all_devices()
-    devices = [d for d in devices if d['IP'] != ip]
-    
     enc_password = crypto_vault.encrypt_password(password)
     enc_secret = crypto_vault.encrypt_password(enable_secret)
 
-    new_device = {
-        'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
-        'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
-        'Group': group if group in get_all_groups() else 'Generale'
-    }
-    devices.append(new_device)
-    safe_write_hosts_csv(devices)
+    with _io_lock:
+        devices = get_all_devices()
+        # Preserva l'hostname già rilevato sul dispositivo esistente
+        existing = next((d for d in devices if d['IP'] == ip), None)
+        existing_hostname = existing.get('Hostname') if existing else None
+        devices = [d for d in devices if d['IP'] != ip]
+
+        new_device = {
+            'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
+            'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
+            'Group': group if group in get_all_groups() else 'Generale'
+        }
+        if existing_hostname:
+            new_device['Hostname'] = existing_hostname
+        devices.append(new_device)
+        safe_write_hosts_csv(devices)
 
 def delete_device(ip):
-    devices = get_all_devices()
-    devices = [d for d in devices if d['IP'] != ip]
-    safe_write_hosts_csv(devices)
+    with _io_lock:
+        devices = get_all_devices()
+        devices = [d for d in devices if d['IP'] != ip]
+        safe_write_hosts_csv(devices)
 
 # --- VENDORS REGISTRY ---
 
@@ -181,21 +195,23 @@ def get_detected_versions():
     return {}
 
 def update_version_inventory(ip, vendor, version, status="online"):
-    data = get_detected_versions()
-    data[ip] = {"vendor": vendor, "version": version, "status": status}
-    safe_json_write(VERSION_DATA_FILE, data)
+    with _io_lock:
+        data = get_detected_versions()
+        data[ip] = {"vendor": vendor, "version": version, "status": status}
+        safe_json_write(VERSION_DATA_FILE, data)
 
 def update_device_hostname(ip: str, hostname: str):
-    devices = get_all_devices()
-    changed = False
-    for d in devices:
-        if d['IP'] == ip:
-            if d.get('Hostname') != hostname:
-                d['Hostname'] = hostname
-                changed = True
-            break
-    if changed:
-        safe_write_hosts_csv(devices)
+    with _io_lock:
+        devices = get_all_devices()
+        changed = False
+        for d in devices:
+            if d['IP'] == ip:
+                if d.get('Hostname') != hostname:
+                    d['Hostname'] = hostname
+                    changed = True
+                break
+        if changed:
+            safe_write_hosts_csv(devices)
 
 # --- UTILITIES GESTIONE GRUPPI (CRUD) ---
 
@@ -204,11 +220,12 @@ def add_group(group_name: str, description: str = "") -> bool:
     group_name = group_name.strip()
     if not group_name:
         return False
-    groups = get_all_groups()
-    if group_name not in groups:
-        groups[group_name] = {"description": description or f"Sede {group_name}"}
-        save_groups(groups)
-        return True
+    with _io_lock:
+        groups = get_all_groups()
+        if group_name not in groups:
+            groups[group_name] = {"description": description or f"Sede {group_name}"}
+            save_groups(groups)
+            return True
     return False
 
 def update_group(old_name: str, new_name: str, description: str = "") -> bool:
@@ -217,25 +234,26 @@ def update_group(old_name: str, new_name: str, description: str = "") -> bool:
     new_name = new_name.strip()
     if not old_name or not new_name or old_name == "Generale":
         return False
-    
-    groups = get_all_groups()
-    if old_name in groups:
-        info = groups.pop(old_name)
-        if description:
-            info["description"] = description
-        groups[new_name] = info
-        save_groups(groups)
-        
-        # Aggiorna i dispositivi
-        devices = get_all_devices()
-        updated = False
-        for d in devices:
-            if d.get('Group') == old_name:
-                d['Group'] = new_name
-                updated = True
-        if updated:
-            safe_write_hosts_csv(devices)
-        return True
+
+    with _io_lock:
+        groups = get_all_groups()
+        if old_name in groups:
+            info = groups.pop(old_name)
+            if description:
+                info["description"] = description
+            groups[new_name] = info
+            save_groups(groups)
+
+            # Aggiorna i dispositivi
+            devices = get_all_devices()
+            updated = False
+            for d in devices:
+                if d.get('Group') == old_name:
+                    d['Group'] = new_name
+                    updated = True
+            if updated:
+                safe_write_hosts_csv(devices)
+            return True
     return False
 
 def delete_group(group_name: str) -> bool:
@@ -243,20 +261,21 @@ def delete_group(group_name: str) -> bool:
     group_name = group_name.strip()
     if not group_name or group_name == "Generale":
         return False
-    
-    groups = get_all_groups()
-    if group_name in groups:
-        groups.pop(group_name)
-        save_groups(groups)
-        
-        # Riassegna i dispositivi
-        devices = get_all_devices()
-        updated = False
-        for d in devices:
-            if d.get('Group') == group_name:
-                d['Group'] = "Generale"
-                updated = True
-        if updated:
-            safe_write_hosts_csv(devices)
-        return True
+
+    with _io_lock:
+        groups = get_all_groups()
+        if group_name in groups:
+            groups.pop(group_name)
+            save_groups(groups)
+
+            # Riassegna i dispositivi
+            devices = get_all_devices()
+            updated = False
+            for d in devices:
+                if d.get('Group') == group_name:
+                    d['Group'] = "Generale"
+                    updated = True
+            if updated:
+                safe_write_hosts_csv(devices)
+            return True
     return False
