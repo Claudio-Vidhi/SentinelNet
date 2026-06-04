@@ -38,10 +38,19 @@ app = FastAPI(title="SentinelNet API", version="2.0.0")
 
 _ws_tokens: dict[str, tuple[str, float]] = {}  # otp -> (username, timestamp)
 
-# Abilita CORS (Nota: allow_origins=["*"] è abilitato per lo sviluppo locale, da cambiare in produzione)
+# Abilita CORS. Le origini consentite sono configurabili via SENTINELNET_CORS_ORIGINS
+# (lista separata da virgole). Default: solo localhost sulla porta dell'app.
+# Nota: usare "*" insieme ad allow_credentials=True è invalido per spec ed è
+# rifiutato dai browser, quindi le origini vengono sempre elencate esplicitamente.
+_default_origins = f"http://localhost:{PORT},http://127.0.0.1:{PORT}"
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("SENTINELNET_CORS_ORIGINS", _default_origins).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -702,12 +711,42 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         chan = client.invoke_shell()
         chan.settimeout(0.0)
 
-        # Task per inviare tasti dal Web allo Switch
+        # Task per inviare tasti dal Web allo Switch.
+        # Applica la stessa blacklist di /api/send-command: i tasti vengono inoltrati
+        # per l'echo, ma la riga digitata viene bufferizzata e, all'Invio, se contiene
+        # un comando pericoloso, la riga viene annullata (Ctrl-U) invece di essere eseguita.
         async def ws_to_ssh():
+            line_buf = ""
             try:
                 while True:
                     data = await websocket.receive_text()
-                    chan.send(data)
+                    for ch in data:
+                        if ch in ("\r", "\n"):
+                            if line_buf.strip() and not is_command_safe(line_buf):
+                                # Annulla la riga sullo switch (kill-line) e avvisa
+                                chan.send("\x15")
+                                await websocket.send_text(
+                                    "\r\n[Comando bloccato] Operazione non consentita "
+                                    "per motivi di sicurezza (in blacklist).\r\n"
+                                )
+                                log_audit(
+                                    f"Comando da terminale bloccato per blacklist "
+                                    f"('{line_buf.strip()}') su '{ip}' "
+                                    f"dall'utente '{username_from_otp}'."
+                                )
+                                line_buf = ""
+                                continue
+                            line_buf = ""
+                            chan.send(ch)
+                        elif ch in ("\x7f", "\x08"):  # backspace
+                            line_buf = line_buf[:-1]
+                            chan.send(ch)
+                        elif ch == "\x03":  # Ctrl-C annulla la riga corrente
+                            line_buf = ""
+                            chan.send(ch)
+                        else:
+                            line_buf += ch
+                            chan.send(ch)
             except WebSocketDisconnect:
                 pass
             except Exception:

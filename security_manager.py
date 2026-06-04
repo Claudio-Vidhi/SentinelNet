@@ -36,9 +36,17 @@ def load_or_create_jwt_secret() -> str:
         
     try:
         with open(JWT_KEY_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    except Exception:
-        return "fallback_default_jwt_secret_key_sentinelnet_security"
+            secret = f.read().strip()
+        if not secret:
+            raise ValueError("Il file della chiave JWT è vuoto.")
+        return secret
+    except Exception as e:
+        # Fail-closed: mai ripiegare su un segreto hardcoded/prevedibile, altrimenti
+        # i token JWT diventerebbero falsificabili da chiunque conosca il sorgente.
+        raise RuntimeError(
+            f"Impossibile caricare la chiave segreta JWT da '{JWT_KEY_FILE}': {e}. "
+            "Impostare SENTINELNET_JWT_SECRET oppure garantire l'accesso al file."
+        ) from e
 
 JWT_SECRET_KEY = load_or_create_jwt_secret()
 JWT_ALGORITHM = "HS256"
