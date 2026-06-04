@@ -609,6 +609,21 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(get_current_use
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         list(executor.map(_ping, devices))
 
+    # Aggiorna lo stato nel file detected_versions.json
+    try:
+        data = inventory_manager.get_detected_versions()
+        for d in devices:
+            ip = d['IP']
+            alive = results.get(ip, False)
+            vendor = d.get('Vendor', 'cisco')
+            version = 'Non Rilevata'
+            if ip in data:
+                vendor = data[ip].get('vendor', vendor)
+                version = data[ip].get('version', version)
+            inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
+    except Exception:
+        pass
+
     log_audit(
         f"Ping check completato su {len(devices)} dispositivi "
         f"(gruppo: '{payload.group}') dall'utente '{current_user.get('sub')}')."
@@ -624,6 +639,24 @@ def ping_single(ip: str, current_user = Depends(get_current_user)):
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
     alive = is_reachable(ip, timeout=3)
+
+    # Aggiorna lo stato nel file detected_versions.json
+    try:
+        data = inventory_manager.get_detected_versions()
+        vendor = "cisco"
+        version = "Non Rilevata"
+        if ip in data:
+            vendor = data[ip].get("vendor", vendor)
+            version = data[ip].get("version", version)
+        else:
+            devices = inventory_manager.get_all_devices()
+            dev = next((d for d in devices if d["IP"] == ip), None)
+            if dev:
+                vendor = dev.get("Vendor", vendor)
+        inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
+    except Exception:
+        pass
+
     log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {'raggiungibile' if alive else 'non raggiungibile'}.")
     return {"ip": ip, "reachable": alive}
 

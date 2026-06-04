@@ -1,0 +1,18 @@
+[project]
+name = "sentinelnet"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "bcrypt>=4.1.0",
+    "cryptography>=42.0.0",
+    "fastapi>=0.110.0",
+    "netmiko>=4.3.0",
+    "paramiko>=3.4.0",
+    "pydantic>=2.6.0",
+    "pyjwt>=2.8.0",
+    "requests>=2.31.0",
+    "uvicorn>=0.28.0",
+    "websockets>=12.0",
+]
