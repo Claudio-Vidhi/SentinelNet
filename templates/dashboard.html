@@ -2202,7 +2202,12 @@
                 shape: "image",
                 image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor),
                 title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
-                size: 38
+                size: 38,
+                labelVal: n.label,
+                deviceTypeVal: n.device_type,
+                isBoundaryVal: n.is_boundary || false,
+                vendorVal: resolvedVendor,
+                nodeDataVal: n
             };
         });
 
@@ -2315,6 +2320,23 @@
             networkInstance.destroy();
         }
         networkInstance = new vis.Network(container, graphData, options);
+    }
+
+    function updateTopologyMapNodeStatus(ip, newStatus) {
+        if (networkInstance && networkInstance.body && networkInstance.body.data && networkInstance.body.data.nodes) {
+            const nodesDataSet = networkInstance.body.data.nodes;
+            const node = nodesDataSet.get(ip);
+            if (node) {
+                node.nodeDataVal.status = newStatus;
+
+                const scan = globalVersions[ip] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: newStatus };
+
+                node.image = createNodeSvg(node.labelVal, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal);
+                node.title = createNodeTooltip(node.nodeDataVal, scan, node.vendorVal);
+
+                nodesDataSet.update(node);
+            }
+        }
     }
 
     function downloadTopology() {
@@ -3021,6 +3043,7 @@
         const safeIp = ip.replace(/\./g, "_");
         const row = document.querySelector(`#grpsel_${safeIp}`)?.closest("tr");
         const led = row?.cells[0]?.querySelector(".led");
+        const ledContainer = row?.cells[0]?.querySelector(".led-container");
 
         btnEl.disabled = true;
         btnEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
@@ -3030,16 +3053,28 @@
             const res = await apiFetch(`/api/ping/${ip}`);
             if (res && res.ok) {
                 const data = await res.json();
+                const statusTxt = data.reachable ? "ONLINE" : "OFFLINE";
                 if (led) {
                     led.className = data.reachable ? "led led-online" : "led led-offline";
-                    // only auto-reset if offline — online stays green
-                    if (!data.reachable) {
-                        setTimeout(() => {
-                            const prevStatus = globalVersions[ip]?.status;
-                            led.className = `led ${prevStatus === "online" ? "led-online" : "led-offline"}`;
-                        }, 4000);
-                    }
                 }
+                if (ledContainer) {
+                    Array.from(ledContainer.childNodes)
+                        .filter(n => n.nodeType === Node.TEXT_NODE)
+                        .forEach(n => n.remove());
+                    ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
+                }
+
+                // Update globalVersions cache
+                if (!globalVersions[ip]) {
+                    globalVersions[ip] = {
+                        version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
+                        vendor: "cisco"
+                    };
+                }
+                globalVersions[ip].status = data.reachable ? "online" : "offline";
+
+                // Update map node status
+                updateTopologyMapNodeStatus(ip, data.reachable ? "online" : "offline");
             }
         } catch(e) {}
 
@@ -3051,6 +3086,7 @@
         const safeIp = ip.replace(/\./g, "_");
         const row = document.querySelector(`#grpsel_${safeIp}`)?.closest("tr");
         const led          = row?.cells[0]?.querySelector(".led");
+        const ledContainer = row?.cells[0]?.querySelector(".led-container");
         const hostnameCell = row?.cells[2];                    // Hostname column
         const verCell      = row?.cells[5]?.querySelector("code"); // Firmware column (was cells[4] — off by one after Hostname added)
 
@@ -3064,6 +3100,12 @@
                 const data = await res.json();
                 if (data.status === "success") {
                     if (led) led.className = "led led-online";
+                    if (ledContainer) {
+                        Array.from(ledContainer.childNodes)
+                            .filter(n => n.nodeType === Node.TEXT_NODE)
+                            .forEach(n => n.remove());
+                        ledContainer.appendChild(document.createTextNode(" ONLINE"));
+                    }
 
                     if (verCell && data.version) verCell.textContent = data.version;
 
@@ -3080,14 +3122,36 @@
                     const dev = globalDevices.find(d => d.IP === ip);
                     if (dev && data.hostname) dev.Hostname = data.hostname;
 
+                    updateTopologyMapNodeStatus(ip, "online");
+
                 } else {
                     if (led) led.className = "led led-offline";
+                    if (ledContainer) {
+                        Array.from(ledContainer.childNodes)
+                            .filter(n => n.nodeType === Node.TEXT_NODE)
+                            .forEach(n => n.remove());
+                        ledContainer.appendChild(document.createTextNode(" OFFLINE"));
+                    }
+                    if (globalVersions[ip]) {
+                        globalVersions[ip].status = "offline";
+                    }
+                    updateTopologyMapNodeStatus(ip, "offline");
                     const msgDetail = data.message || (currentLang === 'en' ? "Unknown error" : "Errore sconosciuto");
                     alert(`${i18n[currentLang].alertTriageFailed}${msgDetail}`);
                 }
             }
         } catch(e) {
             if (led) led.className = "led led-offline";
+            if (ledContainer) {
+                Array.from(ledContainer.childNodes)
+                    .filter(n => n.nodeType === Node.TEXT_NODE)
+                    .forEach(n => n.remove());
+                ledContainer.appendChild(document.createTextNode(" OFFLINE"));
+            }
+            if (globalVersions[ip]) {
+                globalVersions[ip].status = "offline";
+            }
+            updateTopologyMapNodeStatus(ip, "offline");
         }
 
         btnEl.disabled = false;
@@ -3149,6 +3213,18 @@
                 .filter(n => n.nodeType === Node.TEXT_NODE)
                 .forEach(n => n.remove());
             ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
+
+            // Update globalVersions cache
+            if (!globalVersions[ip]) {
+                globalVersions[ip] = {
+                    version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
+                    vendor: "cisco"
+                };
+            }
+            globalVersions[ip].status = alive ? "online" : "offline";
+
+            // Update map node status
+            updateTopologyMapNodeStatus(ip, alive ? "online" : "offline");
         });
     }
 
