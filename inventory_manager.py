@@ -155,10 +155,10 @@ def get_all_vendors() -> dict:
     defaults = {
         "cisco":   {"euvd_term": "cisco",                    "driver": "cisco_ios"},
         "hpe":     {"euvd_term": "hewlett packard enterprise","driver": "hp_procurve"},
-        "juniper": {"euvd_term": "juniper networks",          "driver": None},
-        "aruba":   {"euvd_term": "aruba networks",            "driver": None},
-        "fortinet":{"euvd_term": "fortinet",                  "driver": None},
-        "paloalto":{"euvd_term": "palo alto networks",        "driver": None},
+        "juniper": {"euvd_term": "juniper networks",          "driver": "juniper_junos"},
+        "aruba":   {"euvd_term": "aruba networks",            "driver": "aruba_os"},
+        "fortinet":{"euvd_term": "fortinet",                  "driver": "fortinet"},
+        "paloalto":{"euvd_term": "palo alto networks",        "driver": "paloalto_panos"},
     }
     if not os.path.exists(VENDORS_FILE):
         safe_json_write(VENDORS_FILE, defaults)
