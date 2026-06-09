@@ -43,3 +43,21 @@ Thumbs.db
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# Graphify knowledge-graph artifacts (generated, not source)
+graphify-out/
+.graphifyignore
+CLAUDE.md
+
+# API keys & secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+*secret*.json
+apikey*
+*_api_key*
+.env.local
+credentials.json
+service-account*.json

@@ -9,18 +9,18 @@
     },
     "juniper": {
         "euvd_term": "juniper networks",
-        "driver": null
+        "driver": "juniper_junos"
     },
     "aruba": {
         "euvd_term": "aruba networks",
-        "driver": null
+        "driver": "aruba_os"
     },
     "fortinet": {
         "euvd_term": "fortinet",
-        "driver": null
+        "driver": "fortinet"
     },
     "paloalto": {
         "euvd_term": "palo alto networks",
-        "driver": null
+        "driver": "paloalto_panos"
     }
 }

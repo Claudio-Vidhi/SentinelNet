@@ -3,9 +3,16 @@ import re
 import logging
 import socket
 from netmiko import ConnectHandler
-from inventory_manager import update_version_inventory, get_all_devices, get_detected_versions, update_device_hostname
+from inventory_manager import (
+    update_version_inventory, get_all_devices, get_detected_versions,
+    update_device_hostname, get_all_vendors,
+)
 from drivers.cisco_ios import CiscoIosDriver
 from drivers.hp_procurve import HpProcurveDriver
+from drivers.juniper_junos import JuniperJunosDriver
+from drivers.aruba_os import ArubaOsDriver
+from drivers.fortinet import FortinetDriver
+from drivers.paloalto_panos import PaloAltoDriver
 from crypto_vault import decrypt_password
 from security_manager import log_audit
 import data_config
@@ -39,14 +46,64 @@ def get_device_credentials(device):
     secret   = decrypt_password(device.get('Enable Secret')) or DEFAULT_SECRET
     return username, password, secret
 
+# --- REGISTRY DRIVER ↔ NETMIKO ---
+# Mappa il nome-driver (campo 'driver' del registro vendor) alla classe driver e
+# al device_type netmiko corrispondente. Aggiungere qui un nuovo driver è
+# sufficiente per renderlo selezionabile da tutto il sistema.
+DRIVER_REGISTRY = {
+    'cisco_ios':      (CiscoIosDriver,   'cisco_ios'),
+    'hp_procurve':    (HpProcurveDriver, 'hp_procurve'),
+    'juniper_junos':  (JuniperJunosDriver, 'juniper_junos'),
+    'aruba_os':       (ArubaOsDriver,    'aruba_os'),
+    'fortinet':       (FortinetDriver,   'fortinet'),
+    'paloalto_panos': (PaloAltoDriver,   'paloalto_panos'),
+}
+
+# Fallback nome-vendor → nome-driver, usato quando il registro vendor non
+# specifica un driver (es. installazioni con vendors.json legacy o 'driver': null).
+VENDOR_DRIVER_DEFAULTS = {
+    'cisco':    'cisco_ios',
+    'hpe':      'hp_procurve',
+    'hp':       'hp_procurve',
+    'juniper':  'juniper_junos',
+    'aruba':    'aruba_os',
+    'fortinet': 'fortinet',
+    'paloalto': 'paloalto_panos',
+}
+
+def resolve_driver(vendor):
+    """Risolve un vendor nella coppia (classe driver, device_type netmiko).
+
+    Ordine di risoluzione:
+      1. campo 'driver' del registro vendor (get_all_vendors)
+      2. fallback nome-vendor → driver (VENDOR_DRIVER_DEFAULTS)
+    Solleva ValueError se nessun driver è associato al vendor.
+    """
+    vendor = (vendor or '').lower().strip()
+
+    driver_name = None
+    try:
+        vendors = get_all_vendors()
+        entry = vendors.get(vendor)
+        if entry:
+            driver_name = entry.get('driver')
+    except Exception:
+        pass
+
+    if not driver_name:
+        driver_name = VENDOR_DRIVER_DEFAULTS.get(vendor)
+
+    spec = DRIVER_REGISTRY.get(driver_name) if driver_name else None
+    if not spec:
+        raise ValueError(
+            f"Vendor '{vendor}' non supportato: nessun driver associato "
+            f"(driver='{driver_name}')."
+        )
+    return spec
+
 def driver_factory(vendor, connection):
-    vendor = vendor.lower()
-    if vendor == 'cisco':
-        return CiscoIosDriver(connection)
-    elif vendor == 'hpe':
-        return HpProcurveDriver(connection)
-    else:
-        raise ValueError(f"Vendor '{vendor}' non supportato dall'architettura driver.")
+    driver_cls, _ = resolve_driver(vendor)
+    return driver_cls(connection)
 
 def is_reachable(ip: str, port: int = 22, timeout: int = 2) -> bool:
     try:
@@ -65,7 +122,15 @@ def run_backup_and_triage(device):
         return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta 22 (SSH)"}
 
     username, password, secret = get_device_credentials(device)
-    netmiko_type = 'cisco_ios' if vendor == 'cisco' else 'hp_procurve'
+
+    # Risolve driver e device_type netmiko PRIMA di connettersi: un vendor senza
+    # driver associato fallisce subito, senza aprire inutilmente la sessione SSH.
+    try:
+        driver_cls, netmiko_type = resolve_driver(vendor)
+    except ValueError as ve:
+        log_audit(f"Vendor non supportato per '{ip}': {ve}")
+        update_version_inventory(ip, vendor, "Non Rilevata", "error")
+        return {"status": "error", "message": str(ve)}
 
     device_params = {
         'device_type': netmiko_type,
@@ -83,12 +148,7 @@ def run_backup_and_triage(device):
             net_connect.enable()
             live_hostname = net_connect.find_prompt().strip().rstrip('#>').strip()
 
-            try:
-                driver = driver_factory(vendor, net_connect)
-            except ValueError as ve:
-                log_audit(f"Vendor non supportato per '{ip}': {ve}")
-                update_version_inventory(ip, vendor, "Non Rilevata", "error")
-                return {"status": "error", "message": str(ve)}
+            driver = driver_cls(net_connect)
 
             version    = driver.get_version()
             backup_cmd = driver.get_backup_command()
@@ -145,8 +205,11 @@ def send_custom_command(device, command: str):
     if any(cmd in command.lower() for cmd in DANGEROUS_COMMANDS):
         return {"status": "error", "message": "Comando non consentito dalla policy di sicurezza aziendale (Blacklisted)"}
 
-    vendor       = device['Vendor'].lower()
-    netmiko_type = 'cisco_ios' if vendor == 'cisco' else 'hp_procurve'
+    vendor = device['Vendor'].lower()
+    try:
+        _, netmiko_type = resolve_driver(vendor)
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
 
     username, password, secret = get_device_credentials(device)
     device_params = {
