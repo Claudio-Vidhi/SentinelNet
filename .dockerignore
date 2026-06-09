@@ -28,6 +28,8 @@ users.json
 groups.json
 detected_versions.json
 backup-config/
+data/
+graphify-out/
 
 # Escludi cartelle di build dell'eseguibile desktop
 build/
