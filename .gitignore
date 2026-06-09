@@ -29,3 +29,17 @@ dist/
 secret.key
 
 jwt_secret.key
+
+# Local / IDE files
+.claude/
+.vscode/
+.idea/
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+# Python tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
