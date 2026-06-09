@@ -8,13 +8,15 @@
 
 ## Caratteristiche Principali
 
-* 🔄 **Backup Automatico**: Salva automaticamente la configurazione running degli switch Cisco IOS e HPE ProCurve in file di testo locali con nomenclatura per hostname e IP.
+* 🔄 **Backup Automatico**: Salva automaticamente la configurazione running degli apparati in file di testo locali con nomenclatura per hostname e IP.
+* 🧩 **Architettura Multi-Vendor**: Driver pluggabili guidati dal registro vendor — supporto integrato per Cisco IOS, HPE ProCurve, Juniper Junos, Aruba OS, Fortinet FortiOS e Palo Alto PAN-OS. L'associazione vendor → driver → `device_type` netmiko è centralizzata e facilmente estendibile.
 * 🛡️ **Triage Firmware & Vulnerabilità**: Rileva la versione firmware installata e la confronta con il database europeo ENISA EUVD, con classificazione CVSS per severità (CRITICAL / HIGH / MEDIUM / LOW).
+* 📡 **Scansione Subnet**: Discovery automatico di host su una subnet (ping + probe SSH) con triage opzionale e registrazione in inventario.
 * 🗺️ **Mappa Topologica Interattiva**: Genera automaticamente la mappa di rete 2D da tabelle CDP/LLDP presenti nei backup, con nodi dinamici via Vis.js e tooltip avanzati.
 * 🖥️ **Terminale SSH Interattivo**: Console WebSocket/Xterm.js per sessioni SSH live direttamente da browser, autenticata via token OTP monouso.
 * 👥 **Gestione Gruppi e Sedi**: Organizza i dispositivi in gruppi logici (sedi, clienti) con riassegnazione drag-and-drop e filtro per gruppo su tutte le viste.
 * 📥 **Importazione CSV**: Caricamento massivo di inventario da file CSV con validazione per riga e report dettagliato degli errori.
-* 🔒 **Sicurezza Integrata**: Autenticazione JWT, cifratura Fernet delle credenziali a riposo, audit log rotante e blacklist comandi CLI pericolosi.
+* 🔒 **Sicurezza Integrata**: Autenticazione JWT (fail-closed sul segreto), cifratura Fernet delle credenziali a riposo, audit log rotante, rate-limiting con lockout anti brute-force e blacklist comandi CLI pericolosi applicata sia all'API one-shot che al terminale interattivo.
 
 ---
 
@@ -23,14 +25,22 @@
 | File | Responsabilità |
 |------|---------------|
 | `app_server.py` | Entrypoint FastAPI: rotte HTTP, API REST, WebSocket e proxy verso ENISA EUVD. |
-| `core_engine.py` | Motore SSH: backup, triage firmware, parsing CDP/LLDP e generazione mappa topologica. |
-| `inventory_manager.py` | Persistenza inventario CSV, gruppi JSON e cache versioni rilevate. |
+| `core_engine.py` | Motore SSH: backup, triage firmware, registro driver, parsing CDP/LLDP e generazione mappa topologica. |
+| `inventory_manager.py` | Persistenza inventario CSV, gruppi/vendor JSON e cache versioni rilevate (scritture serializzate). |
+| `network_scanner.py` | Parsing subnet e discovery concorrente (ping + probe SSH) degli host. |
 | `security_manager.py` | JWT, audit log, rate-limiting e lockout per brute-force. |
 | `crypto_vault.py` | Cifratura/decifratura Fernet delle credenziali degli apparati. |
 | `user_manager.py` | Gestione account locali con hashing bcrypt (cost factor 12). |
-| `drivers/cisco_ios.py` | Driver Cisco IOS: versione firmware e comando di backup. |
-| `drivers/hp_procurve.py` | Driver HPE ProCurve: versione firmware e comando di backup. |
+| `data_config.py` | Risoluzione dei percorsi dei file di stato (supporto `SENTINELNET_DATA_DIR`). |
+| `drivers/base_driver.py` | Classe base astratta dei driver (`get_version`, `get_backup_command`). |
+| `drivers/cisco_ios.py` | Driver Cisco IOS. |
+| `drivers/hp_procurve.py` | Driver HPE ProCurve. |
+| `drivers/juniper_junos.py` | Driver Juniper Junos. |
+| `drivers/aruba_os.py` | Driver Aruba OS. |
+| `drivers/fortinet.py` | Driver Fortinet FortiOS. |
+| `drivers/paloalto_panos.py` | Driver Palo Alto PAN-OS. |
 | `templates/dashboard.html` | Single-page Web UI: inventario, topologia, threat intel, terminale SSH. |
+| `Dockerfile` / `docker-compose.yml` | Build e orchestrazione del container. |
 | `requirements.txt` | Dipendenze Python del progetto. |
 
 ---
@@ -105,14 +115,18 @@ L'applicazione sarà accessibile su **`http://localhost:8765/`**.
 
 Tutte le variabili sono opzionali. Se non definite, SentinelNet genera e persiste automaticamente chiavi sicure sui file locali (`secret.key`, `jwt_secret.key`).
 
-| Variabile | Descrizione |
-|-----------|-------------|
-| `SENTINELNET_MASTER_KEY` | Chiave Fernet per la cifratura delle credenziali degli apparati. |
-| `SENTINELNET_JWT_SECRET` | Segreto per la firma dei token JWT di sessione. |
-| `SENTINELNET_ADMIN_USER` | Username predefinito per il profilo credenziali "Standard". |
-| `SENTINELNET_ADMIN_PASS` | Password predefinita per il profilo credenziali "Standard". |
-| `SENTINELNET_ADMIN_SECRET` | Enable secret predefinito per il profilo credenziali "Standard". |
-| `SENTINELNET_DATA_DIR` | Percorso della directory dati (db, log e chiavi) per esecuzione Docker. |
+| Variabile | Descrizione | Default |
+|-----------|-------------|---------|
+| `SENTINELNET_MASTER_KEY` | Passphrase da cui derivare (via SHA-256) la chiave Fernet per la cifratura delle credenziali degli apparati. | file `secret.key` |
+| `SENTINELNET_JWT_SECRET` | Segreto per la firma dei token JWT di sessione. | file `jwt_secret.key` |
+| `SENTINELNET_ADMIN_USER` | Username usato dal profilo credenziali `default` e come fallback per i dispositivi senza username. | `Admin` |
+| `SENTINELNET_ADMIN_PASS` | Password usata dal profilo credenziali `default` e come fallback. | `admin` |
+| `SENTINELNET_ADMIN_SECRET` | Enable secret usato dal profilo credenziali `default` e come fallback. | `admin` |
+| `SENTINELNET_DATA_DIR` | Percorso della directory dati (inventario, log e chiavi) per esecuzione Docker. | directory corrente |
+| `SENTINELNET_HOST` | Indirizzo di bind del server. | `127.0.0.1` |
+| `SENTINELNET_PORT` | Porta di ascolto del server. | `8765` |
+| `SENTINELNET_NO_BROWSER` | Se `true`, non apre il browser all'avvio (impostato automaticamente quando host è `0.0.0.0`). | `false` |
+| `SENTINELNET_CORS_ORIGINS` | Lista (separata da virgole) delle origini CORS consentite. | `http://localhost:8765,http://127.0.0.1:8765` |
 
 ---
 
@@ -123,5 +137,6 @@ Il file `network_hosts.csv` contiene le credenziali cifrate degli apparati fisic
 * `network_hosts.csv` — inventario con credenziali cifrate
 * `backup-config/` — configurazioni running degli apparati
 * `detected_versions.json` — cache dello stato di triage
+* `groups.json` — gruppi/sedi configurati
 * `secret.key` / `jwt_secret.key` — chiavi crittografiche locali
 * `users.json` — account amministratore locale
