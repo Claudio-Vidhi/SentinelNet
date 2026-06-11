@@ -1,0 +1,577 @@
+From f74353e84b0b9bb06d98a0d840832edd7971a9e1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 11 Jun 2026 18:59:06 +0000
+Subject: [PATCH] fix: bug fixes and UI/UX improvements for dashboard and scan
+ jobs
+
+Backend:
+- Fix 422 when adding a vendor without a driver (VendorSchema.driver now Optional)
+- Don't delete still-running subnet scan jobs during stale cleanup (long scans on
+  large subnets would vanish mid-scan and the UI polling got 404)
+- Report subnet scan progress while pinging hosts so the progress bar moves
+
+Frontend:
+- Escape HTML in all dynamically rendered values (hostnames from device configs,
+  group/vendor names, EUVD API descriptions) to prevent broken markup and stored XSS
+- Use data attributes instead of inline string interpolation for delete/add/analyze
+  handlers (names with quotes no longer break onclick)
+- Highlight the correct tab button when switchTab is called programmatically
+  (e.g. after CSV import)
+- Re-render vendor table on language switch
+- Reset group filters to "all" when the previously selected group was deleted
+- Submit login, setup wizard, group creation and subnet scan with the Enter key
+- Close modals by clicking the backdrop; Escape closes the subnet scan modal
+  (kept out of the CLI modal so Escape still reaches the SSH terminal)
+- Empty-state message in the device table instead of a bare header
+- Responsive layout: sidebar stacks above content below 1000px
+- Fix btn-primary hover color (teal leftover on blue button)
+
+https://claude.ai/code/session_016LrhmUxHWiKHnhkrWHFTtM
+---
+ app_server.py            |  13 ++-
+ network_scanner.py       |  15 ++-
+ templates/dashboard.html | 214 ++++++++++++++++++++++++++-------------
+ 3 files changed, 165 insertions(+), 77 deletions(-)
+
+diff --git a/app_server.py b/app_server.py
+index 74333db..e70df58 100644
+--- a/app_server.py
++++ b/app_server.py
+@@ -136,7 +136,7 @@ class SubnetScanRequest(BaseModel):
+ class VendorSchema(BaseModel):
+     name: str
+     euvd_term: str
+-    driver: str = None
++    driver: Optional[str] = None
+ 
+ class VendorDeleteSchema(BaseModel):
+     name: str
+@@ -201,11 +201,17 @@ def _run_scan_job(job_id: str, req: SubnetScanRequest):
+         "password": core_engine.DEFAULT_PASSWORD,
+         "secret":   core_engine.DEFAULT_SECRET,
+     }
++    def _progress(done: int):
++        with _scan_jobs_lock:
++            if job_id in _scan_jobs:
++                _scan_jobs[job_id]["progress"] = done
++
+     try:
+         results = scan_subnet(
+             address=req.network,
+             vendor_hint=req.vendor,
+             credentials=credentials,
++            progress_cb=_progress,
+         )
+ 
+         if req.auto_add:
+@@ -909,7 +915,10 @@ def start_subnet_scan(
+ @app.get("/api/scan-subnet/{job_id}")
+ def get_subnet_scan_status(job_id: str, current_user = Depends(get_current_user)):
+     with _scan_jobs_lock:
+-        stale = [k for k, v in _scan_jobs.items() if time.time() - v.get("started_at", 0) > 600]
++        # Elimina solo i job conclusi: una scansione lunga (es. /16) può
++        # legittimamente restare "running" oltre i 10 minuti.
++        stale = [k for k, v in _scan_jobs.items()
++                 if v.get("status") != "running" and time.time() - v.get("started_at", 0) > 600]
+         for k in stale:
+             del _scan_jobs[k]
+         job = _scan_jobs.get(job_id)
+diff --git a/network_scanner.py b/network_scanner.py
+index 2e04a9f..03f7b61 100644
+--- a/network_scanner.py
++++ b/network_scanner.py
+@@ -60,6 +60,7 @@ def scan_subnet(
+     vendor_hint: str,
+     credentials: dict,
+     max_workers: int = 50,
++    progress_cb=None,
+ ) -> list[dict]:
+     """
+     1. parse_network() to enumerate host IPs.
+@@ -69,17 +70,21 @@ def scan_subnet(
+          ip, reachable, ssh_ok, hostname, vendor, added.
+ 
+     credentials must contain: username, password, secret (plain text).
++    progress_cb, if given, is called with the number of hosts pinged so far.
+     """
+     hosts = parse_network(address)
+ 
+     # Phase 1 — concurrent ping
++    alive: set[str] = set()
+     with ThreadPoolExecutor(max_workers=max_workers) as pool:
+         ping_futures = {pool.submit(_ping, ip): ip for ip in hosts}
+-        alive = {
+-            futures_ip
+-            for fut, futures_ip in ping_futures.items()
+-            if fut.result()
+-        }
++        done = 0
++        for fut in as_completed(ping_futures):
++            done += 1
++            if fut.result():
++                alive.add(ping_futures[fut])
++            if progress_cb:
++                progress_cb(done)
+ 
+     # Seed result table for every host
+     results: dict[str, dict] = {
+diff --git a/templates/dashboard.html b/templates/dashboard.html
+index 48bfbff..7bb14b6 100644
+--- a/templates/dashboard.html
++++ b/templates/dashboard.html
+@@ -225,7 +225,7 @@
+     }
+ 
+     .btn-primary:hover {
+-      background: #39cfd7;
++      background: #6ba3f8;
+       box-shadow: 0 0 15px var(--primary-glow);
+       transform: translateY(-1px);
+     }
+@@ -591,6 +591,27 @@
+       from { transform: translateX(100%); opacity: 0; }
+       to { transform: translateX(0); opacity: 1; }
+     }
++
++    /* Layout responsive: sotto i 1000px la sidebar si impila sopra il contenuto */
++    @media (max-width: 1000px) {
++      body {
++        grid-template-columns: 1fr;
++        padding: 12px;
++        gap: 12px;
++      }
++      aside {
++        position: static;
++        height: auto;
++        max-height: none;
++      }
++      .login-card {
++        width: 92vw;
++        padding: 28px;
++      }
++      .modal {
++        width: 92vw !important;
++      }
++    }
+   </style>
+ </head>
+ <body>
+@@ -1235,7 +1256,9 @@
+         alertTopologyResetError: "Errore durante il reset della topologia.",
+         alertPingError: "Errore durante il ping check.",
+         allSites: "tutte le sedi",
+-        pingingBtnText: "Ping {group}..."
++        pingingBtnText: "Ping {group}...",
++        emptyInventory: 'Nessun dispositivo in inventario. Aggiungi un apparato dalla barra laterale oppure avvia una <strong>Scansione Subnet</strong>.',
++        emptyInventoryFiltered: "Nessun dispositivo in questa sede."
+       },
+       en: {
+         wizTitle: "🚀 First Access Detected",
+@@ -1404,7 +1427,9 @@
+         alertTopologyResetError: "Error resetting topology.",
+         alertPingError: "Error during ping check.",
+         allSites: "all sites",
+-        pingingBtnText: "Ping {group}..."
++        pingingBtnText: "Ping {group}...",
++        emptyInventory: 'No devices in inventory. Add a device from the sidebar or run a <strong>Subnet Scan</strong>.',
++        emptyInventoryFiltered: "No devices in this site."
+       }
+     };
+ 
+@@ -1458,6 +1483,7 @@
+ 
+             renderDeviceTable();
+             renderGroupsTable();
++            renderVendorTable();
+         }
+     }
+ 
+@@ -1499,6 +1525,13 @@
+ 
+     // --- AUTENTICAZIONE E UTILITY ---
+ 
++    // Escaping HTML per tutti i valori dinamici (hostname dai config, nomi gruppo/vendor,
++    // descrizioni EUVD): previene markup rotto e stored XSS nelle tabelle e nei tooltip.
++    function escapeHtml(s) {
++        return String(s ?? '').replace(/[&<>"']/g, c =>
++            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
++    }
++
+     function getAuthHeaders() {
+         const token = sessionStorage.getItem("net_token");
+         return token ? { "Authorization": `Bearer ${token}` } : {};
+@@ -1607,6 +1640,34 @@
+         checkAuthRequirements();
+     }
+ 
++    // Invio rapido con tasto Enter su login, setup wizard e creazione gruppo
++    function bindEnterKey(inputIds, buttonId) {
++        inputIds.forEach(id => {
++            document.getElementById(id).addEventListener('keydown', e => {
++                if (e.key === 'Enter') document.getElementById(buttonId).click();
++            });
++        });
++    }
++    bindEnterKey(['loginUser', 'loginPass'], 'btnLogin');
++    bindEnterKey(['wizUser', 'wizPass'], 'btnRegisterAdmin');
++    bindEnterKey(['newGroupName'], 'btnCreateGroup');
++    bindEnterKey(['scanNetworkInput'], 'btnAvviaScan');
++
++    // Chiusura modali: click sullo sfondo oppure tasto Escape.
++    // Il modale CLI non si chiude con Escape: il tasto serve dentro al terminale SSH.
++    document.getElementById('subnetScanModal').addEventListener('click', e => {
++        if (e.target === e.currentTarget) closeSubnetScanModal();
++    });
++    document.getElementById('cliModalOverlay').addEventListener('click', e => {
++        if (e.target === e.currentTarget) closeCliModal();
++    });
++    document.addEventListener('keydown', e => {
++        if (e.key === 'Escape' &&
++            document.getElementById('subnetScanModal').style.display === 'flex') {
++            closeSubnetScanModal();
++        }
++    });
++
+     // --- INITIALIZATION ---
+ 
+     async function appInit() {
+@@ -1642,10 +1703,9 @@
+ 
+             // Popola tendina Gruppi nel form
+             const groupSelect = document.getElementById('devGroupSelect');
+-            groupSelect.innerHTML = '';
+-            Object.keys(globalGroups).forEach(g => {
+-                groupSelect.innerHTML += `<option value="${g}">${g}</option>`;
+-            });
++            groupSelect.innerHTML = Object.keys(globalGroups).map(g =>
++                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
++            ).join('');
+ 
+             // Memorizza la selezione corrente del filtro se esiste
+             const filterSelect = document.getElementById('filterGroupSelect');
+@@ -1653,33 +1713,33 @@
+             
+             // Popola tendina Filtro Gruppi nella tabella dell'inventario
+             if (filterSelect) {
+-                filterSelect.innerHTML = '<option value="all">Filtra per Sede: Tutte</option>';
+-                Object.keys(globalGroups).forEach(g => {
+-                    filterSelect.innerHTML += `<option value="${g}">${g}</option>`;
+-                });
++                filterSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
++                    Object.keys(globalGroups).map(g =>
++                        `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                 filterSelect.value = prevFilter;
++                if (filterSelect.selectedIndex === -1) filterSelect.value = 'all';
+             }
+ 
+             // Popola tendina Filtro Gruppi in TAB 3
+             const topoSelect = document.getElementById('topologyGroupSelect');
+             if (topoSelect) {
+                 const prevTopoFilter = topoSelect.value || 'all';
+-                topoSelect.innerHTML = '<option value="all">Filtra per Sede: Tutte</option>';
+-                Object.keys(globalGroups).forEach(g => {
+-                    topoSelect.innerHTML += `<option value="${g}">${g}</option>`;
+-                });
++                topoSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
++                    Object.keys(globalGroups).map(g =>
++                        `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                 topoSelect.value = prevTopoFilter;
++                if (topoSelect.selectedIndex === -1) topoSelect.value = 'all';
+             }
+ 
+             // Popola tendina Filtro Gruppi in TAB 4
+             const interSelect = document.getElementById('interactiveGroupSelect');
+             if (interSelect) {
+                 const prevInterFilter = interSelect.value || 'all';
+-                interSelect.innerHTML = '<option value="all">Filtra per Sede: Tutte</option>';
+-                Object.keys(globalGroups).forEach(g => {
+-                    interSelect.innerHTML += `<option value="${g}">${g}</option>`;
+-                });
++                interSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
++                    Object.keys(globalGroups).map(g =>
++                        `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+                 interSelect.value = prevInterFilter;
++                if (interSelect.selectedIndex === -1) interSelect.value = 'all';
+             }
+ 
+             // Popola Tabella Dispositivi tramite la nuova funzione autonoma filtrabile
+@@ -1722,9 +1782,9 @@
+             const reservedText = currentLang === 'en' ? 'System Reserved' : 'System Reserved';
+ 
+             groupBody.innerHTML += `<tr>
+-                <td><strong>${g}</strong></td>
+-                <td><span style="color:var(--text-muted); font-size:13px;">${desc}</span></td>
+-                <td>${g !== 'Generale' ? `<button onclick="deleteGroup('${g}')" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText}</td>
++                <td><strong>${escapeHtml(g)}</strong></td>
++                <td><span style="color:var(--text-muted); font-size:13px;">${escapeHtml(desc)}</span></td>
++                <td>${g !== 'Generale' ? `<button onclick="deleteGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText}</td>
+             </tr>`;
+         });
+     }
+@@ -1746,7 +1806,7 @@
+             else if (scan.status === "auth_failed") ledClass = "led-auth_failed";
+ 
+             const groupOptions = Object.keys(globalGroups).map(g =>
+-                `<option value="${g}" ${g === d.Group ? "selected" : ""}>${g}</option>`
++                `<option value="${escapeHtml(g)}" ${g === d.Group ? "selected" : ""}>${escapeHtml(g)}</option>`
+             ).join("");
+             const safeIp = d.IP.replace(/\./g, "_");
+ 
+@@ -1767,7 +1827,7 @@
+                 </td>
+                 <td>
+                   <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+-                    <span class="badge" id="badge_${safeIp}">${d.Group}</span>
++                    <span class="badge" id="badge_${safeIp}">${escapeHtml(d.Group)}</span>
+                     <select
+                       id="grpsel_${safeIp}"
+                       onchange="reassignDevice('${d.IP}', this.value, this)"
+@@ -1780,10 +1840,10 @@
+                     </select>
+                   </div>
+                 </td>
+-                <td style="font-family:monospace; font-size:12px;">${d.Hostname || '<span style="color:var(--text-muted)">—</span>'}</td>
++                <td style="font-family:monospace; font-size:12px;">${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}</td>
+                 <td><strong>${d.IP}</strong></td>
+-                <td>${d.Vendor.toUpperCase()}</td>
+-                <td><code>${versionText}</code></td>
++                <td>${escapeHtml(d.Vendor.toUpperCase())}</td>
++                <td><code>${escapeHtml(versionText)}</code></td>
+                 <td class="actions-cell">
+                     <button class="btn btn-secondary btn-small"
+                         style="margin:0; padding:4px 8px;"
+@@ -1815,6 +1875,16 @@
+                 </td>
+             </tr>`;
+         });
++
++        // Stato vuoto: guida l'utente invece di mostrare una tabella nuda
++        if (!devBody.children.length) {
++            const msg = globalDevices.length === 0
++                ? i18n[currentLang].emptyInventory
++                : i18n[currentLang].emptyInventoryFiltered;
++            devBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
++                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${msg}
++            </td></tr>`;
++        }
+     }
+ 
+     // --- DEVICE CRUD ---
+@@ -1906,7 +1976,7 @@
+         const builtins = ["cisco","hpe"];
+         const all = [...new Set([...builtins, ...Object.keys(globalVendors)])];
+         return all.map(v =>
+-            `<option value="${v}" ${v===selected?"selected":""}>${v.toUpperCase()}</option>`
++            `<option value="${escapeHtml(v)}" ${v===selected?"selected":""}>${escapeHtml(v.toUpperCase())}</option>`
+         ).join("");
+     }
+ 
+@@ -1919,12 +1989,12 @@
+             const systemText = currentLang === 'en' ? 'System' : 'Sistema';
+             const deleteText = currentLang === 'en' ? 'Delete' : 'Elimina';
+             body.innerHTML += `<tr>
+-                <td><strong>${name}</strong></td>
+-                <td><span style="font-family:var(--font-code); font-size:12px; color:var(--primary);">${meta.euvd_term || '—'}</span></td>
+-                <td><span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${meta.driver || '—'}</span></td>
++                <td><strong>${escapeHtml(name)}</strong></td>
++                <td><span style="font-family:var(--font-code); font-size:12px; color:var(--primary);">${escapeHtml(meta.euvd_term) || '—'}</span></td>
++                <td><span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(meta.driver) || '—'}</span></td>
+                 <td>${isSystem
+                     ? `<span style="color:var(--text-muted); font-size:12px;">${systemText}</span>`
+-                    : `<button onclick="deleteVendor('${name}')" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`
++                    : `<button onclick="deleteVendor(this.dataset.v)" data-v="${escapeHtml(name)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`
+                 }</td>
+             </tr>`;
+         });
+@@ -1973,8 +2043,10 @@
+         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+         document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+         document.getElementById(tabId).classList.add('active');
+-        if (clickedBtn) {
+-            clickedBtn.classList.add('active');
++        // Se chiamato senza pulsante (es. dopo import CSV) evidenzia comunque la tab corretta
++        const btn = clickedBtn || document.querySelector(`.tab-button[onclick*="'${tabId}'"]`);
++        if (btn) {
++            btn.classList.add('active');
+         }
+         
+         if (tabId === 'tab-devices') {
+@@ -2003,10 +2075,13 @@
+                 return;
+             }
+             
+-            view.innerHTML = i18n[currentLang].txtTopologyTitle;
++            let out = i18n[currentLang].txtTopologyTitle;
+             data.links.forEach(l => {
+-                view.innerHTML += i18n[currentLang].txtTopologyLink.replace("{source}", l.source).replace("{target}", l.target);
++                out += i18n[currentLang].txtTopologyLink
++                    .replace("{source}", escapeHtml(l.source))
++                    .replace("{target}", escapeHtml(l.target));
+             });
++            view.innerHTML = out;
+         } catch(e) {
+             view.innerHTML = `${i18n[currentLang].txtTopologyError}${e}`;
+         }
+@@ -2153,12 +2228,12 @@
+             <i class="fa-solid fa-network-wired"></i> ${titleText}
+           </div>
+           <table style="width: 100%; border-collapse: collapse; background: transparent;">
+-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${n.label}</td></tr>
+-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${n.id}</td></tr>
+-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${vendorName}</td></tr>
+-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${n.group}</td></tr>
++            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.label)}</td></tr>
++            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.id)}</td></tr>
++            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${escapeHtml(vendorName)}</td></tr>
++            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.group)}</td></tr>
+             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelStatusText}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${statusLed}</td></tr>
+-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${firmware}</code></td></tr>
++            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${escapeHtml(firmware)}</code></td></tr>
+           </table>
+         </div>
+         `;
+@@ -2228,14 +2303,14 @@
+               <div style="display: grid; grid-template-columns: 1fr 30px 1fr; gap: 8px; align-items: center; font-size: 11px; line-height: 1.4;">
+                 <div>
+                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Source' : 'Origine'}</span>
+-                  <strong style="font-size:11px; color:#fff;">${l.source}</strong>
+-                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${l.local_port || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
++                  <strong style="font-size:11px; color:#fff;">${escapeHtml(l.source)}</strong>
++                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(l.local_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                 </div>
+                 <div style="color: var(--primary); font-size: 14px; text-align: center;"><i class="fa-solid fa-right-left"></i></div>
+                 <div style="text-align: right;">
+                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Destination' : 'Destinazione'}</span>
+-                  <strong style="font-size:11px; color:#fff;">${l.target}</strong>
+-                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${l.remote_port || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
++                  <strong style="font-size:11px; color:#fff;">${escapeHtml(l.target)}</strong>
++                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(l.remote_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                 </div>
+               </div>
+             </div>
+@@ -2633,23 +2708,22 @@
+             return;
+         }
+         const rows = sshOk.map(r => {
+-            const safeIp  = r.ip.replace(/'/g, '');
+-            const safeHn  = (r.hostname || '').replace(/'/g, "\\'");
+             const addText = currentLang === 'en' ? 'Add' : 'Aggiungi';
+             const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
+             const addCell = (!r.added)
+                 ? `<button class="btn btn-primary btn-small"
+                        style="margin:0; padding:3px 8px; width:auto;"
+-                       onclick="addDiscoveredDevice('${safeIp}','${safeHn}','${r.vendor}')">
++                       data-ip="${escapeHtml(r.ip)}" data-hn="${escapeHtml(r.hostname || '')}" data-vendor="${escapeHtml(r.vendor)}"
++                       onclick="addDiscoveredDevice(this.dataset.ip, this.dataset.hn, this.dataset.vendor, this)">
+                        ${addText}
+                    </button>`
+                 : `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
+             return `<div style="display:grid; grid-template-columns:130px 1fr 56px 24px 90px;
+                         align-items:center; gap:8px; padding:8px 12px;
+                         border-bottom:1px solid var(--border); font-size:12px;">
+-                <span style="font-family:'JetBrains Mono',monospace; color:var(--primary);">${r.ip}</span>
+-                <span>${r.hostname || '<span style="color:var(--text-muted)">—</span>'}</span>
+-                <span style="text-transform:uppercase; color:var(--text-muted);">${r.vendor}</span>
++                <span style="font-family:'JetBrains Mono',monospace; color:var(--primary);">${escapeHtml(r.ip)}</span>
++                <span>${r.hostname ? escapeHtml(r.hostname) : '<span style="color:var(--text-muted)">—</span>'}</span>
++                <span style="text-transform:uppercase; color:var(--text-muted);">${escapeHtml(r.vendor)}</span>
+                 <span style="text-align:center; color:${r.ssh_ok ? 'var(--primary)' : 'var(--danger)'};">${r.ssh_ok ? '✓' : '✗'}</span>
+                 ${addCell}
+               </div>`;
+@@ -2658,7 +2732,7 @@
+         if (added.length > 0) appInit();
+     }
+ 
+-    async function addDiscoveredDevice(ip, hostname, vendor) {
++    async function addDiscoveredDevice(ip, hostname, vendor, btnEl) {
+         const group = document.getElementById('scanGroupSelect').value;
+         const res = await apiFetch('/api/add-device', {
+             method: 'POST',
+@@ -2666,12 +2740,10 @@
+             body: JSON.stringify({ ip, vendor, profile: 'default', username: '', password: '', enable_secret: '', group }),
+         });
+         if (!res || !res.ok) return;
+-        document.querySelectorAll('#subnetScanResultsTable button').forEach(b => {
+-            if (b.getAttribute('onclick')?.includes(`'${ip}'`)) {
+-                const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
+-                b.outerHTML = `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
+-            }
+-        });
++        const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
++        if (btnEl) {
++            btnEl.outerHTML = `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
++        }
+         appInit();
+     }
+ 
+@@ -2713,8 +2785,8 @@
+                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                         <div>
+                             <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
+-                            <span class="badge" style="margin-left: 10px;">${d.Vendor.toUpperCase()}</span>
+-                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${scan.version}</code></span>
++                            <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
++                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
+                         </div>
+                         <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);">
+                             <i class="fa-solid fa-circle-notch fa-spin"></i> ${scanningText}
+@@ -2776,17 +2848,19 @@
+             card.innerHTML = `
+                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                     <div>
+-                        <div style="font-weight:700; font-size:15px;">${n.label}</div>
+-                        <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${n.id}</div>
++                        <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
++                        <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
+                     </div>
+                     <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
+                 </div>
+                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
+-                    <code style="font-size:11px; color:var(--primary);">${versionShort}</code>
++                    <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
+                 </div>
+                 <button
+                     id="btn-disc-${safeId}"
+-                    onclick="runDiscoveredVulnCheck('${n.id}', '${n.label}', \`${n.version.replace(/`/g,"'")}\`, '${versionShort.replace(/'/g,"\\'")}', this)"
++                    data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
++                    data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
++                    onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this)"
+                     style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--warning); color:#000; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                     ${i18n[currentLang].btnAnalyzeVuln}
+                 </button>
+@@ -2831,13 +2905,13 @@
+             <div class="vuln-card" style="border-color:var(--primary); margin-top: 8px;">
+                 <div style="font-weight:700; margin-bottom:10px;">
+                     <i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i>
+-                    ${label} <span style="color:var(--text-muted); font-size:12px; font-weight:400;">(${nodeId})</span>
++                    ${escapeHtml(label)} <span style="color:var(--text-muted); font-size:12px; font-weight:400;">(${escapeHtml(nodeId)})</span>
+                     <span id="disc-status-${safeId}" style="float:right; font-size:13px; color:var(--text-muted);">
+                         ${i18n[currentLang].queryingEnisa}
+                     </span>
+                 </div>
+                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+-                    System Description: <code style="color:var(--primary); font-size:11px;">${versionShort}</code>
++                    System Description: <code style="color:var(--primary); font-size:11px;">${escapeHtml(versionShort)}</code>
+                 </div>
+                 <div id="disc-vuln-${safeId}"></div>
+             </div>
+@@ -2884,12 +2958,12 @@
+                             <div style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
+                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+                                     <div>
+-                                        <strong style="color:var(--primary);">${enisaId}</strong>
+-                                        <span style="color:var(--text-muted); margin-left:8px;">(CVE: ${cveId})</span>
++                                        <strong style="color:var(--primary);">${escapeHtml(enisaId)}</strong>
++                                        <span style="color:var(--text-muted); margin-left:8px;">(CVE: ${escapeHtml(cveId)})</span>
+                                     </div>
+-                                    <span class="severity-pill severity-${severity}">CVSS: ${score}</span>
++                                    <span class="severity-pill severity-${severity}">CVSS: ${escapeHtml(score)}</span>
+                                 </div>
+-                                <div style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${description}</div>
++                                <div style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${escapeHtml(description)}</div>
+                                 <div style="font-size:10px; color:var(--primary);">${i18n[currentLang].relevantNis2}</div>
+                             </div>
+                         `;
+-- 
+2.43.0
+
