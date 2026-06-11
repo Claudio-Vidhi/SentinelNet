@@ -60,6 +60,7 @@ def scan_subnet(
     vendor_hint: str,
     credentials: dict,
     max_workers: int = 50,
+    progress_cb=None,
 ) -> list[dict]:
     """
     1. parse_network() to enumerate host IPs.
@@ -69,17 +70,21 @@ def scan_subnet(
          ip, reachable, ssh_ok, hostname, vendor, added.
 
     credentials must contain: username, password, secret (plain text).
+    progress_cb, if given, is called with the number of hosts pinged so far.
     """
     hosts = parse_network(address)
 
     # Phase 1 — concurrent ping
+    alive: set[str] = set()
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         ping_futures = {pool.submit(_ping, ip): ip for ip in hosts}
-        alive = {
-            futures_ip
-            for fut, futures_ip in ping_futures.items()
-            if fut.result()
-        }
+        done = 0
+        for fut in as_completed(ping_futures):
+            done += 1
+            if fut.result():
+                alive.add(ping_futures[fut])
+            if progress_cb:
+                progress_cb(done)
 
     # Seed result table for every host
     results: dict[str, dict] = {

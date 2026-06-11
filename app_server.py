@@ -136,7 +136,7 @@ class SubnetScanRequest(BaseModel):
 class VendorSchema(BaseModel):
     name: str
     euvd_term: str
-    driver: str = None
+    driver: Optional[str] = None
 
 class VendorDeleteSchema(BaseModel):
     name: str
@@ -201,11 +201,17 @@ def _run_scan_job(job_id: str, req: SubnetScanRequest):
         "password": core_engine.DEFAULT_PASSWORD,
         "secret":   core_engine.DEFAULT_SECRET,
     }
+    def _progress(done: int):
+        with _scan_jobs_lock:
+            if job_id in _scan_jobs:
+                _scan_jobs[job_id]["progress"] = done
+
     try:
         results = scan_subnet(
             address=req.network,
             vendor_hint=req.vendor,
             credentials=credentials,
+            progress_cb=_progress,
         )
 
         if req.auto_add:
@@ -909,7 +915,10 @@ def start_subnet_scan(
 @app.get("/api/scan-subnet/{job_id}")
 def get_subnet_scan_status(job_id: str, current_user = Depends(get_current_user)):
     with _scan_jobs_lock:
-        stale = [k for k, v in _scan_jobs.items() if time.time() - v.get("started_at", 0) > 600]
+        # Elimina solo i job conclusi: una scansione lunga (es. /16) può
+        # legittimamente restare "running" oltre i 10 minuti.
+        stale = [k for k, v in _scan_jobs.items()
+                 if v.get("status") != "running" and time.time() - v.get("started_at", 0) > 600]
         for k in stale:
             del _scan_jobs[k]
         job = _scan_jobs.get(job_id)
