@@ -502,6 +502,34 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
     return list(merged.values())
 
 
+# Pattern dei nomi di interfaccia aggregata (Port-Channel / LAG / bundle) per i
+# principali vendor. Usato per evidenziare i link aggregati nella mappa.
+PORTCHANNEL_RE = re.compile(
+    r'^(?:'
+    r'po\d+|'                     # Cisco IOS short:  Po1
+    r'port-?channel\d*|'          # Cisco IOS long:   Port-channel1
+    r'trk\d+|'                    # HP ProCurve:      Trk1
+    r'lag\s*\d+|'                 # Aruba/generico:   lag 1
+    r'ae\d+|'                     # Juniper:          ae0
+    r'bridge-aggregation\d*|'     # HPE Comware:      Bridge-Aggregation1
+    r'bagg\d+|'                   # HPE Comware short: BAGG1
+    r'bundle-ether\d*|'           # Cisco IOS-XR:     Bundle-Ether1
+    r'eth-trunk\d*'               # Huawei:           Eth-Trunk1
+    r')',
+    re.IGNORECASE,
+)
+
+
+def _is_portchannel_port(port: str) -> bool:
+    """True se il nome dell'interfaccia indica un aggregato (Port-Channel/LAG)."""
+    return bool(port and PORTCHANNEL_RE.match(port.strip()))
+
+
+def _looks_like_ip(value: str) -> bool:
+    """True se la stringa è un IPv4 dotted-quad (e non un hostname)."""
+    return bool(re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', (value or '').strip()))
+
+
 def generate_network_map(group_filter=None) -> dict:
     """Scansiona backup-config e genera nodi + link per la mappa topologica."""
     devices      = get_all_devices()
@@ -512,7 +540,11 @@ def generate_network_map(group_filter=None) -> dict:
 
     def get_device_type(hostname: str) -> str:
         h = hostname.lower()
-        if any(k in h for k in ("ap", "wifi", "wlan")):                    return "ap"
+        # Access point: "ap" come token (inizio/separatore), non come sottostringa,
+        # per evitare falsi positivi tipo "capital" o "naples" → classificati AP.
+        if (re.search(r'(?:^|[^a-z])ap(?:[^a-z]|$)', h)
+                or any(k in h for k in ("wifi", "wlan", "accesspoint", "access-point"))):
+            return "ap"
         if any(k in h for k in ("rtr", "router", "fw", "firewall")):       return "router"
         if any(k in h for k in ("phone", "ipphone", "tel")):               return "phone"
         if any(k in h for k in ("srv", "server", "esxi", "nas",
@@ -564,8 +596,21 @@ def generate_network_map(group_filter=None) -> dict:
             "version":     versions.get(ip, {}).get("version"),
         }
 
+    # Arricchisci la mappa hostname→IP con gli hostname noti dall'inventario
+    # (campo Hostname del CSV) e con le forme "base" senza dominio FQDN. Serve a
+    # far collassare un vicino sul nodo reale anche quando CDP/LLDP annuncia l'IP
+    # di una SVI qualsiasi (es. Vlan1) diverso dall'IP di management con cui
+    # l'apparato è censito.
+    for ip, d in ip_to_device.items():
+        hn = (d.get('Hostname') or '').strip()
+        if hn:
+            hostname_to_ip.setdefault(hn.lower(), ip)
+            hostname_to_ip.setdefault(hn.split('.')[0].lower(), ip)
+    for hn_key in list(hostname_to_ip.keys()):
+        hostname_to_ip.setdefault(hn_key.split('.')[0], hostname_to_ip[hn_key])
+
     # Link + nodi scoperti
-    seen_links: set = set()
+    seen_links: dict = {}   # link_key -> indice del link in `links`
     for ip, info in parsed_devices.items():
         parsed_neighbors = parse_cdp_lldp_neighbors(info["content"])
 
@@ -578,12 +623,26 @@ def generate_network_map(group_filter=None) -> dict:
 
             base_neigh_id = neigh_id.split('.')[0] if '.' in neigh_id else neigh_id
 
-            target_ip = neigh_ip
+            # --- Risoluzione robusta del nodo target (fix IP + dedup duplicati) ---
+            # 1. Hostname → IP di management noto. Ha PRIORITÀ sull'IP annunciato da
+            #    CDP/LLDP: il vicino può annunciare l'IP di una SVI qualsiasi (es.
+            #    Vlan1) e non quello con cui è in inventario; affidarsi a esso
+            #    creerebbe un nodo duplicato con l'indirizzo sbagliato.
+            target_ip = (hostname_to_ip.get(neigh_id.lower())
+                         or hostname_to_ip.get(base_neigh_id.lower()))
+
+            # 2. IP annunciato, solo se corrisponde a un nodo reale già noto.
+            if not target_ip and neigh_ip and neigh_ip in nodes_map:
+                target_ip = neigh_ip
+
+            # 3. Vicino esterno: chiave per hostname (così lo stesso switch
+            #    annunciato con IP di VLAN diverse da più apparati non duplica),
+            #    altrimenti per IP annunciato.
             if not target_ip:
-                target_ip = (hostname_to_ip.get(neigh_id.lower())
-                             or hostname_to_ip.get(base_neigh_id.lower()))
-            if not target_ip:
-                target_ip = f"discovered_{sanitize_filename(base_neigh_id)}"
+                if base_neigh_id and not _looks_like_ip(base_neigh_id):
+                    target_ip = f"discovered_{sanitize_filename(base_neigh_id)}"
+                else:
+                    target_ip = neigh_ip or f"discovered_{sanitize_filename(base_neigh_id)}"
 
             if target_ip not in nodes_map:
                 # Crea nodo scoperto con version gia' popolata se disponibile
@@ -595,23 +654,41 @@ def generate_network_map(group_filter=None) -> dict:
                     "device_type": get_device_type(base_neigh_id),
                     "vendor":      "discovered",
                     "version":     neigh_ver,
+                    # IP annunciato via CDP/LLDP (può differire dall'IP del nodo)
+                    "reported_ip": neigh_ip,
                 }
             else:
+                node = nodes_map[target_ip]
                 # Aggiorna version se il nodo esiste ma non ha ancora una versione valida
-                existing_ver = nodes_map[target_ip].get("version")
+                existing_ver = node.get("version")
                 if neigh_ver and (not existing_ver
                                   or existing_ver in ("Non Rilevata", "Unknown", "")):
-                    nodes_map[target_ip]["version"] = neigh_ver
+                    node["version"] = neigh_ver
+                # Segnala l'IP annunciato se diverso dall'IP di management reale:
+                # è la spia del problema "IP sbagliato" che il workaround corregge.
+                if neigh_ip and neigh_ip != target_ip and not node.get("reported_ip"):
+                    node["reported_ip"] = neigh_ip
+
+            is_pc = _is_portchannel_port(local_port) or _is_portchannel_port(remote_port)
 
             link_key = tuple(sorted([ip, target_ip]))
             if link_key not in seen_links:
-                seen_links.add(link_key)
+                seen_links[link_key] = len(links)
                 links.append({
-                    "source":      ip,
-                    "target":      target_ip,
-                    "local_port":  local_port,
-                    "remote_port": remote_port,
+                    "source":         ip,
+                    "target":         target_ip,
+                    "local_port":     local_port,
+                    "remote_port":    remote_port,
+                    "is_portchannel": is_pc,
                 })
+            elif is_pc:
+                # Il link esiste già: se questa istanza è un aggregato, promuovilo
+                # (l'altro estremo può aver annunciato l'interfaccia fisica membro).
+                existing = links[seen_links[link_key]]
+                if not existing.get("is_portchannel"):
+                    existing["is_portchannel"] = True
+                    existing["local_port"]  = local_port
+                    existing["remote_port"] = remote_port
 
     nodes = list(nodes_map.values())
 
