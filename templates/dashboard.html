@@ -1551,6 +1551,19 @@
             ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    // Abbrevia un nome di interfaccia per le etichette compatte sui link
+    // (es. "Ethernet0/1" → "Et0/1", "GigabitEthernet1/0/1" → "Gi1/0/1").
+    function shortIface(name) {
+        if (!name) return '';
+        return String(name)
+            .replace(/^TenGigabitEthernet/i, 'Te')
+            .replace(/^FortyGigabitEthernet/i, 'Fo')
+            .replace(/^GigabitEthernet/i, 'Gi')
+            .replace(/^FastEthernet/i, 'Fa')
+            .replace(/^Ethernet/i, 'Et')
+            .replace(/^Port-channel/i, 'Po');
+    }
+
     function getAuthHeaders() {
         const token = sessionStorage.getItem("net_token");
         return token ? { "Authorization": `Bearer ${token}` } : {};
@@ -2322,14 +2335,40 @@
             const isPC      = !!l.is_portchannel;
             const emphasize = isPC && highlightPC;
 
+            // Interfacce membro per lato (liste affidabili dal backend)
+            const localPorts  = (Array.isArray(l.local_ports)  && l.local_ports.length)  ? l.local_ports  : [l.local_port];
+            const remotePorts = (Array.isArray(l.remote_ports) && l.remote_ports.length) ? l.remote_ports : [l.remote_port];
+
+            // Etichetta dell'aggregato: nome Port-channel dalla config, altrimenti
+            // "LAG ×N" quando ci sono più link fisici verso lo stesso vicino.
+            const pcTag = l.pc_name
+                ? shortIface(l.pc_name)
+                : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+
+            // Interfacce membro compatte: Et0/1+Et0/2 ⇄ Et0/0+Et0/2
+            const localMembers  = localPorts.map(shortIface).filter(Boolean).join('+');
+            const remoteMembers = remotePorts.map(shortIface).filter(Boolean).join('+');
+
             // visualizza le porte collegate come etichetta fluttuante sul cavo
             let portLabel = l.local_port && l.local_port !== 'Vicino' && l.local_port !== 'Neighbor'
-                ? `${escapeHtml(l.local_port)} ⇄ ${escapeHtml(l.remote_port)}` : '';
-            if (emphasize) portLabel = portLabel ? `⛓ ${portLabel}` : '⛓ LAG';
+                ? `${shortIface(l.local_port)} ⇄ ${shortIface(l.remote_port)}` : '';
+            if (emphasize) {
+                // Con l'evidenziazione attiva: nome del Port-channel + tutte le interfacce membro
+                portLabel = `⛓ ${pcTag}`;
+                if (localMembers && remoteMembers) portLabel += `\n${localMembers} ⇄ ${remoteMembers}`;
+            }
 
             const pcBadge = isPC ? `
               <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.3); padding:2px 7px; border-radius:5px; margin-bottom:8px;">
-                <i class="fa-solid fa-link"></i> ${currentLang === 'en' ? 'AGGREGATED · Port-Channel / LAG' : 'AGGREGATO · Port-Channel / LAG'}
+                <i class="fa-solid fa-link"></i> ${currentLang === 'en' ? 'AGGREGATED' : 'AGGREGATO'} · ${escapeHtml(l.pc_name || (currentLang === 'en' ? 'Port-Channel / LAG' : 'Port-Channel / LAG'))}${l.member_count > 1 ? ` · ${l.member_count} ${currentLang === 'en' ? 'members' : 'membri'}` : ''}
+              </div>` : '';
+
+            // Interfacce membro per lato, mostrate solo per gli aggregati
+            const memberRows = (isPC && (localMembers || remoteMembers)) ? `
+              <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.08); padding-top:6px; font-family:var(--font-code); font-size:10px;">
+                <div style="color:var(--text-muted); font-size:9px; text-transform:uppercase; margin-bottom:4px;">${currentLang === 'en' ? 'Member interfaces' : 'Interfacce membro'}</div>
+                <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.source)}</span><span style="color:var(--success);">${escapeHtml(localMembers || '—')}</span></div>
+                <div style="display:flex; justify-content:space-between; gap:10px; padding:1px 0;"><span style="color:var(--text-muted);">${escapeHtml(l.target)}</span><span style="color:var(--success);">${escapeHtml(remoteMembers || '—')}</span></div>
               </div>` : '';
 
             // Generatore del Tooltip HTML premium al passaggio sul collegamento
@@ -2343,15 +2382,16 @@
                 <div>
                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Source' : 'Origine'}</span>
                   <strong style="font-size:11px; color:#fff;">${escapeHtml(l.source)}</strong>
-                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(l.local_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (l.pc_name ? shortIface(l.pc_name) : (localMembers || l.local_port)) : l.local_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
                 </div>
                 <div style="color: var(--primary); font-size: 14px; text-align: center;"><i class="fa-solid fa-right-left"></i></div>
                 <div style="text-align: right;">
                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Destination' : 'Destinazione'}</span>
                   <strong style="font-size:11px; color:#fff;">${escapeHtml(l.target)}</strong>
-                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(l.remote_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
+                  <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (remoteMembers || l.remote_port) : l.remote_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
                 </div>
               </div>
+              ${memberRows}
             </div>
             `;
             const container = document.createElement("div");
