@@ -530,6 +530,54 @@ def _looks_like_ip(value: str) -> bool:
     return bool(re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', (value or '').strip()))
 
 
+# Abbreviazioni di interfaccia note (Cisco-like) → codice canonico, per far
+# combaciare le forme lunghe della config ("Ethernet0/1") con quelle brevi
+# annunciate da CDP/LLDP ("Et0/1").
+_IFACE_ALIASES = {
+    'ethernet': 'et', 'eth': 'et', 'et': 'et',
+    'gigabitethernet': 'gi', 'gigabit': 'gi', 'gig': 'gi', 'gi': 'gi', 'ge': 'gi',
+    'tengigabitethernet': 'te', 'tengige': 'te', 'tengig': 'te', 'te': 'te',
+    'twentyfivegige': 'twe', 'twe': 'twe',
+    'fortygigabitethernet': 'fo', 'fortygige': 'fo', 'fo': 'fo',
+    'hundredgige': 'hu', 'hu': 'hu',
+    'fastethernet': 'fa', 'fast': 'fa', 'fa': 'fa',
+    'portchannel': 'po', 'port-channel': 'po', 'po': 'po',
+}
+
+
+def _normalize_iface(name: str) -> str:
+    """Normalizza un nome di interfaccia a 'codice+numero' (es. Et0/1 → et0/1)."""
+    if not name:
+        return ''
+    name = name.strip()
+    m = re.match(r'^([A-Za-z][A-Za-z\-]*?)\s*([\d/\.:]+)\s*$', name)
+    if not m:
+        return name.lower().replace(' ', '')
+    prefix = m.group(1).lower().replace('-', '')
+    return f"{_IFACE_ALIASES.get(prefix, prefix)}{m.group(2)}"
+
+
+def parse_channel_groups(config: str) -> dict:
+    """Mappa interfaccia fisica → nome Port-channel leggendo 'channel-group N'
+    nei blocchi interface della running-config (Cisco IOS/IOS-XE).
+
+    Es.:  interface Ethernet0/1 / channel-group 10 mode active
+          →  {'et0/1': 'Port-channel10'}
+    """
+    mapping: dict = {}
+    current_iface = None
+    for line in config.splitlines():
+        m = re.match(r'^interface\s+(\S+)', line)
+        if m:
+            current_iface = m.group(1)
+            continue
+        if current_iface:
+            cg = re.search(r'channel-group\s+(\d+)', line)
+            if cg:
+                mapping[_normalize_iface(current_iface)] = f"Port-channel{cg.group(1)}"
+    return mapping
+
+
 def generate_network_map(group_filter=None) -> dict:
     """Scansiona backup-config e genera nodi + link per la mappa topologica."""
     devices      = get_all_devices()
@@ -578,7 +626,12 @@ def generate_network_map(group_filter=None) -> dict:
         if not hostname:
             parts    = filename[:-4].split('-')
             hostname = "-".join(parts[:-1]) if len(parts) >= 2 else filename[:-4]
-        parsed_devices[ip] = {"hostname": hostname, "content": content, "file": file_path}
+        parsed_devices[ip] = {
+            "hostname": hostname,
+            "content": content,
+            "file": file_path,
+            "iface_pc": parse_channel_groups(content),
+        }
         hostname_to_ip[hostname.lower()] = ip
 
     # Nodi inventariati
@@ -609,12 +662,16 @@ def generate_network_map(group_filter=None) -> dict:
     for hn_key in list(hostname_to_ip.keys()):
         hostname_to_ip.setdefault(hn_key.split('.')[0], hostname_to_ip[hn_key])
 
-    # Link + nodi scoperti
-    seen_links: dict = {}   # link_key -> indice del link in `links`
+    # Link + nodi scoperti. I link vengono accumulati per coppia di nodi così da
+    # collassare i membri fisici di un aggregato (Port-Channel/LACP) in un unico
+    # collegamento logico: CDP/LLDP annuncia le interfacce membro (Et0/1, Et0/2),
+    # non l'interfaccia Port-channel, quindi l'aggregato si riconosce solo
+    # incrociando la config (channel-group) e/o la presenza di più link fisici.
+    link_acc: dict = {}   # link_key -> {source, target, members{key:{ports,is_pc_name}}, pc_names}
     for ip, info in parsed_devices.items():
-        parsed_neighbors = parse_cdp_lldp_neighbors(info["content"])
+        iface_pc_local = info.get("iface_pc", {})
 
-        for neigh in parsed_neighbors:
+        for neigh in parse_cdp_lldp_neighbors(info["content"]):
             neigh_id    = neigh["neighbor_id"]
             neigh_ip    = neigh["neighbor_ip"]
             local_port  = neigh["local_port"]
@@ -669,26 +726,78 @@ def generate_network_map(group_filter=None) -> dict:
                 if neigh_ip and neigh_ip != target_ip and not node.get("reported_ip"):
                     node["reported_ip"] = neigh_ip
 
-            is_pc = _is_portchannel_port(local_port) or _is_portchannel_port(remote_port)
+            # --- Riconoscimento aggregato (Port-Channel) sul membro corrente ---
+            # Si conta SOLO l'interfaccia locale del dispositivo che riporta: è
+            # l'unico dato affidabile. La "outgoing port" del vicino è una stima e
+            # può non combaciare col nome reale dall'altro lato (di qui il rischio
+            # di falsi aggregati se si appaiano gli endpoint a coppie).
+            ln = _normalize_iface(local_port)
+            rn = _normalize_iface(remote_port)
+            local_pc  = iface_pc_local.get(ln)
+            remote_pc = parsed_devices.get(target_ip, {}).get("iface_pc", {}).get(rn)
 
             link_key = tuple(sorted([ip, target_ip]))
-            if link_key not in seen_links:
-                seen_links[link_key] = len(links)
-                links.append({
-                    "source":         ip,
-                    "target":         target_ip,
-                    "local_port":     local_port,
-                    "remote_port":    remote_port,
-                    "is_portchannel": is_pc,
-                })
-            elif is_pc:
-                # Il link esiste già: se questa istanza è un aggregato, promuovilo
-                # (l'altro estremo può aver annunciato l'interfaccia fisica membro).
-                existing = links[seen_links[link_key]]
-                if not existing.get("is_portchannel"):
-                    existing["is_portchannel"] = True
-                    existing["local_port"]  = local_port
-                    existing["remote_port"] = remote_port
+            acc = link_acc.get(link_key)
+            if not acc:
+                acc = {
+                    "source": ip, "target": target_ip,
+                    "src_ports": {}, "tgt_ports": {},      # iface locali affidabili per lato
+                    "src_guess": {}, "tgt_guess": {},      # iface stimate (outgoing port del vicino)
+                    "pc_names": set(), "name_pc": False,
+                }
+                link_acc[link_key] = acc
+
+            if _is_portchannel_port(local_port) or _is_portchannel_port(remote_port):
+                acc["name_pc"] = True
+
+            # Assegna le interfacce al lato corretto in base a chi sta riportando.
+            if ip == acc["source"]:
+                acc["src_ports"][ln] = local_port
+                acc["tgt_guess"][rn] = remote_port
+            else:  # ip == acc["target"]
+                acc["tgt_ports"][ln] = local_port
+                acc["src_guess"][rn] = remote_port
+
+            if local_pc:
+                acc["pc_names"].add(local_pc)
+            if remote_pc:
+                acc["pc_names"].add(remote_pc)
+
+    # Emissione dei link. Un link è un aggregato (Port-Channel/LAG) se:
+    #  - la config dichiara un channel-group (pc_names), oppure
+    #  - un'interfaccia annunciata è già una Port-channel (name_pc), oppure
+    #  - ENTRAMBI i lati riportano ≥2 interfacce locali distinte verso lo stesso
+    #    vicino (bundle simmetrico). La simmetria evita il falso positivo del
+    #    singolo cavo con nomi di "outgoing port" discordanti tra i due estremi.
+    for acc in link_acc.values():
+        src, tgt = acc["source"], acc["target"]
+        # Interfacce affidabili (riportate dal lato stesso); fallback alle stime.
+        src_list = list((acc["src_ports"] or acc["src_guess"]).values())
+        tgt_list = list((acc["tgt_ports"] or acc["tgt_guess"]).values())
+
+        symmetric_bundle = len(acc["src_ports"]) > 1 and len(acc["tgt_ports"]) > 1
+        pc_names = sorted(acc["pc_names"])
+        is_pc = bool(pc_names) or acc["name_pc"] or symmetric_bundle
+
+        # Nome del Port-channel da mostrare: dalla config se nota, altrimenti
+        # l'eventuale interfaccia Port-channel annunciata direttamente.
+        pc_name = pc_names[0] if pc_names else None
+        if not pc_name and acc["name_pc"]:
+            pc_name = next((p for p in src_list + tgt_list if _is_portchannel_port(p)), None)
+
+        member_count = max(len(src_list), len(tgt_list)) or 1
+        links.append({
+            "source":         src,
+            "target":         tgt,
+            "local_port":     src_list[0] if src_list else "Unknown",
+            "remote_port":    tgt_list[0] if tgt_list else "Unknown",
+            "local_ports":    src_list,
+            "remote_ports":   tgt_list,
+            "is_portchannel": is_pc,
+            "pc_name":        pc_name,
+            "pc_names":       pc_names,
+            "member_count":   member_count,
+        })
 
     nodes = list(nodes_map.values())
 
