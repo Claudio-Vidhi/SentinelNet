@@ -2422,30 +2422,43 @@
         const container = document.getElementById("networkGraphContainer");
         const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
         
-        // Opzioni Vis.js per stabilizzazione fisica veloce all'avvio e splendida interattività
+        // Opzioni Vis.js. La fisica serve SOLO a calcolare un layout iniziale ben
+        // distanziato: viene spenta al termine della stabilizzazione (vedi sotto),
+        // così i nodi non derivano da soli e restano dove l'utente li trascina.
         const options = {
+            layout: {
+                improvedLayout: true,
+                randomSeed: 42          // layout deterministico tra un refresh e l'altro
+            },
             physics: {
+                enabled: true,
+                solver: 'barnesHut',
                 stabilization: {
                     enabled: true,
-                    iterations: 120, // si stabilizza rapidamente in background
-                    updateInterval: 20,
+                    iterations: 600,    // più iterazioni = layout più riposato e senza sovrapposizioni
+                    updateInterval: 25,
                     onlyDynamicEdges: false,
                     fit: true
                 },
                 barnesHut: {
-                    gravitationalConstant: -4500,
-                    centralGravity: 0.18,
-                    springLength: 200,
-                    springConstant: 0.04,
-                    damping: 0.09,
-                    avoidOverlap: 1
-                }
+                    gravitationalConstant: -16000,  // forte repulsione: i nodi si allontanano
+                    centralGravity: 0.12,
+                    springLength: 240,
+                    springConstant: 0.05,
+                    damping: 0.4,
+                    avoidOverlap: 1                 // massimo: evita la sovrapposizione dei nodi
+                },
+                minVelocity: 0.75
             },
-            interaction: { 
+            interaction: {
                 hover: true,
                 hoverConnectedEdges: true,
                 selectConnectedEdges: true,
-                tooltipDelay: 150
+                tooltipDelay: 150,
+                dragNodes: true,        // i nodi sono trascinabili
+                dragView: true,
+                zoomView: true,
+                multiselect: true
             },
             nodes: {
                 shadow: {
@@ -2457,10 +2470,10 @@
                 }
             },
             edges: {
-                smooth: { 
-                    type: 'cubicBezier', 
-                    forceDirection: 'none', 
-                    roundness: 0.5 
+                smooth: {
+                    type: 'cubicBezier',
+                    forceDirection: 'none',
+                    roundness: 0.5
                 },
                 shadow: {
                     enabled: true,
@@ -2476,6 +2489,22 @@
             networkInstance.destroy();
         }
         networkInstance = new vis.Network(container, graphData, options);
+
+        // A stabilizzazione completata, congela il layout: la fisica si spegne così
+        // i nodi NON si muovono più da soli. Il trascinamento resta abilitato e gli
+        // archi seguono i nodi spostati, che rimangono nella posizione scelta.
+        let mapFrozen = false;
+        const freezeLayout = () => {
+            if (networkInstance && !mapFrozen) {
+                mapFrozen = true;
+                networkInstance.setOptions({ physics: false });
+            }
+        };
+        networkInstance.once('stabilizationIterationsDone', freezeLayout);
+        networkInstance.once('stabilized', freezeLayout);
+        // Rete di sicurezza per i grafi minuscoli (0–1 nodi) dove gli eventi di
+        // stabilizzazione possono non scattare: la fisica viene comunque spenta.
+        networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, 5000));
     }
 
     function updateTopologyMapNodeStatus(ip, newStatus) {
@@ -2500,11 +2529,54 @@
             alert(i18n[currentLang].alertNoTopology);
             return;
         }
-        const canvas = networkInstance.canvas.frame.canvas;
-        const link = document.createElement("a");
-        link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".png";
-        link.href = canvas.toDataURL("image/png");
-        link.click();
+
+        const container = document.getElementById("networkGraphContainer");
+        // Salva dimensioni e vista correnti per ripristinarle dopo l'export
+        const prevW     = container.style.width;
+        const prevH     = container.style.height;
+        const prevPos   = networkInstance.getViewPosition();
+        const prevScale = networkInstance.getScale();
+
+        // Esporta su un canvas molto più grande della finestra: più pixel = più
+        // risoluzione. Con fit() l'inquadratura comprende TUTTI i dispositivi.
+        const EXPORT_W = 3200, EXPORT_H = 2000;
+        container.style.width  = EXPORT_W + "px";
+        container.style.height = EXPORT_H + "px";
+        networkInstance.setSize(EXPORT_W + "px", EXPORT_H + "px");
+        networkInstance.fit({ animation: false });   // racchiude l'intera topologia
+        networkInstance.redraw();
+
+        const restore = () => {
+            container.style.width  = prevW;
+            container.style.height = prevH;
+            networkInstance.setSize(prevW || "100%", prevH || "600px");
+            networkInstance.redraw();
+            networkInstance.moveTo({ position: prevPos, scale: prevScale, animation: false });
+        };
+
+        // Due frame per essere certi che il ridisegno alla nuova dimensione sia completo
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            try {
+                const src = networkInstance.canvas.frame.canvas;
+                // Componi su uno sfondo opaco così il PNG non risulta trasparente
+                const out = document.createElement("canvas");
+                out.width  = src.width;
+                out.height = src.height;
+                const ctx = out.getContext("2d");
+                ctx.fillStyle = "#090d13";
+                ctx.fillRect(0, 0, out.width, out.height);
+                ctx.drawImage(src, 0, 0);
+
+                const link = document.createElement("a");
+                link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".png";
+                link.href = out.toDataURL("image/png");
+                link.click();
+            } catch (e) {
+                console.error("Export mappa fallito:", e);
+            } finally {
+                restore();
+            }
+        }));
     }
 
     async function resetTopology() {
