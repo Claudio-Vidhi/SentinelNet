@@ -76,10 +76,27 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Secur
     payload = verify_access_token(token)
     if not payload:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token non valido o scaduto."
         )
+    # Allinea sempre il ruolo allo stato corrente su disco (gestisce token vecchi
+    # senza ruolo e cambi di ruolo applicati dopo l'emissione del token).
+    payload["role"] = user_manager.get_role(payload.get("sub")) or payload.get("role") or "viewer"
     return payload
+
+def require_role(*allowed):
+    """Dipendenza FastAPI: consente l'accesso solo ai ruoli indicati."""
+    def _dep(current_user = Depends(get_current_user)):
+        if current_user.get("role") not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Privilegi insufficienti per questa operazione."
+            )
+        return current_user
+    return _dep
+
+require_admin = require_role("admin")              # solo amministratori
+require_operator = require_role("admin", "operator")  # scritture/operazioni di rete
 
 # --- MODELLI DI VALIDAZIONE PYDANTIC ---
 
@@ -108,6 +125,18 @@ LoginRequest = UserSchema
 class ChangePasswordSchema(BaseModel):
     old_password: str
     new_password: str
+
+class UserCreateSchema(BaseModel):
+    username: str
+    password: str
+    role: str = "viewer"
+
+class UserDeleteSchema(BaseModel):
+    username: str
+
+class UserRoleSchema(BaseModel):
+    username: str
+    role: str
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -316,7 +345,7 @@ def setup_admin(payload: UserSchema):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Setup già completato. Registrazione non consentita."
         )
-    success = user_manager.create_user(payload.username, payload.password)
+    success = user_manager.create_user(payload.username, payload.password, role="admin")
     if success:
         log_audit(f"Nuovo utente amministratore '{payload.username}' registrato con successo via Setup Wizard.")
         return {"status": "success", "message": "Primo account amministratore creato correttamente."}
@@ -333,9 +362,10 @@ def login(payload: LoginRequest):
         
     if user_manager.verify_user(payload.username, payload.password):
         reset_failed_attempts(payload.username)
-        access_token = create_access_token(data={"sub": payload.username})
-        log_audit(f"Utente '{payload.username}' loggato con successo.")
-        return {"access_token": access_token, "token_type": "bearer"}
+        role = user_manager.get_role(payload.username) or "viewer"
+        access_token = create_access_token(data={"sub": payload.username, "role": role})
+        log_audit(f"Utente '{payload.username}' (ruolo: {role}) loggato con successo.")
+        return {"access_token": access_token, "token_type": "bearer", "role": role}
         
     record_failed_attempt(payload.username)
     log_audit(f"Tentativo di login fallito per l'utente '{payload.username}' (credenziali errate).")
@@ -354,6 +384,50 @@ def change_password(payload: ChangePasswordSchema,
     if not success:
         raise HTTPException(status_code=400, detail="Password attuale non corretta.")
     log_audit(f"Password cambiata per l'utente '{username}'.")
+    return {"status": "success"}
+
+@app.get("/api/auth/me")
+def whoami(current_user = Depends(get_current_user)):
+    return {"username": current_user.get("sub"), "role": current_user.get("role", "viewer")}
+
+# --- GESTIONE UTENTI (solo amministratori) ---
+
+@app.get("/api/users")
+def list_users_ep(current_user = Depends(require_admin)):
+    return user_manager.list_users()
+
+@app.post("/api/users")
+def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_admin)):
+    if payload.role not in user_manager.VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Ruolo non valido.")
+    if not payload.username.strip() or not payload.password:
+        raise HTTPException(status_code=400, detail="Username e password obbligatori.")
+    if not user_manager.create_user(payload.username.strip(), payload.password, payload.role):
+        raise HTTPException(status_code=400, detail="Utente già esistente.")
+    log_audit(f"Utente '{payload.username}' (ruolo: {payload.role}) creato da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/users/delete")
+def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(require_admin)):
+    if payload.username == current_user.get("sub"):
+        raise HTTPException(status_code=400, detail="Non puoi eliminare il tuo stesso account.")
+    if user_manager.get_role(payload.username) == "admin" and user_manager.count_admins() <= 1:
+        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore.")
+    if not user_manager.delete_user(payload.username):
+        raise HTTPException(status_code=404, detail="Utente non trovato.")
+    log_audit(f"Utente '{payload.username}' eliminato da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/users/role")
+def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_admin)):
+    if payload.role not in user_manager.VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Ruolo non valido.")
+    if (user_manager.get_role(payload.username) == "admin"
+            and payload.role != "admin" and user_manager.count_admins() <= 1):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore.")
+    if not user_manager.set_role(payload.username, payload.role):
+        raise HTTPException(status_code=404, detail="Utente non trovato.")
+    log_audit(f"Ruolo di '{payload.username}' impostato a '{payload.role}' da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
 # --- ROTTE DISPOSITIVI (INVENTARIO) ---
@@ -398,7 +472,7 @@ def export_devices_csv(current_user = Depends(get_current_user)):
     )
 
 @app.post("/api/add-device")
-def add_device(device: DeviceSchema, current_user = Depends(get_current_user)):
+def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     inventory_manager.add_or_update_device(
         device.ip, device.vendor, device.profile,
         device.username, device.password, device.enable_secret, device.group
@@ -407,13 +481,13 @@ def add_device(device: DeviceSchema, current_user = Depends(get_current_user)):
     return {"status": "success", "message": "Dispositivo salvato"}
 
 @app.post("/api/delete-device")
-def delete_device(payload: DeviceDelete, current_user = Depends(get_current_user)):
+def delete_device(payload: DeviceDelete, current_user = Depends(require_operator)):
     inventory_manager.delete_device(payload.ip)
     log_audit(f"Dispositivo '{payload.ip}' eliminato dall'inventario dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
 @app.post("/api/import-csv")
-def import_csv(payload: CSVImportRequest, current_user = Depends(get_current_user)):
+def import_csv(payload: CSVImportRequest, current_user = Depends(require_operator)):
     lines = payload.csv_data.split('\n')
     import csv as csv_parser
     reader = csv_parser.DictReader(lines)
@@ -468,7 +542,7 @@ def list_groups(current_user = Depends(get_current_user)):
     return inventory_manager.get_all_groups()
 
 @app.post("/api/groups")
-def create_group(group: GroupSchema, current_user = Depends(get_current_user)):
+def create_group(group: GroupSchema, current_user = Depends(require_operator)):
     name = group.name
     if not name:
         raise HTTPException(status_code=400, detail="Il nome del gruppo è obbligatorio.")
@@ -479,7 +553,7 @@ def create_group(group: GroupSchema, current_user = Depends(get_current_user)):
     return {"status": "success", "message": "Gruppo creato"}
 
 @app.post("/api/groups/delete")
-def remove_group(payload: GroupDeleteSchema, current_user = Depends(get_current_user)):
+def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_operator)):
     group_name = payload.name
     groups = inventory_manager.get_all_groups()
     if group_name in groups and group_name != "Generale":
@@ -495,7 +569,7 @@ def list_vendors(current_user = Depends(get_current_user)):
     return inventory_manager.get_all_vendors()
 
 @app.post("/api/vendors")
-def create_vendor(v: VendorSchema, current_user = Depends(get_current_user)):
+def create_vendor(v: VendorSchema, current_user = Depends(require_operator)):
     vendors = inventory_manager.get_all_vendors()
     vendors[v.name.lower().strip()] = {"euvd_term": v.euvd_term, "driver": v.driver}
     inventory_manager.save_vendors(vendors)
@@ -503,7 +577,7 @@ def create_vendor(v: VendorSchema, current_user = Depends(get_current_user)):
     return {"status": "success"}
 
 @app.post("/api/vendors/delete")
-def delete_vendor(v: VendorDeleteSchema, current_user = Depends(get_current_user)):
+def delete_vendor(v: VendorDeleteSchema, current_user = Depends(require_operator)):
     vendors = inventory_manager.get_all_vendors()
     if v.name.lower() in ("cisco", "hpe"):
         raise HTTPException(status_code=400, detail="Vendor di sistema non eliminabile.")
@@ -525,7 +599,7 @@ def get_network_map(group: str = "all", current_user = Depends(get_current_user)
     return core_engine.generate_network_map(group_filter=group)
 
 @app.post("/api/topology/reset")
-def reset_topology(current_user = Depends(get_current_user)):
+def reset_topology(current_user = Depends(require_operator)):
     backup_dir = "backup-config"
     deleted_count = 0
     if os.path.exists(backup_dir):
@@ -546,7 +620,7 @@ def reset_topology(current_user = Depends(get_current_user)):
 # --- ROTTE AUTOMAZIONE & DOWNLOAD ---
 
 @app.post("/api/run-triage")
-def run_triage(current_user = Depends(get_current_user)):
+def run_triage(current_user = Depends(require_operator)):
     global triage_job
     with triage_lock:
         if triage_job["status"] == "running":
@@ -563,7 +637,7 @@ def run_triage(current_user = Depends(get_current_user)):
     return {"status": "running", "message": "Scansione avviata in background"}
 
 @app.post("/api/triage/{ip}")
-def triage_single_device(ip: str, current_user = Depends(get_current_user)):
+def triage_single_device(ip: str, current_user = Depends(require_operator)):
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
@@ -601,7 +675,7 @@ def is_command_safe(command: str) -> bool:
     return True
 
 @app.post("/api/send-command")
-def send_command(payload: CommandRequest, current_user = Depends(get_current_user)):
+def send_command(payload: CommandRequest, current_user = Depends(require_operator)):
     # Validazione blacklist di sicurezza dei comandi CLI
     if not is_command_safe(payload.command):
         log_audit(f"Tentativo bloccato di esecuzione comando non sicuro '{payload.command}' su '{payload.ip}' dall'utente '{current_user.get('sub')}'.")
@@ -619,7 +693,7 @@ def send_command(payload: CommandRequest, current_user = Depends(get_current_use
     raise HTTPException(status_code=404, detail="Dispositivo non presente in inventario")
 
 @app.post("/api/bulk-command")
-def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(get_current_user)):
+def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(require_operator)):
     """Avvia l'invio degli stessi comandi a più dispositivi (in background)."""
     commands = [c for c in (line.strip() for line in payload.commands.splitlines()) if c]
     if not commands:
@@ -685,14 +759,14 @@ def get_bulk_command_status(job_id: str, current_user = Depends(get_current_user
 
 
 @app.post("/api/ws-token")
-def get_ws_token(current_user = Depends(get_current_user)):
+def get_ws_token(current_user = Depends(require_operator)):
     """Emette un token OTP monouso valido 30 secondi per aprire un WebSocket."""
     otp = _secrets.token_urlsafe(32)
     _ws_tokens[otp] = (current_user.get("sub"), time.time())
     return {"ws_token": otp}
 
 @app.post("/api/reassign-device")
-def reassign_device(payload: DeviceReassignSchema, current_user = Depends(get_current_user)):
+def reassign_device(payload: DeviceReassignSchema, current_user = Depends(require_operator)):
     """Sposta un dispositivo in un gruppo diverso aggiornando solo il campo Group nel CSV."""
     devices = inventory_manager.get_all_devices()
     groups  = inventory_manager.get_all_groups()
@@ -718,7 +792,7 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(get_cu
 
 
 @app.post("/api/ping-check")
-def ping_check(payload: PingCheckRequest, current_user = Depends(get_current_user)):
+def ping_check(payload: PingCheckRequest, current_user = Depends(require_operator)):
     """
     Verifica la raggiungibilità SSH (porta 22) di tutti i dispositivi
     nel gruppo selezionato, in parallelo con ThreadPoolExecutor.
@@ -762,7 +836,7 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(get_current_use
 # Docker note: is_reachable() uses a TCP probe on port 22. Ensure the container
 # has outbound TCP 22 allowed to the management VLAN in your docker-compose network policy.
 @app.get("/api/ping/{ip}")
-def ping_single(ip: str, current_user = Depends(get_current_user)):
+def ping_single(ip: str, current_user = Depends(require_operator)):
     from core_engine import is_reachable
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
@@ -942,7 +1016,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
             pass
 
 @app.get("/api/download-backup/{ip_or_filename}")
-def download_backup(ip_or_filename: str, current_user = Depends(get_current_user)):
+def download_backup(ip_or_filename: str, current_user = Depends(require_operator)):
     log_audit(f"Download del file di backup '{ip_or_filename}' richiesto dall'utente '{current_user.get('sub')}'.")
     
     backup_dir = os.path.realpath("backup-config")
@@ -1009,7 +1083,7 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
 def start_subnet_scan(
     payload: SubnetScanRequest,
     background_tasks: BackgroundTasks,
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_operator),
 ):
     try:
         hosts = parse_network(payload.network)

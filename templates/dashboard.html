@@ -612,6 +612,24 @@
         width: 92vw !important;
       }
     }
+
+    /* Controllo accessi lato UI: nasconde i controlli di scrittura ai viewer e
+       le funzioni da amministratore a chi non è admin. L'enforcement reale è
+       comunque lato server (RBAC sugli endpoint). */
+    body.role-viewer .requires-write { display: none !important; }
+    body:not(.role-admin) .requires-admin { display: none !important; }
+
+    .role-pill {
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .role-pill-admin    { background: rgba(255,107,124,0.15); color: var(--danger);  border: 1px solid rgba(255,107,124,0.35); }
+    .role-pill-operator { background: rgba(79,142,247,0.15);  color: var(--primary); border: 1px solid rgba(79,142,247,0.35); }
+    .role-pill-viewer   { background: rgba(141,155,176,0.15); color: var(--text-muted); border: 1px solid rgba(141,155,176,0.35); }
   </style>
 </head>
 <body>
@@ -690,13 +708,13 @@
     </div>
     
     <div class="user-badge">
-      <span data-i18n="badgeAdmin"><i class="fa-solid fa-user-shield"></i> Amministratore</span>
+      <span id="userBadgeLabel"><i class="fa-solid fa-user-shield"></i> Amministratore</span>
       <a href="#" onclick="logout()" style="color: var(--danger); text-decoration: none; font-weight: 700;" data-i18n="btnExit"><i class="fa-solid fa-power-off"></i> Esci</a>
     </div>
 
-    <div>
+    <div class="requires-write">
       <h3 style="margin-bottom: 12px; font-size: 16px;" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
-      
+
       <div class="form-group">
         <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
         <select id="devGroupSelect"></select>
@@ -749,7 +767,7 @@
       </button>
     </div>
     
-    <div style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: auto;">
+    <div class="requires-write" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: auto;">
       <h3 style="font-size: 14px; margin-bottom: 10px;" data-i18n="titleAddGroup"><i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo</h3>
       <div class="form-group">
         <label data-i18n="lblGroupName">Nome Gruppo</label>
@@ -782,34 +800,45 @@
       <button class="tab-button" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
         <i class="fa-solid fa-file-csv"></i> Importazione CSV
       </button>
+      <button class="tab-button requires-admin" onclick="switchTab('tab-users', this)" data-i18n="tabUsers">
+        <i class="fa-solid fa-users-gear"></i> Utenti
+      </button>
     </div>
 
     <!-- TAB 1: Network Inventory (Dispositivi) -->
     <div id="tab-devices" class="tab-content active">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
-        <div style="display:flex; align-items:center; gap: 15px;">
+        <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
           <h3 data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
           <select id="filterGroupSelect" onchange="renderDeviceTable()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
+          <div style="position:relative;">
+            <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:12px;"></i>
+            <input id="deviceSearch" type="search" oninput="renderDeviceTable()" autocomplete="off"
+              placeholder="Cerca IP, hostname, vendor, gruppo..." data-i18n-placeholder="searchInventoryPl"
+              style="padding:6px 10px 6px 30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:240px; transition:var(--transition);"
+              onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
+              onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
+          </div>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-small" id="btnRunTriage" style="background: var(--warning); color: #000; width: auto; margin: 0;" data-i18n="btnRunTriage">
+          <button class="btn btn-primary btn-small requires-write" id="btnRunTriage" style="background: var(--warning); color: #000; width: auto; margin: 0;" data-i18n="btnRunTriage">
             <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
           </button>
-          <button class="btn btn-secondary btn-small" id="btnPingCheck"
+          <button class="btn btn-secondary btn-small requires-write" id="btnPingCheck"
               onclick="runPingCheck()"
               style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
               data-i18n="btnPingCheck">
             <i class="fa-solid fa-wifi"></i> Ping Sede
           </button>
-          <button class="btn btn-secondary btn-small"
+          <button class="btn btn-secondary btn-small requires-write"
               onclick="openSubnetScanModal()"
               style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
               data-i18n="btnSubnetScan">
             <i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet
           </button>
-          <button class="btn btn-secondary btn-small"
+          <button class="btn btn-secondary btn-small requires-write"
               onclick="openBulkCommandModal()"
               style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
               data-i18n="btnBulkCommand">
@@ -880,7 +909,7 @@
             <tbody id="vendorTableBody"></tbody>
           </table>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+        <div class="requires-write" style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
           <div class="form-group" style="margin-bottom: 0;">
             <label data-i18n="lblVendorName">Nome Vendor</label>
             <input id="newVendorName" type="text" placeholder="es. mikrotik" data-i18n-placeholder="placeholderVendorName" style="padding-left:12px;">
@@ -1002,6 +1031,51 @@
       <button class="btn btn-primary" id="btnUploadCsv" data-i18n="btnUploadCsv">
         <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
       </button>
+    </div>
+
+    <!-- TAB 7: Gestione Utenti (solo admin) -->
+    <div id="tab-users" class="tab-content">
+      <h3 data-i18n="titleUsers">Gestione Utenti e Privilegi</h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descUsers">
+        Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.
+      </p>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="thUserName">Username</th>
+              <th data-i18n="thUserRole">Ruolo / Privilegio</th>
+              <th data-i18n="thUserActions">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 24px;">
+        <h3 style="font-size: 15px; margin-bottom: 12px;" data-i18n="titleAddUser"><i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:10px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblNewUserName">Username</label>
+            <input id="newUserName" type="text" placeholder="es. mario.rossi" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblNewUserPass">Password</label>
+            <input id="newUserPass" type="password" placeholder="••••••••" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblNewUserRole">Ruolo</label>
+            <select id="newUserRole" style="padding-left:12px;">
+              <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
+              <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
+              <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-small" onclick="createUser()" style="margin:0; white-space:nowrap;" data-i18n="btnAddUser">
+            <i class="fa-solid fa-plus"></i> Crea Utente
+          </button>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -1295,6 +1369,23 @@
         lblBulkCommands: "Comandi (uno per riga)",
         btnBulkRun: '<i class="fa-solid fa-paper-plane"></i> Esegui sui dispositivi',
 
+        // Ricerca inventario + gestione utenti
+        searchInventoryPl: "Cerca IP, hostname, vendor, gruppo...",
+        tabUsers: '<i class="fa-solid fa-users-gear"></i> Utenti',
+        titleUsers: "Gestione Utenti e Privilegi",
+        descUsers: 'Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.',
+        thUserName: "Username",
+        thUserRole: "Ruolo / Privilegio",
+        thUserActions: "Azioni",
+        titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente',
+        lblNewUserName: "Username",
+        lblNewUserPass: "Password",
+        lblNewUserRole: "Ruolo",
+        roleViewer: "Viewer (sola lettura)",
+        roleOperator: "Operator (operazioni)",
+        roleAdmin: "Admin (totale)",
+        btnAddUser: '<i class="fa-solid fa-plus"></i> Crea Utente',
+
         // JS Alerts / Confirm Dialogs / Additional Strings
         confirmReset: "Sei sicuro? Questa azione eliminerà tutti i backup e azzererà la mappa di rete.",
         confirmDeleteDevice: "Sicuro di voler rimuovere il dispositivo {ip}?",
@@ -1481,6 +1572,23 @@
         lblBulkCommands: "Commands (one per line)",
         btnBulkRun: '<i class="fa-solid fa-paper-plane"></i> Run on devices',
 
+        // Inventory search + user management
+        searchInventoryPl: "Search IP, hostname, vendor, group...",
+        tabUsers: '<i class="fa-solid fa-users-gear"></i> Users',
+        titleUsers: "User & Privilege Management",
+        descUsers: 'Create accounts with different privileges. <strong>Admin</strong>: full control and user management. <strong>Operator</strong>: all network operations (triage, commands, inventory). <strong>Viewer</strong>: read-only.',
+        thUserName: "Username",
+        thUserRole: "Role / Privilege",
+        thUserActions: "Actions",
+        titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> New User',
+        lblNewUserName: "Username",
+        lblNewUserPass: "Password",
+        lblNewUserRole: "Role",
+        roleViewer: "Viewer (read-only)",
+        roleOperator: "Operator (operations)",
+        roleAdmin: "Admin (full)",
+        btnAddUser: '<i class="fa-solid fa-plus"></i> Create User',
+
         // JS Alerts / Confirm Dialogs / Additional Strings
         confirmReset: "Are you sure? This action will delete all backups and reset the network map.",
         confirmDeleteDevice: "Are you sure you want to remove the device {ip}?",
@@ -1567,6 +1675,9 @@
             }
         });
 
+        // Aggiorna il badge utente (ruolo localizzato)
+        if (currentUsername) applyRoleUI(currentUsername, currentRole);
+
         // Ridisegna componenti dinamici se caricati
         if (globalDevices.length > 0) {
             // Aggiorna opzioni Filtro Sede
@@ -1626,6 +1737,8 @@
     let globalGroups = {};
     let globalVendors = {};
     let globalVersions = {}; // Cache globale per lo stato delle scansioni (ottimizzazione UI)
+    let currentRole = 'viewer';   // ruolo dell'utente loggato (admin/operator/viewer)
+    let currentUsername = '';
     let isTriagePolling = false;
     let appLoading = false;
     let wasTriageRunning = false;
@@ -1758,7 +1871,32 @@
 
     function logout() {
         sessionStorage.removeItem("net_token");
+        currentRole = 'viewer';
+        currentUsername = '';
+        document.body.classList.remove('role-admin','role-operator','role-viewer');
         checkAuthRequirements();
+    }
+
+    // --- RUOLI / PRIVILEGI ---
+
+    function roleLabel(role) {
+        if (role === 'admin')    return currentLang === 'en' ? 'Administrator' : 'Amministratore';
+        if (role === 'operator') return currentLang === 'en' ? 'Operator' : 'Operatore';
+        return currentLang === 'en' ? 'Viewer' : 'Visualizzatore';
+    }
+
+    function applyRoleUI(username, role) {
+        currentUsername = username || '';
+        currentRole = role || 'viewer';
+        document.body.classList.remove('role-admin','role-operator','role-viewer');
+        document.body.classList.add('role-' + currentRole);
+        const badge = document.getElementById('userBadgeLabel');
+        if (badge) {
+            const icon = currentRole === 'admin' ? 'fa-user-shield'
+                       : currentRole === 'operator' ? 'fa-user-gear' : 'fa-user';
+            badge.innerHTML = `<i class="fa-solid ${icon}"></i> ${escapeHtml(currentUsername)} · ` +
+                `<span class="role-pill role-pill-${currentRole}">${roleLabel(currentRole)}</span>`;
+        }
     }
 
     // Invio rapido con tasto Enter su login, setup wizard e creazione gruppo
@@ -1800,6 +1938,16 @@
             return;
         }
         
+        // Determina ruolo/privilegi dell'utente corrente e adatta la UI
+        try {
+            const meRes = await apiFetch('/api/auth/me');
+            if (meRes && meRes.ok) {
+                const me = await meRes.json();
+                currentRole = me.role || 'viewer';
+                applyRoleUI(me.username, currentRole);
+            }
+        } catch (e) { /* non bloccante */ }
+
         try {
             const res = await apiFetch('/api/local-devices');
             if (!res) {
@@ -1807,7 +1955,7 @@
                 return;
             }
             const data = await res.json();
-            
+
             globalDevices = data.devices;
             globalGroups = data.groups;
             globalVersions = data.detected_versions; // Cache globale delle versioni rilevate
@@ -1905,7 +2053,9 @@
             groupBody.innerHTML += `<tr>
                 <td><strong>${escapeHtml(g)}</strong></td>
                 <td><span style="color:var(--text-muted); font-size:13px;">${escapeHtml(desc)}</span></td>
-                <td>${g !== 'Generale' ? `<button onclick="deleteGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText}</td>
+                <td>${currentRole === 'viewer'
+                    ? '<span style="color:var(--text-muted)">—</span>'
+                    : (g !== 'Generale' ? `<button onclick="deleteGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText)}</td>
             </tr>`;
         });
     }
@@ -1917,11 +2067,22 @@
         const devBody = document.getElementById('deviceTableBody');
         if (!devBody) return;
 
+        const term = (document.getElementById('deviceSearch')?.value || '').trim().toLowerCase();
+        const isViewer = currentRole === 'viewer';
+
         devBody.innerHTML = '';
         globalDevices.forEach(d => {
             if (selectedGroup !== 'all' && d.Group !== selectedGroup) return;
 
             const scan = globalVersions[d.IP] || { version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato", status: "unknown" };
+
+            // Barra di ricerca: filtra su IP, hostname, vendor, gruppo, versione, stato
+            if (term) {
+                const haystack = [d.IP, d.Hostname, d.Vendor, d.Group, scan.version, scan.status]
+                    .map(x => (x || '').toString().toLowerCase()).join(' ');
+                if (!haystack.includes(term)) return;
+            }
+
             let ledClass = "led-offline";
             if (scan.status === "online")           ledClass = "led-online";
             else if (scan.status === "auth_failed") ledClass = "led-auth_failed";
@@ -1949,7 +2110,7 @@
                 <td>
                   <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                     <span class="badge" id="badge_${safeIp}">${escapeHtml(d.Group)}</span>
-                    <select
+                    ${isViewer ? '' : `<select
                       id="grpsel_${safeIp}"
                       onchange="reassignDevice('${d.IP}', this.value, this)"
                       title="Sposta in altro gruppo senza eliminare"
@@ -1958,7 +2119,7 @@
                              color:var(--text-muted); cursor:pointer; outline:none;
                              max-width:120px; transition:var(--transition);">
                       ${groupOptions}
-                    </select>
+                    </select>`}
                   </div>
                 </td>
                 <td style="font-family:monospace; font-size:12px;">${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}</td>
@@ -1966,6 +2127,7 @@
                 <td>${escapeHtml(d.Vendor.toUpperCase())}</td>
                 <td><code>${escapeHtml(versionText)}</code></td>
                 <td class="actions-cell">
+                    ${isViewer ? '<span style="color:var(--text-muted)">—</span>' : `
                     <button class="btn btn-secondary btn-small"
                         style="margin:0; padding:4px 8px;"
                         onclick="pingSingleDevice('${d.IP}', this)"
@@ -1992,7 +2154,7 @@
                                color:var(--danger); cursor:pointer;"
                         onclick="deleteDevice('${d.IP}')">
                         <i class="fa-solid fa-trash-can"></i> ${deleteText}
-                    </button>
+                    </button>`}
                 </td>
             </tr>`;
         });
@@ -2113,9 +2275,11 @@
                 <td><strong>${escapeHtml(name)}</strong></td>
                 <td><span style="font-family:var(--font-code); font-size:12px; color:var(--primary);">${escapeHtml(meta.euvd_term) || '—'}</span></td>
                 <td><span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(meta.driver) || '—'}</span></td>
-                <td>${isSystem
-                    ? `<span style="color:var(--text-muted); font-size:12px;">${systemText}</span>`
-                    : `<button onclick="deleteVendor(this.dataset.v)" data-v="${escapeHtml(name)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`
+                <td>${currentRole === 'viewer'
+                    ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
+                    : (isSystem
+                        ? `<span style="color:var(--text-muted); font-size:12px;">${systemText}</span>`
+                        : `<button onclick="deleteVendor(this.dataset.v)" data-v="${escapeHtml(name)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`)
                 }</td>
             </tr>`;
         });
@@ -2177,6 +2341,7 @@
         else if(tabId === 'tab-security' && !appLoading) {
             loadThreatIntel();
         }
+        else if(tabId === 'tab-users') loadUsers();
     }
 
     async function loadTopology() {
@@ -2783,6 +2948,81 @@
                 console.error("Errore durante il dispose di Xterm.js:", e);
             }
             termInstance = null;
+        }
+    }
+
+    // --- GESTIONE UTENTI (solo admin) ---
+
+    async function loadUsers() {
+        if (currentRole !== 'admin') return;
+        const res = await apiFetch('/api/users');
+        if (!res || !res.ok) return;
+        renderUsersTable(await res.json());
+    }
+
+    function renderUsersTable(users) {
+        const body = document.getElementById('usersTableBody');
+        if (!body) return;
+        const delText = currentLang === 'en' ? 'Delete' : 'Elimina';
+        body.innerHTML = users.map(u => {
+            const roleOptions = ['viewer', 'operator', 'admin'].map(r =>
+                `<option value="${r}" ${r === u.role ? 'selected' : ''}>${roleLabel(r)}</option>`).join('');
+            const isSelf = u.username === currentUsername;
+            return `<tr>
+                <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}</td>
+                <td><select data-u="${escapeHtml(u.username)}" onchange="changeUserRole(this.dataset.u, this.value)"
+                       style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
+                    ${roleOptions}
+                  </select></td>
+                <td>${isSelf
+                    ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
+                    : `<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button>`}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function createUser() {
+        const username = document.getElementById('newUserName').value.trim();
+        const password = document.getElementById('newUserPass').value;
+        const role     = document.getElementById('newUserRole').value;
+        if (!username || !password) {
+            alert(currentLang === 'en' ? 'Username and password are required.' : 'Username e password obbligatori.');
+            return;
+        }
+        const res = await apiFetch('/api/users', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, role })
+        });
+        if (res && res.ok) {
+            document.getElementById('newUserName').value = '';
+            document.getElementById('newUserPass').value = '';
+            loadUsers();
+        } else if (res) {
+            const e = await res.json();
+            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+        }
+    }
+
+    async function deleteUser(username) {
+        const msg = currentLang === 'en' ? `Delete user "${username}"?` : `Eliminare l'utente "${username}"?`;
+        if (!confirm(msg)) return;
+        const res = await apiFetch('/api/users/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
+        });
+        if (res && res.ok) loadUsers();
+        else if (res) { const e = await res.json(); alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+    }
+
+    async function changeUserRole(username, role) {
+        const res = await apiFetch('/api/users/role', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, role })
+        });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || ''));
+            loadUsers(); // ripristina la selezione corretta
         }
     }
 
