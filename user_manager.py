@@ -49,6 +49,7 @@ def create_user(username: str, password: str, role: str = "viewer", groups=None)
         "role": role,
         # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
         "groups": list(groups) if groups else [],
+        "disabled": False,
     }
     _save_users(users)
     return True
@@ -73,11 +74,33 @@ def change_password(username: str, old_password: str, new_password: str) -> bool
 # --- GESTIONE UTENTI (CRUD, ruoli) ---
 
 def list_users() -> list:
-    """Elenco utenti (senza hash) con ruolo e sedi assegnate."""
+    """Elenco utenti (senza hash) con ruolo, sedi assegnate e stato."""
     return [
-        {"username": u, "role": d.get("role", "admin"), "groups": d.get("groups", [])}
+        {
+            "username": u,
+            "role": d.get("role", "admin"),
+            "groups": d.get("groups", []),
+            "disabled": d.get("disabled", False),
+        }
         for u, d in get_users().items()
     ]
+
+def is_disabled(username: str) -> bool:
+    user = get_users().get(username)
+    return bool(user and user.get("disabled", False))
+
+def set_disabled(username: str, disabled: bool) -> bool:
+    users = get_users()
+    if username not in users:
+        return False
+    users[username]["disabled"] = bool(disabled)
+    _save_users(users)
+    return True
+
+def count_active_admins() -> int:
+    """Amministratori attivi (ruolo admin e non disabilitati)."""
+    return sum(1 for d in get_users().values()
+               if d.get("role", "admin") == "admin" and not d.get("disabled", False))
 
 def get_user_groups(username: str):
     """Sedi/gruppi assegnati all'utente. Lista vuota o assente = nessuna
