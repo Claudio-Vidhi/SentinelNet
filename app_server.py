@@ -79,9 +79,16 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Secur
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token non valido o scaduto."
         )
-    # Allinea sempre il ruolo allo stato corrente su disco (gestisce token vecchi
-    # senza ruolo e cambi di ruolo applicati dopo l'emissione del token).
-    payload["role"] = user_manager.get_role(payload.get("sub")) or payload.get("role") or "viewer"
+    sub = payload.get("sub")
+    # L'utente deve esistere ancora (gestisce account eliminati con token valido)
+    role = user_manager.get_role(sub)
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non più valido.")
+    # Lockout immediato degli account disabilitati anche con token ancora valido
+    if user_manager.is_disabled(sub):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabilitato.")
+    # Allinea sempre il ruolo allo stato corrente su disco.
+    payload["role"] = role
     return payload
 
 def require_role(*allowed):
@@ -181,6 +188,10 @@ class UserGroupsSchema(BaseModel):
     username: str
     groups: List[str]
 
+class UserDisableSchema(BaseModel):
+    username: str
+    disabled: bool
+
 class DeviceDelete(BaseModel):
     ip: str
 
@@ -202,6 +213,9 @@ class DeviceReassignSchema(BaseModel):
     new_group: str
 
 class PingCheckRequest(BaseModel):
+    group: str = "all"
+
+class TriageRunRequest(BaseModel):
     group: str = "all"
 
 class SubnetScanRequest(BaseModel):
@@ -406,6 +420,12 @@ def login(payload: LoginRequest):
         )
         
     if user_manager.verify_user(payload.username, payload.password):
+        if user_manager.is_disabled(payload.username):
+            log_audit(f"Login rifiutato per account disabilitato '{payload.username}'.")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account disabilitato. Contatta un amministratore."
+            )
         reset_failed_attempts(payload.username)
         role = user_manager.get_role(payload.username) or "viewer"
         access_token = create_access_token(data={"sub": payload.username, "role": role})
@@ -478,6 +498,22 @@ def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_adm
     if not user_manager.set_role(payload.username, payload.role):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Ruolo di '{payload.username}' impostato a '{payload.role}' da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/users/disable")
+def disable_user_ep(payload: UserDisableSchema, current_user = Depends(require_admin)):
+    """Abilita/disabilita un utente. Un utente disabilitato non può autenticarsi."""
+    if payload.disabled and payload.username == current_user.get("sub"):
+        raise HTTPException(status_code=400, detail="Non puoi disabilitare il tuo stesso account.")
+    if (payload.disabled and user_manager.get_role(payload.username) == "admin"
+            and user_manager.count_active_admins() <= 1):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
+    if not user_manager.set_disabled(payload.username, payload.disabled):
+        raise HTTPException(status_code=404, detail="Utente non trovato.")
+    log_audit(
+        f"Utente '{payload.username}' {'disabilitato' if payload.disabled else 'riabilitato'} "
+        f"da '{current_user.get('sub')}'."
+    )
     return {"status": "success"}
 
 @app.post("/api/users/groups")
@@ -710,20 +746,33 @@ def reset_topology(current_user = Depends(require_operator)):
 # --- ROTTE AUTOMAZIONE & DOWNLOAD ---
 
 @app.post("/api/run-triage")
-def run_triage(current_user = Depends(require_operator)):
+def run_triage(payload: TriageRunRequest = TriageRunRequest(),
+               current_user = Depends(require_operator)):
     global triage_job
+
+    # Determina le sedi da sottoporre a triage, rispettando lo scope dell'utente.
+    scope = user_group_scope(current_user)
+    if payload.group and payload.group != "all":
+        assert_group_allowed(current_user, payload.group)
+        target_groups = {payload.group}
+    else:
+        target_groups = scope  # None = tutte le sedi
+
     with triage_lock:
         if triage_job["status"] == "running":
             return {"status": "running", "message": "Scansione già in corso"}
-        
+
         triage_job["status"] = "running"
         triage_job["progress"] = 0
         triage_job["total"] = 0
         triage_job["current_device"] = "Inizializzazione..."
-    
-    log_audit(f"Triage globale in background avviato dall'utente '{current_user.get('sub')}'.")
+
+    log_audit(
+        f"Triage avviato dall'utente '{current_user.get('sub')}' "
+        f"(sede: {payload.group})."
+    )
     thread = threading.Thread(target=run_triage_background,
-                              args=(user_group_scope(current_user),), daemon=True)
+                              args=(target_groups,), daemon=True)
     thread.start()
     return {"status": "running", "message": "Scansione avviata in background"}
 

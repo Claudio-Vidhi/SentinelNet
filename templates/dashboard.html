@@ -826,6 +826,12 @@
           <button class="btn btn-primary btn-small requires-write" id="btnRunTriage" style="background: var(--warning); color: #000; width: auto; margin: 0;" data-i18n="btnRunTriage">
             <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
           </button>
+          <button class="btn btn-secondary btn-small requires-write" id="btnTriageSite"
+              onclick="triageCurrentSite()"
+              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
+              data-i18n="btnTriageSite">
+            <i class="fa-solid fa-bolt"></i> Triage Sede
+          </button>
           <button class="btn btn-secondary btn-small requires-write" id="btnPingCheck"
               onclick="runPingCheck()"
               style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
@@ -1165,6 +1171,24 @@
     </div>
   </div>
 
+  <!-- Selettore sede per il Triage -->
+  <div class="modal-overlay" id="triageScopeModal">
+    <div class="modal" style="width: 460px; max-width: 95%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleTriageScope"><i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Scegli la sede per il Triage</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="closeTriageScopeModal()"></i>
+      </div>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descTriageScope">
+        Seleziona una singola sede da analizzare oppure esegui il triage su tutte le sedi.
+      </p>
+      <button class="btn btn-primary" onclick="startGroupTriage('all')"
+              style="margin-bottom: 12px; background: var(--warning); color: #000;" data-i18n="btnTriageAllSites">
+        <i class="fa-solid fa-globe"></i> Scansiona tutte le sedi
+      </button>
+      <div id="triageScopeList" style="display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto;"></div>
+    </div>
+  </div>
+
   <!-- Invio Comandi Massivo (Bulk) -->
   <div class="modal-overlay" id="bulkCommandModal">
     <div class="modal" style="width: 720px; max-width: 96%;">
@@ -1286,6 +1310,10 @@
         titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
         optFilterAll: "Filtra per Sede: Tutte",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale',
+        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Sede',
+        titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Scegli la sede per il Triage',
+        descTriageScope: "Seleziona una singola sede da analizzare oppure esegui il triage su tutte le sedi.",
+        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scansiona tutte le sedi',
         btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Sede',
         btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet',
         btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Esporta CSV',
@@ -1490,6 +1518,10 @@
         titleInventoryTable: "Monitored Network Devices",
         optFilterAll: "Filter by Site: All",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run Global Triage',
+        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Site',
+        titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Choose site for Triage',
+        descTriageScope: "Select a single site to analyze, or run triage on all sites.",
+        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scan all sites',
         btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Site',
         btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Subnet Scan',
         btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Export CSV',
@@ -1922,6 +1954,14 @@
     });
     document.getElementById('cliModalOverlay').addEventListener('click', e => {
         if (e.target === e.currentTarget) closeCliModal();
+    });
+    document.getElementById('triageScopeModal').addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeTriageScopeModal();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.getElementById('triageScopeModal').style.display === 'flex') {
+            closeTriageScopeModal();
+        }
     });
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' &&
@@ -3000,14 +3040,29 @@
                   </details>`;
             }
 
-            return `<tr>
-                <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}</td>
+            const disabled = !!u.disabled;
+            const disabledBadge = disabled
+                ? ` <span class="role-pill" style="background:rgba(255,107,124,0.15); color:var(--danger); border:1px solid rgba(255,107,124,0.35);">${currentLang === 'en' ? 'DISABLED' : 'DISABILITATO'}</span>`
+                : '';
+            const toggleText = disabled
+                ? (currentLang === 'en' ? 'Enable' : 'Abilita')
+                : (currentLang === 'en' ? 'Disable' : 'Disabilita');
+            const toggleIcon = disabled ? 'fa-circle-check' : 'fa-ban';
+            const toggleColor = disabled ? 'var(--success)' : 'var(--warning)';
+            const toggleBtn = isSelf ? '' :
+                `<button data-u="${escapeHtml(u.username)}" data-d="${disabled ? '1' : '0'}"
+                    onclick="toggleUserDisabled(this.dataset.u, this.dataset.d === '1')"
+                    style="color:${toggleColor}; background:none; border:none; cursor:pointer; margin-right:10px;">
+                    <i class="fa-solid ${toggleIcon}"></i> ${toggleText}</button>`;
+
+            return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
+                <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}${disabledBadge}</td>
                 <td><select data-u="${escapeHtml(u.username)}" onchange="changeUserRole(this.dataset.u, this.value)"
                        style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
                     ${roleOptions}
                   </select></td>
                 <td>${scopeCell}</td>
-                <td>${isSelf
+                <td style="white-space:nowrap;">${toggleBtn}${isSelf
                     ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
                     : `<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button>`}</td>
             </tr>`;
@@ -3058,6 +3113,15 @@
         const res = await apiFetch('/api/users/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
+        });
+        if (res && res.ok) loadUsers();
+        else if (res) { const e = await res.json(); alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+    }
+
+    async function toggleUserDisabled(username, currentlyDisabled) {
+        const res = await apiFetch('/api/users/disable', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, disabled: !currentlyDisabled })
         });
         if (res && res.ok) loadUsers();
         else if (res) { const e = await res.json(); alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
@@ -3234,12 +3298,53 @@
 
     // --- BACKGROUND JOBS (polling triage in background) ---
 
-    document.getElementById("btnRunTriage").addEventListener("click", async () => {
-        const res = await apiFetch("/api/run-triage", { method: "POST" });
-        if (res && res.ok) {
-            startTriageStatusPolling();
+    // Triage globale: con una sola sede parte subito, con più sedi apre il selettore
+    document.getElementById("btnRunTriage").addEventListener("click", () => {
+        const groups = Object.keys(globalGroups);
+        if (groups.length <= 1) {
+            startGroupTriage(groups[0] || 'all');
+        } else {
+            openTriageScopeModal();
         }
     });
+
+    // Triage Sede: analizza la sede attualmente filtrata; se "tutte", apre il selettore
+    function triageCurrentSite() {
+        const g = document.getElementById('filterGroupSelect')?.value || 'all';
+        if (g === 'all') {
+            const groups = Object.keys(globalGroups);
+            if (groups.length <= 1) { startGroupTriage(groups[0] || 'all'); }
+            else { openTriageScopeModal(); }
+        } else {
+            startGroupTriage(g);
+        }
+    }
+
+    function openTriageScopeModal() {
+        const list = document.getElementById('triageScopeList');
+        list.innerHTML = Object.keys(globalGroups).map(g =>
+            `<button class="btn btn-secondary" data-g="${escapeHtml(g)}" onclick="startGroupTriage(this.dataset.g)"
+                 style="justify-content:flex-start; gap:10px;">
+               <i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)}
+             </button>`).join('');
+        document.getElementById('triageScopeModal').style.display = 'flex';
+    }
+
+    function closeTriageScopeModal() {
+        document.getElementById('triageScopeModal').style.display = 'none';
+    }
+
+    async function startGroupTriage(group) {
+        const res = await apiFetch("/api/run-triage", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group })
+        });
+        if (res && res.ok) {
+            closeTriageScopeModal();
+            startTriageStatusPolling();
+        }
+    }
 
     function startTriageStatusPolling() {
         if (isTriagePolling) return;
