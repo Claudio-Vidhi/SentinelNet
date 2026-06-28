@@ -181,6 +181,27 @@ def run_backup_and_triage(device):
                     except Exception:
                         pass
 
+            # Comandi diagnostici/inventario aggiuntivi (solo Cisco): salvati nel
+            # backup per avere una fotografia completa dell'apparato.
+            if vendor == 'cisco':
+                config_out += "\n\n=== DEVICE DIAGNOSTICS ===\n"
+                for cmd, tag in [
+                    ("show vlan",                  "--- SHOW VLAN ---"),
+                    ("show spanning-tree",         "--- SHOW SPANNING-TREE ---"),
+                    ("show mac address-table",     "--- SHOW MAC ADDRESS-TABLE ---"),
+                    ("show etherchannel summary",  "--- SHOW ETHERCHANNEL SUMMARY ---"),
+                    ("show version",               "--- SHOW VERSION ---"),
+                    ("show switch",                "--- SHOW SWITCH ---"),
+                    ("show inventory",             "--- SHOW INVENTORY ---"),
+                    ("show environment all",       "--- SHOW ENVIRONMENT ALL ---"),
+                    ("show license all",           "--- SHOW LICENSE ALL ---"),
+                ]:
+                    try:
+                        out = net_connect.send_command(cmd, read_timeout=30)
+                        config_out += f"\n{tag}\n{out}"
+                    except Exception:
+                        pass
+
             hostname_from_cfg = extract_hostname_from_config(config_out)
             sys_name = hostname_from_cfg or live_hostname or f"{vendor}_{ip}"
 
