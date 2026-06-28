@@ -797,7 +797,7 @@
       <button class="tab-button" onclick="switchTab('tab-security', this)" data-i18n="tabSecurity">
         <i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)
       </button>
-      <button class="tab-button" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
+      <button class="tab-button requires-write" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
         <i class="fa-solid fa-file-csv"></i> Importazione CSV
       </button>
       <button class="tab-button requires-admin" onclick="switchTab('tab-users', this)" data-i18n="tabUsers">
@@ -1045,6 +1045,7 @@
             <tr>
               <th data-i18n="thUserName">Username</th>
               <th data-i18n="thUserRole">Ruolo / Privilegio</th>
+              <th data-i18n="thUserGroups">Sedi visibili / gestibili</th>
               <th data-i18n="thUserActions">Azioni</th>
             </tr>
           </thead>
@@ -1376,6 +1377,7 @@
         descUsers: 'Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.',
         thUserName: "Username",
         thUserRole: "Ruolo / Privilegio",
+        thUserGroups: "Sedi visibili / gestibili",
         thUserActions: "Azioni",
         titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente',
         lblNewUserName: "Username",
@@ -1579,6 +1581,7 @@
         descUsers: 'Create accounts with different privileges. <strong>Admin</strong>: full control and user management. <strong>Operator</strong>: all network operations (triage, commands, inventory). <strong>Viewer</strong>: read-only.',
         thUserName: "Username",
         thUserRole: "Role / Privilege",
+        thUserGroups: "Visible / manageable sites",
         thUserActions: "Actions",
         titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> New User',
         lblNewUserName: "Username",
@@ -2964,21 +2967,67 @@
         const body = document.getElementById('usersTableBody');
         if (!body) return;
         const delText = currentLang === 'en' ? 'Delete' : 'Elimina';
+        const allGroups = Object.keys(globalGroups);
         body.innerHTML = users.map(u => {
             const roleOptions = ['viewer', 'operator', 'admin'].map(r =>
                 `<option value="${r}" ${r === u.role ? 'selected' : ''}>${roleLabel(r)}</option>`).join('');
             const isSelf = u.username === currentUsername;
+            const scope = Array.isArray(u.groups) ? u.groups : [];
+
+            // Editor sedi: gli admin vedono tutto; per gli altri checkbox per sede (nessuna = tutte)
+            let scopeCell;
+            if (u.role === 'admin') {
+                scopeCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All sites (admin)' : 'Tutte le sedi (admin)'}</span>`;
+            } else {
+                const summary = scope.length === 0
+                    ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All sites' : 'Tutte le sedi'}</span>`
+                    : `<span style="color:var(--primary);">${scope.map(escapeHtml).join(', ')}</span>`;
+                const checks = allGroups.map(g =>
+                    `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
+                       <input type="checkbox" class="scope-box" value="${escapeHtml(g)}" ${scope.includes(g) ? 'checked' : ''}
+                              onchange="saveUserGroups(this.closest('details').dataset.u)"
+                              style="accent-color:var(--primary); cursor:pointer;">
+                       ${escapeHtml(g)}
+                     </label>`).join('');
+                scopeCell = `<details data-u="${escapeHtml(u.username)}" style="position:relative;">
+                    <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
+                      <i class="fa-solid fa-location-dot" style="color:var(--text-muted); margin-right:4px;"></i>${summary}
+                    </summary>
+                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); max-height:160px; overflow:auto;">
+                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all sites' : 'Nessuna spuntata = tutte le sedi'}</div>
+                      ${checks || `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No sites' : 'Nessuna sede'}</span>`}
+                    </div>
+                  </details>`;
+            }
+
             return `<tr>
                 <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}</td>
                 <td><select data-u="${escapeHtml(u.username)}" onchange="changeUserRole(this.dataset.u, this.value)"
                        style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
                     ${roleOptions}
                   </select></td>
+                <td>${scopeCell}</td>
                 <td>${isSelf
                     ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
                     : `<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button>`}</td>
             </tr>`;
         }).join('');
+    }
+
+    async function saveUserGroups(username) {
+        const details = document.querySelector(`#usersTableBody details[data-u="${CSS.escape(username)}"]`);
+        if (!details) return;
+        const groups = [...details.querySelectorAll('.scope-box:checked')].map(cb => cb.value);
+        const res = await apiFetch('/api/users/groups', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, groups })
+        });
+        if (res && res.ok) {
+            loadUsers();   // aggiorna il riepilogo
+        } else if (res) {
+            const e = await res.json();
+            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+        }
     }
 
     async function createUser() {

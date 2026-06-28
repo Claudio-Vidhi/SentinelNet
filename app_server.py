@@ -98,6 +98,44 @@ def require_role(*allowed):
 require_admin = require_role("admin")              # solo amministratori
 require_operator = require_role("admin", "operator")  # scritture/operazioni di rete
 
+# --- SCOPING PER SEDE/GRUPPO ---
+# Un utente operator/viewer può essere limitato dall'admin a un sottoinsieme di
+# sedi (gruppi). L'admin non ha restrizioni. Lista vuota = tutte le sedi.
+
+def user_group_scope(current_user):
+    """Set dei gruppi consentiti, oppure None se l'utente vede/gestisce tutto."""
+    if current_user.get("role") == "admin":
+        return None
+    groups = user_manager.get_user_groups(current_user.get("sub"))
+    return set(groups) if groups else None
+
+def assert_group_allowed(current_user, group):
+    scope = user_group_scope(current_user)
+    if scope is not None and group not in scope:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Sede '{group}' non consentita per il tuo profilo."
+        )
+
+def assert_device_allowed(current_user, ip):
+    """Verifica che il dispositivo (per IP) appartenga a una sede consentita.
+    Ritorna il device se trovato, None altrimenti (lascia gestire il 404 a valle)."""
+    device = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
+    if device is None:
+        return None
+    assert_group_allowed(current_user, device.get('Group', 'Generale'))
+    return device
+
+def filter_map_to_scope(data, scope):
+    """Riduce nodi e link della mappa alle sole sedi consentite."""
+    if scope is None:
+        return data
+    allowed_nodes = {n["id"] for n in data.get("nodes", []) if n.get("group") in scope}
+    nodes = [n for n in data.get("nodes", []) if n["id"] in allowed_nodes]
+    links = [l for l in data.get("links", [])
+             if l["source"] in allowed_nodes and l["target"] in allowed_nodes]
+    return {"nodes": nodes, "links": links}
+
 # --- MODELLI DI VALIDAZIONE PYDANTIC ---
 
 class DeviceSchema(BaseModel):
@@ -130,6 +168,7 @@ class UserCreateSchema(BaseModel):
     username: str
     password: str
     role: str = "viewer"
+    groups: List[str] = []
 
 class UserDeleteSchema(BaseModel):
     username: str
@@ -137,6 +176,10 @@ class UserDeleteSchema(BaseModel):
 class UserRoleSchema(BaseModel):
     username: str
     role: str
+
+class UserGroupsSchema(BaseModel):
+    username: str
+    groups: List[str]
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -241,9 +284,11 @@ triage_job = {
     "results": []
 }
 
-def run_triage_background():
+def run_triage_background(allowed_groups=None):
     global triage_job
     devices = inventory_manager.get_all_devices()
+    if allowed_groups is not None:
+        devices = [d for d in devices if d.get('Group') in allowed_groups]
     with triage_lock:
         triage_job["status"] = "running"
         triage_job["total"] = len(devices)
@@ -402,9 +447,14 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
     if not payload.username.strip() or not payload.password:
         raise HTTPException(status_code=400, detail="Username e password obbligatori.")
-    if not user_manager.create_user(payload.username.strip(), payload.password, payload.role):
+    valid_groups = set(inventory_manager.get_all_groups().keys())
+    groups = [g for g in payload.groups if g in valid_groups]
+    if not user_manager.create_user(payload.username.strip(), payload.password, payload.role, groups):
         raise HTTPException(status_code=400, detail="Utente già esistente.")
-    log_audit(f"Utente '{payload.username}' (ruolo: {payload.role}) creato da '{current_user.get('sub')}'.")
+    log_audit(
+        f"Utente '{payload.username}' (ruolo: {payload.role}, sedi: "
+        f"{groups or 'tutte'}) creato da '{current_user.get('sub')}'."
+    )
     return {"status": "success"}
 
 @app.post("/api/users/delete")
@@ -430,20 +480,45 @@ def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_adm
     log_audit(f"Ruolo di '{payload.username}' impostato a '{payload.role}' da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+@app.post("/api/users/groups")
+def set_user_groups_ep(payload: UserGroupsSchema, current_user = Depends(require_admin)):
+    """Assegna le sedi/gruppi visibili e gestibili da un utente (vuoto = tutte)."""
+    valid_groups = set(inventory_manager.get_all_groups().keys())
+    groups = [g for g in payload.groups if g in valid_groups]
+    if not user_manager.set_groups(payload.username, groups):
+        raise HTTPException(status_code=404, detail="Utente non trovato.")
+    log_audit(
+        f"Sedi di '{payload.username}' impostate a {groups or 'tutte'} "
+        f"da '{current_user.get('sub')}'."
+    )
+    return {"status": "success"}
+
 # --- ROTTE DISPOSITIVI (INVENTARIO) ---
 
 @app.get("/api/local-devices")
 def get_devices_and_versions(current_user = Depends(get_current_user)):
+    scope = user_group_scope(current_user)
+    devices = inventory_manager.get_all_devices()
+    versions = inventory_manager.get_detected_versions()
+    groups = inventory_manager.get_all_groups()
+    if scope is not None:
+        devices = [d for d in devices if d.get('Group') in scope]
+        allowed_ips = {d['IP'] for d in devices}
+        versions = {ip: v for ip, v in versions.items() if ip in allowed_ips}
+        groups = {g: v for g, v in groups.items() if g in scope}
     return {
-        "devices": inventory_manager.get_all_devices(),
-        "detected_versions": inventory_manager.get_detected_versions(),
-        "groups": inventory_manager.get_all_groups()
+        "devices": devices,
+        "detected_versions": versions,
+        "groups": groups
     }
 
 @app.get("/api/export/devices")
 def export_devices_csv(current_user = Depends(get_current_user)):
     import csv, io
+    scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
+    if scope is not None:
+        devices = [d for d in devices if d.get('Group') in scope]
     versions = inventory_manager.get_detected_versions()
     output = io.StringIO()
     writer = csv.DictWriter(
@@ -473,6 +548,11 @@ def export_devices_csv(current_user = Depends(get_current_user)):
 
 @app.post("/api/add-device")
 def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
+    assert_group_allowed(current_user, device.group)
+    # Impedisce di modificare un dispositivo esistente in una sede non consentita
+    existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == device.ip), None)
+    if existing:
+        assert_group_allowed(current_user, existing.get('Group', 'Generale'))
     inventory_manager.add_or_update_device(
         device.ip, device.vendor, device.profile,
         device.username, device.password, device.enable_secret, device.group
@@ -482,6 +562,7 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
 
 @app.post("/api/delete-device")
 def delete_device(payload: DeviceDelete, current_user = Depends(require_operator)):
+    assert_device_allowed(current_user, payload.ip)
     inventory_manager.delete_device(payload.ip)
     log_audit(f"Dispositivo '{payload.ip}' eliminato dall'inventario dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
@@ -493,22 +574,24 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
     reader = csv_parser.DictReader(lines)
     
     results = {"imported": [], "failed": []}
-    
+    scope = user_group_scope(current_user)
+
     for i, row in enumerate(reader, start=2):  # start=2 perché riga 1 è l'header
         try:
             ip = row.get('IP')
             if not ip or not ip.strip():
                 raise ValueError("IP mancante o vuoto")
-                
+
             ip = ip.strip()
-            
+
             # Se il campo Group è presente e non vuoto, chiama immediatamente inventory_manager.add_group(row['Group'])
-            group_name = (row.get('Group') or '').strip()
-            if group_name:
+            group_name = (row.get('Group') or '').strip() or 'Generale'
+            # Scoping: un operatore limitato non può importare in sedi non consentite
+            if scope is not None and group_name not in scope:
+                raise ValueError(f"Sede '{group_name}' non consentita per il tuo profilo")
+            if group_name != 'Generale':
                 inventory_manager.add_group(group_name)
-            else:
-                group_name = 'Generale'
-                
+
             username = (row.get('Username') or '').strip()
             password = (row.get('Password') or '').strip()
             enable_secret = (row.get('Enable Secret') or '').strip()
@@ -539,7 +622,11 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
 
 @app.get("/api/groups")
 def list_groups(current_user = Depends(get_current_user)):
-    return inventory_manager.get_all_groups()
+    groups = inventory_manager.get_all_groups()
+    scope = user_group_scope(current_user)
+    if scope is not None:
+        groups = {g: v for g, v in groups.items() if g in scope}
+    return groups
 
 @app.post("/api/groups")
 def create_group(group: GroupSchema, current_user = Depends(require_operator)):
@@ -555,6 +642,7 @@ def create_group(group: GroupSchema, current_user = Depends(require_operator)):
 @app.post("/api/groups/delete")
 def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_operator)):
     group_name = payload.name
+    assert_group_allowed(current_user, group_name)
     groups = inventory_manager.get_all_groups()
     if group_name in groups and group_name != "Generale":
         inventory_manager.delete_group(group_name)
@@ -591,12 +679,14 @@ def delete_vendor(v: VendorDeleteSchema, current_user = Depends(require_operator
 @app.get("/api/topology")
 def get_topology_adjacency(group: str = "all", current_user = Depends(get_current_user)):
     """Restituisce la lista di adiacenza fisica per il triage testuale."""
-    return core_engine.generate_network_map(group_filter=group)
+    data = core_engine.generate_network_map(group_filter=group)
+    return filter_map_to_scope(data, user_group_scope(current_user))
 
 @app.get("/api/network-map")
 def get_network_map(group: str = "all", current_user = Depends(get_current_user)):
     """Restituisce il grafo topologico strutturato per Vis.js."""
-    return core_engine.generate_network_map(group_filter=group)
+    data = core_engine.generate_network_map(group_filter=group)
+    return filter_map_to_scope(data, user_group_scope(current_user))
 
 @app.post("/api/topology/reset")
 def reset_topology(current_user = Depends(require_operator)):
@@ -632,7 +722,8 @@ def run_triage(current_user = Depends(require_operator)):
         triage_job["current_device"] = "Inizializzazione..."
     
     log_audit(f"Triage globale in background avviato dall'utente '{current_user.get('sub')}'.")
-    thread = threading.Thread(target=run_triage_background, daemon=True)
+    thread = threading.Thread(target=run_triage_background,
+                              args=(user_group_scope(current_user),), daemon=True)
     thread.start()
     return {"status": "running", "message": "Scansione avviata in background"}
 
@@ -645,6 +736,7 @@ def triage_single_device(ip: str, current_user = Depends(require_operator)):
     device = next((d for d in devices if d["IP"] == ip), None)
     if not device:
         raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
+    assert_group_allowed(current_user, device.get('Group', 'Generale'))
     result = core_engine.run_backup_and_triage(device)
     log_audit(f"Triage singolo eseguito su '{ip}' dall'utente '{current_user.get('sub')}': {result.get('status')}.")
     return result
@@ -687,6 +779,7 @@ def send_command(payload: CommandRequest, current_user = Depends(require_operato
     devices = inventory_manager.get_all_devices()
     target_device = next((d for d in devices if d['IP'] == payload.ip), None)
     if target_device:
+        assert_group_allowed(current_user, target_device.get('Group', 'Generale'))
         log_audit(f"Comando CLI '{payload.command}' richiesto su dispositivo '{payload.ip}' dall'utente '{current_user.get('sub')}' (One-Shot API).")
         res = core_engine.send_custom_command(target_device, payload.command)
         return res
@@ -716,6 +809,18 @@ def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(requi
     for ip in payload.ips:
         if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
             raise HTTPException(status_code=400, detail=f"IP non valido: {ip}")
+
+    # Scoping: tutti i target devono appartenere a sedi consentite
+    scope = user_group_scope(current_user)
+    if scope is not None:
+        by_ip = {d['IP']: d for d in inventory_manager.get_all_devices()}
+        for ip in payload.ips:
+            dev = by_ip.get(ip)
+            if dev is not None and dev.get('Group', 'Generale') not in scope:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Dispositivo '{ip}' in una sede non consentita per il tuo profilo."
+                )
 
     job_id = str(uuid.uuid4())
     with _bulk_jobs_lock:
@@ -780,6 +885,10 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
             detail=f"Gruppo '{payload.new_group}' non esiste. Crealo prima."
         )
 
+    # Scoping: la sede di origine e quella di destinazione devono essere consentite
+    assert_group_allowed(current_user, target.get('Group', 'Generale'))
+    assert_group_allowed(current_user, payload.new_group)
+
     old_group = target.get('Group', 'Generale')
     target['Group'] = payload.new_group
     inventory_manager.safe_write_hosts_csv(devices)
@@ -799,9 +908,15 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     """
     from core_engine import is_reachable
 
+    scope = user_group_scope(current_user)
+    if payload.group != "all":
+        assert_group_allowed(current_user, payload.group)
+
     devices = inventory_manager.get_all_devices()
     if payload.group != "all":
         devices = [d for d in devices if d.get('Group') == payload.group]
+    elif scope is not None:
+        devices = [d for d in devices if d.get('Group') in scope]
 
     results: dict[str, bool] = {}
 
@@ -841,6 +956,10 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
+    # Scoping: se il dispositivo è in inventario, deve essere in una sede consentita
+    _dev = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
+    if _dev is not None:
+        assert_group_allowed(current_user, _dev.get('Group', 'Generale'))
     alive = is_reachable(ip, timeout=3)
 
     # Aggiorna lo stato nel file detected_versions.json
@@ -897,6 +1016,15 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         await websocket.send_text("[Errore] Dispositivo non trovato in inventario.\r\n")
         await websocket.close()
         return
+
+    # Scoping: l'utente del token OTP deve poter gestire la sede del dispositivo
+    _role = user_manager.get_role(username_from_otp)
+    if _role != "admin":
+        _allowed = user_manager.get_user_groups(username_from_otp)
+        if _allowed and device.get('Group', 'Generale') not in set(_allowed):
+            await websocket.send_text("[Accesso Negato] Sede non consentita per il tuo profilo.\r\n")
+            await websocket.close(code=1008)
+            return
 
     username, password, _ = core_engine.get_device_credentials(device)
 
@@ -1018,7 +1146,21 @@ async def ws_terminal(websocket: WebSocket, ip: str):
 @app.get("/api/download-backup/{ip_or_filename}")
 def download_backup(ip_or_filename: str, current_user = Depends(require_operator)):
     log_audit(f"Download del file di backup '{ip_or_filename}' richiesto dall'utente '{current_user.get('sub')}'.")
-    
+
+    # Scoping: ricava l'IP dal nome richiesto e verifica la sede del dispositivo.
+    scope = user_group_scope(current_user)
+    if scope is not None:
+        ip_guess = ip_or_filename
+        m = re.search(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", ip_or_filename)
+        if m:
+            ip_guess = m.group(1)
+        dev = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip_guess), None)
+        if dev is None or dev.get('Group', 'Generale') not in scope:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Backup non consentito per il tuo profilo."
+            )
+
     backup_dir = os.path.realpath("backup-config")
     requested = os.path.realpath(os.path.join(backup_dir, ip_or_filename))
     
