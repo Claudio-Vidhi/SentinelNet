@@ -233,6 +233,65 @@ def send_custom_command(device, command: str):
         return {"status": "error", "message": str(e)}
 
 
+def run_bulk_command(device, commands, config_mode=False, save_after=False):
+    """Esegue la stessa lista di comandi su un dispositivo.
+
+    - config_mode=False: comandi operativi (show/exec), uno per uno.
+    - config_mode=True:  spinge i comandi in configuration mode (send_config_set),
+      ed eventualmente salva la config (save_after) — usato per applicare modifiche
+      in massa a più apparati.
+    La blacklist dei comandi distruttivi è applicata a monte (lato API).
+    """
+    ip = device['IP']
+    if not is_reachable(ip):
+        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta 22 (SSH)"}
+
+    vendor = device['Vendor'].lower()
+    try:
+        _, netmiko_type = resolve_driver(vendor)
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+
+    username, password, secret = get_device_credentials(device)
+    device_params = {
+        'device_type': netmiko_type,
+        'host': ip,
+        'username': username,
+        'password': password,
+        'secret': secret,
+        'timeout': 20,
+        'auth_timeout': 10,
+        'banner_timeout': 10,
+    }
+
+    try:
+        with ConnectHandler(**device_params) as net_connect:
+            net_connect.enable()
+            if config_mode:
+                output = net_connect.send_config_set(commands)
+                if save_after:
+                    try:
+                        output += "\n" + net_connect.save_config()
+                    except Exception as se:
+                        output += f"\n[Salvataggio configurazione non supportato/fallito: {se}]"
+                log_audit(
+                    f"Configurazione massiva ({len(commands)} comandi, save={save_after}) "
+                    f"applicata con successo su '{ip}'."
+                )
+            else:
+                parts = []
+                for cmd in commands:
+                    parts.append(f"=== {cmd} ===\n" + net_connect.send_command(cmd))
+                output = "\n\n".join(parts)
+                log_audit(
+                    f"Comandi operativi massivi ({len(commands)}) eseguiti con successo su '{ip}'."
+                )
+            return {"status": "success", "output": output}
+    except Exception as e:
+        log_audit(f"Invio comandi massivo fallito su '{ip}': {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
 # ---------------------------------------------------------------------------
 # NETWORK MAPPING ENGINE
 # ---------------------------------------------------------------------------
