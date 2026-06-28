@@ -35,7 +35,7 @@ def get_role(username: str):
         return None
     return user.get("role", "admin")
 
-def create_user(username: str, password: str, role: str = "viewer") -> bool:
+def create_user(username: str, password: str, role: str = "viewer", groups=None) -> bool:
     if role not in VALID_ROLES:
         role = "viewer"
     users = get_users()
@@ -47,6 +47,8 @@ def create_user(username: str, password: str, role: str = "viewer") -> bool:
     users[username] = {
         "hashed_password": hashed_password.decode('utf-8'),
         "role": role,
+        # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
+        "groups": list(groups) if groups else [],
     }
     _save_users(users)
     return True
@@ -71,11 +73,27 @@ def change_password(username: str, old_password: str, new_password: str) -> bool
 # --- GESTIONE UTENTI (CRUD, ruoli) ---
 
 def list_users() -> list:
-    """Elenco utenti (senza hash) con il relativo ruolo."""
+    """Elenco utenti (senza hash) con ruolo e sedi assegnate."""
     return [
-        {"username": u, "role": d.get("role", "admin")}
+        {"username": u, "role": d.get("role", "admin"), "groups": d.get("groups", [])}
         for u, d in get_users().items()
     ]
+
+def get_user_groups(username: str):
+    """Sedi/gruppi assegnati all'utente. Lista vuota o assente = nessuna
+    restrizione (tutte le sedi). Ritorna [] se l'utente non esiste."""
+    user = get_users().get(username)
+    if not user:
+        return []
+    return user.get("groups", [])
+
+def set_groups(username: str, groups) -> bool:
+    users = get_users()
+    if username not in users:
+        return False
+    users[username]["groups"] = list(groups) if groups else []
+    _save_users(users)
+    return True
 
 def delete_user(username: str) -> bool:
     users = get_users()
