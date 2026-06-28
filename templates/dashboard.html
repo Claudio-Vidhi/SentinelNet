@@ -810,6 +810,12 @@
             <i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet
           </button>
           <button class="btn btn-secondary btn-small"
+              onclick="openBulkCommandModal()"
+              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
+              data-i18n="btnBulkCommand">
+            <i class="fa-solid fa-terminal"></i> Invio Comandi
+          </button>
+          <button class="btn btn-secondary btn-small"
               onclick="exportDeviceCsv()"
               style="width:auto; margin:0;"
               data-i18n="btnExportCsv">
@@ -1084,6 +1090,65 @@
     </div>
   </div>
 
+  <!-- Invio Comandi Massivo (Bulk) -->
+  <div class="modal-overlay" id="bulkCommandModal">
+    <div class="modal" style="width: 720px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleBulkCommand"><i class="fa-solid fa-terminal" style="color: var(--warning);"></i> Invio Comandi Massivo</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="closeBulkCommandModal()"></i>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+        <!-- Colonna sinistra: selezione dispositivi -->
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblBulkTargets">Dispositivi target</label>
+            <select id="bulkGroupFilter" onchange="renderBulkTargets()" style="font-size:11px; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; outline:none;"></select>
+          </div>
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; padding:6px 0;">
+            <input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulkTargets(this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
+            <span data-i18n="bulkSelectAll">Seleziona tutti</span>
+          </label>
+          <div id="bulkTargetList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); padding:6px;"></div>
+        </div>
+
+        <!-- Colonna destra: modalità e comandi -->
+        <div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label data-i18n="lblBulkMode">Modalità</label>
+            <select id="bulkMode" style="padding-left:12px;">
+              <option value="exec" data-i18n="bulkModeExec">Operativo (show / exec)</option>
+              <option value="config" data-i18n="bulkModeConfig">Configurazione (config mode)</option>
+            </select>
+          </div>
+          <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:12px; user-select:none;">
+            <input type="checkbox" id="bulkSave" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
+            <span data-i18n="lblBulkSave">Salva configurazione dopo l'invio (write memory)</span>
+          </label>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblBulkCommands">Comandi (uno per riga)</label>
+            <textarea id="bulkCommands" rows="8"
+              placeholder="interface Gi1/0/1&#10; description UPLINK&#10; switchport mode trunk"
+              style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btnBulkRun" onclick="startBulkCommand()"
+              style="margin-top:16px; background:var(--warning); color:#000;" data-i18n="btnBulkRun">
+        <i class="fa-solid fa-paper-plane"></i> Esegui sui dispositivi
+      </button>
+
+      <div id="bulkResults" style="display:none; margin-top:18px;">
+        <div id="bulkStatus" style="font-size:12px; color:var(--text-muted); margin-bottom:6px;"></div>
+        <div style="height:4px; background:var(--surface-3); border-radius:2px; margin-bottom:10px; overflow:hidden;">
+          <div id="bulkProgressBar" style="height:100%; width:0%; background:var(--warning); border-radius:2px; transition:width 0.4s ease;"></div>
+        </div>
+        <div id="bulkResultsList" style="max-height:280px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Terminal CLI Modale Rapido -->
   <div class="modal-overlay" id="cliModalOverlay">
     <div class="modal" style="width: 800px; max-width: 95%;">
@@ -1217,6 +1282,18 @@
         btnStartScan: '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione',
         titleInteractiveTerminal: '<i class="fa-solid fa-terminal" style="color: var(--primary);"></i> Terminale SSH Interattivo',
         lblTargetDevice: "Dispositivo target:",
+
+        // Invio comandi massivo (bulk)
+        btnBulkCommand: '<i class="fa-solid fa-terminal"></i> Invio Comandi',
+        titleBulkCommand: '<i class="fa-solid fa-terminal" style="color: var(--warning);"></i> Invio Comandi Massivo',
+        lblBulkTargets: "Dispositivi target",
+        bulkSelectAll: "Seleziona tutti",
+        lblBulkMode: "Modalità",
+        bulkModeExec: "Operativo (show / exec)",
+        bulkModeConfig: "Configurazione (config mode)",
+        lblBulkSave: "Salva configurazione dopo l'invio (write memory)",
+        lblBulkCommands: "Comandi (uno per riga)",
+        btnBulkRun: '<i class="fa-solid fa-paper-plane"></i> Esegui sui dispositivi',
 
         // JS Alerts / Confirm Dialogs / Additional Strings
         confirmReset: "Sei sicuro? Questa azione eliminerà tutti i backup e azzererà la mappa di rete.",
@@ -1391,6 +1468,18 @@
         btnStartScan: '<i class="fa-solid fa-satellite-dish"></i> Start Scan',
         titleInteractiveTerminal: '<i class="fa-solid fa-terminal" style="color: var(--primary);"></i> Interactive SSH Terminal',
         lblTargetDevice: "Target device:",
+
+        // Bulk command send
+        btnBulkCommand: '<i class="fa-solid fa-terminal"></i> Send Commands',
+        titleBulkCommand: '<i class="fa-solid fa-terminal" style="color: var(--warning);"></i> Bulk Command Send',
+        lblBulkTargets: "Target devices",
+        bulkSelectAll: "Select all",
+        lblBulkMode: "Mode",
+        bulkModeExec: "Operational (show / exec)",
+        bulkModeConfig: "Configuration (config mode)",
+        lblBulkSave: "Save configuration after sending (write memory)",
+        lblBulkCommands: "Commands (one per line)",
+        btnBulkRun: '<i class="fa-solid fa-paper-plane"></i> Run on devices',
 
         // JS Alerts / Confirm Dialogs / Additional Strings
         confirmReset: "Are you sure? This action will delete all backups and reset the network map.",
@@ -2696,6 +2785,163 @@
             termInstance = null;
         }
     }
+
+    // --- INVIO COMANDI MASSIVO (BULK) ---
+
+    let _bulkJobInterval = null;
+
+    function openBulkCommandModal() {
+        // Popola il filtro gruppo
+        const gf = document.getElementById('bulkGroupFilter');
+        gf.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+            Object.keys(globalGroups).map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        gf.value = 'all';
+
+        document.getElementById('bulkSelectAll').checked = false;
+        document.getElementById('bulkMode').value = 'exec';
+        document.getElementById('bulkSave').checked = false;
+        document.getElementById('bulkCommands').value = '';
+        document.getElementById('bulkResults').style.display = 'none';
+        document.getElementById('bulkResultsList').innerHTML = '';
+        document.getElementById('bulkStatus').textContent = '';
+        const btn = document.getElementById('btnBulkRun');
+        btn.disabled = false;
+        btn.innerHTML = i18n[currentLang].btnBulkRun;
+
+        renderBulkTargets();
+        document.getElementById('bulkCommandModal').style.display = 'flex';
+    }
+
+    function closeBulkCommandModal() {
+        if (_bulkJobInterval) { clearInterval(_bulkJobInterval); _bulkJobInterval = null; }
+        document.getElementById('bulkCommandModal').style.display = 'none';
+    }
+
+    function renderBulkTargets() {
+        const group = document.getElementById('bulkGroupFilter').value;
+        // Preserva le selezioni correnti durante il re-render
+        const checked = new Set(getSelectedBulkIps());
+        const list = document.getElementById('bulkTargetList');
+        const rows = globalDevices
+            .filter(d => group === 'all' || d.Group === group)
+            .map(d => {
+                const isOn = checked.has(d.IP) ? 'checked' : '';
+                const hn = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>';
+                return `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-radius:6px;">
+                    <input type="checkbox" class="bulk-target" value="${escapeHtml(d.IP)}" ${isOn} onchange="syncBulkSelectAll()">
+                    <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(d.IP)}</span>
+                    <span>${hn}</span>
+                    <span class="badge" style="margin-left:auto;">${escapeHtml(d.Group)}</span>
+                </label>`;
+            }).join('');
+        list.innerHTML = rows || `<div style="padding:12px; color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No devices in this site.' : 'Nessun dispositivo in questa sede.'}</div>`;
+        syncBulkSelectAll();
+    }
+
+    function toggleAllBulkTargets(on) {
+        document.querySelectorAll('#bulkTargetList .bulk-target').forEach(cb => { cb.checked = on; });
+    }
+
+    function syncBulkSelectAll() {
+        const boxes = [...document.querySelectorAll('#bulkTargetList .bulk-target')];
+        const all = boxes.length > 0 && boxes.every(cb => cb.checked);
+        document.getElementById('bulkSelectAll').checked = all;
+    }
+
+    function getSelectedBulkIps() {
+        return [...document.querySelectorAll('#bulkTargetList .bulk-target:checked')].map(cb => cb.value);
+    }
+
+    async function startBulkCommand() {
+        if (_bulkJobInterval) { clearInterval(_bulkJobInterval); _bulkJobInterval = null; }
+
+        const ips = getSelectedBulkIps();
+        const commands = document.getElementById('bulkCommands').value;
+        const mode = document.getElementById('bulkMode').value;
+        const save = document.getElementById('bulkSave').checked;
+
+        if (ips.length === 0) { alert(currentLang === 'en' ? 'Select at least one device.' : 'Seleziona almeno un dispositivo.'); return; }
+        if (!commands.trim()) { alert(currentLang === 'en' ? 'Enter at least one command.' : 'Inserisci almeno un comando.'); return; }
+
+        const btn = document.getElementById('btnBulkRun');
+        btn.disabled = true;
+        btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Sending...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Invio in corso...';
+        document.getElementById('bulkResults').style.display = 'block';
+        document.getElementById('bulkResultsList').innerHTML = '';
+        document.getElementById('bulkProgressBar').style.width = '0%';
+        document.getElementById('bulkStatus').textContent = currentLang === 'en' ? 'Starting...' : 'Avvio...';
+
+        const res = await apiFetch('/api/bulk-command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ips, commands, mode, save }),
+        });
+        if (!res || !res.ok) {
+            const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
+            document.getElementById('bulkStatus').textContent =
+                (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || '');
+            btn.disabled = false;
+            btn.innerHTML = i18n[currentLang].btnBulkRun;
+            return;
+        }
+        const { job_id, total } = await res.json();
+        pollBulkJob(job_id, total);
+    }
+
+    function pollBulkJob(jobId, total) {
+        _bulkJobInterval = setInterval(async () => {
+            const res = await apiFetch(`/api/bulk-command/${jobId}`);
+            if (!res || !res.ok) {
+                clearInterval(_bulkJobInterval); _bulkJobInterval = null;
+                const b = document.getElementById('btnBulkRun');
+                b.disabled = false; b.innerHTML = i18n[currentLang].btnBulkRun;
+                return;
+            }
+            const data = await res.json();
+            const pct = total > 0 ? Math.round((data.progress / total) * 100) : 0;
+            document.getElementById('bulkProgressBar').style.width = `${pct}%`;
+            document.getElementById('bulkStatus').textContent =
+                currentLang === 'en' ? `Running — ${data.progress}/${total} devices...` : `In corso — ${data.progress}/${total} dispositivi...`;
+            renderBulkResults(data.results || []);
+
+            if (data.status !== 'running') {
+                clearInterval(_bulkJobInterval); _bulkJobInterval = null;
+                document.getElementById('bulkProgressBar').style.width = '100%';
+                const ok  = (data.results || []).filter(r => r.result && r.result.status === 'success').length;
+                const err = (data.results || []).length - ok;
+                document.getElementById('bulkStatus').textContent =
+                    currentLang === 'en' ? `Completed — ${ok} ok, ${err} errors.` : `Completato — ${ok} ok, ${err} errori.`;
+                const b = document.getElementById('btnBulkRun');
+                b.disabled = false; b.innerHTML = i18n[currentLang].btnBulkRun;
+            }
+        }, 1500);
+    }
+
+    function renderBulkResults(results) {
+        const list = document.getElementById('bulkResultsList');
+        list.innerHTML = results.map(r => {
+            const ok = r.result && r.result.status === 'success';
+            const body = ok ? (r.result.output || '') : (r.result ? (r.result.message || '') : '');
+            return `<details style="border-bottom:1px solid var(--border);">
+                <summary style="padding:8px 12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:12px; list-style:none;">
+                    <span style="color:${ok ? 'var(--success)' : 'var(--danger)'}; font-weight:700;">${ok ? '✓' : '✗'}</span>
+                    <strong>${escapeHtml(r.hostname || r.ip)}</strong>
+                    <span style="font-family:var(--font-code); color:var(--text-muted);">${escapeHtml(r.ip)}</span>
+                </summary>
+                <pre style="margin:0; padding:10px 12px; background:#05080c; color:#9fdcc0; font-family:var(--font-code); font-size:11px; white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto;">${escapeHtml(body) || '<span style="color:var(--text-muted)">—</span>'}</pre>
+            </details>`;
+        }).join('');
+    }
+
+    // Chiusura del modale Bulk: backdrop e tasto Escape
+    document.getElementById('bulkCommandModal').addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeBulkCommandModal();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && document.getElementById('bulkCommandModal').style.display === 'flex') {
+            closeBulkCommandModal();
+        }
+    });
 
     // --- BACKGROUND JOBS (polling triage in background) ---
 

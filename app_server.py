@@ -119,6 +119,12 @@ class CommandRequest(BaseModel):
     ip: str
     command: str
 
+class BulkCommandRequest(BaseModel):
+    ips: List[str]
+    commands: str
+    mode: str = "exec"   # "exec" (show/operational) | "config" (configuration push)
+    save: bool = False   # salva la config dopo l'invio (solo mode="config")
+
 class DeviceReassignSchema(BaseModel):
     ip: str
     new_group: str
@@ -145,6 +151,57 @@ class VendorDeleteSchema(BaseModel):
 
 _scan_jobs: dict[str, dict] = {}
 _scan_jobs_lock = threading.Lock()
+
+# Job di invio comandi massivo (bulk) con polling, come per le scansioni.
+_bulk_jobs: dict[str, dict] = {}
+_bulk_jobs_lock = threading.Lock()
+
+# Comandi distruttivi vietati anche nell'invio massivo, indipendentemente dalla
+# modalità: cancellano/riavviano l'apparato. NON si blocca 'conf t' né 'delete'
+# (legittimi nel push di configurazione, p.es. in config mode o su Juniper).
+BULK_DESTRUCTIVE_BLACKLIST = [
+    r"\breload\b",
+    r"\breboot\b",
+    r"\berase\b",
+    r"\bformat\b",
+    r"\bwrite\s+erase\b",
+]
+
+def is_bulk_command_allowed(command: str) -> bool:
+    cmd_clean = command.strip().lower()
+    return not any(re.search(p, cmd_clean) for p in BULK_DESTRUCTIVE_BLACKLIST)
+
+def _run_bulk_job(job_id: str, req: BulkCommandRequest):
+    commands = [c for c in (line.strip() for line in req.commands.splitlines()) if c]
+    config_mode = req.mode == "config"
+
+    devices = inventory_manager.get_all_devices()
+    by_ip = {d["IP"]: d for d in devices}
+    targets = [by_ip[ip] for ip in req.ips if ip in by_ip]
+
+    def worker(d):
+        ip = d["IP"]
+        try:
+            res = core_engine.run_bulk_command(d, commands, config_mode, req.save)
+        except Exception as e:
+            res = {"status": "error", "message": str(e)}
+        with _bulk_jobs_lock:
+            job = _bulk_jobs.get(job_id)
+            if job is not None:
+                job["results"].append({
+                    "ip": ip,
+                    "hostname": d.get("Hostname") or ip,
+                    "result": res,
+                })
+                job["progress"] += 1
+
+    max_workers = min(10, len(targets)) if targets else 1
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        list(executor.map(worker, targets))
+
+    with _bulk_jobs_lock:
+        if job_id in _bulk_jobs:
+            _bulk_jobs[job_id]["status"] = "done"
 
 triage_lock = threading.Lock()
 triage_job = {
@@ -560,6 +617,72 @@ def send_command(payload: CommandRequest, current_user = Depends(get_current_use
         res = core_engine.send_custom_command(target_device, payload.command)
         return res
     raise HTTPException(status_code=404, detail="Dispositivo non presente in inventario")
+
+@app.post("/api/bulk-command")
+def start_bulk_command(payload: BulkCommandRequest, current_user = Depends(get_current_user)):
+    """Avvia l'invio degli stessi comandi a più dispositivi (in background)."""
+    commands = [c for c in (line.strip() for line in payload.commands.splitlines()) if c]
+    if not commands:
+        raise HTTPException(status_code=400, detail="Nessun comando fornito.")
+    if not payload.ips:
+        raise HTTPException(status_code=400, detail="Nessun dispositivo selezionato.")
+
+    # Guard di sicurezza: nessun comando distruttivo, in qualsiasi modalità.
+    for c in commands:
+        if not is_bulk_command_allowed(c):
+            log_audit(
+                f"Invio massivo bloccato: comando distruttivo '{c}' richiesto "
+                f"dall'utente '{current_user.get('sub')}'."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Comando non consentito per motivi di sicurezza: '{c}'."
+            )
+
+    for ip in payload.ips:
+        if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+            raise HTTPException(status_code=400, detail=f"IP non valido: {ip}")
+
+    job_id = str(uuid.uuid4())
+    with _bulk_jobs_lock:
+        _bulk_jobs[job_id] = {
+            "status":     "running",
+            "results":    [],
+            "progress":   0,
+            "total":      len(payload.ips),
+            "started_at": time.time(),
+        }
+
+    thread = threading.Thread(target=_run_bulk_job, args=(job_id, payload), daemon=True)
+    thread.start()
+
+    log_audit(
+        f"Invio comandi massivo avviato dall'utente '{current_user.get('sub')}' "
+        f"(mode={payload.mode}, save={payload.save}, {len(commands)} comandi su "
+        f"{len(payload.ips)} dispositivi, job_id: {job_id})."
+    )
+    return {"job_id": job_id, "status": "started", "total": len(payload.ips)}
+
+
+@app.get("/api/bulk-command/{job_id}")
+def get_bulk_command_status(job_id: str, current_user = Depends(get_current_user)):
+    with _bulk_jobs_lock:
+        # Elimina solo i job conclusi e vecchi (oltre 10 minuti).
+        stale = [k for k, v in _bulk_jobs.items()
+                 if v.get("status") != "running" and time.time() - v.get("started_at", 0) > 600]
+        for k in stale:
+            del _bulk_jobs[k]
+        job = _bulk_jobs.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' non trovato.")
+    return {
+        "status":   job["status"],
+        "results":  job.get("results", []),
+        "progress": job.get("progress", 0),
+        "total":    job.get("total", 0),
+    }
+
 
 @app.post("/api/ws-token")
 def get_ws_token(current_user = Depends(get_current_user)):
