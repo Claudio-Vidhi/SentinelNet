@@ -8,6 +8,7 @@ from inventory_manager import (
     update_device_hostname, get_all_vendors, get_category_assignments,
 )
 from drivers.cisco_ios import CiscoIosDriver
+from drivers.cisco_cbs import CiscoCbsDriver
 from drivers.hp_procurve import HpProcurveDriver
 from drivers.juniper_junos import JuniperJunosDriver
 from drivers.aruba_os import ArubaOsDriver
@@ -71,6 +72,7 @@ def get_device_credentials(device):
 # sufficiente per renderlo selezionabile da tutto il sistema.
 DRIVER_REGISTRY = {
     'cisco_ios':      (CiscoIosDriver,   'cisco_ios'),
+    'cisco_s300':     (CiscoCbsDriver,   'cisco_s300'),
     'hp_procurve':    (HpProcurveDriver, 'hp_procurve'),
     'juniper_junos':  (JuniperJunosDriver, 'juniper_junos'),
     'aruba_os':       (ArubaOsDriver,    'aruba_os'),
@@ -82,6 +84,7 @@ DRIVER_REGISTRY = {
 # specifica un driver (es. installazioni con vendors.json legacy o 'driver': null).
 VENDOR_DRIVER_DEFAULTS = {
     'cisco':    'cisco_ios',
+    'cisco_cbs': 'cisco_s300',
     'hpe':      'hp_procurve',
     'hp':       'hp_procurve',
     'juniper':  'juniper_junos',
@@ -957,6 +960,39 @@ def parse_portchannel_summary(config: str) -> dict:
     return {"portchannels": portchannels, "singles": singles}
 
 
+def parse_etherchannel_status(content: str) -> dict:
+    """Stato operativo dei Port-channel da 'show etherchannel summary'.
+    Ritorna {NumeroPo: {status, up, total, issue, issue_msg, members:{iface:flag}}}.
+    Flag membro: P=aggregato, D=down, s=sospeso, I=stand-alone, w=in attesa...
+    Flag Po: U=in uso, D=down."""
+    sec = re.search(r'--- SHOW ETHERCHANNEL SUMMARY ---\s*\n(.*?)(?=\n--- |\n===|\Z)',
+                    content, re.DOTALL | re.IGNORECASE)
+    if not sec:
+        return {}
+    result = {}
+    for m in re.finditer(r'^\s*\d+\s+Po(\d+)\(([A-Za-z]+)\)\s+\S+\s+(.*)$',
+                         sec.group(1), re.MULTILINE):
+        num, po_flags, ports = m.group(1), m.group(2), m.group(3)
+        members = re.findall(r'(\S+?)\((\w+)\)', ports)
+        total = len(members)
+        up = sum(1 for _, fl in members if fl == 'P')
+        po_up = ('U' in po_flags) and ('D' not in po_flags)
+        issue = (not po_up) or (up < total)
+        if not po_up:
+            issue_msg = "Port-channel DOWN"
+        elif up < total:
+            issue_msg = f"{total - up}/{total} interfacce non aggregate"
+        else:
+            issue_msg = ""
+        result[num] = {
+            "status": "up" if po_up else "down",
+            "up": up, "total": total,
+            "issue": issue, "issue_msg": issue_msg,
+            "members": {ifc: fl for ifc, fl in members},
+        }
+    return result
+
+
 def get_portchannel_report(group_filter=None) -> list:
     """Report Port-channel per apparato (per il tab Adjacency List). Legge i backup
     e ritorna [{ip, hostname, group, portchannels, singles}], filtrato per gruppo."""
@@ -993,6 +1029,7 @@ def get_portchannel_report(group_filter=None) -> list:
                 if lp and nb.get("neighbor_id"):
                     neigh_by_port.setdefault(lp, nb["neighbor_id"])
 
+            ec_status = parse_etherchannel_status(content)
             pcs = []
             for po, members in summary["portchannels"].items():
                 neighbors = []
@@ -1001,7 +1038,18 @@ def get_portchannel_report(group_filter=None) -> list:
                     base = nm.split('.')[0] if nm and '.' in nm else nm
                     if base and base not in neighbors:
                         neighbors.append(base)
-                pcs.append({"name": po, "members": members, "neighbors": neighbors})
+                num = re.sub(r'\D', '', po)  # "Port-channel8" -> "8"
+                st = ec_status.get(num, {})
+                pcs.append({
+                    "name": po,
+                    "members": members,
+                    "neighbors": neighbors,
+                    "status": st.get("status"),           # up|down|None(sconosciuto)
+                    "up": st.get("up"),
+                    "total": st.get("total"),
+                    "issue": st.get("issue", False),
+                    "issue_msg": st.get("issue_msg", ""),
+                })
 
             report.append({
                 "ip": ip,
