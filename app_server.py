@@ -233,6 +233,19 @@ class VendorSchema(BaseModel):
 class VendorDeleteSchema(BaseModel):
     name: str
 
+class CategoryCreateSchema(BaseModel):
+    key: str
+    label: str = ""
+    subcategory: str = ""
+
+class CategoryDeleteSchema(BaseModel):
+    key: str
+
+class DeviceCategorySchema(BaseModel):
+    node_id: str
+    category: str = ""        # vuoto = rimuove l'override manuale
+    subcategory: str = ""
+
 # --- STATO DEI JOB DI TRIAGE IN BACKGROUND CON LOCK ---
 
 _scan_jobs: dict[str, dict] = {}
@@ -710,6 +723,81 @@ def delete_vendor(v: VendorDeleteSchema, current_user = Depends(require_operator
     log_audit(f"Vendor '{v.name}' eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+# --- CATEGORIE / CLASSIFICAZIONE DISPOSITIVI ---
+
+@app.get("/api/device-classification")
+def device_classification(current_user = Depends(get_current_user)):
+    """Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con
+    categoria, sede e conteggi per categoria. Usato dal pannello Dispositivi."""
+    scope = user_group_scope(current_user)
+    data = core_engine.generate_network_map(group_filter="all")
+    data = filter_map_to_scope(data, scope)
+
+    cats = inventory_manager.get_device_categories()
+    assignments = cats["assignments"]
+
+    nodes = []
+    counts_by_category: dict = {}
+    counts_by_group: dict = {}
+    for n in data["nodes"]:
+        a = assignments.get(n["id"], {})
+        dtype = n.get("device_type", "switch")
+        group = n.get("group", "Generale")
+        node = {
+            "id": n["id"],
+            "label": n.get("label", n["id"]),
+            "group": group,
+            "status": n.get("status"),
+            "device_type": dtype,
+            "subcategory": a.get("subcategory", ""),
+            "is_manual": bool(a.get("category")),
+            "vendor": n.get("vendor"),
+            "version": n.get("version"),
+            "vtp_domain": n.get("vtp_domain"),
+            "vtp_mode": n.get("vtp_mode"),
+            "discovered": n.get("vendor") == "discovered",
+        }
+        nodes.append(node)
+        counts_by_category[dtype] = counts_by_category.get(dtype, 0) + 1
+        counts_by_group[group] = counts_by_group.get(group, 0) + 1
+
+    return {
+        "categories": cats["categories"],
+        "nodes": nodes,
+        "counts_by_category": counts_by_category,
+        "counts_by_group": counts_by_group,
+        "total": len(nodes),
+    }
+
+@app.post("/api/device-categories")
+def create_device_category(payload: CategoryCreateSchema, current_user = Depends(require_operator)):
+    """Crea una categoria custom o aggiunge una sottocategoria (admin/operator)."""
+    if not inventory_manager.add_category(payload.key, payload.label, payload.subcategory):
+        raise HTTPException(status_code=400, detail="Chiave categoria non valida.")
+    log_audit(
+        f"Categoria '{payload.key}' (sub: '{payload.subcategory or '-'}') creata/aggiornata "
+        f"da '{current_user.get('sub')}'."
+    )
+    return {"status": "success"}
+
+@app.post("/api/device-categories/delete")
+def delete_device_category(payload: CategoryDeleteSchema, current_user = Depends(require_operator)):
+    if not inventory_manager.delete_category(payload.key):
+        raise HTTPException(status_code=400, detail="Categoria di sistema o inesistente.")
+    log_audit(f"Categoria '{payload.key}' eliminata da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/device-categories/assign")
+def assign_device_category(payload: DeviceCategorySchema, current_user = Depends(require_operator)):
+    """Assegna manualmente un dispositivo a una categoria (admin/operator)."""
+    if not inventory_manager.set_device_category(payload.node_id, payload.category, payload.subcategory):
+        raise HTTPException(status_code=400, detail="Categoria non valida.")
+    log_audit(
+        f"Dispositivo '{payload.node_id}' classificato come "
+        f"'{payload.category or 'auto'}' da '{current_user.get('sub')}'."
+    )
+    return {"status": "success"}
+
 # --- ENDPOINTS COSTRUZIONE MAPPA TOPOLOGICA ---
 
 @app.get("/api/topology")
@@ -729,13 +817,15 @@ def reset_topology(current_user = Depends(require_operator)):
     backup_dir = "backup-config"
     deleted_count = 0
     if os.path.exists(backup_dir):
-        for f in os.listdir(backup_dir):
-            if f.endswith(".txt"):
-                try:
-                    os.remove(os.path.join(backup_dir, f))
-                    deleted_count += 1
-                except Exception:
-                    pass
+        # Ricorsivo: i backup sono organizzati in sottocartelle per gruppo/sede.
+        for root, _dirs, files in os.walk(backup_dir):
+            for f in files:
+                if f.endswith(".txt"):
+                    try:
+                        os.remove(os.path.join(root, f))
+                        deleted_count += 1
+                    except Exception:
+                        pass
     
     # Svuota detected_versions.json
     inventory_manager.safe_json_write(inventory_manager.VERSION_DATA_FILE, {})
@@ -1229,13 +1319,15 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
                 ip = parts[-1]
                 break
 
+    # Ricerca ricorsiva: i backup sono organizzati in sottocartelle per gruppo/sede.
     if os.path.exists(backup_dir):
-        for f in os.listdir(backup_dir):
-            if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt" or f == ip_or_filename:
-                target_path = os.path.realpath(os.path.join(backup_dir, f))
-                if target_path.startswith(backup_dir + os.sep) and os.path.exists(target_path):
-                    return FileResponse(target_path, media_type="application/octet-stream", filename=f)
-                
+        for root, _dirs, files in os.walk(backup_dir):
+            for f in files:
+                if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt" or f == ip_or_filename:
+                    target_path = os.path.realpath(os.path.join(root, f))
+                    if target_path.startswith(backup_dir + os.sep) and os.path.exists(target_path):
+                        return FileResponse(target_path, media_type="application/octet-stream", filename=f)
+
     raise HTTPException(status_code=404, detail="File di backup non trovato per questo dispositivo.")
 
 # --- PROXY MIRATO VERSO ENISA EUVD (SOSTITUISCE IL CATCH-ALL PERICOLOSO) ---

@@ -5,7 +5,7 @@ import socket
 from netmiko import ConnectHandler
 from inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
-    update_device_hostname, get_all_vendors,
+    update_device_hostname, get_all_vendors, get_category_assignments,
 )
 from drivers.cisco_ios import CiscoIosDriver
 from drivers.hp_procurve import HpProcurveDriver
@@ -36,6 +36,25 @@ def sanitize_filename(filename: str) -> str:
         if ord(char) > 31
     )
     return sanitized or "device_unknown"
+
+def group_backup_dir(group: str) -> str:
+    """Cartella di backup dedicata a un gruppo/sede (creata se assente)."""
+    path = os.path.join(BACKUP_FOLDER, sanitize_filename(group or "Generale"))
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def remove_stale_backups(ip: str):
+    """Elimina i backup precedenti dello stesso IP in qualunque sottocartella,
+    così un apparato che cambia gruppo non resta duplicato nella mappa."""
+    if not os.path.exists(BACKUP_FOLDER):
+        return
+    for root, _dirs, files in os.walk(BACKUP_FOLDER):
+        for f in files:
+            if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
+                try:
+                    os.remove(os.path.join(root, f))
+                except Exception:
+                    pass
 
 def get_device_credentials(device):
     profile = device.get('Profile', 'custom').lower()
@@ -187,7 +206,8 @@ def run_backup_and_triage(device):
                 config_out += "\n\n=== DEVICE DIAGNOSTICS ===\n"
                 for cmd, tag in [
                     ("show vlan",                  "--- SHOW VLAN ---"),
-                    ("show spanning-tree",         "--- SHOW SPANNING-TREE ---"),
+                    ("show spanning-tree summary", "--- SHOW SPANNING-TREE SUMMARY ---"),
+                    ("show vtp status",            "--- SHOW VTP STATUS ---"),
                     ("show mac address-table",     "--- SHOW MAC ADDRESS-TABLE ---"),
                     ("show etherchannel summary",  "--- SHOW ETHERCHANNEL SUMMARY ---"),
                     ("show version",               "--- SHOW VERSION ---"),
@@ -207,7 +227,11 @@ def run_backup_and_triage(device):
 
             update_device_hostname(ip, sys_name)
 
-            file_path = os.path.join(BACKUP_FOLDER, f"{sanitize_filename(sys_name)}-{ip}.txt")
+            # Backup salvato nella sottocartella del gruppo/sede dell'apparato.
+            # Prima si rimuovono copie residue (in radice o in altri gruppi).
+            remove_stale_backups(ip)
+            group_dir = group_backup_dir(device.get('Group', 'Generale'))
+            file_path = os.path.join(group_dir, f"{sanitize_filename(sys_name)}-{ip}.txt")
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(config_out)
 
@@ -372,6 +396,112 @@ def _parse_sys_description(block: str) -> str | None:
     return None
 
 
+# Parole chiave per classificare il tipo di apparato a partire da hostname,
+# System Description (LLDP), Platform e Capabilities (CDP). L'ordine di
+# valutazione in classify_device_type stabilisce la priorità.
+_TYPE_SUBSTRINGS = {
+    "firewall": ("fortigate", "fortinet", "fortiwifi", "fortios", "palo alto",
+                 "paloalto", "pan-os", "panos", "firepower", "sonicwall",
+                 "checkpoint", "check point", "firewall"),
+    "wlc":      ("air-ct", "wism", "wireless lan controller", "wireless controller",
+                 "mobility controller", "c9800", "vwlc", "wlc"),
+    "ap":       ("air-ap", "aironet", "accesspoint", "access-point", "access point",
+                 "wifi", "wlan"),
+    "router":   ("router", "isr", "asr", "csr"),
+    "phone":    ("ipphone", "ip phone", "phone", "voip"),
+    "server":   ("server", "esxi", "vmware", "nas", "ubuntu", "debian",
+                 "linux", "windows server", "proxmox"),
+    "pc":       ("workstation", "desktop", "laptop", "client"),
+}
+# Parole chiave brevi/ambigue: cercate solo come token isolati per evitare falsi
+# positivi (es. "ap" dentro "naples", "fw" dentro "software").
+_TYPE_TOKENS = {
+    "firewall": ("asa", "ftd", "srx", "fw", "pa"),
+    "router":   ("rtr",),
+    "ap":       ("ap",),
+    "phone":    ("tel",),
+    "server":   ("srv", "host"),
+    "pc":       ("pc",),
+}
+_TYPE_ORDER = ("firewall", "wlc", "ap", "router", "phone", "server", "pc")
+
+
+def _has_token(text: str, token: str) -> bool:
+    return bool(re.search(r'(?:^|[^a-z0-9])' + re.escape(token) + r'(?:[^a-z0-9]|$)', text))
+
+
+def classify_device_type(hostname: str = "", description: str = "",
+                         platform: str = "", capabilities: str = "") -> str:
+    """Deduce il tipo di apparato combinando hostname, System Description (LLDP),
+    Platform e Capabilities (CDP). Ritorna: firewall|wlc|ap|router|phone|server|
+    pc|switch."""
+    text = " ".join(filter(None, [hostname, description, platform])).lower()
+    if not text.strip():
+        return "switch"
+    for t in _TYPE_ORDER:
+        if any(s in text for s in _TYPE_SUBSTRINGS.get(t, ())):
+            return t
+        if any(_has_token(text, tok) for tok in _TYPE_TOKENS.get(t, ())):
+            return t
+    # Capabilities CDP come ultimo indizio: "Switch" → switch, solo "Router" → router.
+    caps = (capabilities or "").lower()
+    if "switch" in caps:
+        return "switch"
+    if "router" in caps:
+        return "router"
+    return "switch"
+
+
+# Versioni firmware: estrae un numero di versione pulito da una stringa libera
+# (System Description LLDP/CDP), utile per il controllo CVE.
+#   "FortiGate-120G v7.4.11, ..."            -> "7.4.11"
+#   "...IOS Software ... Version 17.16.1a ..." -> "17.16.1a"
+def extract_version(text: str) -> str | None:
+    if not text:
+        return None
+    m = re.search(r'\bv(?:ersion)?\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?[a-z0-9().]*)',
+                  text, re.IGNORECASE)
+    if not m:
+        m = re.search(r'\b([0-9]+\.[0-9]+(?:\.[0-9]+)+[a-z0-9().]*)', text)
+    if not m:
+        return None
+    return m.group(1).strip().strip('.,);')
+
+
+def parse_vtp_status(content: str) -> tuple[str | None, str | None]:
+    """Estrae (vtp_mode, vtp_domain) dall'apparato stesso: prima da
+    'show vtp status', poi dalla running-config, infine dal dominio VTP più
+    frequente annunciato dai vicini CDP (utile per stimare l'estensione)."""
+    mode = domain = None
+
+    sec = re.search(r'--- SHOW VTP STATUS ---\s*\n(.*?)(?=\n--- |\n===|\Z)',
+                    content, re.DOTALL | re.IGNORECASE)
+    if sec:
+        block = sec.group(1)
+        mm = re.search(r'VTP Operating Mode\s*:\s*(\S+)', block, re.IGNORECASE)
+        dm = re.search(r'VTP Domain Name\s*:\s*(\S+)', block, re.IGNORECASE)
+        if mm:
+            mode = mm.group(1).strip()
+        if dm:
+            domain = dm.group(1).strip()
+
+    if not mode:
+        cm = re.search(r'^\s*vtp\s+mode\s+(\S+)', content, re.MULTILINE | re.IGNORECASE)
+        if cm:
+            mode = cm.group(1).strip().capitalize()
+    if not domain:
+        cd = re.search(r'^\s*vtp\s+domain\s+(\S+)', content, re.MULTILINE | re.IGNORECASE)
+        if cd:
+            domain = cd.group(1).strip().strip("'\"")
+
+    if not domain:
+        cdp_doms = re.findall(r"VTP Management Domain:\s*'([^']+)'", content, re.IGNORECASE)
+        if cdp_doms:
+            domain = max(set(cdp_doms), key=cdp_doms.count)
+
+    return mode, domain
+
+
 def parse_cdp_lldp_neighbors(content: str) -> list:
     """
     Parsa le tabelle di vicini CDP e LLDP presenti nel file di backup.
@@ -381,20 +511,38 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
     neighbors = []
 
     # ------------------------------------------------------------------
-    # 1. CDP Neighbors Detail (Cisco)
+    # 1. CDP Neighbors Detail (Cisco) — parsing a blocchi per catturare anche
+    #    Platform/Capabilities (tipo apparato), Version e VTP Management Domain.
     # ------------------------------------------------------------------
-    cdp_details = re.findall(
-        r'Device ID:\s*([^\n\r]+).*?Entry address\(es\):\s*.*?IP address:\s*([^\n\r]+).*?'
-        r'Interface:\s*([^,\n]+),\s*Port ID \(outgoing port\):\s*([^\n\r]+)',
+    cdp_detail_section = re.search(
+        r'--- SHOW CDP NEIGHBORS DETAIL ---\s*\n(.*?)(?=\n--- [A-Z]|\n===|\Z)',
         content, re.DOTALL | re.IGNORECASE
     )
-    for dev_id, ip, local_port, remote_port in cdp_details:
+    cdp_detail_body = cdp_detail_section.group(1) if cdp_detail_section else content
+    for block in re.split(r'-{15,}', cdp_detail_body):
+        dev_m = re.search(r'Device ID:\s*([^\n\r]+)', block, re.IGNORECASE)
+        if not dev_m:
+            continue
+        ip_m       = re.search(r'IP address:\s*([0-9.]+)', block, re.IGNORECASE)
+        iface_m    = re.search(r'Interface:\s*([^,\n]+),\s*Port ID \(outgoing port\):\s*([^\n\r]+)',
+                               block, re.IGNORECASE)
+        plat_m     = re.search(r'Platform:\s*([^,\n]+?)\s*,\s*Capabilities:\s*([^\n\r]*)',
+                               block, re.IGNORECASE)
+        ver_m      = re.search(r'Version\s*:\s*\n?(.*?)(?=\n\s*(?:Technical Support|advertisement|Copyright|VTP|Native VLAN|Duplex|Management|Holdtime)|\Z)',
+                               block, re.IGNORECASE | re.DOTALL)
+        vtp_m      = re.search(r"VTP Management Domain:\s*'?([^'\n\r]+)'?", block, re.IGNORECASE)
+        platform     = plat_m.group(1).strip() if plat_m else None
+        capabilities = plat_m.group(2).strip() if plat_m else None
+        ver_text     = ver_m.group(1).strip() if ver_m else None
         neighbors.append({
-            "neighbor_id": dev_id.strip(),
-            "neighbor_ip": ip.strip(),
-            "local_port":  local_port.strip(),
-            "remote_port": remote_port.strip(),
-            "version": None,
+            "neighbor_id": dev_m.group(1).strip(),
+            "neighbor_ip": ip_m.group(1).strip() if ip_m else None,
+            "local_port":  iface_m.group(1).strip() if iface_m else "Unknown",
+            "remote_port": iface_m.group(2).strip() if iface_m else "Unknown",
+            "version":     extract_version(ver_text) if ver_text else None,
+            "platform":    platform,
+            "capabilities": capabilities,
+            "vtp_domain":  vtp_m.group(1).strip().strip("'") if vtp_m else None,
         })
 
     # ------------------------------------------------------------------
@@ -553,7 +701,8 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
                 "neighbor_ip": ip_m.group(1).strip() if ip_m else None,
                 "local_port":  local_port_m.group(1).strip() if local_port_m else "Unknown",
                 "remote_port": remote_port,
-                "version":     version_str,
+                "version":     extract_version(version_str) or version_str,
+                "description": version_str,
             })
 
     # ------------------------------------------------------------------
@@ -574,6 +723,9 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
                 existing["neighbor_ip"] = n["neighbor_ip"]
             if n.get("version") and not existing.get("version"):
                 existing["version"] = n["version"]
+            for fld in ("platform", "capabilities", "vtp_domain", "description"):
+                if n.get(fld) and not existing.get(fld):
+                    existing[fld] = n[fld]
             if (n.get("remote_port") and n["remote_port"] != "Unknown"
                     and (existing.get("remote_port") == "Unknown"
                          or len(n["remote_port"]) < len(existing.get("remote_port", "")))):
@@ -666,29 +818,26 @@ def generate_network_map(group_filter=None) -> dict:
     nodes_map: dict      = {}
     links: list          = []
 
-    def get_device_type(hostname: str) -> str:
-        h = hostname.lower()
-        # Access point: "ap" come token (inizio/separatore), non come sottostringa,
-        # per evitare falsi positivi tipo "capital" o "naples" → classificati AP.
-        if (re.search(r'(?:^|[^a-z])ap(?:[^a-z]|$)', h)
-                or any(k in h for k in ("wifi", "wlan", "accesspoint", "access-point"))):
-            return "ap"
-        if any(k in h for k in ("rtr", "router", "fw", "firewall")):       return "router"
-        if any(k in h for k in ("phone", "ipphone", "tel")):               return "phone"
-        if any(k in h for k in ("srv", "server", "esxi", "nas",
-                                 "ubuntu", "debian", "linux", "host")):     return "server"
-        if any(k in h for k in ("pc", "workstation", "client",
-                                 "desktop", "laptop")):                     return "pc"
-        return "switch"
+    # Override manuali di categoria (assegnazioni utente) per id-nodo: hanno la
+    # precedenza sulla classificazione automatica da hostname/CDP/LLDP.
+    try:
+        category_assignments = get_category_assignments()
+    except Exception:
+        category_assignments = {}
 
-    # Leggi backup files
+    def apply_category(node_id, auto_type):
+        a = category_assignments.get(node_id)
+        return a.get("category", auto_type) if a and a.get("category") else auto_type
+
+    # Leggi backup files. I backup sono organizzati in sottocartelle per gruppo
+    # (feature: backup separati per sede), quindi la scansione è ricorsiva e
+    # continua a riconoscere i file legacy salvati nella radice.
     backup_files = []
     if os.path.exists(BACKUP_FOLDER):
-        backup_files = [
-            os.path.join(BACKUP_FOLDER, f)
-            for f in os.listdir(BACKUP_FOLDER)
-            if f.endswith('.txt')
-        ]
+        for root, _dirs, files in os.walk(BACKUP_FOLDER):
+            for f in files:
+                if f.endswith('.txt'):
+                    backup_files.append(os.path.join(root, f))
 
     parsed_devices: dict = {}
     for file_path in backup_files:
@@ -706,27 +855,37 @@ def generate_network_map(group_filter=None) -> dict:
         if not hostname:
             parts    = filename[:-4].split('-')
             hostname = "-".join(parts[:-1]) if len(parts) >= 2 else filename[:-4]
+        vtp_mode, vtp_domain = parse_vtp_status(content)
         parsed_devices[ip] = {
             "hostname": hostname,
             "content": content,
             "file": file_path,
             "iface_pc": parse_channel_groups(content),
+            "vtp_mode": vtp_mode,
+            "vtp_domain": vtp_domain,
         }
         hostname_to_ip[hostname.lower()] = ip
 
     # Nodi inventariati
     versions = get_detected_versions()
     for ip, d in ip_to_device.items():
-        label  = parsed_devices.get(ip, {}).get("hostname", ip)
+        pinfo  = parsed_devices.get(ip, {})
+        label  = pinfo.get("hostname", ip)
         status = versions.get(ip, {}).get("status", "offline")
+        vendor = d.get('Vendor', 'cisco')
+        # Il vendor partecipa alla classificazione: un apparato Fortinet/Palo Alto
+        # è un firewall anche se l'hostname non lo dice.
+        auto_type = classify_device_type(label, description=vendor)
         nodes_map[ip] = {
             "id":          ip,
             "label":       label,
             "group":       d.get('Group', 'Generale'),
             "status":      status,
-            "device_type": get_device_type(label),
-            "vendor":      d.get('Vendor', 'cisco'),
+            "device_type": apply_category(ip, auto_type),
+            "vendor":      vendor,
             "version":     versions.get(ip, {}).get("version"),
+            "vtp_mode":    pinfo.get("vtp_mode"),
+            "vtp_domain":  pinfo.get("vtp_domain"),
         }
 
     # Arricchisci la mappa hostname→IP con gli hostname noti dall'inventario
@@ -757,6 +916,10 @@ def generate_network_map(group_filter=None) -> dict:
             local_port  = neigh["local_port"]
             remote_port = neigh["remote_port"]
             neigh_ver   = neigh.get("version")
+            neigh_desc  = neigh.get("description")
+            neigh_plat  = neigh.get("platform")
+            neigh_caps  = neigh.get("capabilities")
+            neigh_dom   = neigh.get("vtp_domain")
 
             base_neigh_id = neigh_id.split('.')[0] if '.' in neigh_id else neigh_id
 
@@ -782,17 +945,23 @@ def generate_network_map(group_filter=None) -> dict:
                     target_ip = neigh_ip or f"discovered_{sanitize_filename(base_neigh_id)}"
 
             if target_ip not in nodes_map:
-                # Crea nodo scoperto con version gia' popolata se disponibile
+                # Crea nodo scoperto: tipo dedotto da Platform/Capabilities (CDP) e
+                # System Description (LLDP), version e dominio VTP se disponibili.
+                auto_type = classify_device_type(
+                    base_neigh_id, neigh_desc or "", neigh_plat or "", neigh_caps or ""
+                )
                 nodes_map[target_ip] = {
                     "id":          target_ip,
                     "label":       base_neigh_id,
                     "group":       "Discovered",
                     "status":      "discovered",
-                    "device_type": get_device_type(base_neigh_id),
+                    "device_type": apply_category(target_ip, auto_type),
                     "vendor":      "discovered",
                     "version":     neigh_ver,
                     # IP annunciato via CDP/LLDP (può differire dall'IP del nodo)
                     "reported_ip": neigh_ip,
+                    "vtp_domain":  neigh_dom,
+                    "platform":    neigh_plat,
                 }
             else:
                 node = nodes_map[target_ip]
@@ -805,6 +974,8 @@ def generate_network_map(group_filter=None) -> dict:
                 # è la spia del problema "IP sbagliato" che il workaround corregge.
                 if neigh_ip and neigh_ip != target_ip and not node.get("reported_ip"):
                     node["reported_ip"] = neigh_ip
+                if neigh_dom and not node.get("vtp_domain"):
+                    node["vtp_domain"] = neigh_dom
 
             # --- Riconoscimento aggregato (Port-Channel) sul membro corrente ---
             # Si conta SOLO l'interfaccia locale del dispositivo che riporta: è
