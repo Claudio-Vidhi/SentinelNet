@@ -172,6 +172,125 @@ def get_all_vendors() -> dict:
 def save_vendors(vendors: dict):
     safe_json_write(VENDORS_FILE, vendors)
 
+# --- CATEGORIE DISPOSITIVI (classificazione manuale + categorie custom) ---
+
+CATEGORIES_FILE = data_config.get_path("device_categories.json")
+
+# Categorie predefinite riconosciute dalla classificazione automatica. Restano
+# sempre presenti; l'utente può aggiungerne di custom e definire sottocategorie.
+BUILTIN_CATEGORIES = {
+    "ap":       "Access Point",
+    "wlc":      "Wireless LAN Controller",
+    "firewall": "Firewall",
+    "router":   "Router",
+    "switch":   "Switch",
+    "server":   "Server",
+    "phone":    "Telefono IP",
+    "pc":       "PC / Workstation",
+    "other":    "Altro",
+}
+
+def _norm_cat_key(key: str) -> str:
+    return re.sub(r'[^a-z0-9_-]', '', (key or '').strip().lower().replace(' ', '-'))
+
+def _load_categories() -> dict:
+    if os.path.exists(CATEGORIES_FILE):
+        try:
+            with open(CATEGORIES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+    else:
+        data = {}
+    data.setdefault("categories", {})
+    data.setdefault("assignments", {})
+    return data
+
+def get_device_categories() -> dict:
+    """Ritorna {categories: {key: {label, builtin, subcategories[]}}, assignments}.
+    Le categorie predefinite sono sempre incluse."""
+    data = _load_categories()
+    stored = data["categories"]
+    categories = {}
+    for key, label in BUILTIN_CATEGORIES.items():
+        s = stored.get(key, {})
+        categories[key] = {
+            "label": s.get("label", label),
+            "builtin": True,
+            "subcategories": sorted(s.get("subcategories", [])),
+        }
+    for key, s in stored.items():
+        if key in BUILTIN_CATEGORIES:
+            continue
+        categories[key] = {
+            "label": s.get("label", key),
+            "builtin": False,
+            "subcategories": sorted(s.get("subcategories", [])),
+        }
+    return {"categories": categories, "assignments": data["assignments"]}
+
+def get_category_assignments() -> dict:
+    return _load_categories().get("assignments", {})
+
+def add_category(key: str, label: str, subcategory: str = "") -> bool:
+    """Crea una categoria custom (o aggiunge una sottocategoria a una esistente)."""
+    key = _norm_cat_key(key)
+    if not key:
+        return False
+    with _io_lock:
+        data = _load_categories()
+        cats = data["categories"]
+        entry = cats.setdefault(key, {
+            "label": label.strip() or key,
+            "subcategories": [],
+        })
+        if label.strip() and key not in BUILTIN_CATEGORIES:
+            entry["label"] = label.strip()
+        sub = subcategory.strip()
+        if sub and sub not in entry["subcategories"]:
+            entry["subcategories"].append(sub)
+        safe_json_write(CATEGORIES_FILE, data)
+        return True
+
+def delete_category(key: str) -> bool:
+    """Elimina una categoria custom e libera i dispositivi ad essa assegnati.
+    Le categorie predefinite non sono eliminabili."""
+    key = _norm_cat_key(key)
+    if key in BUILTIN_CATEGORIES:
+        return False
+    with _io_lock:
+        data = _load_categories()
+        if key not in data["categories"]:
+            return False
+        data["categories"].pop(key, None)
+        data["assignments"] = {
+            n: a for n, a in data["assignments"].items() if a.get("category") != key
+        }
+        safe_json_write(CATEGORIES_FILE, data)
+        return True
+
+def set_device_category(node_id: str, category: str, subcategory: str = "") -> bool:
+    """Assegna manualmente un dispositivo (per id-nodo) a una categoria.
+    Categoria vuota = rimuove l'assegnazione (torna alla classificazione auto)."""
+    node_id = (node_id or '').strip()
+    if not node_id:
+        return False
+    with _io_lock:
+        data = _load_categories()
+        if not category:
+            data["assignments"].pop(node_id, None)
+        else:
+            cat = _norm_cat_key(category)
+            valid = set(BUILTIN_CATEGORIES) | set(data["categories"])
+            if cat not in valid:
+                return False
+            data["assignments"][node_id] = {
+                "category": cat,
+                "subcategory": subcategory.strip(),
+            }
+        safe_json_write(CATEGORIES_FILE, data)
+        return True
+
 def resolve_euvd_term(vendor_display: str) -> str:
     """Maps a vendor display name to the correct EUVD search term."""
     vendors = get_all_vendors()

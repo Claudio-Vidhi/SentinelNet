@@ -794,6 +794,9 @@
       <button class="tab-button" onclick="switchTab('tab-map-interactive', this)" data-i18n="tabInteractive">
         <i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D
       </button>
+      <button class="tab-button" onclick="switchTab('tab-categories', this)" data-i18n="tabCategories">
+        <i class="fa-solid fa-shapes"></i> Dispositivi & Categorie
+      </button>
       <button class="tab-button" onclick="switchTab('tab-security', this)" data-i18n="tabSecurity">
         <i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)
       </button>
@@ -980,6 +983,18 @@
             <input type="checkbox" id="togglePortChannel" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--warning); cursor: pointer; border-radius: 4px;">
             <span data-i18n="lblHighlightPortChannel">Evidenzia Port-Channel</span>
           </label>
+
+          <!-- Interruttore range dominio VTP: colora i nodi per dominio VTP -->
+          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
+            <input type="checkbox" id="toggleVtpDomain" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #b76bff; cursor: pointer; border-radius: 4px;">
+            <span data-i18n="lblVtpDomain">Dominio VTP</span>
+          </label>
+
+          <!-- Interruttore modalità VTP: mostra Server/Client/Transparent -->
+          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
+            <input type="checkbox" id="toggleVtpMode" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #c792ea; cursor: pointer; border-radius: 4px;">
+            <span data-i18n="lblVtpMode">Modalità VTP</span>
+          </label>
         </div>
         <div style="display:flex; gap: 8px;">
           <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0; background: var(--danger); color: #fff;" data-i18n="btnResetTopology">
@@ -1002,8 +1017,59 @@
           <div class="legend-item"><span class="led led-auth_failed"></span><span data-i18n="legendAuthFailed">Autenticazione Fallita</span></div>
           <div class="legend-item"><span class="led led-discovered"></span><span data-i18n="legendDiscovered">Vicino Discoperto (CDP/LLDP)</span></div>
           <div class="legend-item"><span style="width:16px; height:0; border-top:2px dashed var(--warning); display:inline-block;"></span><span data-i18n="legendPortChannel">Link Port-Channel / LAG</span></div>
+          <div id="deviceTypeLegend" style="display:flex; flex-wrap:wrap; gap:10px 14px; width:100%; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);"></div>
         </div>
       </div>
+    </div>
+
+    <!-- TAB: Dispositivi & Categorie -->
+    <div id="tab-categories" class="tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; gap: 15px; flex-wrap: wrap;">
+        <div style="display:flex; align-items:center; gap: 15px;">
+          <h3 data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h3>
+          <select id="categoriesGroupSelect" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+          <select id="categoriesCatFilter" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
+          </select>
+        </div>
+        <button class="btn btn-secondary btn-small" onclick="loadCategoriesData()" style="width:auto; margin:0;" data-i18n="btnRefreshCategories">
+          <i class="fa-solid fa-arrows-rotate"></i> Aggiorna
+        </button>
+      </div>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descCategories">
+        Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.
+      </p>
+
+      <!-- Riquadri di conteggio per categoria -->
+      <div id="categoryCountCards" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;"></div>
+
+      <!-- Creazione nuova categoria / sottocategoria (admin/operator) -->
+      <div class="requires-write" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+        <h4 style="font-size: 14px; margin-bottom: 10px;"><i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> <span data-i18n="titleNewCategory">Nuova Categoria / Sottocategoria</span></h4>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items:end;">
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatExisting">Categoria esistente (o nuova)</label>
+            <input id="newCatKey" list="catKeyList" type="text" placeholder="es. iot, ups, nas" style="width:100%;">
+            <datalist id="catKeyList"></datalist>
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatLabel">Etichetta (solo nuova categoria)</label>
+            <input id="newCatLabel" type="text" placeholder="es. Dispositivi IoT" style="width:100%;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewSubcat">Sottocategoria (opzionale)</label>
+            <input id="newSubcat" type="text" placeholder="es. videosorveglianza" style="width:100%;">
+          </div>
+          <button class="btn btn-primary btn-small" onclick="createCategory()" style="width:auto; margin:0; background:#5ecf8d; color:#000;" data-i18n="btnCreateCategory">
+            <i class="fa-solid fa-plus"></i> Crea
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista dispositivi raggruppati per sede -->
+      <div id="categoriesDeviceList"></div>
     </div>
 
     <!-- TAB 5: Threat Intel (EUVD ENISA) -->
@@ -1303,6 +1369,16 @@
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi',
         tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D',
+        tabCategories: '<i class="fa-solid fa-shapes"></i> Dispositivi & Categorie',
+        titleCategories: 'Dispositivi Scoperti & Classificazione',
+        descCategories: 'Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.',
+        optCatAll: 'Tutte le categorie',
+        btnRefreshCategories: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna',
+        titleNewCategory: 'Nuova Categoria / Sottocategoria',
+        lblNewCatExisting: 'Categoria esistente (o nuova)',
+        lblNewCatLabel: 'Etichetta (solo nuova categoria)',
+        lblNewSubcat: 'Sottocategoria (opzionale)',
+        btnCreateCategory: '<i class="fa-solid fa-plus"></i> Crea',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
         
@@ -1357,6 +1433,8 @@
         lblShowEndDevices: "Mostra Terminali (Server, Telefoni, PC)",
         lblShowAccessPoints: "Mostra Access Point",
         lblHighlightPortChannel: "Evidenzia Port-Channel",
+        lblVtpDomain: "Dominio VTP",
+        lblVtpMode: "Modalità VTP",
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
         legendOnline: "Dispositivo Online",
@@ -1511,6 +1589,16 @@
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Groups/Sites',
         tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> 2D Topology Map',
+        tabCategories: '<i class="fa-solid fa-shapes"></i> Devices & Categories',
+        titleCategories: 'Discovered Devices & Classification',
+        descCategories: 'Per-category count of inventoried and CDP/LLDP-discovered devices. Operators and admins can manually reclassify devices and create new categories/subcategories.',
+        optCatAll: 'All categories',
+        btnRefreshCategories: '<i class="fa-solid fa-arrows-rotate"></i> Refresh',
+        titleNewCategory: 'New Category / Subcategory',
+        lblNewCatExisting: 'Existing category (or new)',
+        lblNewCatLabel: 'Label (new category only)',
+        lblNewSubcat: 'Subcategory (optional)',
+        btnCreateCategory: '<i class="fa-solid fa-plus"></i> Create',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
         
@@ -1565,6 +1653,8 @@
         lblShowEndDevices: "Show End Devices (Servers, Phones, PCs)",
         lblShowAccessPoints: "Show Access Points",
         lblHighlightPortChannel: "Highlight Port-Channel",
+        lblVtpDomain: "VTP Domain",
+        lblVtpMode: "VTP Mode",
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
         legendOnline: "Device Online",
@@ -2381,6 +2471,7 @@
             renderDeviceTable();
         } else if(tabId === 'tab-map') loadTopology();
         else if(tabId === 'tab-map-interactive') loadInteractiveMap();
+        else if(tabId === 'tab-categories') loadCategoriesData();
         else if(tabId === 'tab-security' && !appLoading) {
             loadThreatIntel();
         }
@@ -2421,7 +2512,42 @@
     let networkInstance = null;
 
     // Generatore dinamico di schede SVG ad alta tecnologia per i nodi del network
-    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor) {
+    // Metadati per tipo di apparato: colore distintivo (feature: colori per tipo
+    // di device) ed etichette bilingue. "switch" è il default.
+    const DEVICE_TYPE_META = {
+        firewall: { color: "#ff6b7c", it: "Firewall",      en: "Firewall" },
+        wlc:      { color: "#b76bff", it: "WLC",           en: "WLC" },
+        ap:       { color: "#38bdf8", it: "Access Point",  en: "Access Point" },
+        router:   { color: "#5ecf8d", it: "Router",        en: "Router" },
+        switch:   { color: "#4f8ef7", it: "Switch",        en: "Switch" },
+        server:   { color: "#f7b84f", it: "Server",        en: "Server" },
+        phone:    { color: "#38d9c0", it: "Telefono IP",   en: "IP Phone" },
+        pc:       { color: "#a3a3a3", it: "PC",            en: "PC" },
+        other:    { color: "#8d9bb0", it: "Altro",         en: "Other" },
+    };
+    function deviceTypeMeta(t) { return DEVICE_TYPE_META[t] || DEVICE_TYPE_META.other; }
+    function deviceTypeLabel(t) { const m = deviceTypeMeta(t); return currentLang === 'en' ? m.en : m.it; }
+
+    // Colore stabile per dominio VTP (feature: range dominio VTP).
+    const VTP_PALETTE = ["#b76bff","#4f8ef7","#3be188","#ffb84d","#ff6b7c","#38d9c0","#f7b84f","#8d6bff","#e879f9","#22d3ee"];
+    function vtpDomainColor(domain) {
+        if (!domain) return "#5a6473";
+        let h = 0;
+        for (let i = 0; i < domain.length; i++) h = (h * 31 + domain.charCodeAt(i)) >>> 0;
+        return VTP_PALETTE[h % VTP_PALETTE.length];
+    }
+
+    // Costruisce la legenda dei colori per tipo di apparato sotto la mappa.
+    function renderDeviceTypeLegend() {
+        const box = document.getElementById("deviceTypeLegend");
+        if (!box) return;
+        box.innerHTML = Object.keys(DEVICE_TYPE_META).map(t => {
+            const m = DEVICE_TYPE_META[t];
+            return `<div class="legend-item"><span style="width:12px;height:12px;border-radius:3px;background:${m.color};display:inline-block;"></span><span>${deviceTypeLabel(t)}</span></div>`;
+        }).join("");
+    }
+
+    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp) {
         let statusColor = "#8d9bb0";
         let statusBg = "rgba(141, 155, 176, 0.1)";
         let statusGlow = "rgba(141, 155, 176, 0.2)";
@@ -2456,36 +2582,61 @@
             statusText = currentLang === 'en' ? "EXTERNAL" : "ESTERNO";
         }
 
+        // Colore per TIPO di apparato (feature: colori per tipo di device).
+        // L'icona usa il colore del tipo; lo stato resta nella barra/badge laterale.
+        const typeColor = deviceTypeMeta(deviceType).color;
+
         // Colore tema per il bordo sfumato della scheda basato sullo stato del nodo
         let borderGradStart = statusColor;
         let borderGradEnd = "#1d2837";
-        
+
+        // Annotazione VTP nel badge in alto a destra: di default mostra il tipo di
+        // apparato; con i toggle attivi mostra dominio (e ne colora il bordo) e/o modalità.
+        vtp = vtp || {};
+        let badgeText = deviceTypeLabel(deviceType);
+        let badgeColor = typeColor;
+        const vtpParts = [];
+        if (vtp.showDomain && vtp.domain) {
+            vtpParts.push(vtp.domain);
+            badgeColor = vtpDomainColor(vtp.domain);
+            borderGradStart = badgeColor;
+        }
+        if (vtp.showMode && vtp.mode) vtpParts.push("VTP:" + vtp.mode);
+        if (vtpParts.length) badgeText = vtpParts.join(" · ");
+
         // Carica icone vettoriali moderne basate sulla tipologia di apparato
         let iconSvg = "";
         if (deviceType === "router") {
             // Icona router
-            iconSvg = `<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="${statusColor}"/>`;
+            iconSvg = `<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="${typeColor}"/>`;
         } else if (deviceType === "ap") {
             // Icona Access Point (Wi-Fi)
-            iconSvg = `<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15.92c-.32.05-.65.08-1 .08s-.68-.03-1-.08v-2.12c.32.08.65.12 1 .12s.68-.04 1-.12v2.12zm0-4.22c-.32.12-.65.18-1 .18s-.68-.06-1-.18v-3.8c.32.18.65.28 1 .28s.68-.1 1-.28v3.8zm0-5.8c-.32.22-.65.34-1 .34s-.68-.12-1-.34V4.18c.32.28.65.44 1 .44s.68-.16 1-.44v3.28z" fill="${statusColor}"/>`;
+            iconSvg = `<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15.92c-.32.05-.65.08-1 .08s-.68-.03-1-.08v-2.12c.32.08.65.12 1 .12s.68-.04 1-.12v2.12zm0-4.22c-.32.12-.65.18-1 .18s-.68-.06-1-.18v-3.8c.32.18.65.28 1 .28s.68-.1 1-.28v3.8zm0-5.8c-.32.22-.65.34-1 .34s-.68-.12-1-.34V4.18c.32.28.65.44 1 .44s.68-.16 1-.44v3.28z" fill="${typeColor}"/>`;
+        } else if (deviceType === "wlc") {
+            // Icona WLC (controller wireless: tower + base)
+            iconSvg = `<path d="M12 8a2 2 0 0 0-2 2c0 .74.4 1.38 1 1.72V21h2v-9.28c.6-.34 1-.98 1-1.72a2 2 0 0 0-2-2zM7.05 6.05 5.64 4.64a9 9 0 0 0 0 10.72l1.41-1.41a7 7 0 0 1 0-7.9zm9.9 0a7 7 0 0 1 0 7.9l1.41 1.41a9 9 0 0 0 0-10.72l-1.41 1.41zM4.46 3.46 3.05 2.05a13 13 0 0 0 0 16.9l1.41-1.41a11 11 0 0 1 0-14.08zm16.49-1.41-1.41 1.41a11 11 0 0 1 0 14.08l1.41 1.41a13 13 0 0 0 0-16.9z" fill="${typeColor}"/>`;
+        } else if (deviceType === "firewall") {
+            // Icona Firewall (muro di mattoni + scudo)
+            iconSvg = `<path d="M3 3h18v4H3V3zm0 6h6v4H3V9zm8 0h10v4H11V9zM3 15h10v4H3v-4zm12 0h6v4h-6v-4z" fill="${typeColor}"/>`;
         } else if (deviceType === "server") {
             // Icona Server 2U Rack
-            iconSvg = `<path d="M19 13H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zm-8 4H5v-2h6v2zm8 0h-2v-2h2v2zm0-10H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm-8 4H5V9h6v2zm8 0h-2V9h2v2z" fill="${statusColor}"/>`;
+            iconSvg = `<path d="M19 13H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zm-8 4H5v-2h6v2zm8 0h-2v-2h2v2zm0-10H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm-8 4H5V9h6v2zm8 0h-2V9h2v2z" fill="${typeColor}"/>`;
         } else if (deviceType === "phone") {
             // Icona Telefono IP
-            iconSvg = `<path d="M20 15.5c-1.2 0-2.4-.2-3.6-.6-.3-.1-.7 0-1 .2l-2.2 2.2c-2.8-1.4-5.1-3.8-6.6-6.6l2.2-2.2c.3-.3.4-.7.2-1-.4-1.2-.6-2.4-.6-3.6 0-.6-.4-1-1-1H3.5c-.6 0-1 .4-1 1C2.5 17 7 21.5 16.5 21.5c.6 0 1-.4 1-1V16.5c0-.6-.4-1-1-1z" fill="${statusColor}"/>`;
+            iconSvg = `<path d="M20 15.5c-1.2 0-2.4-.2-3.6-.6-.3-.1-.7 0-1 .2l-2.2 2.2c-2.8-1.4-5.1-3.8-6.6-6.6l2.2-2.2c.3-.3.4-.7.2-1-.4-1.2-.6-2.4-.6-3.6 0-.6-.4-1-1-1H3.5c-.6 0-1 .4-1 1C2.5 17 7 21.5 16.5 21.5c.6 0 1-.4 1-1V16.5c0-.6-.4-1-1-1z" fill="${typeColor}"/>`;
         } else if (deviceType === "pc") {
             // Icona Workstation PC
-            iconSvg = `<path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z" fill="${statusColor}"/>`;
+            iconSvg = `<path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z" fill="${typeColor}"/>`;
         } else {
             // Icona Switch rack standard
-            iconSvg = `<path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm3 2h2v2H7V8zm0 4h2v2H7v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2z" fill="${statusColor}"/>`;
+            iconSvg = `<path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6zm3 2h2v2H7V8zm0 4h2v2H7v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2zm4-4h2v2h-2V8zm0 4h2v2h-2v-2z" fill="${typeColor}"/>`;
         }
 
         const escapedLabel = label.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const escapedIp = ip.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const escapedVendor = (vendor && vendor !== 'discovered' ? vendor : (currentLang === 'en' ? 'Neighbor' : 'Vicino')).toUpperCase();
-        
+        const escapedBadge = String(badgeText).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 22);
+
         // Stringa ID per gradienti isolati per ciascun apparato per prevenire conflitti DOM
         const gradId = escapedIp.replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -2508,16 +2659,20 @@
           <!-- Barra d'accento laterale colorata in base allo stato -->
           <path d="M2 14C2 7.37 7.37 2 14 2H18V82H14C7.37 82 2 76.63 2 70V14Z" fill="${statusColor}" opacity="0.85" />
           
-          <!-- Cerchio contenitore per l'icona dell'apparato -->
-          <circle cx="44" cy="42" r="22" fill="#161e2a" stroke="${statusColor}" stroke-dasharray="1.5" stroke-width="1.5" />
-          
+          <!-- Cerchio contenitore per l'icona dell'apparato (bordo nel colore del tipo) -->
+          <circle cx="44" cy="42" r="22" fill="#161e2a" stroke="${typeColor}" stroke-dasharray="1.5" stroke-width="1.5" />
+
           <!-- Posizionamento SVG dell'icona -->
           <g transform="translate(32, 30)">
             <svg width="24" height="24" viewBox="0 0 24 24">
                 ${iconSvg}
             </svg>
           </g>
-          
+
+          <!-- Badge tipo apparato / annotazione VTP (in alto a destra) -->
+          <rect x="138" y="9" width="94" height="15" rx="4" fill="${badgeColor}22" stroke="${badgeColor}" stroke-opacity="0.5" stroke-width="1" />
+          <text x="185" y="19.5" font-family="'Satoshi', 'Inter', sans-serif" font-size="8.5" font-weight="900" fill="${badgeColor}" text-anchor="middle" letter-spacing="0.3">${escapedBadge}</text>
+
           <!-- Informazioni testuali: Hostname e Indirizzo IP -->
           <text x="78" y="32" font-family="'Satoshi', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="#ffffff" letter-spacing="-0.3">${escapedLabel}</text>
           <text x="78" y="49" font-family="'JetBrains Mono', monospace" font-size="11" font-weight="700" fill="#8d9bb0">${escapedIp}</text>
@@ -2567,7 +2722,9 @@
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${escapeHtml(vendorName)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.group)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelStatusText}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${statusLed}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Type:' : 'Tipo:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${deviceTypeMeta(n.device_type).color};">${escapeHtml(deviceTypeLabel(n.device_type))}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${escapeHtml(firmware)}</code></td></tr>
+            ${(n.vtp_domain || n.vtp_mode) ? `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">VTP:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml([n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · '))}</td></tr>` : ''}
             ${reportedRow}
           </table>
         </div>
@@ -2589,6 +2746,10 @@
         const showEndDevices   = document.getElementById("toggleEndDevices")?.checked || false;
         const showAccessPoints = document.getElementById("toggleAccessPoints")?.checked || false;
         const highlightPC      = document.getElementById("togglePortChannel")?.checked || false;
+        const showVtpDomain    = document.getElementById("toggleVtpDomain")?.checked || false;
+        const showVtpMode      = document.getElementById("toggleVtpMode")?.checked || false;
+
+        renderDeviceTypeLegend();
 
         // Filtra i nodi: terminali (server/telefoni/PC) e access point sono nascosti
         // di default, lasciando in mappa solo switch e router.
@@ -2612,16 +2773,19 @@
                 ? n.vendor
                 : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
 
+            const vtp = { domain: n.vtp_domain, mode: n.vtp_mode, showDomain: showVtpDomain, showMode: showVtpMode };
+
             return {
                 id: n.id,
                 shape: "image",
-                image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor),
+                image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor, vtp),
                 title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
                 size: 38,
                 labelVal: n.label,
                 deviceTypeVal: n.device_type,
                 isBoundaryVal: n.is_boundary || false,
                 vendorVal: resolvedVendor,
+                vtpVal: vtp,
                 nodeDataVal: n
             };
         });
@@ -2804,6 +2968,158 @@
         networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, 5000));
     }
 
+    // ===== Pannello Dispositivi & Categorie (classificazione manuale) =====
+    let categoriesData = { categories: {}, nodes: [], counts_by_category: {}, counts_by_group: {} };
+
+    async function loadCategoriesData() {
+        const res = await apiFetch("/api/device-classification");
+        if (!res || !res.ok) return;
+        categoriesData = await res.json();
+
+        // Popola il filtro sedi
+        const gsel = document.getElementById("categoriesGroupSelect");
+        if (gsel) {
+            const cur = gsel.value;
+            const groups = Object.keys(categoriesData.counts_by_group).sort();
+            gsel.innerHTML = `<option value="all">${currentLang==='en'?'Filter by Site: All':'Filtra per Sede: Tutte'}</option>` +
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+            gsel.value = groups.includes(cur) ? cur : "all";
+        }
+        // Popola il filtro categorie + datalist di creazione
+        const csel = document.getElementById("categoriesCatFilter");
+        const dl = document.getElementById("catKeyList");
+        const catKeys = Object.keys(categoriesData.categories);
+        if (csel) {
+            const cur = csel.value;
+            csel.innerHTML = `<option value="all">${currentLang==='en'?'All categories':'Tutte le categorie'}</option>` +
+                catKeys.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(categoriesData.categories[k].label)}</option>`).join("");
+            csel.value = catKeys.includes(cur) ? cur : "all";
+        }
+        if (dl) dl.innerHTML = catKeys.map(k => `<option value="${escapeHtml(k)}">`).join("");
+
+        renderCategoriesPanel();
+    }
+
+    function categoryOptions(selected) {
+        return Object.keys(categoriesData.categories).map(k =>
+            `<option value="${escapeHtml(k)}"${k===selected?' selected':''}>${escapeHtml(categoriesData.categories[k].label)}</option>`
+        ).join("");
+    }
+
+    function renderCategoriesPanel() {
+        const cats = categoriesData.categories;
+        const counts = categoriesData.counts_by_category || {};
+        const groupFilter = document.getElementById("categoriesGroupSelect")?.value || "all";
+        const catFilter = document.getElementById("categoriesCatFilter")?.value || "all";
+        const canWrite = (currentRole === 'admin' || currentRole === 'operator');
+
+        // Riquadri di conteggio per categoria
+        const cardBox = document.getElementById("categoryCountCards");
+        if (cardBox) {
+            cardBox.innerHTML = Object.keys(cats).map(k => {
+                const c = cats[k];
+                const color = deviceTypeMeta(k).color;
+                const n = counts[k] || 0;
+                const delBtn = (!c.builtin && canWrite)
+                    ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="deleteCategory('${escapeHtml(k)}')"></i>` : '';
+                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:10px; padding:14px;">
+                    ${delBtn}
+                    <div style="font-size:26px; font-weight:900; color:${color};">${n}</div>
+                    <div style="font-size:12px; font-weight:700; color:var(--text); margin-top:2px;">${escapeHtml(c.label)}</div>
+                    ${c.subcategories.length ? `<div style="font-size:10px; color:var(--text-muted); margin-top:4px;">${c.subcategories.map(escapeHtml).join(', ')}</div>` : ''}
+                </div>`;
+            }).join("");
+        }
+
+        // Lista dispositivi raggruppata per sede/gruppo
+        let nodes = categoriesData.nodes.slice();
+        if (groupFilter !== "all") nodes = nodes.filter(n => n.group === groupFilter);
+        if (catFilter !== "all") nodes = nodes.filter(n => n.device_type === catFilter);
+
+        const byGroup = {};
+        nodes.forEach(n => { (byGroup[n.group] = byGroup[n.group] || []).push(n); });
+
+        const listBox = document.getElementById("categoriesDeviceList");
+        if (!listBox) return;
+        if (!nodes.length) { listBox.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No devices.':'Nessun dispositivo.'}</p>`; return; }
+
+        listBox.innerHTML = Object.keys(byGroup).sort().map(g => {
+            const rows = byGroup[g].map(n => {
+                const meta = deviceTypeMeta(n.device_type);
+                const subs = (cats[n.device_type]?.subcategories) || [];
+                const assignControls = canWrite ? `
+                    <select onchange="assignDeviceCategory('${escapeHtml(n.id)}', this.value, this.closest('tr').querySelector('.subcat-sel').value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                        ${categoryOptions(n.device_type)}
+                    </select>
+                    <select class="subcat-sel" onchange="assignDeviceCategory('${escapeHtml(n.id)}', '${escapeHtml(n.device_type)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; ${subs.length?'':'display:none;'}">
+                        <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
+                        ${subs.map(s => `<option value="${escapeHtml(s)}"${s===n.subcategory?' selected':''}>${escapeHtml(s)}</option>`).join('')}
+                    </select>`
+                    : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(n.device_type))}</span>${n.subcategory?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(n.subcategory)}</span>`:''}`;
+                const statusBadge = n.discovered
+                    ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:4px; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
+                    : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
+                return `<tr>
+                    <td style="padding:6px 8px;"><span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}</td>
+                    <td style="padding:6px 8px; font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(n.id)}</td>
+                    <td style="padding:6px 8px;">${statusBadge}</td>
+                    <td style="padding:6px 8px; font-size:12px; color:var(--text-muted);">${escapeHtml(n.version||'-')}</td>
+                    <td style="padding:6px 8px;"><div style="display:flex; gap:6px; align-items:center;">${assignControls}</div></td>
+                </tr>`;
+            }).join("");
+            return `<div style="margin-bottom:18px;">
+                <h4 style="font-size:14px; margin-bottom:8px;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)} <span style="color:var(--text-muted); font-weight:400;">(${byGroup[g].length})</span></h4>
+                <table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+                    <thead><tr style="background:var(--surface); text-align:left; font-size:11px; color:var(--text-muted); text-transform:uppercase;">
+                        <th style="padding:8px;">Hostname</th><th style="padding:8px;">IP</th><th style="padding:8px;">${currentLang==='en'?'Source':'Origine'}</th><th style="padding:8px;">${currentLang==='en'?'Version':'Versione'}</th><th style="padding:8px;">${currentLang==='en'?'Category':'Categoria'}</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        }).join("");
+    }
+
+    async function assignDeviceCategory(nodeId, category, subcategory) {
+        const res = await apiFetch("/api/device-categories/assign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ node_id: nodeId, category: category || "", subcategory: subcategory || "" })
+        });
+        if (res && res.ok) loadCategoriesData();
+        else alert(currentLang==='en'?'Failed to classify device.':'Classificazione non riuscita.');
+    }
+
+    async function createCategory() {
+        const key = document.getElementById("newCatKey").value.trim();
+        const label = document.getElementById("newCatLabel").value.trim();
+        const sub = document.getElementById("newSubcat").value.trim();
+        if (!key) { alert(currentLang==='en'?'Category key required.':'Chiave categoria obbligatoria.'); return; }
+        const res = await apiFetch("/api/device-categories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, label, subcategory: sub })
+        });
+        if (res && res.ok) {
+            document.getElementById("newCatKey").value = "";
+            document.getElementById("newCatLabel").value = "";
+            document.getElementById("newSubcat").value = "";
+            loadCategoriesData();
+        } else {
+            alert(currentLang==='en'?'Failed to create category.':'Creazione categoria non riuscita.');
+        }
+    }
+
+    async function deleteCategory(key) {
+        if (!confirm(currentLang==='en'?`Delete category "${key}"?`:`Eliminare la categoria "${key}"?`)) return;
+        const res = await apiFetch("/api/device-categories/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key })
+        });
+        if (res && res.ok) loadCategoriesData();
+        else alert(currentLang==='en'?'Cannot delete this category.':'Categoria non eliminabile.');
+    }
+
     function updateTopologyMapNodeStatus(ip, newStatus) {
         if (networkInstance && networkInstance.body && networkInstance.body.data && networkInstance.body.data.nodes) {
             const nodesDataSet = networkInstance.body.data.nodes;
@@ -2813,7 +3129,7 @@
 
                 const scan = globalVersions[ip] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: newStatus };
 
-                node.image = createNodeSvg(node.labelVal, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal);
+                node.image = createNodeSvg(node.labelVal, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal, node.vtpVal);
                 node.title = createNodeTooltip(node.nodeDataVal, scan, node.vendorVal);
 
                 nodesDataSet.update(node);
