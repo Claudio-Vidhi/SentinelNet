@@ -248,6 +248,8 @@ class DeviceCategorySchema(BaseModel):
     vendor: Optional[str] = None
     model: Optional[str] = None
     ha_group: Optional[str] = None     # etichetta coppia HA (vuoto = nessuna)
+    name: Optional[str] = None         # nome scelto per risolvere conflitti CDP/LLDP
+    version: Optional[str] = None      # versione scelta per risolvere conflitti
 
 class ModelSchema(BaseModel):
     vendor: str
@@ -258,6 +260,11 @@ class PromoteDeviceSchema(BaseModel):
     ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
     vendor: str = "cisco"
     group: str = "Generale"
+    # Dati ereditati da CDP/LLDP da preservare sul dispositivo promosso.
+    model: Optional[str] = None
+    version: Optional[str] = None
+    device_type: Optional[str] = None
+    hostname: Optional[str] = None
 
 # --- STATO DEI JOB DI TRIAGE IN BACKGROUND CON LOCK ---
 
@@ -776,6 +783,7 @@ def device_classification(current_user = Depends(get_current_user)):
             "vtp_domain": n.get("vtp_domain"),
             "vtp_mode": n.get("vtp_mode"),
             "discovered": discovered,
+            "name_options": n.get("name_options") or [],
         }
         nodes.append(node)
         counts_by_category[dtype] = counts_by_category.get(dtype, 0) + 1
@@ -819,6 +827,8 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
         "vendor": payload.vendor,
         "model": payload.model,
         "ha_group": payload.ha_group,
+        "name": payload.name,
+        "ver": payload.version,
     }.items() if v is not None}
     if not inventory_manager.set_device_meta(payload.node_id, **fields):
         raise HTTPException(status_code=400, detail="Aggiornamento non valido.")
@@ -848,6 +858,21 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
     )
     # Trasferisce l'eventuale classificazione manuale dal nodo scoperto all'IP.
     inventory_manager.migrate_assignment(payload.node_id, payload.ip)
+    # Eredita ciò che è già stato scoperto via CDP/LLDP: categoria, modello,
+    # versione e hostname, così il dispositivo promosso non riparte "vuoto".
+    meta = {}
+    if payload.device_type:
+        meta["category"] = payload.device_type
+    if payload.model:
+        meta["model"] = payload.model
+    if meta:
+        inventory_manager.set_device_meta(payload.ip, **meta)
+    if payload.version:
+        inventory_manager.update_version_inventory(
+            payload.ip, payload.vendor, payload.version, "discovered"
+        )
+    if payload.hostname:
+        inventory_manager.update_device_hostname(payload.ip, payload.hostname)
     log_audit(
         f"Dispositivo scoperto '{payload.node_id}' promosso a gestito "
         f"(IP {payload.ip}, vendor {payload.vendor}, sede {payload.group}) "

@@ -785,7 +785,60 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
                          or len(n["remote_port"]) < len(existing.get("remote_port", "")))):
                 existing["remote_port"] = n["remote_port"]
 
-    return list(merged.values())
+    # ------------------------------------------------------------------
+    # Consolidamento per PORTA FISICA: CDP e LLDP sulla stessa porta descrivono
+    # lo STESSO vicino, a volte con nomi diversi (es. hostname via LLDP,
+    # MAC/seriale via CDP). Si fondono in un'unica entry per non duplicare il
+    # nodo, registrando i nomi/versioni alternativi (name_options) per l'eventuale
+    # scelta dell'utente. Le porte aggregate o sconosciute non si consolidano.
+    by_port: dict = {}
+    singles: list = []
+    for n in merged.values():
+        lp = (n.get("local_port") or "").strip()
+        # La chiave usa l'interfaccia NORMALIZZATA così "GigabitEthernet1/0/34"
+        # (CDP) e "Gi1/0/34" (LLDP) ricadono sulla stessa porta fisica.
+        norm = _normalize_iface(lp)
+        if not lp or lp.lower() == "unknown" or _is_portchannel_port(lp):
+            singles.append(n)
+        else:
+            by_port.setdefault(norm, []).append(n)
+
+    def _looks_like_mac(name: str) -> bool:
+        s = re.sub(r'[.:\-]', '', (name or '')).lower()
+        return bool(re.fullmatch(r'[0-9a-f]{12}', s))
+
+    final: list = []
+    for group in by_port.values():
+        if len(group) == 1:
+            final.append(group[0])
+            continue
+        # Canonico: preferisci un hostname leggibile (non MAC), poi chi ha versione/IP.
+        group.sort(
+            key=lambda e: (
+                0 if _looks_like_mac(e["neighbor_id"]) else 1,
+                1 if e.get("version") else 0,
+                1 if e.get("neighbor_ip") else 0,
+            ),
+            reverse=True,
+        )
+        canonical = dict(group[0])
+        options = {}  # nome -> versione (dedup per nome, mantiene la prima versione utile)
+        for e in group:
+            nm = e["neighbor_id"]
+            if nm not in options or (not options[nm] and e.get("version")):
+                options[nm] = e.get("version")
+        for other in group[1:]:
+            for fld in ("neighbor_ip", "version", "platform", "capabilities",
+                        "vtp_domain", "description", "remote_port"):
+                if other.get(fld) and not canonical.get(fld):
+                    canonical[fld] = other[fld]
+        # Conflitto reale solo se i NOMI differiscono: in tal caso l'utente sceglie.
+        if len(options) > 1:
+            canonical["name_options"] = [{"name": k, "version": v} for k, v in options.items()]
+        final.append(canonical)
+
+    final.extend(singles)
+    return final
 
 
 # Pattern dei nomi di interfaccia aggregata (Port-Channel / LAG / bundle) per i
@@ -931,11 +984,30 @@ def get_portchannel_report(group_filter=None) -> list:
                 continue
             summary = parse_portchannel_summary(content)
             hostname = extract_hostname_from_config(content) or fn[:-4].rsplit('-', 1)[0]
+
+            # Vicino connesso a ciascuna interfaccia (da CDP/LLDP), per attribuire
+            # un nome di device al Port-channel.
+            neigh_by_port = {}
+            for nb in parse_cdp_lldp_neighbors(content):
+                lp = _normalize_iface(nb.get("local_port") or "")
+                if lp and nb.get("neighbor_id"):
+                    neigh_by_port.setdefault(lp, nb["neighbor_id"])
+
+            pcs = []
+            for po, members in summary["portchannels"].items():
+                neighbors = []
+                for m in members:
+                    nm = neigh_by_port.get(_normalize_iface(m))
+                    base = nm.split('.')[0] if nm and '.' in nm else nm
+                    if base and base not in neighbors:
+                        neighbors.append(base)
+                pcs.append({"name": po, "members": members, "neighbors": neighbors})
+
             report.append({
                 "ip": ip,
                 "hostname": hostname,
                 "group": group,
-                "portchannels": summary["portchannels"],
+                "portchannels": pcs,
                 "singles": summary["singles"],
             })
     report.sort(key=lambda r: r["hostname"].lower())
@@ -1098,6 +1170,7 @@ def generate_network_map(group_filter=None) -> dict:
                     "vtp_domain":  neigh_dom,
                     "platform":    neigh_plat,
                     "model":       extract_model(neigh_plat or "", neigh_desc or ""),
+                    "name_options": neigh.get("name_options"),
                 }
             else:
                 node = nodes_map[target_ip]
@@ -1193,6 +1266,17 @@ def generate_network_map(group_filter=None) -> dict:
             "pc_names":       pc_names,
             "member_count":   member_count,
         })
+
+    # Override manuali di nome/versione scelti dall'utente per risolvere i
+    # conflitti CDP/LLDP (stesso device, nomi diversi sulla stessa porta).
+    for node_id, a in category_assignments.items():
+        node = nodes_map.get(node_id)
+        if not node:
+            continue
+        if a.get("name"):
+            node["label"] = a["name"]
+        if a.get("ver"):
+            node["version"] = a["ver"]
 
     nodes = list(nodes_map.values())
 

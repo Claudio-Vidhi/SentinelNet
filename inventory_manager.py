@@ -294,7 +294,7 @@ def set_device_category(node_id: str, category: str, subcategory: str = "") -> b
         safe_json_write(CATEGORIES_FILE, data)
         return True
 
-_META_FIELDS = ("category", "subcategory", "vendor", "model", "ha_group")
+_META_FIELDS = ("category", "subcategory", "vendor", "model", "ha_group", "name", "ver")
 
 def migrate_assignment(old_id: str, new_id: str):
     """Sposta l'assegnazione manuale da un id-nodo a un altro (es. quando un

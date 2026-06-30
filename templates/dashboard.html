@@ -196,6 +196,25 @@
       cursor: pointer;
     }
 
+    /* Input generico coerente con la UI (per form fuori da .form-group) */
+    .ui-input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+    .ui-input::placeholder { color: var(--text-muted); }
+    .ui-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
     .form-group input:focus, .form-group select:focus {
       outline: none;
       border-color: var(--primary);
@@ -1108,16 +1127,16 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items:end;">
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatExisting">Categoria esistente (o nuova)</label>
-            <input id="newCatKey" list="catKeyList" type="text" placeholder="es. iot, ups, nas" style="width:100%;">
+            <input id="newCatKey" class="ui-input" list="catKeyList" type="text" placeholder="es. iot, ups, nas">
             <datalist id="catKeyList"></datalist>
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatLabel">Etichetta (solo nuova categoria)</label>
-            <input id="newCatLabel" type="text" placeholder="es. Dispositivi IoT" style="width:100%;">
+            <input id="newCatLabel" class="ui-input" type="text" placeholder="es. Dispositivi IoT">
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewSubcat">Sottocategoria (opzionale)</label>
-            <input id="newSubcat" type="text" placeholder="es. videosorveglianza" style="width:100%;">
+            <input id="newSubcat" class="ui-input" type="text" placeholder="es. videosorveglianza">
           </div>
           <button class="btn btn-primary btn-small" onclick="createCategory()" style="width:auto; margin:0; background:#5ecf8d; color:#000;" data-i18n="btnCreateCategory">
             <i class="fa-solid fa-plus"></i> Crea
@@ -1951,6 +1970,73 @@
             ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
+    // ===== Ordinamento generico colonne per TUTTE le tabelle =====
+    // Click sull'intestazione: ordina crescente/decrescente. Le celle editabili
+    // (input/select) ordinano per valore del campo.
+    function _cellSortValue(td) {
+        if (!td) return '';
+        const f = td.querySelector('input, select');
+        return f ? String(f.value || '').trim() : td.textContent.trim();
+    }
+    function sortTableByColumn(table, colIdx, th) {
+        const tbody = table.tBodies[0];
+        if (!tbody) return;
+        const asc = th.getAttribute('data-sort-asc') !== 'true';
+        Array.from(table.tHead.rows[0].cells).forEach(c => {
+            c.removeAttribute('data-sort-asc');
+            const i = c.querySelector('.sort-ind');
+            if (i) { i.textContent = ' ⇅'; i.style.opacity = '0.35'; }
+        });
+        th.setAttribute('data-sort-asc', asc ? 'true' : 'false');
+        const ind = th.querySelector('.sort-ind');
+        if (ind) { ind.textContent = asc ? ' ▲' : ' ▼'; ind.style.opacity = '1'; }
+        const rows = Array.from(tbody.rows);
+        rows.sort((a, b) => {
+            const x = _cellSortValue(a.cells[colIdx]);
+            const y = _cellSortValue(b.cells[colIdx]);
+            const c = x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' });
+            return asc ? c : -c;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    }
+    function makeTableSortable(table) {
+        if (!table || table.dataset.sortable === '1') return;
+        if (!table.tHead || !table.tHead.rows.length) return;
+        table.dataset.sortable = '1';
+        Array.from(table.tHead.rows[0].cells).forEach((th, idx) => {
+            if (th.dataset.noSort === '1') return;
+            th.style.cursor = 'pointer';
+            th.style.userSelect = 'none';
+            if (!th.querySelector('.sort-ind')) {
+                const s = document.createElement('span');
+                s.className = 'sort-ind';
+                s.textContent = ' ⇅';
+                s.style.opacity = '0.35';
+                s.style.fontSize = '10px';
+                th.appendChild(s);
+            }
+            th.addEventListener('click', () => sortTableByColumn(table, idx, th));
+        });
+    }
+    function enhanceAllTables(root) {
+        (root || document).querySelectorAll('table').forEach(makeTableSortable);
+    }
+    function initSortableTables() {
+        enhanceAllTables(document);
+        const obs = new MutationObserver(muts => {
+            for (const m of muts) {
+                for (const node of m.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    if (node.tagName === 'TABLE') makeTableSortable(node);
+                    else if (node.querySelectorAll) node.querySelectorAll('table').forEach(makeTableSortable);
+                }
+            }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSortableTables);
+    else initSortableTables();
+
     // Abbrevia un nome di interfaccia per le etichette compatte sui link
     // (es. "Ethernet0/1" → "Et0/1", "GigabitEthernet1/0/1" → "Gi1/0/1").
     function shortIface(name) {
@@ -2590,21 +2676,27 @@
             const res = await apiFetch('/api/portchannels?group=' + encodeURIComponent(selectedGroup || 'all'));
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
-            const devices = (data.devices || []).filter(d => Object.keys(d.portchannels).length);
+            const devices = (data.devices || []).filter(d => (d.portchannels || []).length);
             if (!devices.length) {
                 box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No Port-Channel data (run a triage first).':'Nessun dato Port-Channel (esegui prima un triage).'}</p>`;
                 return;
             }
+            const toText = currentLang==='en' ? 'to' : 'verso';
             box.innerHTML = devices.map(d => {
-                const pcNames = Object.keys(d.portchannels).sort((a,b)=>{
-                    const na=parseInt(a.replace(/\D/g,''))||0, nb=parseInt(b.replace(/\D/g,''))||0; return na-nb;
+                const pcs = (d.portchannels || []).slice().sort((a,b)=>{
+                    const na=parseInt(String(a.name).replace(/\D/g,''))||0, nb=parseInt(String(b.name).replace(/\D/g,''))||0; return na-nb;
                 });
-                const pcHtml = pcNames.length ? pcNames.map(po => `
-                    <div style="margin-bottom:6px;">
-                        <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po)}</span>
-                        <span style="font-family:var(--font-code); font-size:12px; color:var(--success);">${d.portchannels[po].map(escapeHtml).join(', ')}</span>
-                        <span style="font-size:11px; color:var(--text-muted);"> (${d.portchannels[po].length} ${currentLang==='en'?'members':'membri'})</span>
-                    </div>`).join('')
+                const pcHtml = pcs.length ? pcs.map(po => {
+                    const neigh = (po.neighbors && po.neighbors.length)
+                        ? `<span style="font-size:11px; color:var(--primary);"> <i class="fa-solid fa-arrow-right-long"></i> ${toText} <strong>${po.neighbors.map(escapeHtml).join(', ')}</strong></span>`
+                        : `<span style="font-size:11px; color:var(--text-muted);"> <i class="fa-solid fa-arrow-right-long"></i> ${currentLang==='en'?'unknown neighbor':'vicino sconosciuto'}</span>`;
+                    return `<div style="margin-bottom:6px;">
+                        <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po.name)}</span>
+                        <span style="font-family:var(--font-code); font-size:12px; color:var(--success);">${(po.members||[]).map(escapeHtml).join(', ')}</span>
+                        <span style="font-size:11px; color:var(--text-muted);"> (${(po.members||[]).length} ${currentLang==='en'?'members':'membri'})</span>
+                        ${neigh}
+                    </div>`;
+                }).join('')
                     : `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No Port-Channels.':'Nessun Port-Channel.'}</div>`;
                 return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px;">
                     <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span></h4>
@@ -2891,9 +2983,11 @@
         // Filtra i nodi: terminali (server/telefoni/PC) e access point sono nascosti
         // di default, lasciando in mappa solo switch e router.
         const filteredNodesData = data.nodes.filter(n => {
-            // I dispositivi scoperti (CDP/LLDP) sono nascosti di default per non
-            // "sporcare" la mappa principale: si mostrano solo col toggle attivo.
-            if (!showDiscovered && n.status === 'discovered') return false;
+            // I dispositivi scoperti (CDP/LLDP) sono governati SOLO dal toggle
+            // "Mostra Scoperti": se attivo si vedono tutti (anche AP/terminali
+            // scoperti), altrimenti nessuno. Così "Mostra Scoperti" non viene
+            // annullato dai filtri per tipo (che valgono solo per i gestiti).
+            if (n.status === 'discovered') return showDiscovered;
             if (!showEndDevices && (n.device_type === 'phone' || n.device_type === 'server' || n.device_type === 'pc')) return false;
             if (!showAccessPoints && n.device_type === 'ap') return false;
             return true;
@@ -3283,8 +3377,11 @@
             const meta = deviceTypeMeta(effVal(n, 'category'));
             const td = (inner, extra='') => `<td style="padding:6px 8px; ${extra}">${inner}</td>`;
             switch (col.key) {
-                case 'hostname':
-                    return td(`<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}`);
+                case 'hostname': {
+                    const conflictIcon = (canWrite && n.name_options && n.name_options.length > 1)
+                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" onclick="openConflictModal('${escapeHtml(n.id)}')" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
+                    return td(`<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
+                }
                 case 'ip':
                     return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
                 case 'source': {
@@ -3428,7 +3525,14 @@
         const res = await apiFetch("/api/promote-device", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ node_id: nodeId, ip: n.display_ip, vendor, group: n.group })
+            body: JSON.stringify({
+                node_id: nodeId, ip: n.display_ip, vendor, group: n.group,
+                // Eredita ciò che è già stato scoperto via CDP/LLDP.
+                model: effVal(n,'model') || '',
+                version: n.version || '',
+                device_type: n.device_type || '',
+                hostname: n.label || ''
+            })
         });
         if (res && res.ok) {
             delete pendingEdits[nodeId];
@@ -3445,6 +3549,52 @@
             const e = res ? await res.json().catch(()=>({})) : {};
             alert(e.detail || (currentLang==='en'?'Promotion failed.':'Promozione non riuscita.'));
         }
+    }
+
+    // ===== Risoluzione conflitti CDP/LLDP (stesso device, nomi diversi) =====
+    function closeConflictModal() {
+        const m = document.getElementById('conflictModal');
+        if (m) m.remove();
+    }
+    function openConflictModal(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n || !n.name_options || n.name_options.length < 2) return;
+        const cur = n.label;
+        const rows = n.name_options.map(o => `
+            <label style="display:flex; gap:10px; align-items:center; padding:9px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; cursor:pointer;">
+                <input type="radio" name="confName" value="${attrEsc(o.name)}" data-ver="${attrEsc(o.version||'')}" ${o.name===cur?'checked':''} style="accent-color:var(--primary);">
+                <span style="font-weight:700;">${escapeHtml(o.name)}</span>
+                <span style="margin-left:auto; font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${o.version?escapeHtml(o.version):'—'}</span>
+            </label>`).join('');
+        const ov = document.createElement('div');
+        ov.id = 'conflictModal';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.innerHTML = `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(480px,92vw); box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <h3 style="font-size:16px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${currentLang==='en'?'Resolve CDP/LLDP conflict':'Risolvi conflitto CDP/LLDP'}</h3>
+                <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${currentLang==='en'?'The same device was discovered with different names. Choose the name and version to keep.':'Lo stesso dispositivo è stato rilevato con nomi diversi. Scegli nome e versione da mantenere.'}</p>
+                ${rows}
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
+                    <button onclick="closeConflictModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Cancel':'Annulla'}</button>
+                    <button onclick="confirmConflict('${escapeHtml(nodeId)}')" class="btn btn-primary btn-small" style="width:auto; margin:0; background:#5ecf8d; color:#000;">${currentLang==='en'?'Apply':'Applica'}</button>
+                </div>
+            </div>`;
+        ov.addEventListener('click', e => { if (e.target === ov) closeConflictModal(); });
+        document.body.appendChild(ov);
+    }
+    async function confirmConflict(nodeId) {
+        const sel = document.querySelector('#conflictModal input[name="confName"]:checked');
+        if (!sel) { closeConflictModal(); return; }
+        const name = sel.value;
+        const version = sel.getAttribute('data-ver') || '';
+        closeConflictModal();
+        const res = await apiFetch("/api/device-categories/assign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ node_id: nodeId, name, version })
+        });
+        if (res && res.ok) loadCategoriesData();
+        else alert(currentLang==='en'?'Failed to resolve conflict.':'Risoluzione conflitto non riuscita.');
     }
 
     async function createCategory() {
