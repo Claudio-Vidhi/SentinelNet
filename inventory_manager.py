@@ -215,7 +215,9 @@ def get_device_categories() -> dict:
     for key, label in BUILTIN_CATEGORIES.items():
         s = stored.get(key, {})
         categories[key] = {
-            "label": s.get("label", label),
+            # Le categorie predefinite usano sempre l'etichetta di sistema (non
+            # quella eventualmente salvata, che poteva essere corrotta col key).
+            "label": label,
             "builtin": True,
             "subcategories": sorted(s.get("subcategories", [])),
         }
@@ -240,8 +242,9 @@ def add_category(key: str, label: str, subcategory: str = "") -> bool:
     with _io_lock:
         data = _load_categories()
         cats = data["categories"]
+        default_label = BUILTIN_CATEGORIES.get(key, label.strip() or key)
         entry = cats.setdefault(key, {
-            "label": label.strip() or key,
+            "label": default_label,
             "subcategories": [],
         })
         if label.strip() and key not in BUILTIN_CATEGORIES:
@@ -291,7 +294,17 @@ def set_device_category(node_id: str, category: str, subcategory: str = "") -> b
         safe_json_write(CATEGORIES_FILE, data)
         return True
 
-_META_FIELDS = ("category", "subcategory", "vendor", "model")
+_META_FIELDS = ("category", "subcategory", "vendor", "model", "ha_group")
+
+def migrate_assignment(old_id: str, new_id: str):
+    """Sposta l'assegnazione manuale da un id-nodo a un altro (es. quando un
+    dispositivo scoperto viene promosso a gestito e cambia id in IP)."""
+    with _io_lock:
+        data = _load_categories()
+        a = data["assignments"].pop(old_id, None)
+        if a:
+            data["assignments"][new_id] = a
+            safe_json_write(CATEGORIES_FILE, data)
 
 def set_device_meta(node_id: str, **fields) -> bool:
     """Aggiorna in modo incrementale gli attributi manuali di un dispositivo
@@ -379,11 +392,25 @@ def resolve_euvd_term(vendor_display: str) -> str:
 
 # --- UTILITIES PER RILEVAMENTO VERSIONI (Richieste dal Core Engine e Server) ---
 
+def _clean_version(v):
+    """Normalizza una versione: tiene solo il primo token della prima riga, così
+    valori storici sporchi (es. '17.03.03\\nCisco IOS Software [Amsterdam]')
+    diventano '17.03.03'. Conserva parentesi/lettere ('15.2(4)E7')."""
+    if not v or not isinstance(v, str):
+        return v
+    first = v.splitlines()[0].strip()
+    m = re.match(r'^([\w().\-/]+)', first)
+    return m.group(1) if m else first
+
 def get_detected_versions():
     if os.path.exists(VERSION_DATA_FILE):
         try:
             with open(VERSION_DATA_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+            for info in data.values():
+                if isinstance(info, dict) and info.get('version'):
+                    info['version'] = _clean_version(info['version'])
+            return data
         except:
             return {}
     return {}

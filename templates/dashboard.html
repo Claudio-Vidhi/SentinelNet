@@ -420,6 +420,19 @@
       resize: none;
       border-radius: 0;
     }
+    /* Pulsante d'uscita visibile solo a schermo intero (la toolbar è fuori dal wrapper). */
+    #mapExitFs { display: none; }
+    #networkGraphWrapper.map-fullscreen #mapExitFs {
+      display: inline-flex;
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 10001;
+    }
+
+    /* Righe con modifiche non salvate nella tabella Dispositivi & Categorie */
+    tr.row-dirty { background: rgba(255, 184, 77, 0.07); }
+    tr.row-dirty td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
 
     /* Stile personalizzato per i Tooltip di Vis.js */
     div.vis-tooltip {
@@ -976,7 +989,7 @@
 
       <h3 style="margin-top: 22px; margin-bottom: 6px; font-size: 16px;"><i class="fa-solid fa-link" style="color: var(--warning);"></i> <span data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</span></h3>
       <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;" data-i18n="descPortchannels">
-        Elenco dei Port-Channel configurati su ogni switch con le interfacce membro, e delle interfacce fisiche singole non aggregate.
+        Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.
       </p>
       <div id="portchannelReport"></div>
     </div>
@@ -1038,6 +1051,7 @@
       </div>
 
       <div id="networkGraphWrapper" style="position: relative; flex-grow: 1;">
+        <button id="mapExitFs" class="btn btn-secondary btn-small" onclick="toggleMapFullscreen()" style="width:auto; margin:0;"><i class="fa-solid fa-compress"></i> <span data-i18n="btnExitFullscreen">Esci</span></button>
         <div id="networkGraphContainer"></div>
         <div class="network-legend">
           <div class="legend-item"><span class="led led-online"></span><span data-i18n="legendOnline">Dispositivo Online</span></div>
@@ -1063,6 +1077,12 @@
           </select>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn btn-primary btn-small requires-write" id="btnSaveCatEdits" onclick="saveCategoryEdits()" disabled style="width:auto; margin:0; background:#5ecf8d; color:#000; opacity:0.5;" data-i18n="btnSaveEdits">
+            <i class="fa-solid fa-floppy-disk"></i> Salva Modifiche
+          </button>
+          <button class="btn btn-secondary btn-small requires-write" id="btnDiscardCatEdits" onclick="discardCategoryEdits()" disabled style="width:auto; margin:0; opacity:0.5;" data-i18n="btnDiscardEdits">
+            <i class="fa-solid fa-rotate-left"></i> Annulla
+          </button>
           <details id="categoryColumnsMenu" style="position:relative;">
             <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
             <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
@@ -1413,6 +1433,9 @@
         btnRefreshCategories: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna',
         btnColumns: 'Colonne',
         btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Esporta CSV',
+        btnSaveEdits: '<i class="fa-solid fa-floppy-disk"></i> Salva Modifiche',
+        btnDiscardEdits: '<i class="fa-solid fa-rotate-left"></i> Annulla',
+        btnExitFullscreen: 'Esci',
         titleNewCategory: 'Nuova Categoria / Sottocategoria',
         lblNewCatExisting: 'Categoria esistente (o nuova)',
         lblNewCatLabel: 'Etichetta (solo nuova categoria)',
@@ -1466,7 +1489,7 @@
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topologia',
         descAdjacencyMap: "Il sistema estrae le relazioni di prossimità fisiche analizzando le tabelle dei vicini all'interno delle configurazioni di backup salvate.",
         titlePortchannels: "Port-Channel & Interfacce per Switch",
-        descPortchannels: "Elenco dei Port-Channel configurati su ogni switch con le interfacce membro, e delle interfacce fisiche singole non aggregate.",
+        descPortchannels: "Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.",
         txtTopologyWaiting: '> In attesa di elaborazione...',
         
         // Tab 4
@@ -1638,6 +1661,9 @@
         btnRefreshCategories: '<i class="fa-solid fa-arrows-rotate"></i> Refresh',
         btnColumns: 'Columns',
         btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Export CSV',
+        btnSaveEdits: '<i class="fa-solid fa-floppy-disk"></i> Save changes',
+        btnDiscardEdits: '<i class="fa-solid fa-rotate-left"></i> Discard',
+        btnExitFullscreen: 'Exit',
         titleNewCategory: 'New Category / Subcategory',
         lblNewCatExisting: 'Existing category (or new)',
         lblNewCatLabel: 'Label (new category only)',
@@ -1690,8 +1716,8 @@
         titleAdjacencyMap: "CDP/LLDP Adjacency List Topology Map (Deduced from Backups)",
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topology',
         descAdjacencyMap: "The system extracts physical adjacency relationships by analyzing neighbor tables inside saved backup configurations.",
-        titlePortchannels: "Port-Channels & Interfaces per Switch",
-        descPortchannels: "List of Port-Channels configured on each switch with their member interfaces, and standalone physical interfaces not in any aggregate.",
+        titlePortchannels: "Port-Channels per Switch",
+        descPortchannels: "List of Port-Channels configured on each switch with their member interfaces.",
         txtTopologyWaiting: '> Waiting for processing...',
         
         // Tab 4
@@ -2564,7 +2590,7 @@
             const res = await apiFetch('/api/portchannels?group=' + encodeURIComponent(selectedGroup || 'all'));
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
-            const devices = (data.devices || []).filter(d => Object.keys(d.portchannels).length || d.singles.length);
+            const devices = (data.devices || []).filter(d => Object.keys(d.portchannels).length);
             if (!devices.length) {
                 box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No Port-Channel data (run a triage first).':'Nessun dato Port-Channel (esegui prima un triage).'}</p>`;
                 return;
@@ -2580,16 +2606,9 @@
                         <span style="font-size:11px; color:var(--text-muted);"> (${d.portchannels[po].length} ${currentLang==='en'?'members':'membri'})</span>
                     </div>`).join('')
                     : `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No Port-Channels.':'Nessun Port-Channel.'}</div>`;
-                const singlesHtml = d.singles.length
-                    ? `<div style="margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
-                         <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">${currentLang==='en'?'Standalone interfaces':'Interfacce singole (non aggregate)'} (${d.singles.length})</div>
-                         <div style="font-family:var(--font-code); font-size:12px; color:var(--text); line-height:1.6;">${d.singles.map(escapeHtml).join(', ')}</div>
-                       </div>`
-                    : '';
                 return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px;">
                     <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span></h4>
                     ${pcHtml}
-                    ${singlesHtml}
                 </div>`;
             }).join('');
         } catch (e) {
@@ -2606,8 +2625,17 @@
         if (btn) btn.innerHTML = on
             ? '<i class="fa-solid fa-compress"></i> ' + (currentLang==='en'?'Exit Fullscreen':'Esci')
             : '<i class="fa-solid fa-expand"></i> ' + (currentLang==='en'?'Fullscreen':'Schermo Intero');
-        // Ridisegna la mappa nelle nuove dimensioni del contenitore.
-        setTimeout(() => { if (networkInstance) { networkInstance.redraw(); networkInstance.fit(); } }, 60);
+        document.body.style.overflow = on ? 'hidden' : '';
+        // Ridimensiona e ridisegna la mappa nelle nuove dimensioni del contenitore.
+        // setSize('','') forza vis a rileggere le dimensioni reali del container.
+        const resize = () => {
+            if (!networkInstance) return;
+            networkInstance.setSize('100%', '100%');
+            networkInstance.redraw();
+            networkInstance.fit();
+        };
+        requestAnimationFrame(() => requestAnimationFrame(resize));
+        setTimeout(resize, 250);
     }
     // ESC esce dalla modalità schermo intero.
     document.addEventListener("keydown", (e) => {
@@ -3092,6 +3120,7 @@
         { key: 'model',    it: 'Modello',   en: 'Model' },
         { key: 'version',  it: 'Versione',  en: 'Version' },
         { key: 'vtp',      it: 'VTP',       en: 'VTP' },
+        { key: 'ha',       it: 'HA',        en: 'HA' },
         { key: 'category', it: 'Categoria', en: 'Category', fixed: true },
     ];
     function colLabel(c) { return currentLang === 'en' ? c.en : c.it; }
@@ -3134,6 +3163,7 @@
 
         renderColumnsMenu();
         renderCategoriesPanel();
+        updateSaveBar();
     }
 
     function renderColumnsMenu() {
@@ -3166,7 +3196,36 @@
         return nodes;
     }
 
-    // Valore testuale di una cella (usato anche per l'export CSV).
+    // Modifiche in sospeso non ancora salvate: { node_id: { field: value } }.
+    // Le modifiche alla tabella NON vengono salvate in automatico: si applicano
+    // solo col pulsante "Salva Modifiche" (admin/operator).
+    let pendingEdits = {};
+
+    // Valore effettivo di un attributo: lo staged se presente, altrimenti il nodo.
+    function effVal(n, field) {
+        const p = pendingEdits[n.id];
+        if (p && Object.prototype.hasOwnProperty.call(p, field)) return p[field];
+        switch (field) {
+            case 'category': return n.device_type;
+            default: return n[field];
+        }
+    }
+    function stageEdit(nodeId, field, value) {
+        pendingEdits[nodeId] = pendingEdits[nodeId] || {};
+        pendingEdits[nodeId][field] = value;
+        const row = document.querySelector(`tr[data-node="${nodeId}"]`);
+        if (row) row.classList.add('row-dirty');
+        updateSaveBar();
+    }
+    function updateSaveBar() {
+        const n = Object.keys(pendingEdits).length;
+        const save = document.getElementById('btnSaveCatEdits');
+        const disc = document.getElementById('btnDiscardCatEdits');
+        [save, disc].forEach(b => { if (b) { b.disabled = !n; b.style.opacity = n ? '1' : '0.5'; } });
+        if (save) save.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save changes':'Salva Modifiche'}${n?` (${n})`:''}`;
+    }
+
+    // Valore testuale di una cella (usato anche per l'export CSV) — usa i valori salvati.
     function catCellValue(key, n) {
         switch (key) {
             case 'hostname': return n.label || '';
@@ -3176,6 +3235,7 @@
             case 'model':    return n.model || '';
             case 'version':  return n.version || '';
             case 'vtp':      return [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' / ');
+            case 'ha':       return n.ha_group || '';
             case 'category': return deviceTypeLabel(n.device_type) + (n.subcategory ? ' / ' + n.subcategory : '');
             default: return '';
         }
@@ -3220,28 +3280,33 @@
         ).join('');
 
         const cellHtml = (col, n) => {
-            const meta = deviceTypeMeta(n.device_type);
+            const meta = deviceTypeMeta(effVal(n, 'category'));
             const td = (inner, extra='') => `<td style="padding:6px 8px; ${extra}">${inner}</td>`;
             switch (col.key) {
                 case 'hostname':
                     return td(`<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}`);
                 case 'ip':
                     return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
-                case 'source':
-                    return td(n.discovered
+                case 'source': {
+                    const badge = n.discovered
                         ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:4px; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
-                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`);
+                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
+                    // Promozione di un dispositivo scoperto a gestito (operator/admin).
+                    const promote = (n.discovered && canWrite && n.display_ip)
+                        ? ` <button onclick="promoteDevice('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
+                    return td(badge + promote);
+                }
                 case 'vendor': {
-                    const v = (n.vendor && n.vendor !== 'discovered') ? n.vendor : '';
+                    const v = (function(){ const e = effVal(n,'vendor'); return (e && e !== 'discovered') ? e : ''; })();
                     return td(canWrite
-                        ? `<input list="catVendorDL" value="${attrEsc(v)}" onchange="assignDeviceVendor('${escapeHtml(n.id)}', this.value)" placeholder="—" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `<input list="catVendorDL" value="${attrEsc(v)}" onchange="stageEdit('${escapeHtml(n.id)}','vendor',this.value.trim())" placeholder="—" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(v||'—')}</span>`);
                 }
                 case 'model': {
-                    const vk = (n.vendor||'').toLowerCase();
+                    const vk = String(effVal(n,'vendor')||'').toLowerCase();
                     return td(canWrite
-                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(n.model||'')}" onchange="assignDeviceModel('${escapeHtml(n.id)}', '${attrEsc(n.vendor||'')}', this.value)" placeholder="—" style="width:140px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
-                        : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(n.model||'—')}</span>`);
+                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" onchange="stageModel('${escapeHtml(n.id)}', this.value.trim())" placeholder="—" style="width:140px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(effVal(n,'model')||'—')}</span>`);
                 }
                 case 'version':
                     return td(escapeHtml(n.version||'-'), 'font-size:12px; color:var(--text-muted);');
@@ -3249,17 +3314,26 @@
                     const v = [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · ');
                     return td(v ? `<span style="font-size:12px; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml(v)}</span>` : '<span style="color:var(--text-muted);">—</span>');
                 }
+                case 'ha': {
+                    const hg = effVal(n,'ha_group') || '';
+                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:#ff8c42; border:1px solid #ff8c42; border-radius:4px; padding:1px 4px; margin-right:4px;">HA</span>` : '';
+                    return td(canWrite
+                        ? `${badge}<input value="${attrEsc(hg)}" onchange="stageEdit('${escapeHtml(n.id)}','ha_group',this.value.trim())" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        : (hg ? `${badge}<span style="font-size:12px; color:#ff8c42;">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
+                }
                 case 'category': {
-                    const subs = (cats[n.device_type]?.subcategories) || [];
+                    const curCat = effVal(n, 'category');
+                    const curSub = effVal(n, 'subcategory') || '';
+                    const subs = (cats[curCat]?.subcategories) || [];
                     const ctrl = canWrite ? `
-                        <select onchange="assignDeviceCategory('${escapeHtml(n.id)}', this.value, this.closest('tr').querySelector('.subcat-sel').value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-                            ${categoryOptions(n.device_type)}
+                        <select onchange="stageCategory('${escapeHtml(n.id)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                            ${categoryOptions(curCat)}
                         </select>
-                        <select class="subcat-sel" onchange="assignDeviceCategory('${escapeHtml(n.id)}', '${escapeHtml(n.device_type)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; ${subs.length?'':'display:none;'}">
+                        <select class="subcat-sel" onchange="stageEdit('${escapeHtml(n.id)}','subcategory',this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; ${subs.length?'':'display:none;'}">
                             <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
-                            ${subs.map(s => `<option value="${escapeHtml(s)}"${s===n.subcategory?' selected':''}>${escapeHtml(s)}</option>`).join('')}
+                            ${subs.map(s => `<option value="${escapeHtml(s)}"${s===curSub?' selected':''}>${escapeHtml(s)}</option>`).join('')}
                         </select>`
-                        : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(n.device_type))}</span>${n.subcategory?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(n.subcategory)}</span>`:''}`;
+                        : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(curCat))}</span>${curSub?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(curSub)}</span>`:''}`;
                     return td(`<div style="display:flex; gap:6px; align-items:center;">${ctrl}</div>`);
                 }
                 default: return td('');
@@ -3268,7 +3342,7 @@
 
         const headHtml = cols.map(c => `<th style="padding:8px;">${colLabel(c)}</th>`).join('');
         listBox.innerHTML = vendorDL + modelDLs + Object.keys(byGroup).sort().map(g => {
-            const rows = byGroup[g].map(n => `<tr>${cols.map(c => cellHtml(c, n)).join('')}</tr>`).join("");
+            const rows = byGroup[g].map(n => `<tr data-node="${attrEsc(n.id)}" class="${pendingEdits[n.id]?'row-dirty':''}">${cols.map(c => cellHtml(c, n)).join('')}</tr>`).join("");
             return `<div style="margin-bottom:18px;">
                 <h4 style="font-size:14px; margin-bottom:8px;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)} <span style="color:var(--text-muted); font-weight:400;">(${byGroup[g].length})</span></h4>
                 <table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
@@ -3298,23 +3372,79 @@
         URL.revokeObjectURL(url);
     }
 
-    async function postDeviceMeta(nodeId, fields) {
-        const res = await apiFetch("/api/device-categories/assign", {
+    // Cambio categoria: azzera la sottocategoria (cambiano le opzioni) e ridisegna
+    // così il menù sottocategoria si aggiorna alla nuova categoria.
+    function stageCategory(nodeId, category) {
+        pendingEdits[nodeId] = pendingEdits[nodeId] || {};
+        pendingEdits[nodeId].category = category;
+        pendingEdits[nodeId].subcategory = "";
+        updateSaveBar();
+        renderCategoriesPanel();
+    }
+    // Modello: registra anche il vendor effettivo, così alla salvataggio il modello
+    // viene catalogato sotto il vendor corretto.
+    function stageModel(nodeId, model) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        pendingEdits[nodeId] = pendingEdits[nodeId] || {};
+        pendingEdits[nodeId].model = model;
+        const v = effVal(n, 'vendor');
+        if (v && v !== 'discovered') pendingEdits[nodeId].vendor = v;
+        const row = document.querySelector(`tr[data-node="${nodeId}"]`);
+        if (row) row.classList.add('row-dirty');
+        updateSaveBar();
+    }
+
+    async function saveCategoryEdits() {
+        const ids = Object.keys(pendingEdits);
+        if (!ids.length) return;
+        let failed = 0;
+        for (const id of ids) {
+            const res = await apiFetch("/api/device-categories/assign", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(Object.assign({ node_id: id }, pendingEdits[id]))
+            });
+            if (!(res && res.ok)) failed++;
+        }
+        pendingEdits = {};
+        if (failed) alert((currentLang==='en'?'Some changes failed: ':'Alcune modifiche non salvate: ') + failed);
+        await loadCategoriesData();
+        updateSaveBar();
+    }
+    function discardCategoryEdits() {
+        pendingEdits = {};
+        renderCategoriesPanel();
+        updateSaveBar();
+    }
+
+    async function promoteDevice(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n || !n.display_ip) { alert(currentLang==='en'?'No announced IP available.':'Nessun IP annunciato disponibile.'); return; }
+        const vendor = (effVal(n,'vendor') && effVal(n,'vendor') !== 'discovered') ? effVal(n,'vendor') : 'cisco';
+        const msg = currentLang==='en'
+            ? `Promote "${n.label}" (${n.display_ip}) to managed in site "${n.group}"? You can set credentials afterwards in Inventory.`
+            : `Promuovere "${n.label}" (${n.display_ip}) a gestito nella sede "${n.group}"? Le credenziali si impostano dopo, in Inventario.`;
+        if (!confirm(msg)) return;
+        const res = await apiFetch("/api/promote-device", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(Object.assign({ node_id: nodeId }, fields))
+            body: JSON.stringify({ node_id: nodeId, ip: n.display_ip, vendor, group: n.group })
         });
-        if (res && res.ok) loadCategoriesData();
-        else alert(currentLang==='en'?'Update failed.':'Aggiornamento non riuscito.');
-    }
-    function assignDeviceCategory(nodeId, category, subcategory) {
-        postDeviceMeta(nodeId, { category: category || "", subcategory: subcategory || "" });
-    }
-    function assignDeviceVendor(nodeId, vendor) {
-        postDeviceMeta(nodeId, { vendor: vendor.trim() });
-    }
-    function assignDeviceModel(nodeId, vendor, model) {
-        postDeviceMeta(nodeId, { vendor: (vendor||'').trim(), model: model.trim() });
+        if (res && res.ok) {
+            delete pendingEdits[nodeId];
+            await loadCategoriesData();
+            // Aggiorna la cache inventario così il nuovo gestito appare nel triage.
+            try {
+                const dres = await apiFetch('/api/local-devices');
+                if (dres && dres.ok) {
+                    const d = await dres.json();
+                    globalDevices = d.devices; globalGroups = d.groups; globalVersions = d.detected_versions;
+                }
+            } catch (e) {}
+        } else {
+            const e = res ? await res.json().catch(()=>({})) : {};
+            alert(e.detail || (currentLang==='en'?'Promotion failed.':'Promozione non riuscita.'));
+        }
     }
 
     async function createCategory() {
