@@ -291,6 +291,81 @@ def set_device_category(node_id: str, category: str, subcategory: str = "") -> b
         safe_json_write(CATEGORIES_FILE, data)
         return True
 
+_META_FIELDS = ("category", "subcategory", "vendor", "model")
+
+def set_device_meta(node_id: str, **fields) -> bool:
+    """Aggiorna in modo incrementale gli attributi manuali di un dispositivo
+    (category/subcategory/vendor/model). Stringa vuota = rimuove quel campo.
+    category='' riporta il dispositivo alla classificazione automatica."""
+    node_id = (node_id or '').strip()
+    if not node_id:
+        return False
+    provided = {k: v for k, v in fields.items() if k in _META_FIELDS and v is not None}
+    if not provided:
+        return False
+    with _io_lock:
+        data = _load_categories()
+        entry = dict(data["assignments"].get(node_id, {}))
+        for k, v in provided.items():
+            v = v.strip() if isinstance(v, str) else v
+            if k == "category" and v:
+                cat = _norm_cat_key(v)
+                valid = set(BUILTIN_CATEGORIES) | set(data["categories"])
+                if cat not in valid:
+                    return False
+                entry["category"] = cat
+            elif v:
+                entry[k] = v
+            else:
+                entry.pop(k, None)
+        if entry:
+            data["assignments"][node_id] = entry
+        else:
+            data["assignments"].pop(node_id, None)
+        safe_json_write(CATEGORIES_FILE, data)
+        return True
+
+# --- REGISTRO MODELLI (per vendor) ---
+
+MODELS_FILE = data_config.get_path("device_models.json")
+
+def get_models() -> dict:
+    """Ritorna {vendor_key: [model, ...]}."""
+    if os.path.exists(MODELS_FILE):
+        try:
+            with open(MODELS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def add_model(vendor: str, model: str) -> bool:
+    vendor = (vendor or '').strip().lower()
+    model = (model or '').strip()
+    if not vendor or not model:
+        return False
+    with _io_lock:
+        data = get_models()
+        lst = data.setdefault(vendor, [])
+        if model not in lst:
+            lst.append(model)
+            lst.sort()
+            safe_json_write(MODELS_FILE, data)
+        return True
+
+def delete_model(vendor: str, model: str) -> bool:
+    vendor = (vendor or '').strip().lower()
+    model = (model or '').strip()
+    with _io_lock:
+        data = get_models()
+        if vendor in data and model in data[vendor]:
+            data[vendor].remove(model)
+            if not data[vendor]:
+                data.pop(vendor)
+            safe_json_write(MODELS_FILE, data)
+            return True
+    return False
+
 def resolve_euvd_term(vendor_display: str) -> str:
     """Maps a vendor display name to the correct EUVD search term."""
     vendors = get_all_vendors()

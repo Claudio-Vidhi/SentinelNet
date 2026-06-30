@@ -468,6 +468,60 @@ def extract_version(text: str) -> str | None:
     return m.group(1).strip().strip('.,);')
 
 
+# Indizi vendor da Platform/Description/hostname (CDP/LLDP). Ritorna la chiave
+# vendor (coerente con il registro vendors) oppure None.
+def guess_vendor(platform: str = "", description: str = "", hostname: str = "") -> str | None:
+    text = " ".join(filter(None, [platform, description, hostname])).lower()
+    if not text.strip():
+        return None
+    if "forti" in text:
+        return "fortinet"
+    if "palo" in text or "pan-os" in text or "panos" in text or re.search(r'\bpa-\d', text):
+        return "paloalto"
+    if "aruba" in text:
+        return "aruba"
+    if "procurve" in text or "hpe" in text or re.search(r'\bhp\b', text):
+        return "hpe"
+    if "juniper" in text or "junos" in text or re.search(r'\b(srx|ex\d|mx\d|qfx)\b', text):
+        return "juniper"
+    if ("cisco" in text or "catalyst" in text or "nexus" in text
+            or re.search(r'\b(air-|ws-c|c9\d|n9k)', text)):
+        return "cisco"
+    return None
+
+
+# Modello apparato da Platform (CDP) o System Description (LLDP).
+#   "cisco WS-C3750E-24TD"  -> "WS-C3750E-24TD"
+#   "AIR-CT3504-K9"         -> "AIR-CT3504-K9"
+#   "FortiGate-120G v7.4.11" -> "FortiGate-120G"
+def extract_model(platform: str = "", description: str = "") -> str | None:
+    if platform:
+        p = re.sub(r'^(cisco|juniper|aruba|hpe|hp|fortinet|palo\s?alto)\s+',
+                   '', platform.strip(), flags=re.IGNORECASE)
+        p = p.split(',')[0].strip()
+        if p:
+            return p
+    if description:
+        m = re.search(r'\b([A-Za-z][A-Za-z0-9]*-[A-Za-z0-9][\w/-]*)', description)
+        if m:
+            return m.group(1)
+    return None
+
+
+# Modello dal backup dell'apparato stesso (best-effort, multi-vendor).
+def extract_model_from_backup(content: str) -> str | None:
+    for pat in (
+        r'Model [Nn]umber\s*:\s*(\S+)',
+        r'^\s*Model\s*:\s*(\S+)',
+        r'cisco\s+(\S+)\s*\([^)]*\)\s*processor',
+        r'Hardware:\s*(\S+)',
+    ):
+        m = re.search(pat, content, re.IGNORECASE | re.MULTILINE)
+        if m:
+            return m.group(1).strip().strip(',')
+    return None
+
+
 def parse_vtp_status(content: str) -> tuple[str | None, str | None]:
     """Estrae (vtp_mode, vtp_domain) dall'apparato stesso: prima da
     'show vtp status', poi dalla running-config, infine dal dominio VTP più
@@ -810,6 +864,84 @@ def parse_channel_groups(config: str) -> dict:
     return mapping
 
 
+# Pattern di interfacce fisiche (escludono SVI/Vlan/Loopback/Tunnel/Port-channel).
+_PHYS_IFACE_RE = re.compile(
+    r'^(?:Gigabit|TenGigabit|TwentyFiveGig|FortyGigabit|HundredGig|Fast|TwoGigabit)?'
+    r'Ethernet[\d/.]+$|^(?:Gi|Te|Twe|Fo|Hu|Fa|Eth|Et)[\d/.]+$',
+    re.IGNORECASE,
+)
+
+
+def parse_portchannel_summary(config: str) -> dict:
+    """Riassume i Port-channel di un apparato (Cisco IOS/IOS-XE):
+      - portchannels: {nome Po: [interfacce membro]}
+      - singles: interfacce fisiche NON in alcun Port-channel
+    Letto dai blocchi 'interface' della running-config (channel-group N)."""
+    portchannels: dict = {}
+    singles: list = []
+    members_seen: set = set()
+    current_iface = None
+    for line in config.splitlines():
+        m = re.match(r'^interface\s+(\S+)', line)
+        if m:
+            current_iface = m.group(1)
+            continue
+        if current_iface:
+            cg = re.search(r'channel-group\s+(\d+)', line)
+            if cg:
+                po = f"Port-channel{cg.group(1)}"
+                portchannels.setdefault(po, []).append(current_iface)
+                members_seen.add(current_iface)
+    # Seconda passata: interfacce fisiche dichiarate ma non membri di un aggregato.
+    for line in config.splitlines():
+        m = re.match(r'^interface\s+(\S+)', line)
+        if m:
+            name = m.group(1)
+            if name in members_seen:
+                continue
+            if _PHYS_IFACE_RE.match(name) and name not in singles:
+                singles.append(name)
+    return {"portchannels": portchannels, "singles": singles}
+
+
+def get_portchannel_report(group_filter=None) -> list:
+    """Report Port-channel per apparato (per il tab Adjacency List). Legge i backup
+    e ritorna [{ip, hostname, group, portchannels, singles}], filtrato per gruppo."""
+    devices = get_all_devices()
+    ip_to_device = {d['IP']: d for d in devices}
+    report = []
+    if not os.path.exists(BACKUP_FOLDER):
+        return report
+    for root, _dirs, files in os.walk(BACKUP_FOLDER):
+        for fn in files:
+            if not fn.endswith('.txt'):
+                continue
+            ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', fn)
+            if not ip_match:
+                continue
+            ip = ip_match.group(1)
+            dev = ip_to_device.get(ip, {})
+            group = dev.get('Group', 'Generale')
+            if group_filter and group_filter != "all" and group != group_filter:
+                continue
+            try:
+                with open(os.path.join(root, fn), 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+            except Exception:
+                continue
+            summary = parse_portchannel_summary(content)
+            hostname = extract_hostname_from_config(content) or fn[:-4].rsplit('-', 1)[0]
+            report.append({
+                "ip": ip,
+                "hostname": hostname,
+                "group": group,
+                "portchannels": summary["portchannels"],
+                "singles": summary["singles"],
+            })
+    report.sort(key=lambda r: r["hostname"].lower())
+    return report
+
+
 def generate_network_map(group_filter=None) -> dict:
     """Scansiona backup-config e genera nodi + link per la mappa topologica."""
     devices      = get_all_devices()
@@ -886,6 +1018,7 @@ def generate_network_map(group_filter=None) -> dict:
             "version":     versions.get(ip, {}).get("version"),
             "vtp_mode":    pinfo.get("vtp_mode"),
             "vtp_domain":  pinfo.get("vtp_domain"),
+            "model":       extract_model_from_backup(pinfo.get("content", "")) if pinfo else None,
         }
 
     # Arricchisci la mappa hostname→IP con gli hostname noti dall'inventario
@@ -947,21 +1080,24 @@ def generate_network_map(group_filter=None) -> dict:
             if target_ip not in nodes_map:
                 # Crea nodo scoperto: tipo dedotto da Platform/Capabilities (CDP) e
                 # System Description (LLDP), version e dominio VTP se disponibili.
+                # Il nodo eredita il gruppo/sede dell'apparato che lo ha scoperto.
                 auto_type = classify_device_type(
                     base_neigh_id, neigh_desc or "", neigh_plat or "", neigh_caps or ""
                 )
+                source_group = ip_to_device.get(ip, {}).get('Group', 'Generale')
                 nodes_map[target_ip] = {
                     "id":          target_ip,
                     "label":       base_neigh_id,
-                    "group":       "Discovered",
+                    "group":       source_group,
                     "status":      "discovered",
                     "device_type": apply_category(target_ip, auto_type),
-                    "vendor":      "discovered",
+                    "vendor":      guess_vendor(neigh_plat or "", neigh_desc or "", base_neigh_id) or "discovered",
                     "version":     neigh_ver,
                     # IP annunciato via CDP/LLDP (può differire dall'IP del nodo)
                     "reported_ip": neigh_ip,
                     "vtp_domain":  neigh_dom,
                     "platform":    neigh_plat,
+                    "model":       extract_model(neigh_plat or "", neigh_desc or ""),
                 }
             else:
                 node = nodes_map[target_ip]
@@ -976,6 +1112,14 @@ def generate_network_map(group_filter=None) -> dict:
                     node["reported_ip"] = neigh_ip
                 if neigh_dom and not node.get("vtp_domain"):
                     node["vtp_domain"] = neigh_dom
+                # Modello/piattaforma di un nodo inventariato ricavati dal CDP di un
+                # vicino (un apparato non annuncia la propria platform a se stesso).
+                if neigh_plat and not node.get("platform"):
+                    node["platform"] = neigh_plat
+                if not node.get("model"):
+                    mdl = extract_model(neigh_plat or "", neigh_desc or "")
+                    if mdl:
+                        node["model"] = mdl
 
             # --- Riconoscimento aggregato (Port-Channel) sul membro corrente ---
             # Si conta SOLO l'interfaccia locale del dispositivo che riporta: è

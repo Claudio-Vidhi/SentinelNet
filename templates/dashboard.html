@@ -397,10 +397,28 @@
     #networkGraphContainer {
       width: 100%;
       height: 600px;
+      min-height: 300px;
       background: #090d13;
       border-radius: var(--radius);
       border: 1px solid var(--border);
       position: relative;
+      /* Ridimensionamento manuale dell'area mappa (trascina l'angolo in basso a destra) */
+      resize: vertical;
+      overflow: hidden;
+    }
+
+    /* Modalità schermo intero della mappa topologica */
+    #networkGraphWrapper.map-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #05080c;
+      padding: 12px;
+    }
+    #networkGraphWrapper.map-fullscreen #networkGraphContainer {
+      height: 100% !important;
+      resize: none;
+      border-radius: 0;
     }
 
     /* Stile personalizzato per i Tooltip di Vis.js */
@@ -955,6 +973,12 @@
         Il sistema estrae le relazioni di prossimità fisiche analizzando le tabelle dei vicini all'interno delle configurazioni di backup salvate.
       </p>
       <div id="topologyView" class="topology-container" data-i18n="txtTopologyWaiting">> In attesa di elaborazione...</div>
+
+      <h3 style="margin-top: 22px; margin-bottom: 6px; font-size: 16px;"><i class="fa-solid fa-link" style="color: var(--warning);"></i> <span data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</span></h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;" data-i18n="descPortchannels">
+        Elenco dei Port-Channel configurati su ogni switch con le interfacce membro, e delle interfacce fisiche singole non aggregate.
+      </p>
+      <div id="portchannelReport"></div>
     </div>
 
     <!-- TAB 4: Mappa Topologia 2D (Premium Vis.js) -->
@@ -978,6 +1002,12 @@
             <span data-i18n="lblShowAccessPoints">Mostra Access Point</span>
           </label>
 
+          <!-- Interruttore dispositivi scoperti (CDP/LLDP): nascosti di default -->
+          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
+            <input type="checkbox" id="toggleDiscovered" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #a3a3a3; cursor: pointer; border-radius: 4px;">
+            <span data-i18n="lblShowDiscovered">Mostra Scoperti</span>
+          </label>
+
           <!-- Interruttore evidenziazione link Port-Channel / LAG -->
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
             <input type="checkbox" id="togglePortChannel" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--warning); cursor: pointer; border-radius: 4px;">
@@ -990,11 +1020,6 @@
             <span data-i18n="lblVtpDomain">Dominio VTP</span>
           </label>
 
-          <!-- Interruttore modalità VTP: mostra Server/Client/Transparent -->
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleVtpMode" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #c792ea; cursor: pointer; border-radius: 4px;">
-            <span data-i18n="lblVtpMode">Modalità VTP</span>
-          </label>
         </div>
         <div style="display:flex; gap: 8px;">
           <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0; background: var(--danger); color: #fff;" data-i18n="btnResetTopology">
@@ -1006,10 +1031,13 @@
           <button class="btn btn-secondary btn-small" onclick="downloadTopology()" style="width:auto; margin:0;" data-i18n="btnDownloadMap">
             <i class="fa-solid fa-download"></i> Scarica Mappa
           </button>
+          <button class="btn btn-secondary btn-small" onclick="toggleMapFullscreen()" id="btnMapFullscreen" style="width:auto; margin:0;" data-i18n="btnMapFullscreen">
+            <i class="fa-solid fa-expand"></i> Schermo Intero
+          </button>
         </div>
       </div>
-      
-      <div style="position: relative; flex-grow: 1;">
+
+      <div id="networkGraphWrapper" style="position: relative; flex-grow: 1;">
         <div id="networkGraphContainer"></div>
         <div class="network-legend">
           <div class="legend-item"><span class="led led-online"></span><span data-i18n="legendOnline">Dispositivo Online</span></div>
@@ -1034,9 +1062,18 @@
             <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
           </select>
         </div>
-        <button class="btn btn-secondary btn-small" onclick="loadCategoriesData()" style="width:auto; margin:0;" data-i18n="btnRefreshCategories">
-          <i class="fa-solid fa-arrows-rotate"></i> Aggiorna
-        </button>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <details id="categoryColumnsMenu" style="position:relative;">
+            <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
+            <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+          </details>
+          <button class="btn btn-secondary btn-small" onclick="exportCategoriesCsv()" style="width:auto; margin:0;" data-i18n="btnExportCsv">
+            <i class="fa-solid fa-file-csv"></i> Esporta CSV
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="loadCategoriesData()" style="width:auto; margin:0;" data-i18n="btnRefreshCategories">
+            <i class="fa-solid fa-arrows-rotate"></i> Aggiorna
+          </button>
+        </div>
       </div>
       <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descCategories">
         Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.
@@ -1374,6 +1411,8 @@
         descCategories: 'Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.',
         optCatAll: 'Tutte le categorie',
         btnRefreshCategories: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna',
+        btnColumns: 'Colonne',
+        btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Esporta CSV',
         titleNewCategory: 'Nuova Categoria / Sottocategoria',
         lblNewCatExisting: 'Categoria esistente (o nuova)',
         lblNewCatLabel: 'Etichetta (solo nuova categoria)',
@@ -1426,6 +1465,8 @@
         titleAdjacencyMap: "Mappa Topologica Adjacency List (Deducibile dai Backup)",
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topologia',
         descAdjacencyMap: "Il sistema estrae le relazioni di prossimità fisiche analizzando le tabelle dei vicini all'interno delle configurazioni di backup salvate.",
+        titlePortchannels: "Port-Channel & Interfacce per Switch",
+        descPortchannels: "Elenco dei Port-Channel configurati su ogni switch con le interfacce membro, e delle interfacce fisiche singole non aggregate.",
         txtTopologyWaiting: '> In attesa di elaborazione...',
         
         // Tab 4
@@ -1434,7 +1475,8 @@
         lblShowAccessPoints: "Mostra Access Point",
         lblHighlightPortChannel: "Evidenzia Port-Channel",
         lblVtpDomain: "Dominio VTP",
-        lblVtpMode: "Modalità VTP",
+        lblShowDiscovered: "Mostra Scoperti",
+        btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Schermo Intero',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
         legendOnline: "Dispositivo Online",
@@ -1594,6 +1636,8 @@
         descCategories: 'Per-category count of inventoried and CDP/LLDP-discovered devices. Operators and admins can manually reclassify devices and create new categories/subcategories.',
         optCatAll: 'All categories',
         btnRefreshCategories: '<i class="fa-solid fa-arrows-rotate"></i> Refresh',
+        btnColumns: 'Columns',
+        btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Export CSV',
         titleNewCategory: 'New Category / Subcategory',
         lblNewCatExisting: 'Existing category (or new)',
         lblNewCatLabel: 'Label (new category only)',
@@ -1646,6 +1690,8 @@
         titleAdjacencyMap: "CDP/LLDP Adjacency List Topology Map (Deduced from Backups)",
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topology',
         descAdjacencyMap: "The system extracts physical adjacency relationships by analyzing neighbor tables inside saved backup configurations.",
+        titlePortchannels: "Port-Channels & Interfaces per Switch",
+        descPortchannels: "List of Port-Channels configured on each switch with their member interfaces, and standalone physical interfaces not in any aggregate.",
         txtTopologyWaiting: '> Waiting for processing...',
         
         // Tab 4
@@ -1654,7 +1700,8 @@
         lblShowAccessPoints: "Show Access Points",
         lblHighlightPortChannel: "Highlight Port-Channel",
         lblVtpDomain: "VTP Domain",
-        lblVtpMode: "VTP Mode",
+        lblShowDiscovered: "Show Discovered",
+        btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Fullscreen',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
         legendOnline: "Device Online",
@@ -2505,7 +2552,70 @@
         } catch(e) {
             view.innerHTML = `${i18n[currentLang].txtTopologyError}${e}`;
         }
+        loadPortchannelReport(selectedGroup);
     }
+
+    // Riquadro Port-Channel per switch: aggregati + interfacce membro e interfacce
+    // fisiche singole non aggregate (stile elenco).
+    async function loadPortchannelReport(selectedGroup) {
+        const box = document.getElementById("portchannelReport");
+        if (!box) return;
+        try {
+            const res = await apiFetch('/api/portchannels?group=' + encodeURIComponent(selectedGroup || 'all'));
+            if (!res || !res.ok) { box.innerHTML = ''; return; }
+            const data = await res.json();
+            const devices = (data.devices || []).filter(d => Object.keys(d.portchannels).length || d.singles.length);
+            if (!devices.length) {
+                box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No Port-Channel data (run a triage first).':'Nessun dato Port-Channel (esegui prima un triage).'}</p>`;
+                return;
+            }
+            box.innerHTML = devices.map(d => {
+                const pcNames = Object.keys(d.portchannels).sort((a,b)=>{
+                    const na=parseInt(a.replace(/\D/g,''))||0, nb=parseInt(b.replace(/\D/g,''))||0; return na-nb;
+                });
+                const pcHtml = pcNames.length ? pcNames.map(po => `
+                    <div style="margin-bottom:6px;">
+                        <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po)}</span>
+                        <span style="font-family:var(--font-code); font-size:12px; color:var(--success);">${d.portchannels[po].map(escapeHtml).join(', ')}</span>
+                        <span style="font-size:11px; color:var(--text-muted);"> (${d.portchannels[po].length} ${currentLang==='en'?'members':'membri'})</span>
+                    </div>`).join('')
+                    : `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No Port-Channels.':'Nessun Port-Channel.'}</div>`;
+                const singlesHtml = d.singles.length
+                    ? `<div style="margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
+                         <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); margin-bottom:4px;">${currentLang==='en'?'Standalone interfaces':'Interfacce singole (non aggregate)'} (${d.singles.length})</div>
+                         <div style="font-family:var(--font-code); font-size:12px; color:var(--text); line-height:1.6;">${d.singles.map(escapeHtml).join(', ')}</div>
+                       </div>`
+                    : '';
+                return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px;">
+                    <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span></h4>
+                    ${pcHtml}
+                    ${singlesHtml}
+                </div>`;
+            }).join('');
+        } catch (e) {
+            box.innerHTML = '';
+        }
+    }
+
+    // Schermo intero della mappa topologica (toggle classe CSS sul wrapper).
+    function toggleMapFullscreen() {
+        const wrap = document.getElementById("networkGraphWrapper");
+        const btn = document.getElementById("btnMapFullscreen");
+        if (!wrap) return;
+        const on = wrap.classList.toggle("map-fullscreen");
+        if (btn) btn.innerHTML = on
+            ? '<i class="fa-solid fa-compress"></i> ' + (currentLang==='en'?'Exit Fullscreen':'Esci')
+            : '<i class="fa-solid fa-expand"></i> ' + (currentLang==='en'?'Fullscreen':'Schermo Intero');
+        // Ridisegna la mappa nelle nuove dimensioni del contenitore.
+        setTimeout(() => { if (networkInstance) { networkInstance.redraw(); networkInstance.fit(); } }, 60);
+    }
+    // ESC esce dalla modalità schermo intero.
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            const wrap = document.getElementById("networkGraphWrapper");
+            if (wrap && wrap.classList.contains("map-fullscreen")) toggleMapFullscreen();
+        }
+    });
 
     // --- VIS.JS TOPOLOGY GRAPH VIEW ---
 
@@ -2601,7 +2711,6 @@
             badgeColor = vtpDomainColor(vtp.domain);
             borderGradStart = badgeColor;
         }
-        if (vtp.showMode && vtp.mode) vtpParts.push("VTP:" + vtp.mode);
         if (vtpParts.length) badgeText = vtpParts.join(" · ");
 
         // Carica icone vettoriali moderne basate sulla tipologia di apparato
@@ -2747,13 +2856,16 @@
         const showAccessPoints = document.getElementById("toggleAccessPoints")?.checked || false;
         const highlightPC      = document.getElementById("togglePortChannel")?.checked || false;
         const showVtpDomain    = document.getElementById("toggleVtpDomain")?.checked || false;
-        const showVtpMode      = document.getElementById("toggleVtpMode")?.checked || false;
+        const showDiscovered   = document.getElementById("toggleDiscovered")?.checked || false;
 
         renderDeviceTypeLegend();
 
         // Filtra i nodi: terminali (server/telefoni/PC) e access point sono nascosti
         // di default, lasciando in mappa solo switch e router.
         const filteredNodesData = data.nodes.filter(n => {
+            // I dispositivi scoperti (CDP/LLDP) sono nascosti di default per non
+            // "sporcare" la mappa principale: si mostrano solo col toggle attivo.
+            if (!showDiscovered && n.status === 'discovered') return false;
             if (!showEndDevices && (n.device_type === 'phone' || n.device_type === 'server' || n.device_type === 'pc')) return false;
             if (!showAccessPoints && n.device_type === 'ap') return false;
             return true;
@@ -2773,7 +2885,7 @@
                 ? n.vendor
                 : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
 
-            const vtp = { domain: n.vtp_domain, mode: n.vtp_mode, showDomain: showVtpDomain, showMode: showVtpMode };
+            const vtp = { domain: n.vtp_domain, mode: n.vtp_mode, showDomain: showVtpDomain };
 
             return {
                 id: n.id,
@@ -2969,14 +3081,37 @@
     }
 
     // ===== Pannello Dispositivi & Categorie (classificazione manuale) =====
-    let categoriesData = { categories: {}, nodes: [], counts_by_category: {}, counts_by_group: {} };
+    let categoriesData = { categories: {}, nodes: [], counts_by_category: {}, counts_by_group: {}, vendors: [], models: {} };
+
+    // Colonne disponibili nella tabella Dispositivi & Categorie. 'fixed' = sempre visibile.
+    const CAT_COLUMNS = [
+        { key: 'hostname', it: 'Hostname',  en: 'Hostname', fixed: true },
+        { key: 'ip',       it: 'IP',        en: 'IP' },
+        { key: 'source',   it: 'Origine',   en: 'Source' },
+        { key: 'vendor',   it: 'Vendor',    en: 'Vendor' },
+        { key: 'model',    it: 'Modello',   en: 'Model' },
+        { key: 'version',  it: 'Versione',  en: 'Version' },
+        { key: 'vtp',      it: 'VTP',       en: 'VTP' },
+        { key: 'category', it: 'Categoria', en: 'Category', fixed: true },
+    ];
+    function colLabel(c) { return currentLang === 'en' ? c.en : c.it; }
+    let catColVis = {};
+    try { catColVis = JSON.parse(localStorage.getItem('catColVis') || '{}'); } catch (e) { catColVis = {}; }
+    function isColVisible(key) {
+        const c = CAT_COLUMNS.find(x => x.key === key);
+        if (c && c.fixed) return true;
+        return catColVis[key] !== false;
+    }
+    function attrEsc(s) { return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
 
     async function loadCategoriesData() {
         const res = await apiFetch("/api/device-classification");
         if (!res || !res.ok) return;
         categoriesData = await res.json();
+        categoriesData.vendors = categoriesData.vendors || [];
+        categoriesData.models = categoriesData.models || {};
 
-        // Popola il filtro sedi
+        // Filtro sedi
         const gsel = document.getElementById("categoriesGroupSelect");
         if (gsel) {
             const cur = gsel.value;
@@ -2985,7 +3120,7 @@
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
             gsel.value = groups.includes(cur) ? cur : "all";
         }
-        // Popola il filtro categorie + datalist di creazione
+        // Filtro categorie + datalist di creazione
         const csel = document.getElementById("categoriesCatFilter");
         const dl = document.getElementById("catKeyList");
         const catKeys = Object.keys(categoriesData.categories);
@@ -2997,6 +3132,22 @@
         }
         if (dl) dl.innerHTML = catKeys.map(k => `<option value="${escapeHtml(k)}">`).join("");
 
+        renderColumnsMenu();
+        renderCategoriesPanel();
+    }
+
+    function renderColumnsMenu() {
+        const box = document.getElementById("categoryColumnsList");
+        if (!box) return;
+        box.innerHTML = CAT_COLUMNS.map(c => `
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:${c.fixed?'default':'pointer'}; color:${c.fixed?'var(--text-muted)':'var(--text)'};">
+                <input type="checkbox" ${isColVisible(c.key)?'checked':''} ${c.fixed?'disabled':''} onchange="toggleCatColumn('${c.key}', this.checked)" style="accent-color:var(--primary);">
+                ${colLabel(c)}
+            </label>`).join("");
+    }
+    function toggleCatColumn(key, on) {
+        catColVis[key] = on;
+        localStorage.setItem('catColVis', JSON.stringify(catColVis));
         renderCategoriesPanel();
     }
 
@@ -3006,12 +3157,35 @@
         ).join("");
     }
 
+    function getFilteredCategoryNodes() {
+        const groupFilter = document.getElementById("categoriesGroupSelect")?.value || "all";
+        const catFilter = document.getElementById("categoriesCatFilter")?.value || "all";
+        let nodes = categoriesData.nodes.slice();
+        if (groupFilter !== "all") nodes = nodes.filter(n => n.group === groupFilter);
+        if (catFilter !== "all") nodes = nodes.filter(n => n.device_type === catFilter);
+        return nodes;
+    }
+
+    // Valore testuale di una cella (usato anche per l'export CSV).
+    function catCellValue(key, n) {
+        switch (key) {
+            case 'hostname': return n.label || '';
+            case 'ip':       return n.display_ip || '';
+            case 'source':   return n.discovered ? (currentLang==='en'?'discovered':'scoperto') : (currentLang==='en'?'managed':'gestito');
+            case 'vendor':   return n.vendor && n.vendor !== 'discovered' ? n.vendor : '';
+            case 'model':    return n.model || '';
+            case 'version':  return n.version || '';
+            case 'vtp':      return [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' / ');
+            case 'category': return deviceTypeLabel(n.device_type) + (n.subcategory ? ' / ' + n.subcategory : '');
+            default: return '';
+        }
+    }
+
     function renderCategoriesPanel() {
         const cats = categoriesData.categories;
         const counts = categoriesData.counts_by_category || {};
-        const groupFilter = document.getElementById("categoriesGroupSelect")?.value || "all";
-        const catFilter = document.getElementById("categoriesCatFilter")?.value || "all";
         const canWrite = (currentRole === 'admin' || currentRole === 'operator');
+        const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
 
         // Riquadri di conteggio per categoria
         const cardBox = document.getElementById("categoryCountCards");
@@ -3031,11 +3205,7 @@
             }).join("");
         }
 
-        // Lista dispositivi raggruppata per sede/gruppo
-        let nodes = categoriesData.nodes.slice();
-        if (groupFilter !== "all") nodes = nodes.filter(n => n.group === groupFilter);
-        if (catFilter !== "all") nodes = nodes.filter(n => n.device_type === catFilter);
-
+        const nodes = getFilteredCategoryNodes();
         const byGroup = {};
         nodes.forEach(n => { (byGroup[n.group] = byGroup[n.group] || []).push(n); });
 
@@ -3043,50 +3213,108 @@
         if (!listBox) return;
         if (!nodes.length) { listBox.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No devices.':'Nessun dispositivo.'}</p>`; return; }
 
-        listBox.innerHTML = Object.keys(byGroup).sort().map(g => {
-            const rows = byGroup[g].map(n => {
-                const meta = deviceTypeMeta(n.device_type);
-                const subs = (cats[n.device_type]?.subcategories) || [];
-                const assignControls = canWrite ? `
-                    <select onchange="assignDeviceCategory('${escapeHtml(n.id)}', this.value, this.closest('tr').querySelector('.subcat-sel').value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-                        ${categoryOptions(n.device_type)}
-                    </select>
-                    <select class="subcat-sel" onchange="assignDeviceCategory('${escapeHtml(n.id)}', '${escapeHtml(n.device_type)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; ${subs.length?'':'display:none;'}">
-                        <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
-                        ${subs.map(s => `<option value="${escapeHtml(s)}"${s===n.subcategory?' selected':''}>${escapeHtml(s)}</option>`).join('')}
-                    </select>`
-                    : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(n.device_type))}</span>${n.subcategory?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(n.subcategory)}</span>`:''}`;
-                const statusBadge = n.discovered
-                    ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:4px; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
-                    : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
-                return `<tr>
-                    <td style="padding:6px 8px;"><span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}</td>
-                    <td style="padding:6px 8px; font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(n.id)}</td>
-                    <td style="padding:6px 8px;">${statusBadge}</td>
-                    <td style="padding:6px 8px; font-size:12px; color:var(--text-muted);">${escapeHtml(n.version||'-')}</td>
-                    <td style="padding:6px 8px;"><div style="display:flex; gap:6px; align-items:center;">${assignControls}</div></td>
-                </tr>`;
-            }).join("");
+        // Datalist condivise per vendor e modelli (per editing inline).
+        const vendorDL = `<datalist id="catVendorDL">${(categoriesData.vendors||[]).map(v=>`<option value="${attrEsc(v)}">`).join('')}</datalist>`;
+        const modelDLs = Object.keys(categoriesData.models||{}).map(vk =>
+            `<datalist id="catModelDL_${attrEsc(vk)}">${(categoriesData.models[vk]||[]).map(m=>`<option value="${attrEsc(m)}">`).join('')}</datalist>`
+        ).join('');
+
+        const cellHtml = (col, n) => {
+            const meta = deviceTypeMeta(n.device_type);
+            const td = (inner, extra='') => `<td style="padding:6px 8px; ${extra}">${inner}</td>`;
+            switch (col.key) {
+                case 'hostname':
+                    return td(`<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}`);
+                case 'ip':
+                    return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
+                case 'source':
+                    return td(n.discovered
+                        ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:4px; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
+                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`);
+                case 'vendor': {
+                    const v = (n.vendor && n.vendor !== 'discovered') ? n.vendor : '';
+                    return td(canWrite
+                        ? `<input list="catVendorDL" value="${attrEsc(v)}" onchange="assignDeviceVendor('${escapeHtml(n.id)}', this.value)" placeholder="—" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(v||'—')}</span>`);
+                }
+                case 'model': {
+                    const vk = (n.vendor||'').toLowerCase();
+                    return td(canWrite
+                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(n.model||'')}" onchange="assignDeviceModel('${escapeHtml(n.id)}', '${attrEsc(n.vendor||'')}', this.value)" placeholder="—" style="width:140px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(n.model||'—')}</span>`);
+                }
+                case 'version':
+                    return td(escapeHtml(n.version||'-'), 'font-size:12px; color:var(--text-muted);');
+                case 'vtp': {
+                    const v = [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · ');
+                    return td(v ? `<span style="font-size:12px; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml(v)}</span>` : '<span style="color:var(--text-muted);">—</span>');
+                }
+                case 'category': {
+                    const subs = (cats[n.device_type]?.subcategories) || [];
+                    const ctrl = canWrite ? `
+                        <select onchange="assignDeviceCategory('${escapeHtml(n.id)}', this.value, this.closest('tr').querySelector('.subcat-sel').value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                            ${categoryOptions(n.device_type)}
+                        </select>
+                        <select class="subcat-sel" onchange="assignDeviceCategory('${escapeHtml(n.id)}', '${escapeHtml(n.device_type)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; ${subs.length?'':'display:none;'}">
+                            <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
+                            ${subs.map(s => `<option value="${escapeHtml(s)}"${s===n.subcategory?' selected':''}>${escapeHtml(s)}</option>`).join('')}
+                        </select>`
+                        : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(n.device_type))}</span>${n.subcategory?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(n.subcategory)}</span>`:''}`;
+                    return td(`<div style="display:flex; gap:6px; align-items:center;">${ctrl}</div>`);
+                }
+                default: return td('');
+            }
+        };
+
+        const headHtml = cols.map(c => `<th style="padding:8px;">${colLabel(c)}</th>`).join('');
+        listBox.innerHTML = vendorDL + modelDLs + Object.keys(byGroup).sort().map(g => {
+            const rows = byGroup[g].map(n => `<tr>${cols.map(c => cellHtml(c, n)).join('')}</tr>`).join("");
             return `<div style="margin-bottom:18px;">
                 <h4 style="font-size:14px; margin-bottom:8px;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)} <span style="color:var(--text-muted); font-weight:400;">(${byGroup[g].length})</span></h4>
                 <table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
-                    <thead><tr style="background:var(--surface); text-align:left; font-size:11px; color:var(--text-muted); text-transform:uppercase;">
-                        <th style="padding:8px;">Hostname</th><th style="padding:8px;">IP</th><th style="padding:8px;">${currentLang==='en'?'Source':'Origine'}</th><th style="padding:8px;">${currentLang==='en'?'Version':'Versione'}</th><th style="padding:8px;">${currentLang==='en'?'Category':'Categoria'}</th>
-                    </tr></thead>
+                    <thead><tr style="background:var(--surface); text-align:left; font-size:11px; color:var(--text-muted); text-transform:uppercase;">${headHtml}</tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>`;
         }).join("");
     }
 
-    async function assignDeviceCategory(nodeId, category, subcategory) {
+    function exportCategoriesCsv() {
+        const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
+        const nodes = getFilteredCategoryNodes();
+        const esc = (v) => {
+            v = String(v == null ? '' : v);
+            return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+        };
+        const lines = [['Group', ...cols.map(colLabel)].map(esc).join(',')];
+        nodes.forEach(n => {
+            lines.push([n.group, ...cols.map(c => catCellValue(c.key, n))].map(esc).join(','));
+        });
+        const blob = new Blob(["﻿" + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'sentinelnet-devices-categories.csv';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    async function postDeviceMeta(nodeId, fields) {
         const res = await apiFetch("/api/device-categories/assign", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ node_id: nodeId, category: category || "", subcategory: subcategory || "" })
+            body: JSON.stringify(Object.assign({ node_id: nodeId }, fields))
         });
         if (res && res.ok) loadCategoriesData();
-        else alert(currentLang==='en'?'Failed to classify device.':'Classificazione non riuscita.');
+        else alert(currentLang==='en'?'Update failed.':'Aggiornamento non riuscito.');
+    }
+    function assignDeviceCategory(nodeId, category, subcategory) {
+        postDeviceMeta(nodeId, { category: category || "", subcategory: subcategory || "" });
+    }
+    function assignDeviceVendor(nodeId, vendor) {
+        postDeviceMeta(nodeId, { vendor: vendor.trim() });
+    }
+    function assignDeviceModel(nodeId, vendor, model) {
+        postDeviceMeta(nodeId, { vendor: (vendor||'').trim(), model: model.trim() });
     }
 
     async function createCategory() {

@@ -11,6 +11,8 @@ ENV/
 # Sensitive data (Device credentials and inventories)
 network_hosts.csv
 detected_versions.json
+device_categories.json
+device_models.json
 users.json
 groups.json
 
