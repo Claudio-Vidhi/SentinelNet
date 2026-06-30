@@ -247,10 +247,17 @@ class DeviceCategorySchema(BaseModel):
     subcategory: Optional[str] = None
     vendor: Optional[str] = None
     model: Optional[str] = None
+    ha_group: Optional[str] = None     # etichetta coppia HA (vuoto = nessuna)
 
 class ModelSchema(BaseModel):
     vendor: str
     model: str
+
+class PromoteDeviceSchema(BaseModel):
+    node_id: str
+    ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
+    vendor: str = "cisco"
+    group: str = "Generale"
 
 # --- STATO DEI JOB DI TRIAGE IN BACKGROUND CON LOCK ---
 
@@ -764,6 +771,7 @@ def device_classification(current_user = Depends(get_current_user)):
             "is_manual": bool(a.get("category")),
             "vendor": a.get("vendor") or n.get("vendor"),
             "model": a.get("model") or n.get("model") or "",
+            "ha_group": a.get("ha_group", ""),
             "version": n.get("version"),
             "vtp_domain": n.get("vtp_domain"),
             "vtp_mode": n.get("vtp_mode"),
@@ -810,6 +818,7 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
         "subcategory": payload.subcategory,
         "vendor": payload.vendor,
         "model": payload.model,
+        "ha_group": payload.ha_group,
     }.items() if v is not None}
     if not inventory_manager.set_device_meta(payload.node_id, **fields):
         raise HTTPException(status_code=400, detail="Aggiornamento non valido.")
@@ -819,6 +828,29 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
         inventory_manager.add_model(payload.vendor, payload.model)
     log_audit(
         f"Attributi dispositivo '{payload.node_id}' aggiornati ({fields}) "
+        f"da '{current_user.get('sub')}'."
+    )
+    return {"status": "success"}
+
+@app.post("/api/promote-device")
+def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_operator)):
+    """Promuove un dispositivo scoperto (CDP/LLDP) a dispositivo gestito,
+    aggiungendolo all'inventario così da poter essere sottoposto a triage.
+    Le credenziali vanno completate dopo, nella pagina Inventario."""
+    assert_group_allowed(current_user, payload.group)
+    if payload.group not in inventory_manager.get_all_groups():
+        raise HTTPException(status_code=400, detail=f"Sede '{payload.group}' inesistente.")
+    existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == payload.ip), None)
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Dispositivo {payload.ip} già in inventario.")
+    inventory_manager.add_or_update_device(
+        payload.ip, payload.vendor, "custom", "", "", "", payload.group
+    )
+    # Trasferisce l'eventuale classificazione manuale dal nodo scoperto all'IP.
+    inventory_manager.migrate_assignment(payload.node_id, payload.ip)
+    log_audit(
+        f"Dispositivo scoperto '{payload.node_id}' promosso a gestito "
+        f"(IP {payload.ip}, vendor {payload.vendor}, sede {payload.group}) "
         f"da '{current_user.get('sub')}'."
     )
     return {"status": "success"}
