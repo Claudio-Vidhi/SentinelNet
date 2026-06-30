@@ -243,8 +243,14 @@ class CategoryDeleteSchema(BaseModel):
 
 class DeviceCategorySchema(BaseModel):
     node_id: str
-    category: str = ""        # vuoto = rimuove l'override manuale
-    subcategory: str = ""
+    category: Optional[str] = None     # "" rimuove l'override (torna ad auto); None = invariato
+    subcategory: Optional[str] = None
+    vendor: Optional[str] = None
+    model: Optional[str] = None
+
+class ModelSchema(BaseModel):
+    vendor: str
+    model: str
 
 # --- STATO DEI JOB DI TRIAGE IN BACKGROUND CON LOCK ---
 
@@ -743,19 +749,25 @@ def device_classification(current_user = Depends(get_current_user)):
         a = assignments.get(n["id"], {})
         dtype = n.get("device_type", "switch")
         group = n.get("group", "Generale")
+        discovered = n.get("status") == "discovered"
+        # IP mostrato in tabella: per i nodi scoperti l'IP annunciato (CDP/LLDP),
+        # non l'id sintetico "discovered_<hostname>".
+        display_ip = (n.get("reported_ip") or "") if discovered else n["id"]
         node = {
             "id": n["id"],
+            "display_ip": display_ip,
             "label": n.get("label", n["id"]),
             "group": group,
             "status": n.get("status"),
             "device_type": dtype,
             "subcategory": a.get("subcategory", ""),
             "is_manual": bool(a.get("category")),
-            "vendor": n.get("vendor"),
+            "vendor": a.get("vendor") or n.get("vendor"),
+            "model": a.get("model") or n.get("model") or "",
             "version": n.get("version"),
             "vtp_domain": n.get("vtp_domain"),
             "vtp_mode": n.get("vtp_mode"),
-            "discovered": n.get("vendor") == "discovered",
+            "discovered": discovered,
         }
         nodes.append(node)
         counts_by_category[dtype] = counts_by_category.get(dtype, 0) + 1
@@ -766,6 +778,8 @@ def device_classification(current_user = Depends(get_current_user)):
         "nodes": nodes,
         "counts_by_category": counts_by_category,
         "counts_by_group": counts_by_group,
+        "vendors": sorted(inventory_manager.get_all_vendors().keys()),
+        "models": inventory_manager.get_models(),
         "total": len(nodes),
     }
 
@@ -789,13 +803,44 @@ def delete_device_category(payload: CategoryDeleteSchema, current_user = Depends
 
 @app.post("/api/device-categories/assign")
 def assign_device_category(payload: DeviceCategorySchema, current_user = Depends(require_operator)):
-    """Assegna manualmente un dispositivo a una categoria (admin/operator)."""
-    if not inventory_manager.set_device_category(payload.node_id, payload.category, payload.subcategory):
-        raise HTTPException(status_code=400, detail="Categoria non valida.")
+    """Aggiorna gli attributi manuali di un dispositivo: categoria, sottocategoria,
+    vendor e/o modello (admin/operator). I campi non forniti restano invariati."""
+    fields = {k: v for k, v in {
+        "category": payload.category,
+        "subcategory": payload.subcategory,
+        "vendor": payload.vendor,
+        "model": payload.model,
+    }.items() if v is not None}
+    if not inventory_manager.set_device_meta(payload.node_id, **fields):
+        raise HTTPException(status_code=400, detail="Aggiornamento non valido.")
+    # Se è stato indicato un nuovo modello con un vendor, lo si registra anche nel
+    # catalogo modelli del vendor, così diventa riutilizzabile.
+    if payload.model and payload.vendor:
+        inventory_manager.add_model(payload.vendor, payload.model)
     log_audit(
-        f"Dispositivo '{payload.node_id}' classificato come "
-        f"'{payload.category or 'auto'}' da '{current_user.get('sub')}'."
+        f"Attributi dispositivo '{payload.node_id}' aggiornati ({fields}) "
+        f"da '{current_user.get('sub')}'."
     )
+    return {"status": "success"}
+
+# --- REGISTRO MODELLI (per vendor) ---
+
+@app.get("/api/models")
+def list_models(current_user = Depends(get_current_user)):
+    return inventory_manager.get_models()
+
+@app.post("/api/models")
+def create_model(payload: ModelSchema, current_user = Depends(require_operator)):
+    if not inventory_manager.add_model(payload.vendor, payload.model):
+        raise HTTPException(status_code=400, detail="Vendor e modello obbligatori.")
+    log_audit(f"Modello '{payload.model}' (vendor: {payload.vendor}) aggiunto da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/models/delete")
+def remove_model(payload: ModelSchema, current_user = Depends(require_operator)):
+    if not inventory_manager.delete_model(payload.vendor, payload.model):
+        raise HTTPException(status_code=404, detail="Modello non trovato.")
+    log_audit(f"Modello '{payload.model}' (vendor: {payload.vendor}) eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
 # --- ENDPOINTS COSTRUZIONE MAPPA TOPOLOGICA ---
@@ -811,6 +856,17 @@ def get_network_map(group: str = "all", current_user = Depends(get_current_user)
     """Restituisce il grafo topologico strutturato per Vis.js."""
     data = core_engine.generate_network_map(group_filter=group)
     return filter_map_to_scope(data, user_group_scope(current_user))
+
+@app.get("/api/portchannels")
+def get_portchannels(group: str = "all", current_user = Depends(get_current_user)):
+    """Report Port-channel per apparato (per il tab Adjacency List), filtrato per sede."""
+    scope = user_group_scope(current_user)
+    if group != "all" and scope is not None and group not in scope:
+        raise HTTPException(status_code=403, detail="Sede non consentita.")
+    report = core_engine.get_portchannel_report(group_filter=group)
+    if scope is not None:
+        report = [r for r in report if r["group"] in scope]
+    return {"devices": report}
 
 @app.post("/api/topology/reset")
 def reset_topology(current_user = Depends(require_operator)):
