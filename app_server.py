@@ -161,6 +161,11 @@ class GroupSchema(BaseModel):
 class GroupDeleteSchema(BaseModel):
     name: str
 
+class GroupRenameSchema(BaseModel):
+    old_name: str
+    new_name: str
+    description: str = ""
+
 class UserSchema(BaseModel):
     username: str
     password: str
@@ -240,6 +245,10 @@ class CategoryCreateSchema(BaseModel):
 
 class CategoryDeleteSchema(BaseModel):
     key: str
+
+class SubcategoryDeleteSchema(BaseModel):
+    key: str
+    subcategory: str
 
 class DeviceCategorySchema(BaseModel):
     node_id: str
@@ -708,6 +717,27 @@ def create_group(group: GroupSchema, current_user = Depends(require_operator)):
     log_audit(f"Gruppo '{name}' (descrizione: '{group.description}') creato dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "message": "Gruppo creato"}
 
+@app.post("/api/groups/rename")
+def rename_group(payload: GroupRenameSchema, current_user = Depends(require_operator)):
+    """Rinomina una sede/gruppo (admin/operator) e riassegna i relativi apparati.
+    'Generale' non è rinominabile."""
+    old = payload.old_name.strip()
+    new = payload.new_name.strip()
+    if not old or not new:
+        raise HTTPException(status_code=400, detail="Nomi gruppo obbligatori.")
+    if old == "Generale":
+        raise HTTPException(status_code=400, detail="Il gruppo 'Generale' non è rinominabile.")
+    assert_group_allowed(current_user, old)
+    groups = inventory_manager.get_all_groups()
+    if old not in groups:
+        raise HTTPException(status_code=404, detail="Gruppo non trovato.")
+    if new != old and new in groups:
+        raise HTTPException(status_code=400, detail=f"Esiste già un gruppo '{new}'.")
+    if not inventory_manager.update_group(old, new, payload.description):
+        raise HTTPException(status_code=400, detail="Rinomina non riuscita.")
+    log_audit(f"Gruppo '{old}' rinominato in '{new}' dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
 @app.post("/api/groups/delete")
 def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_operator)):
     group_name = payload.name
@@ -815,6 +845,13 @@ def delete_device_category(payload: CategoryDeleteSchema, current_user = Depends
     if not inventory_manager.delete_category(payload.key):
         raise HTTPException(status_code=400, detail="Categoria di sistema o inesistente.")
     log_audit(f"Categoria '{payload.key}' eliminata da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/device-categories/delete-subcategory")
+def delete_subcategory_ep(payload: SubcategoryDeleteSchema, current_user = Depends(require_operator)):
+    if not inventory_manager.delete_subcategory(payload.key, payload.subcategory):
+        raise HTTPException(status_code=404, detail="Sottocategoria non trovata.")
+    log_audit(f"Sottocategoria '{payload.subcategory}' di '{payload.key}' eliminata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
 @app.post("/api/device-categories/assign")

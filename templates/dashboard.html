@@ -426,29 +426,6 @@
       overflow: hidden;
     }
 
-    /* Modalità schermo intero della mappa topologica */
-    #networkGraphWrapper.map-fullscreen {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      background: #05080c;
-      padding: 12px;
-    }
-    #networkGraphWrapper.map-fullscreen #networkGraphContainer {
-      height: 100% !important;
-      resize: none;
-      border-radius: 0;
-    }
-    /* Pulsante d'uscita visibile solo a schermo intero (la toolbar è fuori dal wrapper). */
-    #mapExitFs { display: none; }
-    #networkGraphWrapper.map-fullscreen #mapExitFs {
-      display: inline-flex;
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      z-index: 10001;
-    }
-
     /* Righe con modifiche non salvate nella tabella Dispositivi & Categorie */
     tr.row-dirty { background: rgba(255, 184, 77, 0.07); }
     tr.row-dirty td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
@@ -1022,17 +999,11 @@
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           
-          <!-- Interruttore di visualizzazione dispositivi terminali non di rete -->
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleEndDevices" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; border-radius: 4px;">
-            <span data-i18n="lblShowEndDevices">Mostra Terminali (Server, Telefoni, PC)</span>
-          </label>
-
-          <!-- Interruttore Access Point: spento = solo switch/router nella mappa -->
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleAccessPoints" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; border-radius: 4px;">
-            <span data-i18n="lblShowAccessPoints">Mostra Access Point</span>
-          </label>
+          <!-- Selettore categorie da mostrare nella mappa -->
+          <details id="mapCatMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
+            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-layer-group"></i> <span data-i18n="lblMapCategories">Categorie</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
+            <div id="mapCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:180px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+          </details>
 
           <!-- Interruttore dispositivi scoperti (CDP/LLDP): nascosti di default -->
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
@@ -1063,22 +1034,24 @@
           <button class="btn btn-secondary btn-small" onclick="downloadTopology()" style="width:auto; margin:0;" data-i18n="btnDownloadMap">
             <i class="fa-solid fa-download"></i> Scarica Mappa
           </button>
-          <button class="btn btn-secondary btn-small" onclick="toggleMapFullscreen()" id="btnMapFullscreen" style="width:auto; margin:0;" data-i18n="btnMapFullscreen">
-            <i class="fa-solid fa-expand"></i> Schermo Intero
-          </button>
         </div>
       </div>
 
       <div id="networkGraphWrapper" style="position: relative; flex-grow: 1;">
-        <button id="mapExitFs" class="btn btn-secondary btn-small" onclick="toggleMapFullscreen()" style="width:auto; margin:0;"><i class="fa-solid fa-compress"></i> <span data-i18n="btnExitFullscreen">Esci</span></button>
         <div id="networkGraphContainer"></div>
-        <div class="network-legend">
-          <div class="legend-item"><span class="led led-online"></span><span data-i18n="legendOnline">Dispositivo Online</span></div>
-          <div class="legend-item"><span class="led led-offline"></span><span data-i18n="legendOffline">Dispositivo Offline</span></div>
-          <div class="legend-item"><span class="led led-auth_failed"></span><span data-i18n="legendAuthFailed">Autenticazione Fallita</span></div>
-          <div class="legend-item"><span class="led led-discovered"></span><span data-i18n="legendDiscovered">Vicino Discoperto (CDP/LLDP)</span></div>
-          <div class="legend-item"><span style="width:16px; height:0; border-top:2px dashed var(--warning); display:inline-block;"></span><span data-i18n="legendPortChannel">Link Port-Channel / LAG</span></div>
-          <div id="deviceTypeLegend" style="display:flex; flex-wrap:wrap; gap:10px 14px; width:100%; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);"></div>
+        <div class="network-legend" id="networkLegend">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+            <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="legendTitle">Legenda</span>
+            <button onclick="toggleLegend()" id="legendToggleBtn" title="Legenda" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:13px;"><i class="fa-solid fa-chevron-down"></i></button>
+          </div>
+          <div id="legendBody" style="display:flex; flex-direction:column; gap:8px;">
+            <div class="legend-item"><span class="led led-online"></span><span data-i18n="legendOnline">Dispositivo Online</span></div>
+            <div class="legend-item"><span class="led led-offline"></span><span data-i18n="legendOffline">Dispositivo Offline</span></div>
+            <div class="legend-item"><span class="led led-auth_failed"></span><span data-i18n="legendAuthFailed">Autenticazione Fallita</span></div>
+            <div class="legend-item"><span class="led led-discovered"></span><span data-i18n="legendDiscovered">Vicino Discoperto (CDP/LLDP)</span></div>
+            <div class="legend-item"><span style="width:16px; height:0; border-top:2px dashed var(--warning); display:inline-block;"></span><span data-i18n="legendPortChannel">Link Port-Channel / LAG</span></div>
+            <div id="deviceTypeLegend" style="display:flex; flex-wrap:wrap; gap:10px 14px; width:100%; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1150,13 +1123,28 @@
 
     <!-- TAB 5: Threat Intel (EUVD ENISA) -->
     <div id="tab-security" class="tab-content">
-      <div style="margin-bottom: 20px;">
+      <div style="margin-bottom: 16px;">
         <h3 data-i18n="titleThreatIntel">Vulnerability Matcher (EUVD ENISA)</h3>
         <p style="font-size: 14px; color: var(--text-muted); margin-top: 5px;" data-i18n="descThreatIntel">
           Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).
         </p>
       </div>
-      
+
+      <!-- Controlli: scelta sede + avvio manuale della scansione -->
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; padding:14px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px;">
+        <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
+        <select id="threatGroupSelect" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+          <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+        </select>
+        <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
+          <input type="checkbox" id="threatIncludeDiscovered" style="accent-color:var(--primary);">
+          <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
+        </label>
+        <button class="btn btn-primary btn-small" id="btnStartThreatScan" onclick="startThreatScan()" style="width:auto; margin:0; background:#5ecf8d; color:#000;" data-i18n="btnStartThreatScan">
+          <i class="fa-solid fa-play"></i> Avvia Scansione
+        </button>
+      </div>
+
       <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
         <!-- Popolato in dinamico con i match delle vulnerabilità -->
       </div>
@@ -1518,6 +1506,11 @@
         lblHighlightPortChannel: "Evidenzia Port-Channel",
         lblVtpDomain: "Dominio VTP",
         lblShowDiscovered: "Mostra Scoperti",
+        lblMapCategories: "Categorie",
+        legendTitle: "Legenda",
+        lblThreatGroup: "Sede da analizzare:",
+        lblThreatDiscovered: "Includi vicini scoperti",
+        btnStartThreatScan: '<i class="fa-solid fa-play"></i> Avvia Scansione',
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Schermo Intero',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
@@ -1746,6 +1739,11 @@
         lblHighlightPortChannel: "Highlight Port-Channel",
         lblVtpDomain: "VTP Domain",
         lblShowDiscovered: "Show Discovered",
+        lblMapCategories: "Categories",
+        legendTitle: "Legend",
+        lblThreatGroup: "Site to scan:",
+        lblThreatDiscovered: "Include discovered neighbors",
+        btnStartThreatScan: '<i class="fa-solid fa-play"></i> Start Scan',
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Fullscreen',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
@@ -2340,14 +2338,17 @@
                 desc = desc.replace("Sede secondaria ", "Secondary Site ");
             }
             const btnText = currentLang === 'en' ? '<i class="fa-solid fa-trash-can"></i> Delete Site' : '<i class="fa-solid fa-trash-can"></i> Elimina Sede';
+            const renameText = currentLang === 'en' ? '<i class="fa-solid fa-pen"></i> Rename' : '<i class="fa-solid fa-pen"></i> Rinomina';
             const reservedText = currentLang === 'en' ? 'System Reserved' : 'System Reserved';
+            const renameBtn = (g !== 'Generale')
+                ? `<button onclick="renameGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${renameText}</button>` : '';
 
             groupBody.innerHTML += `<tr>
                 <td><strong>${escapeHtml(g)}</strong></td>
                 <td><span style="color:var(--text-muted); font-size:13px;">${escapeHtml(desc)}</span></td>
                 <td>${currentRole === 'viewer'
                     ? '<span style="color:var(--text-muted)">—</span>'
-                    : (g !== 'Generale' ? `<button onclick="deleteGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText)}</td>
+                    : (g !== 'Generale' ? `${renameBtn}<button onclick="deleteGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText)}</td>
             </tr>`;
         });
     }
@@ -2532,16 +2533,36 @@
 
     async function deleteGroup(name) {
         if(confirm(i18n[currentLang].confirmDeleteGroup.replace("{name}", name))) {
-            const res = await apiFetch('/api/groups/delete', { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify({ name: name }) 
+            const res = await apiFetch('/api/groups/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name: name })
             });
             if(res && res.ok) {
                 appInit();
             } else if (res) {
                 alert(i18n[currentLang].alertGroupDeleteError);
             }
+        }
+    }
+
+    async function renameGroup(oldName) {
+        const newName = prompt(currentLang==='en'
+            ? `New name for site "${oldName}":`
+            : `Nuovo nome per la sede "${oldName}":`, oldName);
+        if (newName === null) return;
+        const trimmed = newName.trim();
+        if (!trimmed || trimmed === oldName) return;
+        const res = await apiFetch('/api/groups/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ old_name: oldName, new_name: trimmed })
+        });
+        if (res && res.ok) {
+            appInit();
+        } else {
+            const e = res ? await res.json().catch(()=>({})) : {};
+            alert(e.detail || (currentLang==='en'?'Rename failed.':'Rinomina non riuscita.'));
         }
     }
 
@@ -2690,10 +2711,19 @@
                     const neigh = (po.neighbors && po.neighbors.length)
                         ? `<span style="font-size:11px; color:var(--primary);"> <i class="fa-solid fa-arrow-right-long"></i> ${toText} <strong>${po.neighbors.map(escapeHtml).join(', ')}</strong></span>`
                         : `<span style="font-size:11px; color:var(--text-muted);"> <i class="fa-solid fa-arrow-right-long"></i> ${currentLang==='en'?'unknown neighbor':'vicino sconosciuto'}</span>`;
+                    // Stato operativo: verde se tutto su, rosso/giallo se c'è un problema.
+                    let stateBadge = '';
+                    if (po.status === 'up' && !po.issue) {
+                        stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:#3be188; border:1px solid #3be188; border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
+                    } else if (po.issue) {
+                        const down = po.status === 'down';
+                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'#ff6b7c':'#ffb84d'}; border:1px solid ${down?'#ff6b7c':'#ffb84d'}; border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
+                    }
                     return `<div style="margin-bottom:6px;">
                         <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po.name)}</span>
                         <span style="font-family:var(--font-code); font-size:12px; color:var(--success);">${(po.members||[]).map(escapeHtml).join(', ')}</span>
                         <span style="font-size:11px; color:var(--text-muted);"> (${(po.members||[]).length} ${currentLang==='en'?'members':'membri'})</span>
+                        ${stateBadge}
                         ${neigh}
                     </div>`;
                 }).join('')
@@ -2708,34 +2738,15 @@
         }
     }
 
-    // Schermo intero della mappa topologica (toggle classe CSS sul wrapper).
-    function toggleMapFullscreen() {
-        const wrap = document.getElementById("networkGraphWrapper");
-        const btn = document.getElementById("btnMapFullscreen");
-        if (!wrap) return;
-        const on = wrap.classList.toggle("map-fullscreen");
-        if (btn) btn.innerHTML = on
-            ? '<i class="fa-solid fa-compress"></i> ' + (currentLang==='en'?'Exit Fullscreen':'Esci')
-            : '<i class="fa-solid fa-expand"></i> ' + (currentLang==='en'?'Fullscreen':'Schermo Intero');
-        document.body.style.overflow = on ? 'hidden' : '';
-        // Ridimensiona e ridisegna la mappa nelle nuove dimensioni del contenitore.
-        // setSize('','') forza vis a rileggere le dimensioni reali del container.
-        const resize = () => {
-            if (!networkInstance) return;
-            networkInstance.setSize('100%', '100%');
-            networkInstance.redraw();
-            networkInstance.fit();
-        };
-        requestAnimationFrame(() => requestAnimationFrame(resize));
-        setTimeout(resize, 250);
+    // Apre/chiude la legenda della mappa su richiesta dell'utente.
+    function toggleLegend() {
+        const body = document.getElementById("legendBody");
+        const btn = document.getElementById("legendToggleBtn");
+        if (!body) return;
+        const hidden = body.style.display === 'none';
+        body.style.display = hidden ? 'flex' : 'none';
+        if (btn) btn.innerHTML = `<i class="fa-solid fa-chevron-${hidden ? 'down' : 'up'}"></i>`;
     }
-    // ESC esce dalla modalità schermo intero.
-    document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-            const wrap = document.getElementById("networkGraphWrapper");
-            if (wrap && wrap.classList.contains("map-fullscreen")) toggleMapFullscreen();
-        }
-    });
 
     // --- VIS.JS TOPOLOGY GRAPH VIEW ---
 
@@ -2765,6 +2776,32 @@
         let h = 0;
         for (let i = 0; i < domain.length; i++) h = (h * 31 + domain.charCodeAt(i)) >>> 0;
         return VTP_PALETTE[h % VTP_PALETTE.length];
+    }
+
+    // Categorie di apparato da mostrare sulla mappa (persistite). Default: solo
+    // infrastruttura (switch/router/firewall/wlc); il resto si abilita a scelta.
+    const MAP_DEFAULT_CATS = ['switch', 'router', 'firewall', 'wlc'];
+    let mapCatVis;
+    try { mapCatVis = JSON.parse(localStorage.getItem('mapCatVis')); } catch (e) { mapCatVis = null; }
+    if (!mapCatVis || typeof mapCatVis !== 'object') {
+        mapCatVis = {};
+        Object.keys(DEVICE_TYPE_META).forEach(k => { mapCatVis[k] = MAP_DEFAULT_CATS.includes(k); });
+    }
+    function isMapCatVisible(c) { return mapCatVis[c] !== false; }
+    function toggleMapCat(cat, on) {
+        mapCatVis[cat] = on;
+        localStorage.setItem('mapCatVis', JSON.stringify(mapCatVis));
+        loadInteractiveMap();
+    }
+    function renderMapCatMenu() {
+        const box = document.getElementById('mapCatList');
+        if (!box) return;
+        box.innerHTML = Object.keys(DEVICE_TYPE_META).map(k => `
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:pointer; color:var(--text);">
+                <input type="checkbox" ${isMapCatVisible(k)?'checked':''} onchange="toggleMapCat('${k}', this.checked)" style="accent-color:var(--primary);">
+                <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${DEVICE_TYPE_META[k].color};"></span>
+                ${deviceTypeLabel(k)}
+            </label>`).join('');
     }
 
     // Costruisce la legenda dei colori per tipo di apparato sotto la mappa.
@@ -2820,18 +2857,19 @@
         let borderGradStart = statusColor;
         let borderGradEnd = "#1d2837";
 
-        // Annotazione VTP nel badge in alto a destra: di default mostra il tipo di
-        // apparato; con i toggle attivi mostra dominio (e ne colora il bordo) e/o modalità.
+        // Badge in alto a destra: SEMPRE il tipo di apparato. Il dominio VTP, se
+        // attivo, va su una riga separata sotto (non deve coprire il tipo).
         vtp = vtp || {};
-        let badgeText = deviceTypeLabel(deviceType);
-        let badgeColor = typeColor;
-        const vtpParts = [];
+        const badgeText = deviceTypeLabel(deviceType);
+        const badgeColor = typeColor;
+        let vtpDomainSvg = '';
         if (vtp.showDomain && vtp.domain) {
-            vtpParts.push(vtp.domain);
-            badgeColor = vtpDomainColor(vtp.domain);
-            borderGradStart = badgeColor;
+            const dcol = vtpDomainColor(vtp.domain);
+            borderGradStart = dcol;
+            const dEsc = String(vtp.domain).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 24);
+            vtpDomainSvg = `<rect x="138" y="26" width="94" height="13" rx="3" fill="${dcol}22" stroke="${dcol}" stroke-opacity="0.45" stroke-width="1" />
+          <text x="185" y="35.5" font-family="'Satoshi','Inter',sans-serif" font-size="7.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${dEsc}</text>`;
         }
-        if (vtpParts.length) badgeText = vtpParts.join(" · ");
 
         // Carica icone vettoriali moderne basate sulla tipologia di apparato
         let iconSvg = "";
@@ -2898,9 +2936,10 @@
             </svg>
           </g>
 
-          <!-- Badge tipo apparato / annotazione VTP (in alto a destra) -->
+          <!-- Badge tipo apparato (in alto a destra) -->
           <rect x="138" y="9" width="94" height="15" rx="4" fill="${badgeColor}22" stroke="${badgeColor}" stroke-opacity="0.5" stroke-width="1" />
           <text x="185" y="19.5" font-family="'Satoshi', 'Inter', sans-serif" font-size="8.5" font-weight="900" fill="${badgeColor}" text-anchor="middle" letter-spacing="0.3">${escapedBadge}</text>
+          ${vtpDomainSvg}
 
           <!-- Informazioni testuali: Hostname e Indirizzo IP -->
           <text x="78" y="32" font-family="'Satoshi', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="#ffffff" letter-spacing="-0.3">${escapedLabel}</text>
@@ -2947,7 +2986,7 @@
           </div>
           <table style="width: 100%; border-collapse: collapse; background: transparent;">
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.label)}</td></tr>
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.id)}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.status === 'discovered' ? (n.reported_ip || '—') : n.id)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${escapeHtml(vendorName)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.group)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelStatusText}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${statusLed}</td></tr>
@@ -2972,25 +3011,20 @@
         const data = await res.json();
 
         // Stato degli interruttori di filtro/evidenziazione della mappa
-        const showEndDevices   = document.getElementById("toggleEndDevices")?.checked || false;
-        const showAccessPoints = document.getElementById("toggleAccessPoints")?.checked || false;
         const highlightPC      = document.getElementById("togglePortChannel")?.checked || false;
         const showVtpDomain    = document.getElementById("toggleVtpDomain")?.checked || false;
         const showDiscovered   = document.getElementById("toggleDiscovered")?.checked || false;
 
         renderDeviceTypeLegend();
+        renderMapCatMenu();
 
         // Filtra i nodi: terminali (server/telefoni/PC) e access point sono nascosti
         // di default, lasciando in mappa solo switch e router.
         const filteredNodesData = data.nodes.filter(n => {
-            // I dispositivi scoperti (CDP/LLDP) sono governati SOLO dal toggle
-            // "Mostra Scoperti": se attivo si vedono tutti (anche AP/terminali
-            // scoperti), altrimenti nessuno. Così "Mostra Scoperti" non viene
-            // annullato dai filtri per tipo (che valgono solo per i gestiti).
-            if (n.status === 'discovered') return showDiscovered;
-            if (!showEndDevices && (n.device_type === 'phone' || n.device_type === 'server' || n.device_type === 'pc')) return false;
-            if (!showAccessPoints && n.device_type === 'ap') return false;
-            return true;
+            // I dispositivi scoperti (CDP/LLDP) si vedono solo col toggle "Mostra
+            // Scoperti". La visibilità per TIPO è governata dal selettore Categorie.
+            if (n.status === 'discovered' && !showDiscovered) return false;
+            return isMapCatVisible(n.device_type);
         });
 
         // Mantieni solo i link i cui due estremi sono ancora visibili
@@ -3337,9 +3371,15 @@
 
     function renderCategoriesPanel() {
         const cats = categoriesData.categories;
-        const counts = categoriesData.counts_by_category || {};
         const canWrite = (currentRole === 'admin' || currentRole === 'operator');
         const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
+
+        // Conteggi per categoria RELATIVI alla sede selezionata (non al totale).
+        const groupFilterForCounts = document.getElementById("categoriesGroupSelect")?.value || "all";
+        const counts = {};
+        categoriesData.nodes
+            .filter(n => groupFilterForCounts === "all" || n.group === groupFilterForCounts)
+            .forEach(n => { counts[n.device_type] = (counts[n.device_type] || 0) + 1; });
 
         // Riquadri di conteggio per categoria
         const cardBox = document.getElementById("categoryCountCards");
@@ -3350,11 +3390,13 @@
                 const n = counts[k] || 0;
                 const delBtn = (!c.builtin && canWrite)
                     ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="deleteCategory('${escapeHtml(k)}')"></i>` : '';
+                const subChips = c.subcategories.length
+                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" onclick="deleteSubcategory('${escapeHtml(k)}','${escapeHtml(s)}')" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
                 return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:10px; padding:14px;">
                     ${delBtn}
                     <div style="font-size:26px; font-weight:900; color:${color};">${n}</div>
                     <div style="font-size:12px; font-weight:700; color:var(--text); margin-top:2px;">${escapeHtml(c.label)}</div>
-                    ${c.subcategories.length ? `<div style="font-size:10px; color:var(--text-muted); margin-top:4px;">${c.subcategories.map(escapeHtml).join(', ')}</div>` : ''}
+                    ${subChips}
                 </div>`;
             }).join("");
         }
@@ -3422,14 +3464,17 @@
                     const curCat = effVal(n, 'category');
                     const curSub = effVal(n, 'subcategory') || '';
                     const subs = (cats[curCat]?.subcategories) || [];
-                    const ctrl = canWrite ? `
-                        <select onchange="stageCategory('${escapeHtml(n.id)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-                            ${categoryOptions(curCat)}
-                        </select>
-                        <select class="subcat-sel" onchange="stageEdit('${escapeHtml(n.id)}','subcategory',this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; ${subs.length?'':'display:none;'}">
+                    // Il menù sottocategoria viene reso SOLO se la categoria ne ha:
+                    // così, rimuovendo l'ultima sottocategoria, non resta spazio vuoto.
+                    const subSel = (canWrite && subs.length)
+                        ? `<select class="subcat-sel" onchange="stageEdit('${escapeHtml(n.id)}','subcategory',this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                             <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
                             ${subs.map(s => `<option value="${escapeHtml(s)}"${s===curSub?' selected':''}>${escapeHtml(s)}</option>`).join('')}
-                        </select>`
+                        </select>` : '';
+                    const ctrl = canWrite
+                        ? `<select onchange="stageCategory('${escapeHtml(n.id)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                            ${categoryOptions(curCat)}
+                        </select>${subSel}`
                         : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(curCat))}</span>${curSub?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(curSub)}</span>`:''}`;
                     return td(`<div style="display:flex; gap:6px; align-items:center;">${ctrl}</div>`);
                 }
@@ -3626,6 +3671,17 @@
         });
         if (res && res.ok) loadCategoriesData();
         else alert(currentLang==='en'?'Cannot delete this category.':'Categoria non eliminabile.');
+    }
+
+    async function deleteSubcategory(key, sub) {
+        if (!confirm(currentLang==='en'?`Remove subcategory "${sub}"?`:`Rimuovere la sottocategoria "${sub}"?`)) return;
+        const res = await apiFetch("/api/device-categories/delete-subcategory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key, subcategory: sub })
+        });
+        if (res && res.ok) loadCategoriesData();
+        else alert(currentLang==='en'?'Cannot remove subcategory.':'Impossibile rimuovere la sottocategoria.');
     }
 
     function updateTopologyMapNodeStatus(ip, newStatus) {
@@ -4364,9 +4420,26 @@
     // --- VULNERABILITY ADVISORY (EUVD) ---
 
     // Parallelizzazione delle query ENISA tramite Promise.all (Ottimizzazione Performance)
-    async function loadThreatIntel() {
+    // Aperta la tab: prepara i controlli (sedi consentite) SENZA avviare la scansione.
+    // La scansione parte solo su richiesta dell'utente (pulsante Avvia Scansione).
+    function loadThreatIntel() {
+        const sel = document.getElementById("threatGroupSelect");
+        if (sel) {
+            const cur = sel.value;
+            const groups = Object.keys(globalGroups || {});
+            sel.innerHTML = `<option value="all">${currentLang==='en'?'All sites':'Tutte le sedi'}</option>` +
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+            sel.value = groups.includes(cur) ? cur : 'all';
+        }
+        const container = document.getElementById("securityTriageContainer");
+        if (container) container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-shield-halved fa-2x" style="opacity:0.4;"></i><br><br>${currentLang==='en'?'Choose a site and start the scan.':'Scegli una sede e avvia la scansione.'}</div>`;
+    }
+
+    async function startThreatScan() {
         const container = document.getElementById("securityTriageContainer");
         if (!container) return;
+        const selGroup = document.getElementById("threatGroupSelect")?.value || 'all';
+        const includeDiscovered = document.getElementById("threatIncludeDiscovered")?.checked || false;
 
         const queryingText = i18n[currentLang].queryingEnisa.replace(/<[^>]*>/g, '');
         container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${queryingText}</div>`;
@@ -4375,10 +4448,11 @@
         if (!res) return;
         const data = await res.json();
 
-        const onlineDevices = data.devices.filter(d => {
+        let onlineDevices = data.devices.filter(d => {
             const scan = data.detected_versions[d.IP];
             return scan && scan.status === 'online' && scan.version !== 'Non Scansionato' && scan.version !== 'Unknown';
         });
+        if (selGroup !== 'all') onlineDevices = onlineDevices.filter(d => d.Group === selGroup);
 
         container.innerHTML = "";
 
@@ -4414,14 +4488,16 @@
             await Promise.all(promises);
         }
 
-        // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – selezione manuale ──────────
-        const mapRes = await apiFetch('/api/network-map');
+        // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – solo se richiesto ──────────
+        if (!includeDiscovered) return;
+        const mapRes = await apiFetch('/api/network-map?group=' + encodeURIComponent(selGroup));
         if (!mapRes || !mapRes.ok) return;
         const mapData = await mapRes.json();
 
-        const discoveredWithVersion = (mapData.nodes || []).filter(n =>
+        let discoveredWithVersion = (mapData.nodes || []).filter(n =>
             n.status === 'discovered' && n.version && n.version.trim() !== ''
         );
+        if (selGroup !== 'all') discoveredWithVersion = discoveredWithVersion.filter(n => n.group === selGroup);
 
         if (discoveredWithVersion.length === 0) return;
 

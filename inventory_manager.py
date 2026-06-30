@@ -154,6 +154,7 @@ def get_all_vendors() -> dict:
     """Returns {display_name: {euvd_term: str, driver: str|None}}"""
     defaults = {
         "cisco":   {"euvd_term": "cisco",                    "driver": "cisco_ios"},
+        "cisco_cbs":{"euvd_term": "cisco",                   "driver": "cisco_s300"},
         "hpe":     {"euvd_term": "hewlett packard enterprise","driver": "hp_procurve"},
         "juniper": {"euvd_term": "juniper networks",          "driver": "juniper_junos"},
         "aruba":   {"euvd_term": "aruba networks",            "driver": "aruba_os"},
@@ -165,7 +166,10 @@ def get_all_vendors() -> dict:
         return defaults
     try:
         with open(VENDORS_FILE, "r") as f:
-            return json.load(f)
+            stored = json.load(f)
+        # I vendor di sistema sono sempre disponibili (lo stored ha la precedenza),
+        # così driver come 'cisco_s300' (CBS) restano selezionabili.
+        return {**defaults, **stored}
     except Exception:
         return defaults
 
@@ -269,6 +273,25 @@ def delete_category(key: str) -> bool:
         data["assignments"] = {
             n: a for n, a in data["assignments"].items() if a.get("category") != key
         }
+        safe_json_write(CATEGORIES_FILE, data)
+        return True
+
+def delete_subcategory(category: str, subcategory: str) -> bool:
+    """Rimuove una sottocategoria da una categoria e la sgancia dai dispositivi
+    che la usavano."""
+    category = _norm_cat_key(category)
+    subcategory = (subcategory or '').strip()
+    if not category or not subcategory:
+        return False
+    with _io_lock:
+        data = _load_categories()
+        entry = data["categories"].get(category)
+        if not entry or subcategory not in entry.get("subcategories", []):
+            return False
+        entry["subcategories"].remove(subcategory)
+        for a in data["assignments"].values():
+            if a.get("subcategory") == subcategory:
+                a.pop("subcategory", None)
         safe_json_write(CATEGORIES_FILE, data)
         return True
 
