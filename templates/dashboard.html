@@ -1126,16 +1126,16 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items:end;">
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatExisting">Categoria esistente (o nuova)</label>
-            <input id="newCatKey" class="ui-input" list="catKeyList" type="text" placeholder="es. iot, ups, nas">
+            <input id="newCatKey" class="ui-input" list="catKeyList" type="text" placeholder="es. iot, ups, nas" data-i18n-placeholder="phNewCatKey">
             <datalist id="catKeyList"></datalist>
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatLabel">Etichetta (solo nuova categoria)</label>
-            <input id="newCatLabel" class="ui-input" type="text" placeholder="es. Dispositivi IoT">
+            <input id="newCatLabel" class="ui-input" type="text" placeholder="es. Dispositivi IoT" data-i18n-placeholder="phNewCatLabel">
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewSubcat">Sottocategoria (opzionale)</label>
-            <input id="newSubcat" class="ui-input" type="text" placeholder="es. videosorveglianza">
+            <input id="newSubcat" class="ui-input" type="text" placeholder="es. videosorveglianza" data-i18n-placeholder="phNewSubcat">
           </div>
           <button class="btn btn-primary btn-small" onclick="createCategory()" style="width:auto; margin:0; background:#5ecf8d; color:#000;" data-i18n="btnCreateCategory">
             <i class="fa-solid fa-plus"></i> Crea
@@ -1483,6 +1483,9 @@
         lblNewCatExisting: 'Categoria esistente (o nuova)',
         lblNewCatLabel: 'Etichetta (solo nuova categoria)',
         lblNewSubcat: 'Sottocategoria (opzionale)',
+        phNewCatKey: 'es. iot, ups, nas',
+        phNewCatLabel: 'es. Dispositivi IoT',
+        phNewSubcat: 'es. videosorveglianza',
         btnCreateCategory: '<i class="fa-solid fa-plus"></i> Crea',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
@@ -1728,6 +1731,9 @@
         lblNewCatExisting: 'Existing category (or new)',
         lblNewCatLabel: 'Label (new category only)',
         lblNewSubcat: 'Subcategory (optional)',
+        phNewCatKey: 'e.g. iot, ups, nas',
+        phNewCatLabel: 'e.g. IoT Devices',
+        phNewSubcat: 'e.g. video surveillance',
         btnCreateCategory: '<i class="fa-solid fa-plus"></i> Create',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
@@ -2504,7 +2510,7 @@
                     ${isViewer ? '' : `<select
                       id="grpsel_${safeIp}"
                       onchange="reassignDevice('${d.IP}', this.value, this)"
-                      title="Sposta in un altro tenant senza eliminare"
+                      title="${currentLang==='en'?'Move to another tenant without deleting':'Sposta in un altro tenant senza eliminare'}"
                       style="font-size:11px; padding:3px 6px; border-radius:6px;
                              border:1px solid var(--border); background:var(--surface-3);
                              color:var(--text-muted); cursor:pointer; outline:none;
@@ -2529,13 +2535,13 @@
                     <button class="btn btn-secondary btn-small"
                         style="margin:0; padding:4px 8px;"
                         onclick="pingSingleDevice('${d.IP}', this)"
-                        title="Ping dispositivo">
+                        title="${currentLang==='en'?'Ping device':'Ping dispositivo'}">
                       <i class="fa-solid fa-wifi"></i>
                     </button>
                     <button class="btn btn-secondary btn-small"
                         style="margin:0; padding:4px 8px; color:var(--warning);"
                         onclick="triageSingleDevice('${d.IP}', this)"
-                        title="Triage dispositivo">
+                        title="${currentLang==='en'?'Triage device':'Triage dispositivo'}">
                       <i class="fa-solid fa-bolt-lightning"></i>
                     </button>
                     <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
@@ -3548,7 +3554,14 @@
                 case 'hostname': {
                     const conflictIcon = (canWrite && n.name_options && n.name_options.length > 1)
                         ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" onclick="openConflictModal('${escapeHtml(n.id)}')" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
-                    return td(`<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
+                    const dot = `<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>`;
+                    // Rinomina inline: modifica il nome mostrato (stage 'name', salvato col pulsante).
+                    if (canWrite) {
+                        const p = pendingEdits[n.id];
+                        const curName = (p && Object.prototype.hasOwnProperty.call(p, 'name')) ? p.name : (n.label || '');
+                        return td(`${dot}<input value="${attrEsc(curName)}" onchange="stageEdit('${escapeHtml(n.id)}','name',this.value.trim())" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
+                    }
+                    return td(`${dot}${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
                 }
                 case 'ip':
                     return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
@@ -3698,11 +3711,12 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 node_id: nodeId, ip: n.display_ip, vendor, group: n.group,
-                // Eredita ciò che è già stato scoperto via CDP/LLDP.
+                // Eredita ciò che è già stato scoperto via CDP/LLDP, incluso il
+                // nome eventualmente rinominato (staged o salvato).
                 model: effVal(n,'model') || '',
                 version: n.version || '',
                 device_type: n.device_type || '',
-                hostname: n.label || ''
+                hostname: (effVal(n,'name') || n.label || '')
             })
         });
         if (res && res.ok) {
