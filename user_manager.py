@@ -35,7 +35,8 @@ def get_role(username: str):
         return None
     return user.get("role", "admin")
 
-def create_user(username: str, password: str, role: str = "viewer", groups=None) -> bool:
+def create_user(username: str, password: str, role: str = "viewer", groups=None,
+                must_change_password: bool = False) -> bool:
     if role not in VALID_ROLES:
         role = "viewer"
     users = get_users()
@@ -50,6 +51,9 @@ def create_user(username: str, password: str, role: str = "viewer", groups=None)
         # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
         "groups": list(groups) if groups else [],
         "disabled": False,
+        # True per gli account creati da un amministratore: al primo login
+        # l'utente è obbligato a impostare una nuova password personale.
+        "must_change_password": bool(must_change_password),
     }
     _save_users(users)
     return True
@@ -68,8 +72,16 @@ def change_password(username: str, old_password: str, new_password: str) -> bool
     users = get_users()
     hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12))
     users[username]["hashed_password"] = hashed.decode('utf-8')
+    # La password è ora personale: rimuoviamo l'obbligo di cambio al primo accesso.
+    users[username]["must_change_password"] = False
     _save_users(users)
     return True
+
+def must_change_password(username: str) -> bool:
+    """True se l'utente deve cambiare la password al primo accesso (account
+    creato da un amministratore e non ancora personalizzato)."""
+    user = get_users().get(username)
+    return bool(user and user.get("must_change_password", False))
 
 # --- GESTIONE UTENTI (CRUD, ruoli) ---
 
@@ -81,6 +93,7 @@ def list_users() -> list:
             "role": d.get("role", "admin"),
             "groups": d.get("groups", []),
             "disabled": d.get("disabled", False),
+            "must_change_password": d.get("must_change_password", False),
         }
         for u, d in get_users().items()
     ]
