@@ -926,6 +926,10 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
         meta["category"] = payload.device_type
     if payload.model:
         meta["model"] = payload.model
+    # Eredita il nome scelto: sia come hostname CSV (tabella/triage) sia come
+    # override 'name' (etichetta su mappa e tab Categorie), così resta coerente.
+    if payload.hostname:
+        meta["name"] = payload.hostname
     if meta:
         inventory_manager.set_device_meta(payload.ip, **meta)
     if payload.version:
