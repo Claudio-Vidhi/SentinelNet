@@ -472,7 +472,12 @@ def login(payload: LoginRequest):
         role = user_manager.get_role(payload.username) or "viewer"
         access_token = create_access_token(data={"sub": payload.username, "role": role})
         log_audit(f"Utente '{payload.username}' (ruolo: {role}) loggato con successo.")
-        return {"access_token": access_token, "token_type": "bearer", "role": role}
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "role": role,
+            "must_change_password": user_manager.must_change_password(payload.username),
+        }
         
     record_failed_attempt(payload.username)
     log_audit(f"Tentativo di login fallito per l'utente '{payload.username}' (credenziali errate).")
@@ -511,7 +516,10 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
         raise HTTPException(status_code=400, detail="Username e password obbligatori.")
     valid_groups = set(inventory_manager.get_all_groups().keys())
     groups = [g for g in payload.groups if g in valid_groups]
-    if not user_manager.create_user(payload.username.strip(), payload.password, payload.role, groups):
+    # Gli account creati da un amministratore devono cambiare la password al
+    # primo accesso: la password iniziale è nota all'amministratore.
+    if not user_manager.create_user(payload.username.strip(), payload.password,
+                                    payload.role, groups, must_change_password=True):
         raise HTTPException(status_code=400, detail="Utente già esistente.")
     log_audit(
         f"Utente '{payload.username}' (ruolo: {payload.role}, sedi: "

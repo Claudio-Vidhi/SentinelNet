@@ -1,37 +1,67 @@
-# Escludi file di tracciamento Git
+# --- Controllo versione ed editor ---
 .git
 .gitignore
+.dockerignore
+.claude/
+.vscode/
+.idea/
+.editorconfig
+*.md
 
-# Escludi cartelle di ambiente virtuale e configurazione editor
-.venv
-venv
-ENV
-.claude
-.idea
-.vscode
+# --- Ambienti virtuali Python ---
+.venv/
+venv/
+ENV/
 
-# Escludi cache di compilazione Python
+# --- Cache e artefatti di compilazione Python ---
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
-# Escludi file di log locali
-*.log
-error_log.txt
-
-# Escludi cache e file di dati sensibili locali (gestiti tramite volume a runtime)
-secret.key
-jwt_secret.key
-network_hosts.csv
-users.json
-groups.json
-detected_versions.json
-backup-config/
-data/
-graphify-out/
-
-# Escludi cartelle di build dell'eseguibile desktop
+# --- Build dell'eseguibile desktop ---
 build/
 dist/
 *.spec
+
+# --- Log locali ---
+*.log
+error_log.txt
+audit.log
+
+# --- Dati sensibili e stato locale (montati via volume a runtime) ---
+network_hosts.csv
+detected_versions.json
+device_categories.json
+device_models.json
+vendors.json
+users.json
+groups.json
+backup-config/
+data/
+
+# --- Chiavi, segreti e credenziali ---
+*.key
+*.pem
+*.p12
+*.pfx
+secret.key
+jwt_secret.key
+secrets.json
+*secret*.json
+credentials.json
+service-account*.json
+apikey*
+*_api_key*
+.env
+.env.*
+
+# --- Knowledge-graph generato ---
+graphify-out/
+.graphifyignore
+
+# --- File di sistema ---
+.DS_Store
+Thumbs.db

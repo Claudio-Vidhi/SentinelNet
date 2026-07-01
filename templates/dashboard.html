@@ -719,7 +719,33 @@
           <i class="fa-solid fa-right-to-bracket"></i> Autenticati
         </button>
       </div>
-      
+
+      <!-- Sezione Cambio Password obbligatorio al primo accesso -->
+      <div id="changePwSection" style="display: none;">
+        <h2 id="cpwTitle" style="text-align: center;" data-i18n="cpwTitle">🔑 Imposta la tua Password</h2>
+        <p id="cpwSubtitle" style="text-align: center;" data-i18n="cpwSubtitle">Questo account è stato creato da un amministratore. Per motivi di sicurezza scegli una nuova password personale prima di continuare.</p>
+
+        <div class="form-group" style="text-align: left;">
+          <label data-i18n="lblNewPass">Nuova Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="cpwNewPass" type="password" placeholder="Minimo 6 caratteri" data-i18n-placeholder="cpwPassPl">
+          </div>
+        </div>
+
+        <div class="form-group" style="text-align: left; margin-bottom: 25px;">
+          <label data-i18n="lblConfirmPass">Conferma Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="cpwConfirmPass" type="password" placeholder="Ripeti la nuova password" data-i18n-placeholder="cpwConfirmPl">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btnChangePass" style="background: #5ecf8d; color: #000;" data-i18n="btnChangePass">
+          <i class="fa-solid fa-key"></i> Imposta Password ed Entra
+        </button>
+      </div>
+
       <!-- Div Messaggi di Errore -->
       <div id="loginError" style="color: var(--danger); font-size: 13px; margin-top: 15px; text-align: center; display: none;" data-i18n="loginError">
         Credenziali non corrette o errore di sistema. Riprova.
@@ -1412,6 +1438,16 @@
         loginPassPl: "Inserisci password",
         btnLogin: '<i class="fa-solid fa-right-to-bracket"></i> Autenticati',
         loginError: "Credenziali non corrette o errore di sistema. Riprova.",
+        cpwTitle: "🔑 Imposta la tua Password",
+        cpwSubtitle: "Questo account è stato creato da un amministratore. Per motivi di sicurezza scegli una nuova password personale prima di continuare.",
+        lblNewPass: "Nuova Password",
+        cpwPassPl: "Minimo 6 caratteri",
+        lblConfirmPass: "Conferma Password",
+        cpwConfirmPl: "Ripeti la nuova password",
+        btnChangePass: '<i class="fa-solid fa-key"></i> Imposta Password ed Entra',
+        alertPassTooShort: "La password deve contenere almeno 6 caratteri.",
+        alertPassMismatch: "Le password non coincidono.",
+        alertPassChangeErr: "Impossibile cambiare la password. Riprova.",
         
         // Sidebar
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Amministratore',
@@ -1645,6 +1681,16 @@
         loginPassPl: "Enter password",
         btnLogin: '<i class="fa-solid fa-right-to-bracket"></i> Log In',
         loginError: "Incorrect credentials or system error. Please try again.",
+        cpwTitle: "🔑 Set Your Password",
+        cpwSubtitle: "This account was created by an administrator. For security, choose a new personal password before continuing.",
+        lblNewPass: "New Password",
+        cpwPassPl: "Minimum 6 characters",
+        lblConfirmPass: "Confirm Password",
+        cpwConfirmPl: "Repeat the new password",
+        btnChangePass: '<i class="fa-solid fa-key"></i> Set Password and Enter',
+        alertPassTooShort: "Password must be at least 6 characters.",
+        alertPassMismatch: "Passwords do not match.",
+        alertPassChangeErr: "Could not change the password. Please try again.",
         
         // Sidebar
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Administrator',
@@ -2079,6 +2125,8 @@
         
         const overlay = document.getElementById('authOverlay');
         const token = sessionStorage.getItem("net_token");
+        // Il pannello di cambio password è transitorio: lo nascondiamo sempre qui.
+        document.getElementById('changePwSection').style.display = 'none';
 
         if (!data.has_users) {
             // Nessun utente su disco: mostriamo la procedura guidata di primo setup
@@ -2142,11 +2190,56 @@
             if (data.access_token) {
                 sessionStorage.setItem("net_token", data.access_token);
             }
+            if (data.must_change_password) {
+                // Account creato da un amministratore: forziamo il cambio password.
+                pendingOldPass = pass;
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('changePwSection').style.display = 'block';
+                document.getElementById('cpwNewPass').value = '';
+                document.getElementById('cpwConfirmPass').value = '';
+                document.getElementById('cpwNewPass').focus();
+                return;
+            }
             // Sblocca la UI nascondendo la schermata oscurante
             document.getElementById('authOverlay').style.display = 'none';
             appInit(); // Avvia il caricamento dei dispositivi di rete
         } else {
             errDiv.innerText = i18n[currentLang].alertLoginDenied;
+            errDiv.style.display = 'block';
+        }
+    });
+
+    // Password nota all'utente al momento del cambio obbligatorio (usata come
+    // vecchia password per l'endpoint /api/auth/change-password).
+    let pendingOldPass = '';
+
+    // Cambio password obbligatorio al primo accesso
+    document.getElementById('btnChangePass').addEventListener('click', async () => {
+        const np = document.getElementById('cpwNewPass').value.trim();
+        const cp = document.getElementById('cpwConfirmPass').value.trim();
+        const errDiv = document.getElementById('loginError');
+        errDiv.style.display = 'none';
+
+        if (np.length < 6) { errDiv.innerText = i18n[currentLang].alertPassTooShort; errDiv.style.display = 'block'; return; }
+        if (np !== cp)     { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
+
+        const res = await fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + sessionStorage.getItem("net_token")
+            },
+            body: JSON.stringify({ old_password: pendingOldPass, new_password: np })
+        });
+
+        if (res.ok) {
+            pendingOldPass = '';
+            document.getElementById('changePwSection').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('authOverlay').style.display = 'none';
+            appInit();
+        } else {
+            errDiv.innerText = i18n[currentLang].alertPassChangeErr;
             errDiv.style.display = 'block';
         }
     });
