@@ -4602,30 +4602,36 @@
                 ${i18n[currentLang].noDevicesText}
             </div>`;
         } else {
-            const promises = onlineDevices.map(async (d) => {
+            // Card SELEZIONABILI: la query EUVD parte SOLO quando l'utente sceglie
+            // un singolo dispositivo (pulsante Analizza), non su tutti insieme.
+            onlineDevices.forEach(d => {
                 const scan = data.detected_versions[d.IP];
                 const safeIpId = d.IP.replace(/\./g, '-');
-                const scanningText = currentLang === 'en' ? 'Scanning...' : 'Scansione...';
 
                 const devCard = document.createElement("div");
                 devCard.className = "vuln-card";
+                devCard.style.marginBottom = "12px";
                 devCard.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                         <div>
                             <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
                             <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
                             <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
                         </div>
-                        <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);">
-                            <i class="fa-solid fa-circle-notch fa-spin"></i> ${scanningText}
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
+                            <button id="btn-mgd-${safeIpId}"
+                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
+                                onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
+                                style="padding:8px 14px; border-radius:7px; border:none; background:var(--warning); color:#000; font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
+                                ${i18n[currentLang].btnAnalyzeVuln}
+                            </button>
                         </div>
                     </div>
-                    <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px;"></div>
+                    <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;"></div>
                 `;
                 container.appendChild(devCard);
-                await runEuvdQuery(safeIpId, d.Vendor, scan.version);
             });
-            await Promise.all(promises);
         }
 
         // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – solo se richiesto ──────────
@@ -4690,7 +4696,8 @@
                     id="btn-disc-${safeId}"
                     data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
                     data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
-                    onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this)"
+                    data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
+                    onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
                     style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--warning); color:#000; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
                     ${i18n[currentLang].btnAnalyzeVuln}
                 </button>
@@ -4717,7 +4724,7 @@
         return sysDesc.substring(0, 60).trim();
     }
 
-    async function runDiscoveredVulnCheck(nodeId, label, fullVersion, versionShort, btnEl) {
+    async function runDiscoveredVulnCheck(nodeId, label, fullVersion, versionShort, nodeVendor, btnEl) {
         const safeId = nodeId.replace(/[^a-zA-Z0-9]/g, '-');
         const card = document.getElementById(`disc-card-${safeId}`);
         const resultArea = document.getElementById(`disc-results-${safeId}`);
@@ -4728,7 +4735,18 @@
         card.style.borderColor = 'var(--primary)';
         card.dataset.checked = '1';
 
-        const vendor = /cisco/i.test(fullVersion) ? 'cisco' : /hpe|procurve|aruba/i.test(fullVersion) ? 'hpe' : label;
+        // Usa il vendor realmente rilevato sul nodo (CDP/LLDP o riclassificato a
+        // mano); solo se assente lo deduce dalla versione. MAI usare l'hostname
+        // come vendor: inquinerebbe la query EUVD (es. "FGT-120G-SWCOREA").
+        let vendor = (nodeVendor || '').trim();
+        if (!vendor) {
+            const hay = `${fullVersion} ${label}`;
+            if (/forti/i.test(hay))                 vendor = 'fortinet';
+            else if (/palo|pan-?os/i.test(hay))     vendor = 'paloalto';
+            else if (/cisco|catalyst|nexus|ios/i.test(hay)) vendor = 'cisco';
+            else if (/hpe|procurve|aruba/i.test(hay)) vendor = 'hpe';
+            else if (/junos|juniper/i.test(hay))    vendor = 'juniper';
+        }
 
         resultArea.style.display = "block";
         resultArea.innerHTML = `
@@ -4753,27 +4771,49 @@
         btnEl.innerHTML = i18n[currentLang].btnRescan;
     }
 
+    // Analisi vulnerabilità di UN singolo dispositivo gestito (scelto dall'utente).
+    async function runManagedVulnCheck(ip, vendor, version, btnEl) {
+        const safeIpId = ip.replace(/\./g, '-');
+        btnEl.disabled = true;
+        btnEl.innerHTML = i18n[currentLang].scanningEuvd;
+        await runEuvdQuery(safeIpId, vendor, version);
+        btnEl.disabled = false;
+        btnEl.innerHTML = i18n[currentLang].btnRescan;
+    }
+
     async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId) {
         const statusEl  = document.getElementById(statusElId  || `status-${safeId}`);
         const resultsEl = document.getElementById(resultsElId || `results-${safeId}`);
         if (!statusEl || !resultsEl) return;
 
-        const queryUrl = `/api/search?vendor=${encodeURIComponent(vendor)}&text=${encodeURIComponent(version)}&size=3`;
+        // Il vendor viene incluso solo se noto (altrimenti si cerca solo per testo);
+        // il proxy lo risolve nel termine EUVD corretto (es. fortinet).
+        const params = new URLSearchParams();
+        if (vendor && vendor.trim()) params.set('vendor', vendor.trim());
+        params.set('text', version);
+        params.set('size', '3');
+        const queryUrl = `/api/search?${params.toString()}`;
 
         try {
             const deviceRes = await apiFetch(queryUrl);
             if (deviceRes && deviceRes.ok) {
                 const vulnData = await deviceRes.json();
-                const items = vulnData.results || vulnData.content || vulnData || [];
+                // L'API EUVD /api/search risponde con { items: [...], total: N }.
+                const items = vulnData.items || vulnData.results || vulnData.content
+                            || (Array.isArray(vulnData) ? vulnData : []);
 
                 if (items.length > 0) {
                     statusEl.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${items.length} ${i18n[currentLang].vulnerabilitiesDetected}</span>`;
                     resultsEl.innerHTML = "";
                     items.slice(0, 3).forEach(v => {
-                        const enisaId    = v.enisaId || v.id || "EUVD-Unknown";
-                        const cveId      = v.cveId   || v.cve || "N/A";
+                        const enisaId    = v.id || v.enisaId || "EUVD-Unknown";
+                        // Il CVE è dentro 'aliases' (stringa multi-riga: CVE/GHSA/...).
+                        const cveMatch   = /CVE-\d{4}-\d{3,}/i.exec(v.aliases || "");
+                        const cveId      = cveMatch ? cveMatch[0] : (v.cveId || v.cve || "N/A");
                         const description = v.description || v.summary || i18n[currentLang].descriptionNotAvailable;
-                        const score      = v.cvssScore || v.score || "N/A";
+                        // Il punteggio CVSS è nel campo 'baseScore' (numero, può essere 0).
+                        const score      = (v.baseScore != null && v.baseScore !== "")
+                                         ? v.baseScore : (v.cvssScore || v.score || "N/A");
 
                         let severity = "MEDIUM";
                         if (score !== "N/A") {

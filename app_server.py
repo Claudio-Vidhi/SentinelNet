@@ -1510,29 +1510,47 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
 
 # --- PROXY MIRATO VERSO ENISA EUVD (SOSTITUISCE IL CATCH-ALL PERICOLOSO) ---
 
+# Parametri ammessi da /api/search come da documentazione EUVD: qualunque altro
+# parametro viene scartato prima di inoltrare la richiesta al servizio ENISA.
+ENISA_SEARCH_PARAMS = {
+    "fromScore", "toScore", "fromEpss", "toEpss",
+    "fromDate", "toDate", "fromUpdatedDate", "toUpdatedDate",
+    "product", "vendor", "assigner", "exploited", "text", "page", "size",
+}
+
 @app.get("/api/search")
 async def proxy_enisa_search(request: Request, current_user = Depends(get_current_user)):
     from urllib.parse import parse_qs, urlencode
+    raw = parse_qs(request.url.query, keep_blank_values=True)
+    # Inoltra solo i parametri documentati dall'API EUVD.
+    params = {k: v for k, v in raw.items() if k in ENISA_SEARCH_PARAMS}
+
+    if params.get("vendor"):
+        original = params["vendor"][0]
+        resolved = inventory_manager.resolve_euvd_term(original)
+        if resolved != original:
+            log_audit(f"EUVD vendor risolto: '{original}' → '{resolved}'")
+        params["vendor"] = [resolved]
+
+    # 'size' è limitato a 100 dalla specifica API: lo vincoliamo a [1, 100].
+    if params.get("size"):
+        try:
+            params["size"] = [str(max(1, min(100, int(params["size"][0]))))]
+        except ValueError:
+            params.pop("size", None)
+
     target = f"{BASE_URL}/api/search"
-    query = request.url.query
-    if query:
-        params = parse_qs(query, keep_blank_values=True)
-        if "vendor" in params:
-            original = params["vendor"][0]
-            resolved = inventory_manager.resolve_euvd_term(original)
-            if resolved != original:
-                log_audit(f"EUVD vendor risolto: '{original}' → '{resolved}'")
-            params["vendor"] = [resolved]
+    if params:
         target += f"?{urlencode(params, doseq=True)}"
 
     try:
         headers = {"User-Agent": "ThreatIntelDashboard/3.0"}
         from fastapi.concurrency import run_in_threadpool
         r = await run_in_threadpool(requests.get, target, headers=headers, timeout=15)
-        
+
         return Response(
-            content=r.content, 
-            status_code=r.status_code, 
+            content=r.content,
+            status_code=r.status_code,
             headers={"Content-Type": r.headers.get("Content-Type", "application/json")}
         )
     except Exception as e:

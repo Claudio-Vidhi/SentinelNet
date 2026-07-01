@@ -1315,8 +1315,10 @@ def generate_network_map(group_filter=None) -> dict:
             "member_count":   member_count,
         })
 
-    # Override manuali di nome/versione scelti dall'utente per risolvere i
-    # conflitti CDP/LLDP (stesso device, nomi diversi sulla stessa porta).
+    # Override manuali scelti dall'utente (nome/versione per risolvere i conflitti
+    # CDP/LLDP, ma anche vendor/modello riclassificati a mano nel tab Categorie):
+    # devono riflettersi sul nodo della mappa così che, ad es., il vendor usato
+    # dalla query EUVD sia quello reale e non l'hostname del dispositivo.
     for node_id, a in category_assignments.items():
         node = nodes_map.get(node_id)
         if not node:
@@ -1325,6 +1327,10 @@ def generate_network_map(group_filter=None) -> dict:
             node["label"] = a["name"]
         if a.get("ver"):
             node["version"] = a["ver"]
+        if a.get("vendor"):
+            node["vendor"] = a["vendor"]
+        if a.get("model"):
+            node["model"] = a["model"]
 
     nodes = list(nodes_map.values())
 
