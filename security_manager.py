@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
 import jwt
 import data_config
+import secure_key_store
 
 JWT_KEY_FILE = data_config.get_path("jwt_secret.key")
 
@@ -14,29 +15,14 @@ def load_or_create_jwt_secret() -> str:
     env_secret = os.getenv("SENTINELNET_JWT_SECRET")
     if env_secret:
         return hashlib.sha256(env_secret.encode('utf-8')).hexdigest()
-        
-    # 2. Fallback su file persistito localmente (jwt_secret.key)
-    if not os.path.exists(JWT_KEY_FILE):
-        import secrets
-        secret = secrets.token_hex(32)
-        try:
-            with open(JWT_KEY_FILE, "w", encoding="utf-8") as f:
-                f.write(secret)
-            
-            # Assicura automaticamente che il file rimanga locale ed escluso da git
-            if os.path.exists(".gitignore"):
-                with open(".gitignore", "r", encoding="utf-8") as gf:
-                    ignore_content = gf.read()
-                if "jwt_secret.key" not in ignore_content:
-                    with open(".gitignore", "a", encoding="utf-8") as gf:
-                        gf.write("\njwt_secret.key\n")
-        except Exception:
-            pass
-        return secret
-        
+
+    # 2. Fallback su file persistito localmente (jwt_secret.key), protetto a
+    #    riposo con DPAPI su Windows. I file legacy in chiaro vengono migrati
+    #    in-place mantenendo lo stesso segreto (le sessioni restano valide).
+    import secrets
     try:
-        with open(JWT_KEY_FILE, "r", encoding="utf-8") as f:
-            secret = f.read().strip()
+        raw = secure_key_store.load_or_create(JWT_KEY_FILE, lambda: secrets.token_hex(32))
+        secret = raw.decode("utf-8").strip()
         if not secret:
             raise ValueError("Il file della chiave JWT è vuoto.")
         return secret

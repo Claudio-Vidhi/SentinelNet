@@ -3,6 +3,7 @@ import base64
 import hashlib
 from cryptography.fernet import Fernet
 import data_config
+import secure_key_store
 
 KEY_FILE = data_config.get_path("secret.key")
 
@@ -14,14 +15,10 @@ def load_or_create_key():
         hashed = hashlib.sha256(env_key.encode('utf-8')).digest()
         return base64.urlsafe_b64encode(hashed)
 
-    # 2. Fallback su file locale persistente
-    if not os.path.exists(KEY_FILE):
-        key = Fernet.generate_key()
-        with open(KEY_FILE, "wb") as k_file:
-            k_file.write(key)
-        return key
-    with open(KEY_FILE, "rb") as k_file:
-        return k_file.read()
+    # 2. Fallback su file locale persistente, protetto a riposo con DPAPI su
+    #    Windows (il file copiato altrove è inservibile). I file legacy in chiaro
+    #    vengono migrati in-place mantenendo la stessa chiave.
+    return secure_key_store.load_or_create(KEY_FILE, Fernet.generate_key)
 
 CIPHER_SUITE = Fernet(load_or_create_key())
 

@@ -200,6 +200,10 @@ class UserDisableSchema(BaseModel):
 class DeviceDelete(BaseModel):
     ip: str
 
+class DeviceRenameSchema(BaseModel):
+    ip: str
+    hostname: str
+
 class CSVImportRequest(BaseModel):
     csv_data: str
 
@@ -651,6 +655,18 @@ def delete_device(payload: DeviceDelete, current_user = Depends(require_operator
     assert_device_allowed(current_user, payload.ip)
     inventory_manager.delete_device(payload.ip)
     log_audit(f"Dispositivo '{payload.ip}' eliminato dall'inventario dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/rename-device")
+def rename_device(payload: DeviceRenameSchema, current_user = Depends(require_operator)):
+    """Rinomina un dispositivo gestito impostandone manualmente l'hostname (il
+    nome mostrato in inventario e sulla mappa). admin/operator, con scoping."""
+    assert_device_allowed(current_user, payload.ip)
+    if not next((d for d in inventory_manager.get_all_devices() if d['IP'] == payload.ip), None):
+        raise HTTPException(status_code=404, detail="Dispositivo non trovato in inventario.")
+    hostname = payload.hostname.strip()
+    inventory_manager.update_device_hostname(payload.ip, hostname)
+    log_audit(f"Dispositivo '{payload.ip}' rinominato in '{hostname or '(vuoto)'}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
 @app.post("/api/import-csv")

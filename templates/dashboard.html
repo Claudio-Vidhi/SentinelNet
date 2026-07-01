@@ -824,7 +824,7 @@
       <h3 style="font-size: 14px; margin-bottom: 10px;" data-i18n="titleAddGroup"><i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo</h3>
       <div class="form-group">
         <label data-i18n="lblGroupName">Nome Gruppo</label>
-        <input id="newGroupName" type="text" placeholder="Es. Sede_Torino" style="padding-left:12px;">
+        <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" style="padding-left:12px;">
       </div>
       <button class="btn btn-primary" id="btnCreateGroup" style="background:#5ecf8d; color:#000;" data-i18n="btnCreateGroup">
         <i class="fa-solid fa-folder-plus"></i> Crea Gruppo
@@ -1183,8 +1183,8 @@
         Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.
       </p>
       <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Vendor
-192.168.1.1,admin,Mypass123!,enablepass,SW-Milano-01,Sede_Milano,cisco
-192.168.2.1,manager,Pwd456!,secret,SW-Roma-Core,Sede_Roma,hpe</div>
+192.168.1.1,admin,Mypass123!,enablepass,SW-Milano-01,Tenant_Milano,cisco
+192.168.2.1,manager,Pwd456!,secret,SW-Roma-Core,Tenant_Roma,hpe</div>
       
       <div class="form-group" style="margin-top: 20px; margin-bottom: 20px;">
         <label data-i18n="lblSelectCsv">Seleziona file CSV</label>
@@ -1453,20 +1453,20 @@
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Amministratore',
         btnExit: '<i class="fa-solid fa-power-off"></i> Esci',
         titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Provisioning Apparato',
-        lblGroup: "Assegna a Gruppo/Sede",
+        lblGroup: "Assegna a Tenant",
         lblIp: "IP Apparato",
         lblVendor: "Vendor Engine",
         lblProfile: "Profilo Credenziali",
         optProfileDefault: "Profilo Rete Standard",
         optProfileCustom: "Credenziali dedicate...",
         btnSaveDevice: '<i class="fa-solid fa-floppy-disk"></i> Salva Apparato',
-        titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo',
-        lblGroupName: "Nome Gruppo",
-        btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Crea Gruppo',
+        titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Tenant',
+        lblGroupName: "Nome Tenant",
+        btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Crea Tenant',
         
         // Tabs
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
-        tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi',
+        tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
         tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Dispositivi & Categorie',
@@ -1489,17 +1489,17 @@
         
         // Tab 1
         titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
-        optFilterAll: "Filtra per Sede: Tutte",
+        optFilterAll: "Filtra per Tenant: Tutti",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale',
-        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Sede',
-        titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Scegli la sede per il Triage',
-        descTriageScope: "Seleziona una singola sede da analizzare oppure esegui il triage su tutte le sedi.",
-        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scansiona tutte le sedi',
-        btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Sede',
+        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
+        titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Scegli il Tenant per il Triage',
+        descTriageScope: "Seleziona un singolo Tenant da analizzare oppure esegui il triage su tutti i Tenant.",
+        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scansiona tutti i Tenant',
+        btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Tenant',
         btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet',
         btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Esporta CSV',
         thStatus: "Stato",
-        thGroup: "Gruppo",
+        thGroup: "Tenant",
         thHostname: "Hostname",
         thIp: "Indirizzo IP",
         thVendor: "Vendor",
@@ -1507,12 +1507,12 @@
         thActions: "Azioni / Utility",
         
         // Tab 2
-        titleGroupsRegistry: "Anagrafica Gruppi, Clienti e Sedi Locali",
-        descGroupsRegistry: "I gruppi organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un gruppo sposta i dispositivi associati nel gruppo Generale.",
-        thGroupName: "Nome Sede / Cliente",
+        titleGroupsRegistry: "Anagrafica Tenant e Clienti",
+        descGroupsRegistry: "I Tenant organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un Tenant sposta i dispositivi associati nel Tenant Generale.",
+        thGroupName: "Nome Tenant / Cliente",
         thGroupDesc: "Descrizione Metadati",
         thGroupActions: "Azioni",
-        btnDeleteGroup: '<i class="fa-solid fa-trash-can"></i> Elimina Sede',
+        btnDeleteGroup: '<i class="fa-solid fa-trash-can"></i> Elimina Tenant',
         titleVendorRegistry: '<i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Gestione Vendor',
         descVendorRegistry: "Registro dei vendor supportati. Il campo EUVD Term è usato nelle query al database europeo delle vulnerabilità ENISA.",
         thVendorName: "Nome",
@@ -1544,7 +1544,7 @@
         lblShowDiscovered: "Mostra Scoperti",
         lblMapCategories: "Categorie",
         legendTitle: "Legenda",
-        lblThreatGroup: "Sede da analizzare:",
+        lblThreatGroup: "Tenant da analizzare:",
         lblThreatDiscovered: "Includi vicini scoperti",
         btnStartThreatScan: '<i class="fa-solid fa-play"></i> Avvia Scansione',
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Schermo Intero',
@@ -1590,13 +1590,13 @@
         btnBulkRun: '<i class="fa-solid fa-paper-plane"></i> Esegui sui dispositivi',
 
         // Ricerca inventario + gestione utenti
-        searchInventoryPl: "Cerca IP, hostname, vendor, gruppo...",
+        searchInventoryPl: "Cerca IP, hostname, vendor, tenant...",
         tabUsers: '<i class="fa-solid fa-users-gear"></i> Utenti',
         titleUsers: "Gestione Utenti e Privilegi",
         descUsers: 'Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.',
         thUserName: "Username",
         thUserRole: "Ruolo / Privilegio",
-        thUserGroups: "Sedi visibili / gestibili",
+        thUserGroups: "Tenant visibili / gestibili",
         thUserActions: "Azioni",
         titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente',
         lblNewUserName: "Username",
@@ -1610,7 +1610,9 @@
         // JS Alerts / Confirm Dialogs / Additional Strings
         confirmReset: "Sei sicuro? Questa azione eliminerà tutti i backup e azzererà la mappa di rete.",
         confirmDeleteDevice: "Sicuro di voler rimuovere il dispositivo {ip}?",
-        confirmDeleteGroup: "Eliminare la sede {name}? Tutti i dispositivi associati passeranno al gruppo Generale.",
+        promptRenameDevice: "Nuovo nome (hostname) per il dispositivo {ip}:",
+        alertRenameDeviceError: "Impossibile rinominare il dispositivo.",
+        confirmDeleteGroup: "Eliminare il tenant {name}? Tutti i dispositivi associati passeranno al Tenant Generale.",
         confirmDeleteVendor: "Eliminare vendor \"{name}\"?",
         alertNoTopology: "Nessuna mappa caricata. Esegui prima un Triage.",
         alertEnterIp: "Inserisci l'IP del dispositivo.",
@@ -1654,16 +1656,16 @@
         alertReassignmentError: "Errore riassegnazione: ",
         alertNetworkReassignmentError: "Errore di rete durante la riassegnazione.",
         alertTriageFailed: "Triage fallito: ",
-        alertGroupCreateError: "Errore durante la creazione del gruppo.",
-        alertGroupDeleteError: "Impossibile eliminare il gruppo.",
+        alertGroupCreateError: "Errore durante la creazione del tenant.",
+        alertGroupDeleteError: "Impossibile eliminare il tenant.",
         alertSaveDeviceError: "Impossibile salvare il dispositivo",
         topologyResetSuccessMsg: '> Topologia resettata. Avvia un Triage per ricostruire la mappa di rete.',
         alertTopologyResetError: "Errore durante il reset della topologia.",
         alertPingError: "Errore durante il ping check.",
-        allSites: "tutte le sedi",
+        allSites: "tutti i tenant",
         pingingBtnText: "Ping {group}...",
         emptyInventory: 'Nessun dispositivo in inventario. Aggiungi un apparato dalla barra laterale oppure avvia una <strong>Scansione Subnet</strong>.',
-        emptyInventoryFiltered: "Nessun dispositivo in questa sede."
+        emptyInventoryFiltered: "Nessun dispositivo in questo tenant."
       },
       en: {
         wizTitle: "🚀 First Access Detected",
@@ -1696,20 +1698,20 @@
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Administrator',
         btnExit: '<i class="fa-solid fa-power-off"></i> Logout',
         titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Device Provisioning',
-        lblGroup: "Assign to Group/Site",
+        lblGroup: "Assign to Tenant",
         lblIp: "Device IP",
         lblVendor: "Vendor Engine",
         lblProfile: "Credentials Profile",
         optProfileDefault: "Standard Network Profile",
         optProfileCustom: "Dedicated credentials...",
         btnSaveDevice: '<i class="fa-solid fa-floppy-disk"></i> Save Device',
-        titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Add New Group',
-        lblGroupName: "Group Name",
-        btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Create Group',
+        titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Add New Tenant',
+        lblGroupName: "Tenant Name",
+        btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Create Tenant',
         
         // Tabs
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
-        tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Groups/Sites',
+        tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
         tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> 2D Topology Map',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Devices & Categories',
@@ -1732,17 +1734,17 @@
         
         // Tab 1
         titleInventoryTable: "Monitored Network Devices",
-        optFilterAll: "Filter by Site: All",
+        optFilterAll: "Filter by Tenant: All",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run Global Triage',
-        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Site',
-        titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Choose site for Triage',
-        descTriageScope: "Select a single site to analyze, or run triage on all sites.",
-        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scan all sites',
-        btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Site',
+        btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
+        titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Choose tenant for Triage',
+        descTriageScope: "Select a single tenant to analyze, or run triage on all tenants.",
+        btnTriageAllSites: '<i class="fa-solid fa-globe"></i> Scan all tenants',
+        btnPingCheck: '<i class="fa-solid fa-wifi"></i> Ping Tenant',
         btnSubnetScan: '<i class="fa-solid fa-magnifying-glass-location"></i> Subnet Scan',
         btnExportCsv: '<i class="fa-solid fa-file-csv"></i> Export CSV',
         thStatus: "Status",
-        thGroup: "Group",
+        thGroup: "Tenant",
         thHostname: "Hostname",
         thIp: "IP Address",
         thVendor: "Vendor",
@@ -1750,12 +1752,12 @@
         thActions: "Actions / Utilities",
         
         // Tab 2
-        titleGroupsRegistry: "Groups, Clients and Local Sites Registry",
-        descGroupsRegistry: "Groups logically organize your asset topology. Deleting a group moves its associated devices to the General group.",
-        thGroupName: "Site / Client Name",
+        titleGroupsRegistry: "Tenants and Clients Registry",
+        descGroupsRegistry: "Tenants logically organize your asset topology. Deleting a tenant moves its associated devices to the General tenant.",
+        thGroupName: "Tenant / Client Name",
         thGroupDesc: "Metadata Description",
         thGroupActions: "Actions",
-        btnDeleteGroup: '<i class="fa-solid fa-trash-can"></i> Delete Site',
+        btnDeleteGroup: '<i class="fa-solid fa-trash-can"></i> Delete Tenant',
         titleVendorRegistry: '<i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Vendor Management',
         descVendorRegistry: "Registry of supported vendors. The EUVD Term field is used in queries to the European ENISA vulnerability database.",
         thVendorName: "Name",
@@ -1787,7 +1789,7 @@
         lblShowDiscovered: "Show Discovered",
         lblMapCategories: "Categories",
         legendTitle: "Legend",
-        lblThreatGroup: "Site to scan:",
+        lblThreatGroup: "Tenant to scan:",
         lblThreatDiscovered: "Include discovered neighbors",
         btnStartThreatScan: '<i class="fa-solid fa-play"></i> Start Scan',
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Fullscreen',
@@ -1833,13 +1835,13 @@
         btnBulkRun: '<i class="fa-solid fa-paper-plane"></i> Run on devices',
 
         // Inventory search + user management
-        searchInventoryPl: "Search IP, hostname, vendor, group...",
+        searchInventoryPl: "Search IP, hostname, vendor, tenant...",
         tabUsers: '<i class="fa-solid fa-users-gear"></i> Users',
         titleUsers: "User & Privilege Management",
         descUsers: 'Create accounts with different privileges. <strong>Admin</strong>: full control and user management. <strong>Operator</strong>: all network operations (triage, commands, inventory). <strong>Viewer</strong>: read-only.',
         thUserName: "Username",
         thUserRole: "Role / Privilege",
-        thUserGroups: "Visible / manageable sites",
+        thUserGroups: "Visible / manageable tenants",
         thUserActions: "Actions",
         titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> New User',
         lblNewUserName: "Username",
@@ -1853,7 +1855,9 @@
         // JS Alerts / Confirm Dialogs / Additional Strings
         confirmReset: "Are you sure? This action will delete all backups and reset the network map.",
         confirmDeleteDevice: "Are you sure you want to remove the device {ip}?",
-        confirmDeleteGroup: "Delete the site {name}? All associated devices will be moved to the General group.",
+        promptRenameDevice: "New name (hostname) for device {ip}:",
+        alertRenameDeviceError: "Could not rename the device.",
+        confirmDeleteGroup: "Delete the tenant {name}? All associated devices will be moved to the General tenant.",
         confirmDeleteVendor: "Delete vendor \"{name}\"?",
         alertNoTopology: "No map loaded. Please run a Triage first.",
         alertEnterIp: "Please enter the device IP.",
@@ -1897,16 +1901,16 @@
         alertReassignmentError: "Reassignment error: ",
         alertNetworkReassignmentError: "Network error during reassignment.",
         alertTriageFailed: "Triage failed: ",
-        alertGroupCreateError: "Error creating group.",
-        alertGroupDeleteError: "Unable to delete group.",
+        alertGroupCreateError: "Error creating tenant.",
+        alertGroupDeleteError: "Unable to delete tenant.",
         alertSaveDeviceError: "Unable to save device",
         topologyResetSuccessMsg: '> Topology reset. Run Triage to reconstruct the network map.',
         alertTopologyResetError: "Error resetting topology.",
         alertPingError: "Error during ping check.",
-        allSites: "all sites",
+        allSites: "all tenants",
         pingingBtnText: "Ping {group}...",
         emptyInventory: 'No devices in inventory. Add a device from the sidebar or run a <strong>Subnet Scan</strong>.',
-        emptyInventoryFiltered: "No devices in this site."
+        emptyInventoryFiltered: "No devices in this tenant."
       }
     };
 
@@ -2424,13 +2428,14 @@
         if (!groupBody) return;
         groupBody.innerHTML = '';
         Object.keys(globalGroups).forEach(g => {
-            let desc = globalGroups[g].description || "Sede Logica";
-            if (currentLang === 'en' && desc === "Sede Principale predefinita") {
-                desc = "Default Main Site";
-            } else if (currentLang === 'en' && desc.startsWith("Sede secondaria ")) {
-                desc = desc.replace("Sede secondaria ", "Secondary Site ");
+            let desc = globalGroups[g].description || "Tenant";
+            if (desc === "Sede Principale predefinita") {
+                desc = currentLang === 'en' ? "Default Main Tenant" : "Tenant principale";
+            } else if (desc.startsWith("Sede secondaria ")) {
+                const nm = desc.slice("Sede secondaria ".length);
+                desc = (currentLang === 'en' ? "Secondary Tenant " : "Tenant secondario ") + nm;
             }
-            const btnText = currentLang === 'en' ? '<i class="fa-solid fa-trash-can"></i> Delete Site' : '<i class="fa-solid fa-trash-can"></i> Elimina Sede';
+            const btnText = currentLang === 'en' ? '<i class="fa-solid fa-trash-can"></i> Delete Tenant' : '<i class="fa-solid fa-trash-can"></i> Elimina Tenant';
             const renameText = currentLang === 'en' ? '<i class="fa-solid fa-pen"></i> Rename' : '<i class="fa-solid fa-pen"></i> Rinomina';
             const reservedText = currentLang === 'en' ? 'System Reserved' : 'System Reserved';
             const renameBtn = (g !== 'Generale')
@@ -2499,7 +2504,7 @@
                     ${isViewer ? '' : `<select
                       id="grpsel_${safeIp}"
                       onchange="reassignDevice('${d.IP}', this.value, this)"
-                      title="Sposta in altro gruppo senza eliminare"
+                      title="Sposta in un altro tenant senza eliminare"
                       style="font-size:11px; padding:3px 6px; border-radius:6px;
                              border:1px solid var(--border); background:var(--surface-3);
                              color:var(--text-muted); cursor:pointer; outline:none;
@@ -2508,7 +2513,14 @@
                     </select>`}
                   </div>
                 </td>
-                <td style="font-family:monospace; font-size:12px;">${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td style="font-family:monospace; font-size:12px;">
+                  ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
+                  ${isViewer ? '' : `<button onclick="renameDevice('${d.IP}')"
+                      title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}"
+                      style="margin-left:6px; font-size:11px; cursor:pointer; border:none; background:none;
+                             color:var(--text-muted); padding:0;">
+                      <i class="fa-solid fa-pen"></i></button>`}
+                </td>
                 <td><strong>${d.IP}</strong></td>
                 <td>${escapeHtml(d.Vendor.toUpperCase())}</td>
                 <td><code>${escapeHtml(versionText)}</code></td>
@@ -2604,13 +2616,34 @@
         }
     }
 
+    // Rinomina un dispositivo gestito (imposta manualmente l'hostname mostrato).
+    async function renameDevice(ip) {
+        const dev = globalDevices.find(d => d.IP === ip);
+        const current = dev ? (dev.Hostname || '') : '';
+        const label = i18n[currentLang].promptRenameDevice.replace("{ip}", ip);
+        const name = prompt(label, current);
+        if (name === null) return;                 // annullato
+        if (name.trim() === (current || '').trim()) return;  // nessuna modifica
+        const res = await apiFetch('/api/rename-device', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ip: ip, hostname: name.trim() })
+        });
+        if (res && res.ok) {
+            appInit();
+        } else if (res) {
+            alert(i18n[currentLang].alertRenameDeviceError);
+        }
+    }
+
     // --- GRUPPI CRUD ---
 
     document.getElementById('btnCreateGroup').addEventListener('click', async () => {
         const name = document.getElementById('newGroupName').value.trim();
         if(!name) return;
         
-        const description = currentLang === 'en' ? `Secondary Site ${name}` : `Sede secondaria ${name}`;
+        // Descrizione canonica in forma IT: renderGroupsTable la traduce per lingua.
+        const description = `Sede secondaria ${name}`;
         const res = await apiFetch('/api/groups', { 
             method: 'POST', 
             headers: {'Content-Type': 'application/json'}, 
@@ -2641,8 +2674,8 @@
 
     async function renameGroup(oldName) {
         const newName = prompt(currentLang==='en'
-            ? `New name for site "${oldName}":`
-            : `Nuovo nome per la sede "${oldName}":`, oldName);
+            ? `New name for tenant "${oldName}":`
+            : `Nuovo nome per il tenant "${oldName}":`, oldName);
         if (newName === null) return;
         const trimmed = newName.trim();
         if (!trimmed || trimmed === oldName) return;
@@ -3064,7 +3097,7 @@
         
         const titleText = currentLang === 'en' ? 'Device Metadata' : 'Metadati Apparato';
         const labelIpText = currentLang === 'en' ? 'IP Address:' : 'Indirizzo IP:';
-        const labelGroupText = currentLang === 'en' ? 'Site/Group:' : 'Sede/Gruppo:';
+        const labelGroupText = currentLang === 'en' ? 'Tenant:' : 'Tenant:';
         const labelStatusText = currentLang === 'en' ? 'Network Status:' : 'Stato Rete:';
 
         // IP annunciato via CDP/LLDP diverso dall'IP di management reale: il vicino
@@ -3366,7 +3399,7 @@
         if (gsel) {
             const cur = gsel.value;
             const groups = Object.keys(categoriesData.counts_by_group).sort();
-            gsel.innerHTML = `<option value="all">${currentLang==='en'?'Filter by Site: All':'Filtra per Sede: Tutte'}</option>` +
+            gsel.innerHTML = `<option value="all">${currentLang==='en'?'Filter by Tenant: All':'Filtra per Tenant: Tutti'}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
             gsel.value = groups.includes(cur) ? cur : "all";
         }
@@ -3657,8 +3690,8 @@
         if (!n || !n.display_ip) { alert(currentLang==='en'?'No announced IP available.':'Nessun IP annunciato disponibile.'); return; }
         const vendor = (effVal(n,'vendor') && effVal(n,'vendor') !== 'discovered') ? effVal(n,'vendor') : 'cisco';
         const msg = currentLang==='en'
-            ? `Promote "${n.label}" (${n.display_ip}) to managed in site "${n.group}"? You can set credentials afterwards in Inventory.`
-            : `Promuovere "${n.label}" (${n.display_ip}) a gestito nella sede "${n.group}"? Le credenziali si impostano dopo, in Inventario.`;
+            ? `Promote "${n.label}" (${n.display_ip}) to managed in tenant "${n.group}"? You can set credentials afterwards in Inventory.`
+            : `Promuovere "${n.label}" (${n.display_ip}) a gestito nel tenant "${n.group}"? Le credenziali si impostano dopo, in Inventario.`;
         if (!confirm(msg)) return;
         const res = await apiFetch("/api/promote-device", {
             method: "POST",
@@ -3990,10 +4023,10 @@
             // Editor sedi: gli admin vedono tutto; per gli altri checkbox per sede (nessuna = tutte)
             let scopeCell;
             if (u.role === 'admin') {
-                scopeCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All sites (admin)' : 'Tutte le sedi (admin)'}</span>`;
+                scopeCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All tenants (admin)' : 'Tutti i tenant (admin)'}</span>`;
             } else {
                 const summary = scope.length === 0
-                    ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All sites' : 'Tutte le sedi'}</span>`
+                    ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All tenants' : 'Tutti i tenant'}</span>`
                     : `<span style="color:var(--primary);">${scope.map(escapeHtml).join(', ')}</span>`;
                 const checks = allGroups.map(g =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
@@ -4007,8 +4040,8 @@
                       <i class="fa-solid fa-location-dot" style="color:var(--text-muted); margin-right:4px;"></i>${summary}
                     </summary>
                     <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); max-height:160px; overflow:auto;">
-                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all sites' : 'Nessuna spuntata = tutte le sedi'}</div>
-                      ${checks || `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No sites' : 'Nessuna sede'}</span>`}
+                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tenants' : 'Nessuno spuntato = tutti i tenant'}</div>
+                      ${checks || `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No tenants' : 'Nessun tenant'}</span>`}
                     </div>
                   </details>`;
             }
@@ -4160,7 +4193,7 @@
                     <span class="badge" style="margin-left:auto;">${escapeHtml(d.Group)}</span>
                 </label>`;
             }).join('');
-        list.innerHTML = rows || `<div style="padding:12px; color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No devices in this site.' : 'Nessun dispositivo in questa sede.'}</div>`;
+        list.innerHTML = rows || `<div style="padding:12px; color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No devices in this tenant.' : 'Nessun dispositivo in questo tenant.'}</div>`;
         syncBulkSelectAll();
     }
 
@@ -4520,12 +4553,12 @@
         if (sel) {
             const cur = sel.value;
             const groups = Object.keys(globalGroups || {});
-            sel.innerHTML = `<option value="all">${currentLang==='en'?'All sites':'Tutte le sedi'}</option>` +
+            sel.innerHTML = `<option value="all">${currentLang==='en'?'All tenants':'Tutti i tenant'}</option>` +
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
             sel.value = groups.includes(cur) ? cur : 'all';
         }
         const container = document.getElementById("securityTriageContainer");
-        if (container) container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-shield-halved fa-2x" style="opacity:0.4;"></i><br><br>${currentLang==='en'?'Choose a site and start the scan.':'Scegli una sede e avvia la scansione.'}</div>`;
+        if (container) container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-shield-halved fa-2x" style="opacity:0.4;"></i><br><br>${currentLang==='en'?'Choose a tenant and start the scan.':'Scegli un tenant e avvia la scansione.'}</div>`;
     }
 
     async function startThreatScan() {
