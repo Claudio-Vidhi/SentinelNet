@@ -853,6 +853,9 @@
       <button class="tab-button" onclick="switchTab('tab-security', this)" data-i18n="tabSecurity">
         <i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)
       </button>
+      <button class="tab-button" onclick="switchTab('tab-mac', this)" data-i18n="tabMacTracker">
+        <i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker
+      </button>
       <button class="tab-button requires-write" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
         <i class="fa-solid fa-file-csv"></i> Importazione CSV
       </button>
@@ -1176,6 +1179,72 @@
       </div>
     </div>
 
+    <!-- TAB: MAC Address Tracker (storico MAC -> porta/vlan) -->
+    <div id="tab-mac" class="tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
+        <h3 data-i18n="titleMacTracker">MAC Address Tracker</h3>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select id="macScanGroup" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
+          </select>
+          <button class="btn btn-primary btn-small requires-write" id="btnMacScan" onclick="runMacScan()" style="width:auto; margin:0; background:var(--warning); color:#000;" data-i18n="btnMacScan">
+            <i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan
+          </button>
+          <div class="requires-admin" style="display:flex; align-items:center; gap:6px;">
+            <label style="font-size:12px; color:var(--text-muted);" data-i18n="lblMacRetention">Retention (giorni):</label>
+            <input id="macRetentionDays" type="number" min="1" max="3650" style="width:70px; padding:5px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+            <button class="btn btn-secondary btn-small" onclick="saveMacRetention()" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
+          </div>
+        </div>
+      </div>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descMacTracker">
+        Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.
+      </p>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px;">
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
+          <input id="macSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacVlan">VLAN</label>
+          <input id="macSearchVlan" class="ui-input" type="text" placeholder="10" style="width:80px;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacIface">Interfaccia / Port-channel</label>
+          <input id="macSearchIface" class="ui-input" type="text" placeholder="Gi1/0/5, Po1" style="width:160px;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label>
+          <input id="macSearchSwitch" class="ui-input" type="text" placeholder="10.0.0.1" style="width:130px;">
+        </div>
+        <button class="btn btn-primary btn-small" onclick="macSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
+          <i class="fa-solid fa-magnifying-glass"></i> Cerca
+        </button>
+        <button class="btn btn-secondary btn-small" onclick="macSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
+          <i class="fa-solid fa-rotate-left"></i> Reset
+        </button>
+        <span id="macStats" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="thMacAddr">MAC</th>
+              <th data-i18n="thMacVendor">Vendor (OUI)</th>
+              <th data-i18n="thMacSwitch">Switch</th>
+              <th data-i18n="thMacPort">Interfaccia / Port-channel</th>
+              <th data-i18n="thMacVlan">VLAN</th>
+              <th data-i18n="thMacFirst">Primo avvistamento</th>
+              <th data-i18n="thMacLast">Ultimo avvistamento</th>
+            </tr>
+          </thead>
+          <tbody id="macTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- TAB 6: Importazione CSV -->
     <div id="tab-import" class="tab-content">
       <h3 data-i18n="titleImportCsv">Importazione Massiva da CSV</h3>
@@ -1488,6 +1557,25 @@
         phNewSubcat: 'es. videosorveglianza',
         btnCreateCategory: '<i class="fa-solid fa-plus"></i> Crea',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
+        tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
+        titleMacTracker: "MAC Address Tracker",
+        descMacTracker: "Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.",
+        btnMacScan: '<i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan',
+        lblMacRetention: "Retention (giorni):",
+        btnSave: "Salva",
+        lblMacSearch: "MAC (anche parziale / OUI)",
+        lblMacVlan: "VLAN",
+        lblMacIface: "Interfaccia / Port-channel",
+        lblMacSwitch: "Switch (IP)",
+        btnMacSearchGo: '<i class="fa-solid fa-magnifying-glass"></i> Cerca',
+        btnMacReset: '<i class="fa-solid fa-rotate-left"></i> Reset',
+        thMacAddr: "MAC",
+        thMacVendor: "Vendor (OUI)",
+        thMacSwitch: "Switch",
+        thMacPort: "Interfaccia / Port-channel",
+        thMacVlan: "VLAN",
+        thMacFirst: "Primo avvistamento",
+        thMacLast: "Ultimo avvistamento",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
         
         // Tab 1
@@ -1736,6 +1824,25 @@
         phNewSubcat: 'e.g. video surveillance',
         btnCreateCategory: '<i class="fa-solid fa-plus"></i> Create',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
+        tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
+        titleMacTracker: "MAC Address Tracker",
+        descMacTracker: "Search and history of MAC addresses across the infrastructure: on which switch, interface/port-channel and VLAN a device is (or was) connected.",
+        btnMacScan: '<i class="fa-solid fa-satellite-dish"></i> Start MAC Scan',
+        lblMacRetention: "Retention (days):",
+        btnSave: "Save",
+        lblMacSearch: "MAC (partial / OUI too)",
+        lblMacVlan: "VLAN",
+        lblMacIface: "Interface / Port-channel",
+        lblMacSwitch: "Switch (IP)",
+        btnMacSearchGo: '<i class="fa-solid fa-magnifying-glass"></i> Search',
+        btnMacReset: '<i class="fa-solid fa-rotate-left"></i> Reset',
+        thMacAddr: "MAC",
+        thMacVendor: "Vendor (OUI)",
+        thMacSwitch: "Switch",
+        thMacPort: "Interface / Port-channel",
+        thMacVlan: "VLAN",
+        thMacFirst: "First seen",
+        thMacLast: "Last seen",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
         
         // Tab 1
@@ -2787,6 +2894,7 @@
         else if(tabId === 'tab-security' && !appLoading) {
             loadThreatIntel();
         }
+        else if(tabId === 'tab-mac') loadMacTracker();
         else if(tabId === 'tab-users') loadUsers();
     }
 
@@ -4555,6 +4663,138 @@
             btnEl.outerHTML = `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
         }
         appInit();
+    }
+
+    // --- MAC ADDRESS TRACKER (storico MAC -> switch/porta/vlan) ---
+
+    function loadMacTracker() {
+        const sel = document.getElementById('macScanGroup');
+        if (sel) {
+            const cur = sel.value;
+            const groups = Object.keys(globalGroups || {});
+            sel.innerHTML = `<option value="all">${currentLang==='en'?'Filter by Tenant: All':'Filtra per Tenant: Tutti'}</option>` +
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+            sel.value = groups.includes(cur) ? cur : 'all';
+        }
+        refreshMacStats(true);
+        macSearch();
+    }
+
+    async function refreshMacStats(fillRetention) {
+        try {
+            const r = await apiFetch('/api/mac/stats');
+            if (!r || !r.ok) return;
+            const s = await r.json();
+            const el = document.getElementById('macStats');
+            if (el) el.textContent = currentLang==='en'
+                ? `${s.sightings} sightings · ${s.unique_macs} MAC · ${s.switches} switches · retention ${s.retention_days}d`
+                : `${s.sightings} avvistamenti · ${s.unique_macs} MAC · ${s.switches} switch · retention ${s.retention_days}g`;
+            const rin = document.getElementById('macRetentionDays');
+            if (rin && (fillRetention || !rin.value)) rin.value = s.retention_days;
+        } catch (e) {}
+    }
+
+    async function runMacScan() {
+        const btn = document.getElementById('btnMacScan');
+        const group = document.getElementById('macScanGroup') ? document.getElementById('macScanGroup').value : 'all';
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${currentLang==='en'?'Scanning...':'Scansione...'}`;
+        try {
+            const res = await apiFetch('/api/mac/scan', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ group })
+            });
+            if (res && res.ok) {
+                const d = await res.json();
+                const okc = d.results.filter(r => !r.error).length;
+                const errc = d.results.filter(r => r.error).length;
+                alert(currentLang==='en'
+                    ? `MAC scan done: ${d.scanned} devices (${okc} ok, ${errc} errors), pruned ${d.pruned}.`
+                    : `MAC scan completata: ${d.scanned} apparati (${okc} ok, ${errc} errori), rimossi ${d.pruned}.`);
+                macSearch();
+                refreshMacStats(false);
+            } else if (res) {
+                const e = await res.json().catch(() => ({}));
+                alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
+            }
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        }
+    }
+
+    async function macSearch() {
+        const params = new URLSearchParams();
+        const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+        if (g('macSearchMac'))    params.set('mac', g('macSearchMac'));
+        if (g('macSearchVlan'))   params.set('vlan', g('macSearchVlan'));
+        if (g('macSearchIface'))  params.set('interface', g('macSearchIface'));
+        if (g('macSearchSwitch')) params.set('switch', g('macSearchSwitch'));
+        const res = await apiFetch('/api/mac/search?' + params.toString());
+        if (!res || !res.ok) return;
+        const d = await res.json();
+        renderMacResults(d.results || []);
+    }
+
+    function macSearchReset() {
+        ['macSearchMac','macSearchVlan','macSearchIface','macSearchSwitch'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        macSearch();
+    }
+
+    function fmtMacTime(iso) {
+        if (!iso) return '—';
+        try { return new Date(iso).toLocaleString(currentLang==='en' ? 'en-US' : 'it-IT'); }
+        catch (e) { return iso; }
+    }
+
+    function renderMacResults(rows) {
+        const body = document.getElementById('macTableBody');
+        if (!body) return;
+        if (!rows.length) {
+            body.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:28px; color:var(--text-muted); font-size:13px;">
+                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${currentLang==='en'?'No MAC sightings. Run a MAC Scan to populate the history.':'Nessun avvistamento MAC. Avvia una MAC Scan per popolare lo storico.'}</td></tr>`;
+            return;
+        }
+        body.innerHTML = rows.map(r => {
+            const port = r.port_channel
+                ? `${escapeHtml(r.interface||'—')} <span class="badge" style="font-size:10px;">${escapeHtml(r.port_channel)}</span>`
+                : escapeHtml(r.interface || '—');
+            const uplink = r.is_uplink
+                ? ` <span title="${currentLang==='en'?'Seen on a trunk/uplink (transit, not the access location)':'Visto su trunk/uplink (transito, non posizione di accesso)'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:0 4px;">uplink</span>`
+                : '';
+            const sw = r.switch_name
+                ? `${escapeHtml(r.switch_name)} <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(r.switch_ip)}</span>`
+                : escapeHtml(r.switch_ip);
+            return `<tr>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}</td>
+                <td>${escapeHtml(r.oui_vendor || '—')}</td>
+                <td>${sw}</td>
+                <td>${port}${uplink}</td>
+                <td>${escapeHtml(r.vlan || '—')}</td>
+                <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.first_seen))}</td>
+                <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.last_seen))}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function saveMacRetention() {
+        const days = parseInt(document.getElementById('macRetentionDays') ? document.getElementById('macRetentionDays').value : '', 10);
+        if (!days || days < 1) { alert(currentLang==='en'?'Enter a valid number of days.':'Inserisci un numero di giorni valido.'); return; }
+        const res = await apiFetch('/api/mac/settings', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ days })
+        });
+        if (res && res.ok) {
+            const d = await res.json();
+            alert((currentLang==='en'?'Retention set to ':'Retention impostata a ') + d.retention_days + (currentLang==='en'?' days.':' giorni.'));
+            refreshMacStats(false);
+        } else if (res) {
+            const e = await res.json().catch(() => ({}));
+            alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
+        }
     }
 
     // --- VULNERABILITY ADVISORY (EUVD) ---

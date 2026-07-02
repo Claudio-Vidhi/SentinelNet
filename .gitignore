@@ -17,6 +17,10 @@ users.json
 groups.json
 # Per-installation vendor registry (custom vendors are local, not shared)
 vendors.json
+# MAC address tracking history (local SQLite DB + WAL/SHM)
+mac_history.db
+mac_history.db-wal
+mac_history.db-shm
 
 # Network Backup configs
 backup-config/

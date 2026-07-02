@@ -39,6 +39,9 @@ device_models.json
 vendors.json
 users.json
 groups.json
+mac_history.db
+mac_history.db-wal
+mac_history.db-shm
 backup-config/
 data/
 
