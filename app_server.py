@@ -209,6 +209,7 @@ class DeviceRenameSchema(BaseModel):
 class MacScanSchema(BaseModel):
     group: str = "all"
     ip: Optional[str] = None
+    transport: Optional[str] = None   # netconf | restconf | cli | None=auto
 
 class MacRetentionSchema(BaseModel):
     days: int
@@ -1589,7 +1590,7 @@ def _mac_uplink_ports(ip: str) -> list:
         return []
 
 
-def _mac_collect_one(device: dict) -> dict:
+def _mac_collect_one(device: dict, transport=None) -> dict:
     ip = device["IP"]
     vendor = (device.get("Vendor") or "cisco").lower()
     username, password, secret = core_engine.get_device_credentials(device)
@@ -1599,7 +1600,7 @@ def _mac_collect_one(device: dict) -> dict:
         netmiko_type = "cisco_ios"
     res = mac_collector.collect_mac_table(
         ip, username, password, secret, device_type=netmiko_type,
-        uplink_ports=_mac_uplink_ports(ip),
+        uplink_ports=_mac_uplink_ports(ip), transport=transport,
     )
     res["device"] = device
     return res
@@ -1627,8 +1628,10 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
         raise HTTPException(status_code=404, detail="Nessun dispositivo idoneo per la scansione MAC.")
 
     # Raccolta in parallelo (I/O di rete), scrittura DB serializzata dopo.
+    from functools import partial
+    worker = partial(_mac_collect_one, transport=payload.transport)
     with ThreadPoolExecutor(max_workers=min(8, len(targets))) as ex:
-        collected = list(ex.map(_mac_collect_one, targets))
+        collected = list(ex.map(worker, targets))
 
     results = []
     for res in collected:

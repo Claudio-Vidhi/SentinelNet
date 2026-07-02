@@ -1184,8 +1184,17 @@
       <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
         <h3 data-i18n="titleMacTracker">MAC Address Tracker</h3>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <select id="macScanGroup" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+          <select id="macScanGroup" onchange="populateMacScanDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
             <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
+          </select>
+          <select id="macScanDevice" title="" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none; max-width:220px;">
+            <option value="all" data-i18n="optMacAllDevices">Tutti i dispositivi</option>
+          </select>
+          <select id="macScanTransport" title="" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
+            <option value="netconf">NETCONF</option>
+            <option value="restconf">RESTCONF</option>
+            <option value="cli">CLI</option>
           </select>
           <button class="btn btn-primary btn-small requires-write" id="btnMacScan" onclick="runMacScan()" style="width:auto; margin:0; background:var(--warning); color:#000;" data-i18n="btnMacScan">
             <i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan
@@ -1227,22 +1236,15 @@
         <span id="macStats" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span>
       </div>
 
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th data-i18n="thMacAddr">MAC</th>
-              <th data-i18n="thMacVendor">Vendor (OUI)</th>
-              <th data-i18n="thMacSwitch">Switch</th>
-              <th data-i18n="thMacPort">Interfaccia / Port-channel</th>
-              <th data-i18n="thMacVlan">VLAN</th>
-              <th data-i18n="thMacFirst">Primo avvistamento</th>
-              <th data-i18n="thMacLast">Ultimo avvistamento</th>
-            </tr>
-          </thead>
-          <tbody id="macTableBody"></tbody>
-        </table>
-      </div>
+      <style>
+        #tab-mac details.mac-switch > summary::-webkit-details-marker { display:none; }
+        #tab-mac details.mac-switch > summary { list-style:none; }
+        #tab-mac details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
+        #tab-mac details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
+        #tab-mac details.mac-switch > summary:hover { background: var(--surface-3); }
+      </style>
+      <!-- Risultati raggruppati per switch: clic sull'host per espandere i MAC -->
+      <div id="macResults"></div>
     </div>
 
     <!-- TAB 6: Importazione CSV -->
@@ -1561,6 +1563,8 @@
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.",
         btnMacScan: '<i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan',
+        optMacAllDevices: "Tutti i dispositivi",
+        optMacTransportAuto: "Trasporto: Auto",
         lblMacRetention: "Retention (giorni):",
         btnSave: "Salva",
         lblMacSearch: "MAC (anche parziale / OUI)",
@@ -1828,6 +1832,8 @@
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Search and history of MAC addresses across the infrastructure: on which switch, interface/port-channel and VLAN a device is (or was) connected.",
         btnMacScan: '<i class="fa-solid fa-satellite-dish"></i> Start MAC Scan',
+        optMacAllDevices: "All devices",
+        optMacTransportAuto: "Transport: Auto",
         lblMacRetention: "Retention (days):",
         btnSave: "Save",
         lblMacSearch: "MAC (partial / OUI too)",
@@ -4676,8 +4682,28 @@
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
             sel.value = groups.includes(cur) ? cur : 'all';
         }
+        populateMacScanDevices();
         refreshMacStats(true);
         macSearch();
+    }
+
+    // Popola il selettore dispositivo in base al tenant scelto (controllo granulare:
+    // permette di scansionare un singolo apparato invece di tutto il tenant).
+    function populateMacScanDevices() {
+        const gsel = document.getElementById('macScanGroup');
+        const dsel = document.getElementById('macScanDevice');
+        if (!dsel) return;
+        const group = gsel ? gsel.value : 'all';
+        const cur = dsel.value;
+        let devs = globalDevices || [];
+        if (group && group !== 'all') devs = devs.filter(d => d.Group === group);
+        const allLabel = (i18n[currentLang] && i18n[currentLang].optMacAllDevices) || 'All devices';
+        dsel.innerHTML = `<option value="all">${allLabel}</option>` +
+            devs.map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
+            }).join('');
+        if ([...dsel.options].some(o => o.value === cur)) dsel.value = cur;
     }
 
     async function refreshMacStats(fillRetention) {
@@ -4696,14 +4722,19 @@
 
     async function runMacScan() {
         const btn = document.getElementById('btnMacScan');
-        const group = document.getElementById('macScanGroup') ? document.getElementById('macScanGroup').value : 'all';
+        const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+        const group = val('macScanGroup') || 'all';
+        const device = val('macScanDevice') || 'all';
+        const transport = val('macScanTransport') || '';
+        const payload = { group, transport };
+        if (device && device !== 'all') payload.ip = device;   // singolo apparato
         const orig = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${currentLang==='en'?'Scanning...':'Scansione...'}`;
         try {
             const res = await apiFetch('/api/mac/scan', {
                 method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ group })
+                body: JSON.stringify(payload)
             });
             if (res && res.ok) {
                 const d = await res.json();
@@ -4750,33 +4781,62 @@
         catch (e) { return iso; }
     }
 
+    // Risultati raggruppati per switch: ogni host è un accordion collassato;
+    // si clicca sull'host per mostrare i MAC (UX più pulita di righe piatte).
     function renderMacResults(rows) {
-        const body = document.getElementById('macTableBody');
-        if (!body) return;
+        const box = document.getElementById('macResults');
+        if (!box) return;
         if (!rows.length) {
-            body.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:28px; color:var(--text-muted); font-size:13px;">
-                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${currentLang==='en'?'No MAC sightings. Run a MAC Scan to populate the history.':'Nessun avvistamento MAC. Avvia una MAC Scan per popolare lo storico.'}</td></tr>`;
+            box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;">
+                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${currentLang==='en'?'No MAC sightings. Run a MAC Scan to populate the history.':'Nessun avvistamento MAC. Avvia una MAC Scan per popolare lo storico.'}</div>`;
             return;
         }
-        body.innerHTML = rows.map(r => {
-            const port = r.port_channel
-                ? `${escapeHtml(r.interface||'—')} <span class="badge" style="font-size:10px;">${escapeHtml(r.port_channel)}</span>`
-                : escapeHtml(r.interface || '—');
-            const uplink = r.is_uplink
-                ? ` <span title="${currentLang==='en'?'Seen on a trunk/uplink (transit, not the access location)':'Visto su trunk/uplink (transito, non posizione di accesso)'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:0 4px;">uplink</span>`
-                : '';
-            const sw = r.switch_name
-                ? `${escapeHtml(r.switch_name)} <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(r.switch_ip)}</span>`
-                : escapeHtml(r.switch_ip);
-            return `<tr>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}</td>
-                <td>${escapeHtml(r.oui_vendor || '—')}</td>
-                <td>${sw}</td>
-                <td>${port}${uplink}</td>
-                <td>${escapeHtml(r.vlan || '—')}</td>
-                <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.first_seen))}</td>
-                <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.last_seen))}</td>
-            </tr>`;
+        const groups = {};
+        rows.forEach(r => {
+            const key = r.switch_ip || '?';
+            if (!groups[key]) groups[key] = { ip: r.switch_ip, name: r.switch_name, tenant: r.tenant, rows: [] };
+            groups[key].rows.push(r);
+        });
+        const keys = Object.keys(groups).sort();
+        const openAll = keys.length === 1;   // un solo switch: aperto di default
+        const L = i18n[currentLang];
+        const colHead = `<thead><tr>
+            <th>${L.thMacAddr}</th><th>${L.thMacVendor}</th><th>${L.thMacPort}</th>
+            <th>${L.thMacVlan}</th><th>${L.thMacFirst}</th><th>${L.thMacLast}</th></tr></thead>`;
+        box.innerHTML = keys.map(k => {
+            const g = groups[k];
+            const title = g.name
+                ? `${escapeHtml(g.name)} <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(g.ip)}</span>`
+                : escapeHtml(g.ip || '—');
+            const tenant = g.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(g.tenant)}</span>` : '';
+            const body = g.rows.map(r => {
+                const port = r.port_channel
+                    ? `${escapeHtml(r.interface||'—')} <span class="badge" style="font-size:10px;">${escapeHtml(r.port_channel)}</span>`
+                    : escapeHtml(r.interface || '—');
+                const uplink = r.is_uplink
+                    ? ` <span title="${currentLang==='en'?'Seen on a trunk/uplink (transit, not the access location)':'Visto su trunk/uplink (transito, non posizione di accesso)'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:0 4px;">uplink</span>`
+                    : '';
+                return `<tr>
+                    <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}</td>
+                    <td>${escapeHtml(r.oui_vendor || '—')}</td>
+                    <td>${port}${uplink}</td>
+                    <td>${escapeHtml(r.vlan || '—')}</td>
+                    <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.first_seen))}</td>
+                    <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.last_seen))}</td>
+                </tr>`;
+            }).join('');
+            const macWord = currentLang==='en' ? (g.rows.length===1?'MAC':'MACs') : 'MAC';
+            return `<details class="mac-switch" ${openAll?'open':''} style="margin-bottom:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); overflow:hidden;">
+                <summary style="cursor:pointer; padding:12px 14px; font-weight:700; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-chevron-right mac-chev"></i>
+                    <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
+                    <span>${title}${tenant}</span>
+                    <span style="margin-left:auto; font-size:12px; color:var(--text-muted); font-weight:600;">${g.rows.length} ${macWord}</span>
+                </summary>
+                <div class="table-container" style="border-top:1px solid var(--border);">
+                    <table>${colHead}<tbody>${body}</tbody></table>
+                </div>
+            </details>`;
         }).join('');
     }
 
