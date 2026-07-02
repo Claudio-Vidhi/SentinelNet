@@ -1577,7 +1577,7 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
 
 # --- MAC ADDRESS TRACKER (storicizzazione + ricerca) ---
 
-def _mac_uplink_ports(ip: str) -> list:
+def _mac_uplink_ports(ip: str) -> dict:
     """Porte locali dell'apparato che hanno un vicino CDP/LLDP: sono trunk/uplink,
     quindi i MAC visti lì sono transito e non 'posizione' reale dell'host. Si
     ricavano dal backup dell'apparato (già raccolto dal triage)."""
@@ -1592,11 +1592,16 @@ def _mac_uplink_ports(ip: str) -> list:
             if content:
                 break
         if not content:
-            return []
-        return list({n.get("local_port") for n in core_engine.parse_cdp_lldp_neighbors(content)
-                     if n.get("local_port")})
+            return {}
+        out = {}
+        for n in core_engine.parse_cdp_lldp_neighbors(content):
+            lp = n.get("local_port")
+            if lp and lp != "Unknown":
+                name = n.get("neighbor_id") or n.get("neighbor_ip") or "Unknown"
+                out[lp] = name
+        return out
     except Exception:
-        return []
+        return {}
 
 
 def _mac_collect_one(device: dict, transport=None) -> dict:
@@ -1676,6 +1681,44 @@ def mac_search(mac: str = None, vlan: str = None, interface: str = None,
     rows = mac_history.search(mac=mac, vlan=vlan, interface=interface,
                               switch_ip=switch, tenants=scope, frm=frm, to=to)
     return {"results": rows, "count": len(rows)}
+
+
+@app.get("/api/mac/locate")
+def mac_locate(mac: str, current_user = Depends(get_current_user)):
+    if not mac or not mac.strip():
+        raise HTTPException(status_code=400, detail="Parametro mac obbligatorio")
+    scope = user_group_scope(current_user)
+    sightings = mac_history.search(mac=mac, tenants=scope, limit=500)
+    if not sightings:
+        return {"origin": [], "transit": [], "results": []}
+    by_mac = {}
+    order = []
+    for s in sightings:
+        m = s["mac"]
+        if m not in by_mac:
+            order.append(m)
+            by_mac[m] = []
+        by_mac[m].append(s)
+    results = []
+    for m in order:
+        rows = by_mac[m]
+        res = {"mac": m, "oui_vendor": "", "origin": [], "transit": []}
+        for s in rows:
+            if s.get("oui_vendor"):
+                res["oui_vendor"] = s["oui_vendor"]
+            if s.get("is_uplink"):
+                res["transit"].append(s)
+            else:
+                res["origin"].append(s)
+        results.append(res)
+    if len(results) == 1:
+        return {
+            "mac": results[0]["mac"],
+            "origin": results[0]["origin"],
+            "transit": results[0]["transit"],
+            "results": results
+        }
+    return {"results": results}
 
 
 @app.get("/api/mac/switch/{ip}")

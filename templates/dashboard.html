@@ -1624,6 +1624,7 @@
         thMacSwitch: "Switch",
         thMacPort: "Interfaccia / Port-channel",
         thMacVlan: "VLAN",
+        thMacOrigin: "Origine",
         thMacFirst: "Primo avvistamento",
         thMacLast: "Ultimo avvistamento",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
@@ -1898,6 +1899,7 @@
         thMacSwitch: "Switch",
         thMacPort: "Interface / Port-channel",
         thMacVlan: "VLAN",
+        thMacOrigin: "Origin",
         thMacFirst: "First seen",
         thMacLast: "Last seen",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
@@ -4120,6 +4122,24 @@
             rows: 24,
             cols: 80
         });
+        termInstance.registerLinkProvider({
+            provideLinks: (y, cb) => {
+                const line = termInstance.buffer.active.getLine(y - 1);
+                if (!line) { cb([]); return; }
+                const text = line.translateToString(true);
+                const rx = /(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}|(?:[0-9a-fA-F]{4}\.){2}[0-9a-fA-F]{4}/g;
+                const links = [];
+                let m;
+                while ((m = rx.exec(text)) !== null) {
+                    links.push({
+                        range: { start: { x: m.index + 1, y }, end: { x: m.index + m[0].length, y } },
+                        text: m[0],
+                        activate: (e, t) => macLocate(t)
+                    });
+                }
+                cb(links);
+            }
+        });
         termInstance.open(container);
         termInstance.write(currentLang === 'en' ? "Initializing terminal session...\r\n" : "Inizializzazione sessione terminale...\r\n");
 
@@ -4253,6 +4273,66 @@
             </tr>`;
         }).join('');
     }
+
+    function closeMacLocateModal() {
+        const m = document.getElementById('macLocateModal');
+        if (m) m.remove();
+    }
+
+    async function macLocate(mac) {
+        const res = await apiFetch('/api/mac/locate?mac=' + encodeURIComponent(mac));
+        if (!res || !res.ok) { alert(currentLang==='en'?'Locate failed.':'Localizzazione non riuscita.'); return; }
+        const d = await res.json();
+        const en = currentLang === 'en';
+
+        const sightRow = (s, accent) => `
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:8px; margin-bottom:6px; background:var(--surface-2);">
+                <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
+                <div style="flex:1;">
+                    <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
+                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span></div>
+                    <div style="font-size:11px; color:var(--text-muted);">
+                        <i class="fa-solid fa-ethernet"></i> ${escapeHtml(s.interface || '—')}${s.port_channel?` (${escapeHtml(s.port_channel)})`:''}
+                        • VLAN ${escapeHtml(s.vlan || '—')}${s.uplink_to?` • <span style="color:var(--warning);">→ ${escapeHtml(s.uplink_to)}</span>`:''}
+                    </div>
+                </div>
+                <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
+            </div>`;
+
+        const origin = d.origin || [];
+        const transit = d.transit || [];
+        const originHtml = origin.length
+            ? origin.map(s => sightRow(s, 'var(--success)')).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
+        const transitHtml = transit.length
+            ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
+
+        const ov = document.createElement('div');
+        ov.id = 'macLocateModal';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.innerHTML = `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
+                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+                </div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(d.mac || mac)}</div>
+
+                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
+                ${originHtml}
+
+                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
+                ${transitHtml}
+
+                <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                    <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
+                </div>
+            </div>`;
+        ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
+        document.body.appendChild(ov);
+    }
+
 
     async function saveUserGroups(username) {
         const details = document.querySelector(`#usersTableBody details[data-u="${CSS.escape(username)}"]`);
@@ -4470,6 +4550,66 @@
             </details>`;
         }).join('');
     }
+
+    function closeMacLocateModal() {
+        const m = document.getElementById('macLocateModal');
+        if (m) m.remove();
+    }
+
+    async function macLocate(mac) {
+        const res = await apiFetch('/api/mac/locate?mac=' + encodeURIComponent(mac));
+        if (!res || !res.ok) { alert(currentLang==='en'?'Locate failed.':'Localizzazione non riuscita.'); return; }
+        const d = await res.json();
+        const en = currentLang === 'en';
+
+        const sightRow = (s, accent) => `
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:8px; margin-bottom:6px; background:var(--surface-2);">
+                <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
+                <div style="flex:1;">
+                    <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
+                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span></div>
+                    <div style="font-size:11px; color:var(--text-muted);">
+                        <i class="fa-solid fa-ethernet"></i> ${escapeHtml(s.interface || '—')}${s.port_channel?` (${escapeHtml(s.port_channel)})`:''}
+                        • VLAN ${escapeHtml(s.vlan || '—')}${s.uplink_to?` • <span style="color:var(--warning);">→ ${escapeHtml(s.uplink_to)}</span>`:''}
+                    </div>
+                </div>
+                <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
+            </div>`;
+
+        const origin = d.origin || [];
+        const transit = d.transit || [];
+        const originHtml = origin.length
+            ? origin.map(s => sightRow(s, 'var(--success)')).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
+        const transitHtml = transit.length
+            ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
+
+        const ov = document.createElement('div');
+        ov.id = 'macLocateModal';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.innerHTML = `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
+                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+                </div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(d.mac || mac)}</div>
+
+                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
+                ${originHtml}
+
+                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
+                ${transitHtml}
+
+                <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                    <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
+                </div>
+            </div>`;
+        ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
+        document.body.appendChild(ov);
+    }
+
 
     // Chiusura del modale Bulk: backdrop e tasto Escape
     document.getElementById('bulkCommandModal').addEventListener('click', e => {
@@ -4952,7 +5092,7 @@
         const L = i18n[currentLang];
         const colHead = `<thead><tr>
             <th>${L.thMacAddr}</th><th>${L.thMacVendor}</th><th>${L.thMacPort}</th>
-            <th>${L.thMacVlan}</th><th>${L.thMacFirst}</th><th>${L.thMacLast}</th></tr></thead>`;
+            <th>${L.thMacVlan}</th><th>${L.thMacOrigin}</th><th>${L.thMacFirst}</th><th>${L.thMacLast}</th></tr></thead>`;
         box.innerHTML = keys.map(k => {
             const g = groups[k];
             const title = g.name
@@ -4966,11 +5106,16 @@
                 const uplink = r.is_uplink
                     ? ` <span title="${currentLang==='en'?'Seen on a trunk/uplink (transit, not the access location)':'Visto su trunk/uplink (transito, non posizione di accesso)'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:0 4px;">uplink</span>`
                     : '';
+                const originCell = r.is_uplink
+                    ? `<span title="${currentLang==='en'?'In transit on an uplink':'In transito su un uplink'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${currentLang==='en'?'transit':'transito'}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
+                    : `<span title="${currentLang==='en'?'Access port – device attached here':'Porta di accesso – dispositivo collegato qui'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${currentLang==='en'?'access':'accesso'}</span>`;
+                const locateBtn = `<button onclick="macLocate('${escapeHtml(r.mac)}')" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
                 return `<tr>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}</td>
                     <td>${escapeHtml(r.oui_vendor || '—')}</td>
                     <td>${port}${uplink}</td>
                     <td>${escapeHtml(r.vlan || '—')}</td>
+                    <td style="white-space:nowrap;">${originCell}${locateBtn}</td>
                     <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.first_seen))}</td>
                     <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.last_seen))}</td>
                 </tr>`;
@@ -4989,6 +5134,66 @@
             </details>`;
         }).join('');
     }
+
+    function closeMacLocateModal() {
+        const m = document.getElementById('macLocateModal');
+        if (m) m.remove();
+    }
+
+    async function macLocate(mac) {
+        const res = await apiFetch('/api/mac/locate?mac=' + encodeURIComponent(mac));
+        if (!res || !res.ok) { alert(currentLang==='en'?'Locate failed.':'Localizzazione non riuscita.'); return; }
+        const d = await res.json();
+        const en = currentLang === 'en';
+
+        const sightRow = (s, accent) => `
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:8px; margin-bottom:6px; background:var(--surface-2);">
+                <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
+                <div style="flex:1;">
+                    <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
+                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span></div>
+                    <div style="font-size:11px; color:var(--text-muted);">
+                        <i class="fa-solid fa-ethernet"></i> ${escapeHtml(s.interface || '—')}${s.port_channel?` (${escapeHtml(s.port_channel)})`:''}
+                        • VLAN ${escapeHtml(s.vlan || '—')}${s.uplink_to?` • <span style="color:var(--warning);">→ ${escapeHtml(s.uplink_to)}</span>`:''}
+                    </div>
+                </div>
+                <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
+            </div>`;
+
+        const origin = d.origin || [];
+        const transit = d.transit || [];
+        const originHtml = origin.length
+            ? origin.map(s => sightRow(s, 'var(--success)')).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
+        const transitHtml = transit.length
+            ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
+            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
+
+        const ov = document.createElement('div');
+        ov.id = 'macLocateModal';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.innerHTML = `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
+                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+                </div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(d.mac || mac)}</div>
+
+                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
+                ${originHtml}
+
+                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
+                ${transitHtml}
+
+                <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                    <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
+                </div>
+            </div>`;
+        ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
+        document.body.appendChild(ov);
+    }
+
 
     async function saveMacRetention() {
         const days = parseInt(document.getElementById('macRetentionDays') ? document.getElementById('macRetentionDays').value : '', 10);

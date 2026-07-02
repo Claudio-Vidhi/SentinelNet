@@ -71,12 +71,17 @@ def init_db():
                     interface    TEXT    DEFAULT '',
                     port_channel TEXT    DEFAULT '',
                     is_uplink    INTEGER DEFAULT 0,
+                    uplink_to    TEXT    DEFAULT '',
                     tenant       TEXT    DEFAULT '',
                     first_seen   TEXT    NOT NULL,
                     last_seen    TEXT    NOT NULL,
                     seen_count   INTEGER DEFAULT 1
                 )
             """)
+            try:
+                c.execute("ALTER TABLE mac_sightings ADD COLUMN uplink_to TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass
             # Una posizione = (mac, switch, interfaccia, vlan): chiave di upsert.
             c.execute("""CREATE UNIQUE INDEX IF NOT EXISTS ux_mac_pos
                          ON mac_sightings(mac, switch_ip, interface, vlan)""")
@@ -189,6 +194,7 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
             iface = (r.get("interface") or "").strip()
             pc = (r.get("port_channel") or "").strip()
             up = 1 if r.get("is_uplink") else 0
+            uplink_to = (r.get("uplink_to") or "").strip()
             oui = (r.get("oui_vendor") or "").strip()
             existing = c.execute(
                 "SELECT id FROM mac_sightings WHERE mac=? AND switch_ip=? AND interface=? AND vlan=?",
@@ -196,16 +202,16 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
             if existing:
                 c.execute("""UPDATE mac_sightings
                              SET last_seen=?, seen_count=seen_count+1, is_uplink=?,
-                                 port_channel=?, oui_vendor=?, switch_name=?, tenant=?
+                                 port_channel=?, oui_vendor=?, switch_name=?, tenant=?, uplink_to=?
                              WHERE id=?""",
-                          (now, up, pc, oui, switch_name, tenant, existing["id"]))
+                          (now, up, pc, oui, switch_name, tenant, uplink_to, existing["id"]))
                 n_upd += 1
             else:
                 c.execute("""INSERT INTO mac_sightings
                              (mac, oui_vendor, vlan, switch_ip, switch_name, interface,
-                              port_channel, is_uplink, tenant, first_seen, last_seen, seen_count)
-                             VALUES (?,?,?,?,?,?,?,?,?,?,?,1)""",
-                          (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, tenant, now, now))
+                              port_channel, is_uplink, uplink_to, tenant, first_seen, last_seen, seen_count)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+                          (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, now, now))
                 n_new += 1
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 

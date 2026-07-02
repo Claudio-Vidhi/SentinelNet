@@ -278,16 +278,33 @@ def mark_uplinks(rows: list, uplink_ports) -> list:
     """Marca come is_uplink gli avvistamenti su porte trunk/uplink (da CDP/LLDP):
     un MAC visto su una dorsale è transito, non la sua 'posizione' reale."""
     ups = set()
-    for u in (uplink_ports or []):
+    port_to_neighbor = {}
+    if isinstance(uplink_ports, dict):
+        port_to_neighbor = uplink_ports.copy()
+        uplink_list = list(uplink_ports.keys())
+    else:
+        uplink_list = uplink_ports or []
+
+    for u in uplink_list:
         u = (u or '').strip()
         if not u:
             continue
         ups.add(u.lower())                    # forma abbreviata (es. 'gi1/0/9')
         ups.add(expand_iface(u).lower())      # forma estesa (espansa dal raw)
+        neigh = port_to_neighbor.get(u)
+        if neigh:
+            port_to_neighbor[u.lower()] = neigh
+            port_to_neighbor[expand_iface(u).lower()] = neigh
+
     for r in rows:
         iface = (r.get('interface') or '').lower()
         base = iface.split('.')[0]   # sottinterfaccia/service-instance -> fisica
-        r['is_uplink'] = iface in ups or base in ups
+        is_up = iface in ups or base in ups
+        r['is_uplink'] = is_up
+        if is_up:
+            r['uplink_to'] = port_to_neighbor.get(iface) or port_to_neighbor.get(base) or ""
+        else:
+            r['uplink_to'] = ""
     return rows
 
 
