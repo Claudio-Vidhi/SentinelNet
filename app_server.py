@@ -209,6 +209,7 @@ class DeviceRenameSchema(BaseModel):
 class MacScanSchema(BaseModel):
     group: str = "all"
     ip: Optional[str] = None
+    ips: List[str] = []               # multi-selezione: più device in un'unica scansione
     transport: Optional[str] = None   # netconf | restconf | cli | None=auto
 
 class MacRetentionSchema(BaseModel):
@@ -1624,13 +1625,18 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
 
+    # Insieme di IP richiesti esplicitamente (singolo 'ip' e/o multi-selezione 'ips').
+    want_ips = set(payload.ips or [])
+    if payload.ip:
+        want_ips.add(payload.ip)
+
     def allowed(d):
         g = d.get("Group", "Generale")
         if scope is not None and g not in scope:
             return False
         if payload.group and payload.group != "all" and g != payload.group:
             return False
-        if payload.ip and d["IP"] != payload.ip:
+        if want_ips and d["IP"] not in want_ips:
             return False
         return True
 
