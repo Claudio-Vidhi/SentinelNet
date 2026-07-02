@@ -25,6 +25,8 @@ import uuid
 import inventory_manager
 import core_engine
 import user_manager
+import mac_history
+import mac_collector
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
@@ -203,6 +205,13 @@ class DeviceDelete(BaseModel):
 class DeviceRenameSchema(BaseModel):
     ip: str
     hostname: str
+
+class MacScanSchema(BaseModel):
+    group: str = "all"
+    ip: Optional[str] = None
+
+class MacRetentionSchema(BaseModel):
+    days: int
 
 class CSVImportRequest(BaseModel):
     csv_data: str
@@ -1555,6 +1564,117 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+# --- MAC ADDRESS TRACKER (storicizzazione + ricerca) ---
+
+def _mac_uplink_ports(ip: str) -> list:
+    """Porte locali dell'apparato che hanno un vicino CDP/LLDP: sono trunk/uplink,
+    quindi i MAC visti lì sono transito e non 'posizione' reale dell'host. Si
+    ricavano dal backup dell'apparato (già raccolto dal triage)."""
+    try:
+        content = None
+        for root, _dirs, files in os.walk(core_engine.BACKUP_FOLDER):
+            for f in files:
+                if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
+                    with open(os.path.join(root, f), encoding="utf-8", errors="ignore") as fh:
+                        content = fh.read()
+                    break
+            if content:
+                break
+        if not content:
+            return []
+        return list({n.get("local_port") for n in core_engine.parse_cdp_lldp_neighbors(content)
+                     if n.get("local_port")})
+    except Exception:
+        return []
+
+
+def _mac_collect_one(device: dict) -> dict:
+    ip = device["IP"]
+    vendor = (device.get("Vendor") or "cisco").lower()
+    username, password, secret = core_engine.get_device_credentials(device)
+    try:
+        _, netmiko_type = core_engine.resolve_driver(vendor)
+    except Exception:
+        netmiko_type = "cisco_ios"
+    res = mac_collector.collect_mac_table(
+        ip, username, password, secret, device_type=netmiko_type,
+        uplink_ports=_mac_uplink_ports(ip),
+    )
+    res["device"] = device
+    return res
+
+
+@app.post("/api/mac/scan")
+def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
+    """Raccoglie la MAC-table degli apparati selezionati (scoped per tenant) e la
+    storicizza. Manuale, parallelizzato; al termine applica la retention."""
+    scope = user_group_scope(current_user)
+    devices = inventory_manager.get_all_devices()
+
+    def allowed(d):
+        g = d.get("Group", "Generale")
+        if scope is not None and g not in scope:
+            return False
+        if payload.group and payload.group != "all" and g != payload.group:
+            return False
+        if payload.ip and d["IP"] != payload.ip:
+            return False
+        return True
+
+    targets = [d for d in devices if allowed(d)]
+    if not targets:
+        raise HTTPException(status_code=404, detail="Nessun dispositivo idoneo per la scansione MAC.")
+
+    # Raccolta in parallelo (I/O di rete), scrittura DB serializzata dopo.
+    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as ex:
+        collected = list(ex.map(_mac_collect_one, targets))
+
+    results = []
+    for res in collected:
+        d = res["device"]
+        ip = d["IP"]
+        if res.get("error"):
+            results.append({"ip": ip, "error": res["error"], "count": 0})
+            continue
+        summ = mac_history.record_sightings(
+            res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
+            tenant=d.get("Group", "Generale"),
+        )
+        results.append({"ip": ip, "method": res["method"], "count": len(res["rows"]), **summ})
+
+    pruned = mac_history.prune()
+    log_audit(f"MAC scan eseguita da '{current_user.get('sub')}' su {len(targets)} apparati (pruned: {pruned}).")
+    return {"scanned": len(targets), "results": results, "pruned": pruned}
+
+
+@app.get("/api/mac/search")
+def mac_search(mac: str = None, vlan: str = None, interface: str = None,
+               switch: str = None, frm: str = None, to: str = None,
+               current_user = Depends(get_current_user)):
+    scope = user_group_scope(current_user)
+    rows = mac_history.search(mac=mac, vlan=vlan, interface=interface,
+                              switch_ip=switch, tenants=scope, frm=frm, to=to)
+    return {"results": rows, "count": len(rows)}
+
+
+@app.get("/api/mac/switch/{ip}")
+def mac_switch(ip: str, current_user = Depends(get_current_user)):
+    scope = user_group_scope(current_user)
+    return {"results": mac_history.switch_table(ip, tenants=scope)}
+
+
+@app.get("/api/mac/stats")
+def mac_stats(current_user = Depends(get_current_user)):
+    return mac_history.stats()
+
+
+@app.post("/api/mac/settings")
+def mac_set_settings(payload: MacRetentionSchema, current_user = Depends(require_admin)):
+    days = mac_history.set_retention_days(payload.days)
+    log_audit(f"MAC retention impostata a {days} giorni da '{current_user.get('sub')}'.")
+    return {"retention_days": days}
+
 
 # --- SCANSIONE SUBNET IN BACKGROUND ---
 
