@@ -214,6 +214,14 @@ class MacScanSchema(BaseModel):
 class MacRetentionSchema(BaseModel):
     days: int
 
+class MacOverrideSchema(BaseModel):
+    ip: str
+    command: str
+    fmt: str = "generic"    # bridge-domain | mac-address-table | generic
+
+class MacOverrideDeleteSchema(BaseModel):
+    ip: str
+
 class CSVImportRequest(BaseModel):
     csv_data: str
 
@@ -1598,9 +1606,12 @@ def _mac_collect_one(device: dict, transport=None) -> dict:
         _, netmiko_type = core_engine.resolve_driver(vendor)
     except Exception:
         netmiko_type = "cisco_ios"
+    # Comando ad-hoc configurato per questo apparato (casi non ordinari).
+    ov = mac_history.get_override(ip) or {}
     res = mac_collector.collect_mac_table(
         ip, username, password, secret, device_type=netmiko_type,
         uplink_ports=_mac_uplink_ports(ip), transport=transport,
+        cli_command=ov.get("command"), cli_format=ov.get("fmt"),
     )
     res["device"] = device
     return res
@@ -1677,6 +1688,33 @@ def mac_set_settings(payload: MacRetentionSchema, current_user = Depends(require
     days = mac_history.set_retention_days(payload.days)
     log_audit(f"MAC retention impostata a {days} giorni da '{current_user.get('sub')}'.")
     return {"retention_days": days}
+
+
+# --- Comandi ad-hoc per apparati non ordinari (es. C8000V bridge-domain) ---
+
+@app.get("/api/mac/overrides")
+def mac_list_overrides(current_user = Depends(get_current_user)):
+    return {"overrides": mac_history.list_overrides()}
+
+
+@app.post("/api/mac/overrides")
+def mac_set_override(payload: MacOverrideSchema, current_user = Depends(require_operator)):
+    if payload.fmt not in mac_collector.CLI_FORMATS:
+        raise HTTPException(status_code=400, detail="Formato di parsing non valido.")
+    assert_device_allowed(current_user, payload.ip)
+    if not mac_history.set_override(payload.ip, payload.command, payload.fmt):
+        raise HTTPException(status_code=400, detail="IP e comando obbligatori.")
+    log_audit(f"MAC override per '{payload.ip}' impostato ('{payload.command}' / {payload.fmt}) "
+              f"da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+
+@app.post("/api/mac/overrides/delete")
+def mac_delete_override(payload: MacOverrideDeleteSchema, current_user = Depends(require_operator)):
+    assert_device_allowed(current_user, payload.ip)
+    mac_history.delete_override(payload.ip)
+    log_audit(f"MAC override per '{payload.ip}' rimosso da '{current_user.get('sub')}'.")
+    return {"status": "success"}
 
 
 # --- SCANSIONE SUBNET IN BACKGROUND ---
