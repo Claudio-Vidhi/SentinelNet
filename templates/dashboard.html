@@ -1187,9 +1187,14 @@
           <select id="macScanGroup" onchange="populateMacScanDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
             <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
           </select>
-          <select id="macScanDevice" title="" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none; max-width:220px;">
-            <option value="all" data-i18n="optMacAllDevices">Tutti i dispositivi</option>
-          </select>
+          <details id="macDeviceMenu" style="position:relative;">
+            <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
+              <span id="macDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
+              <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+            </summary>
+            <div id="macDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+          </details>
           <select id="macScanTransport" title="" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
             <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
             <option value="netconf">NETCONF</option>
@@ -1275,6 +1280,9 @@
         #tab-mac details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
         #tab-mac details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
         #tab-mac details.mac-switch > summary:hover { background: var(--surface-3); }
+        #tab-mac #macDeviceMenu > summary::-webkit-details-marker { display:none; }
+        #tab-mac #macDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+        #tab-mac #macDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
       </style>
       <!-- Risultati raggruppati per switch: clic sull'host per espandere i MAC -->
       <div id="macResults"></div>
@@ -4806,9 +4814,46 @@
 
     // Popola i selettori dispositivo (scan e ad-hoc) in base al tenant scelto:
     // così scegliendo un tenant si vedono SOLO i suoi switch, non tutti.
+    // Lo scan usa una multi-selezione a checkbox (più device in un'unica scansione).
     function populateMacScanDevices() {
-        fillMacDeviceSelect(document.getElementById('macScanDevice'), true);
+        const box = document.getElementById('macDeviceList');
+        if (box) {
+            const devs = macFilteredDevices();
+            const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
+                <input type="checkbox" id="macDevAll" onchange="toggleAllMacDevices(this.checked)" style="accent-color:var(--primary);">
+                <strong>${currentLang==='en'?'All devices':'Tutti i dispositivi'}</strong></label>`;
+            const items = devs.map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
+                    <input type="checkbox" class="mac-dev-cb" value="${escapeHtml(d.IP)}" onchange="updateMacDeviceSummary()" style="accent-color:var(--primary);">
+                    <span style="font-family:var(--font-code);">${escapeHtml(d.IP)}</span>
+                    <span style="color:var(--text-muted);">${name}</span></label>`;
+            }).join('');
+            box.innerHTML = head + (items ||
+                `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${currentLang==='en'?'No devices':'Nessun dispositivo'}</div>`);
+        }
+        updateMacDeviceSummary();
         fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
+    }
+
+    function selectedMacDevices() {
+        return [...document.querySelectorAll('#macDeviceList .mac-dev-cb:checked')].map(cb => cb.value);
+    }
+
+    function toggleAllMacDevices(on) {
+        document.querySelectorAll('#macDeviceList .mac-dev-cb').forEach(cb => cb.checked = on);
+        updateMacDeviceSummary();
+    }
+
+    function updateMacDeviceSummary() {
+        const total = document.querySelectorAll('#macDeviceList .mac-dev-cb').length;
+        const sel = selectedMacDevices().length;
+        const all = document.getElementById('macDevAll');
+        if (all) all.checked = (total > 0 && sel === total);
+        const sum = document.getElementById('macDeviceSummary');
+        if (sum) sum.textContent = (sel === 0)
+            ? (currentLang==='en' ? 'All devices' : 'Tutti i dispositivi')
+            : `${sel} ${currentLang==='en' ? 'selected' : 'selezionati'}`;
     }
 
     async function refreshMacStats(fillRetention) {
@@ -4829,10 +4874,10 @@
         const btn = document.getElementById('btnMacScan');
         const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
         const group = val('macScanGroup') || 'all';
-        const device = val('macScanDevice') || 'all';
         const transport = val('macScanTransport') || '';
+        const ips = selectedMacDevices();
         const payload = { group, transport };
-        if (device && device !== 'all') payload.ip = device;   // singolo apparato
+        if (ips.length) payload.ips = ips;   // device specifici (multi-selezione)
         const orig = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${currentLang==='en'?'Scanning...':'Scansione...'}`;
