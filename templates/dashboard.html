@@ -4733,15 +4733,7 @@
 
     // Comandi ad-hoc per apparati non ordinari (override CLI per singolo switch).
     async function loadMacOverrides() {
-        const dsel = document.getElementById('macOvDevice');
-        if (dsel) {
-            const cur = dsel.value;
-            dsel.innerHTML = (globalDevices || []).map(d => {
-                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
-                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
-            }).join('');
-            if ([...dsel.options].some(o => o.value === cur)) dsel.value = cur;
-        }
+        fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
         try {
             const r = await apiFetch('/api/mac/overrides');
             if (r && r.ok) renderMacOverrides((await r.json()).overrides || []);
@@ -4790,23 +4782,33 @@
         if (res && res.ok) loadMacOverrides();
     }
 
-    // Popola il selettore dispositivo in base al tenant scelto (controllo granulare:
-    // permette di scansionare un singolo apparato invece di tutto il tenant).
-    function populateMacScanDevices() {
-        const gsel = document.getElementById('macScanGroup');
-        const dsel = document.getElementById('macScanDevice');
-        if (!dsel) return;
-        const group = gsel ? gsel.value : 'all';
-        const cur = dsel.value;
+    // Dispositivi filtrati per il tenant selezionato (globalDevices è già scoped
+    // per utente lato server; qui si applica solo il filtro del tenant scelto).
+    function macFilteredDevices() {
+        const g = document.getElementById('macScanGroup');
+        const group = g ? g.value : 'all';
         let devs = globalDevices || [];
         if (group && group !== 'all') devs = devs.filter(d => d.Group === group);
+        return devs;
+    }
+
+    function fillMacDeviceSelect(sel, includeAll) {
+        if (!sel) return;
+        const cur = sel.value;
+        const opts = macFilteredDevices().map(d => {
+            const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+            return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
+        }).join('');
         const allLabel = (i18n[currentLang] && i18n[currentLang].optMacAllDevices) || 'All devices';
-        dsel.innerHTML = `<option value="all">${allLabel}</option>` +
-            devs.map(d => {
-                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
-                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
-            }).join('');
-        if ([...dsel.options].some(o => o.value === cur)) dsel.value = cur;
+        sel.innerHTML = (includeAll ? `<option value="all">${allLabel}</option>` : '') + opts;
+        if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+    }
+
+    // Popola i selettori dispositivo (scan e ad-hoc) in base al tenant scelto:
+    // così scegliendo un tenant si vedono SOLO i suoi switch, non tutti.
+    function populateMacScanDevices() {
+        fillMacDeviceSelect(document.getElementById('macScanDevice'), true);
+        fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
     }
 
     async function refreshMacStats(fillRetention) {
