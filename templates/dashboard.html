@@ -1210,6 +1210,39 @@
         Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.
       </p>
 
+      <!-- Comandi ad-hoc per apparati non ordinari (es. C8000V bridge-domain) -->
+      <details class="requires-write" style="margin-bottom:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 14px; font-weight:700; list-style:none;">
+          <i class="fa-solid fa-terminal" style="color:var(--warning); margin-right:6px;"></i>
+          <span data-i18n="titleMacAdhoc">Comandi ad-hoc (apparati non standard)</span>
+        </summary>
+        <div style="padding:14px; border-top:1px solid var(--border);">
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;" data-i18n="descMacAdhoc">
+            Per apparati dove la MAC-table non si legge in modo standard (es. Catalyst 8000V con bridge-domain: i MAC stanno in "show bridge-domain"), definisci un comando CLI dedicato e il formato di parsing. Verrà usato al posto di "show mac address-table" per quell'apparato.
+          </p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+            <div>
+              <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label>
+              <select id="macOvDevice" class="ui-input" style="width:220px;"></select>
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacAdhocCmd">Comando CLI</label>
+              <input id="macOvCommand" class="ui-input" type="text" placeholder="show bridge-domain" style="width:220px;">
+            </div>
+            <div>
+              <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacAdhocFmt">Formato</label>
+              <select id="macOvFmt" class="ui-input">
+                <option value="bridge-domain">bridge-domain</option>
+                <option value="mac-address-table">mac-address-table</option>
+                <option value="generic" data-i18n="optMacFmtGeneric">generico</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-small" onclick="saveMacOverride()" style="width:auto; margin:0; background:#5ecf8d; color:#000;" data-i18n="btnSave">Salva</button>
+          </div>
+          <div id="macOverridesList" style="margin-top:12px;"></div>
+        </div>
+      </details>
+
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px;">
         <div>
           <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
@@ -1562,6 +1595,11 @@
         tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.",
+        titleMacAdhoc: "Comandi ad-hoc (apparati non standard)",
+        descMacAdhoc: "Per apparati dove la MAC-table non si legge in modo standard (es. Catalyst 8000V con bridge-domain: i MAC stanno in 'show bridge-domain'), definisci un comando CLI dedicato e il formato di parsing. Verrà usato al posto di 'show mac address-table' per quell'apparato.",
+        lblMacAdhocCmd: "Comando CLI",
+        lblMacAdhocFmt: "Formato",
+        optMacFmtGeneric: "generico",
         btnMacScan: '<i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan',
         optMacAllDevices: "Tutti i dispositivi",
         optMacTransportAuto: "Trasporto: Auto",
@@ -1831,6 +1869,11 @@
         tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Search and history of MAC addresses across the infrastructure: on which switch, interface/port-channel and VLAN a device is (or was) connected.",
+        titleMacAdhoc: "Ad-hoc commands (non-standard devices)",
+        descMacAdhoc: "For devices whose MAC-table isn't read the standard way (e.g. Catalyst 8000V with bridge-domain: MACs live in 'show bridge-domain'), define a dedicated CLI command and parsing format. It will be used instead of 'show mac address-table' for that device.",
+        lblMacAdhocCmd: "CLI command",
+        lblMacAdhocFmt: "Format",
+        optMacFmtGeneric: "generic",
         btnMacScan: '<i class="fa-solid fa-satellite-dish"></i> Start MAC Scan',
         optMacAllDevices: "All devices",
         optMacTransportAuto: "Transport: Auto",
@@ -4683,8 +4726,68 @@
             sel.value = groups.includes(cur) ? cur : 'all';
         }
         populateMacScanDevices();
+        loadMacOverrides();
         refreshMacStats(true);
         macSearch();
+    }
+
+    // Comandi ad-hoc per apparati non ordinari (override CLI per singolo switch).
+    async function loadMacOverrides() {
+        const dsel = document.getElementById('macOvDevice');
+        if (dsel) {
+            const cur = dsel.value;
+            dsel.innerHTML = (globalDevices || []).map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
+            }).join('');
+            if ([...dsel.options].some(o => o.value === cur)) dsel.value = cur;
+        }
+        try {
+            const r = await apiFetch('/api/mac/overrides');
+            if (r && r.ok) renderMacOverrides((await r.json()).overrides || []);
+        } catch (e) {}
+    }
+
+    function renderMacOverrides(list) {
+        const box = document.getElementById('macOverridesList');
+        if (!box) return;
+        if (!list.length) {
+            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No ad-hoc commands configured.':'Nessun comando ad-hoc configurato.'}</div>`;
+            return;
+        }
+        box.innerHTML = list.map(o => `<div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px;">
+            <span style="font-family:var(--font-code); color:var(--primary); min-width:120px;">${escapeHtml(o.switch_ip)}</span>
+            <span style="font-family:var(--font-code); flex:1;">${escapeHtml(o.command)}</span>
+            <span class="badge" style="font-size:10px;">${escapeHtml(o.fmt)}</span>
+            <button onclick="removeMacOverride('${escapeHtml(o.switch_ip)}')" title="${currentLang==='en'?'Remove':'Rimuovi'}" style="border:none; background:none; color:var(--danger); cursor:pointer;"><i class="fa-solid fa-trash-can"></i></button>
+        </div>`).join('');
+    }
+
+    async function saveMacOverride() {
+        const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+        const ip = val('macOvDevice');
+        const command = (val('macOvCommand') || '').trim();
+        const fmt = val('macOvFmt') || 'generic';
+        if (!ip || !command) { alert(currentLang==='en'?'Select a device and enter a command.':'Seleziona un apparato e inserisci un comando.'); return; }
+        const res = await apiFetch('/api/mac/overrides', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ ip, command, fmt })
+        });
+        if (res && res.ok) {
+            const c = document.getElementById('macOvCommand'); if (c) c.value = '';
+            loadMacOverrides();
+        } else if (res) {
+            const e = await res.json().catch(() => ({}));
+            alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
+        }
+    }
+
+    async function removeMacOverride(ip) {
+        const res = await apiFetch('/api/mac/overrides/delete', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ ip })
+        });
+        if (res && res.ok) loadMacOverrides();
     }
 
     // Popola il selettore dispositivo in base al tenant scelto (controllo granulare:

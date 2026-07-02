@@ -85,6 +85,14 @@ def init_db():
             c.execute("CREATE INDEX IF NOT EXISTS ix_last_seen ON mac_sightings(last_seen)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_tenant    ON mac_sightings(tenant)")
             c.execute("CREATE TABLE IF NOT EXISTS mac_settings (key TEXT PRIMARY KEY, value TEXT)")
+            # Override comando ad-hoc per apparati non ordinari (es. C8000V con
+            # bridge-domain, dove la FDB sta in 'show bridge-domain' e non in
+            # 'show mac address-table').
+            c.execute("""CREATE TABLE IF NOT EXISTS mac_cmd_overrides (
+                switch_ip TEXT PRIMARY KEY,
+                command   TEXT NOT NULL,
+                fmt       TEXT DEFAULT 'generic'
+            )""")
         _init_done = True
 
 
@@ -107,6 +115,44 @@ def set_retention_days(days: int) -> int:
         c.execute("""INSERT INTO mac_settings(key, value) VALUES('retention_days', ?)
                      ON CONFLICT(key) DO UPDATE SET value=excluded.value""", (str(days),))
     return days
+
+
+# --- Override comando ad-hoc per apparato ---
+
+def get_override(switch_ip: str):
+    """Ritorna {command, fmt} per l'apparato, o None se non configurato."""
+    init_db()
+    with _lock, _connect() as c:
+        row = c.execute("SELECT command, fmt FROM mac_cmd_overrides WHERE switch_ip=?",
+                        (switch_ip,)).fetchone()
+    return {"command": row["command"], "fmt": row["fmt"]} if row else None
+
+
+def set_override(switch_ip: str, command: str, fmt: str = "generic") -> bool:
+    init_db()
+    if not switch_ip or not (command or "").strip():
+        return False
+    with _lock, _connect() as c:
+        c.execute("""INSERT INTO mac_cmd_overrides(switch_ip, command, fmt) VALUES(?,?,?)
+                     ON CONFLICT(switch_ip) DO UPDATE
+                     SET command=excluded.command, fmt=excluded.fmt""",
+                  (switch_ip, command.strip(), (fmt or "generic")))
+    return True
+
+
+def delete_override(switch_ip: str) -> bool:
+    init_db()
+    with _lock, _connect() as c:
+        return c.execute("DELETE FROM mac_cmd_overrides WHERE switch_ip=?",
+                         (switch_ip,)).rowcount > 0
+
+
+def list_overrides() -> list:
+    init_db()
+    with _lock, _connect() as c:
+        rows = c.execute("SELECT switch_ip, command, fmt FROM mac_cmd_overrides "
+                         "ORDER BY switch_ip").fetchall()
+    return [dict(r) for r in rows]
 
 
 def prune(retention_days: int = None) -> int:

@@ -212,6 +212,66 @@ def parse_cli_mac_table(text: str) -> list:
     return out
 
 
+# --- Parser CLI ad-hoc: 'show bridge-domain' (EVC/service-instance, es. C8000V) ---
+#
+# Alcuni apparati non espongono la FDB come uno switch normale: sul Catalyst
+# 8000V un bridge-domain impara i MAC in 'show bridge-domain', non in
+# 'show mac address-table' (che lì mostra solo MAC di sistema/CPU). Formato:
+#   Bridge-domain 10 (2 ports in all)
+#      AED MAC address    Policy  Tag       Age  Pseudoport
+#      0   F8B9.5AB2.ACEE forward dynamic   300  GigabitEthernet1.EFP10
+#      -   001E.7ACE.A1BF to_bdi  static    0    BDI10
+_BD_HDR = re.compile(r'^\s*Bridge-domain\s+(\d+)', re.I)
+_BD_ROW = re.compile(
+    r'^\s*(?:\d+|-)\s+([0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})\s+\S+\s+'
+    r'(dynamic|static)\s+\d+\s+(\S+)\s*$', re.I)
+
+
+def parse_bridge_domain_mac(text: str) -> list:
+    out = []
+    bd = ''
+    for line in (text or '').splitlines():
+        h = _BD_HDR.match(line)
+        if h:
+            bd = h.group(1)
+            continue
+        m = _BD_ROW.match(line)
+        if not m:
+            continue
+        out.append(_row_from(m.group(1), bd, m.group(3), m.group(2)))
+    return out
+
+
+# Parser generico best-effort: estrae qualsiasi MAC + interfaccia da output CLI
+# arbitrario (per comandi ad-hoc non previsti). VLAN non deducibile => vuota.
+_MAC_ANY = re.compile(r'([0-9A-Fa-f]{4}[.:-][0-9A-Fa-f]{4}[.:-][0-9A-Fa-f]{4}'
+                      r'|[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})')
+_IFACE_TOK = re.compile(
+    r'\b((?:GigabitEthernet|TenGigabitEthernet|FortyGigE|HundredGigE|FastEthernet|'
+    r'Ethernet|Port-channel|Gi|Te|Fo|Hu|Fa|Eth|Po|BDI|Vlan)\d[\w./]*)', re.I)
+
+
+def parse_cli_generic(text: str) -> list:
+    out = []
+    for line in (text or '').splitlines():
+        mm = _MAC_ANY.search(line)
+        if not mm:
+            continue
+        im = _IFACE_TOK.search(line)
+        if not im:
+            continue
+        out.append(_row_from(mm.group(1), '', im.group(1), ''))
+    return out
+
+
+# Registro dei formati CLI selezionabili per i comandi ad-hoc.
+CLI_FORMATS = {
+    "mac-address-table": parse_cli_mac_table,
+    "bridge-domain": parse_bridge_domain_mac,
+    "generic": parse_cli_generic,
+}
+
+
 # --- Post-processing: uplink + dedup ---
 
 def mark_uplinks(rows: list, uplink_ports) -> list:
@@ -226,7 +286,8 @@ def mark_uplinks(rows: list, uplink_ports) -> list:
         ups.add(expand_iface(u).lower())      # forma estesa (espansa dal raw)
     for r in rows:
         iface = (r.get('interface') or '').lower()
-        r['is_uplink'] = iface in ups
+        base = iface.split('.')[0]   # sottinterfaccia/service-instance -> fisica
+        r['is_uplink'] = iface in ups or base in ups
     return rows
 
 
@@ -310,12 +371,17 @@ def collect_via_restconf(host, username, password, port=443, timeout=15):
     return None
 
 
-def collect_via_cli(host, username, password, secret="", device_type="cisco_ios", timeout=20):
-    """Fallback CLI: 'show mac address-table' via Netmiko."""
+def collect_via_cli(host, username, password, secret="", device_type="cisco_ios",
+                    timeout=20, command=None, fmt=None):
+    """CLI via Netmiko. Di default 'show mac address-table'; per i casi non
+    ordinari si può passare un comando ad-hoc (es. 'show bridge-domain') con il
+    relativo formato di parsing (fmt in CLI_FORMATS)."""
     try:
         from netmiko import ConnectHandler
     except ImportError:
         return None
+    cmd = command or "show mac address-table"
+    parser = CLI_FORMATS.get((fmt or "").lower(), parse_cli_mac_table)
     params = {'device_type': device_type, 'host': host, 'username': username,
               'password': password, 'secret': secret or '', 'timeout': timeout,
               'auth_timeout': 10, 'banner_timeout': 10}
@@ -325,8 +391,8 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
                 conn.enable()
             except Exception:
                 pass
-            out = conn.send_command("show mac address-table")
-            return parse_cli_mac_table(out)
+            out = conn.send_command(cmd, read_timeout=30)
+            return parser(out)
     except Exception as e:
         log.info("CLI mac-table fallito su %s: %s", host, e)
         return None
@@ -334,7 +400,7 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
 
 def collect_mac_table(host, username, password, secret="", device_type="cisco_ios",
                       uplink_ports=None, netconf_port=830, restconf_port=443,
-                      transport=None) -> dict:
+                      transport=None, cli_command=None, cli_format=None) -> dict:
     """Raccolta ad alto livello con fallback NETCONF -> RESTCONF -> CLI.
 
     NETCONF e RESTCONF usano i modelli standardizzati (OpenConfig FDB) oltre a
@@ -354,7 +420,8 @@ def collect_mac_table(host, username, password, secret="", device_type="cisco_io
         if rows is not None:
             method = "restconf"
     if rows is None and want in (None, "cli"):
-        rows = collect_via_cli(host, username, password, secret, device_type)
+        rows = collect_via_cli(host, username, password, secret, device_type,
+                               command=cli_command, fmt=cli_format)
         if rows is not None:
             method = "cli"
     if rows is None:
