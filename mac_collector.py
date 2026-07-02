@@ -333,23 +333,33 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
 
 
 def collect_mac_table(host, username, password, secret="", device_type="cisco_ios",
-                      uplink_ports=None, netconf_port=830, restconf_port=443) -> dict:
+                      uplink_ports=None, netconf_port=830, restconf_port=443,
+                      transport=None) -> dict:
     """Raccolta ad alto livello con fallback NETCONF -> RESTCONF -> CLI.
 
-    NETCONF e RESTCONF usano modelli standardizzati (OpenConfig FDB) oltre a
-    Cisco matm-oper; il CLI è l'ultima spiaggia (CBS/legacy). Ritorna
-    {rows, method, error}: 'rows' è già normalizzato e con is_uplink.
+    NETCONF e RESTCONF usano i modelli standardizzati (OpenConfig FDB) oltre a
+    Cisco matm-oper (via primaria); il CLI è l'ultima spiaggia (CBS/legacy).
+    'transport' (netconf|restconf|cli) forza un singolo trasporto; None = auto.
+    Ritorna {rows, method, error}: 'rows' è già normalizzato e con is_uplink.
     """
-    rows = collect_via_netconf(host, username, password, port=netconf_port)
-    method = "netconf"
-    if rows is None:
+    want = (transport or "").strip().lower() or None
+    rows = None
+    method = None
+    if want in (None, "netconf"):
+        rows = collect_via_netconf(host, username, password, port=netconf_port)
+        if rows is not None:
+            method = "netconf"
+    if rows is None and want in (None, "restconf"):
         rows = collect_via_restconf(host, username, password, port=restconf_port)
-        method = "restconf"
-    if rows is None:
+        if rows is not None:
+            method = "restconf"
+    if rows is None and want in (None, "cli"):
         rows = collect_via_cli(host, username, password, secret, device_type)
-        method = "cli"
+        if rows is not None:
+            method = "cli"
     if rows is None:
+        scope = want or "NETCONF/RESTCONF/CLI"
         return {"rows": [], "method": None,
-                "error": "MAC-table non ottenibile via NETCONF/RESTCONF/CLI."}
+                "error": "MAC-table non ottenibile (%s)." % scope}
     mark_uplinks(rows, uplink_ports)
     return {"rows": rows, "method": method, "error": None}
