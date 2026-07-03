@@ -4256,66 +4256,6 @@
         }).join('');
     }
 
-    function closeMacLocateModal() {
-        const m = document.getElementById('macLocateModal');
-        if (m) m.remove();
-    }
-
-    async function macLocate(mac) {
-        const res = await apiFetch('/api/mac/locate?mac=' + encodeURIComponent(mac));
-        if (!res || !res.ok) { alert(currentLang==='en'?'Locate failed.':'Localizzazione non riuscita.'); return; }
-        const d = await res.json();
-        const en = currentLang === 'en';
-
-        const sightRow = (s, accent) => `
-            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:8px; margin-bottom:6px; background:var(--surface-2);">
-                <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
-                <div style="flex:1;">
-                    <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
-                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span></div>
-                    <div style="font-size:11px; color:var(--text-muted);">
-                        <i class="fa-solid fa-ethernet"></i> ${escapeHtml(s.interface || '—')}${s.port_channel?` (${escapeHtml(s.port_channel)})`:''}
-                        • VLAN ${escapeHtml(s.vlan || '—')}${s.uplink_to?` • <span style="color:var(--warning);">→ ${escapeHtml(s.uplink_to)}</span>`:''}
-                    </div>
-                </div>
-                <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
-            </div>`;
-
-        const origin = d.origin || [];
-        const transit = d.transit || [];
-        const originHtml = origin.length
-            ? origin.map(s => sightRow(s, 'var(--success)')).join('')
-            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
-        const transitHtml = transit.length
-            ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
-            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
-
-        const ov = document.createElement('div');
-        ov.id = 'macLocateModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
-        ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
-                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
-                </div>
-                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(d.mac || mac)}</div>
-
-                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
-                ${originHtml}
-
-                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
-                ${transitHtml}
-
-                <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-                    <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
-                </div>
-            </div>`;
-        ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
-        document.body.appendChild(ov);
-    }
-
-
     async function saveUserGroups(username) {
         const details = document.querySelector(`#usersTableBody details[data-u="${CSS.escape(username)}"]`);
         if (!details) return;
@@ -4532,66 +4472,6 @@
             </details>`;
         }).join('');
     }
-
-    function closeMacLocateModal() {
-        const m = document.getElementById('macLocateModal');
-        if (m) m.remove();
-    }
-
-    async function macLocate(mac) {
-        const res = await apiFetch('/api/mac/locate?mac=' + encodeURIComponent(mac));
-        if (!res || !res.ok) { alert(currentLang==='en'?'Locate failed.':'Localizzazione non riuscita.'); return; }
-        const d = await res.json();
-        const en = currentLang === 'en';
-
-        const sightRow = (s, accent) => `
-            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:8px; margin-bottom:6px; background:var(--surface-2);">
-                <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
-                <div style="flex:1;">
-                    <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
-                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span></div>
-                    <div style="font-size:11px; color:var(--text-muted);">
-                        <i class="fa-solid fa-ethernet"></i> ${escapeHtml(s.interface || '—')}${s.port_channel?` (${escapeHtml(s.port_channel)})`:''}
-                        • VLAN ${escapeHtml(s.vlan || '—')}${s.uplink_to?` • <span style="color:var(--warning);">→ ${escapeHtml(s.uplink_to)}</span>`:''}
-                    </div>
-                </div>
-                <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
-            </div>`;
-
-        const origin = d.origin || [];
-        const transit = d.transit || [];
-        const originHtml = origin.length
-            ? origin.map(s => sightRow(s, 'var(--success)')).join('')
-            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
-        const transitHtml = transit.length
-            ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
-            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
-
-        const ov = document.createElement('div');
-        ov.id = 'macLocateModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
-        ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
-                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
-                </div>
-                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(d.mac || mac)}</div>
-
-                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
-                ${originHtml}
-
-                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
-                ${transitHtml}
-
-                <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-                    <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
-                </div>
-            </div>`;
-        ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
-        document.body.appendChild(ov);
-    }
-
 
     // Chiusura del modale Bulk: backdrop e tasto Escape
     document.getElementById('bulkCommandModal').addEventListener('click', e => {
@@ -5128,12 +5008,20 @@
         const d = await res.json();
         const en = currentLang === 'en';
 
-        const sightRow = (s, accent) => `
+        // Se la ricerca ha colpito più MAC distinti, localizza il primo del gruppo.
+        const g = (d.results && d.results.length && !d.origin) ? d.results[0] : d;
+        const status = g.status || d.status || 'resolved';
+        const origin = g.origin || [];
+        const transit = g.transit || [];
+        const macStr = g.mac || d.mac || mac;
+
+        // rank: la porta d'accesso più recente è la più probabile (primo elemento).
+        const sightRow = (s, accent, badge) => `
             <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:8px; margin-bottom:6px; background:var(--surface-2);">
                 <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
                 <div style="flex:1;">
                     <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
-                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span></div>
+                        <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span>${badge||''}</div>
                     <div style="font-size:11px; color:var(--text-muted);">
                         <i class="fa-solid fa-ethernet"></i> ${escapeHtml(s.interface || '—')}${s.port_channel?` (${escapeHtml(s.port_channel)})`:''}
                         • VLAN ${escapeHtml(s.vlan || '—')}${s.uplink_to?` • <span style="color:var(--warning);">→ ${escapeHtml(s.uplink_to)}</span>`:''}
@@ -5142,14 +5030,31 @@
                 <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
             </div>`;
 
-        const origin = d.origin || [];
-        const transit = d.transit || [];
+        const mostRecent = ` <span class="role-pill" style="background:rgba(59,225,136,0.15); color:var(--success); border:1px solid rgba(59,225,136,0.35);">${en?'most recent':'più recente'}</span>`;
         const originHtml = origin.length
-            ? origin.map(s => sightRow(s, 'var(--success)')).join('')
+            ? origin.map((s, i) => sightRow(s, 'var(--success)', (status==='ambiguous' && i===0) ? mostRecent : '')).join('')
             : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
         const transitHtml = transit.length
             ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
             : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
+
+        // Banner di stato: chiarisce all'utente quanto è affidabile l'origine.
+        let banner = '';
+        if (status === 'ambiguous') {
+            banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
+                <span>${en?`Multiple possible access ports (${g.access_count}). The most recent is the likeliest; run a fresh MAC Scan to disambiguate.`:`Più porte d'accesso possibili (${g.access_count}). La più recente è la più probabile; esegui una MAC Scan aggiornata per disambiguare.`}</span></div>`;
+        } else if (status === 'transit_only') {
+            banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
+                <span>${en?'Only seen in transit on uplinks – the device is behind an unmanaged/unscanned switch. Scan more switches to find the access port.':'Visto solo in transito sugli uplink – il dispositivo è dietro uno switch non gestito/non scansionato. Scansiona altri switch per trovare la porta di accesso.'}</span></div>`;
+        } else if (status === 'resolved' && origin.length) {
+            banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px; margin-bottom:14px;">
+                <i class="fa-solid fa-circle-check"></i>
+                <span>${en?'Single access port resolved.':'Porta di accesso univoca risolta.'}</span></div>`;
+        }
+
+        const canAnimate = origin.length || transit.length;
 
         const ov = document.createElement('div');
         ov.id = 'macLocateModal';
@@ -5160,7 +5065,9 @@
                     <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
                     <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
                 </div>
-                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(d.mac || mac)}</div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(macStr)}</div>
+
+                ${banner}
 
                 <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
                 ${originHtml}
@@ -5168,12 +5075,62 @@
                 <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
                 ${transitHtml}
 
-                <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:16px;">
+                    ${canAnimate
+                        ? `<button onclick="animateClientPath('${escapeHtml(macStr)}')" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta,var(--primary)); color:var(--cta-text,#05080c);"><i class="fa-solid fa-route"></i> ${en?'Trace path on map':'Traccia percorso sulla mappa'}</button>`
+                        : '<span></span>'}
                     <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
                 </div>
             </div>`;
         ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
         document.body.appendChild(ov);
+    }
+
+    // Carrellata animata sulla topologia 2D: zooma in sequenza sulla porta di
+    // accesso e poi sui salti di transito verso il core (percorso da /api/mac/trace).
+    async function animateClientPath(mac) {
+        const res = await apiFetch('/api/mac/trace?mac=' + encodeURIComponent(mac));
+        if (!res || !res.ok) { alert(currentLang==='en'?'Unable to trace path.':'Impossibile tracciare il percorso.'); return; }
+        const data = await res.json();
+        if (!data.path || !data.path.length) {
+            alert(currentLang==='en'?'No path found for this MAC.':'Nessun percorso trovato per questo MAC.');
+            return;
+        }
+        closeMacLocateModal();
+        const btn = [...document.querySelectorAll('.tab-button')].find(b => b.getAttribute('onclick')?.includes('tab-map-interactive'));
+        switchTab('tab-map-interactive', btn);
+
+        // Attende che la rete vis.js sia costruita e stabilizzata.
+        const waitNet = async () => {
+            for (let i = 0; i < 40; i++) {
+                if (networkInstance && networkInstance.body && Object.keys(networkInstance.body.nodes).length) return true;
+                await new Promise(r => setTimeout(r, 150));
+            }
+            return false;
+        };
+        if (!(await waitNet())) return;
+        networkInstance.setOptions({ physics: false });
+
+        // Considera solo i nodi realmente presenti in mappa.
+        const present = data.path.filter(s => networkInstance.body.nodes[s.switch_ip]);
+        if (!present.length) {
+            alert(currentLang==='en'?'Path nodes not on the current map. Run a Global Triage to build the topology.':'Nodi del percorso non presenti in mappa. Esegui un Triage Globale per costruire la topologia.');
+            return;
+        }
+
+        let delay = 0;
+        const ids = present.map(s => s.switch_ip);
+        present.forEach((s, index) => {
+            setTimeout(() => {
+                networkInstance.focus(s.switch_ip, { scale: 1.25, animation: { duration: 800, easingFunction: 'easeInOutQuad' } });
+                networkInstance.selectNodes(ids.slice(0, index + 1), false);
+            }, delay);
+            delay += 1600;
+        });
+        setTimeout(() => {
+            networkInstance.selectNodes(ids, false);
+            networkInstance.fit({ nodes: ids, animation: { duration: 1200, easingFunction: 'easeInOutCubic' } });
+        }, delay + 800);
     }
 
 
