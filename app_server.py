@@ -1604,6 +1604,86 @@ def _mac_uplink_ports(ip: str) -> dict:
         return {}
 
 
+# --- Risoluzione origine/transito basata sulla topologia GLOBALE ---
+# Il difetto storico: is_uplink veniva deciso per-switch al momento della
+# raccolta, dal solo backup di quello switch. Se una porta di dorsale non aveva
+# un vicino CDP/LLDP "vivo" in quell'istante, veniva scambiata per porta di
+# accesso: lo stesso MAC compariva così come "posizione" su più switch.
+#
+# Qui la classificazione è rifatta a READ-TIME contro la mappa topologica
+# globale (generate_network_map), che aggrega le adiacenze viste da TUTTI gli
+# apparati e fa dedup + aggregazione port-channel. In più consideriamo dorsale
+# SOLO una porta il cui vicino è infrastruttura (switch/router): una porta verso
+# un server/PC/AP resta correttamente "accesso".
+
+_MAC_INFRA_TYPES = {"switch", "router"}
+
+def _mac_topology_uplinks():
+    """Ritorna (uplink_map, known_switches).
+
+    uplink_map: { switch_ip: { porta_normalizzata: etichetta_vicino } } — solo le
+                porte che vanno verso un altro apparato di rete (infrastruttura).
+    known_switches: insieme degli IP inventariati presenti in mappa (per cui la
+                topologia è autorevole: assenza di una porta = porta di accesso).
+    """
+    from collections import defaultdict
+    uplink_map: dict = defaultdict(dict)
+    known_switches: set = set()
+    try:
+        data = core_engine.generate_network_map(group_filter="all")
+    except Exception:
+        return uplink_map, known_switches
+
+    nodes = data.get("nodes", [])
+    node_type = {n["id"]: n.get("device_type") for n in nodes}
+    node_label = {n["id"]: (n.get("label") or n["id"]) for n in nodes}
+    known_switches = {n["id"] for n in nodes if n.get("group") != "Discovered"}
+
+    def add(sw, port, neigh_id):
+        if not port:
+            return
+        uplink_map[sw][core_engine._normalize_iface(port)] = node_label.get(neigh_id, neigh_id)
+
+    for l in data.get("links", []):
+        src, tgt = l.get("source"), l.get("target")
+        tgt_infra = node_type.get(tgt) in _MAC_INFRA_TYPES
+        src_infra = node_type.get(src) in _MAC_INFRA_TYPES
+        pc = l.get("pc_name")
+        # Le porte locali di src vanno verso tgt: sono uplink solo se tgt è infra.
+        if tgt_infra:
+            for p in l.get("local_ports", []):
+                add(src, p, tgt)
+            if pc:
+                add(src, pc, tgt)
+        if src_infra:
+            for p in l.get("remote_ports", []):
+                add(tgt, p, src)
+            if pc:
+                add(tgt, pc, src)
+    return uplink_map, known_switches
+
+
+def _reclassify_sightings(rows, uplink_map=None, known_switches=None):
+    """Ricalcola is_uplink/uplink_to di ogni avvistamento contro la topologia
+    globale. Per gli switch noti la topologia è autorevole; per gli switch senza
+    dati topologici si conserva il valore rilevato in raccolta (fallback)."""
+    if uplink_map is None or known_switches is None:
+        uplink_map, known_switches = _mac_topology_uplinks()
+    norm = core_engine._normalize_iface
+    for r in rows:
+        sw = r.get("switch_ip")
+        if sw in known_switches:
+            ups = uplink_map.get(sw, {})
+            ni = norm(r.get("interface") or "")
+            npc = norm(r.get("port_channel") or "") if r.get("port_channel") else ""
+            neigh = ups.get(ni) or (ups.get(npc) if npc else None)
+            r["is_uplink"] = bool(neigh)
+            r["uplink_to"] = neigh or ""
+        # else: switch senza topologia nota → mantiene is_uplink/uplink_to raccolti
+        r["is_uplink"] = bool(r.get("is_uplink"))
+    return rows
+
+
 def _mac_collect_one(device: dict, transport=None) -> dict:
     ip = device["IP"]
     vendor = (device.get("Vendor") or "cisco").lower()
@@ -1680,7 +1760,45 @@ def mac_search(mac: str = None, vlan: str = None, interface: str = None,
     scope = user_group_scope(current_user)
     rows = mac_history.search(mac=mac, vlan=vlan, interface=interface,
                               switch_ip=switch, tenants=scope, frm=frm, to=to)
+    # Riclassifica accesso/transito contro la topologia globale (fix falsi positivi).
+    _reclassify_sightings(rows)
     return {"results": rows, "count": len(rows)}
+
+
+def _mac_group(rows):
+    """Raggruppa gli avvistamenti (già riclassificati) per MAC in
+    {mac, oui_vendor, origin[], transit[], status}. origin ordinato per recency."""
+    by_mac, order = {}, []
+    for s in rows:
+        m = s["mac"]
+        if m not in by_mac:
+            order.append(m)
+            by_mac[m] = []
+        by_mac[m].append(s)
+
+    results = []
+    for m in order:
+        grp = by_mac[m]
+        origin = [s for s in grp if not s.get("is_uplink")]
+        transit = [s for s in grp if s.get("is_uplink")]
+        # Ordina per ultimo avvistamento (più recente prima).
+        origin.sort(key=lambda s: s.get("last_seen", ""), reverse=True)
+        transit.sort(key=lambda s: s.get("last_seen", ""), reverse=True)
+        # Posizioni di accesso DISTINTE (switch, interfaccia): l'ambiguità reale.
+        distinct = {(s.get("switch_ip"), (s.get("interface") or "").lower()) for s in origin}
+        if not origin and not transit:
+            status = "not_found"
+        elif not origin:
+            status = "transit_only"          # visto solo in transito → dietro switch non gestito
+        elif len(distinct) > 1:
+            status = "ambiguous"             # più porte d'accesso plausibili
+        else:
+            status = "resolved"
+        oui = next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), "")
+        results.append({"mac": m, "oui_vendor": oui, "origin": origin,
+                        "transit": transit, "status": status,
+                        "access_count": len(distinct)})
+    return results
 
 
 @app.get("/api/mac/locate")
@@ -1690,35 +1808,80 @@ def mac_locate(mac: str, current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     sightings = mac_history.search(mac=mac, tenants=scope, limit=500)
     if not sightings:
-        return {"origin": [], "transit": [], "results": []}
-    by_mac = {}
-    order = []
-    for s in sightings:
-        m = s["mac"]
-        if m not in by_mac:
-            order.append(m)
-            by_mac[m] = []
-        by_mac[m].append(s)
-    results = []
-    for m in order:
-        rows = by_mac[m]
-        res = {"mac": m, "oui_vendor": "", "origin": [], "transit": []}
-        for s in rows:
-            if s.get("oui_vendor"):
-                res["oui_vendor"] = s["oui_vendor"]
-            if s.get("is_uplink"):
-                res["transit"].append(s)
-            else:
-                res["origin"].append(s)
-        results.append(res)
+        return {"status": "not_found", "origin": [], "transit": [], "results": []}
+    _reclassify_sightings(sightings)
+    results = _mac_group(sightings)
     if len(results) == 1:
-        return {
-            "mac": results[0]["mac"],
-            "origin": results[0]["origin"],
-            "transit": results[0]["transit"],
-            "results": results
-        }
+        r = results[0]
+        return {"mac": r["mac"], "status": r["status"], "access_count": r["access_count"],
+                "origin": r["origin"], "transit": r["transit"], "results": results}
     return {"results": results}
+
+
+@app.get("/api/mac/trace")
+def mac_trace(mac: str, current_user = Depends(get_current_user)):
+    """Percorso ordinato (accesso → core) di un MAC, per l'animazione sulla mappa.
+    Parte dalla porta di accesso e segue gli uplink hop-by-hop nella topologia."""
+    if not mac or not mac.strip():
+        raise HTTPException(status_code=400, detail="Parametro mac obbligatorio")
+    scope = user_group_scope(current_user)
+    sightings = mac_history.search(mac=mac, tenants=scope, limit=500)
+    if not sightings:
+        return {"mac": mac, "status": "not_found", "path": []}
+
+    uplink_map, known = _mac_topology_uplinks()
+    _reclassify_sightings(sightings, uplink_map, known)
+    grouped = _mac_group(sightings)
+    # Traccia il primo MAC (match esatto o unico); per ricerche parziali prende il più recente.
+    g = grouped[0]
+    origin, transit = g["origin"], g["transit"]
+
+    # Grafo di adiacenza non orientato tra switch, per ordinare i transiti via BFS.
+    adj = {}
+    try:
+        data = core_engine.generate_network_map(group_filter="all")
+        for l in data.get("links", []):
+            a, b = l.get("source"), l.get("target")
+            adj.setdefault(a, set()).add(b)
+            adj.setdefault(b, set()).add(a)
+    except Exception:
+        pass
+
+    transit_by_sw = {}
+    for s in transit:
+        transit_by_sw.setdefault(s["switch_ip"], s)
+
+    def step(s, role):
+        return {"switch_ip": s["switch_ip"], "switch_name": s.get("switch_name", ""),
+                "interface": s.get("interface", ""), "port_channel": s.get("port_channel", ""),
+                "vlan": s.get("vlan", ""), "last_seen": s.get("last_seen", ""),
+                "uplink_to": s.get("uplink_to", ""), "role": role}
+
+    path = []
+    visited = set()
+    if origin:
+        access = origin[0]
+        path.append(step(access, "access"))
+        visited.add(access["switch_ip"])
+        # BFS dagli switch di accesso: aggiunge i transiti in ordine di distanza.
+        from collections import deque
+        q = deque([access["switch_ip"]])
+        while q:
+            cur = q.popleft()
+            for nb in sorted(adj.get(cur, [])):
+                if nb in visited:
+                    continue
+                visited.add(nb)
+                q.append(nb)
+                if nb in transit_by_sw:
+                    path.append(step(transit_by_sw[nb], "transit"))
+    # Transiti non raggiungibili via topologia: in coda, per recency.
+    for s in transit:
+        if s["switch_ip"] not in visited:
+            visited.add(s["switch_ip"])
+            path.append(step(s, "transit"))
+
+    return {"mac": g["mac"], "status": g["status"], "access_count": g["access_count"], "path": path}
 
 
 @app.get("/api/mac/switch/{ip}")
