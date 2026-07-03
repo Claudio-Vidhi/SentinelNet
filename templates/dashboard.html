@@ -33,8 +33,8 @@
       --border: #362d59;                /* hairline-violet */
       --text: #ffffff;                  /* on-primary */
       --text-muted: #bdb8c0;            /* on-dark-muted */
-      --primary: #6a5fc1;               /* accent-violet: link/accenti interattivi */
-      --primary-glow: rgba(106, 95, 193, 0.35);
+      --primary: #a99ff2;               /* accent-violet schiarito per leggibilità su canvas scuro */
+      --primary-glow: rgba(169, 159, 242, 0.35);
       --ring: rgba(59, 130, 246, 0.5);  /* ring-focus: unico blu del sistema */
       --success: #57d987;               /* semantico (LED online) — non brand */
       --success-glow: rgba(87, 217, 135, 0.3);
@@ -514,19 +514,6 @@
       font-size: 12px;
     }
 
-    .topology-container {
-      background: var(--surface);
-      height: 380px;
-      border-radius: var(--radius);
-      padding: 20px;
-      overflow-y: auto;
-      font-family: var(--font-code);
-      color: var(--text);
-      border: 1px solid var(--border);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
     /* Vulnerability check panel */
     .vuln-card {
       background: var(--surface-2);
@@ -888,7 +875,7 @@
         <i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi
       </button>
       <button class="tab-button" onclick="switchTab('tab-map', this)" data-i18n="tabMap">
-        <i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List
+        <i class="fa-solid fa-link"></i> Port-Channel & Link
       </button>
       <button class="tab-button" onclick="switchTab('tab-map-interactive', this)" data-i18n="tabInteractive">
         <i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D
@@ -1040,25 +1027,20 @@
       </div>
     </div>
 
-    <!-- TAB 3: Mappa Topologica Adjacency List -->
+    <!-- TAB 3: Port-Channel & Link (la lista adjacency testuale è stata rimossa:
+         la topologia si consulta nella mappa interattiva) -->
     <div id="tab-map" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
         <div style="display:flex; align-items:center; gap: 15px;">
-          <h3 data-i18n="titleAdjacencyMap">Mappa Topologica Adjacency List (Deducibile dai Backup)</h3>
+          <h3><i class="fa-solid fa-link" style="color: var(--warning);"></i> <span data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</span></h3>
           <select id="topologyGroupSelect" onchange="loadTopology()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
         </div>
-        <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0; background: var(--danger); color: #fff;" data-i18n="btnResetTopology">
+        <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
           <i class="fa-solid fa-trash-can"></i> Reset Topologia
         </button>
       </div>
-      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descAdjacencyMap">
-        Il sistema estrae le relazioni di prossimità fisiche analizzando le tabelle dei vicini all'interno delle configurazioni di backup salvate.
-      </p>
-      <div id="topologyView" class="topology-container" data-i18n="txtTopologyWaiting">> In attesa di elaborazione...</div>
-
-      <h3 style="margin-top: 22px; margin-bottom: 6px; font-size: 16px;"><i class="fa-solid fa-link" style="color: var(--warning);"></i> <span data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</span></h3>
       <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;" data-i18n="descPortchannels">
         Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.
       </p>
@@ -1100,7 +1082,7 @@
 
         </div>
         <div style="display:flex; gap: 8px;">
-          <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0; background: var(--danger); color: #fff;" data-i18n="btnResetTopology">
+          <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
             <i class="fa-solid fa-trash-can"></i> Reset Topologia
           </button>
           <button class="btn btn-secondary btn-small" onclick="loadInteractiveMap()" style="width: auto; margin: 0;" data-i18n="btnRefreshMap">
@@ -1625,7 +1607,7 @@
         // Tabs
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
-        tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
+        tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Dispositivi & Categorie',
         titleCategories: 'Dispositivi Scoperti & Classificazione',
@@ -1716,12 +1698,9 @@
         placeholderVendorDriver: "es. mikrotik_routeros",
         
         // Tab 3
-        titleAdjacencyMap: "Mappa Topologica Adjacency List (Deducibile dai Backup)",
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topologia',
-        descAdjacencyMap: "Il sistema estrae le relazioni di prossimità fisiche analizzando le tabelle dei vicini all'interno delle configurazioni di backup salvate.",
         titlePortchannels: "Port-Channel & Interfacce per Switch",
         descPortchannels: "Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.",
-        txtTopologyWaiting: '> In attesa di elaborazione...',
         
         // Tab 4
         title2DMap: "Topologia Dinamica 2D Interactive",
@@ -1810,11 +1789,6 @@
         alertFirstSetupError: "Errore: ",
         alertLoginFill: "Compila tutti i campi!",
         alertLoginDenied: "Accesso negato: credenziali errate o utente inesistente.",
-        txtTopologyAnalyzing: "> Analisi euristica dei vicini CDP/LLDP in corso...\n",
-        txtTopologyNoLinks: "> Nessun collegamento fisicamente individuato.\nAssicurati che i backup configurazione contengano tabelle dei vicini LLDP/CDP.",
-        txtTopologyTitle: "=== COLLEGAMENTI INFRASTRUTTURA FISICA RILEVATI ===\n\n",
-        txtTopologyLink: "[Nodo: {source}] <-------- INTERCONNESSIONE CDP/LLDP --------> [Nodo: {target}]\n",
-        txtTopologyError: "> Errore durante il caricamento della topologia: ",
         
         // Dynamic UI / JS Alerts
         noDevicesText: "Nessun apparato online con firmware rilevato. Esegui prima un <strong>Triage Globale</strong>.",
@@ -1847,7 +1821,6 @@
         alertGroupCreateError: "Errore durante la creazione del tenant.",
         alertGroupDeleteError: "Impossibile eliminare il tenant.",
         alertSaveDeviceError: "Impossibile salvare il dispositivo",
-        topologyResetSuccessMsg: '> Topologia resettata. Avvia un Triage per ricostruire la mappa di rete.',
         alertTopologyResetError: "Errore durante il reset della topologia.",
         alertPingError: "Errore durante il ping check.",
         allSites: "tutti i tenant",
@@ -1900,7 +1873,7 @@
         // Tabs
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
-        tabMap: '<i class="fa-solid fa-route"></i> CDP/LLDP Adjacency List',
+        tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> 2D Topology Map',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Devices & Categories',
         titleCategories: 'Discovered Devices & Classification',
@@ -1991,12 +1964,9 @@
         placeholderVendorDriver: "e.g. mikrotik_routeros",
         
         // Tab 3
-        titleAdjacencyMap: "CDP/LLDP Adjacency List Topology Map (Deduced from Backups)",
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topology',
-        descAdjacencyMap: "The system extracts physical adjacency relationships by analyzing neighbor tables inside saved backup configurations.",
         titlePortchannels: "Port-Channels per Switch",
         descPortchannels: "List of Port-Channels configured on each switch with their member interfaces.",
-        txtTopologyWaiting: '> Waiting for processing...',
         
         // Tab 4
         title2DMap: "Dynamic 2D Interactive Topology",
@@ -2085,11 +2055,6 @@
         alertFirstSetupError: "Error: ",
         alertLoginFill: "Fill in all fields!",
         alertLoginDenied: "Access denied: incorrect credentials or user does not exist.",
-        txtTopologyAnalyzing: "> Heuristic analysis of CDP/LLDP neighbors in progress...\n",
-        txtTopologyNoLinks: "> No links physically identified.\nEnsure configuration backups contain LLDP/CDP neighbor tables.",
-        txtTopologyTitle: "=== PHYSICAL INFRASTRUCTURE LINKS DETECTED ===\n\n",
-        txtTopologyLink: "[Node: {source}] <-------- CDP/LLDP INTERCONNECTION --------> [Node: {target}]\n",
-        txtTopologyError: "> Error during topology loading: ",
         
         // Dynamic UI / JS Alerts
         noDevicesText: "No online devices with detected firmware. Please run a <strong>Global Triage</strong> first.",
@@ -2122,7 +2087,6 @@
         alertGroupCreateError: "Error creating tenant.",
         alertGroupDeleteError: "Unable to delete tenant.",
         alertSaveDeviceError: "Unable to save device",
-        topologyResetSuccessMsg: '> Topology reset. Run Triage to reconstruct the network map.',
         alertTopologyResetError: "Error resetting topology.",
         alertPingError: "Error during ping check.",
         allSites: "all tenants",
@@ -3003,33 +2967,11 @@
         else if(tabId === 'tab-users') loadUsers();
     }
 
+    // La lista adjacency testuale è stata rimossa (non human-readable): il tab
+    // mostra solo il report Port-Channel; la topologia vive nella mappa 2D.
     async function loadTopology() {
-        const view = document.getElementById('topologyView');
-        view.innerHTML = i18n[currentLang].txtTopologyAnalyzing;
-        
         const groupSelect = document.getElementById('topologyGroupSelect');
         const selectedGroup = groupSelect ? groupSelect.value : 'all';
-        
-        try {
-            const res = await apiFetch('/api/topology?group=' + encodeURIComponent(selectedGroup));
-            if (!res) return;
-            const data = await res.json();
-            
-            if(!data.links || data.links.length === 0) {
-                view.innerHTML = i18n[currentLang].txtTopologyNoLinks;
-                return;
-            }
-            
-            let out = i18n[currentLang].txtTopologyTitle;
-            data.links.forEach(l => {
-                out += i18n[currentLang].txtTopologyLink
-                    .replace("{source}", escapeHtml(l.source))
-                    .replace("{target}", escapeHtml(l.target));
-            });
-            view.innerHTML = out;
-        } catch(e) {
-            view.innerHTML = `${i18n[currentLang].txtTopologyError}${e}`;
-        }
         loadPortchannelReport(selectedGroup);
     }
 
@@ -3485,7 +3427,7 @@
                 },
                 color: emphasize
                     ? { color: "rgba(255, 184, 77, 0.85)", highlight: "#ffb84d", hover: "#ffd27d" }
-                    : { color: "rgba(106, 95, 193, 0.4)", highlight: "#6a5fc1", hover: "#a99ff2" },
+                    : { color: "rgba(106, 95, 193, 0.45)", highlight: "#a99ff2", hover: "#c4bdf7" },
                 dashes: emphasize ? [8, 4] : false,
                 arrows: { to: { enabled: false } },
                 width: emphasize ? 5 : 3.5,
@@ -4126,16 +4068,10 @@
         const graphContainer = document.getElementById('networkGraphContainer');
         if (graphContainer) graphContainer.innerHTML = '';
 
-        // 2. Pulisci la vista adjacency list
-        const topoView = document.getElementById('topologyView');
-        if (topoView) {
-            topoView.innerHTML = i18n[currentLang].topologyResetSuccessMsg;
-        }
-
-        // 3. Ricarica inventario (aggiorna stati LED nella tabella)
+        // 2. Ricarica inventario (aggiorna stati LED nella tabella)
         await appInit();
 
-        // 4. Forza reload di ENTRAMBE le mappe indipendentemente dalla tab attiva
+        // 3. Forza reload di ENTRAMBE le viste indipendentemente dalla tab attiva
         await loadTopology();
         await loadInteractiveMap();
 
