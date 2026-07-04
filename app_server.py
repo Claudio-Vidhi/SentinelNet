@@ -1669,6 +1669,9 @@ def _reclassify_sightings(rows, uplink_map=None, known_switches=None):
     dati topologici si conserva il valore rilevato in raccolta (fallback)."""
     if uplink_map is None or known_switches is None:
         uplink_map, known_switches = _mac_topology_uplinks()
+    # MAC delle interfacce proprie degli switch: tali MAC sono infrastruttura
+    # ("switch-interface"), non endpoint. Si taggano, non si scartano.
+    if_macs = mac_history.get_switch_if_macs()
     norm = core_engine._normalize_iface
     for r in rows:
         sw = r.get("switch_ip")
@@ -1681,6 +1684,13 @@ def _reclassify_sightings(rows, uplink_map=None, known_switches=None):
             r["uplink_to"] = neigh or ""
         # else: switch senza topologia nota → mantiene is_uplink/uplink_to raccolti
         r["is_uplink"] = bool(r.get("is_uplink"))
+        info = if_macs.get(r.get("mac"))
+        if info:
+            r["origin_type"] = "switch-interface"
+            r["origin_switch"] = info.get("switch_name") or info.get("switch_ip") or ""
+            r["origin_interface"] = info.get("interface") or ""
+        else:
+            r["origin_type"] = "endpoint"
     return rows
 
 
@@ -1700,6 +1710,20 @@ def _mac_collect_one(device: dict, transport=None) -> dict:
         cli_command=ov.get("command"), cli_format=ov.get("fmt"),
     )
     res["device"] = device
+    # Raccogli anche i MAC delle interfacce proprie dello switch (infrastruttura):
+    # servono a classificarli come "switch-interface" invece che endpoint. I
+    # fallimenti sono non fatali (lista vuota).
+    if not res.get("error"):
+        try:
+            ifres = mac_collector.collect_interface_macs(
+                ip, username, password, secret, device_type=netmiko_type,
+                transport=transport,
+            )
+            res["if_macs"] = ifres.get("rows") or []
+        except Exception:
+            res["if_macs"] = []
+    else:
+        res["if_macs"] = []
     return res
 
 
@@ -1746,6 +1770,11 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
             res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
             tenant=d.get("Group", "Generale"),
         )
+        # Storicizza i MAC delle interfacce proprie dello switch (infrastruttura).
+        if res.get("if_macs"):
+            mac_history.record_switch_if_macs(
+                res["if_macs"], switch_ip=ip, switch_name=d.get("Hostname", ""),
+            )
         results.append({"ip": ip, "method": res["method"], "count": len(res["rows"]), **summ})
 
     pruned = mac_history.prune()
@@ -1795,9 +1824,19 @@ def _mac_group(rows):
         else:
             status = "resolved"
         oui = next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), "")
-        results.append({"mac": m, "oui_vendor": oui, "origin": origin,
-                        "transit": transit, "status": status,
-                        "access_count": len(distinct)})
+        entry = {"mac": m, "oui_vendor": oui, "origin": origin,
+                 "transit": transit, "status": status,
+                 "access_count": len(distinct)}
+        # MAC di un'interfaccia propria di uno switch: infrastruttura, non endpoint.
+        si = next((s for s in grp if s.get("origin_type") == "switch-interface"), None)
+        if si:
+            entry["device_type"] = "switch-interface"
+            entry["origin_type"] = "switch-interface"
+            entry["origin_switch"] = si.get("origin_switch") or ""
+            entry["origin_interface"] = si.get("origin_interface") or ""
+        results.append(entry)
+    # I gruppi switch-interface (infrastruttura) vanno dopo gli endpoint.
+    results.sort(key=lambda e: 1 if e.get("origin_type") == "switch-interface" else 0)
     return results
 
 
@@ -1814,74 +1853,11 @@ def mac_locate(mac: str, current_user = Depends(get_current_user)):
     if len(results) == 1:
         r = results[0]
         return {"mac": r["mac"], "status": r["status"], "access_count": r["access_count"],
-                "origin": r["origin"], "transit": r["transit"], "results": results}
+                "origin": r["origin"], "transit": r["transit"],
+                "origin_type": r.get("origin_type"), "device_type": r.get("device_type"),
+                "origin_switch": r.get("origin_switch"), "origin_interface": r.get("origin_interface"),
+                "results": results}
     return {"results": results}
-
-
-@app.get("/api/mac/trace")
-def mac_trace(mac: str, current_user = Depends(get_current_user)):
-    """Percorso ordinato (accesso → core) di un MAC, per l'animazione sulla mappa.
-    Parte dalla porta di accesso e segue gli uplink hop-by-hop nella topologia."""
-    if not mac or not mac.strip():
-        raise HTTPException(status_code=400, detail="Parametro mac obbligatorio")
-    scope = user_group_scope(current_user)
-    sightings = mac_history.search(mac=mac, tenants=scope, limit=500)
-    if not sightings:
-        return {"mac": mac, "status": "not_found", "path": []}
-
-    uplink_map, known = _mac_topology_uplinks()
-    _reclassify_sightings(sightings, uplink_map, known)
-    grouped = _mac_group(sightings)
-    # Traccia il primo MAC (match esatto o unico); per ricerche parziali prende il più recente.
-    g = grouped[0]
-    origin, transit = g["origin"], g["transit"]
-
-    # Grafo di adiacenza non orientato tra switch, per ordinare i transiti via BFS.
-    adj = {}
-    try:
-        data = core_engine.generate_network_map(group_filter="all")
-        for l in data.get("links", []):
-            a, b = l.get("source"), l.get("target")
-            adj.setdefault(a, set()).add(b)
-            adj.setdefault(b, set()).add(a)
-    except Exception:
-        pass
-
-    transit_by_sw = {}
-    for s in transit:
-        transit_by_sw.setdefault(s["switch_ip"], s)
-
-    def step(s, role):
-        return {"switch_ip": s["switch_ip"], "switch_name": s.get("switch_name", ""),
-                "interface": s.get("interface", ""), "port_channel": s.get("port_channel", ""),
-                "vlan": s.get("vlan", ""), "last_seen": s.get("last_seen", ""),
-                "uplink_to": s.get("uplink_to", ""), "role": role}
-
-    path = []
-    visited = set()
-    if origin:
-        access = origin[0]
-        path.append(step(access, "access"))
-        visited.add(access["switch_ip"])
-        # BFS dagli switch di accesso: aggiunge i transiti in ordine di distanza.
-        from collections import deque
-        q = deque([access["switch_ip"]])
-        while q:
-            cur = q.popleft()
-            for nb in sorted(adj.get(cur, [])):
-                if nb in visited:
-                    continue
-                visited.add(nb)
-                q.append(nb)
-                if nb in transit_by_sw:
-                    path.append(step(transit_by_sw[nb], "transit"))
-    # Transiti non raggiungibili via topologia: in coda, per recency.
-    for s in transit:
-        if s["switch_ip"] not in visited:
-            visited.add(s["switch_ip"])
-            path.append(step(s, "transit"))
-
-    return {"mac": g["mac"], "status": g["status"], "access_count": g["access_count"], "path": path}
 
 
 @app.get("/api/mac/switch/{ip}")

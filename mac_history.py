@@ -98,6 +98,14 @@ def init_db():
                 command   TEXT NOT NULL,
                 fmt       TEXT DEFAULT 'generic'
             )""")
+            # MAC delle interfacce PROPRIE degli switch (infrastruttura): servono a
+            # classificare quei MAC come "switch-interface" invece che endpoint.
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS switch_if_macs (
+                  mac TEXT NOT NULL, switch_ip TEXT NOT NULL, switch_name TEXT DEFAULT '',
+                  interface TEXT NOT NULL, last_seen TEXT NOT NULL,
+                  PRIMARY KEY (mac, switch_ip, interface))
+            """)
         _init_done = True
 
 
@@ -214,6 +222,52 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
                           (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, now, now))
                 n_new += 1
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
+
+
+# --- MAC delle interfacce proprie degli switch (infrastruttura) ---
+
+def record_switch_if_macs(rows, switch_ip: str, switch_name: str = "") -> dict:
+    """Registra (upsert) i MAC delle interfacce proprie di UNO switch.
+
+    rows: iterabile di dict con chiavi 'interface' e 'mac' (grezzo). Chiave di
+    upsert: (mac, switch_ip, interface); aggiorna last_seen/switch_name.
+    """
+    init_db()
+    now = _now_iso()
+    n_new = n_upd = n_skip = 0
+    with _lock, _connect() as c:
+        for r in rows:
+            mac = normalize_mac(r.get("mac"))
+            iface = (r.get("interface") or "").strip()
+            if not mac or not iface:
+                n_skip += 1
+                continue
+            existing = c.execute(
+                "SELECT 1 FROM switch_if_macs WHERE mac=? AND switch_ip=? AND interface=?",
+                (mac, switch_ip, iface)).fetchone()
+            if existing:
+                c.execute("""UPDATE switch_if_macs SET last_seen=?, switch_name=?
+                             WHERE mac=? AND switch_ip=? AND interface=?""",
+                          (now, switch_name, mac, switch_ip, iface))
+                n_upd += 1
+            else:
+                c.execute("""INSERT INTO switch_if_macs
+                             (mac, switch_ip, switch_name, interface, last_seen)
+                             VALUES (?,?,?,?,?)""",
+                          (mac, switch_ip, switch_name, iface, now))
+                n_new += 1
+    return {"new": n_new, "updated": n_upd, "skipped": n_skip}
+
+
+def get_switch_if_macs() -> dict:
+    """Ritorna { mac_normalizzato: {switch_ip, switch_name, interface} } per la
+    classificazione read-time degli avvistamenti come infrastruttura."""
+    init_db()
+    with _lock, _connect() as c:
+        rows = c.execute("SELECT mac, switch_ip, switch_name, interface "
+                         "FROM switch_if_macs").fetchall()
+    return {r["mac"]: {"switch_ip": r["switch_ip"], "switch_name": r["switch_name"],
+                       "interface": r["interface"]} for r in rows}
 
 
 # --- Ricerca storica ---

@@ -1190,16 +1190,13 @@
       <!-- Controlli: scelta sede + avvio manuale della scansione -->
       <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; padding:14px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px;">
         <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
-        <select id="threatGroupSelect" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+        <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
           <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
         </select>
         <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
-          <input type="checkbox" id="threatIncludeDiscovered" style="accent-color:var(--primary);">
+          <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
           <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
         </label>
-        <button class="btn btn-primary btn-small" id="btnStartThreatScan" onclick="startThreatScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnStartThreatScan">
-          <i class="fa-solid fa-play"></i> Avvia Scansione
-        </button>
       </div>
 
       <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
@@ -1713,7 +1710,6 @@
         legendTitle: "Legenda",
         lblThreatGroup: "Tenant da analizzare:",
         lblThreatDiscovered: "Includi vicini scoperti",
-        btnStartThreatScan: '<i class="fa-solid fa-play"></i> Avvia Scansione',
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Schermo Intero',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
@@ -1979,7 +1975,6 @@
         legendTitle: "Legend",
         lblThreatGroup: "Tenant to scan:",
         lblThreatDiscovered: "Include discovered neighbors",
-        btnStartThreatScan: '<i class="fa-solid fa-play"></i> Start Scan',
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Fullscreen',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
@@ -4972,8 +4967,16 @@
                     ? `<span title="${currentLang==='en'?'In transit on an uplink':'In transito su un uplink'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${currentLang==='en'?'transit':'transito'}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
                     : `<span title="${currentLang==='en'?'Access port – device attached here':'Porta di accesso – dispositivo collegato qui'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${currentLang==='en'?'access':'accesso'}</span>`;
                 const locateBtn = `<button onclick="macLocate('${escapeHtml(r.mac)}')" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
-                return `<tr>
-                    <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}</td>
+                // MAC di un'interfaccia propria dello switch: infrastruttura, non endpoint.
+                const isSwitchIf = (r.origin_type || r.device_type) === 'switch-interface';
+                const swName = r.origin_switch || r.switch_name || r.switch_ip;
+                const swIf = r.origin_interface || '';
+                const switchBadge = isSwitchIf
+                    ? ` <span title="${currentLang==='en'?`Interface of ${swName}${swIf?` (${swIf})`:''}`:`Interfaccia di ${swName}${swIf?` (${swIf})`:''}`}" style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:4px; padding:0 4px;"><i class="fa-solid fa-microchip"></i> SWITCH</span>`
+                    : '';
+                const rowStyle = isSwitchIf ? ' style="color:var(--text-muted);"' : '';
+                return `<tr${rowStyle}>
+                    <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}${switchBadge}</td>
                     <td>${escapeHtml(r.oui_vendor || '—')}</td>
                     <td>${port}${uplink}</td>
                     <td>${escapeHtml(r.vlan || '—')}</td>
@@ -5040,7 +5043,15 @@
 
         // Banner di stato: chiarisce all'utente quanto è affidabile l'origine.
         let banner = '';
-        if (status === 'ambiguous') {
+        // MAC di un'interfaccia propria di uno switch: infrastruttura, non endpoint.
+        const isSwitchIf = (g.origin_type || g.device_type || d.origin_type) === 'switch-interface';
+        if (isSwitchIf) {
+            const swName = g.origin_switch || d.origin_switch || '';
+            const swIf = g.origin_interface || d.origin_interface || '';
+            banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:14px;">
+                <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
+                <span>${en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`}</span></div>`;
+        } else if (status === 'ambiguous') {
             banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
                 <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
                 <span>${en?`Multiple possible access ports (${g.access_count}). The most recent is the likeliest; run a fresh MAC Scan to disambiguate.`:`Più porte d'accesso possibili (${g.access_count}). La più recente è la più probabile; esegui una MAC Scan aggiornata per disambiguare.`}</span></div>`;
@@ -5053,8 +5064,6 @@
                 <i class="fa-solid fa-circle-check"></i>
                 <span>${en?'Single access port resolved.':'Porta di accesso univoca risolta.'}</span></div>`;
         }
-
-        const canAnimate = origin.length || transit.length;
 
         const ov = document.createElement('div');
         ov.id = 'macLocateModal';
@@ -5075,64 +5084,13 @@
                 <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
                 ${transitHtml}
 
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:16px;">
-                    ${canAnimate
-                        ? `<button onclick="animateClientPath('${escapeHtml(macStr)}')" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta,var(--primary)); color:var(--cta-text,#05080c);"><i class="fa-solid fa-route"></i> ${en?'Trace path on map':'Traccia percorso sulla mappa'}</button>`
-                        : '<span></span>'}
+                <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
                     <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
                 </div>
             </div>`;
         ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
         document.body.appendChild(ov);
     }
-
-    // Carrellata animata sulla topologia 2D: zooma in sequenza sulla porta di
-    // accesso e poi sui salti di transito verso il core (percorso da /api/mac/trace).
-    async function animateClientPath(mac) {
-        const res = await apiFetch('/api/mac/trace?mac=' + encodeURIComponent(mac));
-        if (!res || !res.ok) { alert(currentLang==='en'?'Unable to trace path.':'Impossibile tracciare il percorso.'); return; }
-        const data = await res.json();
-        if (!data.path || !data.path.length) {
-            alert(currentLang==='en'?'No path found for this MAC.':'Nessun percorso trovato per questo MAC.');
-            return;
-        }
-        closeMacLocateModal();
-        const btn = [...document.querySelectorAll('.tab-button')].find(b => b.getAttribute('onclick')?.includes('tab-map-interactive'));
-        switchTab('tab-map-interactive', btn);
-
-        // Attende che la rete vis.js sia costruita e stabilizzata.
-        const waitNet = async () => {
-            for (let i = 0; i < 40; i++) {
-                if (networkInstance && networkInstance.body && Object.keys(networkInstance.body.nodes).length) return true;
-                await new Promise(r => setTimeout(r, 150));
-            }
-            return false;
-        };
-        if (!(await waitNet())) return;
-        networkInstance.setOptions({ physics: false });
-
-        // Considera solo i nodi realmente presenti in mappa.
-        const present = data.path.filter(s => networkInstance.body.nodes[s.switch_ip]);
-        if (!present.length) {
-            alert(currentLang==='en'?'Path nodes not on the current map. Run a Global Triage to build the topology.':'Nodi del percorso non presenti in mappa. Esegui un Triage Globale per costruire la topologia.');
-            return;
-        }
-
-        let delay = 0;
-        const ids = present.map(s => s.switch_ip);
-        present.forEach((s, index) => {
-            setTimeout(() => {
-                networkInstance.focus(s.switch_ip, { scale: 1.25, animation: { duration: 800, easingFunction: 'easeInOutQuad' } });
-                networkInstance.selectNodes(ids.slice(0, index + 1), false);
-            }, delay);
-            delay += 1600;
-        });
-        setTimeout(() => {
-            networkInstance.selectNodes(ids, false);
-            networkInstance.fit({ nodes: ids, animation: { duration: 1200, easingFunction: 'easeInOutCubic' } });
-        }, delay + 800);
-    }
-
 
     async function saveMacRetention() {
         const days = parseInt(document.getElementById('macRetentionDays') ? document.getElementById('macRetentionDays').value : '', 10);
@@ -5154,8 +5112,7 @@
     // --- VULNERABILITY ADVISORY (EUVD) ---
 
     // Parallelizzazione delle query ENISA tramite Promise.all (Ottimizzazione Performance)
-    // Aperta la tab: prepara i controlli (sedi consentite) SENZA avviare la scansione.
-    // La scansione parte solo su richiesta dell'utente (pulsante Avvia Scansione).
+    // Aperta la tab: prepara i controlli (sedi consentite) e avvia automaticamente la scansione.
     function loadThreatIntel() {
         const sel = document.getElementById("threatGroupSelect");
         if (sel) {
@@ -5165,11 +5122,15 @@
                 groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
             sel.value = groups.includes(cur) ? cur : 'all';
         }
-        const container = document.getElementById("securityTriageContainer");
-        if (container) container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-shield-halved fa-2x" style="opacity:0.4;"></i><br><br>${currentLang==='en'?'Choose a tenant and start the scan.':'Scegli un tenant e avvia la scansione.'}</div>`;
+        startThreatScan();
     }
 
+    // Costruisce la lista di dispositivi da analizzare; le query EUVD reali partono
+    // solo al clic del pulsante "Analizza" su ogni singolo dispositivo.
     async function startThreatScan() {
+        if (window._threatScanBusy) return;
+        window._threatScanBusy = true;
+        try {
         const container = document.getElementById("securityTriageContainer");
         if (!container) return;
         const selGroup = document.getElementById("threatGroupSelect")?.value || 'all';
@@ -5307,6 +5268,9 @@
             resultArea.style.cssText = "display:none; grid-column:1/-1;";
             grid.appendChild(resultArea);
         });
+        } finally {
+            window._threatScanBusy = false;
+        }
     }
 
     function extractReadableVersion(sysDesc) {
@@ -5375,9 +5339,30 @@
         btnEl.innerHTML = i18n[currentLang].btnRescan;
     }
 
+    function toggleVulnDesc(id, btn) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const hidden = el.style.display === 'none';
+        el.style.display = hidden ? '' : 'none';
+        const ic = btn.querySelector('i');
+        if (ic) ic.className = hidden ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down';
+    }
+
+    function toggleVulnResults(resultsElId, btn) {
+        const wrapper = document.getElementById(`vulncards-${resultsElId}`);
+        if (!wrapper) return;
+        const hidden = wrapper.style.display === 'none';
+        wrapper.style.display = hidden ? '' : 'none';
+        const label = hidden
+            ? (currentLang === 'en' ? 'Hide results' : 'Nascondi risultati')
+            : (currentLang === 'en' ? 'Show results' : 'Mostra risultati');
+        btn.innerHTML = `<i class="fa-solid fa-chevron-${hidden ? 'up' : 'down'}"></i> ${label}`;
+    }
+
     async function runEuvdQuery(safeId, vendor, version, statusElId, resultsElId) {
+        const effectiveResultsId = resultsElId || `results-${safeId}`;
         const statusEl  = document.getElementById(statusElId  || `status-${safeId}`);
-        const resultsEl = document.getElementById(resultsElId || `results-${safeId}`);
+        const resultsEl = document.getElementById(effectiveResultsId);
         if (!statusEl || !resultsEl) return;
 
         // Il vendor viene incluso solo se noto (altrimenti si cerca solo per testo);
@@ -5398,8 +5383,18 @@
 
                 if (items.length > 0) {
                     statusEl.innerHTML = `<span style="color: var(--danger);"><i class="fa-solid fa-triangle-exclamation"></i> ${items.length} ${i18n[currentLang].vulnerabilitiesDetected}</span>`;
-                    resultsEl.innerHTML = "";
-                    items.slice(0, 3).forEach(v => {
+                    const hideLabel = currentLang === 'en' ? 'Hide results' : 'Nascondi risultati';
+                    resultsEl.innerHTML = `
+                        <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:6px;">
+                            <button onclick="toggleVulnResults('${effectiveResultsId}', this)"
+                                style="padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                                <i class="fa-solid fa-chevron-up"></i> ${hideLabel}
+                            </button>
+                        </div>
+                        <div id="vulncards-${effectiveResultsId}" style="display:flex; flex-direction:column; gap:10px;"></div>
+                    `;
+                    const cardsEl = document.getElementById(`vulncards-${effectiveResultsId}`);
+                    items.slice(0, 3).forEach((v, idx) => {
                         const enisaId    = v.id || v.enisaId || "EUVD-Unknown";
                         // Il CVE è dentro 'aliases' (stringa multi-riga: CVE/GHSA/...).
                         const cveMatch   = /CVE-\d{4}-\d{3,}/i.exec(v.aliases || "");
@@ -5408,6 +5403,7 @@
                         // Il punteggio CVSS è nel campo 'baseScore' (numero, può essere 0).
                         const score      = (v.baseScore != null && v.baseScore !== "")
                                          ? v.baseScore : (v.cvssScore || v.score || "N/A");
+                        const descId = `vulndesc-${effectiveResultsId}-${idx}`;
 
                         let severity = "MEDIUM";
                         if (score !== "N/A") {
@@ -5418,16 +5414,20 @@
                             else                 severity = "LOW";
                         }
 
-                        resultsEl.innerHTML += `
+                        cardsEl.innerHTML += `
                             <div style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
-                                    <div>
+                                    <div style="display:flex; align-items:center; gap:8px;">
                                         <strong style="color:var(--primary);">${escapeHtml(enisaId)}</strong>
-                                        <span style="color:var(--text-muted); margin-left:8px;">(CVE: ${escapeHtml(cveId)})</span>
+                                        <span style="color:var(--text-muted);">(CVE: ${escapeHtml(cveId)})</span>
+                                        <button onclick="toggleVulnDesc('${descId}', this)"
+                                            style="padding:2px 7px; border-radius:5px; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                            <i class="fa-solid fa-chevron-up"></i>
+                                        </button>
                                     </div>
                                     <span class="severity-pill severity-${severity}">CVSS: ${escapeHtml(score)}</span>
                                 </div>
-                                <div style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${escapeHtml(description)}</div>
+                                <div id="${descId}" style="color:var(--text-muted); margin-bottom:6px; line-height:1.4;">${escapeHtml(description)}</div>
                                 <div style="font-size:10px; color:var(--primary);">${i18n[currentLang].relevantNis2}</div>
                             </div>
                         `;

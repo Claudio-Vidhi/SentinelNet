@@ -415,6 +415,196 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
         return None
 
 
+# --- Raccolta MAC delle interfacce PROPRIE dello switch (infrastruttura) ---
+#
+# Oltre alla FDB (MAC degli endpoint), è utile conoscere i MAC delle interfacce
+# dello switch stesso ('own' hardware address): compaiono anche loro nella scan e
+# vanno classificati come infrastruttura ("switch-interface"), non come endpoint.
+# Modello standard 'ietf-interfaces': interfaces-state/interface {name, phys-address}.
+
+NS_IETF_IF = "urn:ietf:params:xml:ns:yang:ietf-interfaces"
+
+# Es.:  "  Hardware is Ethernet, address is aabb.cc00.0300 (bia aabb.cc00.0300)"
+_IF_HDR = re.compile(r'^(\S+) is ', re.I)
+_IF_ADDR = re.compile(r'address is\s+([0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})', re.I)
+
+
+def parse_ietf_if_macs_xml(xml_text: str) -> list:
+    """Estrae le coppie (name, phys-address) da ietf-interfaces (XML NETCONF)."""
+    out = []
+    if not xml_text or 'interface' not in xml_text:
+        return out
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return out
+    for entry in root.iter():
+        if _localname(entry.tag) != 'interface':
+            continue
+        name = mac = None
+        for d in entry.iter():
+            ln = _localname(d.tag)
+            t = (d.text or '').strip()
+            if not t:
+                continue
+            if ln == 'name' and not name:
+                name = t
+            elif ln == 'phys-address' and not mac:
+                mac = t
+        if name and mac:
+            out.append({"interface": name, "mac": mac})
+    return out
+
+
+def parse_ietf_if_macs_json(data) -> list:
+    """Estrae le coppie {interface, mac} da ietf-interfaces (JSON RESTCONF)."""
+    out = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            name = o.get("name")
+            mac = o.get("phys-address")
+            if isinstance(name, str) and name and isinstance(mac, str) and mac:
+                out.append({"interface": name, "mac": mac})
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(data)
+    return out
+
+
+def parse_cli_if_macs(text: str) -> list:
+    """Parsa 'show interfaces' in modo stateful: la riga di intestazione
+    interfaccia ('^<name> is ') fissa l'interfaccia corrente; la successiva
+    'address is <mac>' emette la coppia {interface, mac}. Il filtro
+    '| include address is' perderebbe il nome interfaccia: si parsa tutto."""
+    out = []
+    cur = ""
+    for line in (text or '').splitlines():
+        h = _IF_HDR.match(line)
+        if h:
+            cur = h.group(1)
+        a = _IF_ADDR.search(line)
+        if a and cur:
+            out.append({"interface": cur, "mac": a.group(1)})
+    return out
+
+
+def collect_if_macs_via_netconf(host, username, password, port=830, timeout=30):
+    """MAC delle interfacce proprie via NETCONF (ietf-interfaces): prova prima
+    'interfaces-state' (operativo), poi 'interfaces' (config). None se ncclient
+    non installato o nessun dato."""
+    try:
+        from ncclient import manager
+    except ImportError:
+        log.warning("ncclient non installato: NETCONF non disponibile.")
+        return None
+    attempts = [
+        '<interfaces-state xmlns="%s"/>' % NS_IETF_IF,
+        '<interfaces xmlns="%s"/>' % NS_IETF_IF,
+    ]
+    try:
+        with manager.connect(host=host, port=port, username=username, password=password,
+                             hostkey_verify=False, allow_agent=False, look_for_keys=False,
+                             timeout=timeout, device_params={'name': 'iosxe'}) as m:
+            for flt in attempts:
+                try:
+                    rows = parse_ietf_if_macs_xml(m.get(('subtree', flt)).data_xml)
+                    if rows:
+                        return rows
+                except Exception as e:
+                    log.info("NETCONF if-macs get fallito su %s: %s", host, e)
+            return None
+    except Exception as e:
+        log.info("NETCONF if-macs connessione fallita su %s: %s", host, e)
+        return None
+
+
+def collect_if_macs_via_restconf(host, username, password, port=443, timeout=15):
+    """MAC delle interfacce proprie via RESTCONF (ietf-interfaces). Prova con i
+    campi ristretti (name;phys-address), poi lo stato completo, poi la config.
+    None se non raggiungibile / nessun dato."""
+    try:
+        import requests
+        import urllib3
+        urllib3.disable_warnings()
+    except ImportError:
+        return None
+    base = "https://%s:%s/restconf" % (host, port)
+    s = requests.Session()
+    s.auth = (username, password)
+    s.verify = False
+    s.headers.update({"Accept": "application/yang-data+json"})
+    endpoints = [
+        "/data/ietf-interfaces:interfaces-state/interface?fields=name;phys-address",
+        "/data/ietf-interfaces:interfaces-state",
+        "/data/ietf-interfaces:interfaces",
+    ]
+    try:
+        for ep in endpoints:
+            r = s.get(base + ep, timeout=timeout)
+            if r.status_code == 200:
+                rows = parse_ietf_if_macs_json(r.json())
+                if rows:
+                    return rows
+    except Exception as e:
+        log.info("RESTCONF if-macs fallito su %s: %s", host, e)
+    return None
+
+
+def collect_if_macs_via_cli(host, username, password, secret="", device_type="cisco_ios",
+                            timeout=20):
+    """MAC delle interfacce proprie via CLI Netmiko ('show interfaces')."""
+    try:
+        from netmiko import ConnectHandler
+    except ImportError:
+        return None
+    params = {'device_type': device_type, 'host': host, 'username': username,
+              'password': password, 'secret': secret or '', 'timeout': timeout,
+              'auth_timeout': 10, 'banner_timeout': 10}
+    try:
+        with ConnectHandler(**params) as conn:
+            try:
+                conn.enable()
+            except Exception:
+                pass
+            out = conn.send_command("show interfaces", read_timeout=30)
+            return parse_cli_if_macs(out)
+    except Exception as e:
+        log.info("CLI if-macs fallito su %s: %s", host, e)
+        return None
+
+
+def collect_interface_macs(host, username, password, secret="", device_type="cisco_ios",
+                           netconf_port=830, restconf_port=443, transport=None) -> dict:
+    """Raccolta ad alto livello dei MAC delle interfacce proprie dello switch,
+    con fallback NETCONF -> RESTCONF -> CLI (stessa struttura di collect_mac_table).
+    Ritorna {rows, method, error}; 'rows' è list[{interface, mac}] (MAC grezzi)."""
+    want = (transport or "").strip().lower() or None
+    rows = None
+    method = None
+    if want in (None, "netconf"):
+        rows = collect_if_macs_via_netconf(host, username, password, port=netconf_port)
+        if rows is not None:
+            method = "netconf"
+    if rows is None and want in (None, "restconf"):
+        rows = collect_if_macs_via_restconf(host, username, password, port=restconf_port)
+        if rows is not None:
+            method = "restconf"
+    if rows is None and want in (None, "cli"):
+        rows = collect_if_macs_via_cli(host, username, password, secret, device_type)
+        if rows is not None:
+            method = "cli"
+    if rows is None:
+        scope = want or "NETCONF/RESTCONF/CLI"
+        return {"rows": [], "method": None,
+                "error": "MAC interfacce non ottenibili (%s)." % scope}
+    return {"rows": rows, "method": method, "error": None}
+
+
 def collect_mac_table(host, username, password, secret="", device_type="cisco_ios",
                       uplink_ports=None, netconf_port=830, restconf_port=443,
                       transport=None, cli_command=None, cli_format=None) -> dict:
