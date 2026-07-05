@@ -889,11 +889,17 @@
       <button class="tab-button" onclick="switchTab('tab-mac', this)" data-i18n="tabMacTracker">
         <i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker
       </button>
+      <button class="tab-button" onclick="switchTab('tab-config', this)" data-i18n="tabConfigAnalyzer">
+        <i class="fa-solid fa-file-code"></i> Config Analyzer
+      </button>
       <button class="tab-button requires-write" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
         <i class="fa-solid fa-file-csv"></i> Importazione CSV
       </button>
       <button class="tab-button requires-admin" onclick="switchTab('tab-users', this)" data-i18n="tabUsers">
         <i class="fa-solid fa-users-gear"></i> Utenti
+      </button>
+      <button class="tab-button requires-admin" onclick="switchTab('tab-settings', this)" data-i18n="tabSettings">
+        <i class="fa-solid fa-gear"></i> Impostazioni
       </button>
     </div>
 
@@ -1313,6 +1319,47 @@
       <div id="macResults"></div>
     </div>
 
+    <!-- TAB: Config Analyzer -->
+    <div id="tab-config" class="tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
+        <h3 data-i18n="titleConfigAnalyzer">Config Analyzer</h3>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+          <button class="btn btn-secondary btn-small" onclick="loadConfigAnalyzer(true)" style="width:auto; margin:0;" data-i18n="btnCaRefresh">
+            <i class="fa-solid fa-rotate"></i> Aggiorna
+          </button>
+        </div>
+      </div>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descConfigAnalyzer">
+        Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.
+      </p>
+
+      <style>
+        #tab-config details.mac-switch > summary::-webkit-details-marker { display:none; }
+        #tab-config details.mac-switch > summary { list-style:none; }
+        #tab-config details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
+        #tab-config details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
+        #tab-config details.mac-switch > summary:hover { background: var(--surface-3); }
+        #tab-config .ca-pill { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; transition:var(--transition); }
+        #tab-config .ca-pill.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+        #tab-config .ca-pill:hover:not(.active) { background:var(--surface-3); }
+        #tab-config .ca-chip { display:inline-flex; align-items:center; gap:4px; font-size:10px; border-radius:5px; padding:1px 6px; border:1px solid var(--border); color:var(--text-muted); margin:2px 4px 2px 0; }
+        #tab-config .ca-route-map { height:220px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-top:8px; }
+      </style>
+
+      <div id="caPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        <button class="ca-pill active" data-view="vlan" onclick="caSwitchView('vlan')" data-i18n="pillVlans">VLAN</button>
+        <button class="ca-pill" data-view="routing" onclick="caSwitchView('routing')" data-i18n="pillRouting">Routing</button>
+        <button class="ca-pill" data-view="acl" onclick="caSwitchView('acl')" data-i18n="pillAcls">ACL</button>
+        <button class="ca-pill" data-view="iface" onclick="caSwitchView('iface')" data-i18n="pillIfaces">Interfacce</button>
+        <button class="ca-pill" data-view="validation" onclick="caSwitchView('validation')" data-i18n="pillValidation">Validazione</button>
+      </div>
+
+      <div id="caResults"></div>
+    </div>
+
     <!-- TAB 6: Importazione CSV -->
     <div id="tab-import" class="tab-content">
       <h3 data-i18n="titleImportCsv">Importazione Massiva da CSV</h3>
@@ -1374,6 +1421,19 @@
           <button class="btn btn-primary btn-small" onclick="createUser()" style="margin:0; white-space:nowrap;" data-i18n="btnAddUser">
             <i class="fa-solid fa-plus"></i> Crea Utente
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-settings" class="tab-content">
+      <h3 data-i18n="titleSettings">Impostazioni</h3>
+      <div style="margin-top:16px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
+        <h3 style="font-size:15px; margin-bottom:8px;" data-i18n="titleNetExpose"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> Esposizione in rete</h3>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descNetExpose">
+          Scegli su quale indirizzo SentinelNet resta in ascolto. 0.0.0.0 espone l'app su tutte le interfacce (raggiungibile dalla LAN); 127.0.0.1 la limita a questo PC.
+        </p>
+        <div id="netSettingsBody">
+          <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
       </div>
     </div>
@@ -1645,13 +1705,62 @@
         btnMacSearchGo: '<i class="fa-solid fa-magnifying-glass"></i> Cerca',
         btnMacReset: '<i class="fa-solid fa-rotate-left"></i> Reset',
         thMacAddr: "MAC",
-        thMacVendor: "Vendor (OUI)",
         thMacSwitch: "Switch",
         thMacPort: "Interfaccia / Port-channel",
         thMacVlan: "VLAN",
         thMacOrigin: "Origine",
         thMacFirst: "Primo avvistamento",
         thMacLast: "Ultimo avvistamento",
+        tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
+        titleConfigAnalyzer: "Config Analyzer",
+        descConfigAnalyzer: "Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.",
+        btnCaRefresh: '<i class="fa-solid fa-rotate"></i> Aggiorna',
+        pillVlans: "VLAN",
+        pillRouting: "Routing",
+        pillAcls: "ACL",
+        pillIfaces: "Interfacce",
+        pillValidation: "Validazione",
+        thCaVlanId: "VLAN",
+        thCaVlanName: "Nome",
+        thCaSvi: "SVI",
+        thCaAccessPorts: "Porte access",
+        thCaTrunkPorts: "Trunk",
+        lblCaShutdown: "spenta",
+        lblCaPrefix: "Prefisso",
+        lblCaNextHop: "Next-hop",
+        lblCaAd: "AD",
+        lblCaVrf: "VRF",
+        lblCaName: "Nome",
+        lblCaRouteMap: "Mappa route",
+        lblCaRouteMapEdge: "route",
+        lblCaRouteFlat: "Elenco",
+        lblCaRouteByHop: "Per Next-Hop",
+        lblCaDefaultRoute: "default",
+        lblCaVtp: "VTP",
+        lblCaRawConfig: "Configurazione raw",
+        lblCaProtocols: "Protocolli di routing",
+        lblCaVrfs: "VRF",
+        thCaAclSeq: "Seq",
+        thCaAclAction: "Azione",
+        thCaAclRule: "Regola",
+        lblCaAppliedTo: "Applicata a",
+        lblCaReferencedByRouting: "riferita da routing",
+        thCaIface: "Interfaccia",
+        thCaDesc: "Descrizione",
+        thCaMode: "Modo",
+        thCaVlanCol: "VLAN",
+        thCaIp: "IP",
+        thCaAclInOut: "ACL in/out",
+        thCaState: "Stato",
+        lblCaActive: "attiva",
+        titleCaUnusedAcls: "ACL non usate",
+        titleCaMissingAcls: "ACL mancanti",
+        titleCaUnusedVlans: "VLAN non usate",
+        titleCaUndefinedVlans: "VLAN non definite",
+        titleCaRouteAclRefs: "Riferimenti Route ↔ ACL",
+        msgCaNoIssues: "Nessun problema rilevato",
+        msgCaNoDevices: "Nessun apparato disponibile.",
+        lblCaReferencedIn: "riferita in",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
         
         // Tab 1
@@ -1756,6 +1865,16 @@
         searchInventoryPl: "Cerca IP, hostname, vendor, tenant...",
         tabUsers: '<i class="fa-solid fa-users-gear"></i> Utenti',
         titleUsers: "Gestione Utenti e Privilegi",
+        tabSettings: '<i class="fa-solid fa-gear"></i> Impostazioni',
+        titleSettings: "Impostazioni",
+        titleNetExpose: "Esposizione in rete",
+        descNetExpose: "Scegli su quale indirizzo SentinelNet resta in ascolto. 0.0.0.0 espone l'app su tutte le interfacce (raggiungibile dalla LAN); 127.0.0.1 la limita a questo PC.",
+        lblNetHost: "Indirizzo attuale",
+        lblNetPort: "Porta",
+        msgEnvOverride: "La variabile d'ambiente SENTINELNET_HOST ha la precedenza: il salvataggio è disabilitato.",
+        msgRestartRequired: "Salvato. Riavvia SentinelNet per applicare.",
+        optAllIfaces: "(tutte le interfacce)",
+        optLocalOnly: "(solo locale)",
         descUsers: 'Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.',
         thUserName: "Username",
         thUserRole: "Ruolo / Privilegio",
@@ -1910,13 +2029,62 @@
         btnMacSearchGo: '<i class="fa-solid fa-magnifying-glass"></i> Search',
         btnMacReset: '<i class="fa-solid fa-rotate-left"></i> Reset',
         thMacAddr: "MAC",
-        thMacVendor: "Vendor (OUI)",
         thMacSwitch: "Switch",
         thMacPort: "Interface / Port-channel",
         thMacVlan: "VLAN",
         thMacOrigin: "Origin",
         thMacFirst: "First seen",
         thMacLast: "Last seen",
+        tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
+        titleConfigAnalyzer: "Config Analyzer",
+        descConfigAnalyzer: "Structured analysis of configurations: VLAN, routing, ACL and interfaces per device, with cross-object validation checks.",
+        btnCaRefresh: '<i class="fa-solid fa-rotate"></i> Refresh',
+        pillVlans: "VLAN",
+        pillRouting: "Routing",
+        pillAcls: "ACL",
+        pillIfaces: "Interfaces",
+        pillValidation: "Validation",
+        thCaVlanId: "VLAN",
+        thCaVlanName: "Name",
+        thCaSvi: "SVI",
+        thCaAccessPorts: "Access ports",
+        thCaTrunkPorts: "Trunk",
+        lblCaShutdown: "shutdown",
+        lblCaPrefix: "Prefix",
+        lblCaNextHop: "Next-hop",
+        lblCaAd: "AD",
+        lblCaVrf: "VRF",
+        lblCaName: "Name",
+        lblCaRouteMap: "Route map",
+        lblCaRouteMapEdge: "route",
+        lblCaRouteFlat: "List",
+        lblCaRouteByHop: "By Next-Hop",
+        lblCaDefaultRoute: "default",
+        lblCaVtp: "VTP",
+        lblCaRawConfig: "Raw config",
+        lblCaProtocols: "Routing protocols",
+        lblCaVrfs: "VRFs",
+        thCaAclSeq: "Seq",
+        thCaAclAction: "Action",
+        thCaAclRule: "Rule",
+        lblCaAppliedTo: "Applied to",
+        lblCaReferencedByRouting: "referenced by routing",
+        thCaIface: "Interface",
+        thCaDesc: "Description",
+        thCaMode: "Mode",
+        thCaVlanCol: "VLAN",
+        thCaIp: "IP",
+        thCaAclInOut: "ACL in/out",
+        thCaState: "State",
+        lblCaActive: "active",
+        titleCaUnusedAcls: "Unused ACLs",
+        titleCaMissingAcls: "Missing ACLs",
+        titleCaUnusedVlans: "Unused VLANs",
+        titleCaUndefinedVlans: "Undefined VLANs",
+        titleCaRouteAclRefs: "Route ↔ ACL references",
+        msgCaNoIssues: "No issues detected",
+        msgCaNoDevices: "No devices available.",
+        lblCaReferencedIn: "referenced in",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
         
         // Tab 1
@@ -2022,6 +2190,16 @@
         tabUsers: '<i class="fa-solid fa-users-gear"></i> Users',
         titleUsers: "User & Privilege Management",
         descUsers: 'Create accounts with different privileges. <strong>Admin</strong>: full control and user management. <strong>Operator</strong>: all network operations (triage, commands, inventory). <strong>Viewer</strong>: read-only.',
+        tabSettings: '<i class="fa-solid fa-gear"></i> Settings',
+        titleSettings: "Settings",
+        titleNetExpose: "Network exposure",
+        descNetExpose: "Choose which address SentinelNet listens on. 0.0.0.0 exposes the app on all interfaces (reachable from the LAN); 127.0.0.1 restricts it to this PC only.",
+        lblNetHost: "Current address",
+        lblNetPort: "Port",
+        msgEnvOverride: "The SENTINELNET_HOST environment variable takes precedence: saving is disabled.",
+        msgRestartRequired: "Saved. Restart SentinelNet to apply.",
+        optAllIfaces: "(all interfaces)",
+        optLocalOnly: "(local only)",
         thUserName: "Username",
         thUserRole: "Role / Privilege",
         thUserGroups: "Visible / manageable tenants",
@@ -2959,7 +3137,9 @@
             loadThreatIntel();
         }
         else if(tabId === 'tab-mac') loadMacTracker();
+        else if(tabId === 'tab-config') loadConfigAnalyzer();
         else if(tabId === 'tab-users') loadUsers();
+        else if(tabId === 'tab-settings') loadAppSettings();
     }
 
     // La lista adjacency testuale è stata rimossa (non human-readable): il tab
@@ -4321,6 +4501,68 @@
         }
     }
 
+    // --- IMPOSTAZIONI: esposizione in rete (solo admin) ---
+
+    async function loadAppSettings() {
+        if (currentRole !== 'admin') return;
+        const box = document.getElementById('netSettingsBody');
+        if (!box) return;
+        const res = await apiFetch('/api/settings/network');
+        if (!res || !res.ok) { box.innerHTML = ''; return; }
+        const d = await res.json();
+        renderAppSettings(d);
+    }
+
+    function renderAppSettings(d) {
+        const box = document.getElementById('netSettingsBody');
+        if (!box) return;
+        const L = i18n[currentLang];
+        const localIps = d.local_ips || [];
+        const options = ['0.0.0.0', '127.0.0.1', ...localIps.filter(ip => ip !== '0.0.0.0' && ip !== '127.0.0.1')];
+        const current = d.configured_host || d.effective_host || '0.0.0.0';
+        const optHtml = options.map(ip => {
+            const hint = ip === '0.0.0.0' ? ` ${escapeHtml(L.optAllIfaces)}` : ip === '127.0.0.1' ? ` ${escapeHtml(L.optLocalOnly)}` : '';
+            return `<option value="${escapeHtml(ip)}" ${ip === current ? 'selected' : ''}>${escapeHtml(ip)}${hint}</option>`;
+        }).join('');
+        const envNote = d.env_override
+            ? `<div style="margin-top:10px; padding:8px 10px; border:1px solid var(--warning); border-radius:8px; color:var(--warning); font-size:12px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(L.msgEnvOverride)}</div>`
+            : '';
+        box.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.lblNetHost)}:</span>
+                <span class="badge" style="font-size:11px; color:var(--primary); border:1px solid var(--primary); font-family:var(--font-code);">${escapeHtml(d.effective_host || '—')}</span>
+                <span style="font-size:12px; color:var(--text-muted); margin-left:16px;">${escapeHtml(L.lblNetPort)}:</span>
+                <span style="font-family:var(--font-code); font-size:12px;">${escapeHtml(d.port != null ? String(d.port) : '—')}</span>
+            </div>
+            <div class="form-group" style="max-width:360px;">
+                <select id="netHostSelect" ${d.env_override ? 'disabled' : ''} style="padding-left:12px;">${optHtml}</select>
+            </div>
+            ${envNote}
+            <div style="margin-top:12px;">
+                <button class="btn btn-primary btn-small" onclick="saveAppSettings()" ${d.env_override ? 'disabled' : ''} data-i18n="btnSave">
+                    <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
+                </button>
+            </div>
+            <div id="netSettingsNotice" style="margin-top:10px; font-size:12px; color:var(--warning);"></div>`;
+    }
+
+    async function saveAppSettings() {
+        const sel = document.getElementById('netHostSelect');
+        if (!sel) return;
+        const L = i18n[currentLang];
+        const res = await apiFetch('/api/settings/network', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: sel.value })
+        });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || ''));
+            return;
+        }
+        const notice = document.getElementById('netSettingsNotice');
+        if (notice) notice.textContent = L.msgRestartRequired;
+    }
+
     // --- INVIO COMANDI MASSIVO (BULK) ---
 
     let _bulkJobInterval = null;
@@ -4948,7 +5190,7 @@
         const openAll = keys.length === 1;   // un solo switch: aperto di default
         const L = i18n[currentLang];
         const colHead = `<thead><tr>
-            <th>${L.thMacAddr}</th><th>${L.thMacVendor}</th><th>${L.thMacPort}</th>
+            <th>${L.thMacAddr}</th><th>${L.thMacPort}</th>
             <th>${L.thMacVlan}</th><th>${L.thMacOrigin}</th><th>${L.thMacFirst}</th><th>${L.thMacLast}</th></tr></thead>`;
         box.innerHTML = keys.map(k => {
             const g = groups[k];
@@ -4977,7 +5219,6 @@
                 const rowStyle = isSwitchIf ? ' style="color:var(--text-muted);"' : '';
                 return `<tr${rowStyle}>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}${switchBadge}</td>
-                    <td>${escapeHtml(r.oui_vendor || '—')}</td>
                     <td>${port}${uplink}</td>
                     <td>${escapeHtml(r.vlan || '—')}</td>
                     <td style="white-space:nowrap;">${originCell}${locateBtn}</td>
@@ -5107,6 +5348,365 @@
             const e = await res.json().catch(() => ({}));
             alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
         }
+    }
+
+    // ===== Config Analyzer =====
+    // Dati cache lato client: un solo fetch per tenant selezionato, i pill di
+    // vista ri-renderizzano senza richiamare l'API (come richiesto).
+    let caData = null;
+    let caView = 'vlan';
+    let caRouteGroupMode = 'flat'; // 'flat' | 'byhop' — ricordato per la sessione
+    let caNetworks = {};   // ip -> vis.Network istanza mappa route (lazy, per device aperto)
+
+    function loadConfigAnalyzer(forceRefresh) {
+        const sel = document.getElementById('configGroupSelect');
+        if (sel) {
+            const cur = sel.value;
+            const groups = Object.keys(globalGroups || {});
+            sel.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+            sel.value = groups.includes(cur) ? cur : 'all';
+        }
+        fetchConfigAnalyzer();
+    }
+
+    async function fetchConfigAnalyzer() {
+        const box = document.getElementById('caResults');
+        if (box) box.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i></div>`;
+        destroyCaNetworks();
+        const sel = document.getElementById('configGroupSelect');
+        const group = sel ? sel.value : 'all';
+        try {
+            const res = await apiFetch('/api/config-analyzer?group=' + encodeURIComponent(group || 'all'));
+            if (!res || !res.ok) { if (box) box.innerHTML = ''; return; }
+            const d = await res.json();
+            caData = d.devices || [];
+        } catch (e) {
+            caData = [];
+        }
+        renderCaResults();
+    }
+
+    function caSwitchView(view) {
+        caView = view;
+        document.querySelectorAll('#caPills .ca-pill').forEach(p => p.classList.toggle('active', p.dataset.view === view));
+        destroyCaNetworks();
+        renderCaResults();
+    }
+
+    function destroyCaNetworks() {
+        Object.keys(caNetworks).forEach(k => { try { caNetworks[k].destroy(); } catch (e) {} });
+        caNetworks = {};
+    }
+
+    function caDeviceCount(dev) {
+        if (caView === 'vlan') return (dev.vlans || []).length;
+        if (caView === 'routing') return (dev.routing && dev.routing.static ? dev.routing.static.length : 0) + (dev.routing && dev.routing.protocols ? dev.routing.protocols.length : 0);
+        if (caView === 'acl') return (dev.acls || []).length;
+        if (caView === 'iface') return (dev.interfaces || []).length;
+        return 0;
+    }
+
+    function renderCaResults() {
+        const box = document.getElementById('caResults');
+        if (!box) return;
+        const L = i18n[currentLang];
+        const en = currentLang === 'en';
+        if (!caData || !caData.length) {
+            box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
+            return;
+        }
+        if (caView === 'validation') {
+            box.innerHTML = caData.map(dev => caRenderValidation(dev, L, en)).join('');
+            return;
+        }
+        const openAll = caData.length === 1;
+        box.innerHTML = caData.map((dev, idx) => {
+            const count = caDeviceCount(dev);
+            const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
+            const body = caView === 'vlan' ? caRenderVlans(dev, L, en)
+                       : caView === 'routing' ? caRenderRouting(dev, L, en, idx)
+                       : caView === 'acl' ? caRenderAcls(dev, L, en)
+                       : caRenderIfaces(dev, L, en);
+            return `<details class="mac-switch" data-ca-idx="${idx}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''} ontoggle="caOnToggle(this, ${idx})">
+                <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
+                    <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
+                    <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
+                    <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
+                    ${tenant}
+                    <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${count}</span>
+                </summary>
+                <div style="padding:0 14px 14px;">${body}</div>
+            </details>`;
+        }).join('');
+    }
+
+    // Le mappe route (vis.js) si creano solo quando l'accordion del device viene
+    // aperto e vengono distrutte alla chiusura, per evitare leak di canvas.
+    function caOnToggle(detailsEl, idx) {
+        if (caView !== 'routing') return;
+        const dev = caData[idx];
+        if (!dev) return;
+        if (detailsEl.open) {
+            caBuildRouteMap(dev, idx);
+        } else if (caNetworks[idx]) {
+            caNetworks[idx].destroy();
+            delete caNetworks[idx];
+        }
+    }
+
+    function caRenderVtpTag(dev, L) {
+        const vtp = dev.vtp || {};
+        const mode = (vtp.mode || '').trim();
+        if (!mode) return '';
+        const modeLower = mode.toLowerCase();
+        const color = modeLower === 'server' ? 'var(--success)'
+                    : modeLower === 'client' ? 'var(--primary)'
+                    : 'var(--text-muted)';
+        const label = `${escapeHtml(L.lblCaVtp)}: ${escapeHtml(mode.toUpperCase())}${vtp.domain ? ` &middot; ${escapeHtml(vtp.domain)}` : ''}`;
+        return `<span class="badge" style="font-size:10px; color:${color}; border:1px solid ${color}; margin-bottom:8px; display:inline-block;">${label}</span>`;
+    }
+
+    function caRenderVlans(dev, L, en) {
+        const vlans = dev.vlans || [];
+        const vtpTag = caRenderVtpTag(dev, L);
+        const vtpHtml = vtpTag ? `<div>${vtpTag}</div>` : '';
+        if (!vlans.length) return `${vtpHtml}<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
+        const rows = vlans.map(v => {
+            const svi = v.svi
+                ? `${escapeHtml(v.svi.ip || '—')}${v.svi.shutdown ? ` <span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(L.lblCaShutdown)}</span>` : ''}`
+                : '—';
+            const access = v.access_ifaces || [];
+            const trunk = v.trunk_ifaces || [];
+            const accessCell = access.length
+                ? `<details><summary style="cursor:pointer; color:var(--text);">${access.length}</summary><div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-top:4px;">${access.map(escapeHtml).join(', ')}</div></details>`
+                : '0';
+            const trunkCell = trunk.length ? String(trunk.length) : '0';
+            return `<tr><td>${escapeHtml(v.id)}</td><td>${escapeHtml(v.name || '—')}</td><td>${svi}</td><td>${accessCell}</td><td>${trunkCell}</td></tr>`;
+        }).join('');
+        return `${vtpHtml}<div class="table-container"><table><thead><tr>
+            <th>${L.thCaVlanId}</th><th>${L.thCaVlanName}</th><th>${L.thCaSvi}</th><th>${L.thCaAccessPorts}</th><th>${L.thCaTrunkPorts}</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    // Cambia modalità (elenco piatto / raggruppato per next-hop) senza ricostruire
+    // l'intero accordion (per non toccare la mappa vis.js già aperta).
+    function caSwitchRouteGroupMode(mode, idx) {
+        caRouteGroupMode = mode;
+        renderCaResults();
+        const dev = caData[idx];
+        const detailsEl = document.querySelector(`details[data-ca-idx="${idx}"]`);
+        if (detailsEl) {
+            detailsEl.open = true;
+            caOnToggle(detailsEl, idx);
+        }
+    }
+
+    function caRenderRouting(dev, L, en, idx) {
+        const routing = dev.routing || {};
+        const statics = routing.static || [];
+        const protocols = routing.protocols || [];
+        const vrfs = routing.vrfs || [];
+        const staticRows = statics.length ? statics.map(r => `<tr>
+            <td style="font-family:var(--font-code);">${escapeHtml(r.prefix)}</td>
+            <td style="font-family:var(--font-code);">${escapeHtml(r.next_hop || '—')}</td>
+            <td>${escapeHtml(r.ad != null ? String(r.ad) : '—')}</td>
+            <td>${escapeHtml(r.vrf || '—')}</td>
+            <td>${escapeHtml(r.name || '—')}</td>
+            </tr>`).join('') : '';
+        const staticTable = staticRows
+            ? `<div class="table-container"><table><thead><tr><th>${L.lblCaPrefix}</th><th>${L.lblCaNextHop}</th><th>${L.lblCaAd}</th><th>${L.lblCaVrf}</th><th>${L.lblCaName}</th></tr></thead><tbody>${staticRows}</tbody></table></div>`
+            : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
+        const groups = {};
+        statics.forEach(r => {
+            const hop = r.next_hop || '—';
+            if (!groups[hop]) groups[hop] = { hop, hasDefault: false, rows: [] };
+            groups[hop].rows.push(r);
+            if ((r.prefix || '').indexOf('0.0.0.0/0') === 0) groups[hop].hasDefault = true;
+        });
+        const groupKeys = Object.keys(groups).sort();
+        const groupedHtml = groupKeys.length ? groupKeys.map(hop => {
+            const g = groups[hop];
+            const rows = g.rows.map(r => `<tr>
+                <td style="font-family:var(--font-code);">${escapeHtml(r.prefix)}</td>
+                <td>${escapeHtml(r.ad != null ? String(r.ad) : '—')}</td>
+                <td>${escapeHtml(r.vrf || '—')}</td>
+                <td>${escapeHtml(r.name || '—')}</td>
+                </tr>`).join('');
+            const defaultBadge = g.hasDefault ? ` <span class="badge" style="font-size:10px; color:var(--warning); border:1px solid var(--warning);">${escapeHtml(L.lblCaDefaultRoute)}</span>` : '';
+            return `<details style="border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface);">
+                <summary style="cursor:pointer; padding:8px 10px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;">
+                    <span style="font-family:var(--font-code);">${escapeHtml(hop)}</span>
+                    <span class="badge" style="font-size:10px;">${g.rows.length}</span>
+                    ${defaultBadge}
+                </summary>
+                <div class="table-container" style="border-top:1px solid var(--border);"><table><thead><tr>
+                    <th>${L.lblCaPrefix}</th><th>${L.lblCaAd}</th><th>${L.lblCaVrf}</th><th>${L.lblCaName}</th>
+                    </tr></thead><tbody>${rows}</tbody></table></div>
+            </details>`;
+        }).join('') : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
+        const routeToggle = `<div style="display:flex; gap:6px; margin-bottom:8px;">
+            <button type="button" class="ca-pill ${caRouteGroupMode === 'flat' ? 'active' : ''}" onclick="caSwitchRouteGroupMode('flat', ${idx})">${escapeHtml(L.lblCaRouteFlat)}</button>
+            <button type="button" class="ca-pill ${caRouteGroupMode === 'byhop' ? 'active' : ''}" onclick="caSwitchRouteGroupMode('byhop', ${idx})">${escapeHtml(L.lblCaRouteByHop)}</button>
+        </div>`;
+        const staticSection = `${routeToggle}${caRouteGroupMode === 'byhop' ? groupedHtml : staticTable}`;
+        const protoCards = protocols.length ? protocols.map(p => `
+            <details style="border:1px solid var(--border); border-radius:8px; margin-top:8px; background:var(--surface);">
+                <summary style="cursor:pointer; padding:8px 10px; font-size:12px; font-weight:700;">${escapeHtml(p.proto)}${p.id ? ' ' + escapeHtml(p.id) : ''}</summary>
+                <div style="padding:8px 10px; border-top:1px solid var(--border);">
+                    ${(p.details || []).length ? `<pre style="font-family:var(--font-code); font-size:11px; background:var(--surface); margin:0 0 6px; white-space:pre-wrap;">${escapeHtml((p.details || []).join('\\n'))}</pre>` : ''}
+                    ${p.raw ? `<details><summary style="cursor:pointer; font-size:11px; color:var(--text-muted);">raw</summary><pre style="font-family:var(--font-code); font-size:11px; background:var(--surface); margin-top:4px; white-space:pre-wrap;">${escapeHtml(p.raw)}</pre></details>` : ''}
+                </div>
+            </details>`).join('') : '';
+        const vrfChips = vrfs.length ? `<div style="margin-top:8px;">${vrfs.map(v => `<span class="ca-chip">${escapeHtml(v.name)}${v.rd ? ' · ' + escapeHtml(v.rd) : ''}</span>`).join('')}</div>` : '';
+        const mapId = `caRouteMap_${idx}`;
+        return `${staticSection}
+            ${protocols.length ? `<h4 style="font-size:12px; margin:12px 0 4px; color:var(--text-muted);">${L.lblCaProtocols}</h4>${protoCards}` : ''}
+            ${vrfs.length ? `<h4 style="font-size:12px; margin:12px 0 4px; color:var(--text-muted);">${L.lblCaVrfs}</h4>${vrfChips}` : ''}
+            <h4 style="font-size:12px; margin:12px 0 4px; color:var(--text-muted);">${L.lblCaRouteMap}</h4>
+            <div id="${mapId}" class="ca-route-map"></div>`;
+    }
+
+    // Mappa minimale: nodo centrale = device, un nodo per next-hop distinto,
+    // archi etichettati col numero di prefissi che passano per quel next-hop.
+    // La rotta di default (0.0.0.0/0) viene evidenziata in var(--warning).
+    function caBuildRouteMap(dev, idx) {
+        const mapId = `caRouteMap_${idx}`;
+        const container = document.getElementById(mapId);
+        if (!container || typeof vis === 'undefined') return;
+        const statics = (dev.routing && dev.routing.static) || [];
+        const hostname = dev.hostname || dev.ip;
+        const nodeFont = { color: '#ffffff', size: 13, face: 'Rubik, sans-serif' };
+        const hopFont = { color: '#ffffff', size: 12, face: 'Rubik, sans-serif' };
+        const nodes = [{
+            id: 'center', label: hostname, shape: 'box',
+            color: { background: '#6a5fc1', border: '#a99ff2' },
+            font: nodeFont, borderWidth: 2, margin: 8
+        }];
+        const edges = [];
+        const hopCounts = {};
+        const hopHasDefault = {};
+        statics.forEach(r => {
+            const hop = r.next_hop || '—';
+            hopCounts[hop] = (hopCounts[hop] || 0) + 1;
+            if ((r.prefix || '').indexOf('0.0.0.0/0') === 0) hopHasDefault[hop] = true;
+        });
+        Object.keys(hopCounts).forEach(hop => {
+            const nid = 'hop_' + hop;
+            nodes.push({
+                id: nid, label: hop, shape: 'ellipse',
+                color: { background: '#2b2144', border: '#a99ff2' },
+                font: hopFont, borderWidth: 1.5
+            });
+            edges.push({
+                from: 'center', to: nid,
+                label: `${hopCounts[hop]} ${i18n[currentLang].lblCaRouteMapEdge}`,
+                color: hopHasDefault[hop] ? { color: '#ffb84d' } : { color: 'rgba(169,159,242,0.65)' },
+                width: hopHasDefault[hop] ? 3 : 2,
+                font: { color: '#ffffff', size: 12, strokeWidth: 0, background: '#150f23' }
+            });
+        });
+        if (caNetworks[idx]) { try { caNetworks[idx].destroy(); } catch (e) {} }
+        const network = new vis.Network(container, { nodes, edges }, {
+            physics: { stabilization: { iterations: 100 } },
+            interaction: { dragView: true, zoomView: true },
+            edges: { font: { color: '#ffffff', size: 12, strokeWidth: 0, background: '#150f23' } }
+        });
+        let frozen = false;
+        const freeze = () => { if (!frozen) { frozen = true; network.setOptions({ physics: false }); } };
+        network.once('stabilizationIterationsDone', freeze);
+        network.once('afterDrawing', () => setTimeout(freeze, 3000));
+        caNetworks[idx] = network;
+    }
+
+    function caRenderAcls(dev, L, en) {
+        const acls = dev.acls || [];
+        if (!acls.length) return `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
+        const refs = (dev.validation && dev.validation.route_acl_refs) || [];
+        const referencedNames = new Set(refs.map(r => r.acl));
+        return acls.map(acl => {
+            const applied = (acl.applied || []).map(a => `<span class="ca-chip">${escapeHtml([a.target, a.direction].filter(Boolean).join(' '))}${a.where ? ' · ' + escapeHtml(a.where) : ''}</span>`).join('');
+            const note = referencedNames.has(acl.name) ? `<span class="ca-chip" style="color:var(--primary); border-color:var(--primary);">${escapeHtml(L.lblCaReferencedByRouting)}</span>` : '';
+            const rows = (acl.entries || []).map(e => {
+                const act = (e.action || '').toLowerCase();
+                const color = act === 'permit' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
+                return `<tr><td>${escapeHtml(e.seq != null ? String(e.seq) : '—')}</td><td style="color:${color}; font-weight:700;">${escapeHtml(e.action || '—')}</td><td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(e.text || '—')}</td></tr>`;
+            }).join('');
+            return `<details style="border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface);">
+                <summary style="cursor:pointer; padding:10px 12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; list-style:none;">
+                    <strong>${escapeHtml(acl.name)}</strong>
+                    <span class="badge" style="font-size:10px;">${escapeHtml(acl.kind || '—')}</span>
+                    ${applied}${note}
+                </summary>
+                <div style="padding:0 12px 12px;">
+                    <div class="table-container"><table><thead><tr><th>${L.thCaAclSeq}</th><th>${L.thCaAclAction}</th><th>${L.thCaAclRule}</th></tr></thead><tbody>${rows}</tbody></table></div>
+                </div>
+            </details>`;
+        }).join('');
+    }
+
+    function caRenderIfaces(dev, L, en) {
+        const ifaces = dev.interfaces || [];
+        if (!ifaces.length) return `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
+        const rows = ifaces.map((i, ii) => {
+            const mode = i.mode || (i.ip ? 'routed' : '—');
+            const vlanCol = i.mode === 'trunk' ? (i.trunk_allowed || '—') : (i.access_vlan != null ? String(i.access_vlan) : '—');
+            const aclChips = [i.acl_in ? `<span class="ca-chip">in: ${escapeHtml(i.acl_in)}</span>` : '', i.acl_out ? `<span class="ca-chip">out: ${escapeHtml(i.acl_out)}</span>` : ''].join('');
+            const state = i.shutdown
+                ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">shutdown</span>`
+                : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(L.lblCaActive)}</span>`;
+            const rowId = `caIfaceRaw_${dev.ip || ''}_${ii}`.replace(/[^a-zA-Z0-9_]/g, '_');
+            return `<tr style="cursor:pointer;" onclick="caToggleIfaceRaw('${rowId}')">
+                    <td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.description || '—')}</td><td><span class="badge" style="font-size:10px;">${escapeHtml(mode)}</span></td>
+                    <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(String(vlanCol))}</td>
+                    <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
+                    <td>${aclChips || '—'}</td><td>${state}</td>
+                </tr>
+                <tr id="${rowId}" style="display:none;"><td colspan="7"><pre style="font-family:var(--font-code); background:var(--surface); border-radius:6px; padding:8px; margin:0; white-space:pre-wrap; font-size:11px;">${escapeHtml(i.raw || '—')}</pre></td></tr>`;
+        }).join('');
+        return `<div class="table-container"><table><thead><tr>
+            <th>${L.thCaIface}</th><th>${L.thCaDesc}</th><th>${L.thCaMode}</th><th>${L.thCaVlanCol}</th><th>${L.thCaIp}</th><th>${L.thCaAclInOut}</th><th>${L.thCaState}</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    function caToggleIfaceRaw(rowId) {
+        const row = document.getElementById(rowId);
+        if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+    }
+
+    function caRenderValidation(dev, L, en) {
+        const v = dev.validation || {};
+        const unusedAcls = v.unused_acls || [];
+        const missingAcls = v.missing_acls || [];
+        const unusedVlans = v.unused_vlans || [];
+        const undefinedVlans = v.undefined_vlans || [];
+        const routeAclRefs = v.route_acl_refs || [];
+        const total = unusedAcls.length + missingAcls.length + unusedVlans.length + undefinedVlans.length + routeAclRefs.length;
+        const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
+        const chips = arr => arr.map(x => `<span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">${escapeHtml(x)}</span>`).join('');
+        let body;
+        if (total === 0) {
+            body = `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+                <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>`;
+        } else {
+            const sections = [];
+            if (unusedAcls.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${L.titleCaUnusedAcls}</h4><div>${chips(unusedAcls)}</div>`);
+            if (missingAcls.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--danger);">${L.titleCaMissingAcls}</h4><div>${missingAcls.map(m => `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(m.name)} (${L.lblCaReferencedIn}: ${escapeHtml(m.referenced_in || '—')})</span>`).join('')}</div>`);
+            if (unusedVlans.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${L.titleCaUnusedVlans}</h4><div>${chips(unusedVlans)}</div>`);
+            if (undefinedVlans.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${L.titleCaUndefinedVlans}</h4><div>${undefinedVlans.map(u => `<span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">${escapeHtml(u.vlan)} (${L.lblCaReferencedIn}: ${escapeHtml(u.referenced_in || '—')})</span>`).join('')}</div>`);
+            if (routeAclRefs.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--primary);">${L.titleCaRouteAclRefs}</h4><div>${routeAclRefs.map(r => `<span class="ca-chip">${escapeHtml(r.context)} → ${escapeHtml(r.acl)}</span>`).join('')}</div>`);
+            body = sections.join('');
+        }
+        return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+            <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
+                <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
+                <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
+                <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
+                ${tenant}
+                <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${total}</span>
+            </summary>
+            <div style="padding:0 14px 14px;">${body}</div>
+        </details>`;
     }
 
     // --- VULNERABILITY ADVISORY (EUVD) ---

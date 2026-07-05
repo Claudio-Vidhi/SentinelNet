@@ -1,5 +1,6 @@
 import os
 import secrets as _secrets
+import socket
 import sys
 import asyncio
 import paramiko
@@ -22,11 +23,13 @@ from pydantic import BaseModel, Field
 
 import uuid
 
+import data_config
 import inventory_manager
 import core_engine
 import user_manager
 import mac_history
 import mac_collector
+import config_analyzer
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
@@ -144,6 +147,75 @@ def filter_map_to_scope(data, scope):
     links = [l for l in data.get("links", [])
              if l["source"] in allowed_nodes and l["target"] in allowed_nodes]
     return {"nodes": nodes, "links": links}
+
+# --- IMPOSTAZIONI APPLICATIVE (persistenza su app_settings.json) ---
+# Consente all'amministratore di scegliere l'IP di bind sulla LAN. Applicato al
+# prossimo riavvio. Il file e' tollerante a mancanza/corruzione.
+
+_app_settings_lock = threading.Lock()
+
+def get_app_settings() -> dict:
+    """Legge app_settings.json. Ritorna {} se assente o corrotto."""
+    path = data_config.get_path("app_settings.json")
+    with _app_settings_lock:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+def save_app_settings(settings: dict) -> None:
+    """Salva (merge) le impostazioni su app_settings.json."""
+    path = data_config.get_path("app_settings.json")
+    with _app_settings_lock:
+        current = {}
+        try:
+            with open(path, encoding="utf-8") as fh:
+                loaded = json.load(fh)
+            if isinstance(loaded, dict):
+                current = loaded
+        except (OSError, ValueError):
+            current = {}
+        current.update(settings)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(current, fh, indent=2)
+
+def list_local_ips() -> list:
+    """Enumera gli IP locali senza dipendenze aggiuntive. Include sempre
+    '0.0.0.0' (tutte le interfacce) e '127.0.0.1'; esclude i link-local 169.254.*."""
+    ips = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except OSError:
+        pass
+    # Trucco UDP-connect: ricava l'IP dell'interfaccia usata verso l'esterno.
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ips.add(s.getsockname()[0])
+        finally:
+            s.close()
+    except OSError:
+        pass
+    ips = {ip for ip in ips if not ip.startswith("169.254.")}
+    ips.discard("0.0.0.0")
+    ips.discard("127.0.0.1")
+    return ["0.0.0.0", "127.0.0.1"] + sorted(ips)
+
+def resolve_bind_host() -> str:
+    """Ordine di risoluzione dell'host di bind: env SENTINELNET_HOST >
+    app_settings.json 'host' > '127.0.0.1'."""
+    env = os.environ.get("SENTINELNET_HOST")
+    if env:
+        return env
+    cfg = get_app_settings().get("host")
+    if cfg:
+        return cfg
+    return "127.0.0.1"
+
 
 # --- MODELLI DI VALIDAZIONE PYDANTIC ---
 
@@ -286,6 +358,9 @@ class DeviceCategorySchema(BaseModel):
 class ModelSchema(BaseModel):
     vendor: str
     model: str
+
+class NetworkSettingsSchema(BaseModel):
+    host: str
 
 class PromoteDeviceSchema(BaseModel):
     node_id: str
@@ -983,6 +1058,36 @@ def remove_model(payload: ModelSchema, current_user = Depends(require_operator))
         raise HTTPException(status_code=404, detail="Modello non trovato.")
     log_audit(f"Modello '{payload.model}' (vendor: {payload.vendor}) eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
+
+# --- IMPOSTAZIONI DI RETE (bind IP, solo amministratori) ---
+
+@app.get("/api/settings/network")
+def get_network_settings(current_user = Depends(require_admin)):
+    """Stato attuale del bind IP: host configurato, host effettivo, eventuale
+    override via env, porta e IP locali selezionabili."""
+    env_host = os.environ.get("SENTINELNET_HOST")
+    configured = get_app_settings().get("host")
+    effective = env_host or configured or "127.0.0.1"
+    return {
+        "configured_host": configured,
+        "effective_host": effective,
+        "env_override": env_host is not None,
+        "port": int(os.environ.get("SENTINELNET_PORT", PORT)),
+        "local_ips": list_local_ips(),
+    }
+
+@app.post("/api/settings/network")
+def set_network_settings(payload: NetworkSettingsSchema, current_user = Depends(require_admin)):
+    """Imposta l'IP di bind (applicato al prossimo riavvio). Valida che l'host
+    sia tra gli IP locali enumerati (o 0.0.0.0/127.0.0.1)."""
+    host = payload.host.strip()
+    valid = set(list_local_ips()) | {"0.0.0.0", "127.0.0.1"}
+    if host not in valid:
+        raise HTTPException(status_code=400, detail=f"Host '{host}' non valido o non disponibile sulla LAN.")
+    save_app_settings({"host": host})
+    log_audit(f"IP di bind impostato a '{host}' dall'utente '{current_user.get('sub')}' (applicato al riavvio).")
+    return {"status": "success", "restart_required": True, "host": host}
+
 
 # --- ENDPOINTS COSTRUZIONE MAPPA TOPOLOGICA ---
 
@@ -1905,6 +2010,29 @@ def mac_delete_override(payload: MacOverrideDeleteSchema, current_user = Depends
     return {"status": "success"}
 
 
+# --- CONFIG ANALYZER: analisi running-config dai backup ---
+
+@app.get("/api/config-analyzer")
+def config_analyzer_all(group: str = "all", current_user = Depends(get_current_user)):
+    scope = user_group_scope(current_user)
+    return config_analyzer.analyze_all(group_filter=group, allowed_groups=scope)
+
+
+@app.get("/api/config-analyzer/{ip}")
+def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
+    scope = user_group_scope(current_user)
+    device = next((d for d in inventory_manager.get_all_devices() if d.get('IP') == ip), None)
+    if device is not None and scope is not None:
+        if device.get('Group', 'Generale') not in scope:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dispositivo non consentito per il tuo profilo.")
+    result = config_analyzer.analyze_device(ip)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
+    return result
+
+
 # --- SCANSIONE SUBNET IN BACKGROUND ---
 
 @app.post("/api/scan-subnet")
@@ -1972,7 +2100,8 @@ def main():
     if not os.path.exists("templates"): 
         os.makedirs("templates")
         
-    host = os.environ.get("SENTINELNET_HOST", "127.0.0.1")
+    # Ordine di risoluzione: env SENTINELNET_HOST > app_settings.json > 127.0.0.1
+    host = resolve_bind_host()
     port = int(os.environ.get("SENTINELNET_PORT", PORT))
     
     # Disabilita l'apertura automatica del browser in ambiente Docker/containerizzato
