@@ -69,3 +69,5 @@ apikey*
 .env.local
 credentials.json
 service-account*.json
+
+app_settings.json
