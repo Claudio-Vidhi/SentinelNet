@@ -1845,7 +1845,7 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
         want_ips.add(payload.ip)
 
     def allowed(d):
-        g = d.get("Group", "Generale")
+        g = d.get("Group") or "Generale"
         if scope is not None and g not in scope:
             return False
         if payload.group and payload.group != "all" and g != payload.group:
@@ -1873,7 +1873,7 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
             continue
         summ = mac_history.record_sightings(
             res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
-            tenant=d.get("Group", "Generale"),
+            tenant=d.get("Group") or "Generale",
         )
         # Storicizza i MAC delle interfacce proprie dello switch (infrastruttura).
         if res.get("if_macs"):
