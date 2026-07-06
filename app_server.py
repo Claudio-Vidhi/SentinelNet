@@ -1893,7 +1893,8 @@ def mac_search(mac: str = None, vlan: str = None, interface: str = None,
                current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     rows = mac_history.search(mac=mac, vlan=vlan, interface=interface,
-                              switch_ip=switch, tenants=scope, frm=frm, to=to)
+                              switch_ip=switch, tenants=scope, frm=frm, to=to,
+                              limit=10000)
     # Riclassifica accesso/transito contro la topologia globale (fix falsi positivi).
     _reclassify_sightings(rows)
     return {"results": rows, "count": len(rows)}
