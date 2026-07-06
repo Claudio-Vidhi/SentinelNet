@@ -1215,7 +1215,7 @@
       <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
         <h3 data-i18n="titleMacTracker">MAC Address Tracker</h3>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <select id="macScanGroup" onchange="populateMacScanDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+          <select id="macScanGroup" onchange="populateMacScanDevices(); macSearch(); refreshMacStats(false);" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
             <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
           </select>
           <details id="macDeviceMenu" style="position:relative;">
@@ -5097,7 +5097,10 @@
 
     async function refreshMacStats(fillRetention) {
         try {
-            const r = await apiFetch('/api/mac/stats');
+            const g = document.getElementById('macScanGroup');
+            const grp = g ? g.value : 'all';
+            const qs = (grp && grp !== 'all') ? ('?tenant=' + encodeURIComponent(grp)) : '';
+            const r = await apiFetch('/api/mac/stats' + qs);
             if (!r || !r.ok) return;
             const s = await r.json();
             const el = document.getElementById('macStats');
@@ -5151,6 +5154,8 @@
         if (g('macSearchVlan'))   params.set('vlan', g('macSearchVlan'));
         if (g('macSearchIface'))  params.set('interface', g('macSearchIface'));
         if (g('macSearchSwitch')) params.set('switch', g('macSearchSwitch'));
+        const grp = g('macScanGroup');
+        if (grp && grp !== 'all') params.set('tenant', grp);
         const res = await apiFetch('/api/mac/search?' + params.toString());
         if (!res || !res.ok) return;
         const d = await res.json();

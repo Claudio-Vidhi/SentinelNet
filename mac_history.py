@@ -336,11 +336,19 @@ def switch_table(switch_ip: str, tenants=None, limit: int = 2000) -> list:
     return search(switch_ip=switch_ip, tenants=tenants, limit=limit)
 
 
-def stats() -> dict:
+def stats(tenants=None) -> dict:
     init_db()
+    if tenants is not None and not tenants:
+        return {"sightings": 0, "unique_macs": 0, "switches": 0,
+                "retention_days": get_retention_days()}
+    where = ""
+    args = []
+    if tenants is not None:
+        where = " WHERE tenant IN (%s)" % ",".join("?" * len(tenants))
+        args = list(tenants)
     with _lock, _connect() as c:
-        total = c.execute("SELECT COUNT(*) n FROM mac_sightings").fetchone()["n"]
-        macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM mac_sightings").fetchone()["n"]
-        switches = c.execute("SELECT COUNT(DISTINCT switch_ip) n FROM mac_sightings").fetchone()["n"]
+        total = c.execute("SELECT COUNT(*) n FROM mac_sightings" + where, args).fetchone()["n"]
+        macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM mac_sightings" + where, args).fetchone()["n"]
+        switches = c.execute("SELECT COUNT(DISTINCT switch_ip) n FROM mac_sightings" + where, args).fetchone()["n"]
     return {"sightings": total, "unique_macs": macs, "switches": switches,
             "retention_days": get_retention_days()}

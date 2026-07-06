@@ -1890,10 +1890,17 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
 @app.get("/api/mac/search")
 def mac_search(mac: str = None, vlan: str = None, interface: str = None,
                switch: str = None, frm: str = None, to: str = None,
+               tenant: str = None,
                current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
+    if tenant:
+        if scope is not None and tenant not in scope:
+            raise HTTPException(status_code=403, detail=f"Tenant '{tenant}' non consentito.")
+        tenants = [tenant]
+    else:
+        tenants = scope
     rows = mac_history.search(mac=mac, vlan=vlan, interface=interface,
-                              switch_ip=switch, tenants=scope, frm=frm, to=to,
+                              switch_ip=switch, tenants=tenants, frm=frm, to=to,
                               limit=10000)
     # Riclassifica accesso/transito contro la topologia globale (fix falsi positivi).
     _reclassify_sightings(rows)
@@ -1973,8 +1980,15 @@ def mac_switch(ip: str, current_user = Depends(get_current_user)):
 
 
 @app.get("/api/mac/stats")
-def mac_stats(current_user = Depends(get_current_user)):
-    return mac_history.stats()
+def mac_stats(tenant: str = None, current_user = Depends(get_current_user)):
+    scope = user_group_scope(current_user)
+    if tenant:
+        if scope is not None and tenant not in scope:
+            raise HTTPException(status_code=403, detail=f"Tenant '{tenant}' non consentito.")
+        tenants = [tenant]
+    else:
+        tenants = scope
+    return mac_history.stats(tenants=tenants)
 
 
 @app.post("/api/mac/settings")
