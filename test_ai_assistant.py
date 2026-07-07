@@ -54,11 +54,59 @@ class TestAiAssistantDispatch(unittest.TestCase):
             {"candidates": [{"content": {"parts": [{"text": "Ciao Gemini"}]}}]}
         )
         reply = ai_assistant.chat(self._messages(), provider="gemini",
-                                   model="gemini-1.5-flash", api_key="AIza-x")
+                                   model="gemini-3-flash", api_key="AIza-x")
         self.assertEqual(reply, "Ciao Gemini")
         args, _kwargs = mock_post.call_args
         self.assertIn("generativelanguage.googleapis.com", args[0])
         self.assertIn("AIza-x", args[0])
+        self.assertIn("/models/gemini-3-flash:generateContent", args[0])
+
+    @patch("ai_assistant.requests.post")
+    def test_gemini_default_model(self, mock_post):
+        mock_post.return_value = _fake_response(
+            {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
+        )
+        ai_assistant.chat(self._messages(), provider="gemini", api_key="AIza-x")
+        args, _kwargs = mock_post.call_args
+        self.assertIn("/models/gemini-3-flash:generateContent", args[0])
+
+    @patch("ai_assistant.requests.post")
+    def test_gemini_model_strips_models_prefix(self, mock_post):
+        """Regressione: un nome modello già prefissato con 'models/' (come
+        ritornato da ListModels, o incollato dall'utente) non deve produrre
+        un percorso doppio 'models/models/...' nell'URL (errore 400)."""
+        mock_post.return_value = _fake_response(
+            {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
+        )
+        ai_assistant.chat(self._messages(), provider="gemini",
+                           model="models/gemini-2.5-pro", api_key="AIza-x")
+        args, _kwargs = mock_post.call_args
+        self.assertIn("/models/gemini-2.5-pro:generateContent", args[0])
+        self.assertNotIn("models/models/", args[0])
+
+    def test_normalize_gemini_model_helper(self):
+        self.assertEqual(ai_assistant._normalize_gemini_model("models/gemini-3-flash"), "gemini-3-flash")
+        self.assertEqual(ai_assistant._normalize_gemini_model("gemini-2.5-pro"), "gemini-2.5-pro")
+        self.assertEqual(ai_assistant._normalize_gemini_model(None), "gemini-3-flash")
+        self.assertEqual(ai_assistant._normalize_gemini_model(""), "gemini-3-flash")
+
+    @patch("ai_assistant.requests.get")
+    def test_list_models_gemini(self, mock_get):
+        mock_get.return_value = _fake_response({
+            "models": [
+                {"name": "models/gemini-3-flash", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-2.5-pro", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/embedding-001", "supportedGenerationMethods": ["embedContent"]},
+            ]
+        })
+        models = ai_assistant.list_models("gemini", api_key="AIza-x")
+        self.assertEqual(models, ["gemini-3-flash", "gemini-2.5-pro"])
+        args, _kwargs = mock_get.call_args
+        self.assertIn("generativelanguage.googleapis.com/v1beta/models", args[0])
+
+    def test_list_models_unsupported_provider(self):
+        with self.assertRaises(ai_assistant.AiAssistantError):
+            ai_assistant.list_models("ollama", api_key=None)
 
     @patch("ai_assistant.requests.post")
     def test_ollama(self, mock_post):

@@ -2260,6 +2260,22 @@ def set_ai_settings(payload: AiSettingsSchema, current_user = Depends(require_ad
     log_audit(f"Impostazioni AI Assistant aggiornate (provider='{provider}') dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+@app.get("/api/ai/models")
+def list_ai_models(current_user = Depends(require_admin)):
+    """Elenca i modelli disponibili per il provider AI attualmente configurato
+    (chiave API già salvata) che supportano la chat, cosi' l'admin puo'
+    sceglierne uno valido invece di indovinare il nome a mano."""
+    s = _get_ai_settings()
+    provider = s.get("provider", "")
+    if not provider:
+        raise HTTPException(status_code=400, detail="Nessun provider AI configurato.")
+    api_key = crypto_vault.decrypt_password(s.get("api_key_enc", "")) if s.get("api_key_enc") else None
+    try:
+        models = ai_assistant.list_models(provider, api_key=api_key)
+    except ai_assistant.AiAssistantError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"provider": provider, "models": models}
+
 @app.post("/api/ai/chat")
 def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
     s = _get_ai_settings()
