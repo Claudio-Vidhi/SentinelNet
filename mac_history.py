@@ -82,6 +82,12 @@ def init_db():
                 c.execute("ALTER TABLE mac_sightings ADD COLUMN uplink_to TEXT DEFAULT ''")
             except sqlite3.OperationalError:
                 pass
+            # 'site': sede multi-sede di provenienza (default 'central'). Attribuzione
+            # indipendente dal 'tenant' (gruppo) usato per lo scoping utente.
+            try:
+                c.execute("ALTER TABLE mac_sightings ADD COLUMN site TEXT DEFAULT 'central'")
+            except sqlite3.OperationalError:
+                pass
             # Una posizione = (mac, switch, interfaccia, vlan): chiave di upsert.
             c.execute("""CREATE UNIQUE INDEX IF NOT EXISTS ux_mac_pos
                          ON mac_sightings(mac, switch_ip, interface, vlan)""")
@@ -181,7 +187,8 @@ def prune(retention_days: int = None) -> int:
 
 # --- Scrittura avvistamenti (upsert) ---
 
-def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = "") -> dict:
+def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = "",
+                     site: str = "central") -> dict:
     """Registra una lista di avvistamenti di UNO switch.
 
     rows: iterabile di dict con chiavi: mac (obbligatoria), vlan, interface,
@@ -210,16 +217,16 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
             if existing:
                 c.execute("""UPDATE mac_sightings
                              SET last_seen=?, seen_count=seen_count+1, is_uplink=?,
-                                 port_channel=?, oui_vendor=?, switch_name=?, tenant=?, uplink_to=?
+                                 port_channel=?, oui_vendor=?, switch_name=?, tenant=?, uplink_to=?, site=?
                              WHERE id=?""",
-                          (now, up, pc, oui, switch_name, tenant, uplink_to, existing["id"]))
+                          (now, up, pc, oui, switch_name, tenant, uplink_to, site, existing["id"]))
                 n_upd += 1
             else:
                 c.execute("""INSERT INTO mac_sightings
                              (mac, oui_vendor, vlan, switch_ip, switch_name, interface,
-                              port_channel, is_uplink, uplink_to, tenant, first_seen, last_seen, seen_count)
-                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)""",
-                          (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, now, now))
+                              port_channel, is_uplink, uplink_to, tenant, site, first_seen, last_seen, seen_count)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+                          (mac, oui, vlan, switch_ip, switch_name, iface, pc, up, uplink_to, tenant, site, now, now))
                 n_new += 1
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
@@ -280,7 +287,7 @@ def _row_to_dict(row) -> dict:
 
 def search(mac: str = None, vlan: str = None, interface: str = None,
            switch_ip: str = None, tenants=None, frm: str = None, to: str = None,
-           limit: int = 500) -> list:
+           limit: int = 500, site: str = None) -> list:
     """Ricerca avvistamenti con filtri combinabili.
 
     - mac: MAC completo (match esatto) oppure frammento/OUI (ricerca parziale,
@@ -311,6 +318,9 @@ def search(mac: str = None, vlan: str = None, interface: str = None,
     if switch_ip:
         q.append("AND switch_ip = ?")
         args.append(switch_ip)
+    if site:
+        q.append("AND site = ?")
+        args.append(site)
     if tenants is not None:
         if not tenants:
             return []

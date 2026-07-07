@@ -898,6 +898,9 @@
       <button class="tab-button requires-admin" onclick="switchTab('tab-users', this)" data-i18n="tabUsers">
         <i class="fa-solid fa-users-gear"></i> Utenti
       </button>
+      <button class="tab-button requires-admin" onclick="switchTab('tab-sites', this)">
+        <i class="fa-solid fa-sitemap"></i> Sedi
+      </button>
       <button class="tab-button requires-admin" onclick="switchTab('tab-settings', this)" data-i18n="tabSettings">
         <i class="fa-solid fa-gear"></i> Impostazioni
       </button>
@@ -963,6 +966,7 @@
             <tr>
               <th data-i18n="thStatus">Stato</th>
               <th data-i18n="thGroup">Gruppo</th>
+              <th>Sede</th>
               <th data-i18n="thHostname">Hostname</th>
               <th data-i18n="thIp">Indirizzo IP</th>
               <th data-i18n="thVendor">Vendor</th>
@@ -1420,6 +1424,47 @@
           </div>
           <button class="btn btn-primary btn-small" onclick="createUser()" style="margin:0; white-space:nowrap;" data-i18n="btnAddUser">
             <i class="fa-solid fa-plus"></i> Crea Utente
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-sites" class="tab-content">
+      <h3><i class="fa-solid fa-sitemap" style="color:var(--primary);"></i> Sedi multi-sito</h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;">
+        Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.
+      </p>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Nome</th><th>Modalità</th><th>Subnet</th><th>Ultimo contatto</th><th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="sitesTableBody"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 24px;">
+        <h3 style="font-size: 15px; margin-bottom: 12px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> Nuova sede</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 2fr auto; gap:10px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Nome</label>
+            <input id="newSiteName" type="text" placeholder="es. Milano" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Modalità</label>
+            <select id="newSiteMode" style="padding-left:12px;">
+              <option value="central">Central poll</option>
+              <option value="agent">Site agent</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Subnet (separate da virgola)</label>
+            <input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" style="padding-left:12px;">
+          </div>
+          <button class="btn btn-primary btn-small" onclick="createSite()" style="margin:0; white-space:nowrap;">
+            <i class="fa-solid fa-plus"></i> Crea sede
           </button>
         </div>
       </div>
@@ -2824,7 +2869,7 @@
 
             // Barra di ricerca: filtra su IP, hostname, vendor, gruppo, versione, stato
             if (term) {
-                const haystack = [d.IP, d.Hostname, d.Vendor, d.Group, scan.version, scan.status]
+                const haystack = [d.IP, d.Hostname, d.Vendor, d.Group, d.Site, scan.version, scan.status]
                     .map(x => (x || '').toString().toLowerCase()).join(' ');
                 if (!haystack.includes(term)) return;
             }
@@ -2868,6 +2913,7 @@
                     </select>`}
                   </div>
                 </td>
+                <td><span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span></td>
                 <td style="font-family:monospace; font-size:12px;">
                   ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
                   ${isViewer ? '' : `<button onclick="renameDevice('${d.IP}')"
@@ -2917,7 +2963,7 @@
             const msg = globalDevices.length === 0
                 ? i18n[currentLang].emptyInventory
                 : i18n[currentLang].emptyInventoryFiltered;
-            devBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
+            devBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13px;">
                 <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${msg}
             </td></tr>`;
         }
@@ -3139,7 +3185,93 @@
         else if(tabId === 'tab-mac') loadMacTracker();
         else if(tabId === 'tab-config') loadConfigAnalyzer();
         else if(tabId === 'tab-users') loadUsers();
+        else if(tabId === 'tab-sites') loadSites();
         else if(tabId === 'tab-settings') loadAppSettings();
+    }
+
+    // --- SEDI MULTI-SITO (admin) ---
+    async function loadSites() {
+        if (currentRole !== 'admin') return;
+        const res = await apiFetch('/api/sites');
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        renderSitesTable(data.sites || []);
+    }
+
+    function renderSitesTable(sites) {
+        const body = document.getElementById('sitesTableBody');
+        if (!body) return;
+        body.innerHTML = sites.map(s => {
+            const isCentral = s.id === 'central';
+            const modeBadge = s.mode === 'agent'
+                ? '<span class="role-pill" style="background:rgba(93,169,255,0.15); color:var(--primary); border:1px solid rgba(93,169,255,0.35);">SITE AGENT</span>'
+                : '<span class="role-pill" style="background:rgba(120,200,120,0.15); color:var(--success); border:1px solid rgba(120,200,120,0.35);">CENTRAL POLL</span>';
+            const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
+            const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
+            let actions = '';
+            if (s.mode === 'agent') {
+                actions += `<button data-s="${escapeHtml(s.id)}" onclick="regenSiteToken(this.dataset.s)" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> Rigenera token</button>`;
+            }
+            if (!isCentral) {
+                actions += `<button data-s="${escapeHtml(s.id)}" onclick="deleteSite(this.dataset.s)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> Elimina</button>`;
+            } else {
+                actions = '<span style="color:var(--text-muted); font-size:12px;">predefinita</span>';
+            }
+            return `<tr>
+                <td><strong>${escapeHtml(s.id)}</strong></td>
+                <td>${escapeHtml(s.name)}</td>
+                <td>${modeBadge}</td>
+                <td style="font-size:12px;">${subnets}</td>
+                <td style="font-size:12px; color:var(--text-muted);">${last}</td>
+                <td style="white-space:nowrap;">${actions}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function createSite() {
+        const name = document.getElementById('newSiteName').value.trim();
+        const mode = document.getElementById('newSiteMode').value;
+        const subnets = document.getElementById('newSiteSubnets').value
+            .split(',').map(x => x.trim()).filter(Boolean);
+        if (!name) { alert('Nome sede obbligatorio.'); return; }
+        const res = await apiFetch('/api/sites', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, mode, subnets })
+        });
+        if (res && res.ok) {
+            const data = await res.json();
+            document.getElementById('newSiteName').value = '';
+            document.getElementById('newSiteSubnets').value = '';
+            if (data.token) {
+                prompt('Token della sede (mostrato UNA SOLA VOLTA — copialo ora e configuralo nell\'agente):', data.token);
+            }
+            loadSites();
+        } else if (res) {
+            const e = await res.json(); alert('Errore: ' + (e.detail || ''));
+        }
+    }
+
+    async function regenSiteToken(id) {
+        if (!confirm(`Rigenerare il token della sede "${id}"? Il vecchio token smetterà di funzionare.`)) return;
+        const res = await apiFetch('/api/sites/regenerate-token', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        if (res && res.ok) {
+            const data = await res.json();
+            prompt('Nuovo token (mostrato UNA SOLA VOLTA):', data.token);
+            loadSites();
+        } else if (res) { const e = await res.json(); alert('Errore: ' + (e.detail || '')); }
+    }
+
+    async function deleteSite(id) {
+        if (!confirm(`Eliminare la sede "${id}"?`)) return;
+        const res = await apiFetch('/api/sites/delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        if (res && res.ok) loadSites();
+        else if (res) { const e = await res.json(); alert('Errore: ' + (e.detail || '')); }
     }
 
     // La lista adjacency testuale è stata rimossa (non human-readable): il tab
