@@ -892,6 +892,9 @@
       <button class="tab-button" onclick="switchTab('tab-config', this)" data-i18n="tabConfigAnalyzer">
         <i class="fa-solid fa-file-code"></i> Config Analyzer
       </button>
+      <button class="tab-button" onclick="switchTab('tab-ai', this)" data-i18n="tabAiAssistant">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
       <button class="tab-button requires-write" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
         <i class="fa-solid fa-file-csv"></i> Importazione CSV
       </button>
@@ -1360,6 +1363,66 @@
       <div id="caResults"></div>
     </div>
 
+    <!-- TAB: AI Assistant -->
+    <div id="tab-ai" class="tab-content">
+      <h3 data-i18n="titleAiAssistant">AI Assistant</h3>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descAiAssistant">
+        Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.
+      </p>
+
+      <div class="requires-admin" style="border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:18px; background:var(--surface-2);">
+        <h4 style="margin-bottom:10px;" data-i18n="titleAiSettings">Configurazione Provider</h4>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+          <div class="form-group" style="min-width:150px;">
+            <label data-i18n="lblAiProvider">Provider</label>
+            <select id="aiProvider" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="openai">OpenAI (ChatGPT)</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="ollama">Ollama (LLM locale)</option>
+            </select>
+          </div>
+          <div class="form-group" style="min-width:180px;">
+            <label data-i18n="lblAiModel">Modello</label>
+            <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="min-width:220px;">
+            <label id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
+            <input id="aiApiKey" type="password" placeholder="•••••• (lascia vuoto per non modificare)" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="min-width:220px;">
+            <label data-i18n="lblAiBaseUrl">Endpoint locale (Ollama)</label>
+            <input id="aiBaseUrl" type="text" placeholder="http://localhost:11434" style="padding-left:12px;">
+          </div>
+          <button class="btn btn-primary" style="width:auto;" onclick="saveAiSettings()" data-i18n="btnAiSaveSettings">
+            <i class="fa-solid fa-floppy-disk"></i> Salva
+          </button>
+        </div>
+        <div id="aiSettingsStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+      </div>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+        <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
+        </label>
+        <select id="aiAttachDeviceIp" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+          <option value="" data-i18n="optAiNoDevice">Nessuna config allegata</option>
+        </select>
+        <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="clearAiChat()" data-i18n="btnAiClear">
+          <i class="fa-solid fa-trash"></i> Nuova conversazione
+        </button>
+      </div>
+
+      <div id="aiChatMessages" style="border:1px solid var(--border); border-radius:10px; background:var(--surface); min-height:280px; max-height:480px; overflow-y:auto; padding:14px; margin-bottom:12px;"></div>
+
+      <div style="display:flex; gap:8px;">
+        <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
+        <button class="btn btn-primary" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
+          <i class="fa-solid fa-paper-plane"></i> Invia
+        </button>
+      </div>
+    </div>
+
     <!-- TAB 6: Importazione CSV -->
     <div id="tab-import" class="tab-content">
       <h3 data-i18n="titleImportCsv">Importazione Massiva da CSV</h3>
@@ -1714,6 +1777,19 @@
         tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
         titleConfigAnalyzer: "Config Analyzer",
         descConfigAnalyzer: "Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.",
+        tabAiAssistant: '<i class="fa-solid fa-robot"></i> AI Assistant',
+        titleAiAssistant: "AI Assistant",
+        descAiAssistant: "Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.",
+        titleAiSettings: "Configurazione Provider",
+        lblAiProvider: "Provider",
+        lblAiModel: "Modello",
+        lblAiApiKey: "API Key",
+        lblAiBaseUrl: "Endpoint locale (Ollama)",
+        btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Salva',
+        lblAiAttachInventory: "Allega riepilogo inventario",
+        optAiNoDevice: "Nessuna config allegata",
+        btnAiClear: '<i class="fa-solid fa-trash"></i> Nuova conversazione',
+        btnAiSend: '<i class="fa-solid fa-paper-plane"></i> Invia',
         btnCaRefresh: '<i class="fa-solid fa-rotate"></i> Aggiorna',
         pillVlans: "VLAN",
         pillRouting: "Routing",
@@ -2035,6 +2111,19 @@
         thMacOrigin: "Origin",
         thMacFirst: "First seen",
         thMacLast: "Last seen",
+        tabAiAssistant: '<i class="fa-solid fa-robot"></i> AI Assistant',
+        titleAiAssistant: "AI Assistant",
+        descAiAssistant: "Chat with an AI assistant (Anthropic Claude, OpenAI ChatGPT, Google Gemini, or a local LLM via Ollama). You can attach the device inventory or a device's running-config as context.",
+        titleAiSettings: "Provider Configuration",
+        lblAiProvider: "Provider",
+        lblAiModel: "Model",
+        lblAiApiKey: "API Key",
+        lblAiBaseUrl: "Local endpoint (Ollama)",
+        btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Save',
+        lblAiAttachInventory: "Attach inventory summary",
+        optAiNoDevice: "No config attached",
+        btnAiClear: '<i class="fa-solid fa-trash"></i> New conversation',
+        btnAiSend: '<i class="fa-solid fa-paper-plane"></i> Send',
         tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
         titleConfigAnalyzer: "Config Analyzer",
         descConfigAnalyzer: "Structured analysis of configurations: VLAN, routing, ACL and interfaces per device, with cross-object validation checks.",
@@ -3138,6 +3227,7 @@
         }
         else if(tabId === 'tab-mac') loadMacTracker();
         else if(tabId === 'tab-config') loadConfigAnalyzer();
+        else if(tabId === 'tab-ai') loadAiTab();
         else if(tabId === 'tab-users') loadUsers();
         else if(tabId === 'tab-settings') loadAppSettings();
     }
@@ -6372,6 +6462,127 @@
             // Update map node status
             updateTopologyMapNodeStatus(ip, alive ? "online" : "offline");
         });
+    }
+
+    // ===== AI Assistant =====
+    let aiHistory = [];  // {role, content} inviato al backend (senza system: aggiunto server-side)
+
+    function loadAiTab() {
+        // Popola la select dei dispositivi per l'attach della running-config
+        const sel = document.getElementById('aiAttachDeviceIp');
+        if (sel) {
+            const cur = sel.value;
+            const opts = (globalDevices || []).map(d =>
+                `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`
+            ).join('');
+            sel.innerHTML = `<option value="">${i18n[currentLang].optAiNoDevice}</option>` + opts;
+            sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+        }
+        if (document.body.classList.contains('role-admin')) {
+            loadAiSettings();
+        }
+    }
+
+    async function loadAiSettings() {
+        const statusEl = document.getElementById('aiSettingsStatus');
+        try {
+            const res = await apiFetch('/api/ai/settings');
+            if (!res || !res.ok) return;
+            const s = await res.json();
+            document.getElementById('aiProvider').value = s.provider || 'anthropic';
+            document.getElementById('aiModel').value = s.model || '';
+            document.getElementById('aiBaseUrl').value = s.base_url || '';
+            document.getElementById('aiApiKey').value = '';
+            document.getElementById('aiApiKey').placeholder = s.api_key_set
+                ? '•••••• (già impostata, lascia vuoto per non modificare)'
+                : 'Inserisci una API key';
+            if (statusEl) statusEl.textContent = '';
+        } catch (e) { /* silenzioso: pannello opzionale per admin */ }
+    }
+
+    async function saveAiSettings() {
+        const statusEl = document.getElementById('aiSettingsStatus');
+        const body = {
+            provider: document.getElementById('aiProvider').value,
+            model: document.getElementById('aiModel').value.trim(),
+            base_url: document.getElementById('aiBaseUrl').value.trim(),
+        };
+        const key = document.getElementById('aiApiKey').value;
+        if (key) body.api_key = key;
+        try {
+            const res = await apiFetch('/api/ai/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (res && res.ok) {
+                if (statusEl) statusEl.textContent = 'Impostazioni salvate.';
+                loadAiSettings();
+            } else {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                if (statusEl) statusEl.textContent = 'Errore: ' + (err.detail || res?.status);
+            }
+        } catch (e) {
+            if (statusEl) statusEl.textContent = 'Errore di rete: ' + e;
+        }
+    }
+
+    function clearAiChat() {
+        aiHistory = [];
+        const box = document.getElementById('aiChatMessages');
+        if (box) box.innerHTML = '';
+    }
+
+    function appendAiMessage(role, text) {
+        const box = document.getElementById('aiChatMessages');
+        if (!box) return;
+        const div = document.createElement('div');
+        div.style.marginBottom = '12px';
+        const label = role === 'user' ? 'Tu' : 'AI';
+        div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${label}</div>
+            <div style="white-space:pre-wrap; background:${role === 'user' ? 'var(--surface-2)' : 'var(--surface-3)'}; border-radius:8px; padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    async function sendAiChat() {
+        const input = document.getElementById('aiChatInput');
+        const text = (input.value || '').trim();
+        if (!text) return;
+        input.value = '';
+        aiHistory.push({ role: 'user', content: text });
+        appendAiMessage('user', text);
+
+        const attachInventory = document.getElementById('aiAttachInventory').checked;
+        const attachDeviceIp = document.getElementById('aiAttachDeviceIp').value || null;
+
+        appendAiMessage('assistant', '...');
+        const box = document.getElementById('aiChatMessages');
+        const placeholder = box.lastElementChild;
+
+        try {
+            const res = await apiFetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: aiHistory,
+                    attach_inventory: attachInventory,
+                    attach_device_ip: attachDeviceIp
+                })
+            });
+            if (placeholder) placeholder.remove();
+            if (res && res.ok) {
+                const data = await res.json();
+                aiHistory.push({ role: 'assistant', content: data.reply });
+                appendAiMessage('assistant', data.reply);
+            } else {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                appendAiMessage('assistant', 'Errore: ' + (err.detail || 'richiesta fallita.'));
+            }
+        } catch (e) {
+            if (placeholder) placeholder.remove();
+            appendAiMessage('assistant', 'Errore di rete: ' + e);
+        }
     }
 
     window.onload = () => {
