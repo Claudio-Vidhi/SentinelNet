@@ -213,11 +213,26 @@ def _chat_openai(messages, model, api_key, timeout, base_url=None):
     return choices[0].get("message", {}).get("content", "")
 
 
+def _normalize_gemini_model(model):
+    """Normalizza il nome modello Gemini per l'uso nell'URL REST.
+
+    Accetta sia forme brevi (``gemini-3-flash``) sia forme già prefissate
+    (``models/gemini-3-flash``, come ritornate da ListModels) e ritorna
+    sempre il nome senza prefisso ``models/`` per evitare percorsi doppi
+    come ``models/models/...`` (causa dell'errore 400 "unexpected model
+    name format").
+    """
+    name = (model or "gemini-3-flash").strip()
+    while name.startswith("models/"):
+        name = name[len("models/"):]
+    return name
+
+
 def _chat_gemini(messages, model, api_key, timeout):
     if not api_key:
         raise AiAssistantError("API key Gemini mancante.")
     system, convo = _split_system(messages)
-    model_name = model or "gemini-1.5-flash"
+    model_name = _normalize_gemini_model(model)
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{model_name}:generateContent?key={api_key}"
@@ -253,6 +268,43 @@ def _chat_ollama(messages, model, timeout, base_url=None):
         raise AiAssistantError(f"Ollama endpoint error {resp.status_code}: {resp.text[:500]}")
     data = resp.json()
     return data.get("message", {}).get("content", "")
+
+
+def _list_models_gemini(api_key, timeout):
+    if not api_key:
+        raise AiAssistantError("API key Gemini mancante.")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+    resp = requests.get(url, timeout=timeout)
+    if resp.status_code >= 400:
+        raise AiAssistantError(f"Gemini API error {resp.status_code}: {resp.text[:500]}")
+    data = resp.json()
+    models = []
+    for m in data.get("models") or []:
+        methods = m.get("supportedGenerationMethods") or []
+        if "generateContent" not in methods:
+            continue
+        name = _normalize_gemini_model(m.get("name", ""))
+        if name:
+            models.append(name)
+    return models
+
+
+def list_models(provider, api_key=None, timeout=DEFAULT_TIMEOUT):
+    """Ritorna la lista dei nomi modello disponibili per il provider che
+    supportano la chat (``generateContent``/equivalente). Attualmente
+    implementato solo per "gemini"; per gli altri provider solleva
+    ``AiAssistantError`` (nessun endpoint ListModels standard/necessario)."""
+    provider = (provider or "").strip().lower()
+    if provider not in _PROVIDERS:
+        raise AiAssistantError(f"Provider non supportato: '{provider}'.")
+    try:
+        if provider == "gemini":
+            return _list_models_gemini(api_key, timeout)
+        raise AiAssistantError(f"Elenco modelli non supportato per il provider '{provider}'.")
+    except AiAssistantError:
+        raise
+    except requests.RequestException as e:
+        raise AiAssistantError(f"Errore di rete verso il provider '{provider}': {e}")
 
 
 _PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
