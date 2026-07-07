@@ -106,7 +106,58 @@ class TestAiAssistantDispatch(unittest.TestCase):
 
     def test_list_models_unsupported_provider(self):
         with self.assertRaises(ai_assistant.AiAssistantError):
-            ai_assistant.list_models("ollama", api_key=None)
+            ai_assistant.list_models("does-not-exist", api_key=None)
+
+    @patch("ai_assistant.requests.get")
+    def test_list_models_openai(self, mock_get):
+        mock_get.return_value = _fake_response({
+            "data": [
+                {"id": "gpt-4o-mini"},
+                {"id": "gpt-4o"},
+                {"id": "text-embedding-3-small"},
+                {"id": "whisper-1"},
+            ]
+        })
+        models = ai_assistant.list_models("openai", api_key="sk-oa-x")
+        self.assertIn("gpt-4o-mini", models)
+        self.assertIn("gpt-4o", models)
+        self.assertNotIn("text-embedding-3-small", models)
+        self.assertNotIn("whisper-1", models)
+        args, kwargs = mock_get.call_args
+        self.assertIn("api.openai.com/v1/models", args[0])
+        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer sk-oa-x")
+
+    def test_list_models_openai_missing_key(self):
+        with self.assertRaises(ai_assistant.AiAssistantError):
+            ai_assistant.list_models("openai", api_key=None)
+
+    @patch("ai_assistant.requests.get")
+    def test_list_models_anthropic(self, mock_get):
+        mock_get.return_value = _fake_response({
+            "data": [{"id": "claude-3-5-sonnet-latest"}, {"id": "claude-3-opus-latest"}]
+        })
+        models = ai_assistant.list_models("anthropic", api_key="sk-ant-x")
+        self.assertEqual(models, ["claude-3-5-sonnet-latest", "claude-3-opus-latest"])
+        args, kwargs = mock_get.call_args
+        self.assertIn("api.anthropic.com/v1/models", args[0])
+        self.assertEqual(kwargs["headers"]["x-api-key"], "sk-ant-x")
+
+    @patch("ai_assistant.requests.get")
+    def test_list_models_ollama(self, mock_get):
+        mock_get.return_value = _fake_response({
+            "models": [{"name": "llama3"}, {"name": "mistral"}]
+        })
+        models = ai_assistant.list_models("ollama", base_url="http://localhost:11434")
+        self.assertEqual(models, ["llama3", "mistral"])
+        args, _kwargs = mock_get.call_args
+        self.assertEqual(args[0], "http://localhost:11434/api/tags")
+
+    def test_default_models_per_provider(self):
+        self.assertEqual(ai_assistant.get_default_model("anthropic"), "claude-3-5-sonnet-latest")
+        self.assertEqual(ai_assistant.get_default_model("openai"), "gpt-4o-mini")
+        self.assertEqual(ai_assistant.get_default_model("gemini"), "gemini-3-flash")
+        self.assertEqual(ai_assistant.get_default_model("ollama"), "llama3")
+        self.assertEqual(ai_assistant.get_default_model("nope"), "")
 
     @patch("ai_assistant.requests.post")
     def test_ollama(self, mock_post):

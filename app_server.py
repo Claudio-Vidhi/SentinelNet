@@ -366,12 +366,25 @@ class ModelSchema(BaseModel):
 class NetworkSettingsSchema(BaseModel):
     host: str
 
-class AiSettingsSchema(BaseModel):
+class AiProfileSchema(BaseModel):
+    """Corpo per la creazione di un profilo di connessione AI."""
+    name: str
     provider: str  # anthropic | openai | gemini | ollama
     model: str = ""
-    api_key: Optional[str] = None   # None = non modificare la chiave già salvata
-    base_url: str = ""              # usato da ollama (endpoint locale) e opzionalmente da openai
-    rate_limit_rpm: int = 0         # richieste/minuto verso il provider AI (0 = illimitato)
+    api_key: Optional[str] = None
+    base_url: str = ""
+    rate_limit_rpm: int = 0
+
+class AiProfileUpdateSchema(BaseModel):
+    """Corpo per l'aggiornamento parziale di un profilo AI esistente
+    (tutti i campi opzionali; ``None`` = non modificare, salvo ``api_key``
+    per cui stringa vuota = rimuove la chiave salvata)."""
+    name: Optional[str] = None
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    rate_limit_rpm: Optional[int] = None
 
 class AiChatMessage(BaseModel):
     role: str
@@ -2156,12 +2169,73 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
 
 
 # --- AI ASSISTANT: provider pluggabili (Anthropic/OpenAI/Gemini/Ollama) ---
-# La configurazione (provider/modello/endpoint) vive in app_settings.json sotto
-# la chiave "ai"; la API key viene cifrata con lo stesso CIPHER_SUITE usato per
-# le password degli apparati (crypto_vault), mai salvata in chiaro su disco.
+# La configurazione vive in app_settings.json sotto forma di PROFILI di
+# connessione ("ai_profiles": lista di dict, "ai_active_profile": id del
+# profilo attivo usato dalla chat). La API key di ogni profilo viene cifrata
+# con lo stesso CIPHER_SUITE usato per le password degli apparati
+# (crypto_vault), mai salvata in chiaro su disco e mai restituita in chiaro
+# dalle GET (solo un flag booleano ``api_key_set``).
+#
+# Retrocompatibilità: se il vecchio formato a profilo singolo (chiave "ai")
+# esiste ancora e "ai_profiles" non è mai stato inizializzato, viene
+# migrato automaticamente in un profilo "Default" alla prima lettura.
 
-def _get_ai_settings() -> dict:
-    return get_app_settings().get("ai", {}) or {}
+_AI_PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
+
+
+def _mask_ai_profile(p: dict) -> dict:
+    """Rappresentazione di un profilo AI sicura da esporre via API (mai la
+    chiave API in chiaro)."""
+    return {
+        "id": p.get("id"),
+        "name": p.get("name", ""),
+        "provider": p.get("provider", "anthropic"),
+        "model": p.get("model", ""),
+        "base_url": p.get("base_url", ""),
+        "api_key_set": bool(p.get("api_key_enc")),
+        "rate_limit_rpm": p.get("rate_limit_rpm", 0),
+    }
+
+
+def _get_ai_profiles_raw():
+    """Ritorna (profiles: list[dict], active_id: str|None). Esegue, una
+    tantum, la migrazione dal vecchio formato a profilo singolo ("ai") al
+    nuovo formato a profili multipli se necessario."""
+    settings = get_app_settings()
+    profiles = settings.get("ai_profiles")
+    active = settings.get("ai_active_profile")
+    if profiles is None:
+        legacy = settings.get("ai", {}) or {}
+        profiles = []
+        active = None
+        if legacy.get("provider"):
+            default_profile = {
+                "id": uuid.uuid4().hex,
+                "name": "Default",
+                "provider": legacy.get("provider", "anthropic"),
+                "model": legacy.get("model", ""),
+                "base_url": legacy.get("base_url", ""),
+                "api_key_enc": legacy.get("api_key_enc", ""),
+                "rate_limit_rpm": legacy.get("rate_limit_rpm", 0),
+            }
+            profiles = [default_profile]
+            active = default_profile["id"]
+        save_app_settings({"ai_profiles": profiles, "ai_active_profile": active})
+    return profiles, active
+
+
+def _find_ai_profile(profiles, profile_id):
+    if not profile_id:
+        return None
+    for p in profiles:
+        if p.get("id") == profile_id:
+            return p
+    return None
+
+
+def _get_active_ai_profile():
+    profiles, active = _get_ai_profiles_raw()
+    return _find_ai_profile(profiles, active)
 
 def _device_inventory_summary(current_user) -> str:
     """Riepilogo testuale sintetico dell'inventario, scopato per sede utente."""
@@ -2227,64 +2301,120 @@ def _tenant_context_block(tenant: str, current_user) -> str:
         mac_recent=mac_recent,
     )
 
-@app.get("/api/ai/settings")
-def get_ai_settings(current_user = Depends(require_admin)):
-    """Ritorna la configurazione AI corrente. La chiave API non viene mai
-    restituita in chiaro: solo un flag booleano che indica se è impostata."""
-    s = _get_ai_settings()
-    return {
-        "provider": s.get("provider", "anthropic"),
-        "model": s.get("model", ""),
-        "base_url": s.get("base_url", ""),
-        "api_key_set": bool(s.get("api_key_enc")),
-        "rate_limit_rpm": s.get("rate_limit_rpm", 0),
-    }
+@app.get("/api/ai/profiles")
+def list_ai_profiles(current_user = Depends(require_admin)):
+    """Elenca i profili di connessione AI salvati (chiavi API mascherate) e
+    l'id del profilo attualmente attivo (usato da /api/ai/chat)."""
+    profiles, active = _get_ai_profiles_raw()
+    return {"profiles": [_mask_ai_profile(p) for p in profiles], "active_profile": active}
 
-@app.post("/api/ai/settings")
-def set_ai_settings(payload: AiSettingsSchema, current_user = Depends(require_admin)):
+@app.post("/api/ai/profiles")
+def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_admin)):
     provider = payload.provider.strip().lower()
-    if provider not in {"anthropic", "openai", "gemini", "ollama"}:
+    if provider not in _AI_PROVIDERS:
         raise HTTPException(status_code=400, detail=f"Provider non supportato: '{provider}'.")
-    current = _get_ai_settings()
-    new_settings = {
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="Il nome del profilo è obbligatorio.")
+    profiles, active = _get_ai_profiles_raw()
+    new_profile = {
+        "id": uuid.uuid4().hex,
+        "name": payload.name.strip(),
         "provider": provider,
         "model": payload.model.strip(),
         "base_url": payload.base_url.strip(),
-        "api_key_enc": current.get("api_key_enc", ""),
+        "api_key_enc": crypto_vault.encrypt_password(payload.api_key) if payload.api_key else "",
         "rate_limit_rpm": max(0, int(payload.rate_limit_rpm or 0)),
     }
+    profiles = profiles + [new_profile]
+    if active is None:
+        active = new_profile["id"]
+    save_app_settings({"ai_profiles": profiles, "ai_active_profile": active})
+    log_audit(f"Profilo AI '{new_profile['name']}' creato (provider='{provider}') dall'utente '{current_user.get('sub')}'.")
+    return _mask_ai_profile(new_profile)
+
+@app.put("/api/ai/profiles/{profile_id}")
+def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_user = Depends(require_admin)):
+    profiles, active = _get_ai_profiles_raw()
+    profile = _find_ai_profile(profiles, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profilo AI non trovato.")
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Il nome del profilo è obbligatorio.")
+        profile["name"] = name
+    if payload.provider is not None:
+        provider = payload.provider.strip().lower()
+        if provider not in _AI_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Provider non supportato: '{provider}'.")
+        profile["provider"] = provider
+    if payload.model is not None:
+        profile["model"] = payload.model.strip()
+    if payload.base_url is not None:
+        profile["base_url"] = payload.base_url.strip()
+    if payload.rate_limit_rpm is not None:
+        profile["rate_limit_rpm"] = max(0, int(payload.rate_limit_rpm or 0))
     # api_key=None -> mantiene quella già salvata; stringa vuota -> la rimuove.
     if payload.api_key is not None:
-        new_settings["api_key_enc"] = crypto_vault.encrypt_password(payload.api_key) if payload.api_key else ""
-    save_app_settings({"ai": new_settings})
-    log_audit(f"Impostazioni AI Assistant aggiornate (provider='{provider}') dall'utente '{current_user.get('sub')}'.")
+        profile["api_key_enc"] = crypto_vault.encrypt_password(payload.api_key) if payload.api_key else ""
+    save_app_settings({"ai_profiles": profiles, "ai_active_profile": active})
+    log_audit(f"Profilo AI '{profile['name']}' aggiornato dall'utente '{current_user.get('sub')}'.")
+    return _mask_ai_profile(profile)
+
+@app.delete("/api/ai/profiles/{profile_id}")
+def delete_ai_profile(profile_id: str, current_user = Depends(require_admin)):
+    profiles, active = _get_ai_profiles_raw()
+    profile = _find_ai_profile(profiles, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profilo AI non trovato.")
+    remaining = [p for p in profiles if p.get("id") != profile_id]
+    if active == profile_id:
+        active = remaining[0]["id"] if remaining else None
+    save_app_settings({"ai_profiles": remaining, "ai_active_profile": active})
+    log_audit(f"Profilo AI '{profile['name']}' eliminato dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+@app.post("/api/ai/profiles/{profile_id}/activate")
+def activate_ai_profile(profile_id: str, current_user = Depends(require_admin)):
+    profiles, _active = _get_ai_profiles_raw()
+    profile = _find_ai_profile(profiles, profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profilo AI non trovato.")
+    save_app_settings({"ai_profiles": profiles, "ai_active_profile": profile_id})
+    log_audit(f"Profilo AI attivo impostato su '{profile['name']}' dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success", "active_profile": profile_id}
+
 @app.get("/api/ai/models")
-def list_ai_models(current_user = Depends(require_admin)):
-    """Elenca i modelli disponibili per il provider AI attualmente configurato
-    (chiave API già salvata) che supportano la chat, cosi' l'admin puo'
-    sceglierne uno valido invece di indovinare il nome a mano."""
-    s = _get_ai_settings()
-    provider = s.get("provider", "")
-    if not provider:
+def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = None,
+                    current_user = Depends(require_admin)):
+    """Elenca i modelli disponibili che supportano la chat per un provider,
+    cosi' l'admin puo' sceglierne uno valido invece di indovinare il nome a
+    mano. Usa la API key/base_url del profilo indicato (``profile_id``) o di
+    quello attivo se omesso; se anche ``provider`` è indicato ed è diverso dal
+    provider del profilo, si tenta comunque con la chiave/base_url del
+    profilo (utile per verificare un provider prima di salvarlo)."""
+    profiles, active = _get_ai_profiles_raw()
+    profile = _find_ai_profile(profiles, profile_id) or _find_ai_profile(profiles, active)
+    prov = (provider or (profile.get("provider") if profile else "")).strip().lower()
+    if not prov:
         raise HTTPException(status_code=400, detail="Nessun provider AI configurato.")
-    api_key = crypto_vault.decrypt_password(s.get("api_key_enc", "")) if s.get("api_key_enc") else None
+    api_key = crypto_vault.decrypt_password(profile.get("api_key_enc", "")) if profile and profile.get("api_key_enc") else None
+    base_url = (profile.get("base_url") if profile else None) or None
     try:
-        models = ai_assistant.list_models(provider, api_key=api_key)
+        models = ai_assistant.list_models(prov, api_key=api_key, base_url=base_url)
     except ai_assistant.AiAssistantError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    return {"provider": provider, "models": models}
+    return {"provider": prov, "models": models, "default_model": ai_assistant.get_default_model(prov)}
 
 @app.post("/api/ai/chat")
 def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
-    s = _get_ai_settings()
-    provider = s.get("provider", "")
-    if not provider:
-        raise HTTPException(status_code=400, detail="Nessun provider AI configurato. Un amministratore deve impostarlo prima.")
-    api_key = crypto_vault.decrypt_password(s.get("api_key_enc", "")) if s.get("api_key_enc") else None
+    profile = _get_active_ai_profile()
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Nessun profilo AI configurato/attivo. Un amministratore deve crearne uno prima.")
+    provider = profile.get("provider", "")
+    api_key = crypto_vault.decrypt_password(profile.get("api_key_enc", "")) if profile.get("api_key_enc") else None
     if provider != "ollama" and not api_key:
-        raise HTTPException(status_code=400, detail="API key non configurata per il provider selezionato.")
+        raise HTTPException(status_code=400, detail="API key non configurata per il profilo AI attivo.")
 
     messages = [{"role": m.role, "content": m.content} for m in payload.messages]
 
@@ -2302,16 +2432,17 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
         reply = ai_assistant.chat(
             messages,
             provider=provider,
-            model=s.get("model") or None,
+            model=profile.get("model") or None,
             api_key=api_key,
-            base_url=s.get("base_url") or None,
-            rate_limit_rpm=s.get("rate_limit_rpm", 0),
+            base_url=profile.get("base_url") or None,
+            rate_limit_rpm=profile.get("rate_limit_rpm", 0),
         )
     except ai_assistant.RateLimitExceededError as e:
         raise HTTPException(status_code=429, detail=str(e))
     except ai_assistant.AiAssistantError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    return {"reply": reply, "provider": provider}
+    return {"reply": reply, "provider": provider, "model": profile.get("model") or ai_assistant.get_default_model(provider),
+            "profile_name": profile.get("name", "")}
 # --- SWITCH PROVISIONER: config "da zero" (view/SSH/console-seriale) ---
 
 @app.post("/api/provisioner/generate")
