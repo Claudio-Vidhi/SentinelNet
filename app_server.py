@@ -2443,7 +2443,7 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
     return {"status": "queued", "job_id": job["id"]}
 
 @app.get("/api/command-jobs/{job_id}")
-def get_command_job_ep(job_id: str, current_user = Depends(get_current_user)):
+def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
     job = site_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job non trovato.")
@@ -2479,11 +2479,14 @@ def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent
     passano dal relay, eseguiti in locale dall'agente)."""
     site_id = site["id"]
     n = 0
+    existing_groups = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
     for d in payload.devices:
         if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", d.ip):
             continue
+        # Preserva il Group esistente: non declassare a 'Generale' ad ogni push.
+        group = existing_groups.get(d.ip) or "Generale"
         inventory_manager.add_or_update_device(
-            d.ip, d.vendor, "custom", "", "", "", "Generale", site=site_id)
+            d.ip, d.vendor, "custom", "", "", "", group, site=site_id)
         if d.hostname:
             inventory_manager.update_device_hostname(d.ip, d.hostname)
         n += 1
@@ -2496,10 +2499,13 @@ def agent_push_mac(payload: AgentMacSchema, site = Depends(get_agent_site)):
     attribuzione alla sede (site) per il MAC tracker centrale."""
     site_id = site["id"]
     total = 0
+    # Tenant = Group del device in inventario (coerente con la raccolta centrale),
+    # non l'id sede: lo scoping utenti filtra per Group.
+    groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
     for col in payload.collections:
         summ = mac_history.record_sightings(
             col.rows, switch_ip=col.switch_ip, switch_name=col.switch_name,
-            tenant=site_id, site=site_id)
+            tenant=groups_by_ip.get(col.switch_ip) or "Generale", site=site_id)
         total += summ.get("new", 0) + summ.get("updated", 0)
     pruned = mac_history.prune()
     log_audit(f"Agente sede '{site_id}': {len(payload.collections)} MAC-table ricevute "

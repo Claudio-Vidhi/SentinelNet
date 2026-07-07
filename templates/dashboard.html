@@ -1432,6 +1432,9 @@
         <button class="btn btn-primary" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
           <i class="fa-solid fa-paper-plane"></i> Invia
         </button>
+      </div>
+    </div>
+
     <!-- TAB: Switch da Zero (Provisioner) -->
     <div id="tab-provisioner" class="tab-content">
       <h3 data-i18n="titleProvisioner">Provisioning Switch da Zero</h3>
@@ -1979,7 +1982,13 @@
         msgCaNoDevices: "Nessun apparato disponibile.",
         lblCaReferencedIn: "riferita in",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
-        
+        tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Switch da Zero',
+        titleProvisioner: "Provisioning Switch da Zero",
+        descProvisioner: "Genera una configurazione IOS/IOS-XE completa seguendo le linee guida di hardening Cisco, poi scegli come consegnarla.",
+        lblSecret: "Enable Secret",
+        btnMapClassic: "Classica",
+        btnMapMinimal: "Nuova",
+
         // Tab 1
         titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
         optFilterAll: "Filtra per Tenant: Tutti",
@@ -2316,7 +2325,13 @@
         msgCaNoDevices: "No devices available.",
         lblCaReferencedIn: "referenced in",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
-        
+        tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Switch',
+        titleProvisioner: "Zero-Touch Switch Provisioning",
+        descProvisioner: "Generate a complete IOS/IOS-XE configuration following Cisco hardening guidelines, then choose how to deliver it.",
+        lblSecret: "Enable Secret",
+        btnMapClassic: "Classic",
+        btnMapMinimal: "New",
+
         // Tab 1
         titleInventoryTable: "Monitored Network Devices",
         optFilterAll: "Filter by Tenant: All",
@@ -3967,8 +3982,9 @@
         // aggregata con le interfacce membro), senza bisogno di alcun interruttore.
         updateMapViewButtons();
         if (getMapView() === 'minimal') {
-            const { nodes, edges, options } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC });
-            renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background);
+            const { nodes, edges, options, bundles } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC });
+            renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
+                          bundles && bundles.length ? (ctx => drawBundlesOverlay(ctx, bundles)) : null);
             return;
         }
 
@@ -4133,7 +4149,7 @@
 
     // Crea/ricrea l'istanza Vis.js condivisa e congela il layout a stabilizzazione
     // completata (usata da entrambe le viste).
-    function renderNetwork(nodes, edges, options, background) {
+    function renderNetwork(nodes, edges, options, background, afterDraw) {
         const container = document.getElementById("networkGraphContainer");
         // Sfondo per-vista: la mappa minimalista usa il bianco, la classica torna
         // allo sfondo scuro definito nel CSS (#networkGraphContainer).
@@ -4141,6 +4157,11 @@
         const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
         if (networkInstance) networkInstance.destroy();
         networkInstance = new vis.Network(container, graphData, options);
+        // Overlay disegnato in coordinate rete (ctx già trasformato da vis.js):
+        // usato dalla vista minimalista per i fasci Port-Channel/vPC in stile Visio.
+        if (typeof afterDraw === 'function') {
+            networkInstance.on('afterDrawing', afterDraw);
+        }
         let mapFrozen = false;
         const freezeLayout = () => {
             if (networkInstance && !mapFrozen) { mapFrozen = true; networkInstance.setOptions({ physics: false }); }
@@ -4251,6 +4272,13 @@
             };
         });
 
+        // Fasci Port-Channel/vPC con ≥2 interfacce membro: disegnati come linee
+        // parallele separate (una per cavo fisico) con etichette di porta a ciascun
+        // estremo e un'ellisse "Po/vPC" che attraversa il gruppo (stile Cisco Visio).
+        // Questi non producono un arco vis.js visibile: sono resi nell'overlay
+        // afterDrawing. Un arco invisibile viene comunque creato per mantenere la
+        // fisica (attrazione tra i due nodi) e il tooltip.
+        const bundles = [];
         const edges = linkData.map(l => {
             const isPC      = !!l.is_portchannel;
             const emphasize = isPC && highlightPC;
@@ -4260,6 +4288,24 @@
             const members       = localPorts.map(shortIface).filter(Boolean).join(', ');
             const remoteMembers = remotePorts.map(shortIface).filter(Boolean).join(', ');
             const pcTag = l.pc_name ? shortIface(l.pc_name) : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+
+            // Un fascio ha senso solo se conosciamo ≥2 porte membro su almeno un lato.
+            const memberPairs = [];
+            const maxMembers = Math.max(localPorts.length, remotePorts.length);
+            if (isPC && maxMembers > 1) {
+                for (let i = 0; i < maxMembers; i++) {
+                    memberPairs.push({
+                        local:  shortIface(localPorts[i]  || localPorts[localPorts.length - 1]   || ''),
+                        remote: shortIface(remotePorts[i] || remotePorts[remotePorts.length - 1] || '')
+                    });
+                }
+            }
+            if (memberPairs.length > 1) {
+                bundles.push({
+                    from: l.source, to: l.target,
+                    pcTag, members: memberPairs, emphasize
+                });
+            }
 
             // Etichetta arco. vis.js non supporta etichette per-estremità, quindi
             // le interfacce dei due lati sono mostrate in forma compatta al centro:
@@ -4283,14 +4329,19 @@
                 : `<div style="font-family:var(--font-code); font-size:10px; margin-top:4px;">${escapeHtml(shortIface(l.local_port)||'—')} ⇄ ${escapeHtml(shortIface(l.remote_port)||'—')}</div>`}
             </div>`;
 
+            const isBundle = memberPairs.length > 1;
             const col = isPC ? S.edge.pcColor : S.edge.color;
             return {
                 from: l.source, to: l.target,
-                label,
+                // Il fascio è disegnato dall'overlay: l'arco vis.js resta invisibile
+                // ma conserva fisica e tooltip.
+                label: isBundle ? '' : label,
                 title: tip,
                 font: isPC ? Object.assign({}, S.edge.font, { color: S.edge.pcFontColor }) : S.edge.font,
-                color: { color: col, highlight: '#1a2430', hover: '#1a2430' },
-                width: emphasize ? S.edge.emphWidth : (isPC ? S.edge.pcWidth : S.edge.width),
+                color: isBundle
+                    ? { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' }
+                    : { color: col, highlight: '#1a2430', hover: '#1a2430' },
+                width: isBundle ? 0.0001 : (emphasize ? S.edge.emphWidth : (isPC ? S.edge.pcWidth : S.edge.width)),
                 dashes: false,
                 arrows: { to: { enabled: false } },
                 smooth: { type: 'continuous', roundness: 0.2 }
@@ -4310,7 +4361,108 @@
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
         };
 
-        return { nodes, edges, options };
+        return { nodes, edges, options, bundles };
+    }
+
+    // ===== Overlay fasci Port-Channel / vPC (stile Cisco Visio) =====
+    // Disegna, per ogni fascio, una linea per interfaccia membro (cavo fisico),
+    // con le etichette di porta ai due estremi accanto al riquadro del dispositivo,
+    // e un'ellisse che attraversa il gruppo con il nome "Po/vPC". Il contesto è già
+    // trasformato da vis.js nelle coordinate della rete.
+    function drawBundlesOverlay(ctx, bundles) {
+        if (!networkInstance) return;
+        const S = MINIMAL_MAP_STYLE;
+
+        // Punto sul bordo del bounding box del nodo lungo la direzione (dx,dy).
+        const borderPoint = (id, dx, dy) => {
+            const p = networkInstance.getPosition(id);
+            let bb; try { bb = networkInstance.getBoundingBox(id); } catch (e) { bb = null; }
+            const hw = bb ? (bb.right - bb.left) / 2 : 40;
+            const hh = bb ? (bb.bottom - bb.top) / 2 : 20;
+            const ax = Math.abs(dx), ay = Math.abs(dy);
+            // t = distanza dal centro al bordo del riquadro nella direzione data.
+            let t = Infinity;
+            if (ax > 1e-6) t = Math.min(t, hw / ax);
+            if (ay > 1e-6) t = Math.min(t, hh / ay);
+            if (!isFinite(t)) t = 0;
+            return { x: p.x + dx * t, y: p.y + dy * t };
+        };
+
+        bundles.forEach(b => {
+            let p1, p2;
+            try { p1 = networkInstance.getPosition(b.from); p2 = networkInstance.getPosition(b.to); }
+            catch (e) { return; }
+            if (!p1 || !p2) return;
+
+            let dx = p2.x - p1.x, dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy) || 1;
+            dx /= len; dy /= len;
+            // Versore perpendicolare, per distanziare le linee membro parallele.
+            const ux = -dy, uy = dx;
+
+            const n = b.members.length;
+            const spacing = 11;                 // distanza tra cavi paralleli (coord rete)
+            const half = (n - 1) / 2;
+
+            const a0 = borderPoint(b.from, dx, dy);   // uscita dal nodo sorgente
+            const b0 = borderPoint(b.to, -dx, -dy);   // ingresso al nodo destinazione
+
+            ctx.save();
+            ctx.strokeStyle = S.edge.pcColor;
+            ctx.lineWidth = b.emphasize ? 2.2 : 1.6;
+            ctx.lineCap = 'round';
+            ctx.font = '9px Arial, Helvetica, sans-serif';
+            ctx.textBaseline = 'middle';
+
+            b.members.forEach((m, i) => {
+                const off = (i - half) * spacing;
+                const ax = a0.x + ux * off, ay = a0.y + uy * off;
+                const bx = b0.x + ux * off, by = b0.y + uy * off;
+
+                // Linea del singolo cavo fisico.
+                ctx.beginPath();
+                ctx.moveTo(ax, ay);
+                ctx.lineTo(bx, by);
+                ctx.stroke();
+
+                // Etichette di porta accanto a ciascun riquadro (leggermente rientrate
+                // lungo il cavo per non toccare il bordo del nodo).
+                ctx.fillStyle = S.edge.pcColor;
+                const lblOff = 14;
+                if (m.local) {
+                    ctx.textAlign = dx >= 0 ? 'left' : 'right';
+                    ctx.fillText(m.local, ax + dx * lblOff, ay + dy * lblOff - 5);
+                }
+                if (m.remote) {
+                    ctx.textAlign = dx >= 0 ? 'right' : 'left';
+                    ctx.fillText(m.remote, bx - dx * lblOff, by - dy * lblOff - 5);
+                }
+            });
+
+            // Ellisse che attraversa il gruppo di linee, a metà del fascio, con il
+            // nome dell'aggregato (Po/vPC).
+            const mx = (a0.x + b0.x) / 2, my = (a0.y + b0.y) / 2;
+            const rx = 20;                                  // semiasse lungo il cavo
+            const ry = (half * spacing) + 12;               // semiasse trasversale (copre i cavi)
+            const angle = Math.atan2(dy, dx);
+            ctx.beginPath();
+            ctx.ellipse(mx, my, rx, ry, angle, 0, 2 * Math.PI);
+            ctx.lineWidth = b.emphasize ? 2 : 1.4;
+            ctx.strokeStyle = S.edge.pcColor;
+            ctx.stroke();
+
+            // Cartiglio del nome aggregato accanto all'ellisse.
+            ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
+            ctx.textAlign = 'center';
+            const labelText = b.pcTag || 'Po';
+            const tw = ctx.measureText(labelText).width;
+            const lx = mx, ly = my - ry - 8;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14);
+            ctx.fillStyle = S.edge.pcColor;
+            ctx.fillText(labelText, lx, ly);
+            ctx.restore();
+        });
     }
 
     // ===== Pannello Dispositivi & Categorie (classificazione manuale) =====
