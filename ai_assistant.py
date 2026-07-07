@@ -28,6 +28,20 @@ import requests
 
 DEFAULT_TIMEOUT = 60
 
+# Modello di default sensato per provider quando l'utente non ne specifica uno.
+DEFAULT_MODELS = {
+    "anthropic": "claude-3-5-sonnet-latest",
+    "openai": "gpt-4o-mini",
+    "gemini": "gemini-3-flash",
+    "ollama": "llama3",
+}
+
+
+def get_default_model(provider: str) -> str:
+    """Ritorna il modello di default per il provider indicato (stringa vuota
+    se il provider non e' riconosciuto)."""
+    return DEFAULT_MODELS.get((provider or "").strip().lower(), "")
+
 
 class AiAssistantError(Exception):
     """Errore di alto livello per problemi di configurazione o di rete verso il provider."""
@@ -166,7 +180,7 @@ def _chat_anthropic(messages, model, api_key, timeout):
         raise AiAssistantError("API key Anthropic mancante.")
     system, convo = _split_system(messages)
     payload = {
-        "model": model or "claude-3-5-sonnet-latest",
+        "model": model or DEFAULT_MODELS["anthropic"],
         "max_tokens": 2048,
         "messages": [{"role": m["role"], "content": m["content"]} for m in convo],
     }
@@ -195,7 +209,7 @@ def _chat_openai(messages, model, api_key, timeout, base_url=None):
         raise AiAssistantError("API key OpenAI mancante.")
     url = (base_url or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
     payload = {
-        "model": model or "gpt-4o-mini",
+        "model": model or DEFAULT_MODELS["openai"],
         "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
     }
     resp = requests.post(
@@ -222,7 +236,7 @@ def _normalize_gemini_model(model):
     come ``models/models/...`` (causa dell'errore 400 "unexpected model
     name format").
     """
-    name = (model or "gemini-3-flash").strip()
+    name = (model or DEFAULT_MODELS["gemini"]).strip()
     while name.startswith("models/"):
         name = name[len("models/"):]
     return name
@@ -259,7 +273,7 @@ def _chat_gemini(messages, model, api_key, timeout):
 def _chat_ollama(messages, model, timeout, base_url=None):
     url = (base_url or "http://localhost:11434").rstrip("/") + "/api/chat"
     payload = {
-        "model": model or "llama3",
+        "model": model or DEFAULT_MODELS["ollama"],
         "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
         "stream": False,
     }
@@ -289,17 +303,77 @@ def _list_models_gemini(api_key, timeout):
     return models
 
 
-def list_models(provider, api_key=None, timeout=DEFAULT_TIMEOUT):
+# Prefissi/nomi di modelli OpenAI che NON sono chat-capable (embedding, audio,
+# immagini, moderazione...): usati per filtrare la risposta di GET /v1/models,
+# che elenca indistintamente tutti i modelli disponibili sull'account.
+_OPENAI_NON_CHAT_HINTS = (
+    "embedding", "whisper", "tts", "dall-e", "moderation", "davinci-002",
+    "babbage-002", "text-", "audio", "realtime", "transcribe", "image",
+)
+
+
+def _list_models_openai(api_key, timeout, base_url=None):
+    if not api_key:
+        raise AiAssistantError("API key OpenAI mancante.")
+    url = (base_url or "https://api.openai.com/v1").rstrip("/") + "/models"
+    resp = requests.get(
+        url, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout
+    )
+    if resp.status_code >= 400:
+        raise AiAssistantError(f"OpenAI API error {resp.status_code}: {resp.text[:500]}")
+    data = resp.json()
+    models = []
+    for m in data.get("data") or []:
+        model_id = m.get("id", "")
+        if not model_id:
+            continue
+        if any(hint in model_id.lower() for hint in _OPENAI_NON_CHAT_HINTS):
+            continue
+        models.append(model_id)
+    return sorted(models)
+
+
+def _list_models_anthropic(api_key, timeout):
+    if not api_key:
+        raise AiAssistantError("API key Anthropic mancante.")
+    resp = requests.get(
+        "https://api.anthropic.com/v1/models",
+        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        timeout=timeout,
+    )
+    if resp.status_code >= 400:
+        raise AiAssistantError(f"Anthropic API error {resp.status_code}: {resp.text[:500]}")
+    data = resp.json()
+    return [m.get("id") for m in data.get("data") or [] if m.get("id")]
+
+
+def _list_models_ollama(timeout, base_url=None):
+    url = (base_url or "http://localhost:11434").rstrip("/") + "/api/tags"
+    resp = requests.get(url, timeout=timeout)
+    if resp.status_code >= 400:
+        raise AiAssistantError(f"Ollama endpoint error {resp.status_code}: {resp.text[:500]}")
+    data = resp.json()
+    return [m.get("name") for m in data.get("models") or [] if m.get("name")]
+
+
+def list_models(provider, api_key=None, base_url=None, timeout=DEFAULT_TIMEOUT):
     """Ritorna la lista dei nomi modello disponibili per il provider che
-    supportano la chat (``generateContent``/equivalente). Attualmente
-    implementato solo per "gemini"; per gli altri provider solleva
-    ``AiAssistantError`` (nessun endpoint ListModels standard/necessario)."""
+    supportano la chat, quando l'API del provider espone un endpoint
+    ListModels: Gemini (``ListModels``), OpenAI (``GET /v1/models``),
+    Anthropic (``GET /v1/models``), Ollama (``GET /api/tags`` sul base_url
+    configurato)."""
     provider = (provider or "").strip().lower()
     if provider not in _PROVIDERS:
         raise AiAssistantError(f"Provider non supportato: '{provider}'.")
     try:
         if provider == "gemini":
             return _list_models_gemini(api_key, timeout)
+        if provider == "openai":
+            return _list_models_openai(api_key, timeout, base_url=base_url)
+        if provider == "anthropic":
+            return _list_models_anthropic(api_key, timeout)
+        if provider == "ollama":
+            return _list_models_ollama(timeout, base_url=base_url)
         raise AiAssistantError(f"Elenco modelli non supportato per il provider '{provider}'.")
     except AiAssistantError:
         raise
