@@ -34,6 +34,7 @@ import ai_assistant
 import crypto_vault
 import switch_provisioner
 import site_manager
+import mcp_server
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
@@ -446,6 +447,9 @@ class SwitchProvisionSSHSchema(SwitchProvisionSchema):
 class SwitchProvisionSerialSchema(SwitchProvisionSchema):
     com_port: str
     baudrate: int = 9600
+class McpSettingsSchema(BaseModel):
+    disabled_tools: List[str] = []
+
 class SiteSchema(BaseModel):
     name: str
     mode: str = "central"          # "central" | "agent"
@@ -2212,7 +2216,9 @@ def _mask_ai_profile(p: dict) -> dict:
     return {
         "id": p.get("id"),
         "name": p.get("name", ""),
-        "provider": p.get("provider", "anthropic"),
+        # Nessun provider di default: un profilo senza provider esplicito
+        # resta vuoto finché l'utente non ne sceglie uno.
+        "provider": p.get("provider", ""),
         "model": p.get("model", ""),
         "base_url": p.get("base_url", ""),
         "api_key_set": bool(p.get("api_key_enc")),
@@ -2421,6 +2427,15 @@ def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = N
     prov = (provider or (profile.get("provider") if profile else "")).strip().lower()
     if not prov:
         raise HTTPException(status_code=400, detail="Nessun provider AI configurato.")
+    # I modelli elencati devono appartenere al provider richiesto: se il
+    # profilo selezionato usa un ALTRO provider, la sua chiave non è valida
+    # per questo elenco; si preferisce un profilo che usi il provider giusto.
+    if profile and (profile.get("provider") or "").strip().lower() != prov:
+        match = next((p for p in profiles
+                      if (p.get("provider") or "").strip().lower() == prov
+                      and (p.get("api_key_enc") or prov == "ollama")), None)
+        if match:
+            profile = match
     api_key = crypto_vault.decrypt_password(profile.get("api_key_enc", "")) if profile and profile.get("api_key_enc") else None
     base_url = (profile.get("base_url") if profile else None) or None
     try:
@@ -2528,6 +2543,40 @@ def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user =
 def provisioner_serial_ports(current_user = Depends(require_operator)):
     """Elenca le porte COM/seriali disponibili sull'host del server."""
     return {"ports": switch_provisioner.list_serial_ports()}
+
+
+# --- MCP SERVER: controllo dei tool esposti ai client LLM esterni ---
+# Il catalogo dei tool vive in mcp_server.TOOLS (unica fonte); qui si gestisce
+# solo l'elenco dei tool DISABILITATI, persistito in app_settings.json ("mcp").
+
+def _mcp_disabled_tools() -> list:
+    mcp = get_app_settings().get("mcp", {}) or {}
+    return [t for t in (mcp.get("disabled_tools") or []) if t in mcp_server.TOOLS]
+
+@app.get("/api/mcp/settings")
+def get_mcp_settings(current_user = Depends(require_admin)):
+    """Catalogo dei tool MCP con descrizione + elenco dei tool disabilitati."""
+    return {
+        "tools": [{"name": name, "description": desc}
+                  for name, (desc, _schema, _fn) in mcp_server.TOOLS.items()],
+        "disabled_tools": _mcp_disabled_tools(),
+    }
+
+@app.post("/api/mcp/settings")
+def set_mcp_settings(payload: McpSettingsSchema, current_user = Depends(require_admin)):
+    unknown = [t for t in payload.disabled_tools if t not in mcp_server.TOOLS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Tool sconosciuti: {', '.join(unknown)}")
+    save_app_settings({"mcp": {"disabled_tools": payload.disabled_tools}})
+    log_audit(f"Tool MCP disabilitati impostati a {payload.disabled_tools or '[]'} "
+              f"da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.get("/api/mcp/tool-config")
+def get_mcp_tool_config(current_user = Depends(get_current_user)):
+    """Letto dal processo mcp_server.py (con l'account con cui si autentica)
+    per sapere quali tool NON esporre al client LLM."""
+    return {"disabled_tools": _mcp_disabled_tools()}
 
 
 # --- SCANSIONE SUBNET IN BACKGROUND ---

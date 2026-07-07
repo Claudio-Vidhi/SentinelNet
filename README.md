@@ -172,6 +172,10 @@ Il server centrale deve essere in esecuzione. Tool disponibili: `list_devices`,
 `generate_switch_config`. I tool di scrittura richiedono un account con ruolo
 *operator*; usare un account *viewer* per accesso in sola lettura.
 
+Dalla dashboard, tab **MCP Server** (admin): guida alla configurazione, snippet
+JSON pronto da copiare e selezione dei tool esposti ai client (i tool
+disattivati spariscono dall'elenco e ogni chiamata viene rifiutata).
+
 ---
 
 ## Sicurezza delle Credenziali
