@@ -894,6 +894,8 @@
       </button>
       <button class="tab-button" onclick="switchTab('tab-ai', this)" data-i18n="tabAiAssistant">
         <i class="fa-solid fa-robot"></i> AI Assistant
+      <button class="tab-button requires-write" onclick="switchTab('tab-provisioner', this)" data-i18n="tabProvisioner">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> Switch da Zero
       </button>
       <button class="tab-button requires-write" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
         <i class="fa-solid fa-file-csv"></i> Importazione CSV
@@ -1420,6 +1422,94 @@
         <button class="btn btn-primary" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
           <i class="fa-solid fa-paper-plane"></i> Invia
         </button>
+    <!-- TAB: Switch da Zero (Provisioner) -->
+    <div id="tab-provisioner" class="tab-content">
+      <h3 data-i18n="titleProvisioner">Provisioning Switch da Zero</h3>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descProvisioner">
+        Genera una configurazione IOS/IOS-XE completa seguendo le linee guida di hardening Cisco, poi scegli come consegnarla.
+      </p>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
+        <div class="form-group"><label>Hostname</label><input id="provHostname" type="text" value="SW-NEW-01" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Ruolo</label>
+          <select id="provRole" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+            <option value="access">Access</option>
+            <option value="distribution">Distribution/Core (L3)</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Dominio DNS</label><input id="provDomain" type="text" placeholder="azienda.local" style="padding-left:12px;"></div>
+        <div class="form-group"><label>VLAN Management</label><input id="provMgmtVlan" type="number" value="1" style="padding-left:12px;"></div>
+        <div class="form-group"><label>IP Management</label><input id="provMgmtIp" type="text" placeholder="192.168.1.10" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Subnet Mask</label><input id="provMgmtMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Gateway</label><input id="provMgmtGw" type="text" placeholder="192.168.1.1" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Admin locale (user)</label><input id="provAdminUser" type="text" placeholder="netadmin" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Admin locale (password)</label><input id="provAdminPass" type="password" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Enable secret</label><input id="provEnableSecret" type="password" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Banner MOTD</label><input id="provBanner" type="text" placeholder="Accesso riservato - uso autorizzato" style="padding-left:12px;"></div>
+        <div class="form-group"><label>NTP servers (comma)</label><input id="provNtp" type="text" placeholder="10.0.0.1, 10.0.0.2" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Syslog server</label><input id="provSyslog" type="text" placeholder="10.0.0.50" style="padding-left:12px;"></div>
+        <div class="form-group"><label>SNMPv3 user</label><input id="provSnmpUser" type="text" style="padding-left:12px;"></div>
+        <div class="form-group"><label>SNMPv3 auth pass</label><input id="provSnmpAuth" type="password" style="padding-left:12px;"></div>
+        <div class="form-group"><label>SNMPv3 priv pass</label><input id="provSnmpPriv" type="password" style="padding-left:12px;"></div>
+        <div class="form-group"><label>VLANs (id:nome, comma)</label><input id="provVlans" type="text" placeholder="10:DATA, 20:VOICE, 99:MGMT" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Porte access (range)</label><input id="provAccessPorts" type="text" placeholder="GigabitEthernet1/0/1-24" style="padding-left:12px;"></div>
+        <div class="form-group"><label>VLAN dati porte access</label><input id="provAccessVlan" type="number" placeholder="10" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Porte trunk (range)</label><input id="provTrunkPorts" type="text" placeholder="GigabitEthernet1/0/25-28" style="padding-left:12px;"></div>
+        <div class="form-group"><label>VLAN consentite su trunk</label><input id="provTrunkVlans" type="text" placeholder="10,20,99" style="padding-left:12px;"></div>
+        <div class="form-group" id="provSvisGroup" style="display:none;"><label>SVI distribution (vlan:ip:mask, comma)</label><input id="provSvis" type="text" placeholder="10:10.1.10.1:255.255.255.0" style="padding-left:12px;"></div>
+        <div class="form-group" id="provDefRouteGroup" style="display:none;"><label>Default route gateway</label><input id="provDefRouteGw" type="text" placeholder="10.1.0.1" style="padding-left:12px;"></div>
+      </div>
+
+      <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:16px;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provSshOnly" checked> SSH-only (transport input ssh)</label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provBpduguard" checked> BPDU Guard su edge</label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provPortSecurity"> Port-security</label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provDhcpSnooping"> DHCP Snooping</label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provCdp" checked> CDP</label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provLldp" checked> LLDP</label>
+      </div>
+
+      <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <button class="btn btn-primary" id="btnProvGenerate"><i class="fa-solid fa-file-code"></i> Genera Config</button>
+        <button class="btn" id="btnProvDownload"><i class="fa-solid fa-download"></i> Scarica .txt</button>
+        <select id="provDeliveryMode" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="view">Solo visualizzazione</option>
+          <option value="ssh">Push via SSH</option>
+          <option value="serial">Push via Console/Seriale</option>
+        </select>
+      </div>
+
+      <div id="provSshFields" style="margin-top:16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:14px; display:none;">
+        <div class="form-group"><label>Host SSH</label><input id="provSshHost" type="text" placeholder="192.168.1.10" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Porta</label><input id="provSshPort" type="number" value="22" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Username</label><input id="provSshUser" type="text" placeholder="admin" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Password</label><input id="provSshPass" type="password" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Enable secret</label><input id="provSshSecret" type="password" style="padding-left:12px;"></div>
+        <div style="align-self:end;"><button class="btn btn-primary" id="btnProvPushSsh"><i class="fa-solid fa-paper-plane"></i> Applica via SSH</button></div>
+      </div>
+
+      <div id="provSerialFields" style="margin-top:16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:14px; display:none;">
+        <div class="form-group"><label>Porta COM</label>
+          <div style="display:flex; gap:8px;">
+            <input id="provComPort" type="text" placeholder="COM3 / /dev/ttyUSB0" style="padding-left:12px; flex:1;">
+            <button class="btn" id="btnProvRefreshPorts" title="Aggiorna elenco porte"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+        </div>
+        <div class="form-group"><label>Baud rate</label>
+          <select id="provBaudrate" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+            <option value="9600" selected>9600</option>
+            <option value="19200">19200</option>
+            <option value="38400">38400</option>
+            <option value="57600">57600</option>
+            <option value="115200">115200</option>
+          </select>
+        </div>
+        <div style="align-self:end;"><button class="btn btn-primary" id="btnProvPushSerial"><i class="fa-solid fa-paper-plane"></i> Applica via Console</button></div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <label style="font-size:13px; color:var(--text-muted);">Config generata / esito operazione</label>
+        <textarea id="provOutput" readonly style="width:100%; height:320px; margin-top:6px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
       </div>
     </div>
 
@@ -3204,6 +3294,157 @@
         });
         if (res && res.ok) { await loadVendors(); }
     }
+
+    // --- SWITCH PROVISIONER ("Switch da Zero") ---
+
+    function provParseVlans(text) {
+        // "10:DATA, 20:VOICE" -> [{id:10, name:'DATA'}, ...]
+        return (text || '').split(',').map(s => s.trim()).filter(Boolean).map(chunk => {
+            const [id, name] = chunk.split(':').map(p => (p || '').trim());
+            return { id: parseInt(id, 10), name: name || `VLAN${id}` };
+        }).filter(v => !isNaN(v.id));
+    }
+
+    function provParseSvis(text) {
+        // "10:10.1.10.1:255.255.255.0" -> [{vlan:10, ip:'10.1.10.1', mask:'255.255.255.0'}]
+        return (text || '').split(',').map(s => s.trim()).filter(Boolean).map(chunk => {
+            const [vlan, ip, mask] = chunk.split(':').map(p => (p || '').trim());
+            return { vlan: parseInt(vlan, 10), ip, mask };
+        }).filter(s => !isNaN(s.vlan) && s.ip && s.mask);
+    }
+
+    function provParseRanges(text) {
+        return (text || '').split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    function provCollectPayload() {
+        return {
+            hostname: document.getElementById('provHostname').value.trim() || 'Switch',
+            role: document.getElementById('provRole').value,
+            domain: document.getElementById('provDomain').value.trim(),
+            mgmt_vlan: parseInt(document.getElementById('provMgmtVlan').value, 10) || null,
+            mgmt_ip: document.getElementById('provMgmtIp').value.trim(),
+            mgmt_mask: document.getElementById('provMgmtMask').value.trim(),
+            mgmt_gw: document.getElementById('provMgmtGw').value.trim(),
+            admin_user: document.getElementById('provAdminUser').value.trim(),
+            admin_password: document.getElementById('provAdminPass').value,
+            enable_secret: document.getElementById('provEnableSecret').value,
+            ssh_only: document.getElementById('provSshOnly').checked,
+            banner: document.getElementById('provBanner').value.trim(),
+            ntp_servers: document.getElementById('provNtp').value.split(',').map(s => s.trim()).filter(Boolean),
+            syslog_server: document.getElementById('provSyslog').value.trim(),
+            snmpv3: document.getElementById('provSnmpUser').value.trim() ? {
+                user: document.getElementById('provSnmpUser').value.trim(),
+                auth_pass: document.getElementById('provSnmpAuth').value,
+                priv_pass: document.getElementById('provSnmpPriv').value,
+            } : {},
+            vlans: provParseVlans(document.getElementById('provVlans').value),
+            vtp_mode: 'transparent',
+            stp_mode: 'rapid-pvst',
+            bpduguard: document.getElementById('provBpduguard').checked,
+            port_security: document.getElementById('provPortSecurity').checked,
+            dhcp_snooping: document.getElementById('provDhcpSnooping').checked,
+            dhcp_snooping_vlans: document.getElementById('provTrunkVlans').value.trim(),
+            cdp_enabled: document.getElementById('provCdp').checked,
+            lldp_enabled: document.getElementById('provLldp').checked,
+            access_ports: provParseRanges(document.getElementById('provAccessPorts').value),
+            access_vlan: parseInt(document.getElementById('provAccessVlan').value, 10) || null,
+            trunk_ports: provParseRanges(document.getElementById('provTrunkPorts').value),
+            trunk_allowed_vlans: document.getElementById('provTrunkVlans').value.trim(),
+            svis: provParseSvis(document.getElementById('provSvis').value),
+            enable_routing: true,
+            default_route_gw: document.getElementById('provDefRouteGw').value.trim(),
+        };
+    }
+
+    function provInitToggles() {
+        const roleSel = document.getElementById('provRole');
+        if (!roleSel) return;
+        roleSel.addEventListener('change', () => {
+            const isDist = roleSel.value === 'distribution';
+            document.getElementById('provSvisGroup').style.display = isDist ? 'block' : 'none';
+            document.getElementById('provDefRouteGroup').style.display = isDist ? 'block' : 'none';
+        });
+        document.getElementById('provDeliveryMode').addEventListener('change', (e) => {
+            document.getElementById('provSshFields').style.display = e.target.value === 'ssh' ? 'grid' : 'none';
+            document.getElementById('provSerialFields').style.display = e.target.value === 'serial' ? 'grid' : 'none';
+        });
+        document.getElementById('btnProvGenerate').addEventListener('click', async () => {
+            const res = await apiFetch('/api/provisioner/generate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(provCollectPayload())
+            });
+            if (res && res.ok) {
+                const data = await res.json();
+                document.getElementById('provOutput').value = data.config;
+            }
+        });
+        document.getElementById('btnProvDownload').addEventListener('click', async () => {
+            const res = await apiFetch('/api/provisioner/download', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(provCollectPayload())
+            });
+            if (res && res.ok) {
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${document.getElementById('provHostname').value.trim() || 'switch'}-day0.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        });
+        document.getElementById('btnProvPushSsh').addEventListener('click', async () => {
+            const payload = Object.assign(provCollectPayload(), {
+                ssh_host: document.getElementById('provSshHost').value.trim(),
+                ssh_port: parseInt(document.getElementById('provSshPort').value, 10) || 22,
+                ssh_username: document.getElementById('provSshUser').value.trim(),
+                ssh_password: document.getElementById('provSshPass').value,
+                ssh_secret: document.getElementById('provSshSecret').value,
+                save_after: true,
+            });
+            document.getElementById('provOutput').value = 'Invio in corso via SSH...';
+            const res = await apiFetch('/api/provisioner/push-ssh', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res) {
+                const data = await res.json();
+                document.getElementById('provOutput').value =
+                    `[${data.status}]\n${data.message || data.output || ''}`;
+            }
+        });
+        document.getElementById('btnProvPushSerial').addEventListener('click', async () => {
+            const payload = Object.assign(provCollectPayload(), {
+                com_port: document.getElementById('provComPort').value.trim(),
+                baudrate: parseInt(document.getElementById('provBaudrate').value, 10) || 9600,
+            });
+            document.getElementById('provOutput').value = 'Invio in corso via console/seriale...';
+            const res = await apiFetch('/api/provisioner/push-serial', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res) {
+                const data = await res.json();
+                document.getElementById('provOutput').value =
+                    `[${data.status}]\n${data.message || data.output || ''}`;
+            }
+        });
+        document.getElementById('btnProvRefreshPorts').addEventListener('click', async () => {
+            const res = await apiFetch('/api/provisioner/serial-ports');
+            if (res && res.ok) {
+                const data = await res.json();
+                if (data.ports && data.ports.length) {
+                    document.getElementById('provComPort').value = data.ports[0].device;
+                    alert(data.ports.map(p => `${p.device} — ${p.description}`).join('\n'));
+                } else {
+                    alert('Nessuna porta seriale rilevata sul server.');
+                }
+            }
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', provInitToggles);
+    else provInitToggles();
 
     // --- TABS & TOPOLOGY LIST VIEW ---
 
