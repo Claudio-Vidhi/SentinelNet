@@ -1809,6 +1809,16 @@
   </div>
 
   <!-- Terminal CLI Modale Rapido -->
+  <div class="modal-overlay" id="caRawRouteModal">
+    <div class="modal" style="width: 640px; max-width: 95%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleCaRawRoute"><i class="fa-solid fa-code" style="color: var(--primary);"></i> Riga di configurazione</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="caCloseRawRouteModal()"></i>
+      </div>
+      <pre id="caRawRouteContent" style="font-family:var(--font-code); font-size:13px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; white-space:pre-wrap; word-break:break-all; margin:0;"></pre>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="cliModalOverlay">
     <div class="modal" style="width: 800px; max-width: 95%;">
       <div class="modal-header">
@@ -1981,6 +1991,8 @@
         msgCaNoIssues: "Nessun problema rilevato",
         msgCaNoDevices: "Nessun apparato disponibile.",
         lblCaReferencedIn: "riferita in",
+        titleCaRawRoute: "Riga di configurazione",
+        lblCaShowRawRoute: "Mostra riga di configurazione",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Switch da Zero',
         titleProvisioner: "Provisioning Switch da Zero",
@@ -2324,6 +2336,8 @@
         msgCaNoIssues: "No issues detected",
         msgCaNoDevices: "No devices available.",
         lblCaReferencedIn: "referenced in",
+        titleCaRawRoute: "Configuration line",
+        lblCaShowRawRoute: "Show configuration line",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Switch',
         titleProvisioner: "Zero-Touch Switch Provisioning",
@@ -6274,6 +6288,29 @@
         }
     }
 
+    // Bottone icona che mostra la/le riga/righe raw di config da cui deriva
+    // la route (data-* per evitare problemi di escaping in onclick inline).
+    function caRawRouteButton(r, L) {
+        const lines = (r && r.raw_lines) || [];
+        if (!lines.length) return '';
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(lines))));
+        return `<button type="button" class="ca-pill" title="${escapeHtml(L.lblCaShowRawRoute)}" data-i18n-title="lblCaShowRawRoute"
+            data-raw="${encoded}" onclick="caShowRawRoute(this)" style="padding:2px 8px;">
+            <i class="fa-solid fa-code"></i>
+        </button>`;
+    }
+
+    function caShowRawRoute(btn) {
+        let lines = [];
+        try { lines = JSON.parse(decodeURIComponent(escape(atob(btn.dataset.raw)))); } catch (e) { lines = []; }
+        document.getElementById('caRawRouteContent').textContent = lines.join('\n');
+        document.getElementById('caRawRouteModal').style.display = 'flex';
+    }
+
+    function caCloseRawRouteModal() {
+        document.getElementById('caRawRouteModal').style.display = 'none';
+    }
+
     function caRenderRouting(dev, L, en, idx) {
         const routing = dev.routing || {};
         const statics = routing.static || [];
@@ -6285,9 +6322,10 @@
             <td>${escapeHtml(r.ad != null ? String(r.ad) : '—')}</td>
             <td>${escapeHtml(r.vrf || '—')}</td>
             <td>${escapeHtml(r.name || '—')}</td>
+            <td>${caRawRouteButton(r, L)}</td>
             </tr>`).join('') : '';
         const staticTable = staticRows
-            ? `<div class="table-container"><table><thead><tr><th>${L.lblCaPrefix}</th><th>${L.lblCaNextHop}</th><th>${L.lblCaAd}</th><th>${L.lblCaVrf}</th><th>${L.lblCaName}</th></tr></thead><tbody>${staticRows}</tbody></table></div>`
+            ? `<div class="table-container"><table><thead><tr><th>${L.lblCaPrefix}</th><th>${L.lblCaNextHop}</th><th>${L.lblCaAd}</th><th>${L.lblCaVrf}</th><th>${L.lblCaName}</th><th></th></tr></thead><tbody>${staticRows}</tbody></table></div>`
             : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
         const groups = {};
         statics.forEach(r => {
@@ -6304,6 +6342,7 @@
                 <td>${escapeHtml(r.ad != null ? String(r.ad) : '—')}</td>
                 <td>${escapeHtml(r.vrf || '—')}</td>
                 <td>${escapeHtml(r.name || '—')}</td>
+                <td>${caRawRouteButton(r, L)}</td>
                 </tr>`).join('');
             const defaultBadge = g.hasDefault ? ` <span class="badge" style="font-size:10px; color:var(--warning); border:1px solid var(--warning);">${escapeHtml(L.lblCaDefaultRoute)}</span>` : '';
             return `<details style="border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface);">
@@ -6313,7 +6352,7 @@
                     ${defaultBadge}
                 </summary>
                 <div class="table-container" style="border-top:1px solid var(--border);"><table><thead><tr>
-                    <th>${L.lblCaPrefix}</th><th>${L.lblCaAd}</th><th>${L.lblCaVrf}</th><th>${L.lblCaName}</th>
+                    <th>${L.lblCaPrefix}</th><th>${L.lblCaAd}</th><th>${L.lblCaVrf}</th><th>${L.lblCaName}</th><th></th>
                     </tr></thead><tbody>${rows}</tbody></table></div>
             </details>`;
         }).join('') : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
