@@ -3982,9 +3982,10 @@
         // aggregata con le interfacce membro), senza bisogno di alcun interruttore.
         updateMapViewButtons();
         if (getMapView() === 'minimal') {
-            const { nodes, edges, options, bundles } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC });
+            const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC });
+            const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
-                          bundles && bundles.length ? (ctx => drawBundlesOverlay(ctx, bundles)) : null);
+                          hasOverlay ? (ctx => drawMinimalOverlay(ctx, bundles, groupsInfo)) : null);
             return;
         }
 
@@ -4154,6 +4155,27 @@
         // Sfondo per-vista: la mappa minimalista usa il bianco, la classica torna
         // allo sfondo scuro definito nel CSS (#networkGraphContainer).
         container.style.background = background || '';
+
+        // --- Conserva le posizioni tra un refresh e l'altro ---------------------
+        // Ogni ricaricamento dati (polling triage/scan, cambio tab, toggle) ricrea
+        // l'istanza Vis.js. Senza intervento la fisica riparte da zero e i nodi
+        // "saltano", perdendo le posizioni trascinate dall'utente. Catturiamo le
+        // posizioni correnti PRIMA di distruggere e le riapplichiamo ai nodi
+        // omonimi; se TUTTI i nodi sono già noti spegniamo del tutto la fisica così
+        // la mappa resta immobile (niente reset). I nodi nuovi mantengono la fisica.
+        const prevPos = networkInstance ? networkInstance.getPositions() : null;
+        if (prevPos) {
+            nodes.forEach(nd => {
+                const p = prevPos[nd.id];
+                if (p) { nd.x = p.x; nd.y = p.y; }
+            });
+        }
+        const allKnown = !!prevPos && nodes.length > 0 && nodes.every(nd => prevPos[nd.id]);
+        if (allKnown) {
+            // Clona per non mutare l'oggetto opzioni del chiamante e disattiva fisica.
+            options = Object.assign({}, options, { physics: false });
+        }
+
         const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
         if (networkInstance) networkInstance.destroy();
         networkInstance = new vis.Network(container, graphData, options);
@@ -4200,11 +4222,14 @@
         edge: {
             color:   '#78909c',                    // link semplice: pieno, tonalità sobria
             width:   1.5,
-            pcColor: '#c62828',                    // aggregato Port-Channel/vPC: accento rosso
+            pcColor: '#8B4513',                    // aggregato Port-Channel/vPC: rame/marrone (stile Cisco)
             pcWidth: 2,
             emphWidth: 3,                          // con "Evidenzia Port-Channel"
+            peerColor: '#2e7d32',                  // peer-link / peer-keepalive vPC: verde
             font: { multi: 'html', color: '#455a64', size: 10, face: 'Arial, Helvetica, sans-serif', strokeWidth: 0, background: '#ffffff' },
-            pcFontColor: '#c62828'
+            pcFontColor: '#8B4513',
+            // Contenitore tratteggiato di raggruppamento per Sede/Gruppo
+            group: { stroke: '#90a4ae', fill: 'rgba(120,144,156,0.05)', font: '#607d8b' }
         }
     };
 
@@ -4278,10 +4303,35 @@
         // Questi non producono un arco vis.js visibile: sono resi nell'overlay
         // afterDrawing. Un arco invisibile viene comunque creato per mantenere la
         // fisica (attrazione tra i due nodi) e il tooltip.
+        // Mappa id→label per riconoscere coppie di peer vPC (es. EX_1/EX_2, Nexus-A/
+        // Nexus-B) dagli hostname, e info di raggruppamento per i contenitori Sede.
+        const labelById = {};
+        nodeData.forEach(n => { labelById[n.id] = n.label || n.id; });
+        const isMgmtPort = p => /mgmt|ma\d|management/i.test(p || '');
+        // Due nodi formano una coppia peer se gli hostname condividono lo stesso
+        // prefisso e differiscono solo per il suffisso finale (1/2, A/B, _1/_2…).
+        const looksLikePeerPair = (a, b) => {
+            const na = String(a || '').split('.')[0], nb = String(b || '').split('.')[0];
+            if (!na || !nb || na.toLowerCase() === nb.toLowerCase()) return false;
+            const strip = s => s.replace(/[ _-]?([12]|[ab])$/i, '');
+            const ra = strip(na), rb = strip(nb);
+            return ra && ra.toLowerCase() === rb.toLowerCase() && ra !== na && rb !== nb;
+        };
+
+        // Info raggruppamento per Sede/Gruppo (contenitore tratteggiato nell'overlay).
+        const groupsInfo = groups.map(g => ({
+            group: g,
+            ids: nodeData.filter(n => (n.group || 'Generale') === g).map(n => n.id)
+        })).filter(gi => gi.ids.length > 0);
+
         const bundles = [];
         const edges = linkData.map(l => {
             const isPC      = !!l.is_portchannel;
             const emphasize = isPC && highlightPC;
+            // Peer vPC: mgmt0↔mgmt0 = peer-keepalive; PortChannel tra una coppia di
+            // peer (hostname appaiati) = peer-link. Entrambi resi in verde.
+            const isKeepalive = isMgmtPort(l.local_port) && isMgmtPort(l.remote_port);
+            const isPeerLink  = isPC && looksLikePeerPair(labelById[l.source], labelById[l.target]);
 
             const localPorts  = (Array.isArray(l.local_ports)  && l.local_ports.length)  ? l.local_ports  : [l.local_port];
             const remotePorts = (Array.isArray(l.remote_ports) && l.remote_ports.length) ? l.remote_ports : [l.remote_port];
@@ -4303,7 +4353,10 @@
             if (memberPairs.length > 1) {
                 bundles.push({
                     from: l.source, to: l.target,
-                    pcTag, members: memberPairs, emphasize
+                    pcTag, members: memberPairs, emphasize,
+                    // 'peer' = peer-link vPC (verde), 'pc' = aggregato dati (rame).
+                    type: isPeerLink ? 'peer' : 'pc',
+                    label: isPeerLink ? `${pcTag} / vPC` : pcTag
                 });
             }
 
@@ -4330,19 +4383,30 @@
             </div>`;
 
             const isBundle = memberPairs.length > 1;
-            const col = isPC ? S.edge.pcColor : S.edge.color;
+            // Colore arco vis.js (i fasci a ≥2 membri sono disegnati dall'overlay e
+            // qui restano invisibili). Verde per peer-keepalive/peer-link, rame per
+            // gli aggregati dati, tinta sobria per i link semplici.
+            const col = isKeepalive ? S.edge.peerColor
+                      : (isPeerLink ? S.edge.peerColor
+                      : (isPC ? S.edge.pcColor : S.edge.color));
+            // Etichetta verde dedicata per il keepalive su mgmt0.
+            if (isKeepalive && !isPC) {
+                label = `<b>peer-keepalive</b>\n${shortIface(l.local_port)} ⇄ ${shortIface(l.remote_port)}`;
+            }
+            const edgeFontColor = (isKeepalive || isPeerLink) ? S.edge.peerColor
+                                : (isPC ? S.edge.pcFontColor : S.edge.font.color);
             return {
                 from: l.source, to: l.target,
                 // Il fascio è disegnato dall'overlay: l'arco vis.js resta invisibile
                 // ma conserva fisica e tooltip.
                 label: isBundle ? '' : label,
                 title: tip,
-                font: isPC ? Object.assign({}, S.edge.font, { color: S.edge.pcFontColor }) : S.edge.font,
+                font: Object.assign({}, S.edge.font, { color: edgeFontColor }),
                 color: isBundle
                     ? { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' }
                     : { color: col, highlight: '#1a2430', hover: '#1a2430' },
-                width: isBundle ? 0.0001 : (emphasize ? S.edge.emphWidth : (isPC ? S.edge.pcWidth : S.edge.width)),
-                dashes: false,
+                width: isBundle ? 0.0001 : (emphasize ? S.edge.emphWidth : (isPC ? S.edge.pcWidth : (isKeepalive ? 1.4 : S.edge.width))),
+                dashes: isKeepalive && !isPC ? [4, 3] : false,
                 arrows: { to: { enabled: false } },
                 smooth: { type: 'continuous', roundness: 0.2 }
             };
@@ -4361,17 +4425,57 @@
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
         };
 
-        return { nodes, edges, options, bundles };
+        return { nodes, edges, options, bundles, groupsInfo };
     }
 
-    // ===== Overlay fasci Port-Channel / vPC (stile Cisco Visio) =====
-    // Disegna, per ogni fascio, una linea per interfaccia membro (cavo fisico),
-    // con le etichette di porta ai due estremi accanto al riquadro del dispositivo,
-    // e un'ellisse che attraversa il gruppo con il nome "Po/vPC". Il contesto è già
-    // trasformato da vis.js nelle coordinate della rete.
-    function drawBundlesOverlay(ctx, bundles) {
+    // ===== Overlay Visio (contenitori Sede + fasci Port-Channel / vPC / peer) =====
+    // Contesto già trasformato da vis.js nelle coordinate della rete. Disegna:
+    //  1) contenitori tratteggiati per Sede/Gruppo con etichetta;
+    //  2) per ogni fascio, un cavo ORTOGONALE (a gradino, no diagonali) per ogni
+    //     interfaccia membro, spaziati così da non sovrapporsi nelle pieghe;
+    //  3) le etichette di porta sul bordo INTERNO del riquadro, nel punto d'aggancio;
+    //  4) una "pillola" traslucida verticale che attraversa i cavi paralleli con il
+    //     nome dell'aggregato (es. "Po2 / vPC2"). Rame per i dati, verde per i peer.
+    function drawMinimalOverlay(ctx, bundles, groupsInfo) {
         if (!networkInstance) return;
         const S = MINIMAL_MAP_STYLE;
+
+        // --- 1) Contenitori di raggruppamento per Sede/Gruppo ------------------
+        if (Array.isArray(groupsInfo) && groupsInfo.length > 1) {
+            ctx.save();
+            ctx.setLineDash([8, 5]);
+            ctx.lineWidth = 1.2;
+            groupsInfo.forEach(gi => {
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, found = 0;
+                gi.ids.forEach(id => {
+                    let bb; try { bb = networkInstance.getBoundingBox(id); } catch (e) { bb = null; }
+                    if (!bb) return;
+                    found++;
+                    minX = Math.min(minX, bb.left);  minY = Math.min(minY, bb.top);
+                    maxX = Math.max(maxX, bb.right); maxY = Math.max(maxY, bb.bottom);
+                });
+                if (!found) return;
+                const pad = 28;
+                minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+                ctx.strokeStyle = S.edge.group.stroke;
+                ctx.fillStyle = S.edge.group.fill;
+                ctx.beginPath();
+                ctx.rect(minX, minY, maxX - minX, maxY - minY);
+                ctx.fill();
+                ctx.stroke();
+                // Etichetta Sede in alto a sinistra del contenitore.
+                ctx.setLineDash([]);
+                ctx.font = 'bold 11px Arial, Helvetica, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                ctx.fillStyle = S.edge.group.font;
+                ctx.fillText(gi.group, minX + 4, minY - 3);
+                ctx.setLineDash([8, 5]);
+            });
+            ctx.restore();
+        }
+
+        if (!Array.isArray(bundles) || !bundles.length) return;
 
         // Punto sul bordo del bounding box del nodo lungo la direzione (dx,dy).
         const borderPoint = (id, dx, dy) => {
@@ -4380,7 +4484,6 @@
             const hw = bb ? (bb.right - bb.left) / 2 : 40;
             const hh = bb ? (bb.bottom - bb.top) / 2 : 20;
             const ax = Math.abs(dx), ay = Math.abs(dy);
-            // t = distanza dal centro al bordo del riquadro nella direzione data.
             let t = Infinity;
             if (ax > 1e-6) t = Math.min(t, hw / ax);
             if (ay > 1e-6) t = Math.min(t, hh / ay);
@@ -4394,72 +4497,105 @@
             catch (e) { return; }
             if (!p1 || !p2) return;
 
-            let dx = p2.x - p1.x, dy = p2.y - p1.y;
-            const len = Math.hypot(dx, dy) || 1;
-            dx /= len; dy /= len;
-            // Versore perpendicolare, per distanziare le linee membro parallele.
-            const ux = -dy, uy = dx;
+            const color = (b.type === 'peer') ? S.edge.peerColor : S.edge.pcColor;
+            const cdx = p2.x - p1.x, cdy = p2.y - p1.y;
+            // Asse dominante: instrada in orizzontale-verticale-orizzontale se i nodi
+            // sono affiancati, altrimenti verticale-orizzontale-verticale.
+            const horizontal = Math.abs(cdx) >= Math.abs(cdy);
 
             const n = b.members.length;
-            const spacing = 11;                 // distanza tra cavi paralleli (coord rete)
+            const spacing = 11;
             const half = (n - 1) / 2;
 
-            const a0 = borderPoint(b.from, dx, dy);   // uscita dal nodo sorgente
-            const b0 = borderPoint(b.to, -dx, -dy);   // ingresso al nodo destinazione
+            // Uscita/ingresso perpendicolari alla faccia del riquadro.
+            const sdx = horizontal ? Math.sign(cdx || 1) : 0;
+            const sdy = horizontal ? 0 : Math.sign(cdy || 1);
+            const a0 = borderPoint(b.from, sdx, sdy);
+            const b0 = borderPoint(b.to, -sdx, -sdy);
+            const midMain = horizontal ? (a0.x + b0.x) / 2 : (a0.y + b0.y) / 2;
 
             ctx.save();
-            ctx.strokeStyle = S.edge.pcColor;
-            ctx.lineWidth = b.emphasize ? 2.2 : 1.6;
-            ctx.lineCap = 'round';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = b.emphasize ? 2.4 : 1.8;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'butt';
             ctx.font = '9px Arial, Helvetica, sans-serif';
             ctx.textBaseline = 'middle';
 
             b.members.forEach((m, i) => {
-                const off = (i - half) * spacing;
-                const ax = a0.x + ux * off, ay = a0.y + uy * off;
-                const bx = b0.x + ux * off, by = b0.y + uy * off;
+                const off = (i - half) * spacing;   // scostamento del singolo cavo
+                let ax, ay, bx, by, mid;
+                if (horizontal) {
+                    ax = a0.x;            ay = a0.y + off;
+                    bx = b0.x;            by = b0.y + off;
+                    mid = midMain + off;                  // segmento verticale distinto per membro
+                    ctx.beginPath();
+                    ctx.moveTo(ax, ay);
+                    ctx.lineTo(mid, ay);
+                    ctx.lineTo(mid, by);
+                    ctx.lineTo(bx, by);
+                    ctx.stroke();
+                } else {
+                    ax = a0.x + off;      ay = a0.y;
+                    bx = b0.x + off;      by = b0.y;
+                    mid = midMain + off;                  // segmento orizzontale distinto per membro
+                    ctx.beginPath();
+                    ctx.moveTo(ax, ay);
+                    ctx.lineTo(ax, mid);
+                    ctx.lineTo(bx, mid);
+                    ctx.lineTo(bx, by);
+                    ctx.stroke();
+                }
 
-                // Linea del singolo cavo fisico.
-                ctx.beginPath();
-                ctx.moveTo(ax, ay);
-                ctx.lineTo(bx, by);
-                ctx.stroke();
-
-                // Etichette di porta accanto a ciascun riquadro (leggermente rientrate
-                // lungo il cavo per non toccare il bordo del nodo).
-                ctx.fillStyle = S.edge.pcColor;
-                const lblOff = 14;
+                // Etichette di porta sul bordo INTERNO del riquadro (rientrate verso
+                // il centro del nodo dal punto d'aggancio).
+                ctx.fillStyle = color;
+                const inset = 13;
                 if (m.local) {
-                    ctx.textAlign = dx >= 0 ? 'left' : 'right';
-                    ctx.fillText(m.local, ax + dx * lblOff, ay + dy * lblOff - 5);
+                    if (horizontal) { ctx.textAlign = sdx >= 0 ? 'right' : 'left'; ctx.fillText(m.local, ax - sdx * inset, ay - 5); }
+                    else            { ctx.textAlign = 'center'; ctx.fillText(m.local, ax, ay - sdy * inset); }
                 }
                 if (m.remote) {
-                    ctx.textAlign = dx >= 0 ? 'right' : 'left';
-                    ctx.fillText(m.remote, bx - dx * lblOff, by - dy * lblOff - 5);
+                    if (horizontal) { ctx.textAlign = sdx >= 0 ? 'left' : 'right'; ctx.fillText(m.remote, bx + sdx * inset, by - 5); }
+                    else            { ctx.textAlign = 'center'; ctx.fillText(m.remote, bx, by + sdy * inset); }
                 }
             });
 
-            // Ellisse che attraversa il gruppo di linee, a metà del fascio, con il
-            // nome dell'aggregato (Po/vPC).
-            const mx = (a0.x + b0.x) / 2, my = (a0.y + b0.y) / 2;
-            const rx = 20;                                  // semiasse lungo il cavo
-            const ry = (half * spacing) + 12;               // semiasse trasversale (copre i cavi)
-            const angle = Math.atan2(dy, dx);
+            // --- Pillola traslucida che attraversa i cavi paralleli --------------
+            const spread = (half * spacing);
+            const cx = horizontal ? midMain : (a0.x + b0.x) / 2;
+            const cy = horizontal ? (a0.y + b0.y) / 2 : midMain;
+            // Larghezza lungo l'asse dei cavi (sottile), altezza a coprire il fascio.
+            const pillHalfW = 9;
+            const pillHalfSpread = spread + 12;
+            let px, py, pw, ph;
+            if (horizontal) { px = cx - pillHalfW; py = cy - pillHalfSpread; pw = pillHalfW * 2; ph = pillHalfSpread * 2; }
+            else            { px = cx - pillHalfSpread; py = cy - pillHalfW; pw = pillHalfSpread * 2; ph = pillHalfW * 2; }
+            const r = Math.min(pillHalfW, 8);
             ctx.beginPath();
-            ctx.ellipse(mx, my, rx, ry, angle, 0, 2 * Math.PI);
+            // Rettangolo arrotondato (pillola).
+            ctx.moveTo(px + r, py);
+            ctx.arcTo(px + pw, py, px + pw, py + ph, r);
+            ctx.arcTo(px + pw, py + ph, px, py + ph, r);
+            ctx.arcTo(px, py + ph, px, py, r);
+            ctx.arcTo(px, py, px + pw, py, r);
+            ctx.closePath();
+            ctx.fillStyle = (b.type === 'peer') ? 'rgba(46,125,50,0.16)' : 'rgba(139,69,19,0.16)';
+            ctx.fill();
             ctx.lineWidth = b.emphasize ? 2 : 1.4;
-            ctx.strokeStyle = S.edge.pcColor;
+            ctx.strokeStyle = color;
             ctx.stroke();
 
-            // Cartiglio del nome aggregato accanto all'ellisse.
+            // Cartiglio del nome aggregato (Po/vPC) sopra la pillola.
             ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
             ctx.textAlign = 'center';
-            const labelText = b.pcTag || 'Po';
+            ctx.textBaseline = 'middle';
+            const labelText = b.label || b.pcTag || 'Po';
             const tw = ctx.measureText(labelText).width;
-            const lx = mx, ly = my - ry - 8;
+            const lx = cx, ly = cy - pillHalfSpread - 9;
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14);
-            ctx.fillStyle = S.edge.pcColor;
+            ctx.fillStyle = color;
             ctx.fillText(labelText, lx, ly);
             ctx.restore();
         });
