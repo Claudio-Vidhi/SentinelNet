@@ -1259,6 +1259,7 @@ def generate_network_map(group_filter=None) -> dict:
                     "source": ip, "target": target_ip,
                     "src_ports": {}, "tgt_ports": {},      # iface locali affidabili per lato
                     "src_guess": {}, "tgt_guess": {},      # iface stimate (outgoing port del vicino)
+                    "src_pc": set(), "tgt_pc": set(),      # nome aggregato per-lato (Po può differire tra A e B)
                     "pc_names": set(), "name_pc": False,
                 }
                 link_acc[link_key] = acc
@@ -1270,9 +1271,14 @@ def generate_network_map(group_filter=None) -> dict:
             if ip == acc["source"]:
                 acc["src_ports"][ln] = local_port
                 acc["tgt_guess"][rn] = remote_port
+                # local_pc appartiene alla source, remote_pc (stima) alla target.
+                if local_pc:  acc["src_pc"].add(local_pc)
+                if remote_pc: acc["tgt_pc"].add(remote_pc)
             else:  # ip == acc["target"]
                 acc["tgt_ports"][ln] = local_port
                 acc["src_guess"][rn] = remote_port
+                if local_pc:  acc["tgt_pc"].add(local_pc)
+                if remote_pc: acc["src_pc"].add(remote_pc)
 
             if local_pc:
                 acc["pc_names"].add(local_pc)
@@ -1302,6 +1308,19 @@ def generate_network_map(group_filter=None) -> dict:
             pc_name = next((p for p in src_list + tgt_list if _is_portchannel_port(p)), None)
 
         member_count = max(len(src_list), len(tgt_list)) or 1
+
+        # Nome aggregato per-lato: il Port-channel può avere id diverso sui due
+        # apparati (es. Po1 su A, Po4 su B). Si conserva ciascun lato separatamente
+        # per etichettare i due estremi del fascio in modo indipendente.
+        local_pc  = sorted(acc["src_pc"])[0] if acc["src_pc"] else None
+        remote_pc = sorted(acc["tgt_pc"])[0] if acc["tgt_pc"] else None
+        # Fallback: se un lato non ha channel-group in config ma annuncia una
+        # Port-channel, usa quella; altrimenti ripiega sul pc_name comune.
+        if not local_pc:
+            local_pc = next((p for p in src_list if _is_portchannel_port(p)), None) or pc_name
+        if not remote_pc:
+            remote_pc = next((p for p in tgt_list if _is_portchannel_port(p)), None) or pc_name
+
         links.append({
             "source":         src,
             "target":         tgt,
@@ -1311,6 +1330,8 @@ def generate_network_map(group_filter=None) -> dict:
             "remote_ports":   tgt_list,
             "is_portchannel": is_pc,
             "pc_name":        pc_name,
+            "local_pc":       local_pc if is_pc else None,
+            "remote_pc":      remote_pc if is_pc else None,
             "pc_names":       pc_names,
             "member_count":   member_count,
         })
