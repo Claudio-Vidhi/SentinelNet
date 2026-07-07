@@ -1091,6 +1091,12 @@
             <span data-i18n="lblVtpDomain">Dominio VTP</span>
           </label>
 
+          <!-- Selettore vista: mappa classica oppure la nuova mappa minimalista -->
+          <div style="display:inline-flex; align-items:center; gap:4px; padding-left:10px; border-left:1px solid var(--border);">
+            <button id="mapViewClassicBtn" class="map-view-btn" onclick="setMapView('classic')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapClassic">Classica</button>
+            <button id="mapViewMinimalBtn" class="map-view-btn" onclick="setMapView('minimal')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Nuova</button>
+          </div>
+
         </div>
         <div style="display:flex; gap: 8px;">
           <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
@@ -3824,6 +3830,16 @@
         const validNodeIds = new Set(filteredNodesData.map(n => n.id));
         const filteredLinksData = data.links.filter(l => validNodeIds.has(l.source) && validNodeIds.has(l.target));
 
+        // La nuova mappa minimalista riusa gli STESSI dati e filtri: cambia solo la
+        // resa grafica. I Port-Channel qui sono visibili di default (etichetta
+        // aggregata con le interfacce membro), senza bisogno di alcun interruttore.
+        updateMapViewButtons();
+        if (getMapView() === 'minimal') {
+            const { nodes, edges, options } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC });
+            renderNetwork(nodes, edges, options);
+            return;
+        }
+
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
             const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
@@ -3941,92 +3957,168 @@
             };
         });
 
-        const container = document.getElementById("networkGraphContainer");
-        const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
-        
-        // Opzioni Vis.js. La fisica serve SOLO a calcolare un layout iniziale ben
-        // distanziato: viene spenta al termine della stabilizzazione (vedi sotto),
-        // così i nodi non derivano da soli e restano dove l'utente li trascina.
-        const options = {
-            layout: {
-                improvedLayout: true,
-                randomSeed: 42          // layout deterministico tra un refresh e l'altro
-            },
+        renderNetwork(nodes, edges, classicMapOptions());
+    }
+
+    // ===== Selettore vista mappa (Classica / Nuova minimalista) =====
+    // La scelta è ricordata in localStorage. Entrambe le viste condividono dati,
+    // filtri, interruttori, selettore Sede/Categorie e istanza Vis.js.
+    let mapViewMode = localStorage.getItem('mapViewMode') === 'minimal' ? 'minimal' : 'classic';
+    function getMapView() { return mapViewMode; }
+    function updateMapViewButtons() {
+        const base = 'width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
+        const on  = base + 'background:var(--primary); color:#fff; border-color:var(--primary);';
+        const off = base + 'background:var(--surface-2); color:var(--text-muted); border-color:var(--border);';
+        const c = document.getElementById('mapViewClassicBtn');
+        const m = document.getElementById('mapViewMinimalBtn');
+        if (c) c.setAttribute('style', mapViewMode === 'classic' ? on : off);
+        if (m) m.setAttribute('style', mapViewMode === 'minimal' ? on : off);
+    }
+    function setMapView(mode) {
+        mapViewMode = (mode === 'minimal') ? 'minimal' : 'classic';
+        localStorage.setItem('mapViewMode', mapViewMode);
+        updateMapViewButtons();
+        loadInteractiveMap();
+    }
+
+    // Opzioni Vis.js della mappa classica. La fisica serve SOLO a calcolare un
+    // layout iniziale ben distanziato: viene spenta al termine della
+    // stabilizzazione, così i nodi non derivano e restano dove l'utente li mette.
+    function classicMapOptions() {
+        return {
+            layout: { improvedLayout: true, randomSeed: 42 },
             physics: {
-                enabled: true,
-                solver: 'barnesHut',
-                stabilization: {
-                    enabled: true,
-                    iterations: 600,    // più iterazioni = layout più riposato e senza sovrapposizioni
-                    updateInterval: 25,
-                    onlyDynamicEdges: false,
-                    fit: true
-                },
-                barnesHut: {
-                    gravitationalConstant: -16000,  // forte repulsione: i nodi si allontanano
-                    centralGravity: 0.12,
-                    springLength: 240,
-                    springConstant: 0.05,
-                    damping: 0.4,
-                    avoidOverlap: 1                 // massimo: evita la sovrapposizione dei nodi
-                },
+                enabled: true, solver: 'barnesHut',
+                stabilization: { enabled: true, iterations: 600, updateInterval: 25, onlyDynamicEdges: false, fit: true },
+                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.12, springLength: 240, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
                 minVelocity: 0.75
             },
-            interaction: {
-                hover: true,
-                hoverConnectedEdges: true,
-                selectConnectedEdges: true,
-                tooltipDelay: 150,
-                dragNodes: true,        // i nodi sono trascinabili
-                dragView: true,
-                zoomView: true,
-                multiselect: true
-            },
-            nodes: {
-                shadow: {
-                    enabled: true,
-                    color: "rgba(0,0,0,0.5)",
-                    size: 10,
-                    x: 0,
-                    y: 4
-                }
-            },
-            edges: {
-                smooth: {
-                    type: 'cubicBezier',
-                    forceDirection: 'none',
-                    roundness: 0.5
-                },
-                shadow: {
-                    enabled: true,
-                    color: "rgba(0,0,0,0.4)",
-                    size: 4,
-                    x: 0,
-                    y: 2
-                }
-            }
+            interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
+            nodes: { shadow: { enabled: true, color: "rgba(0,0,0,0.5)", size: 10, x: 0, y: 4 } },
+            edges: { smooth: { type: 'cubicBezier', forceDirection: 'none', roundness: 0.5 }, shadow: { enabled: true, color: "rgba(0,0,0,0.4)", size: 4, x: 0, y: 2 } }
         };
+    }
 
-        if (networkInstance) {
-            networkInstance.destroy();
-        }
+    // Crea/ricrea l'istanza Vis.js condivisa e congela il layout a stabilizzazione
+    // completata (usata da entrambe le viste).
+    function renderNetwork(nodes, edges, options) {
+        const container = document.getElementById("networkGraphContainer");
+        const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+        if (networkInstance) networkInstance.destroy();
         networkInstance = new vis.Network(container, graphData, options);
-
-        // A stabilizzazione completata, congela il layout: la fisica si spegne così
-        // i nodi NON si muovono più da soli. Il trascinamento resta abilitato e gli
-        // archi seguono i nodi spostati, che rimangono nella posizione scelta.
         let mapFrozen = false;
         const freezeLayout = () => {
-            if (networkInstance && !mapFrozen) {
-                mapFrozen = true;
-                networkInstance.setOptions({ physics: false });
-            }
+            if (networkInstance && !mapFrozen) { mapFrozen = true; networkInstance.setOptions({ physics: false }); }
         };
         networkInstance.once('stabilizationIterationsDone', freezeLayout);
         networkInstance.once('stabilized', freezeLayout);
-        // Rete di sicurezza per i grafi minuscoli (0–1 nodi) dove gli eventi di
-        // stabilizzazione possono non scattare: la fisica viene comunque spenta.
         networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, 5000));
+    }
+
+    // ===== Nuova mappa minimalista =====
+    // Stili centralizzati: modificare QUI per adeguarsi all'immagine di esempio
+    // che l'utente fornirà (nodi, colori, spessori, font).
+    const MINIMAL_MAP_STYLE = {
+        node: {
+            shape: 'dot', size: 12, borderWidth: 1.5,
+            font: { color: '#c9d1e0', size: 12, face: 'Inter, system-ui, sans-serif', strokeWidth: 0 },
+            offlineOpacity: 0.4
+        },
+        edge: {
+            color:   'rgba(140,150,175,0.35)',   // link normale, sottile e discreto
+            width:   1,
+            pcColor: 'rgba(120,140,205,0.75)',   // aggregato (Port-Channel/LAG)
+            pcWidth: 1.6,
+            emphColor: '#ffb84d', emphWidth: 2.6,  // con "Evidenzia Port-Channel"
+            font: { color: '#8b95ac', size: 10, face: 'Menlo, monospace', strokeWidth: 0, background: 'rgba(21,15,35,0.85)' }
+        },
+        statusColor: { online: '#4f8ef7', offline: '#5a6473', auth_failed: '#ff6b7c', discovered: '#8d9bb0', warning: '#ffb84d' }
+    };
+
+    // Costruisce nodi/archi/opzioni per la vista minimalista dai medesimi dati già
+    // filtrati della mappa classica. I Port-Channel sono resi come UN arco
+    // aggregato con etichetta "Po1 (Gi1/0/1, Gi1/0/2)" (interfacce membro incluse).
+    function buildMinimalGraph(nodeData, linkData, opts) {
+        const S = MINIMAL_MAP_STYLE;
+        const showVtpDomain = !!(opts && opts.showVtpDomain);
+        const highlightPC   = !!(opts && opts.highlightPC);
+
+        const nodes = nodeData.map(n => {
+            const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            const matchedDev = globalDevices.find(d => d.IP === n.id);
+            const resolvedVendor = (n.vendor && n.vendor !== 'discovered')
+                ? n.vendor : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
+            // Colore: per tipo apparato, oppure per dominio VTP se l'interruttore è ON.
+            const color = showVtpDomain ? vtpDomainColor(n.vtp_domain) : deviceTypeMeta(n.device_type).color;
+            return {
+                id: n.id,
+                shape: S.node.shape,
+                size: S.node.size,
+                label: n.label,
+                title: createNodeTooltip(n, scan, resolvedVendor),
+                borderWidth: S.node.borderWidth,
+                borderWidthSelected: S.node.borderWidth + 1,
+                color: {
+                    background: color, border: color,
+                    highlight: { background: color, border: '#ffffff' },
+                    hover: { background: color, border: '#ffffff' }
+                },
+                opacity: (n.status === 'offline') ? S.node.offlineOpacity : 1,
+                font: S.node.font,
+                nodeDataVal: n
+            };
+        });
+
+        const edges = linkData.map(l => {
+            const isPC      = !!l.is_portchannel;
+            const emphasize = isPC && highlightPC;
+
+            const localPorts  = (Array.isArray(l.local_ports)  && l.local_ports.length)  ? l.local_ports  : [l.local_port];
+            const remotePorts = (Array.isArray(l.remote_ports) && l.remote_ports.length) ? l.remote_ports : [l.remote_port];
+            const members = localPorts.map(shortIface).filter(Boolean).join(', ');
+            const pcTag   = l.pc_name ? shortIface(l.pc_name) : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+
+            // Etichetta: Port-Channel SEMPRE visibile con le interfacce membro; per
+            // i link semplici nessuna etichetta (stile pulito e poco affollato).
+            const label = isPC ? (members ? `${pcTag} (${members})` : pcTag) : '';
+
+            const remoteMembers = remotePorts.map(shortIface).filter(Boolean).join(', ');
+            const tip = document.createElement('div');
+            tip.innerHTML = `<div style="font-family:var(--font-main); min-width:180px; color:var(--text); font-size:11px;">
+                <strong style="color:var(--primary);">${escapeHtml(l.source)} ⇄ ${escapeHtml(l.target)}</strong>
+                ${isPC ? `<div style="margin-top:4px; color:var(--text-muted);">${currentLang==='en'?'Aggregate':'Aggregato'}: <span style="color:var(--warning);">${escapeHtml(pcTag)}</span></div>
+                <div style="font-family:var(--font-code); font-size:10px; margin-top:2px;">${escapeHtml(members||'—')} ⇄ ${escapeHtml(remoteMembers||'—')}</div>`
+                : `<div style="font-family:var(--font-code); font-size:10px; margin-top:4px;">${escapeHtml(shortIface(l.local_port)||'—')} ⇄ ${escapeHtml(shortIface(l.remote_port)||'—')}</div>`}
+            </div>`;
+
+            const col = emphasize ? S.edge.emphColor : (isPC ? S.edge.pcColor : S.edge.color);
+            return {
+                from: l.source, to: l.target,
+                label,
+                title: tip,
+                font: S.edge.font,
+                color: { color: col, highlight: '#c4bdf7', hover: '#c4bdf7' },
+                width: emphasize ? S.edge.emphWidth : (isPC ? S.edge.pcWidth : S.edge.width),
+                dashes: emphasize ? [6, 4] : false,
+                arrows: { to: { enabled: false } },
+                smooth: { type: 'continuous', roundness: 0.35 }
+            };
+        });
+
+        const options = {
+            layout: { improvedLayout: true, randomSeed: 42 },
+            physics: {
+                enabled: true, solver: 'barnesHut',
+                stabilization: { enabled: true, iterations: 600, updateInterval: 25, onlyDynamicEdges: false, fit: true },
+                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.12, springLength: 240, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
+                minVelocity: 0.75
+            },
+            interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
+            nodes: { shadow: { enabled: false } },
+            edges: { smooth: { type: 'continuous', roundness: 0.35 }, shadow: { enabled: false } }
+        };
+
+        return { nodes, edges, options };
     }
 
     // ===== Pannello Dispositivi & Categorie (classificazione manuale) =====
