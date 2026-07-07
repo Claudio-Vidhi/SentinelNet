@@ -15,6 +15,7 @@ device_categories.json
 device_models.json
 users.json
 groups.json
+sites.json
 # Per-installation vendor registry (custom vendors are local, not shared)
 vendors.json
 # MAC address tracking history (local SQLite DB + WAL/SHM)
