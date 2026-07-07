@@ -1382,48 +1382,77 @@
         Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.
       </p>
 
-      <div class="requires-admin" style="border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:18px; background:var(--surface-2);">
-        <h4 style="margin-bottom:10px;" data-i18n="titleAiSettings">Configurazione Provider</h4>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-          <div class="form-group" style="min-width:150px;">
-            <label data-i18n="lblAiProvider">Provider</label>
-            <select id="aiProvider" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
-              <option value="anthropic">Anthropic (Claude)</option>
-              <option value="openai">OpenAI (ChatGPT)</option>
-              <option value="gemini">Google Gemini</option>
-              <option value="ollama">Ollama (LLM locale)</option>
-            </select>
-          </div>
-          <div class="form-group" style="min-width:200px;">
-            <label data-i18n="lblAiModel">Modello</label>
-            <div style="display:flex; gap:4px;">
-              <select id="aiModelSelect" style="flex:1; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
-                <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
-              </select>
-              <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="refreshAiModels()" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
-                <i class="fa-solid fa-rotate"></i>
-              </button>
-            </div>
-            <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" style="padding-left:12px; margin-top:4px;">
-          </div>
-          <div class="form-group" style="min-width:220px;">
-            <label id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
-            <input id="aiApiKey" type="password" placeholder="•••••• (lascia vuoto per non modificare)" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="min-width:220px;">
-            <label data-i18n="lblAiBaseUrl">Endpoint locale (Ollama)</label>
-            <input id="aiBaseUrl" type="text" placeholder="http://localhost:11434" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="min-width:150px;">
-            <label data-i18n="lblAiRateLimit">Limite richieste/min</label>
-            <input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" style="padding-left:12px;">
-          </div>
-          <button class="btn btn-primary" style="width:auto;" onclick="saveAiSettings()" data-i18n="btnAiSaveSettings">
-            <i class="fa-solid fa-floppy-disk"></i> Salva
-          </button>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+        <div class="form-group" style="min-width:220px; margin-bottom:0;">
+          <label data-i18n="lblAiActiveProfile">Profilo attivo</label>
+          <select id="aiProfileSelect" onchange="onAiProfileSelectChange()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+            <option value="" data-i18n="optAiNoProfile">Nessun profilo</option>
+          </select>
         </div>
-        <div id="aiSettingsStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+        <span id="aiActiveProfileBadge" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
+
+      <details class="requires-admin" id="aiSettingsPanel" style="border:1px solid var(--border); border-radius:10px; padding:0; margin-bottom:18px; background:var(--surface-2); overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 14px; font-weight:600;" data-i18n="titleAiSettings">Configurazione Provider (Profili)</summary>
+        <div style="padding:0 14px 14px 14px;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+            <div class="form-group" style="min-width:180px;">
+              <label data-i18n="lblAiEditProfile">Profilo in modifica</label>
+              <select id="aiProfileEditSelect" onchange="onAiProfileEditSelectChange()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+                <option value="__new__" data-i18n="optAiNewProfile">-- nuovo profilo --</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:160px;">
+              <label data-i18n="lblAiProfileName">Nome profilo</label>
+              <input id="aiProfileName" type="text" placeholder="es. Claude prod" style="padding-left:12px;">
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+            <div class="form-group" style="min-width:150px;">
+              <label data-i18n="lblAiProvider">Provider</label>
+              <select id="aiProvider" onchange="refreshAiModels()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (ChatGPT)</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="ollama">Ollama (LLM locale)</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:200px;">
+              <label data-i18n="lblAiModel">Modello</label>
+              <div style="display:flex; gap:4px;">
+                <select id="aiModelSelect" style="flex:1; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+                  <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
+                </select>
+                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="refreshAiModels()" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
+                  <i class="fa-solid fa-rotate"></i>
+                </button>
+              </div>
+              <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" style="padding-left:12px; margin-top:4px;">
+            </div>
+            <div class="form-group" style="min-width:220px;">
+              <label id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
+              <input id="aiApiKey" type="password" placeholder="•••••• (lascia vuoto per non modificare)" style="padding-left:12px;">
+            </div>
+            <div class="form-group" style="min-width:220px;">
+              <label data-i18n="lblAiBaseUrl">Endpoint locale (Ollama)</label>
+              <input id="aiBaseUrl" type="text" placeholder="http://localhost:11434" style="padding-left:12px;">
+            </div>
+            <div class="form-group" style="min-width:150px;">
+              <label data-i18n="lblAiRateLimit">Limite richieste/min</label>
+              <input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" style="padding-left:12px;">
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <button class="btn btn-primary" style="width:auto;" onclick="saveAiSettings()" data-i18n="btnAiSaveSettings">
+              <i class="fa-solid fa-floppy-disk"></i> Salva profilo
+            </button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="deleteAiProfile()" id="btnAiDeleteProfile" data-i18n="btnAiDeleteProfile">
+              <i class="fa-solid fa-trash"></i> Elimina profilo
+            </button>
+          </div>
+          <div id="aiSettingsStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+        </div>
+      </details>
 
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
         <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
@@ -1444,7 +1473,7 @@
 
       <div style="display:flex; gap:8px;">
         <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
-        <button class="btn btn-primary" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
+        <button class="btn btn-primary" id="btnAiSend" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
           <i class="fa-solid fa-paper-plane"></i> Invia
         </button>
       </div>
@@ -1949,7 +1978,7 @@
         tabAiAssistant: '<i class="fa-solid fa-robot"></i> AI Assistant',
         titleAiAssistant: "AI Assistant",
         descAiAssistant: "Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.",
-        titleAiSettings: "Configurazione Provider",
+        titleAiSettings: "Configurazione Provider (Profili)",
         lblAiProvider: "Provider",
         lblAiModel: "Modello",
         lblAiApiKey: "API Key",
@@ -1957,13 +1986,26 @@
         lblAiRateLimit: "Limite richieste/min",
         optAiModelCustom: "-- modello personalizzato --",
         btnAiRefreshModelsTitle: "Aggiorna elenco modelli",
-        btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Salva',
+        btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Salva profilo',
         lblAiAttachInventory: "Allega riepilogo inventario",
         optAiNoDevice: "Nessuna config allegata",
         optAiNoTenant: "Nessuna sede/tenant allegata",
         errAiRateLimited: "Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.",
         btnAiClear: '<i class="fa-solid fa-trash"></i> Nuova conversazione',
         btnAiSend: '<i class="fa-solid fa-paper-plane"></i> Invia',
+        lblAiActiveProfile: "Profilo attivo",
+        optAiNoProfile: "Nessun profilo",
+        lblAiEditProfile: "Profilo in modifica",
+        optAiNewProfile: "-- nuovo profilo --",
+        lblAiProfileName: "Nome profilo",
+        btnAiDeleteProfile: '<i class="fa-solid fa-trash"></i> Elimina profilo',
+        phAiApiKeySet: "•••••• (già impostata, lascia vuoto per non modificare)",
+        phAiApiKeyEmpty: "Inserisci una API key",
+        errAiProfileNameRequired: "Il nome del profilo è obbligatorio.",
+        msgAiProfileSaved: "Profilo salvato.",
+        msgAiProfileDeleted: "Profilo eliminato.",
+        lblAiChatYou: "Tu",
+        lblAiChatAssistant: "AI",
         btnCaRefresh: '<i class="fa-solid fa-rotate"></i> Aggiorna',
         pillVlans: "VLAN",
         pillRouting: "Routing",
@@ -2296,7 +2338,7 @@
         tabAiAssistant: '<i class="fa-solid fa-robot"></i> AI Assistant',
         titleAiAssistant: "AI Assistant",
         descAiAssistant: "Chat with an AI assistant (Anthropic Claude, OpenAI ChatGPT, Google Gemini, or a local LLM via Ollama). You can attach the device inventory or a device's running-config as context.",
-        titleAiSettings: "Provider Configuration",
+        titleAiSettings: "Provider Configuration (Profiles)",
         lblAiProvider: "Provider",
         lblAiModel: "Model",
         lblAiApiKey: "API Key",
@@ -2304,13 +2346,26 @@
         lblAiRateLimit: "Requests/min limit",
         optAiModelCustom: "-- custom model --",
         btnAiRefreshModelsTitle: "Refresh model list",
-        btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Save',
+        btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Save profile',
         lblAiAttachInventory: "Attach inventory summary",
         optAiNoDevice: "No config attached",
         optAiNoTenant: "No tenant/site attached",
         errAiRateLimited: "Too many requests: rate limit exceeded. Please retry in a few seconds.",
         btnAiClear: '<i class="fa-solid fa-trash"></i> New conversation',
         btnAiSend: '<i class="fa-solid fa-paper-plane"></i> Send',
+        lblAiActiveProfile: "Active profile",
+        optAiNoProfile: "No profile",
+        lblAiEditProfile: "Editing profile",
+        optAiNewProfile: "-- new profile --",
+        lblAiProfileName: "Profile name",
+        btnAiDeleteProfile: '<i class="fa-solid fa-trash"></i> Delete profile',
+        phAiApiKeySet: "•••••• (already set, leave blank to keep it)",
+        phAiApiKeyEmpty: "Enter an API key",
+        errAiProfileNameRequired: "The profile name is required.",
+        msgAiProfileSaved: "Profile saved.",
+        msgAiProfileDeleted: "Profile deleted.",
+        lblAiChatYou: "You",
+        lblAiChatAssistant: "AI",
         tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
         titleConfigAnalyzer: "Config Analyzer",
         descConfigAnalyzer: "Structured analysis of configurations: VLAN, routing, ACL and interfaces per device, with cross-object validation checks.",
@@ -7343,6 +7398,8 @@
 
     // ===== AI Assistant =====
     let aiHistory = [];  // {role, content} inviato al backend (senza system: aggiunto server-side)
+    let aiProfilesCache = [];   // ultima lista di profili (mascherati) caricata dal server
+    let aiActiveProfileId = ''; // id del profilo attivo lato server
 
     function loadAiTab() {
         // Popola la select dei dispositivi per l'attach della running-config
@@ -7366,37 +7423,114 @@
             tenantSel.value = [...tenantSel.options].some(o => o.value === curTenant) ? curTenant : '';
         }
         if (document.body.classList.contains('role-admin')) {
-            loadAiSettings();
+            loadAiProfiles();
         }
     }
 
-    async function loadAiSettings() {
+    // Ricarica la lista dei profili AI dal server e ripopola sia la select
+    // "profilo attivo" (in cima alla chat) sia quella "profilo in modifica"
+    // (nel pannello di configurazione admin).
+    async function loadAiProfiles() {
         const statusEl = document.getElementById('aiSettingsStatus');
         try {
-            const res = await apiFetch('/api/ai/settings');
+            const res = await apiFetch('/api/ai/profiles');
             if (!res || !res.ok) return;
-            const s = await res.json();
-            document.getElementById('aiProvider').value = s.provider || 'anthropic';
-            document.getElementById('aiModel').value = s.model || '';
-            document.getElementById('aiBaseUrl').value = s.base_url || '';
-            document.getElementById('aiRateLimitRpm').value = s.rate_limit_rpm || 0;
-            document.getElementById('aiApiKey').value = '';
-            document.getElementById('aiApiKey').placeholder = s.api_key_set
-                ? '•••••• (già impostata, lascia vuoto per non modificare)'
-                : 'Inserisci una API key';
+            const data = await res.json();
+            aiProfilesCache = data.profiles || [];
+            aiActiveProfileId = data.active_profile || '';
+
+            const activeSel = document.getElementById('aiProfileSelect');
+            if (activeSel) {
+                const opts = aiProfilesCache.map(p =>
+                    `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${escapeHtml(p.provider)})</option>`
+                ).join('');
+                activeSel.innerHTML = (aiProfilesCache.length
+                    ? opts
+                    : `<option value="">${i18n[currentLang].optAiNoProfile}</option>`);
+                activeSel.value = aiActiveProfileId;
+            }
+            const badge = document.getElementById('aiActiveProfileBadge');
+            if (badge) {
+                const active = aiProfilesCache.find(p => p.id === aiActiveProfileId);
+                badge.textContent = active ? `${active.model || i18n[currentLang].optAiModelCustom}` : '';
+            }
+
+            const editSel = document.getElementById('aiProfileEditSelect');
+            if (editSel) {
+                const curEdit = editSel.value;
+                const editOpts = aiProfilesCache.map(p =>
+                    `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`
+                ).join('');
+                editSel.innerHTML = `<option value="__new__" data-i18n="optAiNewProfile">${i18n[currentLang].optAiNewProfile}</option>` + editOpts;
+                editSel.value = [...editSel.options].some(o => o.value === curEdit) ? curEdit : '__new__';
+                onAiProfileEditSelectChange();
+            }
             if (statusEl) statusEl.textContent = '';
-            // Prova a popolare la select modelli con la lista aggiornata dal provider
-            // (silenzioso se fallisce, es. chiave API non ancora salvata).
-            refreshAiModels(true);
         } catch (e) { /* silenzioso: pannello opzionale per admin */ }
+    }
+
+    // L'utente ha cambiato il "profilo attivo" in cima alla chat: attiva
+    // subito quel profilo lato server, cosi' la chat lo usa istantaneamente.
+    async function onAiProfileSelectChange() {
+        const sel = document.getElementById('aiProfileSelect');
+        const profileId = sel ? sel.value : '';
+        if (!profileId) return;
+        try {
+            const res = await apiFetch(`/api/ai/profiles/${encodeURIComponent(profileId)}/activate`, { method: 'POST' });
+            if (res && res.ok) {
+                aiActiveProfileId = profileId;
+                const badge = document.getElementById('aiActiveProfileBadge');
+                const active = aiProfilesCache.find(p => p.id === profileId);
+                if (badge) badge.textContent = active ? `${active.model || i18n[currentLang].optAiModelCustom}` : '';
+            }
+        } catch (e) { /* silenzioso */ }
+    }
+
+    // L'utente ha selezionato un profilo diverso nel pannello di modifica:
+    // ripopola i campi del form con i dati di quel profilo (chiave API mai
+    // precompilata, solo il placeholder indica se e' gia' impostata).
+    function onAiProfileEditSelectChange() {
+        const editSel = document.getElementById('aiProfileEditSelect');
+        const id = editSel ? editSel.value : '__new__';
+        const apiKeyInput = document.getElementById('aiApiKey');
+        if (id === '__new__') {
+            document.getElementById('aiProfileName').value = '';
+            document.getElementById('aiProvider').value = 'anthropic';
+            document.getElementById('aiModel').value = '';
+            document.getElementById('aiBaseUrl').value = '';
+            document.getElementById('aiRateLimitRpm').value = 0;
+            apiKeyInput.value = '';
+            apiKeyInput.placeholder = i18n[currentLang].phAiApiKeyEmpty || 'Inserisci una API key';
+            document.getElementById('btnAiDeleteProfile').style.display = 'none';
+        } else {
+            const p = aiProfilesCache.find(x => x.id === id);
+            if (!p) return;
+            document.getElementById('aiProfileName').value = p.name || '';
+            document.getElementById('aiProvider').value = p.provider || 'anthropic';
+            document.getElementById('aiModel').value = p.model || '';
+            document.getElementById('aiBaseUrl').value = p.base_url || '';
+            document.getElementById('aiRateLimitRpm').value = p.rate_limit_rpm || 0;
+            apiKeyInput.value = '';
+            apiKeyInput.placeholder = p.api_key_set
+                ? (i18n[currentLang].phAiApiKeySet || '•••••• (già impostata, lascia vuoto per non modificare)')
+                : (i18n[currentLang].phAiApiKeyEmpty || 'Inserisci una API key');
+            document.getElementById('btnAiDeleteProfile').style.display = '';
+        }
+        refreshAiModels(true);
     }
 
     async function refreshAiModels(silent) {
         const statusEl = document.getElementById('aiSettingsStatus');
         const sel = document.getElementById('aiModelSelect');
         if (!sel) return;
+        const provider = document.getElementById('aiProvider').value;
+        const editSel = document.getElementById('aiProfileEditSelect');
+        const profileId = (editSel && editSel.value !== '__new__') ? editSel.value : '';
+        const qs = new URLSearchParams();
+        if (provider) qs.set('provider', provider);
+        if (profileId) qs.set('profile_id', profileId);
         try {
-            const res = await apiFetch('/api/ai/models');
+            const res = await apiFetch('/api/ai/models?' + qs.toString());
             if (!res || !res.ok) {
                 if (!silent) {
                     const err = res ? await res.json().catch(() => ({})) : {};
@@ -7422,7 +7556,15 @@
 
     async function saveAiSettings() {
         const statusEl = document.getElementById('aiSettingsStatus');
+        const editSel = document.getElementById('aiProfileEditSelect');
+        const editingId = (editSel && editSel.value !== '__new__') ? editSel.value : null;
+        const name = document.getElementById('aiProfileName').value.trim();
+        if (!name) {
+            if (statusEl) statusEl.textContent = i18n[currentLang].errAiProfileNameRequired || 'Il nome del profilo è obbligatorio.';
+            return;
+        }
         const body = {
+            name,
             provider: document.getElementById('aiProvider').value,
             model: document.getElementById('aiModel').value.trim(),
             base_url: document.getElementById('aiBaseUrl').value.trim(),
@@ -7431,14 +7573,38 @@
         const key = document.getElementById('aiApiKey').value;
         if (key) body.api_key = key;
         try {
-            const res = await apiFetch('/api/ai/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+            const res = editingId
+                ? await apiFetch(`/api/ai/profiles/${encodeURIComponent(editingId)}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                })
+                : await apiFetch('/api/ai/profiles', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                });
             if (res && res.ok) {
-                if (statusEl) statusEl.textContent = 'Impostazioni salvate.';
-                loadAiSettings();
+                const saved = await res.json();
+                if (statusEl) statusEl.textContent = i18n[currentLang].msgAiProfileSaved || 'Profilo salvato.';
+                await loadAiProfiles();
+                const editSel2 = document.getElementById('aiProfileEditSelect');
+                if (editSel2 && saved.id) { editSel2.value = saved.id; onAiProfileEditSelectChange(); }
+            } else {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                if (statusEl) statusEl.textContent = 'Errore: ' + (err.detail || res?.status);
+            }
+        } catch (e) {
+            if (statusEl) statusEl.textContent = 'Errore di rete: ' + e;
+        }
+    }
+
+    async function deleteAiProfile() {
+        const editSel = document.getElementById('aiProfileEditSelect');
+        const id = editSel ? editSel.value : '';
+        if (!id || id === '__new__') return;
+        const statusEl = document.getElementById('aiSettingsStatus');
+        try {
+            const res = await apiFetch(`/api/ai/profiles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            if (res && res.ok) {
+                if (statusEl) statusEl.textContent = i18n[currentLang].msgAiProfileDeleted || 'Profilo eliminato.';
+                await loadAiProfiles();
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
                 if (statusEl) statusEl.textContent = 'Errore: ' + (err.detail || res?.status);
@@ -7454,23 +7620,30 @@
         if (box) box.innerHTML = '';
     }
 
-    function appendAiMessage(role, text) {
+    function appendAiMessage(role, text, meta) {
         const box = document.getElementById('aiChatMessages');
-        if (!box) return;
+        if (!box) return null;
         const div = document.createElement('div');
+        const isUser = role === 'user';
         div.style.marginBottom = '12px';
-        const label = role === 'user' ? 'Tu' : 'AI';
-        div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${label}</div>
-            <div style="white-space:pre-wrap; background:${role === 'user' ? 'var(--surface-2)' : 'var(--surface-3)'}; border-radius:8px; padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
+        div.style.display = 'flex';
+        div.style.flexDirection = 'column';
+        div.style.alignItems = isUser ? 'flex-end' : 'flex-start';
+        const label = isUser ? (i18n[currentLang].lblAiChatYou || 'Tu') : (meta || (i18n[currentLang].lblAiChatAssistant || 'AI'));
+        div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${escapeHtml(label)}</div>
+            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--accent, #3b82f6)' : 'var(--surface-3)'}; color:${isUser ? '#fff' : 'inherit'}; border-radius:12px; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
+        return div;
     }
 
     async function sendAiChat() {
         const input = document.getElementById('aiChatInput');
+        const sendBtn = document.getElementById('btnAiSend');
         const text = (input.value || '').trim();
         if (!text) return;
         input.value = '';
+        if (sendBtn) sendBtn.disabled = true;
         aiHistory.push({ role: 'user', content: text });
         appendAiMessage('user', text);
 
@@ -7478,9 +7651,7 @@
         const attachDeviceIp = document.getElementById('aiAttachDeviceIp').value || null;
         const attachTenant = document.getElementById('aiAttachTenant')?.value || null;
 
-        appendAiMessage('assistant', '...');
-        const box = document.getElementById('aiChatMessages');
-        const placeholder = box.lastElementChild;
+        const placeholder = appendAiMessage('assistant', '...');
 
         try {
             const res = await apiFetch('/api/ai/chat', {
@@ -7497,7 +7668,8 @@
             if (res && res.ok) {
                 const data = await res.json();
                 aiHistory.push({ role: 'assistant', content: data.reply });
-                appendAiMessage('assistant', data.reply);
+                const meta = [data.profile_name, data.model].filter(Boolean).join(' · ');
+                appendAiMessage('assistant', data.reply, meta);
             } else if (res && res.status === 429) {
                 const err = await res.json().catch(() => ({}));
                 appendAiMessage('assistant', '⏳ ' + (i18n[currentLang].errAiRateLimited || 'Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.') + (err.detail ? ' (' + err.detail + ')' : ''));
@@ -7508,6 +7680,8 @@
         } catch (e) {
             if (placeholder) placeholder.remove();
             appendAiMessage('assistant', 'Errore di rete: ' + e);
+        } finally {
+            if (sendBtn) sendBtn.disabled = false;
         }
     }
 
