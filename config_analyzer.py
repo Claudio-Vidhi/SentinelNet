@@ -251,7 +251,8 @@ def _parse_static_route(line):
         if t.isdigit():
             ad = t
             break
-    return {"prefix": prefix, "next_hop": nexthop, "ad": ad, "name": name, "vrf": vrf}
+    return {"prefix": prefix, "next_hop": nexthop, "ad": ad, "name": name, "vrf": vrf,
+             "raw_lines": [line]}
 
 
 def _parse_router_block(header, body):
