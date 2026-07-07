@@ -30,6 +30,7 @@ import user_manager
 import mac_history
 import mac_collector
 import config_analyzer
+import switch_provisioner
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
@@ -361,6 +362,53 @@ class ModelSchema(BaseModel):
 
 class NetworkSettingsSchema(BaseModel):
     host: str
+
+class SwitchProvisionSchema(BaseModel):
+    """Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config
+    per il significato di ciascun campo (tutti opzionali salvo hostname)."""
+    hostname: str = "Switch"
+    role: str = "access"                  # access | distribution
+    domain: str = ""
+    mgmt_vlan: Optional[int] = None
+    mgmt_ip: str = ""
+    mgmt_mask: str = ""
+    mgmt_gw: str = ""
+    admin_user: str = ""
+    admin_password: str = ""
+    enable_secret: str = ""
+    ssh_only: bool = True
+    banner: str = ""
+    ntp_servers: List[str] = []
+    syslog_server: str = ""
+    snmpv3: dict = {}
+    vlans: List[dict] = []
+    vtp_mode: str = "transparent"
+    stp_mode: str = "rapid-pvst"
+    bpduguard: bool = True
+    port_security: bool = False
+    dhcp_snooping: bool = False
+    dhcp_snooping_vlans: str = ""
+    cdp_enabled: bool = True
+    lldp_enabled: bool = True
+    access_ports: List[str] = []
+    access_vlan: Optional[int] = None
+    trunk_ports: List[str] = []
+    trunk_allowed_vlans: str = ""
+    svis: List[dict] = []
+    enable_routing: bool = True
+    default_route_gw: str = ""
+
+class SwitchProvisionSSHSchema(SwitchProvisionSchema):
+    ssh_host: str
+    ssh_port: int = 22
+    ssh_username: str
+    ssh_password: str
+    ssh_secret: str = ""
+    save_after: bool = True
+
+class SwitchProvisionSerialSchema(SwitchProvisionSchema):
+    com_port: str
+    baudrate: int = 9600
 
 class PromoteDeviceSchema(BaseModel):
     node_id: str
@@ -2046,6 +2094,70 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
     if result is None:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
     return result
+
+
+# --- SWITCH PROVISIONER: config "da zero" (view/SSH/console-seriale) ---
+
+@app.post("/api/provisioner/generate")
+def provisioner_generate(payload: SwitchProvisionSchema, current_user = Depends(require_operator)):
+    """Genera la running-config e la restituisce come testo (view/copy nella UI)."""
+    config_text = switch_provisioner.build_config(payload.dict())
+    return {"status": "success", "config": config_text}
+
+@app.post("/api/provisioner/download")
+def provisioner_download(payload: SwitchProvisionSchema, current_user = Depends(require_operator)):
+    """Genera la running-config e la restituisce come file .txt scaricabile."""
+    config_text = switch_provisioner.build_config(payload.dict())
+    from fastapi.responses import Response as FastResponse
+    filename = f"{(payload.hostname or 'switch').strip()}-day0.txt"
+    log_audit(f"Config day-0 generata (download) per '{payload.hostname}' da '{current_user.get('sub')}'.")
+    return FastResponse(
+        content=config_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.post("/api/provisioner/push-ssh")
+def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depends(require_operator)):
+    """Genera la config e la applica via SSH (Netmiko) su un apparato raggiungibile."""
+    config_text = switch_provisioner.build_config(payload.dict())
+    result = switch_provisioner.push_via_ssh(
+        host=payload.ssh_host,
+        username=payload.ssh_username,
+        password=payload.ssh_password,
+        secret=payload.ssh_secret,
+        config_text=config_text,
+        port=payload.ssh_port,
+        save=payload.save_after,
+    )
+    log_audit(
+        f"Push SSH config day-0 su '{payload.ssh_host}' (hostname target: "
+        f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
+    )
+    result["config"] = config_text
+    return result
+
+@app.post("/api/provisioner/push-serial")
+def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user = Depends(require_operator)):
+    """Genera la config e la applica via console/seriale (pyserial) per il
+    provisioning day-0 senza connettivita' di rete."""
+    config_text = switch_provisioner.build_config(payload.dict())
+    result = switch_provisioner.push_via_serial(
+        com_port=payload.com_port,
+        config_text=config_text,
+        baudrate=payload.baudrate,
+    )
+    log_audit(
+        f"Push seriale ({payload.com_port}) config day-0 (hostname target: "
+        f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
+    )
+    result["config"] = config_text
+    return result
+
+@app.get("/api/provisioner/serial-ports")
+def provisioner_serial_ports(current_user = Depends(require_operator)):
+    """Elenca le porte COM/seriali disponibili sull'host del server."""
+    return {"ports": switch_provisioner.list_serial_ports()}
 
 
 # --- SCANSIONE SUBNET IN BACKGROUND ---
