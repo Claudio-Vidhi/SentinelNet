@@ -26,6 +26,7 @@ Trasporto: JSON-RPC 2.0, un messaggio per riga su stdin/stdout (MCP stdio).
 import os
 import sys
 import json
+import time
 
 import requests
 
@@ -177,6 +178,24 @@ TOOLS = {
 }
 
 
+# --- Tool disabilitati dall'amministratore (tab "MCP Server" del centrale) ---
+# Cache con TTL: si evita una chiamata HTTP per ogni tools/list o tools/call.
+
+_disabled = {"at": 0.0, "tools": set()}
+
+
+def disabled_tools() -> set:
+    if time.monotonic() - _disabled["at"] < 60:
+        return _disabled["tools"]
+    try:
+        data = api("GET", "/api/mcp/tool-config")
+        _disabled["tools"] = set(data.get("disabled_tools") or [])
+    except Exception:
+        pass                     # centrale irraggiungibile: si tiene l'ultimo noto
+    _disabled["at"] = time.monotonic()
+    return _disabled["tools"]
+
+
 # --- Ciclo JSON-RPC su stdio -------------------------------------------------
 
 def _reply(msg_id, result=None, error=None):
@@ -190,9 +209,10 @@ def _reply(msg_id, result=None, error=None):
 
 
 def _tool_list():
+    off = disabled_tools()
     return {"tools": [
         {"name": name, "description": desc, "inputSchema": schema}
-        for name, (desc, schema, _fn) in TOOLS.items()
+        for name, (desc, schema, _fn) in TOOLS.items() if name not in off
     ]}
 
 
@@ -201,6 +221,10 @@ def _tool_call(params):
     args = params.get("arguments") or {}
     if name not in TOOLS:
         return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}],
+                "isError": True}
+    if name in disabled_tools():
+        return {"content": [{"type": "text", "text":
+                             f"Tool '{name}' disabled by the SentinelNet administrator."}],
                 "isError": True}
     try:
         result = TOOLS[name][2](args)

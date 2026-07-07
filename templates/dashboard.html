@@ -894,6 +894,7 @@
       </button>
       <button class="tab-button" onclick="switchTab('tab-ai', this)" data-i18n="tabAiAssistant">
         <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
       <button class="tab-button requires-write" onclick="switchTab('tab-provisioner', this)" data-i18n="tabProvisioner">
         <i class="fa-solid fa-wand-magic-sparkles"></i> Switch da Zero
       </button>
@@ -905,6 +906,9 @@
       </button>
       <button class="tab-button requires-admin" onclick="switchTab('tab-sites', this)">
         <i class="fa-solid fa-sitemap"></i> Sedi
+      </button>
+      <button class="tab-button requires-admin" onclick="switchTab('tab-mcp', this)">
+        <i class="fa-solid fa-plug"></i> MCP Server
       </button>
       <button class="tab-button requires-admin" onclick="switchTab('tab-settings', this)" data-i18n="tabSettings">
         <i class="fa-solid fa-gear"></i> Impostazioni
@@ -1417,7 +1421,8 @@
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group" style="min-width:150px;">
               <label data-i18n="lblAiProvider">Provider</label>
-              <select id="aiProvider" onchange="refreshAiModels()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+              <select id="aiProvider" onchange="resetAiModelList()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+                <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI (ChatGPT)</option>
                 <option value="gemini">Google Gemini</option>
@@ -1468,7 +1473,7 @@
         <select id="aiAttachDeviceIp" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           <option value="" data-i18n="optAiNoDevice">Nessuna config allegata</option>
         </select>
-        <select id="aiAttachTenant" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+        <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           <option value="" data-i18n="optAiNoTenant">Nessuna sede/tenant allegata</option>
         </select>
         <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="clearAiChat()" data-i18n="btnAiClear">
@@ -1684,6 +1689,46 @@
           <button class="btn btn-primary btn-small" onclick="createSite()" style="margin:0; white-space:nowrap;">
             <i class="fa-solid fa-plus"></i> Crea sede
           </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-mcp" class="tab-content">
+      <h3><i class="fa-solid fa-plug" style="color:var(--primary);"></i> MCP Server — client LLM esterni</h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;">
+        SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo
+        <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client,
+        si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi
+        restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura,
+        <em>operator</em> se servono i comandi CLI).
+      </p>
+
+      <div style="padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
+          <h3 style="font-size:15px; margin:0;"><i class="fa-solid fa-file-code" style="color:var(--primary);"></i> Configurazione client</h3>
+          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="copyMcpConfig()">
+            <i class="fa-solid fa-copy"></i> Copia JSON
+          </button>
+        </div>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;">
+          Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password
+          con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.
+        </p>
+        <pre id="mcpConfigSnippet" style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; font-family:var(--font-code); font-size:12px; overflow-x:auto; white-space:pre;"></pre>
+      </div>
+
+      <div style="padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
+        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-toggle-on" style="color:var(--primary);"></i> Tool esposti</h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;">
+          Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni
+          chiamata viene rifiutata. La modifica vale per tutti i client collegati (ricaricano l'elenco entro ~1 minuto).
+        </p>
+        <div id="mcpToolList" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:8px;"></div>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:14px;">
+          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="saveMcpSettings()">
+            <i class="fa-solid fa-floppy-disk"></i> Salva
+          </button>
+          <span id="mcpSettingsStatus" style="font-size:12px; color:var(--text-muted);"></span>
         </div>
       </div>
     </div>
@@ -1998,6 +2043,8 @@
         lblAiRateLimit: "Limite richieste/min",
         optAiModelCustom: "-- modello personalizzato --",
         btnAiRefreshModelsTitle: "Aggiorna elenco modelli",
+        optAiNoProvider: "-- seleziona provider --",
+        errAiProviderRequired: "Seleziona prima un provider.",
         btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Salva profilo',
         lblAiAttachInventory: "Allega riepilogo inventario",
         optAiNoDevice: "Nessuna config allegata",
@@ -2359,6 +2406,8 @@
         lblAiRateLimit: "Requests/min limit",
         optAiModelCustom: "-- custom model --",
         btnAiRefreshModelsTitle: "Refresh model list",
+        optAiNoProvider: "-- select a provider --",
+        errAiProviderRequired: "Select a provider first.",
         btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Save profile',
         lblAiAttachInventory: "Attach inventory summary",
         optAiNoDevice: "No config attached",
@@ -3651,6 +3700,7 @@
         else if(tabId === 'tab-ai') loadAiTab();
         else if(tabId === 'tab-users') loadUsers();
         else if(tabId === 'tab-sites') loadSites();
+        else if(tabId === 'tab-mcp') loadMcpTab();
         else if(tabId === 'tab-settings') loadAppSettings();
     }
 
@@ -3737,6 +3787,61 @@
         });
         if (res && res.ok) loadSites();
         else if (res) { const e = await res.json(); alert('Errore: ' + (e.detail || '')); }
+    }
+
+    // --- TAB MCP SERVER (guida + selezione tool esposti ai client LLM) ---
+
+    function mcpConfigSnippetText() {
+        return JSON.stringify({
+            mcpServers: {
+                sentinelnet: {
+                    command: "python",
+                    args: ["/percorso/SentinelNet/mcp_server.py"],
+                    env: {
+                        SENTINELNET_URL: window.location.origin,
+                        SENTINELNET_USERNAME: "<utente-dedicato>",
+                        SENTINELNET_PASSWORD: "<password>"
+                    }
+                }
+            }
+        }, null, 2);
+    }
+
+    async function loadMcpTab() {
+        const pre = document.getElementById('mcpConfigSnippet');
+        if (pre) pre.textContent = mcpConfigSnippetText();
+        const list = document.getElementById('mcpToolList');
+        if (!list) return;
+        const res = await apiFetch('/api/mcp/settings');
+        if (!res || !res.ok) { list.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">Impossibile caricare le impostazioni MCP.</span>'; return; }
+        const data = await res.json();
+        const disabled = new Set(data.disabled_tools || []);
+        list.innerHTML = (data.tools || []).map(t => `
+            <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;">
+              <input type="checkbox" class="mcp-tool-toggle" value="${escapeHtml(t.name)}" ${disabled.has(t.name) ? '' : 'checked'} style="margin-top:2px;">
+              <span><code style="font-size:12px;">${escapeHtml(t.name)}</code><br>
+                <span style="color:var(--text-muted); font-size:11px;">${escapeHtml(t.description || '')}</span></span>
+            </label>`).join('');
+    }
+
+    async function saveMcpSettings() {
+        const statusEl = document.getElementById('mcpSettingsStatus');
+        const disabled = [...document.querySelectorAll('.mcp-tool-toggle')]
+            .filter(cb => !cb.checked).map(cb => cb.value);
+        const res = await apiFetch('/api/mcp/settings', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ disabled_tools: disabled })
+        });
+        if (res && res.ok) {
+            if (statusEl) statusEl.textContent = 'Impostazioni salvate.';
+        } else {
+            const e = res ? await res.json().catch(() => ({})) : {};
+            if (statusEl) statusEl.textContent = 'Errore: ' + (e.detail || 'salvataggio fallito.');
+        }
+    }
+
+    function copyMcpConfig() {
+        navigator.clipboard.writeText(mcpConfigSnippetText());
     }
 
     // La lista adjacency testuale è stata rimossa (non human-readable): il tab
@@ -4303,6 +4408,14 @@
         if (typeof afterDraw === 'function') {
             networkInstance.on('afterDrawing', afterDraw);
         }
+        // Nella nuova mappa i riquadri non possono MAI sovrapporsi: al termine
+        // di ogni trascinamento il nodo mosso viene respinto fuori dai riquadri
+        // che intersecherebbe (Fix no node overlapping).
+        if (getMapView() === 'minimal') {
+            networkInstance.on('dragEnd', p => {
+                if (p.nodes && p.nodes.length) resolveNodeOverlaps(p.nodes);
+            });
+        }
         let mapFrozen = false;
         const freezeLayout = () => {
             if (networkInstance && !mapFrozen) { mapFrozen = true; networkInstance.setOptions({ physics: false }); }
@@ -4310,6 +4423,42 @@
         networkInstance.once('stabilizationIterationsDone', freezeLayout);
         networkInstance.once('stabilized', freezeLayout);
         networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, 5000));
+    }
+
+    // Separazione AABB dei riquadri dopo un trascinamento: il nodo mosso viene
+    // spinto fuori da ogni riquadro intersecato lungo l'asse di minima
+    // penetrazione, iterando finché non restano sovrapposizioni.
+    function resolveNodeOverlaps(movedIds) {
+        if (!networkInstance) return;
+        const margin = 14;
+        const allIds = networkInstance.body.data.nodes.getIds();
+        for (let iter = 0; iter < 15; iter++) {
+            let pushed = false;
+            movedIds.forEach(id => {
+                let bb; try { bb = networkInstance.getBoundingBox(id); } catch (e) { return; }
+                let pos = networkInstance.getPosition(id);
+                allIds.forEach(oid => {
+                    if (oid === id || movedIds.includes(oid) && oid < id) return;
+                    let ob; try { ob = networkInstance.getBoundingBox(oid); } catch (e) { return; }
+                    const overlapX = Math.min(bb.right, ob.right) - Math.max(bb.left, ob.left) + margin;
+                    const overlapY = Math.min(bb.bottom, ob.bottom) - Math.max(bb.top, ob.top) + margin;
+                    if (overlapX <= 0 || overlapY <= 0) return;
+                    const op = networkInstance.getPosition(oid);
+                    if (overlapX < overlapY) {
+                        const dir = pos.x >= op.x ? 1 : -1;
+                        networkInstance.moveNode(id, pos.x + dir * overlapX, pos.y);
+                    } else {
+                        const dir = pos.y >= op.y ? 1 : -1;
+                        networkInstance.moveNode(id, pos.x, pos.y + dir * overlapY);
+                    }
+                    pushed = true;
+                    bb = networkInstance.getBoundingBox(id);
+                    pos = networkInstance.getPosition(id);
+                });
+            });
+            if (!pushed) break;
+        }
+        networkInstance.redraw();
     }
 
     // ===== Nuova mappa minimalista (stile diagramma Visio) =====
@@ -4416,7 +4565,11 @@
                 font: S.node.font,
                 x: c.x + ((idx * 137) % (2 * jitter)) - jitter,
                 y: c.y + ((idx * 89)  % (2 * jitter)) - jitter,
-                nodeDataVal: n
+                nodeDataVal: n,
+                // Testi della targhetta (nome + vendor/modello) usati dal
+                // dimensionamento per garantire che le etichette di porta
+                // disegnate ai bordi non collidano mai col nome centrale.
+                _nameTexts: [n.label || '', modelLine]
             };
         });
 
@@ -4456,11 +4609,12 @@
         const _measCtx = _measCanvas.getContext('2d');
         _measCtx.font = '9px Arial, Helvetica, sans-serif';
         const measurePort = t => t ? _measCtx.measureText(t).width : 0;
-        const nodeReq = {};   // id -> { spread, labelW }
-        const bumpReq = (id, spread, labelW) => {
-            const r = nodeReq[id] || (nodeReq[id] = { spread: 0, labelW: 0 });
+        const nodeReq = {};   // id -> { spread, labelW, slots }
+        const bumpReq = (id, spread, labelW, slots) => {
+            const r = nodeReq[id] || (nodeReq[id] = { spread: 0, labelW: 0, slots: 0 });
             r.spread = Math.max(r.spread, spread);
             r.labelW = Math.max(r.labelW, labelW);
+            r.slots += slots || 0;
         };
         const edges = linkData.map(l => {
             const isPC      = !!l.is_portchannel;
@@ -4482,7 +4636,15 @@
             const remotePcTag = l.remote_pc ? shortIface(l.remote_pc) : pcTag;
             const asymmetricPc = !!(localPcTag && remotePcTag && localPcTag !== remotePcTag);
 
-            // Un fascio ha senso solo se conosciamo ≥2 porte membro su almeno un lato.
+            // OGNI collegamento è reso dall'overlay ortogonale con stile
+            // UNIFORME (Fix rappresentazione standardizzata): i Port-Channel
+            // come fascio di cavi paralleli attraversati dalla pillola ovale
+            // (anche quando è nota una sola interfaccia membro), i link
+            // semplici come cavo singolo ortogonale con le etichette di porta
+            // sul bordo interno del riquadro (Fix porte non aggregate).
+            // L'arco vis.js resta sempre invisibile: mantiene solo fisica,
+            // selezione e tooltip.
+            const clean = s => (s && s !== 'Vicino' && s !== 'Neighbor') ? s : '';
             const memberPairs = [];
             const maxMembers = Math.max(localPorts.length, remotePorts.length);
             if (isPC && maxMembers > 1) {
@@ -4492,43 +4654,35 @@
                         remote: shortIface(remotePorts[i] || remotePorts[remotePorts.length - 1] || '')
                     });
                 }
-            }
-            if (memberPairs.length > 1) {
-                bundles.push({
-                    from: l.source, to: l.target,
-                    pcTag, members: memberPairs, emphasize,
-                    // 'peer' = peer-link vPC (verde), 'pc' = aggregato dati (rame).
-                    type: isPeerLink ? 'peer' : 'pc',
-                    label: isPeerLink ? `${pcTag} / vPC` : pcTag,
-                    localPcTag, remotePcTag, asymmetricPc,
-                    // Etichette per-estremo quando i nomi differiscono tra i due lati.
-                    localLabel:  isPeerLink ? `${localPcTag} / vPC`  : localPcTag,
-                    remoteLabel: isPeerLink ? `${remotePcTag} / vPC` : remotePcTag
-                });
-
-                // Requisiti di spazio per i due nodi: lo spread dei cavi (verticale o
-                // orizzontale a seconda dell'orientamento) e la larghezza del testo di
-                // porta più lungo su ciascun lato.
-                const spread = (memberPairs.length - 1) * 11;
-                const locW = Math.max(...memberPairs.map(m => measurePort(m.local)), 0);
-                const remW = Math.max(...memberPairs.map(m => measurePort(m.remote)), 0);
-                bumpReq(l.source, spread, locW);
-                bumpReq(l.target, spread, remW);
-            }
-
-            // Etichetta arco. vis.js non supporta etichette per-estremità, quindi
-            // le interfacce dei due lati sono mostrate in forma compatta al centro:
-            //  - link semplice:  "Eth1/51 ⇄ Fo1/0/3"
-            //  - Port-Channel (sempre visibile): "Po1" in grassetto con le coppie
-            //    di interfacce membro in piccolo sulla riga sotto.
-            let label = '';
-            if (isPC) {
-                label = `<b>${pcTag}</b>`;
-                if (members || remoteMembers) label += `\n${members || '—'} ⇄ ${remoteMembers || '—'}`;
             } else {
-                const lp = shortIface(l.local_port), rp = shortIface(l.remote_port);
-                if (lp && lp !== 'Vicino' && lp !== 'Neighbor') label = `${lp} ⇄ ${rp}`;
+                memberPairs.push({ local: clean(shortIface(l.local_port)),
+                                   remote: clean(shortIface(l.remote_port)) });
             }
+            const type = (isKeepalive && !isPC) ? 'keepalive'
+                       : (isPeerLink ? 'peer' : (isPC ? 'pc' : 'link'));
+            bundles.push({
+                from: l.source, to: l.target,
+                pcTag, members: memberPairs, emphasize,
+                // 'peer' = peer-link vPC (verde), 'pc' = aggregato dati (rame),
+                // 'keepalive' = mgmt0↔mgmt0 (verde tratteggiato), 'link' = semplice.
+                type,
+                label: type === 'peer' ? `${pcTag} / vPC`
+                     : (type === 'pc' ? pcTag
+                     : (type === 'keepalive' ? 'peer-keepalive' : '')),
+                localPcTag, remotePcTag, asymmetricPc: isPC && asymmetricPc,
+                // Etichette per-estremo quando i nomi differiscono tra i due lati.
+                localLabel:  isPeerLink ? `${localPcTag} / vPC`  : localPcTag,
+                remoteLabel: isPeerLink ? `${remotePcTag} / vPC` : remotePcTag
+            });
+
+            // Requisiti di spazio per i due nodi: lo spread dei cavi, la
+            // larghezza del testo di porta più lungo su ciascun lato e il
+            // numero di slot occupati sul perimetro del riquadro.
+            const spread = (memberPairs.length - 1) * 11;
+            const locW = Math.max(...memberPairs.map(m => measurePort(m.local)), 0);
+            const remW = Math.max(...memberPairs.map(m => measurePort(m.remote)), 0);
+            bumpReq(l.source, spread, locW, memberPairs.length);
+            bumpReq(l.target, spread, remW, memberPairs.length);
 
             const tip = document.createElement('div');
             tip.innerHTML = `<div style="font-family:var(--font-main); min-width:180px; color:var(--text); font-size:11px;">
@@ -4538,50 +4692,41 @@
                 : `<div style="font-family:var(--font-code); font-size:10px; margin-top:4px;">${escapeHtml(shortIface(l.local_port)||'—')} ⇄ ${escapeHtml(shortIface(l.remote_port)||'—')}</div>`}
             </div>`;
 
-            const isBundle = memberPairs.length > 1;
-            // Colore arco vis.js (i fasci a ≥2 membri sono disegnati dall'overlay e
-            // qui restano invisibili). Verde per peer-keepalive/peer-link, rame per
-            // gli aggregati dati, tinta sobria per i link semplici.
-            const col = isKeepalive ? S.edge.peerColor
-                      : (isPeerLink ? S.edge.peerColor
-                      : (isPC ? S.edge.pcColor : S.edge.color));
-            // Etichetta verde dedicata per il keepalive su mgmt0.
-            if (isKeepalive && !isPC) {
-                label = `<b>peer-keepalive</b>\n${shortIface(l.local_port)} ⇄ ${shortIface(l.remote_port)}`;
-            }
-            const edgeFontColor = (isKeepalive || isPeerLink) ? S.edge.peerColor
-                                : (isPC ? S.edge.pcFontColor : S.edge.font.color);
+            // Tutto il disegno visibile avviene nell'overlay: l'arco vis.js è
+            // sempre trasparente e serve solo per fisica, selezione e tooltip.
             return {
                 from: l.source, to: l.target,
-                // Il fascio è disegnato dall'overlay: l'arco vis.js resta invisibile
-                // ma conserva fisica e tooltip.
-                label: isBundle ? '' : label,
+                label: '',
                 title: hoverInfo ? tip : undefined,
-                font: Object.assign({}, S.edge.font, { color: edgeFontColor }),
-                color: isBundle
-                    ? { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' }
-                    : { color: col, highlight: '#1a2430', hover: '#1a2430' },
-                width: isBundle ? 0.0001 : (emphasize ? S.edge.emphWidth : (isPC ? S.edge.pcWidth : (isKeepalive ? 1.4 : S.edge.width))),
-                dashes: isKeepalive && !isPC ? [4, 3] : false,
+                color: { color: 'rgba(0,0,0,0)', highlight: 'rgba(0,0,0,0)', hover: 'rgba(0,0,0,0)' },
+                width: 0.0001,
                 arrows: { to: { enabled: false } },
                 smooth: { type: 'continuous', roundness: 0.2 }
             };
         });
 
-        // Dimensionamento dinamico dei riquadri: si impone una larghezza/altezza
-        // minima tale che tutte le etichette di porta disegnate INTERNAMENTE
-        // dall'overlay entrino senza traboccare né collidere col nome del device.
-        // L'orientamento del fascio (H/V) non è noto qui, quindi si copre il caso
-        // peggiore su entrambe le dimensioni: lo spread può svilupparsi in verticale
-        // (labels impilate) o in orizzontale, e le etichette rientrano di 'inset'.
+        // Dimensionamento dinamico dei riquadri (Fix auto-expanding): larghezza
+        // e altezza minime tali che il nome centrale, il vendor/modello e TUTTE
+        // le etichette di porta disegnate ai bordi dall'overlay convivano senza
+        // troncamenti né sovrapposizioni. L'orientamento dei cavi non è noto a
+        // build-time, quindi si copre il caso peggiore su entrambe le dimensioni;
+        // gli slot totali si assumono ripartiti al peggio su due lati opposti.
         const INSET = 13;
         nodes.forEach(nd => {
             const r = nodeReq[nd.id];
             if (!r) return;
-            // Larghezza: due lati possibili × (inset + testo) oppure lo spread orizzontale.
-            const minW = Math.max(2 * (INSET + r.labelW + 6), r.spread + r.labelW + 12);
-            // Altezza: labels impilate verticalmente (spread) + margine per il nome.
-            const minH = Math.max(r.spread + 24, 2 * (INSET + 8));
+            _measCtx.font = 'bold 12px Arial, Helvetica, sans-serif';
+            const nameW = _measCtx.measureText(nd._nameTexts[0] || '').width;
+            _measCtx.font = '12px Arial, Helvetica, sans-serif';
+            const modelW = _measCtx.measureText(nd._nameTexts[1] || '').width;
+            const textW = Math.max(nameW, modelW);
+            const sideSlots = Math.max(r.spread / 11 + 1, Math.ceil(r.slots / 2));
+            const slotSpread = (Math.max(sideSlots, 1) - 1) * 11;
+            // Larghezza: etichette porta su entrambi i lati + nome al centro.
+            const minW = Math.max(textW + 2 * (r.labelW + INSET + 6),
+                                  slotSpread + 2 * INSET, 100);
+            // Altezza: slot impilati verticalmente + blocco del nome (2 righe).
+            const minH = Math.max(slotSpread + 38, 46);
             nd.widthConstraint  = { minimum: Math.round(minW) };
             nd.heightConstraint = { minimum: Math.round(minH) };
         });
@@ -4651,55 +4796,90 @@
 
         if (!Array.isArray(bundles) || !bundles.length) return;
 
-        // Punto sul bordo del bounding box del nodo lungo la direzione (dx,dy).
-        const borderPoint = (id, dx, dy) => {
-            const p = networkInstance.getPosition(id);
-            let bb; try { bb = networkInstance.getBoundingBox(id); } catch (e) { bb = null; }
-            const hw = bb ? (bb.right - bb.left) / 2 : 40;
-            const hh = bb ? (bb.bottom - bb.top) / 2 : 20;
-            const ax = Math.abs(dx), ay = Math.abs(dy);
-            let t = Infinity;
-            if (ax > 1e-6) t = Math.min(t, hw / ax);
-            if (ay > 1e-6) t = Math.min(t, hh / ay);
-            if (!isFinite(t)) t = 0;
-            return { x: p.x + dx * t, y: p.y + dy * t };
-        };
+        const spacing = 11;         // distanza tra cavi paralleli / slot di porta
+        const EDGE_INSET = 14;      // margine degli ancoraggi dagli angoli del riquadro
 
-        // --- PASSO 1: geometria di tutti i fasci --------------------------------
-        // Si calcola per ogni membro la polilinea ortogonale (HVH o VHV) PRIMA di
-        // disegnare, così da poter rilevare gli incroci tra fasci indipendenti e
-        // scavalcarli con un ponticello (Fix line bridges).
-        const spacing = 11;
-        const geoms = bundles.map((b, bi) => {
+        const bbox = id => { try { return networkInstance.getBoundingBox(id); } catch (e) { return null; } };
+        // Stile UNIFORME per tipo di collegamento (Fix rappresentazione
+        // standardizzata): stesso colore/spessore per ogni Port-Channel, verde
+        // per peer-link/keepalive, tinta sobria per i link semplici.
+        const styleFor = b =>
+              b.type === 'peer'      ? { color: S.edge.peerColor, lw: b.emphasize ? 2.4 : 1.8, dash: null }
+            : b.type === 'keepalive' ? { color: S.edge.peerColor, lw: 1.2, dash: [4, 3] }
+            : b.type === 'pc'        ? { color: S.edge.pcColor,   lw: b.emphasize ? 2.4 : 1.8, dash: null }
+                                     : { color: S.edge.color,     lw: 1.4, dash: null };
+
+        // --- PASSO 1: ancoraggi per lato -----------------------------------
+        // Ogni collegamento occupa 'members.length' slot sul lato del riquadro
+        // rivolto verso il peer; gli slot di TUTTI i collegamenti (fasci e
+        // porte singole) sono distribuiti lungo il lato ordinati per la
+        // coordinata del peer, così nessun cavo o etichetta si sovrappone.
+        const sideRegistry = {};   // nodeId -> { E|W|N|S: [entry] }
+        const pre = bundles.map((b, bi) => {
             let p1, p2;
             try { p1 = networkInstance.getPosition(b.from); p2 = networkInstance.getPosition(b.to); }
             catch (e) { return null; }
             if (!p1 || !p2) return null;
+            const dx = p2.x - p1.x, dy = p2.y - p1.y;
+            const horizontal = Math.abs(dx) >= Math.abs(dy);
+            const fromSide = horizontal ? (dx >= 0 ? 'E' : 'W') : (dy >= 0 ? 'S' : 'N');
+            const toSide   = horizontal ? (dx >= 0 ? 'W' : 'E') : (dy >= 0 ? 'N' : 'S');
+            const reg = (id, side, key) => {
+                const sides = sideRegistry[id] || (sideRegistry[id] = {});
+                const arr = sides[side] || (sides[side] = []);
+                const entry = { count: b.members.length, key, slot: 0, step: 0, total: 1 };
+                arr.push(entry);
+                return entry;
+            };
+            return { b, bi, horizontal, fromSide, toSide,
+                     fromEntry: reg(b.from, fromSide, horizontal ? p2.y : p2.x),
+                     toEntry:   reg(b.to,   toSide,   horizontal ? p1.y : p1.x) };
+        }).filter(Boolean);
 
-            const color = (b.type === 'peer') ? S.edge.peerColor : S.edge.pcColor;
-            const cdx = p2.x - p1.x, cdy = p2.y - p1.y;
-            const horizontal = Math.abs(cdx) >= Math.abs(cdy);
-            const n = b.members.length;
-            const half = (n - 1) / 2;
-            const sdx = horizontal ? Math.sign(cdx || 1) : 0;
-            const sdy = horizontal ? 0 : Math.sign(cdy || 1);
-            const a0 = borderPoint(b.from, sdx, sdy);
-            const b0 = borderPoint(b.to, -sdx, -sdy);
-            const midMain = horizontal ? (a0.x + b0.x) / 2 : (a0.y + b0.y) / 2;
-
-            const members = b.members.map((m, i) => {
-                const off = (i - half) * spacing;
-                let ax, ay, bx, by, mid, pts;
-                if (horizontal) {
-                    ax = a0.x; ay = a0.y + off; bx = b0.x; by = b0.y + off; mid = midMain + off;
-                    pts = [{ x: ax, y: ay }, { x: mid, y: ay }, { x: mid, y: by }, { x: bx, y: by }];
-                } else {
-                    ax = a0.x + off; ay = a0.y; bx = b0.x + off; by = b0.y; mid = midMain + off;
-                    pts = [{ x: ax, y: ay }, { x: ax, y: mid }, { x: bx, y: mid }, { x: bx, y: by }];
-                }
-                return { m, ax, ay, bx, by, pts };
+        Object.keys(sideRegistry).forEach(id => {
+            const bb = bbox(id); if (!bb) return;
+            Object.keys(sideRegistry[id]).forEach(side => {
+                const entries = sideRegistry[id][side].sort((a, c) => a.key - c.key);
+                const total = entries.reduce((s, e) => s + e.count, 0);
+                const sideLen = (side === 'E' || side === 'W') ? (bb.bottom - bb.top) : (bb.right - bb.left);
+                const usable = Math.max(sideLen - 2 * EDGE_INSET, 0);
+                const step = total > 1 ? Math.min(spacing, usable / (total - 1)) : 0;
+                let slot = 0;
+                entries.forEach(e => { e.slot = slot; e.step = step; e.total = total; slot += e.count; });
             });
-            return { b, bi, color, horizontal, sdx, sdy, a0, b0, midMain, half, members };
+        });
+
+        // Punto di aggancio dello slot i-esimo di una entry sul lato del nodo.
+        const anchorPoint = (id, side, entry, i) => {
+            const bb = bbox(id);
+            const p = networkInstance.getPosition(id);
+            const off = ((entry.slot + i) - (entry.total - 1) / 2) * entry.step;
+            if (side === 'E') return { x: bb ? bb.right : p.x, y: p.y + off };
+            if (side === 'W') return { x: bb ? bb.left : p.x,  y: p.y + off };
+            if (side === 'S') return { x: p.x + off, y: bb ? bb.bottom : p.y };
+            return { x: p.x + off, y: bb ? bb.top : p.y };
+        };
+
+        // --- PASSO 2: geometria delle polilinee ortogonali ------------------
+        // Calcolata PRIMA di disegnare, così da poter rilevare gli incroci tra
+        // percorsi indipendenti e scavalcarli con un ponticello (Fix bridges).
+        const geoms = pre.map(g => {
+            const b = g.b;
+            const n = b.members.length, half = (n - 1) / 2;
+            const members = b.members.map((m, i) => {
+                const A = anchorPoint(b.from, g.fromSide, g.fromEntry, i);
+                const B = anchorPoint(b.to,   g.toSide,   g.toEntry,   i);
+                let pts;
+                if (g.horizontal) {
+                    const mid = (A.x + B.x) / 2 + (i - half) * spacing;
+                    pts = [A, { x: mid, y: A.y }, { x: mid, y: B.y }, B];
+                } else {
+                    const mid = (A.y + B.y) / 2 + (i - half) * spacing;
+                    pts = [A, { x: A.x, y: mid }, { x: B.x, y: mid }, B];
+                }
+                return { m, A, B, pts };
+            });
+            return Object.assign({}, g, { members, style: styleFor(b) });
         });
 
         // Raccolta dei segmenti verticali (per membro) da tutti i fasci: sono gli
@@ -4742,43 +4922,52 @@
             ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
         };
 
-        // --- PASSO 2: disegno cavi + etichette ----------------------------------
+        // --- PASSO 3: disegno cavi + etichette ------------------------------
         geoms.forEach(g => {
-            if (!g) return;
-            const b = g.b, horizontal = g.horizontal, sdx = g.sdx, sdy = g.sdy;
-            const a0 = g.a0, b0 = g.b0, midMain = g.midMain, color = g.color;
+            const b = g.b, horizontal = g.horizontal, color = g.style.color;
+            const sdx = horizontal ? (g.fromSide === 'E' ? 1 : -1) : 0;
+            const sdy = horizontal ? 0 : (g.fromSide === 'S' ? 1 : -1);
 
             ctx.save();
             ctx.strokeStyle = color;
-            ctx.lineWidth = b.emphasize ? 2.4 : 1.8;
+            ctx.lineWidth = g.style.lw;
+            ctx.setLineDash(g.style.dash || []);
             ctx.lineJoin = 'round';
             ctx.lineCap = 'butt';
             ctx.font = '9px Arial, Helvetica, sans-serif';
             ctx.textBaseline = 'middle';
 
+            // Etichetta di porta sul bordo INTERNO del riquadro, nel punto d'aggancio.
+            const drawPortLabel = (text, pt, side) => {
+                if (!text) return;
+                ctx.fillStyle = color;
+                if (side === 'E')      { ctx.textAlign = 'right';  ctx.fillText(text, pt.x - 13, pt.y - 5); }
+                else if (side === 'W') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 13, pt.y - 5); }
+                else if (side === 'S') { ctx.textAlign = 'center'; ctx.fillText(text, pt.x, pt.y - 13); }
+                else                   { ctx.textAlign = 'center'; ctx.fillText(text, pt.x, pt.y + 13); }
+            };
+
             g.members.forEach(mm => {
-                // Disegna i 3 segmenti della polilinea: gli orizzontali scavalcano.
+                // Disegna i segmenti della polilinea: gli orizzontali scavalcano
+                // con un ponticello i segmenti verticali degli ALTRI percorsi.
                 for (let k = 0; k < mm.pts.length - 1; k++) {
                     const p = mm.pts[k], q = mm.pts[k + 1];
                     if (Math.abs(p.y - q.y) < 0.5) drawHSeg(p.x, p.y, q.x, g.bi);
                     else                           drawVSeg(p.x, p.y, q.y);
                 }
-
-                // Etichette di porta sul bordo INTERNO del riquadro.
-                const m = mm.m, ax = mm.ax, ay = mm.ay, bx = mm.bx, by = mm.by;
-                ctx.fillStyle = color;
-                const inset = 13;
-                if (m.local) {
-                    if (horizontal) { ctx.textAlign = sdx >= 0 ? 'right' : 'left'; ctx.fillText(m.local, ax - sdx * inset, ay - 5); }
-                    else            { ctx.textAlign = 'center'; ctx.fillText(m.local, ax, ay - sdy * inset); }
-                }
-                if (m.remote) {
-                    if (horizontal) { ctx.textAlign = sdx >= 0 ? 'left' : 'right'; ctx.fillText(m.remote, bx + sdx * inset, by - 5); }
-                    else            { ctx.textAlign = 'center'; ctx.fillText(m.remote, bx, by + sdy * inset); }
-                }
+                drawPortLabel(mm.m.local,  mm.A, g.fromSide);
+                drawPortLabel(mm.m.remote, mm.B, g.toSide);
             });
+            ctx.setLineDash([]);
 
-            const spread = (g.half * spacing);
+            // Centro del fascio e ampiezza (per pillola/etichette).
+            const aC = { x: g.members.reduce((s, m) => s + m.A.x, 0) / g.members.length,
+                         y: g.members.reduce((s, m) => s + m.A.y, 0) / g.members.length };
+            const bC = { x: g.members.reduce((s, m) => s + m.B.x, 0) / g.members.length,
+                         y: g.members.reduce((s, m) => s + m.B.y, 0) / g.members.length };
+            const half = (b.members.length - 1) / 2;
+            const spread = half * spacing;
+            const cx = (aC.x + bC.x) / 2, cy = (aC.y + bC.y) / 2;
 
             // Cartiglio bianco riutilizzabile per i nomi aggregato.
             const drawTag = (text, lx, ly) => {
@@ -4792,23 +4981,15 @@
                 ctx.fillText(text, lx, ly);
             };
 
-            if (b.asymmetricPc) {
-                // Nomi Port-channel diversi tra i due lati: si etichetta ciascun
-                // estremo del fascio vicino al proprio dispositivo d'origine.
-                if (horizontal) {
-                    drawTag(b.localLabel  || b.localPcTag,  a0.x + sdx * 26, a0.y - spread - 10);
-                    drawTag(b.remoteLabel || b.remotePcTag, b0.x - sdx * 26, b0.y - spread - 10);
-                } else {
-                    drawTag(b.localLabel  || b.localPcTag,  a0.x - spread - 12, a0.y + sdy * 22);
-                    drawTag(b.remoteLabel || b.remotePcTag, b0.x - spread - 12, b0.y - sdy * 22);
-                }
+            if (b.type === 'keepalive') {
+                drawTag(b.label || 'peer-keepalive', cx, cy - 10);
                 ctx.restore();
                 return;
             }
+            if (b.type === 'link') { ctx.restore(); return; }
 
-            // --- Pillola traslucida centrale (nomi identici sui due lati) --------
-            const cx = horizontal ? midMain : (a0.x + b0.x) / 2;
-            const cy = horizontal ? (a0.y + b0.y) / 2 : midMain;
+            // --- Pillola ovale standard: SEMPRE presente su ogni Port-Channel
+            // e peer-link, qualunque sia il numero di membri visibili.
             const pillHalfW = 9;
             const pillHalfSpread = spread + 12;
             let px, py, pw, ph;
@@ -4828,7 +5009,20 @@
             ctx.strokeStyle = color;
             ctx.stroke();
 
-            drawTag(b.label || b.pcTag || 'Po', cx, cy - pillHalfSpread - 9);
+            if (b.asymmetricPc) {
+                // Nomi Port-channel diversi sui due lati (es. Po1 ⇄ Po4): si
+                // etichetta ciascun estremo accanto al dispositivo d'origine,
+                // indicando la direzione da cui il nome proviene.
+                if (horizontal) {
+                    drawTag(b.localLabel  || b.localPcTag,  aC.x + sdx * 26, aC.y - spread - 10);
+                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - sdx * 26, bC.y - spread - 10);
+                } else {
+                    drawTag(b.localLabel  || b.localPcTag,  aC.x - spread - 14, aC.y + sdy * 22);
+                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - spread - 14, bC.y - sdy * 22);
+                }
+            } else {
+                drawTag(b.label || b.pcTag || 'Po', cx, cy - pillHalfSpread - 9);
+            }
             ctx.restore();
         });
     }
@@ -7539,17 +7733,24 @@
     let aiProfilesCache = [];   // ultima lista di profili (mascherati) caricata dal server
     let aiActiveProfileId = ''; // id del profilo attivo lato server
 
-    function loadAiTab() {
-        // Popola la select dei dispositivi per l'attach della running-config
+    // Popola la select dei dispositivi allegabili, filtrata per il tenant/sede
+    // selezionato: la config allegata deve appartenere al tenant scelto.
+    function populateAiAttachDevices() {
         const sel = document.getElementById('aiAttachDeviceIp');
-        if (sel) {
-            const cur = sel.value;
-            const opts = (globalDevices || []).map(d =>
-                `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`
-            ).join('');
-            sel.innerHTML = `<option value="">${i18n[currentLang].optAiNoDevice}</option>` + opts;
-            sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
-        }
+        if (!sel) return;
+        const tenant = document.getElementById('aiAttachTenant')?.value || '';
+        const cur = sel.value;
+        const devices = (globalDevices || []).filter(d =>
+            !tenant || (d.Group || 'Generale') === tenant);
+        const opts = devices.map(d =>
+            `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`
+        ).join('');
+        sel.innerHTML = `<option value="">${i18n[currentLang].optAiNoDevice}</option>` + opts;
+        sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+    }
+
+    function loadAiTab() {
+        populateAiAttachDevices();
         // Popola la select dei tenant/sedi per allegare il contesto completo al chat
         const tenantSel = document.getElementById('aiAttachTenant');
         if (tenantSel) {
@@ -7559,6 +7760,7 @@
             ).join('');
             tenantSel.innerHTML = `<option value="">${i18n[currentLang].optAiNoTenant}</option>` + tenantOpts;
             tenantSel.value = [...tenantSel.options].some(o => o.value === curTenant) ? curTenant : '';
+            if (tenantSel.value !== curTenant) populateAiAttachDevices();
         }
         if (document.body.classList.contains('role-admin')) {
             loadAiProfiles();
@@ -7633,7 +7835,8 @@
         const apiKeyInput = document.getElementById('aiApiKey');
         if (id === '__new__') {
             document.getElementById('aiProfileName').value = '';
-            document.getElementById('aiProvider').value = 'anthropic';
+            // Nessun provider preselezionato: la scelta è esplicita dell'utente.
+            document.getElementById('aiProvider').value = '';
             document.getElementById('aiModel').value = '';
             document.getElementById('aiBaseUrl').value = '';
             document.getElementById('aiRateLimitRpm').value = 0;
@@ -7644,7 +7847,7 @@
             const p = aiProfilesCache.find(x => x.id === id);
             if (!p) return;
             document.getElementById('aiProfileName').value = p.name || '';
-            document.getElementById('aiProvider').value = p.provider || 'anthropic';
+            document.getElementById('aiProvider').value = p.provider || '';
             document.getElementById('aiModel').value = p.model || '';
             document.getElementById('aiBaseUrl').value = p.base_url || '';
             document.getElementById('aiRateLimitRpm').value = p.rate_limit_rpm || 0;
@@ -7654,7 +7857,18 @@
                 : (i18n[currentLang].phAiApiKeyEmpty || 'Inserisci una API key');
             document.getElementById('btnAiDeleteProfile').style.display = '';
         }
-        refreshAiModels(true);
+        // NESSUNA chiamata API automatica: l'elenco modelli si aggiorna solo
+        // col pulsante dedicato. Qui si svuota soltanto la lista locale, che
+        // altrimenti mostrerebbe i modelli di un altro provider/profilo.
+        resetAiModelList();
+    }
+
+    // Svuota la select dei modelli (nessuna chiamata di rete). Usata quando
+    // cambia provider o profilo in modifica: i modelli elencati devono sempre
+    // appartenere al provider correntemente selezionato.
+    function resetAiModelList() {
+        const sel = document.getElementById('aiModelSelect');
+        if (sel) sel.innerHTML = `<option value="" data-i18n="optAiModelCustom">${i18n[currentLang].optAiModelCustom || '-- modello personalizzato --'}</option>`;
     }
 
     async function refreshAiModels(silent) {
@@ -7662,6 +7876,10 @@
         const sel = document.getElementById('aiModelSelect');
         if (!sel) return;
         const provider = document.getElementById('aiProvider').value;
+        if (!provider) {
+            if (statusEl) statusEl.textContent = i18n[currentLang].errAiProviderRequired || 'Seleziona prima un provider.';
+            return;
+        }
         const editSel = document.getElementById('aiProfileEditSelect');
         const profileId = (editSel && editSel.value !== '__new__') ? editSel.value : '';
         const qs = new URLSearchParams();
@@ -7699,6 +7917,10 @@
         const name = document.getElementById('aiProfileName').value.trim();
         if (!name) {
             if (statusEl) statusEl.textContent = i18n[currentLang].errAiProfileNameRequired || 'Il nome del profilo è obbligatorio.';
+            return;
+        }
+        if (!document.getElementById('aiProvider').value) {
+            if (statusEl) statusEl.textContent = i18n[currentLang].errAiProviderRequired || 'Seleziona prima un provider.';
             return;
         }
         const body = {
