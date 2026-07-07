@@ -59,6 +59,11 @@ def build_config(cfg: dict) -> str:
       access_vlan (int)             -> vlan dati di default sulle porte access
       trunk_ports (list[str])
       trunk_allowed_vlans (str)     -> es. "10,20,30"
+      uplink_pc_id (int)            -> aggrega le porte trunk in Port-channelN (LACP active)
+      login_block (bool, default True)      -> login block-for anti brute-force
+      storm_control (bool)                  -> storm-control broadcast sulle porte access
+      errdisable_recovery (bool, default True) -> auto-recovery da bpduguard/port-security
+      no_vstack (bool, default True)        -> disabilita Smart Install (no vstack)
       svis (list[dict])             -> [{'vlan':10,'ip':'10.1.10.1','mask':'255.255.255.0'}]
       enable_routing (bool)         -> "ip routing" (solo role=distribution)
       default_route_gw (str)
@@ -75,6 +80,8 @@ def build_config(cfg: dict) -> str:
     lines.append("service password-encryption")
     lines.append("service timestamps debug datetime msec localtime")
     lines.append("service timestamps log datetime msec localtime")
+    lines.append("service tcp-keepalives-in")
+    lines.append("service tcp-keepalives-out")
     lines.append("!")
     lines.append(f"hostname {hostname}")
     lines.append("!")
@@ -83,6 +90,10 @@ def build_config(cfg: dict) -> str:
         lines.append(f"ip domain-name {cfg['domain']}")
     lines.append("no ip http server")
     lines.append("no ip http secure-server")
+    if cfg.get("no_vstack", True):
+        # Smart Install (vstack) e' un noto vettore d'attacco: va disabilitato.
+        # Sui modelli che non lo supportano il comando viene semplicemente rifiutato.
+        lines.append("no vstack")
 
     sec("AUTENTICAZIONE LOCALE / ENABLE")
     if cfg.get("enable_secret"):
@@ -93,6 +104,11 @@ def build_config(cfg: dict) -> str:
     lines.append("aaa new-model")
     lines.append("aaa authentication login default local")
     lines.append("aaa authorization exec default local")
+    if cfg.get("login_block", True):
+        # Anti brute-force: dopo 5 tentativi falliti in 60s blocca i login per 120s.
+        lines.append("login block-for 120 attempts 5 within 60")
+        lines.append("login on-failure log")
+        lines.append("login on-success log")
 
     ssh_only = cfg.get("ssh_only", True)
     if ssh_only:
@@ -142,6 +158,20 @@ def build_config(cfg: dict) -> str:
     if cfg.get("bpduguard", True):
         lines.append("spanning-tree portfast bpduguard default")
 
+    if cfg.get("errdisable_recovery", True):
+        causes = []
+        if cfg.get("bpduguard", True):
+            causes.append("bpduguard")
+        if cfg.get("port_security"):
+            causes.append("psecure-violation")
+        if cfg.get("storm_control"):
+            causes.append("storm-control")
+        if causes:
+            sec("ERRDISABLE AUTO-RECOVERY")
+            for c in causes:
+                lines.append(f"errdisable recovery cause {c}")
+            lines.append("errdisable recovery interval 300")
+
     if cfg.get("dhcp_snooping"):
         sec("DHCP SNOOPING")
         lines.append("ip dhcp snooping")
@@ -177,6 +207,9 @@ def build_config(cfg: dict) -> str:
                 lines.append(" switchport port-security violation restrict")
                 lines.append(" switchport port-security aging time 2")
                 lines.append(" switchport port-security aging type inactivity")
+            if cfg.get("storm_control"):
+                lines.append(" storm-control broadcast level 5.00")
+                lines.append(" storm-control action trap")
             if cfg.get("dhcp_snooping"):
                 lines.append(" ip dhcp snooping limit rate 15")
             lines.append(" no shutdown")
@@ -186,8 +219,23 @@ def build_config(cfg: dict) -> str:
     if trunk_ports:
         sec("PORTE TRUNK (UPLINK)")
         allowed = cfg.get("trunk_allowed_vlans")
+        pc_id = cfg.get("uplink_pc_id")
         for rng in trunk_ports:
             lines.append(f"interface range {rng}")
+            lines.append(" switchport mode trunk")
+            if allowed:
+                lines.append(f" switchport trunk allowed vlan {allowed}")
+            lines.append(" switchport nonegotiate")
+            if cfg.get("dhcp_snooping"):
+                lines.append(" ip dhcp snooping trust")
+            if pc_id:
+                lines.append(f" channel-group {pc_id} mode active")
+            lines.append(" no shutdown")
+            lines.append("exit")
+        if pc_id:
+            # EtherChannel di uplink (LACP): l'interfaccia logica replica la
+            # configurazione trunk dei membri.
+            lines.append(f"interface Port-channel{pc_id}")
             lines.append(" switchport mode trunk")
             if allowed:
                 lines.append(f" switchport trunk allowed vlan {allowed}")
@@ -206,8 +254,9 @@ def build_config(cfg: dict) -> str:
         for srv in cfg["ntp_servers"]:
             lines.append(f"ntp server {srv}")
 
+    sec("LOGGING")
+    lines.append("logging buffered 16384")
     if cfg.get("syslog_server"):
-        sec("SYSLOG")
         lines.append(f"logging host {cfg['syslog_server']}")
         lines.append("logging trap informational")
         lines.append("logging source-interface Vlan%s" % mgmt_vlan if mgmt_vlan else "logging on")

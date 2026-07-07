@@ -70,6 +70,43 @@ def test_access_config_contains_expected_sections():
     assert config.strip().endswith("end")
 
 
+def test_hardening_defaults_and_uplink_lag():
+    cfg = _sample_cfg()
+    cfg["uplink_pc_id"] = 2
+    cfg["storm_control"] = True
+
+    config = sp.build_config(cfg)
+
+    # Hardening sempre attivo di default
+    assert "service tcp-keepalives-in" in config
+    assert "no vstack" in config
+    assert "login block-for 120 attempts 5 within 60" in config
+    assert "logging buffered 16384" in config
+    # Errdisable recovery per le cause abilitate (bpduguard + port-security + storm)
+    assert "errdisable recovery cause bpduguard" in config
+    assert "errdisable recovery cause psecure-violation" in config
+    assert "errdisable recovery cause storm-control" in config
+    assert "errdisable recovery interval 300" in config
+    # Storm-control sulle porte access
+    assert "storm-control broadcast level 5.00" in config
+    # Uplink EtherChannel LACP: membri + interfaccia logica
+    assert "channel-group 2 mode active" in config
+    assert "interface Port-channel2" in config
+
+
+def test_hardening_can_be_disabled():
+    cfg = _sample_cfg()
+    cfg.update({"login_block": False, "no_vstack": False,
+                "errdisable_recovery": False})
+
+    config = sp.build_config(cfg)
+
+    assert "login block-for" not in config
+    assert "no vstack" not in config
+    assert "errdisable recovery" not in config
+    assert "channel-group" not in config      # nessun uplink_pc_id
+
+
 def test_distribution_role_adds_routing_and_svis():
     cfg = _sample_cfg()
     cfg["role"] = "distribution"
@@ -86,5 +123,7 @@ def test_distribution_role_adds_routing_and_svis():
 
 if __name__ == "__main__":
     test_access_config_contains_expected_sections()
+    test_hardening_defaults_and_uplink_lag()
+    test_hardening_can_be_disabled()
     test_distribution_role_adds_routing_and_svis()
     print("OK")
