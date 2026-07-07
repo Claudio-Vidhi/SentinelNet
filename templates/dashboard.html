@@ -1394,9 +1394,17 @@
               <option value="ollama">Ollama (LLM locale)</option>
             </select>
           </div>
-          <div class="form-group" style="min-width:180px;">
+          <div class="form-group" style="min-width:200px;">
             <label data-i18n="lblAiModel">Modello</label>
-            <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" style="padding-left:12px;">
+            <div style="display:flex; gap:4px;">
+              <select id="aiModelSelect" style="flex:1; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+                <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="refreshAiModels()" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
+                <i class="fa-solid fa-rotate"></i>
+              </button>
+            </div>
+            <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" style="padding-left:12px; margin-top:4px;">
           </div>
           <div class="form-group" style="min-width:220px;">
             <label id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
@@ -1405,6 +1413,10 @@
           <div class="form-group" style="min-width:220px;">
             <label data-i18n="lblAiBaseUrl">Endpoint locale (Ollama)</label>
             <input id="aiBaseUrl" type="text" placeholder="http://localhost:11434" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="min-width:150px;">
+            <label data-i18n="lblAiRateLimit">Limite richieste/min</label>
+            <input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" style="padding-left:12px;">
           </div>
           <button class="btn btn-primary" style="width:auto;" onclick="saveAiSettings()" data-i18n="btnAiSaveSettings">
             <i class="fa-solid fa-floppy-disk"></i> Salva
@@ -1419,6 +1431,9 @@
         </label>
         <select id="aiAttachDeviceIp" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           <option value="" data-i18n="optAiNoDevice">Nessuna config allegata</option>
+        </select>
+        <select id="aiAttachTenant" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+          <option value="" data-i18n="optAiNoTenant">Nessuna sede/tenant allegata</option>
         </select>
         <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="clearAiChat()" data-i18n="btnAiClear">
           <i class="fa-solid fa-trash"></i> Nuova conversazione
@@ -1929,9 +1944,14 @@
         lblAiModel: "Modello",
         lblAiApiKey: "API Key",
         lblAiBaseUrl: "Endpoint locale (Ollama)",
+        lblAiRateLimit: "Limite richieste/min",
+        optAiModelCustom: "-- modello personalizzato --",
+        btnAiRefreshModelsTitle: "Aggiorna elenco modelli",
         btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Salva',
         lblAiAttachInventory: "Allega riepilogo inventario",
         optAiNoDevice: "Nessuna config allegata",
+        optAiNoTenant: "Nessuna sede/tenant allegata",
+        errAiRateLimited: "Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.",
         btnAiClear: '<i class="fa-solid fa-trash"></i> Nuova conversazione',
         btnAiSend: '<i class="fa-solid fa-paper-plane"></i> Invia',
         btnCaRefresh: '<i class="fa-solid fa-rotate"></i> Aggiorna',
@@ -2269,9 +2289,14 @@
         lblAiModel: "Model",
         lblAiApiKey: "API Key",
         lblAiBaseUrl: "Local endpoint (Ollama)",
+        lblAiRateLimit: "Requests/min limit",
+        optAiModelCustom: "-- custom model --",
+        btnAiRefreshModelsTitle: "Refresh model list",
         btnAiSaveSettings: '<i class="fa-solid fa-floppy-disk"></i> Save',
         lblAiAttachInventory: "Attach inventory summary",
         optAiNoDevice: "No config attached",
+        optAiNoTenant: "No tenant/site attached",
+        errAiRateLimited: "Too many requests: rate limit exceeded. Please retry in a few seconds.",
         btnAiClear: '<i class="fa-solid fa-trash"></i> New conversation',
         btnAiSend: '<i class="fa-solid fa-paper-plane"></i> Send',
         tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
@@ -7291,6 +7316,16 @@
             sel.innerHTML = `<option value="">${i18n[currentLang].optAiNoDevice}</option>` + opts;
             sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
         }
+        // Popola la select dei tenant/sedi per allegare il contesto completo al chat
+        const tenantSel = document.getElementById('aiAttachTenant');
+        if (tenantSel) {
+            const curTenant = tenantSel.value;
+            const tenantOpts = Object.keys(globalGroups || {}).map(g =>
+                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
+            ).join('');
+            tenantSel.innerHTML = `<option value="">${i18n[currentLang].optAiNoTenant}</option>` + tenantOpts;
+            tenantSel.value = [...tenantSel.options].some(o => o.value === curTenant) ? curTenant : '';
+        }
         if (document.body.classList.contains('role-admin')) {
             loadAiSettings();
         }
@@ -7305,12 +7340,45 @@
             document.getElementById('aiProvider').value = s.provider || 'anthropic';
             document.getElementById('aiModel').value = s.model || '';
             document.getElementById('aiBaseUrl').value = s.base_url || '';
+            document.getElementById('aiRateLimitRpm').value = s.rate_limit_rpm || 0;
             document.getElementById('aiApiKey').value = '';
             document.getElementById('aiApiKey').placeholder = s.api_key_set
                 ? '•••••• (già impostata, lascia vuoto per non modificare)'
                 : 'Inserisci una API key';
             if (statusEl) statusEl.textContent = '';
+            // Prova a popolare la select modelli con la lista aggiornata dal provider
+            // (silenzioso se fallisce, es. chiave API non ancora salvata).
+            refreshAiModels(true);
         } catch (e) { /* silenzioso: pannello opzionale per admin */ }
+    }
+
+    async function refreshAiModels(silent) {
+        const statusEl = document.getElementById('aiSettingsStatus');
+        const sel = document.getElementById('aiModelSelect');
+        if (!sel) return;
+        try {
+            const res = await apiFetch('/api/ai/models');
+            if (!res || !res.ok) {
+                if (!silent) {
+                    const err = res ? await res.json().catch(() => ({})) : {};
+                    if (statusEl) statusEl.textContent = 'Errore elenco modelli: ' + (err.detail || res?.status);
+                }
+                return;
+            }
+            const data = await res.json();
+            const current = document.getElementById('aiModel').value.trim();
+            const opts = (data.models || []).map(m =>
+                `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`
+            ).join('');
+            sel.innerHTML = `<option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>` + opts;
+            if (current && (data.models || []).includes(current)) sel.value = current;
+            sel.onchange = () => {
+                if (sel.value) document.getElementById('aiModel').value = sel.value;
+            };
+            if (!silent && statusEl) statusEl.textContent = `Trovati ${(data.models || []).length} modelli.`;
+        } catch (e) {
+            if (!silent && statusEl) statusEl.textContent = 'Errore di rete: ' + e;
+        }
     }
 
     async function saveAiSettings() {
@@ -7319,6 +7387,7 @@
             provider: document.getElementById('aiProvider').value,
             model: document.getElementById('aiModel').value.trim(),
             base_url: document.getElementById('aiBaseUrl').value.trim(),
+            rate_limit_rpm: parseInt(document.getElementById('aiRateLimitRpm').value, 10) || 0,
         };
         const key = document.getElementById('aiApiKey').value;
         if (key) body.api_key = key;
@@ -7368,6 +7437,7 @@
 
         const attachInventory = document.getElementById('aiAttachInventory').checked;
         const attachDeviceIp = document.getElementById('aiAttachDeviceIp').value || null;
+        const attachTenant = document.getElementById('aiAttachTenant')?.value || null;
 
         appendAiMessage('assistant', '...');
         const box = document.getElementById('aiChatMessages');
@@ -7380,7 +7450,8 @@
                 body: JSON.stringify({
                     messages: aiHistory,
                     attach_inventory: attachInventory,
-                    attach_device_ip: attachDeviceIp
+                    attach_device_ip: attachDeviceIp,
+                    attach_tenant: attachTenant
                 })
             });
             if (placeholder) placeholder.remove();
@@ -7388,6 +7459,9 @@
                 const data = await res.json();
                 aiHistory.push({ role: 'assistant', content: data.reply });
                 appendAiMessage('assistant', data.reply);
+            } else if (res && res.status === 429) {
+                const err = await res.json().catch(() => ({}));
+                appendAiMessage('assistant', '⏳ ' + (i18n[currentLang].errAiRateLimited || 'Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.') + (err.detail ? ' (' + err.detail + ')' : ''));
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
                 appendAiMessage('assistant', 'Errore: ' + (err.detail || 'richiesta fallita.'));
