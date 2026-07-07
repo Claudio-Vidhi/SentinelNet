@@ -33,6 +33,7 @@ import config_analyzer
 import ai_assistant
 import crypto_vault
 import switch_provisioner
+import site_manager
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
@@ -425,6 +426,45 @@ class SwitchProvisionSSHSchema(SwitchProvisionSchema):
 class SwitchProvisionSerialSchema(SwitchProvisionSchema):
     com_port: str
     baudrate: int = 9600
+class SiteSchema(BaseModel):
+    name: str
+    mode: str = "central"          # "central" | "agent"
+    subnets: List[str] = []
+
+class SiteUpdateSchema(BaseModel):
+    id: str
+    name: Optional[str] = None
+    mode: Optional[str] = None
+    subnets: Optional[List[str]] = None
+
+class SiteIdSchema(BaseModel):
+    id: str
+
+class SiteCommandSchema(BaseModel):
+    ip: str
+    command: str
+
+# --- Modelli push agente (autenticazione per-sede, non JWT utente) ---
+
+class AgentDeviceSchema(BaseModel):
+    ip: str
+    vendor: str = "cisco"
+    hostname: str = ""
+
+class AgentInventorySchema(BaseModel):
+    devices: List[AgentDeviceSchema] = []
+
+class AgentMacCollection(BaseModel):
+    switch_ip: str
+    switch_name: str = ""
+    rows: List[dict] = []
+
+class AgentMacSchema(BaseModel):
+    collections: List[AgentMacCollection] = []
+
+class AgentJobResultSchema(BaseModel):
+    status: str = "done"           # "done" | "error"
+    result: str = ""
 
 class PromoteDeviceSchema(BaseModel):
     node_id: str
@@ -1938,6 +1978,7 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
         summ = mac_history.record_sightings(
             res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
             tenant=d.get("Group") or "Generale",
+            site=d.get("Site") or "central",
         )
         # Storicizza i MAC delle interfacce proprie dello switch (infrastruttura).
         if res.get("if_macs"):
@@ -2333,6 +2374,149 @@ def get_subnet_scan_status(job_id: str, current_user = Depends(get_current_user)
         "progress": job.get("progress", 0),
         "total":    job.get("total", 0),
     }
+
+
+# --- GESTIONE SEDI MULTI-SITE (solo amministratori) ---
+
+@app.get("/api/sites")
+def list_sites_ep(current_user = Depends(require_admin)):
+    return {"sites": site_manager.list_sites()}
+
+@app.post("/api/sites")
+def create_site_ep(payload: SiteSchema, current_user = Depends(require_admin)):
+    try:
+        site, token = site_manager.create_site(payload.name, payload.mode, payload.subnets)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    log_audit(f"Sede '{site['id']}' (mode: {payload.mode}) creata da '{current_user.get('sub')}'.")
+    # Il token in chiaro è restituito UNA SOLA VOLTA (poi solo hash su disco).
+    return {"status": "success", "site": site, "token": token}
+
+@app.post("/api/sites/update")
+def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_admin)):
+    try:
+        ok = site_manager.update_site(payload.id, payload.name, payload.mode, payload.subnets)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Sede non trovata.")
+    log_audit(f"Sede '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/sites/delete")
+def delete_site_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
+    if not site_manager.delete_site(payload.id):
+        raise HTTPException(status_code=400, detail="Sede non eliminabile o inesistente.")
+    log_audit(f"Sede '{payload.id}' eliminata da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/sites/regenerate-token")
+def regenerate_site_token_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
+    token = site_manager.regenerate_token(payload.id)
+    if token is None:
+        raise HTTPException(status_code=400, detail="Sede inesistente o non in modalità agent.")
+    log_audit(f"Token della sede '{payload.id}' rigenerato da '{current_user.get('sub')}'.")
+    return {"status": "success", "token": token}
+
+# --- Relay comandi CLI verso una sede agent (UI -> coda -> agente) ---
+
+@app.post("/api/sites/{site_id}/command")
+def site_command_ep(site_id: str, payload: SiteCommandSchema,
+                    current_user = Depends(require_operator)):
+    """Accoda un comando CLI per un dispositivo di una sede agent. L'agente lo
+    preleverà in polling, lo eseguirà localmente e ne posterà il risultato."""
+    site = site_manager.get_site(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Sede non trovata.")
+    if site.get("mode") != "agent":
+        raise HTTPException(status_code=400, detail="Il relay comandi è disponibile solo per sedi in modalità agent.")
+    if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", payload.ip):
+        raise HTTPException(status_code=400, detail="IP non valido.")
+    if not is_command_safe(payload.command):
+        log_audit(f"Relay comando bloccato (blacklist) '{payload.command}' su '{payload.ip}' "
+                  f"sede '{site_id}' da '{current_user.get('sub')}'.")
+        raise HTTPException(status_code=400, detail="Comando non consentito per motivi di sicurezza (in blacklist).")
+    job = site_manager.enqueue_job(site_id, payload.ip, payload.command,
+                                   requested_by=current_user.get("sub"))
+    log_audit(f"Comando CLI accodato per sede agent '{site_id}' su '{payload.ip}' "
+              f"da '{current_user.get('sub')}' (job {job['id']}).")
+    return {"status": "queued", "job_id": job["id"]}
+
+@app.get("/api/command-jobs/{job_id}")
+def get_command_job_ep(job_id: str, current_user = Depends(get_current_user)):
+    job = site_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job non trovato.")
+    return job
+
+@app.get("/api/sites/{site_id}/command-jobs")
+def list_site_command_jobs_ep(site_id: str, current_user = Depends(require_operator)):
+    return {"jobs": site_manager.list_jobs(site_id)}
+
+
+# --- ENDPOINT PER GLI AGENTI DI SEDE (auth per-sede, separata dal JWT utente) ---
+
+def get_agent_site(request: Request):
+    """Autentica un agente tramite header X-Site-Token (+ opzionale X-Site-Id).
+    Ritorna il dict della sede agent. 401 se il token non corrisponde."""
+    token = request.headers.get("X-Site-Token") or request.headers.get("x-site-token")
+    claimed_id = request.headers.get("X-Site-Id") or request.headers.get("x-site-id")
+    site_id = site_manager.authenticate(token)
+    if not site_id or (claimed_id and claimed_id != site_id):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Token di sede non valido.")
+    site_manager.touch_last_seen(site_id)
+    return site_manager.get_site(site_id)
+
+@app.post("/api/agent/heartbeat")
+def agent_heartbeat(site = Depends(get_agent_site)):
+    return {"ok": True, "site_id": site["id"], "name": site["name"], "subnets": site.get("subnets", [])}
+
+@app.post("/api/agent/inventory")
+def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent_site)):
+    """L'agente spinge il proprio inventario locale: viene rispecchiato sul
+    centrale, taggato con la sede. Le credenziali NON sono replicate (i comandi
+    passano dal relay, eseguiti in locale dall'agente)."""
+    site_id = site["id"]
+    n = 0
+    for d in payload.devices:
+        if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", d.ip):
+            continue
+        inventory_manager.add_or_update_device(
+            d.ip, d.vendor, "custom", "", "", "", "Generale", site=site_id)
+        if d.hostname:
+            inventory_manager.update_device_hostname(d.ip, d.hostname)
+        n += 1
+    log_audit(f"Agente sede '{site_id}': inventario aggiornato ({n} dispositivi).")
+    return {"status": "success", "updated": n}
+
+@app.post("/api/agent/mac")
+def agent_push_mac(payload: AgentMacSchema, site = Depends(get_agent_site)):
+    """L'agente spinge le MAC-table raccolte localmente. Vengono storicizzate con
+    attribuzione alla sede (site) per il MAC tracker centrale."""
+    site_id = site["id"]
+    total = 0
+    for col in payload.collections:
+        summ = mac_history.record_sightings(
+            col.rows, switch_ip=col.switch_ip, switch_name=col.switch_name,
+            tenant=site_id, site=site_id)
+        total += summ.get("new", 0) + summ.get("updated", 0)
+    pruned = mac_history.prune()
+    log_audit(f"Agente sede '{site_id}': {len(payload.collections)} MAC-table ricevute "
+              f"({total} avvistamenti, pruned {pruned}).")
+    return {"status": "success", "recorded": total, "pruned": pruned}
+
+@app.get("/api/agent/jobs")
+def agent_poll_jobs(site = Depends(get_agent_site)):
+    """L'agente preleva i job di comando pendenti (marcati 'running')."""
+    return {"jobs": site_manager.claim_pending_jobs(site["id"])}
+
+@app.post("/api/agent/jobs/{job_id}/result")
+def agent_post_job_result(job_id: str, payload: AgentJobResultSchema,
+                          site = Depends(get_agent_site)):
+    if not site_manager.complete_job(job_id, site["id"], payload.status, payload.result):
+        raise HTTPException(status_code=404, detail="Job non trovato per questa sede.")
+    return {"status": "success"}
 
 
 # --- AVVIO E BROWSER AUTOMATICO ---
