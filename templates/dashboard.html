@@ -3968,7 +3968,7 @@
         updateMapViewButtons();
         if (getMapView() === 'minimal') {
             const { nodes, edges, options } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC });
-            renderNetwork(nodes, edges, options);
+            renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background);
             return;
         }
 
@@ -4133,8 +4133,11 @@
 
     // Crea/ricrea l'istanza Vis.js condivisa e congela il layout a stabilizzazione
     // completata (usata da entrambe le viste).
-    function renderNetwork(nodes, edges, options) {
+    function renderNetwork(nodes, edges, options, background) {
         const container = document.getElementById("networkGraphContainer");
+        // Sfondo per-vista: la mappa minimalista usa il bianco, la classica torna
+        // allo sfondo scuro definito nel CSS (#networkGraphContainer).
+        container.style.background = background || '';
         const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
         if (networkInstance) networkInstance.destroy();
         networkInstance = new vis.Network(container, graphData, options);
@@ -4147,56 +4150,103 @@
         networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, 5000));
     }
 
-    // ===== Nuova mappa minimalista =====
-    // Stili centralizzati: modificare QUI per adeguarsi all'immagine di esempio
-    // che l'utente fornirà (nodi, colori, spessori, font).
+    // ===== Nuova mappa minimalista (stile diagramma Visio) =====
+    // Stili centralizzati: modificare QUI per ritoccare la resa (nodi, colori,
+    // spessori, font). Ispirata all'immagine di esempio fornita dall'utente.
     const MINIMAL_MAP_STYLE = {
+        background: '#ffffff',                     // sfondo bianco/neutro, alta leggibilità
         node: {
-            shape: 'dot', size: 12, borderWidth: 1.5,
-            font: { color: '#c9d1e0', size: 12, face: 'Inter, system-ui, sans-serif', strokeWidth: 0 },
-            offlineOpacity: 0.4
+            shape: 'box',                          // riquadri rettangolari a spigoli vivi
+            borderRadius: 0,
+            borderWidth: 1,
+            borderColor: '#37474f',                // bordo scuro sottile
+            margin: { top: 8, right: 12, bottom: 8, left: 12 },
+            font: { multi: 'html', color: '#1a2430', size: 12, face: 'Arial, Helvetica, sans-serif', strokeWidth: 0 },
+            offlineOpacity: 0.45,
+            // Riempimenti pastello per categoria di apparato (varianti ciano/giallo pallido)
+            fill: {
+                switch:   '#d8f0f7',
+                router:   '#def0dc',
+                firewall: '#fbe4e2',
+                wlc:      '#ebe2f7',
+                ap:       '#e0ecfb',
+                server:   '#fdf3d5',
+                phone:    '#dcf5ef',
+                pc:       '#ededed',
+                other:    '#f4f4f4'
+            }
         },
         edge: {
-            color:   'rgba(140,150,175,0.35)',   // link normale, sottile e discreto
-            width:   1,
-            pcColor: 'rgba(120,140,205,0.75)',   // aggregato (Port-Channel/LAG)
-            pcWidth: 1.6,
-            emphColor: '#ffb84d', emphWidth: 2.6,  // con "Evidenzia Port-Channel"
-            font: { color: '#8b95ac', size: 10, face: 'Menlo, monospace', strokeWidth: 0, background: 'rgba(21,15,35,0.85)' }
-        },
-        statusColor: { online: '#4f8ef7', offline: '#5a6473', auth_failed: '#ff6b7c', discovered: '#8d9bb0', warning: '#ffb84d' }
+            color:   '#78909c',                    // link semplice: pieno, tonalità sobria
+            width:   1.5,
+            pcColor: '#c62828',                    // aggregato Port-Channel/vPC: accento rosso
+            pcWidth: 2,
+            emphWidth: 3,                          // con "Evidenzia Port-Channel"
+            font: { multi: 'html', color: '#455a64', size: 10, face: 'Arial, Helvetica, sans-serif', strokeWidth: 0, background: '#ffffff' },
+            pcFontColor: '#c62828'
+        }
     };
 
     // Costruisce nodi/archi/opzioni per la vista minimalista dai medesimi dati già
-    // filtrati della mappa classica. I Port-Channel sono resi come UN arco
-    // aggregato con etichetta "Po1 (Gi1/0/1, Gi1/0/2)" (interfacce membro incluse).
+    // filtrati della mappa classica. Nodi = riquadri con nome in grassetto e
+    // vendor/modello sulla seconda riga; i Port-Channel sono SEMPRE visibili come
+    // un arco aggregato con etichetta "Po1" + coppie di interfacce membro sotto.
     function buildMinimalGraph(nodeData, linkData, opts) {
         const S = MINIMAL_MAP_STYLE;
         const showVtpDomain = !!(opts && opts.showVtpDomain);
         const highlightPC   = !!(opts && opts.highlightPC);
 
-        const nodes = nodeData.map(n => {
+        // Raggruppamento spaziale per Sede: ogni gruppo riceve un "centro" su una
+        // circonferenza e i suoi nodi partono da lì (la fisica mantiene i cluster).
+        // vis.js non supporta i riquadri tratteggiati di raggruppamento: si
+        // approssima con la sola vicinanza spaziale.
+        const groups = [...new Set(nodeData.map(n => n.group || 'Generale'))];
+        const groupCenter = {};
+        groups.forEach((g, i) => {
+            const angle = (2 * Math.PI * i) / groups.length;
+            const radius = groups.length > 1 ? 600 : 0;
+            groupCenter[g] = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+        });
+
+        const nodes = nodeData.map((n, idx) => {
             const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
             const matchedDev = globalDevices.find(d => d.IP === n.id);
             const resolvedVendor = (n.vendor && n.vendor !== 'discovered')
                 ? n.vendor : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
-            // Colore: per tipo apparato, oppure per dominio VTP se l'interruttore è ON.
-            const color = showVtpDomain ? vtpDomainColor(n.vtp_domain) : deviceTypeMeta(n.device_type).color;
+
+            // Seconda riga del riquadro: vendor + modello (es. "Cisco N9K-C93180YC-EX")
+            const vendorTxt = (resolvedVendor && resolvedVendor !== 'discovered')
+                ? resolvedVendor.charAt(0).toUpperCase() + resolvedVendor.slice(1) : '';
+            const modelLine = [vendorTxt, n.model || n.platform || ''].filter(Boolean).join(' ').trim();
+            const label = modelLine ? `<b>${n.label}</b>\n${modelLine}` : `<b>${n.label}</b>`;
+
+            // Riempimento pastello per categoria; col toggle VTP il bordo assume il
+            // colore del dominio VTP (il riempimento resta neutro e leggibile).
+            const fill = S.node.fill[n.device_type] || S.node.fill.other;
+            const border = showVtpDomain && n.vtp_domain ? vtpDomainColor(n.vtp_domain) : S.node.borderColor;
+
+            // Posizione iniziale: attorno al centro del proprio gruppo/Sede.
+            const c = groupCenter[n.group || 'Generale'] || { x: 0, y: 0 };
+            const jitter = 180;
+
             return {
                 id: n.id,
                 shape: S.node.shape,
-                size: S.node.size,
-                label: n.label,
+                shapeProperties: { borderRadius: S.node.borderRadius },
+                margin: S.node.margin,
+                label,
                 title: createNodeTooltip(n, scan, resolvedVendor),
-                borderWidth: S.node.borderWidth,
+                borderWidth: showVtpDomain && n.vtp_domain ? 2 : S.node.borderWidth,
                 borderWidthSelected: S.node.borderWidth + 1,
                 color: {
-                    background: color, border: color,
-                    highlight: { background: color, border: '#ffffff' },
-                    hover: { background: color, border: '#ffffff' }
+                    background: fill, border,
+                    highlight: { background: fill, border: '#1a2430' },
+                    hover: { background: fill, border: '#1a2430' }
                 },
                 opacity: (n.status === 'offline') ? S.node.offlineOpacity : 1,
                 font: S.node.font,
+                x: c.x + ((idx * 137) % (2 * jitter)) - jitter,
+                y: c.y + ((idx * 89)  % (2 * jitter)) - jitter,
                 nodeDataVal: n
             };
         });
@@ -4207,33 +4257,43 @@
 
             const localPorts  = (Array.isArray(l.local_ports)  && l.local_ports.length)  ? l.local_ports  : [l.local_port];
             const remotePorts = (Array.isArray(l.remote_ports) && l.remote_ports.length) ? l.remote_ports : [l.remote_port];
-            const members = localPorts.map(shortIface).filter(Boolean).join(', ');
-            const pcTag   = l.pc_name ? shortIface(l.pc_name) : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
-
-            // Etichetta: Port-Channel SEMPRE visibile con le interfacce membro; per
-            // i link semplici nessuna etichetta (stile pulito e poco affollato).
-            const label = isPC ? (members ? `${pcTag} (${members})` : pcTag) : '';
-
+            const members       = localPorts.map(shortIface).filter(Boolean).join(', ');
             const remoteMembers = remotePorts.map(shortIface).filter(Boolean).join(', ');
+            const pcTag = l.pc_name ? shortIface(l.pc_name) : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+
+            // Etichetta arco. vis.js non supporta etichette per-estremità, quindi
+            // le interfacce dei due lati sono mostrate in forma compatta al centro:
+            //  - link semplice:  "Eth1/51 ⇄ Fo1/0/3"
+            //  - Port-Channel (sempre visibile): "Po1" in grassetto con le coppie
+            //    di interfacce membro in piccolo sulla riga sotto.
+            let label = '';
+            if (isPC) {
+                label = `<b>${pcTag}</b>`;
+                if (members || remoteMembers) label += `\n${members || '—'} ⇄ ${remoteMembers || '—'}`;
+            } else {
+                const lp = shortIface(l.local_port), rp = shortIface(l.remote_port);
+                if (lp && lp !== 'Vicino' && lp !== 'Neighbor') label = `${lp} ⇄ ${rp}`;
+            }
+
             const tip = document.createElement('div');
             tip.innerHTML = `<div style="font-family:var(--font-main); min-width:180px; color:var(--text); font-size:11px;">
                 <strong style="color:var(--primary);">${escapeHtml(l.source)} ⇄ ${escapeHtml(l.target)}</strong>
-                ${isPC ? `<div style="margin-top:4px; color:var(--text-muted);">${currentLang==='en'?'Aggregate':'Aggregato'}: <span style="color:var(--warning);">${escapeHtml(pcTag)}</span></div>
+                ${isPC ? `<div style="margin-top:4px; color:var(--text-muted);">${currentLang==='en'?'Aggregate':'Aggregato'}: <span style="color:var(--warning);">${escapeHtml(pcTag)}</span>${l.member_count > 1 ? ` · ${l.member_count} ${currentLang==='en'?'members':'membri'}` : ''}</div>
                 <div style="font-family:var(--font-code); font-size:10px; margin-top:2px;">${escapeHtml(members||'—')} ⇄ ${escapeHtml(remoteMembers||'—')}</div>`
                 : `<div style="font-family:var(--font-code); font-size:10px; margin-top:4px;">${escapeHtml(shortIface(l.local_port)||'—')} ⇄ ${escapeHtml(shortIface(l.remote_port)||'—')}</div>`}
             </div>`;
 
-            const col = emphasize ? S.edge.emphColor : (isPC ? S.edge.pcColor : S.edge.color);
+            const col = isPC ? S.edge.pcColor : S.edge.color;
             return {
                 from: l.source, to: l.target,
                 label,
                 title: tip,
-                font: S.edge.font,
-                color: { color: col, highlight: '#c4bdf7', hover: '#c4bdf7' },
+                font: isPC ? Object.assign({}, S.edge.font, { color: S.edge.pcFontColor }) : S.edge.font,
+                color: { color: col, highlight: '#1a2430', hover: '#1a2430' },
                 width: emphasize ? S.edge.emphWidth : (isPC ? S.edge.pcWidth : S.edge.width),
-                dashes: emphasize ? [6, 4] : false,
+                dashes: false,
                 arrows: { to: { enabled: false } },
-                smooth: { type: 'continuous', roundness: 0.35 }
+                smooth: { type: 'continuous', roundness: 0.2 }
             };
         });
 
@@ -4242,12 +4302,12 @@
             physics: {
                 enabled: true, solver: 'barnesHut',
                 stabilization: { enabled: true, iterations: 600, updateInterval: 25, onlyDynamicEdges: false, fit: true },
-                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.12, springLength: 240, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
+                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.08, springLength: 260, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
                 minVelocity: 0.75
             },
             interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
             nodes: { shadow: { enabled: false } },
-            edges: { smooth: { type: 'continuous', roundness: 0.35 }, shadow: { enabled: false } }
+            edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
         };
 
         return { nodes, edges, options };
