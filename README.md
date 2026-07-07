@@ -130,6 +130,50 @@ Tutte le variabili sono opzionali. Se non definite, SentinelNet genera e persist
 
 ---
 
+## Sedi Remote (multi-sito)
+
+SentinelNet gestisce più sedi su VPN da un unico centrale, in modalità
+**central poll** (SSH diretto via VPN) o **site agent** (agente remoto che si
+connette in uscita e riceve i comandi da una coda). Guida completa alla
+creazione e gestione: [docs/REMOTE-SITES.md](docs/REMOTE-SITES.md).
+
+---
+
+## Server MCP — usare SentinelNet da un client LLM esterno
+
+Oltre all'AI Assistant integrato nella dashboard, SentinelNet espone i propri
+dati come **server MCP** (Model Context Protocol) su stdio: qualunque client
+compatibile (Claude Desktop, LM Studio, Cline, ecc.) può interrogare
+inventario, mappa di rete, MAC tracker e config analyzer, eseguire comandi CLI
+e generare config day-0, con autorizzazione (ruoli, tenant, blacklist comandi)
+applicata sempre lato server.
+
+Esempio di configurazione per Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "sentinelnet": {
+      "command": "python",
+      "args": ["/percorso/SentinelNet/mcp_server.py"],
+      "env": {
+        "SENTINELNET_URL": "http://127.0.0.1:8765",
+        "SENTINELNET_USERNAME": "admin",
+        "SENTINELNET_PASSWORD": "..."
+      }
+    }
+  }
+}
+```
+
+Il server centrale deve essere in esecuzione. Tool disponibili: `list_devices`,
+`get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`,
+`analyze_config`, `get_triage_status`, `send_cli_command`, `list_sites`,
+`generate_switch_config`. I tool di scrittura richiedono un account con ruolo
+*operator*; usare un account *viewer* per accesso in sola lettura.
+
+---
+
 ## Sicurezza delle Credenziali
 
 Il file `network_hosts.csv` contiene le credenziali cifrate degli apparati fisici ed è escluso dal tracciamento Git tramite `.gitignore`. Prima di pubblicare il repository, verificare che i seguenti file siano esclusi:

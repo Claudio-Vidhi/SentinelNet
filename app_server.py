@@ -426,6 +426,11 @@ class SwitchProvisionSchema(BaseModel):
     access_vlan: Optional[int] = None
     trunk_ports: List[str] = []
     trunk_allowed_vlans: str = ""
+    uplink_pc_id: Optional[int] = None
+    login_block: bool = True
+    storm_control: bool = False
+    errdisable_recovery: bool = True
+    no_vstack: bool = True
     svis: List[dict] = []
     enable_routing: bool = True
     default_route_gw: str = ""
@@ -1341,6 +1346,24 @@ def send_command(payload: CommandRequest, current_user = Depends(require_operato
     if target_device:
         assert_group_allowed(current_user, target_device.get('Group', 'Generale'))
         log_audit(f"Comando CLI '{payload.command}' richiesto su dispositivo '{payload.ip}' dall'utente '{current_user.get('sub')}' (One-Shot API).")
+        # Dispositivo di una sede agent: il centrale non lo raggiunge via SSH.
+        # Il comando passa dalla coda di relay e si attende (breve) l'esito
+        # dell'agente, restituendo la stessa forma della via diretta.
+        site = site_manager.get_site(target_device.get('Site') or 'central')
+        if site and site.get('mode') == 'agent':
+            job = site_manager.enqueue_job(site['id'], payload.ip, payload.command,
+                                           requested_by=current_user.get('sub'))
+            deadline = time.time() + 90       # l'agente fa polling (default 60s)
+            while time.time() < deadline:
+                time.sleep(2)
+                j = site_manager.get_job(job['id'])
+                if j and j['status'] in ('done', 'error'):
+                    if j['status'] == 'done':
+                        return {"status": "success", "output": j.get('result', '')}
+                    return {"status": "error", "message": j.get('result', 'errore agente')}
+            return {"status": "queued", "job_id": job['id'],
+                    "message": "Comando accodato per la sede agent; esito non ancora "
+                               "disponibile (consulta /api/command-jobs/{job_id})."}
         res = core_engine.send_custom_command(target_device, payload.command)
         return res
     raise HTTPException(status_code=404, detail="Dispositivo non presente in inventario")
