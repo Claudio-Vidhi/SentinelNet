@@ -30,6 +30,8 @@ import user_manager
 import mac_history
 import mac_collector
 import config_analyzer
+import ai_assistant
+import crypto_vault
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
@@ -361,6 +363,21 @@ class ModelSchema(BaseModel):
 
 class NetworkSettingsSchema(BaseModel):
     host: str
+
+class AiSettingsSchema(BaseModel):
+    provider: str  # anthropic | openai | gemini | ollama
+    model: str = ""
+    api_key: Optional[str] = None   # None = non modificare la chiave già salvata
+    base_url: str = ""              # usato da ollama (endpoint locale) e opzionalmente da openai
+
+class AiChatMessage(BaseModel):
+    role: str
+    content: str
+
+class AiChatSchema(BaseModel):
+    messages: List[AiChatMessage]
+    attach_inventory: bool = False   # allega un riepilogo dell'inventario dispositivi
+    attach_device_ip: Optional[str] = None  # allega la running-config di un dispositivo
 
 class PromoteDeviceSchema(BaseModel):
     node_id: str
@@ -2046,6 +2063,110 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
     if result is None:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
     return result
+
+
+# --- AI ASSISTANT: provider pluggabili (Anthropic/OpenAI/Gemini/Ollama) ---
+# La configurazione (provider/modello/endpoint) vive in app_settings.json sotto
+# la chiave "ai"; la API key viene cifrata con lo stesso CIPHER_SUITE usato per
+# le password degli apparati (crypto_vault), mai salvata in chiaro su disco.
+
+def _get_ai_settings() -> dict:
+    return get_app_settings().get("ai", {}) or {}
+
+def _device_inventory_summary(current_user) -> str:
+    """Riepilogo testuale sintetico dell'inventario, scopato per sede utente."""
+    scope = user_group_scope(current_user)
+    devices = inventory_manager.get_all_devices()
+    if scope is not None:
+        devices = [d for d in devices if d.get('Group', 'Generale') in scope]
+    lines = [f"Inventario dispositivi ({len(devices)} totali):"]
+    for d in devices[:200]:  # limite di sicurezza per non gonfiare il contesto
+        lines.append(
+            f"- {d.get('IP', '?')} | {d.get('Hostname', '') or '(senza hostname)'} | "
+            f"vendor={d.get('Vendor', '?')} | sede={d.get('Group', 'Generale')}"
+        )
+    if len(devices) > 200:
+        lines.append(f"... e altri {len(devices) - 200} dispositivi (troncato).")
+    return "\n".join(lines)
+
+def _device_running_config_context(ip: str, current_user) -> str:
+    """Testo della running-config più recente per un dispositivo (raw), con
+    verifica di scoping per sede prima di restituirlo."""
+    device = assert_device_allowed(current_user, ip)
+    if device is None:
+        raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato.")
+    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            content = fh.read()
+    except OSError:
+        raise HTTPException(status_code=500, detail=f"Impossibile leggere il backup di {ip}.")
+    return f"Running-config di {ip}:\n\n{config_analyzer.running_config(content)}"
+
+@app.get("/api/ai/settings")
+def get_ai_settings(current_user = Depends(require_admin)):
+    """Ritorna la configurazione AI corrente. La chiave API non viene mai
+    restituita in chiaro: solo un flag booleano che indica se è impostata."""
+    s = _get_ai_settings()
+    return {
+        "provider": s.get("provider", "anthropic"),
+        "model": s.get("model", ""),
+        "base_url": s.get("base_url", ""),
+        "api_key_set": bool(s.get("api_key_enc")),
+    }
+
+@app.post("/api/ai/settings")
+def set_ai_settings(payload: AiSettingsSchema, current_user = Depends(require_admin)):
+    provider = payload.provider.strip().lower()
+    if provider not in {"anthropic", "openai", "gemini", "ollama"}:
+        raise HTTPException(status_code=400, detail=f"Provider non supportato: '{provider}'.")
+    current = _get_ai_settings()
+    new_settings = {
+        "provider": provider,
+        "model": payload.model.strip(),
+        "base_url": payload.base_url.strip(),
+        "api_key_enc": current.get("api_key_enc", ""),
+    }
+    # api_key=None -> mantiene quella già salvata; stringa vuota -> la rimuove.
+    if payload.api_key is not None:
+        new_settings["api_key_enc"] = crypto_vault.encrypt_password(payload.api_key) if payload.api_key else ""
+    save_app_settings({"ai": new_settings})
+    log_audit(f"Impostazioni AI Assistant aggiornate (provider='{provider}') dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.post("/api/ai/chat")
+def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
+    s = _get_ai_settings()
+    provider = s.get("provider", "")
+    if not provider:
+        raise HTTPException(status_code=400, detail="Nessun provider AI configurato. Un amministratore deve impostarlo prima.")
+    api_key = crypto_vault.decrypt_password(s.get("api_key_enc", "")) if s.get("api_key_enc") else None
+    if provider != "ollama" and not api_key:
+        raise HTTPException(status_code=400, detail="API key non configurata per il provider selezionato.")
+
+    messages = [{"role": m.role, "content": m.content} for m in payload.messages]
+
+    context_blocks = []
+    if payload.attach_inventory:
+        context_blocks.append(_device_inventory_summary(current_user))
+    if payload.attach_device_ip:
+        context_blocks.append(_device_running_config_context(payload.attach_device_ip, current_user))
+    if context_blocks:
+        messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
+
+    try:
+        reply = ai_assistant.chat(
+            messages,
+            provider=provider,
+            model=s.get("model") or None,
+            api_key=api_key,
+            base_url=s.get("base_url") or None,
+        )
+    except ai_assistant.AiAssistantError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"reply": reply, "provider": provider}
 
 
 # --- SCANSIONE SUBNET IN BACKGROUND ---
