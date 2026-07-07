@@ -371,6 +371,7 @@ class AiSettingsSchema(BaseModel):
     model: str = ""
     api_key: Optional[str] = None   # None = non modificare la chiave già salvata
     base_url: str = ""              # usato da ollama (endpoint locale) e opzionalmente da openai
+    rate_limit_rpm: int = 0         # richieste/minuto verso il provider AI (0 = illimitato)
 
 class AiChatMessage(BaseModel):
     role: str
@@ -380,6 +381,7 @@ class AiChatSchema(BaseModel):
     messages: List[AiChatMessage]
     attach_inventory: bool = False   # allega un riepilogo dell'inventario dispositivi
     attach_device_ip: Optional[str] = None  # allega la running-config di un dispositivo
+    attach_tenant: Optional[str] = None  # allega il contesto completo di un tenant/sede (gruppo)
 class SwitchProvisionSchema(BaseModel):
     """Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config
     per il significato di ciascun campo (tutti opzionali salvo hostname)."""
@@ -2193,6 +2195,38 @@ def _device_running_config_context(ip: str, current_user) -> str:
         raise HTTPException(status_code=500, detail=f"Impossibile leggere il backup di {ip}.")
     return f"Running-config di {ip}:\n\n{config_analyzer.running_config(content)}"
 
+def _tenant_context_block(tenant: str, current_user) -> str:
+    """Raccoglie TUTTE le informazioni rilevanti per un singolo tenant/sede
+    (gruppo) — dispositivi, config del gruppo, MAC history, config sito VPN —
+    e le formatta in un blocco di contesto compatto. Lo scope è verificato
+    contro l'utente corrente e strettamente limitato al tenant richiesto:
+    ogni sorgente dati viene filtrata per quel gruppo prima di essere passata
+    al formatter di ai_assistant."""
+    assert_group_allowed(current_user, tenant)
+    groups = inventory_manager.get_all_groups()
+    if tenant not in groups:
+        raise HTTPException(status_code=404, detail=f"Sede/tenant '{tenant}' non trovata.")
+
+    devices = [d for d in inventory_manager.get_all_devices() if d.get('Group', 'Generale') == tenant]
+
+    mac_stats = mac_history.stats(tenants=[tenant])
+    mac_recent = mac_history.search(tenants=[tenant], limit=15)
+
+    # Le sedi VPN (site_manager) sono un concetto distinto dai gruppi/tenant ma
+    # sono referenziate dai dispositivi tramite il campo 'Site': recuperiamo la
+    # config di ognuna delle sedi VPN effettivamente usate da questo tenant.
+    site_ids = sorted({d.get('Site', 'central') for d in devices})
+    sites = [s for s in (site_manager.get_site(sid) for sid in site_ids) if s]
+
+    return ai_assistant.build_tenant_context(
+        tenant,
+        devices=devices,
+        group_info=groups.get(tenant),
+        site=sites,
+        mac_stats=mac_stats,
+        mac_recent=mac_recent,
+    )
+
 @app.get("/api/ai/settings")
 def get_ai_settings(current_user = Depends(require_admin)):
     """Ritorna la configurazione AI corrente. La chiave API non viene mai
@@ -2203,6 +2237,7 @@ def get_ai_settings(current_user = Depends(require_admin)):
         "model": s.get("model", ""),
         "base_url": s.get("base_url", ""),
         "api_key_set": bool(s.get("api_key_enc")),
+        "rate_limit_rpm": s.get("rate_limit_rpm", 0),
     }
 
 @app.post("/api/ai/settings")
@@ -2216,6 +2251,7 @@ def set_ai_settings(payload: AiSettingsSchema, current_user = Depends(require_ad
         "model": payload.model.strip(),
         "base_url": payload.base_url.strip(),
         "api_key_enc": current.get("api_key_enc", ""),
+        "rate_limit_rpm": max(0, int(payload.rate_limit_rpm or 0)),
     }
     # api_key=None -> mantiene quella già salvata; stringa vuota -> la rimuove.
     if payload.api_key is not None:
@@ -2241,6 +2277,8 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
         context_blocks.append(_device_inventory_summary(current_user))
     if payload.attach_device_ip:
         context_blocks.append(_device_running_config_context(payload.attach_device_ip, current_user))
+    if payload.attach_tenant:
+        context_blocks.append(_tenant_context_block(payload.attach_tenant, current_user))
     if context_blocks:
         messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
 
@@ -2251,7 +2289,10 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
             model=s.get("model") or None,
             api_key=api_key,
             base_url=s.get("base_url") or None,
+            rate_limit_rpm=s.get("rate_limit_rpm", 0),
         )
+    except ai_assistant.RateLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except ai_assistant.AiAssistantError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"reply": reply, "provider": provider}
