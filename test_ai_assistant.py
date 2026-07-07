@@ -87,5 +87,75 @@ class TestAiAssistantDispatch(unittest.TestCase):
             ai_assistant.chat(self._messages(), provider="openai", api_key="sk-bad")
 
 
+class TestRateLimiter(unittest.TestCase):
+    def test_allows_up_to_limit(self):
+        limiter = ai_assistant.RateLimiter(rpm=2)
+        ok1, _ = limiter.allow()
+        ok2, _ = limiter.allow()
+        ok3, retry_after = limiter.allow()
+        self.assertTrue(ok1)
+        self.assertTrue(ok2)
+        self.assertFalse(ok3)
+        self.assertIsNotNone(retry_after)
+
+    def test_unlimited_when_zero_or_none(self):
+        limiter = ai_assistant.RateLimiter(rpm=0)
+        for _ in range(50):
+            ok, _ = limiter.allow()
+            self.assertTrue(ok)
+
+    def test_reconfigure_changes_limit(self):
+        limiter = ai_assistant.RateLimiter(rpm=1)
+        self.assertTrue(limiter.allow()[0])
+        self.assertFalse(limiter.allow()[0])
+        limiter.configure(5)
+        self.assertTrue(limiter.allow()[0])
+
+    @patch("ai_assistant.requests.post")
+    def test_chat_raises_when_rate_limit_exceeded(self, mock_post):
+        mock_post.return_value = _fake_response(
+            {"message": {"content": "ok"}}
+        )
+        try:
+            ai_assistant.chat(self._msgs(), provider="ollama", rate_limit_rpm=1)
+            with self.assertRaises(ai_assistant.RateLimitExceededError):
+                ai_assistant.chat(self._msgs(), provider="ollama", rate_limit_rpm=1)
+        finally:
+            ai_assistant.configure_rate_limit(0)  # reset per non influenzare altri test
+
+    def _msgs(self):
+        return [{"role": "user", "content": "ciao"}]
+
+
+class TestBuildTenantContext(unittest.TestCase):
+    def test_includes_only_given_tenant_data(self):
+        text = ai_assistant.build_tenant_context(
+            "SedeA",
+            devices=[{"IP": "10.0.0.1", "Hostname": "sw1", "Vendor": "cisco", "Site": "central"}],
+            group_info={"description": "Sede di test"},
+            site=[{"name": "central", "mode": "central", "subnets": ["10.0.0.0/24"], "last_seen": None}],
+            mac_stats={"sightings": 5, "unique_macs": 3, "switches": 1, "retention_days": 30},
+            mac_recent=[{"mac": "aa:bb:cc:dd:ee:ff", "switch_ip": "10.0.0.1",
+                         "interface": "Gi1/0/1", "vlan": "10", "last_seen": "2026-01-01"}],
+        )
+        self.assertIn("SedeA", text)
+        self.assertIn("Sede di test", text)
+        self.assertIn("10.0.0.1", text)
+        self.assertIn("sw1", text)
+        self.assertIn("5 avvistamenti", text)
+        self.assertIn("aa:bb:cc:dd:ee:ff", text)
+        self.assertIn("mode=central", text)
+
+    def test_truncates_large_device_list(self):
+        devices = [{"IP": f"10.0.0.{i}", "Hostname": f"h{i}", "Vendor": "cisco"} for i in range(5)]
+        text = ai_assistant.build_tenant_context("SedeB", devices=devices, max_devices=2)
+        self.assertIn("altri 3 dispositivi", text)
+
+    def test_empty_inputs_do_not_crash(self):
+        text = ai_assistant.build_tenant_context("SedeVuota")
+        self.assertIn("SedeVuota", text)
+        self.assertIn("0 totali", text)
+
+
 if __name__ == "__main__":
     unittest.main()
