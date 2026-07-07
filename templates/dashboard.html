@@ -4364,6 +4364,20 @@
         })).filter(gi => gi.ids.length > 0);
 
         const bundles = [];
+        // Requisiti di dimensione per nodo: per far stare TUTTE le etichette di porta
+        // disegnate dentro il riquadro (Fix dimensionamento dinamico). Per ciascun
+        // nodo si tiene lo "spread" massimo (n. membri × spaziatura) e la larghezza
+        // massima del testo di porta, misurata con lo stesso font dell'overlay.
+        const _measCanvas = document.createElement('canvas');
+        const _measCtx = _measCanvas.getContext('2d');
+        _measCtx.font = '9px Arial, Helvetica, sans-serif';
+        const measurePort = t => t ? _measCtx.measureText(t).width : 0;
+        const nodeReq = {};   // id -> { spread, labelW }
+        const bumpReq = (id, spread, labelW) => {
+            const r = nodeReq[id] || (nodeReq[id] = { spread: 0, labelW: 0 });
+            r.spread = Math.max(r.spread, spread);
+            r.labelW = Math.max(r.labelW, labelW);
+        };
         const edges = linkData.map(l => {
             const isPC      = !!l.is_portchannel;
             const emphasize = isPC && highlightPC;
@@ -4377,6 +4391,12 @@
             const members       = localPorts.map(shortIface).filter(Boolean).join(', ');
             const remoteMembers = remotePorts.map(shortIface).filter(Boolean).join(', ');
             const pcTag = l.pc_name ? shortIface(l.pc_name) : (l.member_count > 1 ? `LAG ×${l.member_count}` : 'LAG');
+            // Nome aggregato per-lato: il Port-channel può avere id diverso sui due
+            // estremi (es. Po1 su A, Po4 su B). Se differiscono si etichetta ciascun
+            // estremo col proprio id; se coincidono si tiene la pillola centrale.
+            const localPcTag  = l.local_pc  ? shortIface(l.local_pc)  : pcTag;
+            const remotePcTag = l.remote_pc ? shortIface(l.remote_pc) : pcTag;
+            const asymmetricPc = !!(localPcTag && remotePcTag && localPcTag !== remotePcTag);
 
             // Un fascio ha senso solo se conosciamo ≥2 porte membro su almeno un lato.
             const memberPairs = [];
@@ -4395,8 +4415,21 @@
                     pcTag, members: memberPairs, emphasize,
                     // 'peer' = peer-link vPC (verde), 'pc' = aggregato dati (rame).
                     type: isPeerLink ? 'peer' : 'pc',
-                    label: isPeerLink ? `${pcTag} / vPC` : pcTag
+                    label: isPeerLink ? `${pcTag} / vPC` : pcTag,
+                    localPcTag, remotePcTag, asymmetricPc,
+                    // Etichette per-estremo quando i nomi differiscono tra i due lati.
+                    localLabel:  isPeerLink ? `${localPcTag} / vPC`  : localPcTag,
+                    remoteLabel: isPeerLink ? `${remotePcTag} / vPC` : remotePcTag
                 });
+
+                // Requisiti di spazio per i due nodi: lo spread dei cavi (verticale o
+                // orizzontale a seconda dell'orientamento) e la larghezza del testo di
+                // porta più lungo su ciascun lato.
+                const spread = (memberPairs.length - 1) * 11;
+                const locW = Math.max(...memberPairs.map(m => measurePort(m.local)), 0);
+                const remW = Math.max(...memberPairs.map(m => measurePort(m.remote)), 0);
+                bumpReq(l.source, spread, locW);
+                bumpReq(l.target, spread, remW);
             }
 
             // Etichetta arco. vis.js non supporta etichette per-estremità, quindi
@@ -4449,6 +4482,24 @@
                 arrows: { to: { enabled: false } },
                 smooth: { type: 'continuous', roundness: 0.2 }
             };
+        });
+
+        // Dimensionamento dinamico dei riquadri: si impone una larghezza/altezza
+        // minima tale che tutte le etichette di porta disegnate INTERNAMENTE
+        // dall'overlay entrino senza traboccare né collidere col nome del device.
+        // L'orientamento del fascio (H/V) non è noto qui, quindi si copre il caso
+        // peggiore su entrambe le dimensioni: lo spread può svilupparsi in verticale
+        // (labels impilate) o in orizzontale, e le etichette rientrano di 'inset'.
+        const INSET = 13;
+        nodes.forEach(nd => {
+            const r = nodeReq[nd.id];
+            if (!r) return;
+            // Larghezza: due lati possibili × (inset + testo) oppure lo spread orizzontale.
+            const minW = Math.max(2 * (INSET + r.labelW + 6), r.spread + r.labelW + 12);
+            // Altezza: labels impilate verticalmente (spread) + margine per il nome.
+            const minH = Math.max(r.spread + 24, 2 * (INSET + 8));
+            nd.widthConstraint  = { minimum: Math.round(minW) };
+            nd.heightConstraint = { minimum: Math.round(minH) };
         });
 
         const options = {
@@ -4530,28 +4581,88 @@
             return { x: p.x + dx * t, y: p.y + dy * t };
         };
 
-        bundles.forEach(b => {
+        // --- PASSO 1: geometria di tutti i fasci --------------------------------
+        // Si calcola per ogni membro la polilinea ortogonale (HVH o VHV) PRIMA di
+        // disegnare, così da poter rilevare gli incroci tra fasci indipendenti e
+        // scavalcarli con un ponticello (Fix line bridges).
+        const spacing = 11;
+        const geoms = bundles.map((b, bi) => {
             let p1, p2;
             try { p1 = networkInstance.getPosition(b.from); p2 = networkInstance.getPosition(b.to); }
-            catch (e) { return; }
-            if (!p1 || !p2) return;
+            catch (e) { return null; }
+            if (!p1 || !p2) return null;
 
             const color = (b.type === 'peer') ? S.edge.peerColor : S.edge.pcColor;
             const cdx = p2.x - p1.x, cdy = p2.y - p1.y;
-            // Asse dominante: instrada in orizzontale-verticale-orizzontale se i nodi
-            // sono affiancati, altrimenti verticale-orizzontale-verticale.
             const horizontal = Math.abs(cdx) >= Math.abs(cdy);
-
             const n = b.members.length;
-            const spacing = 11;
             const half = (n - 1) / 2;
-
-            // Uscita/ingresso perpendicolari alla faccia del riquadro.
             const sdx = horizontal ? Math.sign(cdx || 1) : 0;
             const sdy = horizontal ? 0 : Math.sign(cdy || 1);
             const a0 = borderPoint(b.from, sdx, sdy);
             const b0 = borderPoint(b.to, -sdx, -sdy);
             const midMain = horizontal ? (a0.x + b0.x) / 2 : (a0.y + b0.y) / 2;
+
+            const members = b.members.map((m, i) => {
+                const off = (i - half) * spacing;
+                let ax, ay, bx, by, mid, pts;
+                if (horizontal) {
+                    ax = a0.x; ay = a0.y + off; bx = b0.x; by = b0.y + off; mid = midMain + off;
+                    pts = [{ x: ax, y: ay }, { x: mid, y: ay }, { x: mid, y: by }, { x: bx, y: by }];
+                } else {
+                    ax = a0.x + off; ay = a0.y; bx = b0.x + off; by = b0.y; mid = midMain + off;
+                    pts = [{ x: ax, y: ay }, { x: ax, y: mid }, { x: bx, y: mid }, { x: bx, y: by }];
+                }
+                return { m, ax, ay, bx, by, pts };
+            });
+            return { b, bi, color, horizontal, sdx, sdy, a0, b0, midMain, half, members };
+        });
+
+        // Raccolta dei segmenti verticali (per membro) da tutti i fasci: sono gli
+        // ostacoli che i tratti orizzontali dovranno scavalcare.
+        const verticals = [];
+        geoms.forEach(g => {
+            if (!g) return;
+            g.members.forEach(mm => {
+                for (let k = 0; k < mm.pts.length - 1; k++) {
+                    const p = mm.pts[k], q = mm.pts[k + 1];
+                    if (Math.abs(p.x - q.x) < 0.5 && Math.abs(p.y - q.y) > 0.5) {
+                        verticals.push({ x: p.x, ymin: Math.min(p.y, q.y), ymax: Math.max(p.y, q.y), bundle: g.bi });
+                    }
+                }
+            });
+        });
+
+        const BR = 5;   // raggio del ponticello (semi-arco)
+        // Disegna un tratto orizzontale scavalcando con un arco i segmenti verticali
+        // di ALTRI fasci che lo attraversano (i membri dello stesso fascio, paralleli,
+        // sono esclusi e non generano ponti).
+        const drawHSeg = (x1, y, x2, bundleIdx) => {
+            const dir = Math.sign(x2 - x1) || 1;
+            const lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+            let hops = verticals
+                .filter(v => v.bundle !== bundleIdx && v.x > lo + BR && v.x < hi - BR && y > v.ymin + 0.5 && y < v.ymax - 0.5)
+                .map(v => v.x);
+            hops = [...new Set(hops.map(x => Math.round(x)))].sort((a, b) => dir > 0 ? a - b : b - a);
+            ctx.beginPath();
+            ctx.moveTo(x1, y);
+            hops.forEach(hx => {
+                ctx.lineTo(hx - dir * BR, y);
+                if (dir > 0) ctx.arc(hx, y, BR, Math.PI, 0, false);
+                else         ctx.arc(hx, y, BR, 0, Math.PI, true);
+            });
+            ctx.lineTo(x2, y);
+            ctx.stroke();
+        };
+        const drawVSeg = (x, y1, y2) => {
+            ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+        };
+
+        // --- PASSO 2: disegno cavi + etichette ----------------------------------
+        geoms.forEach(g => {
+            if (!g) return;
+            const b = g.b, horizontal = g.horizontal, sdx = g.sdx, sdy = g.sdy;
+            const a0 = g.a0, b0 = g.b0, midMain = g.midMain, color = g.color;
 
             ctx.save();
             ctx.strokeStyle = color;
@@ -4561,33 +4672,16 @@
             ctx.font = '9px Arial, Helvetica, sans-serif';
             ctx.textBaseline = 'middle';
 
-            b.members.forEach((m, i) => {
-                const off = (i - half) * spacing;   // scostamento del singolo cavo
-                let ax, ay, bx, by, mid;
-                if (horizontal) {
-                    ax = a0.x;            ay = a0.y + off;
-                    bx = b0.x;            by = b0.y + off;
-                    mid = midMain + off;                  // segmento verticale distinto per membro
-                    ctx.beginPath();
-                    ctx.moveTo(ax, ay);
-                    ctx.lineTo(mid, ay);
-                    ctx.lineTo(mid, by);
-                    ctx.lineTo(bx, by);
-                    ctx.stroke();
-                } else {
-                    ax = a0.x + off;      ay = a0.y;
-                    bx = b0.x + off;      by = b0.y;
-                    mid = midMain + off;                  // segmento orizzontale distinto per membro
-                    ctx.beginPath();
-                    ctx.moveTo(ax, ay);
-                    ctx.lineTo(ax, mid);
-                    ctx.lineTo(bx, mid);
-                    ctx.lineTo(bx, by);
-                    ctx.stroke();
+            g.members.forEach(mm => {
+                // Disegna i 3 segmenti della polilinea: gli orizzontali scavalcano.
+                for (let k = 0; k < mm.pts.length - 1; k++) {
+                    const p = mm.pts[k], q = mm.pts[k + 1];
+                    if (Math.abs(p.y - q.y) < 0.5) drawHSeg(p.x, p.y, q.x, g.bi);
+                    else                           drawVSeg(p.x, p.y, q.y);
                 }
 
-                // Etichette di porta sul bordo INTERNO del riquadro (rientrate verso
-                // il centro del nodo dal punto d'aggancio).
+                // Etichette di porta sul bordo INTERNO del riquadro.
+                const m = mm.m, ax = mm.ax, ay = mm.ay, bx = mm.bx, by = mm.by;
                 ctx.fillStyle = color;
                 const inset = 13;
                 if (m.local) {
@@ -4600,11 +4694,37 @@
                 }
             });
 
-            // --- Pillola traslucida che attraversa i cavi paralleli --------------
-            const spread = (half * spacing);
+            const spread = (g.half * spacing);
+
+            // Cartiglio bianco riutilizzabile per i nomi aggregato.
+            const drawTag = (text, lx, ly) => {
+                ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const tw = ctx.measureText(text).width;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14);
+                ctx.fillStyle = color;
+                ctx.fillText(text, lx, ly);
+            };
+
+            if (b.asymmetricPc) {
+                // Nomi Port-channel diversi tra i due lati: si etichetta ciascun
+                // estremo del fascio vicino al proprio dispositivo d'origine.
+                if (horizontal) {
+                    drawTag(b.localLabel  || b.localPcTag,  a0.x + sdx * 26, a0.y - spread - 10);
+                    drawTag(b.remoteLabel || b.remotePcTag, b0.x - sdx * 26, b0.y - spread - 10);
+                } else {
+                    drawTag(b.localLabel  || b.localPcTag,  a0.x - spread - 12, a0.y + sdy * 22);
+                    drawTag(b.remoteLabel || b.remotePcTag, b0.x - spread - 12, b0.y - sdy * 22);
+                }
+                ctx.restore();
+                return;
+            }
+
+            // --- Pillola traslucida centrale (nomi identici sui due lati) --------
             const cx = horizontal ? midMain : (a0.x + b0.x) / 2;
             const cy = horizontal ? (a0.y + b0.y) / 2 : midMain;
-            // Larghezza lungo l'asse dei cavi (sottile), altezza a coprire il fascio.
             const pillHalfW = 9;
             const pillHalfSpread = spread + 12;
             let px, py, pw, ph;
@@ -4612,7 +4732,6 @@
             else            { px = cx - pillHalfSpread; py = cy - pillHalfW; pw = pillHalfSpread * 2; ph = pillHalfW * 2; }
             const r = Math.min(pillHalfW, 8);
             ctx.beginPath();
-            // Rettangolo arrotondato (pillola).
             ctx.moveTo(px + r, py);
             ctx.arcTo(px + pw, py, px + pw, py + ph, r);
             ctx.arcTo(px + pw, py + ph, px, py + ph, r);
@@ -4625,17 +4744,7 @@
             ctx.strokeStyle = color;
             ctx.stroke();
 
-            // Cartiglio del nome aggregato (Po/vPC) sopra la pillola.
-            ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const labelText = b.label || b.pcTag || 'Po';
-            const tw = ctx.measureText(labelText).width;
-            const lx = cx, ly = cy - pillHalfSpread - 9;
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14);
-            ctx.fillStyle = color;
-            ctx.fillText(labelText, lx, ly);
+            drawTag(b.label || b.pcTag || 'Po', cx, cy - pillHalfSpread - 9);
             ctx.restore();
         });
     }
