@@ -896,7 +896,7 @@
         <i class="fa-solid fa-robot"></i> AI Assistant
       </button>
       <button class="tab-button requires-write" onclick="switchTab('tab-provisioner', this)" data-i18n="tabProvisioner">
-        <i class="fa-solid fa-wand-magic-sparkles"></i> Switch da Zero
+        <i class="fa-solid fa-wand-magic-sparkles"></i> Apparato da Zero
       </button>
       <button class="tab-button requires-write" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
         <i class="fa-solid fa-file-csv"></i> Importazione CSV
@@ -1520,9 +1520,9 @@
 
     <!-- TAB: Switch da Zero (Provisioner) -->
     <div id="tab-provisioner" class="tab-content">
-      <h3 data-i18n="titleProvisioner">Provisioning Switch da Zero</h3>
+      <h3 data-i18n="titleProvisioner">Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)</h3>
       <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descProvisioner">
-        Genera una configurazione IOS/IOS-XE completa seguendo le linee guida di hardening Cisco, poi scegli come consegnarla.
+        Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.
       </p>
 
       <div class="form-group" style="max-width:320px;">
@@ -2197,9 +2197,10 @@
         titleCaRawRoute: "Riga di configurazione",
         lblCaShowRawRoute: "Mostra riga di configurazione",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
-        tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Switch da Zero',
-        titleProvisioner: "Provisioning Switch da Zero",
-        descProvisioner: "Genera una configurazione IOS/IOS-XE completa seguendo le linee guida di hardening Cisco, poi scegli come consegnarla.",
+        tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Apparato da Zero',
+        titleProvisioner: "Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)",
+        descProvisioner: "Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.",
+        lblProvVendor: "Tipo apparato",
         lblSecret: "Enable Secret",
         btnMapClassic: "Classica",
         btnMapMinimal: "Nuova",
@@ -2569,9 +2570,10 @@
         titleCaRawRoute: "Configuration line",
         lblCaShowRawRoute: "Show configuration line",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
-        tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Switch',
-        titleProvisioner: "Zero-Touch Switch Provisioning",
-        descProvisioner: "Generate a complete IOS/IOS-XE configuration following Cisco hardening guidelines, then choose how to deliver it.",
+        tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Device',
+        titleProvisioner: "Zero-Touch Provisioning (Cisco Switch / FortiGate Firewall)",
+        descProvisioner: "Generate a complete, hardened day-0 configuration — IOS/IOS-XE for Cisco switches or FortiOS for FortiGate firewalls — following vendor hardening guidelines, then choose how to deliver it: text, SSH or console/serial.",
+        lblProvVendor: "Device type",
         lblSecret: "Enable Secret",
         btnMapClassic: "Classic",
         btnMapMinimal: "New",
@@ -5535,19 +5537,33 @@
             };
 
             g.members.forEach((mm, i) => {
-                // Disegna i segmenti della polilinea: gli orizzontali scavalcano
-                // con un ponticello i segmenti verticali degli ALTRI percorsi.
-                for (let k = 0; k < mm.pts.length - 1; k++) {
-                    const p = mm.pts[k], q = mm.pts[k + 1];
-                    if (Math.abs(p.y - q.y) < 0.5) drawHSeg(p.x, p.y, q.x, g.bi);
-                    else                           drawVSeg(p.x, p.y, q.y);
+                // Export Visio attivo: il cavo NON viene rasterizzato come
+                // segmenti sciolti ma consegnato come connettore STRUTTURATO
+                // (polilinea continua + nodi di aggancio), che il backend
+                // trasforma in una forma 1-D incollata ai connection point.
+                if (visioConnectorSink) {
+                    visioConnectorSink.push({
+                        from: b.from, to: b.to,
+                        points: mm.pts.map(p => [p.x, p.y]),
+                        color: visioColor(color).hex,
+                        width: g.style.lw,
+                        dash: !!g.style.dash
+                    });
+                } else {
+                    // Disegna i segmenti della polilinea: gli orizzontali scavalcano
+                    // con un ponticello i segmenti verticali degli ALTRI percorsi.
+                    for (let k = 0; k < mm.pts.length - 1; k++) {
+                        const p = mm.pts[k], q = mm.pts[k + 1];
+                        if (Math.abs(p.y - q.y) < 0.5) drawHSeg(p.x, p.y, q.x, g.bi);
+                        else                           drawVSeg(p.x, p.y, q.y);
+                    }
+                    drawTermSquare(mm.A, g.fromSide);
+                    drawTermSquare(mm.B, g.toSide);
                 }
                 // Indice di slot globale sul lato (entry.slot + i): garantisce che le
                 // etichette N/S di fasci diversi si impilino su righe distinte.
                 drawPortLabel(mm.m.local,  mm.A, g.fromSide, g.fromEntry.slot + i);
                 drawPortLabel(mm.m.remote, mm.B, g.toSide,   g.toEntry.slot + i);
-                drawTermSquare(mm.A, g.fromSide);
-                drawTermSquare(mm.B, g.toSide);
             });
             // Segmenti del fascio per l'hit-test del menu categorie (click destro).
             edgeHitSegs.push({ key: pillKey(b), segs: g.members.flatMap(mm =>
@@ -6234,6 +6250,9 @@
     // Dati dell'ultima mappa minimalista renderizzata (bundles + gruppi):
     // servono all'export Visio per riprodurre fedelmente l'overlay canvas.
     let minimalOverlayData = null;
+    // Quando valorizzato (solo durante l'export Visio), drawMinimalOverlay vi
+    // deposita i cavi come connettori strutturati invece di rasterizzarli.
+    let visioConnectorSink = null;
 
     // Normalizza un colore canvas ('#rrggbb' o 'rgba(r,g,b,a)') in {hex, alpha}.
     function visioColor(c) {
@@ -6351,11 +6370,20 @@
 
         let edges = [];
         let primitives = null;
+        let connectors = null;
         if (getMapView() === 'minimal' && minimalOverlayData) {
-            // Riesegue l'overlay sul contesto registratore: cavi ortogonali
-            // paralleli, etichette di porta, pillole Po/vPC, contenitori Sede.
+            // Riesegue l'overlay sul contesto registratore: etichette di porta,
+            // pillole Po/vPC e contenitori Sede finiscono nelle primitive; i
+            // cavi vengono invece raccolti come connettori strutturati, che il
+            // backend incolla ai connection point dei riquadri dispositivo.
             primitives = { lines: [], polys: [], rects: [], texts: [] };
-            drawMinimalOverlay(makeRecordingCtx(primitives), minimalOverlayData.bundles, minimalOverlayData.groupsInfo);
+            connectors = [];
+            visioConnectorSink = connectors;
+            try {
+                drawMinimalOverlay(makeRecordingCtx(primitives), minimalOverlayData.bundles, minimalOverlayData.groupsInfo);
+            } finally {
+                visioConnectorSink = null;
+            }
         } else {
             edges = edgesDs.get().map(e => {
                 const ex = e.exportVal || {};
@@ -6370,7 +6398,7 @@
         const res = await apiFetch('/api/map/export/vsdx', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nodes, edges, primitives })
+            body: JSON.stringify({ nodes, edges, primitives, connectors })
         });
         if (!res || !res.ok) {
             alert(i18n[currentLang].alertVisioExportError);

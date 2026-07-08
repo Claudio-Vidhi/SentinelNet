@@ -1321,9 +1321,12 @@ class VisioEdgeSchema(BaseModel):
 class VisioExportSchema(BaseModel):
     nodes: List[VisioNodeSchema] = []
     edges: List[VisioEdgeSchema] = []
-    # Primitive grafiche registrate dal frontend (mappa minimalista): cavi
-    # ortogonali paralleli, etichette porta, pillole Po/vPC, contenitori Sede.
+    # Primitive grafiche registrate dal frontend (mappa minimalista): etichette
+    # porta, pillole Po/vPC, contenitori Sede.
     primitives: Optional[dict] = None
+    # Cavi strutturati (mappa minimalista): diventano forme 1-D continue
+    # incollate (glue) ai connection point dei riquadri dispositivo.
+    connectors: Optional[List[dict]] = None
 
 @app.post("/api/map/export/vsdx")
 def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_current_user)):
@@ -1332,6 +1335,7 @@ def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_curre
         [n.dict() for n in payload.nodes],
         [e.dict() for e in payload.edges],
         payload.primitives,
+        payload.connectors,
     )
     log_audit(f"Export Visio mappa richiesto dall'utente '{current_user.get('sub')}'.")
     return Response(
