@@ -1,14 +1,14 @@
 # ponytail: costruzione minimale di un .vsdx (Visio) usando solo la stdlib.
 # Un .vsdx e' semplicemente uno zip OPC (le stesse regole dei .docx/.xlsx) con
 # parti XML. Non usiamo librerie esterne: zipfile + xml.sax.saxutils.escape
-# bastano per generare una pagina con forme rettangolari (dispositivi) e forme
-# 1-D (collegamenti) posizionate secondo le coordinate ricevute dal frontend.
+# bastano per generare una pagina con forme rettangolari (dispositivi), forme
+# 1-D (collegamenti) e — per la mappa minimalista — le PRIMITIVE registrate
+# dal frontend (polilinee ortogonali, etichette di porta, pillole Po/vPC,
+# contenitori Sede), cosi' il .vsdx replica fedelmente il disegno dell'app.
 #
-# Limite noto: le forme 1-D qui sono semplici linee con BeginX/Y - EndX/Y (non
-# connettori "incollati" agli shape endpoint di Visio), sufficiente per una
-# esportazione leggibile ed editabile ma senza il glue automatico che si
-# otterrebbe ricreando il disegno a mano in Visio. La vera prova di fedeltà è
-# aprire il file in Visio.
+# Limite noto: le forme 1-D qui sono semplici linee (non connettori "incollati"
+# agli shape endpoint di Visio), sufficiente per una esportazione leggibile ed
+# editabile ma senza il glue automatico.
 
 import io
 import zipfile
@@ -23,7 +23,7 @@ _MIN_MARGIN_IN = 0.5
 
 
 def _hex_to_rgb_fraction(hex_color: str):
-    """'#RRGGBB' -> 'r,g,b' con valori 0-255 (formato colore Visio ARGB non serve, RGB va bene)."""
+    """'#RRGGBB' -> '#RRGGBB' normalizzato (fallback al viola di default)."""
     h = (hex_color or "#6A5FC1").lstrip("#")
     if len(h) != 6:
         h = "6A5FC1"
@@ -34,52 +34,82 @@ def _hex_to_rgb_fraction(hex_color: str):
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
-def _compute_layout(nodes):
-    """Scala coordinate canvas -> pollici Visio, con asse Y invertito (Visio: Y cresce verso l'alto)."""
-    if not nodes:
-        return {}, _PAGE_W_IN, _PAGE_H_IN
-    xs = [n["x"] for n in nodes]
-    ys = [n["y"] for n in nodes]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    span_x = max((max_x - min_x) * _SCALE, 1.0)
-    span_y = max((max_y - min_y) * _SCALE, 1.0)
-    page_w = span_x + 2 * _MIN_MARGIN_IN
-    page_h = span_y + 2 * _MIN_MARGIN_IN
+def _pt(px: float) -> float:
+    """Dimensione testo: pixel canvas -> punti, coerente con la scala geometrica
+    (px * _SCALE pollici * 72 pt/pollice)."""
+    return max(px * _SCALE * 72, 4.0)
 
-    positions = {}
+
+def _collect_bounds(nodes, primitives):
+    xs, ys = [], []
     for n in nodes:
-        px = (n["x"] - min_x) * _SCALE + _MIN_MARGIN_IN
-        # Inverti Y: canvas cresce verso il basso, Visio verso l'alto.
-        py = (max_y - n["y"]) * _SCALE + _MIN_MARGIN_IN
-        positions[n["id"]] = (px, py)
-    return positions, page_w, page_h
+        w = float(n.get("w") or 80.0); h = float(n.get("h") or 30.0)
+        xs += [n["x"] - w / 2, n["x"] + w / 2]
+        ys += [n["y"] - h / 2, n["y"] + h / 2]
+    if primitives:
+        for ln in primitives.get("lines", []) + primitives.get("polys", []):
+            for p in ln.get("points", []):
+                xs.append(p[0]); ys.append(p[1])
+        for r in primitives.get("rects", []):
+            xs += [r["x"], r["x"] + r["w"]]
+            ys += [r["y"], r["y"] + r["h"]]
+        for t in primitives.get("texts", []):
+            xs.append(t["x"]); ys.append(t["y"])
+    if not xs:
+        return 0.0, 0.0, 1.0, 1.0
+    return min(xs), min(ys), max(xs), max(ys)
 
 
-def build_vsdx(nodes, edges) -> bytes:
-    """Costruisce un .vsdx in memoria a partire da nodi/archi già posizionati.
+def build_vsdx(nodes, edges, primitives=None) -> bytes:
+    """Costruisce un .vsdx in memoria.
 
-    nodes: [{id, label, model, ip, x, y}, ...]
-    edges: [{source, target, label, color}, ...]
+    nodes: [{id, label, model, ip, x, y, [w, h, fill, border]}, ...]
+    edges: [{source, target, label, color}, ...]  (mappa classica)
+    primitives: dict opzionale registrato dal frontend (mappa minimalista):
+      lines: [{points:[[x,y],...], color, alpha, width, dash}]
+      polys: [{points, fill, alpha}]
+      rects: [{x, y, w, h, fill, alpha}]
+      texts: [{x, y, text, color, size, bold, w}]
+    Tutte le coordinate sono in pixel canvas vis.js (Y verso il basso).
     Ritorna i byte del file zip (.vsdx).
     """
-    positions, page_w, page_h = _compute_layout(nodes)
+    min_x, min_y, max_x, max_y = _collect_bounds(nodes, primitives)
+    page_w = max((max_x - min_x) * _SCALE, 1.0) + 2 * _MIN_MARGIN_IN
+    page_h = max((max_y - min_y) * _SCALE, 1.0) + 2 * _MIN_MARGIN_IN
+
+    # Trasformazione canvas -> pollici Visio (asse Y invertito).
+    def tx(x): return (x - min_x) * _SCALE + _MIN_MARGIN_IN
+    def ty(y): return (max_y - y) * _SCALE + _MIN_MARGIN_IN
+
     shapes_xml = []
-    connects_xml = []
     shape_id = 1
-    id_by_node = {}
 
-    box_w, box_h = 1.6, 0.6  # dimensioni fisse dei rettangoli dispositivo, in pollici
-
-    for n in nodes:
-        px, py = positions.get(n["id"], (1.0, 1.0))
+    def next_id():
+        nonlocal shape_id
         sid = shape_id
-        id_by_node[n["id"]] = sid
         shape_id += 1
-        label = n.get("label") or n.get("ip") or str(n["id"])
-        model = n.get("model") or ""
-        ip = n.get("ip") or n["id"]
-        text = "\n".join(filter(None, [label, model, ip]))
+        return sid
+
+    def char_section(size_pt, color, bold=False):
+        return (f'<Section N="Character"><Row IX="0">'
+                f'<Cell N="Size" V="{size_pt/72:.4f}" U="PT"/>'
+                f'<Cell N="Color" V="{_hex_to_rgb_fraction(color)}"/>'
+                f'<Cell N="Style" V="{1 if bold else 0}"/>'
+                f'</Row></Section>')
+
+    # --- Riquadri dispositivo -------------------------------------------------
+    positions = {}
+    for n in nodes:
+        w_px = float(n.get("w") or 80.0); h_px = float(n.get("h") or 30.0)
+        box_w = max(w_px * _SCALE, 0.3); box_h = max(h_px * _SCALE, 0.15)
+        px, py = tx(n["x"]), ty(n["y"])
+        positions[n["id"]] = (px, py)
+        sid = next_id()
+        parts = [n.get("label") or n.get("ip") or str(n["id"]),
+                 n.get("model") or "", n.get("ip") or ""]
+        text = "\n".join(p for p in parts if p)
+        fill = _hex_to_rgb_fraction(n.get("fill") or "#E8E4FB")
+        border = _hex_to_rgb_fraction(n.get("border") or "#6A5FC1")
         shapes_xml.append(f'''
         <Shape ID="{sid}" Type="Shape">
           <Cell N="PinX" V="{px:.4f}"/>
@@ -88,9 +118,10 @@ def build_vsdx(nodes, edges) -> bytes:
           <Cell N="Height" V="{box_h:.4f}"/>
           <Cell N="LocPinX" V="{box_w/2:.4f}"/>
           <Cell N="LocPinY" V="{box_h/2:.4f}"/>
-          <Cell N="FillForegnd" V="#E8E4FB"/>
-          <Cell N="LineColor" V="#6A5FC1"/>
+          <Cell N="FillForegnd" V="{fill}"/>
+          <Cell N="LineColor" V="{border}"/>
           <Cell N="LineWeight" V="0.01"/>
+          {char_section(_pt(12), "#1a2430")}
           <Section N="Geometry" IX="0">
             <Row T="MoveTo" IX="1"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>
             <Row T="LineTo" IX="2"><Cell N="X" V="{box_w:.4f}"/><Cell N="Y" V="0"/></Row>
@@ -101,28 +132,107 @@ def build_vsdx(nodes, edges) -> bytes:
           <Text>{escape(text)}</Text>
         </Shape>''')
 
-    for e in edges:
-        src = id_by_node.get(e.get("source"))
-        dst = id_by_node.get(e.get("target"))
-        if src is None or dst is None:
-            continue
-        spx, spy = positions[e["source"]]
-        dpx, dpy = positions[e["target"]]
-        sid = shape_id
-        shape_id += 1
-        color = _hex_to_rgb_fraction(e.get("color"))
-        label = e.get("label") or ""
-        # Coordinate locali relative al bounding box della forma 1-D stessa.
-        x0, y0 = spx + box_w / 2, spy + box_h / 2
-        x1, y1 = dpx + box_w / 2, dpy + box_h / 2
-        w = x1 - x0
-        h = y1 - y0
-        # Width/Height del riquadro shape sempre positivi (Visio rifiuta valori
-        # negativi); la geometria usa coordinate locali con segno.
+    # --- Percorso generico (polilinea/poligono) in coordinate pagina ---------
+    def path_shape(points, line_color=None, line_w_px=1.5, dash=False,
+                   fill=None, fill_alpha=1.0, closed=False):
+        pts = [(tx(p[0]), ty(p[1])) for p in points]
+        xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+        x0, y0 = min(xs), min(ys)
+        w = max(max(xs) - x0, 0.01); h = max(max(ys) - y0, 0.01)
+        sid = next_id()
+        rows = []
+        for i, (x, y) in enumerate(pts):
+            t = "MoveTo" if i == 0 else "LineTo"
+            rows.append(f'<Row T="{t}" IX="{i+1}"><Cell N="X" V="{x-x0:.4f}"/><Cell N="Y" V="{y-y0:.4f}"/></Row>')
+        cells = [
+            f'<Cell N="PinX" V="{x0:.4f}"/>', f'<Cell N="PinY" V="{y0:.4f}"/>',
+            f'<Cell N="Width" V="{w:.4f}"/>', f'<Cell N="Height" V="{h:.4f}"/>',
+            '<Cell N="LocPinX" V="0"/>', '<Cell N="LocPinY" V="0"/>',
+        ]
+        if line_color:
+            cells.append(f'<Cell N="LineColor" V="{_hex_to_rgb_fraction(line_color)}"/>')
+            cells.append(f'<Cell N="LineWeight" V="{max(line_w_px * _SCALE, 0.008):.4f}"/>')
+            if dash:
+                cells.append('<Cell N="LinePattern" V="2"/>')
+        else:
+            cells.append('<Cell N="LinePattern" V="0"/>')
+        geo_cells = ''
+        if fill:
+            cells.append(f'<Cell N="FillForegnd" V="{_hex_to_rgb_fraction(fill)}"/>')
+            if fill_alpha < 1.0:
+                cells.append(f'<Cell N="FillForegndTrans" V="{1.0 - fill_alpha:.3f}"/>')
+        else:
+            geo_cells = '<Cell N="NoFill" V="1"/>'
         shapes_xml.append(f'''
         <Shape ID="{sid}" Type="Shape">
-          <Cell N="PinX" V="{x0:.4f}"/>
-          <Cell N="PinY" V="{y0:.4f}"/>
+          {''.join(cells)}
+          <Section N="Geometry" IX="0">
+            {geo_cells}
+            {''.join(rows)}
+          </Section>
+        </Shape>''')
+
+    def text_shape(cx, cy, text, color, size_px, bold, w_px):
+        sid = next_id()
+        w = max((w_px or len(text) * size_px * 0.6) * _SCALE, 0.1)
+        h = max(size_px * 1.4 * _SCALE, 0.08)
+        pt = _pt(size_px)
+        shapes_xml.append(f'''
+        <Shape ID="{sid}" Type="Shape">
+          <Cell N="PinX" V="{tx(cx):.4f}"/>
+          <Cell N="PinY" V="{ty(cy):.4f}"/>
+          <Cell N="Width" V="{w:.4f}"/>
+          <Cell N="Height" V="{h:.4f}"/>
+          <Cell N="LocPinX" V="{w/2:.4f}"/>
+          <Cell N="LocPinY" V="{h/2:.4f}"/>
+          <Cell N="LinePattern" V="0"/>
+          <Cell N="FillPattern" V="0"/>
+          {char_section(pt, color, bold)}
+          <Text>{escape(text)}</Text>
+        </Shape>''')
+
+    if primitives:
+        # Ordine di disegno = ordine del canvas: poligoni/rettangoli/linee/testi
+        # arrivano già sequenziati dal registratore; si mantiene la z-order
+        # relativa disegnando prima i riempimenti, poi le linee, poi i testi
+        # (i riquadri dispositivo sono già stati emessi per primi, come sul
+        # canvas dove vis.js disegna i nodi prima dell'overlay... in realtà
+        # l'overlay è sopra i nodi, quindi l'ordine qui coincide).
+        for p in primitives.get("polys", []):
+            if len(p.get("points", [])) > 2:
+                path_shape(p["points"], fill=p.get("fill"),
+                           fill_alpha=float(p.get("alpha", 1.0)), closed=True)
+        for r in primitives.get("rects", []):
+            pts = [[r["x"], r["y"]], [r["x"] + r["w"], r["y"]],
+                   [r["x"] + r["w"], r["y"] + r["h"]], [r["x"], r["y"] + r["h"]],
+                   [r["x"], r["y"]]]
+            path_shape(pts, fill=r.get("fill"), fill_alpha=float(r.get("alpha", 1.0)), closed=True)
+        for ln in primitives.get("lines", []):
+            if len(ln.get("points", [])) > 1:
+                path_shape(ln["points"], line_color=ln.get("color") or "#78909c",
+                           line_w_px=float(ln.get("width", 1.5)),
+                           dash=bool(ln.get("dash")))
+        for t in primitives.get("texts", []):
+            if t.get("text"):
+                text_shape(t["x"], t["y"], t["text"], t.get("color") or "#455a64",
+                           float(t.get("size", 10)), bool(t.get("bold")),
+                           float(t.get("w") or 0))
+    else:
+        # Mappa classica: una linea retta per arco, con etichetta.
+        for e in edges:
+            if e.get("source") not in positions or e.get("target") not in positions:
+                continue
+            spx, spy = positions[e["source"]]
+            dpx, dpy = positions[e["target"]]
+            sid = next_id()
+            color = _hex_to_rgb_fraction(e.get("color"))
+            label = e.get("label") or ""
+            w = dpx - spx
+            h = dpy - spy
+            shapes_xml.append(f'''
+        <Shape ID="{sid}" Type="Shape">
+          <Cell N="PinX" V="{spx:.4f}"/>
+          <Cell N="PinY" V="{spy:.4f}"/>
           <Cell N="Width" V="{max(abs(w), 0.01):.4f}"/>
           <Cell N="Height" V="{max(abs(h), 0.01):.4f}"/>
           <Cell N="LocPinX" V="0"/>
@@ -235,29 +345,42 @@ def build_vsdx(nodes, edges) -> bytes:
 
 
 if __name__ == "__main__":
-    # Validazione minima: 2 nodi finti + 1 arco -> vsdx apribile come zip e XML valido.
+    # Validazione minima: nodi + arco classico E primitive minimaliste ->
+    # vsdx apribile come zip e XML valido.
     import xml.dom.minidom as minidom
 
     fake_nodes = [
-        {"id": "10.0.0.1", "label": "SW-CORE-1", "model": "C9300", "ip": "10.0.0.1", "x": 0, "y": 0},
-        {"id": "10.0.0.2", "label": "SW-ACCESS-2", "model": "C2960", "ip": "10.0.0.2", "x": 300, "y": 150},
+        {"id": "10.0.0.1", "label": "SW-CORE-1", "model": "C9300", "ip": "10.0.0.1",
+         "x": 0, "y": 0, "w": 160, "h": 60, "fill": "#dbeefa", "border": "#5a7a94"},
+        {"id": "10.0.0.2", "label": "SW-ACCESS-2", "model": "C2960", "ip": "10.0.0.2",
+         "x": 400, "y": 200, "w": 160, "h": 60},
     ]
     fake_edges = [
         {"source": "10.0.0.1", "target": "10.0.0.2", "label": "Po1", "color": "#FFB84D"},
     ]
-    data = build_vsdx(fake_nodes, fake_edges)
-    with zipfile.ZipFile(io.BytesIO(data)) as z:
-        required = [
-            "[Content_Types].xml", "_rels/.rels", "visio/document.xml",
-            "visio/_rels/document.xml.rels", "visio/pages/pages.xml",
-            "visio/pages/_rels/pages.xml.rels", "visio/pages/page1.xml",
-            "visio/windows.xml", "docProps/core.xml", "docProps/app.xml",
-            "docProps/custom.xml",
-        ]
-        names = z.namelist()
-        for part in required:
-            assert part in names, f"Parte mancante: {part}"
-        for part in required:
-            if part.endswith(".xml"):
+    fake_prims = {
+        "lines": [{"points": [[80, 0], [240, 0], [240, 200], [320, 200]],
+                   "color": "#8B4513", "alpha": 1, "width": 1.8, "dash": False},
+                  {"points": [[80, 11], [251, 11], [251, 211], [320, 211]],
+                   "color": "#8B4513", "alpha": 1, "width": 1.8, "dash": False}],
+        "polys": [{"points": [[230, 90], [260, 90], [260, 120], [230, 120], [230, 90]],
+                   "fill": "#8B4513", "alpha": 0.16}],
+        "rects": [{"x": 200, "y": 60, "w": 30, "h": 14, "fill": "#ffffff", "alpha": 1}],
+        "texts": [{"x": 215, "y": 67, "text": "po1", "color": "#8B4513",
+                   "size": 10, "bold": True, "w": 24}],
+    }
+    for prims in (None, fake_prims):
+        data = build_vsdx(fake_nodes, fake_edges, prims)
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            names = z.namelist()
+            required = [
+                "[Content_Types].xml", "_rels/.rels", "visio/document.xml",
+                "visio/_rels/document.xml.rels", "visio/pages/pages.xml",
+                "visio/pages/_rels/pages.xml.rels", "visio/pages/page1.xml",
+                "visio/windows.xml", "docProps/core.xml", "docProps/app.xml",
+                "docProps/custom.xml",
+            ]
+            for part in required:
+                assert part in names, f"Parte mancante: {part}"
                 minidom.parseString(z.read(part))  # solleva se XML non valido
-    print(f"OK: vsdx valido, {len(data)} bytes, {len(names)} parti.")
+        print(f"OK ({'primitives' if prims else 'classic'}): vsdx valido, {len(data)} bytes.")

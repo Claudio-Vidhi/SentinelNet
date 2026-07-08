@@ -33,6 +33,7 @@ import config_analyzer
 import ai_assistant
 import crypto_vault
 import switch_provisioner
+import fortigate_provisioner
 import site_manager
 import mcp_server
 import visio_export
@@ -452,6 +453,51 @@ class SwitchProvisionSSHSchema(SwitchProvisionSchema):
 class SwitchProvisionSerialSchema(SwitchProvisionSchema):
     com_port: str
     baudrate: int = 9600
+
+class FortiGateProvisionSchema(BaseModel):
+    """Parametri del wizard ZTP FortiGate. Vedi fortigate_provisioner.build_config."""
+    hostname: str = "FortiGate"
+    timezone: str = "Europe/Rome"
+    admin_user: str = ""
+    admin_password: str = ""
+    admin_timeout: int = 10
+    lockout: bool = True
+    strong_crypto: bool = True
+    mgmt_interface: str = ""
+    mgmt_ip: str = ""
+    mgmt_mask: str = ""
+    mgmt_allowaccess: str = "ping https ssh"
+    wan_interface: str = ""
+    wan_mode: str = "dhcp"
+    wan_ip: str = ""
+    wan_mask: str = ""
+    wan_gw: str = ""
+    lan_interface: str = ""
+    lan_ip: str = ""
+    lan_mask: str = ""
+    dhcp_server: bool = False
+    dhcp_start: str = ""
+    dhcp_end: str = ""
+    dns_primary: str = ""
+    dns_secondary: str = ""
+    ntp_servers: List[str] = []
+    syslog_server: str = ""
+    snmpv3: dict = {}
+    lan_to_wan_policy: bool = True
+    disable_wan_admin: bool = True
+    banner: str = ""
+
+class FortiGateProvisionSSHSchema(FortiGateProvisionSchema):
+    ssh_host: str
+    ssh_port: int = 22
+    ssh_username: str
+    ssh_password: str
+
+class FortiGateProvisionSerialSchema(FortiGateProvisionSchema):
+    com_port: str
+    baudrate: int = 9600
+    console_user: str = "admin"
+    console_password: str = ""
 class McpSettingsSchema(BaseModel):
     disabled_tools: List[str] = []
 
@@ -1260,6 +1306,11 @@ class VisioNodeSchema(BaseModel):
     ip: str = ""
     x: float = 0
     y: float = 0
+    # Dimensioni/colori reali del riquadro (mappa minimalista): opzionali.
+    w: Optional[float] = None
+    h: Optional[float] = None
+    fill: Optional[str] = None
+    border: Optional[str] = None
 
 class VisioEdgeSchema(BaseModel):
     source: str
@@ -1270,6 +1321,9 @@ class VisioEdgeSchema(BaseModel):
 class VisioExportSchema(BaseModel):
     nodes: List[VisioNodeSchema] = []
     edges: List[VisioEdgeSchema] = []
+    # Primitive grafiche registrate dal frontend (mappa minimalista): cavi
+    # ortogonali paralleli, etichette porta, pillole Po/vPC, contenitori Sede.
+    primitives: Optional[dict] = None
 
 @app.post("/api/map/export/vsdx")
 def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_current_user)):
@@ -1277,6 +1331,7 @@ def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_curre
     data = visio_export.build_vsdx(
         [n.dict() for n in payload.nodes],
         [e.dict() for e in payload.edges],
+        payload.primitives,
     )
     log_audit(f"Export Visio mappa richiesto dall'utente '{current_user.get('sub')}'.")
     return Response(
@@ -2597,6 +2652,65 @@ def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user =
 def provisioner_serial_ports(current_user = Depends(require_operator)):
     """Elenca le porte COM/seriali disponibili sull'host del server."""
     return {"ports": switch_provisioner.list_serial_ports()}
+
+
+# --- FORTIGATE PROVISIONER: ZTP firewall FortiGate (view/SSH/console-seriale) ---
+
+@app.post("/api/provisioner/fgt/generate")
+def fgt_provisioner_generate(payload: FortiGateProvisionSchema, current_user = Depends(require_operator)):
+    """Genera la configurazione FortiOS day-0 e la restituisce come testo."""
+    config_text = fortigate_provisioner.build_config(payload.dict())
+    log_audit(f"Config FortiGate day-0 generata per '{payload.hostname}' da '{current_user.get('sub')}'.")
+    return {"status": "success", "config": config_text}
+
+@app.post("/api/provisioner/fgt/download")
+def fgt_provisioner_download(payload: FortiGateProvisionSchema, current_user = Depends(require_operator)):
+    """Genera la configurazione FortiOS e la restituisce come file .txt."""
+    config_text = fortigate_provisioner.build_config(payload.dict())
+    from fastapi.responses import Response as FastResponse
+    filename = f"{(payload.hostname or 'fortigate').strip()}-day0.txt"
+    log_audit(f"Config FortiGate day-0 (download) per '{payload.hostname}' da '{current_user.get('sub')}'.")
+    return FastResponse(
+        content=config_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.post("/api/provisioner/fgt/push-ssh")
+def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user = Depends(require_operator)):
+    """Genera la config FortiOS e la applica via SSH (Netmiko 'fortinet')."""
+    config_text = fortigate_provisioner.build_config(payload.dict())
+    result = fortigate_provisioner.push_via_ssh(
+        host=payload.ssh_host,
+        username=payload.ssh_username,
+        password=payload.ssh_password,
+        config_text=config_text,
+        port=payload.ssh_port,
+    )
+    log_audit(
+        f"Push SSH config FortiGate day-0 su '{payload.ssh_host}' (hostname target: "
+        f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
+    )
+    result["config"] = config_text
+    return result
+
+@app.post("/api/provisioner/fgt/push-serial")
+def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current_user = Depends(require_operator)):
+    """Genera la config FortiOS e la applica via console/seriale (day-0)."""
+    config_text = fortigate_provisioner.build_config(payload.dict())
+    result = fortigate_provisioner.push_via_serial(
+        com_port=payload.com_port,
+        config_text=config_text,
+        baudrate=payload.baudrate,
+        username=payload.console_user,
+        password=payload.console_password,
+    )
+    log_audit(
+        f"Push seriale ({payload.com_port}) config FortiGate day-0 (hostname target: "
+        f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
+    )
+    result["config"] = config_text
+    return result
 
 
 # --- MCP SERVER: controllo dei tool esposti ai client LLM esterni ---

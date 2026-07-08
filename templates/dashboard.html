@@ -1525,6 +1525,57 @@
         Genera una configurazione IOS/IOS-XE completa seguendo le linee guida di hardening Cisco, poi scegli come consegnarla.
       </p>
 
+      <div class="form-group" style="max-width:320px;">
+        <label data-i18n="lblProvVendor">Tipo apparato</label>
+        <select id="provVendor" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="cisco">Switch Cisco (IOS/IOS-XE)</option>
+          <option value="fortigate">Firewall FortiGate (FortiOS)</option>
+        </select>
+      </div>
+
+      <div id="provFgtSection" style="display:none;">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
+          <div class="form-group"><label>Hostname</label><input id="fgtHostname" type="text" value="FGT-NEW-01" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Timezone</label><input id="fgtTimezone" type="text" value="Europe/Rome" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Admin aggiuntivo (user)</label><input id="fgtAdminUser" type="text" placeholder="netadmin" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Admin aggiuntivo (password)</label><input id="fgtAdminPass" type="password" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Interfaccia MGMT</label><input id="fgtMgmtIf" type="text" placeholder="mgmt / port1" style="padding-left:12px;"></div>
+          <div class="form-group"><label>IP MGMT</label><input id="fgtMgmtIp" type="text" placeholder="10.0.0.254" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Mask MGMT</label><input id="fgtMgmtMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Interfaccia WAN</label><input id="fgtWanIf" type="text" placeholder="wan1" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Modalità WAN</label>
+            <select id="fgtWanMode" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+              <option value="dhcp">DHCP</option>
+              <option value="static">Statica</option>
+            </select>
+          </div>
+          <div class="form-group"><label>IP WAN (statica)</label><input id="fgtWanIp" type="text" placeholder="203.0.113.2" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Mask WAN</label><input id="fgtWanMask" type="text" placeholder="255.255.255.252" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Gateway WAN</label><input id="fgtWanGw" type="text" placeholder="203.0.113.1" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Interfaccia LAN</label><input id="fgtLanIf" type="text" placeholder="internal / lan" style="padding-left:12px;"></div>
+          <div class="form-group"><label>IP LAN</label><input id="fgtLanIp" type="text" placeholder="192.168.1.1" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Mask LAN</label><input id="fgtLanMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
+          <div class="form-group"><label>DHCP range start</label><input id="fgtDhcpStart" type="text" placeholder="192.168.1.100" style="padding-left:12px;"></div>
+          <div class="form-group"><label>DHCP range end</label><input id="fgtDhcpEnd" type="text" placeholder="192.168.1.200" style="padding-left:12px;"></div>
+          <div class="form-group"><label>DNS primario</label><input id="fgtDns1" type="text" placeholder="1.1.1.1" style="padding-left:12px;"></div>
+          <div class="form-group"><label>DNS secondario</label><input id="fgtDns2" type="text" placeholder="8.8.8.8" style="padding-left:12px;"></div>
+          <div class="form-group"><label>NTP servers (comma)</label><input id="fgtNtp" type="text" placeholder="it.pool.ntp.org" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Syslog server</label><input id="fgtSyslog" type="text" placeholder="10.0.0.50" style="padding-left:12px;"></div>
+          <div class="form-group"><label>SNMPv3 user</label><input id="fgtSnmpUser" type="text" style="padding-left:12px;"></div>
+          <div class="form-group"><label>SNMPv3 auth pass</label><input id="fgtSnmpAuth" type="password" style="padding-left:12px;"></div>
+          <div class="form-group"><label>SNMPv3 priv pass</label><input id="fgtSnmpPriv" type="password" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" style="padding-left:12px;"></div>
+        </div>
+        <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:16px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtDhcpServer"> DHCP server su LAN</label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLanToWan" checked> Policy LAN→WAN con NAT</label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtNoWanAdmin" checked> Nessun accesso admin dal WAN</label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLockout" checked> Admin lockout (anti brute-force)</label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtStrongCrypto" checked> Strong-crypto</label>
+        </div>
+      </div>
+
+      <div id="provCiscoSection">
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
         <div class="form-group"><label>Hostname</label><input id="provHostname" type="text" value="SW-NEW-01" style="padding-left:12px;"></div>
         <div class="form-group"><label>Ruolo</label>
@@ -1569,6 +1620,7 @@
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provErrdisable" checked> Errdisable auto-recovery</label>
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provNoVstack" checked> Disabilita Smart Install (no vstack)</label>
       </div>
+      </div>
 
       <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
         <button class="btn btn-primary" id="btnProvGenerate"><i class="fa-solid fa-file-code"></i> Genera Config</button>
@@ -1605,6 +1657,8 @@
             <option value="115200">115200</option>
           </select>
         </div>
+        <div class="form-group" id="fgtConsoleUserGroup" style="display:none;"><label>Login console (user)</label><input id="fgtConsoleUser" type="text" value="admin" style="padding-left:12px;"></div>
+        <div class="form-group" id="fgtConsolePassGroup" style="display:none;"><label>Login console (password)</label><input id="fgtConsolePass" type="password" placeholder="(vuota su unità vergine)" style="padding-left:12px;"></div>
         <div style="align-self:end;"><button class="btn btn-primary" id="btnProvPushSerial"><i class="fa-solid fa-paper-plane"></i> Applica via Console</button></div>
       </div>
 
@@ -3634,9 +3688,62 @@
         };
     }
 
+    // Raccolta parametri del wizard ZTP FortiGate (vedi fortigate_provisioner.py).
+    function fgtCollectPayload() {
+        const v = id => (document.getElementById(id)?.value || '').trim();
+        return {
+            hostname: v('fgtHostname') || 'FortiGate',
+            timezone: v('fgtTimezone') || 'Europe/Rome',
+            admin_user: v('fgtAdminUser'),
+            admin_password: document.getElementById('fgtAdminPass').value,
+            lockout: document.getElementById('fgtLockout').checked,
+            strong_crypto: document.getElementById('fgtStrongCrypto').checked,
+            mgmt_interface: v('fgtMgmtIf'),
+            mgmt_ip: v('fgtMgmtIp'),
+            mgmt_mask: v('fgtMgmtMask'),
+            wan_interface: v('fgtWanIf'),
+            wan_mode: document.getElementById('fgtWanMode').value,
+            wan_ip: v('fgtWanIp'),
+            wan_mask: v('fgtWanMask'),
+            wan_gw: v('fgtWanGw'),
+            lan_interface: v('fgtLanIf'),
+            lan_ip: v('fgtLanIp'),
+            lan_mask: v('fgtLanMask'),
+            dhcp_server: document.getElementById('fgtDhcpServer').checked,
+            dhcp_start: v('fgtDhcpStart'),
+            dhcp_end: v('fgtDhcpEnd'),
+            dns_primary: v('fgtDns1'),
+            dns_secondary: v('fgtDns2'),
+            ntp_servers: v('fgtNtp').split(',').map(s => s.trim()).filter(Boolean),
+            syslog_server: v('fgtSyslog'),
+            snmpv3: v('fgtSnmpUser') ? {
+                user: v('fgtSnmpUser'),
+                auth_pass: document.getElementById('fgtSnmpAuth').value,
+                priv_pass: document.getElementById('fgtSnmpPriv').value,
+            } : {},
+            lan_to_wan_policy: document.getElementById('fgtLanToWan').checked,
+            disable_wan_admin: document.getElementById('fgtNoWanAdmin').checked,
+            banner: v('fgtBanner'),
+        };
+    }
+    function provVendorIsFgt() { return document.getElementById('provVendor')?.value === 'fortigate'; }
+    function provPayloadAndBase() {
+        return provVendorIsFgt()
+            ? { payload: fgtCollectPayload(), base: '/api/provisioner/fgt' }
+            : { payload: provCollectPayload(), base: '/api/provisioner' };
+    }
+
     function provInitToggles() {
         const roleSel = document.getElementById('provRole');
         if (!roleSel) return;
+        document.getElementById('provVendor').addEventListener('change', () => {
+            const fgt = provVendorIsFgt();
+            document.getElementById('provCiscoSection').style.display = fgt ? 'none' : '';
+            document.getElementById('provFgtSection').style.display = fgt ? '' : 'none';
+            // Campi login console: servono solo al push seriale FortiGate.
+            document.getElementById('fgtConsoleUserGroup').style.display = fgt ? 'block' : 'none';
+            document.getElementById('fgtConsolePassGroup').style.display = fgt ? 'block' : 'none';
+        });
         roleSel.addEventListener('change', () => {
             const isDist = roleSel.value === 'distribution';
             document.getElementById('provSvisGroup').style.display = isDist ? 'block' : 'none';
@@ -3647,9 +3754,10 @@
             document.getElementById('provSerialFields').style.display = e.target.value === 'serial' ? 'grid' : 'none';
         });
         document.getElementById('btnProvGenerate').addEventListener('click', async () => {
-            const res = await apiFetch('/api/provisioner/generate', {
+            const { payload, base } = provPayloadAndBase();
+            const res = await apiFetch(`${base}/generate`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(provCollectPayload())
+                body: JSON.stringify(payload)
             });
             if (res && res.ok) {
                 const data = await res.json();
@@ -3657,31 +3765,35 @@
             }
         });
         document.getElementById('btnProvDownload').addEventListener('click', async () => {
-            const res = await apiFetch('/api/provisioner/download', {
+            const { payload, base } = provPayloadAndBase();
+            const res = await apiFetch(`${base}/download`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(provCollectPayload())
+                body: JSON.stringify(payload)
             });
             if (res && res.ok) {
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${document.getElementById('provHostname').value.trim() || 'switch'}-day0.txt`;
+                a.download = `${(payload.hostname || 'device')}-day0.txt`;
                 a.click();
                 URL.revokeObjectURL(url);
             }
         });
         document.getElementById('btnProvPushSsh').addEventListener('click', async () => {
-            const payload = Object.assign(provCollectPayload(), {
+            const { payload, base } = provPayloadAndBase();
+            Object.assign(payload, {
                 ssh_host: document.getElementById('provSshHost').value.trim(),
                 ssh_port: parseInt(document.getElementById('provSshPort').value, 10) || 22,
                 ssh_username: document.getElementById('provSshUser').value.trim(),
                 ssh_password: document.getElementById('provSshPass').value,
-                ssh_secret: document.getElementById('provSshSecret').value,
-                save_after: true,
             });
+            if (!provVendorIsFgt()) {
+                payload.ssh_secret = document.getElementById('provSshSecret').value;
+                payload.save_after = true;
+            }
             document.getElementById('provOutput').value = 'Invio in corso via SSH...';
-            const res = await apiFetch('/api/provisioner/push-ssh', {
+            const res = await apiFetch(`${base}/push-ssh`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
@@ -3692,12 +3804,17 @@
             }
         });
         document.getElementById('btnProvPushSerial').addEventListener('click', async () => {
-            const payload = Object.assign(provCollectPayload(), {
+            const { payload, base } = provPayloadAndBase();
+            Object.assign(payload, {
                 com_port: document.getElementById('provComPort').value.trim(),
                 baudrate: parseInt(document.getElementById('provBaudrate').value, 10) || 9600,
             });
+            if (provVendorIsFgt()) {
+                payload.console_user = document.getElementById('fgtConsoleUser').value.trim() || 'admin';
+                payload.console_password = document.getElementById('fgtConsolePass').value;
+            }
             document.getElementById('provOutput').value = 'Invio in corso via console/seriale...';
-            const res = await apiFetch('/api/provisioner/push-serial', {
+            const res = await apiFetch(`${base}/push-serial`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
@@ -4299,10 +4416,14 @@
             const hoverInfo = document.getElementById("toggleMinimalHover")?.checked || false;
             const { nodes, edges, options, bundles, groupsInfo } = buildMinimalGraph(filteredNodesData, filteredLinksData, { showVtpDomain, highlightPC, hoverInfo });
             const hasOverlay = (bundles && bundles.length) || (groupsInfo && groupsInfo.length > 1);
+            // Conservati per l'export Visio: il .vsdx replica ESATTAMENTE il
+            // disegno dell'overlay (cavi paralleli, etichette porta, pillole).
+            minimalOverlayData = { bundles, groupsInfo, nodes };
             renderNetwork(nodes, edges, options, MINIMAL_MAP_STYLE.background,
                           hasOverlay ? (ctx => drawMinimalOverlay(ctx, bundles, groupsInfo)) : null);
             return;
         }
+        minimalOverlayData = null;
 
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
@@ -6110,6 +6231,88 @@
     // editabile. Riusa posizioni/dati già presenti nell'istanza vis.js: nessuna
     // nuova chiamata all'API della topologia, solo un POST al backend che
     // costruisce il pacchetto OPC.
+    // Dati dell'ultima mappa minimalista renderizzata (bundles + gruppi):
+    // servono all'export Visio per riprodurre fedelmente l'overlay canvas.
+    let minimalOverlayData = null;
+
+    // Normalizza un colore canvas ('#rrggbb' o 'rgba(r,g,b,a)') in {hex, alpha}.
+    function visioColor(c) {
+        c = String(c || '#000000');
+        let m = /^rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)$/.exec(c);
+        if (m) {
+            const hex = '#' + [m[1], m[2], m[3]].map(v => (+v).toString(16).padStart(2, '0')).join('');
+            return { hex: hex.toUpperCase(), alpha: m[4] !== undefined ? +m[4] : 1 };
+        }
+        m = /^#([0-9a-f]{6})$/i.exec(c);
+        return { hex: m ? ('#' + m[1]).toUpperCase() : '#000000', alpha: 1 };
+    }
+
+    // Contesto canvas "registratore": espone la stessa API 2D usata da
+    // drawMinimalOverlay ma, invece di disegnare, accumula primitive
+    // (polilinee, poligoni, rettangoli, testi) in coordinate rete. L'export
+    // Visio riesegue l'overlay su questo contesto e spedisce le primitive al
+    // backend: il .vsdx contiene ESATTAMENTE ciò che si vede sulla mappa.
+    function makeRecordingCtx(prims) {
+        const meas = document.createElement('canvas').getContext('2d');
+        const stack = [];
+        let subpaths = [], cur = null;
+        const ctx = {
+            strokeStyle: '#000', fillStyle: '#000', lineWidth: 1,
+            font: '10px Arial', textAlign: 'left', textBaseline: 'alphabetic',
+            lineJoin: 'round', lineCap: 'butt', _dash: [],
+            save() { stack.push({ s: this.strokeStyle, f: this.fillStyle, w: this.lineWidth, fo: this.font, a: this.textAlign, b: this.textBaseline, d: this._dash }); },
+            restore() { const p = stack.pop(); if (p) { this.strokeStyle = p.s; this.fillStyle = p.f; this.lineWidth = p.w; this.font = p.fo; this.textAlign = p.a; this.textBaseline = p.b; this._dash = p.d; } },
+            setLineDash(d) { this._dash = d || []; },
+            beginPath() { subpaths = []; cur = null; },
+            moveTo(x, y) { cur = [[x, y]]; subpaths.push(cur); },
+            lineTo(x, y) { if (!cur) this.moveTo(x, y); else cur.push([x, y]); },
+            arc(x, y, r, a0, a1, ccw) {
+                // Approssimazione poligonale (8 segmenti): sufficiente per i
+                // ponticelli di scavalcamento e gli angoli arrotondati.
+                const steps = 8;
+                let d = a1 - a0;
+                if (ccw && d > 0) d -= 2 * Math.PI;
+                if (!ccw && d < 0) d += 2 * Math.PI;
+                for (let i = 0; i <= steps; i++) {
+                    const a = a0 + d * i / steps;
+                    this.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+                }
+            },
+            arcTo(x1, y1) { this.lineTo(x1, y1); },  // angolo vivo: fedeltà sufficiente
+            rect(x, y, w, h) { subpaths.push([[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]); cur = null; },
+            closePath() { if (cur && cur.length > 1) cur.push([...cur[0]]); },
+            stroke() {
+                const c = visioColor(this.strokeStyle);
+                subpaths.forEach(sp => { if (sp.length > 1) prims.lines.push({ points: sp.map(p => [p[0], p[1]]), color: c.hex, alpha: c.alpha, width: this.lineWidth, dash: this._dash && this._dash.length ? true : false }); });
+            },
+            fill() {
+                const c = visioColor(this.fillStyle);
+                subpaths.forEach(sp => { if (sp.length > 2) prims.polys.push({ points: sp.map(p => [p[0], p[1]]), fill: c.hex, alpha: c.alpha }); });
+            },
+            fillRect(x, y, w, h) {
+                const c = visioColor(this.fillStyle);
+                prims.rects.push({ x, y, w, h, fill: c.hex, alpha: c.alpha });
+            },
+            measureText(t) { meas.font = this.font; return meas.measureText(t || ''); },
+            fillText(text, x, y) {
+                if (!text) return;
+                meas.font = this.font;
+                const w = meas.measureText(text).width;
+                const size = parseFloat(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1] || '10');
+                const bold = /bold/.test(this.font);
+                // Converte allineamento/baseline in un punto CENTRALE del testo.
+                let cx = x, cy = y;
+                if (this.textAlign === 'left') cx = x + w / 2;
+                else if (this.textAlign === 'right') cx = x - w / 2;
+                if (this.textBaseline === 'bottom') cy = y - size / 2;
+                else if (this.textBaseline === 'top') cy = y + size / 2;
+                const c = visioColor(this.fillStyle);
+                prims.texts.push({ x: cx, y: cy, text, color: c.hex, size, bold, w });
+            }
+        };
+        return ctx;
+    }
+
     async function exportVisioMap() {
         if (!networkInstance) {
             alert(i18n[currentLang].alertNoTopology);
@@ -6119,30 +6322,55 @@
         const nodesDs = networkInstance.body.data.nodes;
         const edgesDs = networkInstance.body.data.edges;
 
+        const stripTags = s => String(s || '').replace(/<\/?[bi]>/g, '');
         const nodes = nodesDs.get().map(n => {
             const p = positions[n.id] || { x: 0, y: 0 };
             const raw = n.nodeDataVal || {};
-            return {
+            let bb = null;
+            try { bb = networkInstance.getBoundingBox(n.id); } catch (e) { bb = null; }
+            const out = {
                 id:    n.id,
-                label: n.labelVal || raw.label || String(n.id),
+                label: stripTags(n.labelVal || raw.label || String(n.id)),
                 model: raw.model || raw.platform || '',
                 ip:    n.id,
                 x: p.x, y: p.y
             };
+            if (bb) { out.w = bb.right - bb.left; out.h = bb.bottom - bb.top; }
+            if (n.color && typeof n.color === 'object') {
+                if (typeof n.color.background === 'string') out.fill = visioColor(n.color.background).hex;
+                if (typeof n.color.border === 'string') out.border = visioColor(n.color.border).hex;
+            }
+            // Nella mappa minimalista la label multiriga (nome/modello/mgmt) è
+            // già dentro n.label: si esporta così com'è, senza tag HTML.
+            if (getMapView() === 'minimal' && typeof n.label === 'string') {
+                out.label = stripTags(n.label);
+                out.model = ''; out.ip = '';
+            }
+            return out;
         });
-        const edges = edgesDs.get().map(e => {
-            const ex = e.exportVal || {};
-            return {
-                source: e.from, target: e.to,
-                label: ex.isPortChannel ? (ex.pcName || 'Port-Channel') : '',
-                color: ex.color || '#6A5FC1'
-            };
-        });
+
+        let edges = [];
+        let primitives = null;
+        if (getMapView() === 'minimal' && minimalOverlayData) {
+            // Riesegue l'overlay sul contesto registratore: cavi ortogonali
+            // paralleli, etichette di porta, pillole Po/vPC, contenitori Sede.
+            primitives = { lines: [], polys: [], rects: [], texts: [] };
+            drawMinimalOverlay(makeRecordingCtx(primitives), minimalOverlayData.bundles, minimalOverlayData.groupsInfo);
+        } else {
+            edges = edgesDs.get().map(e => {
+                const ex = e.exportVal || {};
+                return {
+                    source: e.from, target: e.to,
+                    label: ex.isPortChannel ? (ex.pcName || 'Port-Channel') : '',
+                    color: ex.color || '#6A5FC1'
+                };
+            });
+        }
 
         const res = await apiFetch('/api/map/export/vsdx', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nodes, edges })
+            body: JSON.stringify({ nodes, edges, primitives })
         });
         if (!res || !res.ok) {
             alert(i18n[currentLang].alertVisioExportError);
