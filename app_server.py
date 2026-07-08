@@ -276,6 +276,10 @@ class UserDisableSchema(BaseModel):
     username: str
     disabled: bool
 
+class UserTabsSchema(BaseModel):
+    username: str
+    allowed_tabs: List[str] = []
+
 class DeviceDelete(BaseModel):
     ip: str
 
@@ -726,7 +730,11 @@ def change_password(payload: ChangePasswordSchema,
 
 @app.get("/api/auth/me")
 def whoami(current_user = Depends(get_current_user)):
-    return {"username": current_user.get("sub"), "role": current_user.get("role", "viewer")}
+    username = current_user.get("sub")
+    role = current_user.get("role", "viewer")
+    # Gli admin non sono mai ristretti: niente tab da nascondere lato frontend.
+    allowed_tabs = [] if role == "admin" else user_manager.get_allowed_tabs(username)
+    return {"username": username, "role": role, "allowed_tabs": allowed_tabs}
 
 # --- GESTIONE UTENTI (solo amministratori) ---
 
@@ -801,6 +809,19 @@ def set_user_groups_ep(payload: UserGroupsSchema, current_user = Depends(require
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(
         f"Sedi di '{payload.username}' impostate a {groups or 'tutte'} "
+        f"da '{current_user.get('sub')}'."
+    )
+    return {"status": "success"}
+
+@app.post("/api/users/tabs")
+def set_user_tabs_ep(payload: UserTabsSchema, current_user = Depends(require_admin)):
+    """Assegna le tab della dashboard visibili a un utente (vuoto = tutte).
+    # ponytail: enforcement solo lato frontend (nasconde i pulsanti tab). Le API
+    # sensibili sono già protette da ruolo/gruppo indipendentemente da questo campo."""
+    if not user_manager.set_allowed_tabs(payload.username, payload.allowed_tabs):
+        raise HTTPException(status_code=404, detail="Utente non trovato.")
+    log_audit(
+        f"Tab visibili di '{payload.username}' impostate a {payload.allowed_tabs or 'tutte'} "
         f"da '{current_user.get('sub')}'."
     )
     return {"status": "success"}

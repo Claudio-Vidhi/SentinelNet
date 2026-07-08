@@ -50,6 +50,8 @@ def create_user(username: str, password: str, role: str = "viewer", groups=None,
         "role": role,
         # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
         "groups": list(groups) if groups else [],
+        # Tab dashboard visibili all'utente. Lista vuota = tutte (come per "groups").
+        "allowed_tabs": [],
         "disabled": False,
         # True per gli account creati da un amministratore: al primo login
         # l'utente è obbligato a impostare una nuova password personale.
@@ -92,6 +94,7 @@ def list_users() -> list:
             "username": u,
             "role": d.get("role", "admin"),
             "groups": d.get("groups", []),
+            "allowed_tabs": d.get("allowed_tabs", []),
             "disabled": d.get("disabled", False),
             "must_change_password": d.get("must_change_password", False),
         }
@@ -128,6 +131,22 @@ def set_groups(username: str, groups) -> bool:
     if username not in users:
         return False
     users[username]["groups"] = list(groups) if groups else []
+    _save_users(users)
+    return True
+
+def get_allowed_tabs(username: str):
+    """Tab dashboard visibili all'utente. Lista vuota o assente = nessuna
+    restrizione (tutte le tab). Ritorna [] se l'utente non esiste."""
+    user = get_users().get(username)
+    if not user:
+        return []
+    return user.get("allowed_tabs", [])
+
+def set_allowed_tabs(username: str, tabs) -> bool:
+    users = get_users()
+    if username not in users:
+        return False
+    users[username]["allowed_tabs"] = list(tabs) if tabs else []
     _save_users(users)
     return True
 

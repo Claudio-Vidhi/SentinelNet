@@ -1112,6 +1112,10 @@
             <span data-i18n="lblHoverInfo">Info al passaggio</span>
           </label>
 
+          <!-- Color-picker + legenda dei tipi di collegamento: solo nuova mappa.
+               Generato da MINIMAL_LINK_TYPES (stessa tabella usata dal renderer). -->
+          <div id="minimalLegendWrap" style="display:none; align-items:center; gap:12px; flex-wrap:wrap; padding-left:10px; border-left:1px solid var(--border);"></div>
+
         </div>
         <div style="display:flex; gap: 8px;">
           <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
@@ -1619,6 +1623,7 @@
               <th data-i18n="thUserName">Username</th>
               <th data-i18n="thUserRole">Ruolo / Privilegio</th>
               <th data-i18n="thUserGroups">Sedi visibili / gestibili</th>
+              <th data-i18n="thUserTabs">Tab dashboard visibili</th>
               <th data-i18n="thUserActions">Azioni</th>
             </tr>
           </thead>
@@ -2239,6 +2244,7 @@
         thUserName: "Username",
         thUserRole: "Ruolo / Privilegio",
         thUserGroups: "Tenant visibili / gestibili",
+        thUserTabs: "Tab dashboard visibili",
         thUserActions: "Azioni",
         titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente',
         lblNewUserName: "Username",
@@ -2605,6 +2611,7 @@
         thUserName: "Username",
         thUserRole: "Role / Privilege",
         thUserGroups: "Visible / manageable tenants",
+        thUserTabs: "Visible dashboard tabs",
         thUserActions: "Actions",
         titleAddUser: '<i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> New User',
         lblNewUserName: "Username",
@@ -3021,7 +3028,7 @@
         return currentLang === 'en' ? 'Viewer' : 'Visualizzatore';
     }
 
-    function applyRoleUI(username, role) {
+    function applyRoleUI(username, role, allowedTabs) {
         currentUsername = username || '';
         currentRole = role || 'viewer';
         document.body.classList.remove('role-admin','role-operator','role-viewer');
@@ -3032,6 +3039,14 @@
                        : currentRole === 'operator' ? 'fa-user-gear' : 'fa-user';
             badge.innerHTML = `<i class="fa-solid ${icon}"></i> ${escapeHtml(currentUsername)} · ` +
                 `<span class="role-pill role-pill-${currentRole}">${roleLabel(currentRole)}</span>`;
+        }
+        // ponytail: restrizione solo lato frontend (nasconde i pulsanti); vuoto = tutte le tab.
+        if (Array.isArray(allowedTabs) && allowedTabs.length > 0) {
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                const m = btn.getAttribute('onclick').match(/switchTab\('([^']+)'/);
+                const tabId = m && m[1];
+                if (tabId && !allowedTabs.includes(tabId)) btn.style.display = 'none';
+            });
         }
     }
 
@@ -3088,7 +3103,7 @@
             if (meRes && meRes.ok) {
                 const me = await meRes.json();
                 currentRole = me.role || 'viewer';
-                applyRoleUI(me.username, currentRole);
+                applyRoleUI(me.username, currentRole, me.allowed_tabs || []);
             }
         } catch (e) { /* non bloccante */ }
 
@@ -4346,6 +4361,9 @@
         if (hw) hw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none';
         const hc = document.getElementById('toggleMinimalHover');
         if (hc) hc.checked = localStorage.getItem('minimalHoverInfo') === '1';
+        // Color-picker/legenda dei tipi di link: visibile solo sulla nuova mappa.
+        const lw = document.getElementById('minimalLegendWrap');
+        if (lw) { lw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none'; if (mapViewMode === 'minimal') renderMinimalLegend(); }
     }
     function setMapView(mode) {
         mapViewMode = (mode === 'minimal') ? 'minimal' : 'classic';
@@ -4500,6 +4518,47 @@
             group: { stroke: '#90a4ae', fill: 'rgba(120,144,156,0.05)', font: '#607d8b' }
         }
     };
+
+    // ponytail: unica fonte tipo→colore per render + legenda + color-picker.
+    // I default ricalcano i colori di MINIMAL_MAP_STYLE; l'utente li può cambiare
+    // e la scelta è ricordata in localStorage e applicata a ogni ridisegno.
+    const MINIMAL_LINK_TYPES = [
+        { key: 'pc',        it: 'Port-Channel',      en: 'Port-Channel',      def: MINIMAL_MAP_STYLE.edge.pcColor },
+        { key: 'peer',      it: 'Peer-link / vPC',   en: 'Peer-link / vPC',   def: MINIMAL_MAP_STYLE.edge.peerColor },
+        { key: 'keepalive', it: 'Peer-keepalive',    en: 'Peer-keepalive',    def: MINIMAL_MAP_STYLE.edge.peerColor },
+        { key: 'link',      it: 'Link semplice',     en: 'Simple link',       def: MINIMAL_MAP_STYLE.edge.color }
+    ];
+    let minimalLinkColors = {};
+    try { minimalLinkColors = JSON.parse(localStorage.getItem('minimalLinkColors') || '{}'); } catch (e) { minimalLinkColors = {}; }
+    function linkColor(key) {
+        if (minimalLinkColors[key]) return minimalLinkColors[key];
+        const t = MINIMAL_LINK_TYPES.find(x => x.key === key);
+        return t ? t.def : MINIMAL_MAP_STYLE.edge.color;
+    }
+    // Converte un colore #rrggbb nel corrispondente rgba() con alpha (per i
+    // riempimenti traslucidi della pillola aggregata).
+    function hexToRgba(hex, a) {
+        const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+        if (!m) return hex;
+        return `rgba(${parseInt(m[1],16)},${parseInt(m[2],16)},${parseInt(m[3],16)},${a})`;
+    }
+    // Color-picker + legenda della nuova mappa: righe generate dalla stessa
+    // tabella tipo→colore usata dal renderer (fonte unica).
+    function renderMinimalLegend() {
+        const box = document.getElementById('minimalLegendWrap');
+        if (!box) return;
+        box.innerHTML = MINIMAL_LINK_TYPES.map(t => `
+            <label style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted); cursor:pointer; user-select:none;" title="${currentLang==='en'?t.en:t.it}">
+                <input type="color" value="${linkColor(t.key)}" onchange="setMinimalLinkColor('${t.key}', this.value)" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer;">
+                <span>${currentLang==='en'?t.en:t.it}</span>
+            </label>`).join('');
+    }
+    function setMinimalLinkColor(key, val) {
+        minimalLinkColors[key] = val;
+        localStorage.setItem('minimalLinkColors', JSON.stringify(minimalLinkColors));
+        renderMinimalLegend();
+        loadInteractiveMap();
+    }
 
     // Costruisce nodi/archi/opzioni per la vista minimalista dai medesimi dati già
     // filtrati della mappa classica. Nodi = riquadri con nome in grassetto e
@@ -4803,11 +4862,13 @@
         // Stile UNIFORME per tipo di collegamento (Fix rappresentazione
         // standardizzata): stesso colore/spessore per ogni Port-Channel, verde
         // per peer-link/keepalive, tinta sobria per i link semplici.
+        // ponytail: colore preso dalla tabella tipo→colore (fonte unica), così il
+        // color-picker/legenda e il disegno restano sempre allineati.
         const styleFor = b =>
-              b.type === 'peer'      ? { color: S.edge.peerColor, lw: b.emphasize ? 2.4 : 1.8, dash: null }
-            : b.type === 'keepalive' ? { color: S.edge.peerColor, lw: 1.2, dash: [4, 3] }
-            : b.type === 'pc'        ? { color: S.edge.pcColor,   lw: b.emphasize ? 2.4 : 1.8, dash: null }
-                                     : { color: S.edge.color,     lw: 1.4, dash: null };
+              b.type === 'peer'      ? { color: linkColor('peer'),      lw: b.emphasize ? 2.4 : 1.8, dash: null }
+            : b.type === 'keepalive' ? { color: linkColor('keepalive'), lw: 1.2, dash: [4, 3] }
+            : b.type === 'pc'        ? { color: linkColor('pc'),        lw: b.emphasize ? 2.4 : 1.8, dash: null }
+                                     : { color: linkColor('link'),      lw: 1.4, dash: null };
 
         // --- PASSO 1: ancoraggi per lato -----------------------------------
         // Ogni collegamento occupa 'members.length' slot sul lato del riquadro
@@ -4938,16 +4999,33 @@
             ctx.textBaseline = 'middle';
 
             // Etichetta di porta sul bordo INTERNO del riquadro, nel punto d'aggancio.
-            const drawPortLabel = (text, pt, side) => {
+            // ponytail: sui lati alti/bassi (N/S) gli ancoraggi sono ravvicinati in
+            // orizzontale, quindi le etichette centrate si accavallavano in un
+            // groviglio illeggibile ("Te1/1d1t21/1"). Le impiliamo verticalmente una
+            // per riga (slotIdx), allineate a sinistra, come già avviene sui lati E/W.
+            const drawPortLabel = (text, pt, side, slotIdx) => {
                 if (!text) return;
                 ctx.fillStyle = color;
                 if (side === 'E')      { ctx.textAlign = 'right';  ctx.fillText(text, pt.x - 13, pt.y - 5); }
                 else if (side === 'W') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 13, pt.y - 5); }
-                else if (side === 'S') { ctx.textAlign = 'center'; ctx.fillText(text, pt.x, pt.y - 13); }
-                else                   { ctx.textAlign = 'center'; ctx.fillText(text, pt.x, pt.y + 13); }
+                else if (side === 'S') { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 4, pt.y - 13 - (slotIdx || 0) * 11); }
+                else                   { ctx.textAlign = 'left';   ctx.fillText(text, pt.x + 4, pt.y + 13 + (slotIdx || 0) * 11); }
             };
 
-            g.members.forEach(mm => {
+            // ponytail: quadratino di terminazione appena DENTRO il bordo, colore del
+            // cavo (stile drawio). ~5px a zoom base: non copre il testo di porta.
+            const drawTermSquare = (pt, side) => {
+                const s = 5, h = s / 2;
+                let x = pt.x, y = pt.y;
+                if (side === 'E')      x -= h + 1;
+                else if (side === 'W') x += h + 1;
+                else if (side === 'S') y -= h + 1;
+                else                   y += h + 1;
+                ctx.fillStyle = color;
+                ctx.fillRect(x - h, y - h, s, s);
+            };
+
+            g.members.forEach((mm, i) => {
                 // Disegna i segmenti della polilinea: gli orizzontali scavalcano
                 // con un ponticello i segmenti verticali degli ALTRI percorsi.
                 for (let k = 0; k < mm.pts.length - 1; k++) {
@@ -4955,8 +5033,12 @@
                     if (Math.abs(p.y - q.y) < 0.5) drawHSeg(p.x, p.y, q.x, g.bi);
                     else                           drawVSeg(p.x, p.y, q.y);
                 }
-                drawPortLabel(mm.m.local,  mm.A, g.fromSide);
-                drawPortLabel(mm.m.remote, mm.B, g.toSide);
+                // Indice di slot globale sul lato (entry.slot + i): garantisce che le
+                // etichette N/S di fasci diversi si impilino su righe distinte.
+                drawPortLabel(mm.m.local,  mm.A, g.fromSide, g.fromEntry.slot + i);
+                drawPortLabel(mm.m.remote, mm.B, g.toSide,   g.toEntry.slot + i);
+                drawTermSquare(mm.A, g.fromSide);
+                drawTermSquare(mm.B, g.toSide);
             });
             ctx.setLineDash([]);
 
@@ -5003,7 +5085,7 @@
             ctx.arcTo(px, py + ph, px, py, r);
             ctx.arcTo(px, py, px + pw, py, r);
             ctx.closePath();
-            ctx.fillStyle = (b.type === 'peer') ? 'rgba(46,125,50,0.16)' : 'rgba(139,69,19,0.16)';
+            ctx.fillStyle = hexToRgba(color, 0.16);
             ctx.fill();
             ctx.lineWidth = b.emphasize ? 2 : 1.4;
             ctx.strokeStyle = color;
@@ -5021,7 +5103,15 @@
                     drawTag(b.remoteLabel || b.remotePcTag, bC.x - spread - 14, bC.y - sdy * 22);
                 }
             } else {
-                drawTag(b.label || b.pcTag || 'Po', cx, cy - pillHalfSpread - 9);
+                // ponytail: etichetta (es. "Po1", "Po1 / vPC") accostata alla pillola
+                // e spostata LUNGO il cavo verso lo switch a cui il Port-channel
+                // appartiene (lo switch 'from'), affiancata alla linea come in drawio.
+                const towardX = Math.sign(aC.x - cx) || 1;
+                const towardY = Math.sign(aC.y - cy) || 1;
+                let lx, ly;
+                if (horizontal) { lx = cx + towardX * (pillHalfW + 20); ly = cy - spread - 9; }
+                else            { lx = cx - spread - 16;                ly = cy + towardY * (pillHalfW + 16); }
+                drawTag(b.label || b.pcTag || 'Po', lx, ly);
             }
             ctx.restore();
         });
@@ -5687,6 +5777,21 @@
 
     // --- GESTIONE UTENTI (solo admin) ---
 
+    // Tab assegnabili ai ruoli non-admin (le tab requires-admin restano sempre escluse).
+    const ASSIGNABLE_TABS = [
+        { id: 'tab-devices', key: 'tabInventory' },
+        { id: 'tab-groups', key: 'tabGroups' },
+        { id: 'tab-map', key: 'tabMap' },
+        { id: 'tab-map-interactive', key: 'tabInteractive' },
+        { id: 'tab-categories', key: 'tabCategories' },
+        { id: 'tab-security', key: 'tabSecurity' },
+        { id: 'tab-mac', key: 'tabMacTracker' },
+        { id: 'tab-config', key: 'tabConfigAnalyzer' },
+        { id: 'tab-ai', key: 'tabAiAssistant' },
+        { id: 'tab-provisioner', key: 'tabProvisioner' },
+        { id: 'tab-import', key: 'tabImport' },
+    ];
+
     async function loadUsers() {
         if (currentRole !== 'admin') return;
         const res = await apiFetch('/api/users');
@@ -5731,6 +5836,40 @@
                   </details>`;
             }
 
+            // Editor tab: gli admin vedono sempre tutto; per gli altri checkbox per tab
+            // (nessuna spuntata = tutte), con salvataggio esplicito (staged, no auto-save).
+            let tabsCell;
+            if (u.role === 'admin') {
+                tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All tabs (admin)' : 'Tutte le tab (admin)'}</span>`;
+            } else {
+                const allowed = Array.isArray(u.allowed_tabs) ? u.allowed_tabs : [];
+                const tabsSummary = allowed.length === 0
+                    ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All tabs' : 'Tutte le tab'}</span>`
+                    : `<span style="color:var(--primary);">${allowed.length} ${currentLang === 'en' ? 'tab(s)' : 'tab'}</span>`;
+                const tabChecks = ASSIGNABLE_TABS.map(t =>
+                    `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
+                       <input type="checkbox" class="tabs-box" value="${t.id}" ${allowed.includes(t.id) ? 'checked' : ''}
+                              onchange="markTabsDirty(this)"
+                              style="accent-color:var(--primary); cursor:pointer;">
+                       ${i18n[currentLang][t.key] || t.id}
+                     </label>`).join('');
+                tabsCell = `<details data-u="${escapeHtml(u.username)}" data-orig='${JSON.stringify(allowed)}' style="position:relative;">
+                    <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
+                      <i class="fa-solid fa-table-columns" style="color:var(--text-muted); margin-right:4px;"></i>${tabsSummary}
+                    </summary>
+                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); max-height:200px; overflow:auto;">
+                      <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tabs' : 'Nessuna spuntata = tutte le tab'}</div>
+                      ${tabChecks}
+                      <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
+                        <button type="button" class="btn btn-primary btn-small tabs-save-btn" style="display:none; width:auto; margin:0; padding:4px 10px; font-size:12px;" onclick="saveUserTabs(this)">
+                          <i class="fa-solid fa-floppy-disk"></i> ${currentLang === 'en' ? 'Save' : 'Salva'}
+                        </button>
+                        <span class="tabs-dirty-label" style="display:none; color:var(--warning); font-size:11px;">${currentLang === 'en' ? 'Unsaved changes' : 'Modifiche non salvate'}</span>
+                      </div>
+                    </div>
+                  </details>`;
+            }
+
             const disabled = !!u.disabled;
             const disabledBadge = disabled
                 ? ` <span class="role-pill" style="background:rgba(255,107,124,0.15); color:var(--danger); border:1px solid rgba(255,107,124,0.35);">${currentLang === 'en' ? 'DISABLED' : 'DISABILITATO'}</span>`
@@ -5753,6 +5892,7 @@
                     ${roleOptions}
                   </select></td>
                 <td>${scopeCell}</td>
+                <td>${tabsCell}</td>
                 <td style="white-space:nowrap;">${toggleBtn}${isSelf
                     ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
                     : `<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button>`}</td>
@@ -5770,6 +5910,37 @@
         });
         if (res && res.ok) {
             loadUsers();   // aggiorna il riepilogo
+        } else if (res) {
+            const e = await res.json();
+            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+        }
+    }
+
+    // Staged: il toggle di una checkbox non chiama l'API, mostra solo il pulsante Salva
+    // se lo stato differisce da quello originale caricato dal server.
+    function markTabsDirty(checkboxEl) {
+        const details = checkboxEl.closest('details');
+        if (!details) return;
+        const original = JSON.parse(details.dataset.orig || '[]').slice().sort();
+        const current = [...details.querySelectorAll('.tabs-box:checked')].map(cb => cb.value).sort();
+        const dirty = JSON.stringify(original) !== JSON.stringify(current);
+        const btn = details.querySelector('.tabs-save-btn');
+        const label = details.querySelector('.tabs-dirty-label');
+        if (btn) btn.style.display = dirty ? 'inline-flex' : 'none';
+        if (label) label.style.display = dirty ? 'inline' : 'none';
+    }
+
+    async function saveUserTabs(btnEl) {
+        const details = btnEl.closest('details');
+        if (!details) return;
+        const username = details.dataset.u;
+        const allowed_tabs = [...details.querySelectorAll('.tabs-box:checked')].map(cb => cb.value);
+        const res = await apiFetch('/api/users/tabs', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, allowed_tabs })
+        });
+        if (res && res.ok) {
+            loadUsers();
         } else if (res) {
             const e = await res.json();
             alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
