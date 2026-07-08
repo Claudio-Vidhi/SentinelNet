@@ -60,7 +60,7 @@ def _collect_bounds(nodes, primitives):
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def build_vsdx(nodes, edges, primitives=None) -> bytes:
+def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
     """Costruisce un .vsdx in memoria.
 
     nodes: [{id, label, model, ip, x, y, [w, h, fill, border]}, ...]
@@ -70,10 +70,21 @@ def build_vsdx(nodes, edges, primitives=None) -> bytes:
       polys: [{points, fill, alpha}]
       rects: [{x, y, w, h, fill, alpha}]
       texts: [{x, y, text, color, size, bold, w}]
+    connectors: lista opzionale di cavi strutturati (mappa minimalista):
+      [{from, to, points:[[x,y],...], color, width, dash}]
+      Ogni cavo diventa UNA forma 1-D continua, INCOLLATA (glue) ai connection
+      point dei riquadri dispositivo; i riquadri espongono i punti di aggancio
+      come quadratini colorati sul perimetro (figli del gruppo, quindi si
+      muovono col dispositivo) e come Connection section per il glue dinamico.
     Tutte le coordinate sono in pixel canvas vis.js (Y verso il basso).
     Ritorna i byte del file zip (.vsdx).
     """
+    connectors = connectors or []
     min_x, min_y, max_x, max_y = _collect_bounds(nodes, primitives)
+    for c in connectors:
+        for p in c.get("points", []):
+            min_x = min(min_x, p[0]); max_x = max(max_x, p[0])
+            min_y = min(min_y, p[1]); max_y = max(max_y, p[1])
     page_w = max((max_x - min_x) * _SCALE, 1.0) + 2 * _MIN_MARGIN_IN
     page_h = max((max_y - min_y) * _SCALE, 1.0) + 2 * _MIN_MARGIN_IN
 
@@ -97,21 +108,93 @@ def build_vsdx(nodes, edges, primitives=None) -> bytes:
                 f'<Cell N="Style" V="{1 if bold else 0}"/>'
                 f'</Row></Section>')
 
+    # --- Punti di aggancio per nodo (dai connettori strutturati) --------------
+    # Ogni estremita' di cavo diventa un connection point sul riquadro del
+    # dispositivo (con quadratino colorato visibile) a cui il cavo e' incollato.
+    node_by_id = {n["id"]: n for n in nodes}
+    node_anchors = {}   # id -> [ {lx, ly (pollici, locali Y-su), color} ]
+    anchor_index = {}   # (id, round(x), round(y)) -> indice riga Connection
+
+    def _register_anchor(node_id, pt, color):
+        n = node_by_id.get(node_id)
+        if not n:
+            return None
+        key = (node_id, round(pt[0]), round(pt[1]))
+        if key in anchor_index:
+            return anchor_index[key]
+        w_px = float(n.get("w") or 80.0); h_px = float(n.get("h") or 30.0)
+        # Coordinate locali del riquadro (origine in basso a sinistra, Y su).
+        lx = (pt[0] - (n["x"] - w_px / 2)) * _SCALE
+        ly = ((n["y"] + h_px / 2) - pt[1]) * _SCALE
+        lst = node_anchors.setdefault(node_id, [])
+        anchor_index[key] = len(lst)
+        lst.append({"lx": lx, "ly": ly, "color": color})
+        return anchor_index[key]
+
+    conn_glue = []   # (connettore) -> {sid dopo emissione, from/to id, idx aggancio}
+    for c in connectors:
+        pts = c.get("points") or []
+        if len(pts) < 2:
+            continue
+        color = c.get("color") or "#78909c"
+        conn_glue.append({
+            "c": c,
+            "from_idx": _register_anchor(c.get("from"), pts[0], color),
+            "to_idx": _register_anchor(c.get("to"), pts[-1], color),
+        })
+
     # --- Riquadri dispositivo -------------------------------------------------
     positions = {}
+    node_shape_id = {}
+    sq = 5 * _SCALE  # lato del quadratino di aggancio (5px canvas)
     for n in nodes:
         w_px = float(n.get("w") or 80.0); h_px = float(n.get("h") or 30.0)
         box_w = max(w_px * _SCALE, 0.3); box_h = max(h_px * _SCALE, 0.15)
         px, py = tx(n["x"]), ty(n["y"])
         positions[n["id"]] = (px, py)
         sid = next_id()
+        node_shape_id[n["id"]] = sid
         parts = [n.get("label") or n.get("ip") or str(n["id"]),
                  n.get("model") or "", n.get("ip") or ""]
         text = "\n".join(p for p in parts if p)
         fill = _hex_to_rgb_fraction(n.get("fill") or "#E8E4FB")
         border = _hex_to_rgb_fraction(n.get("border") or "#6A5FC1")
+
+        anchors = node_anchors.get(n["id"]) or []
+        # Connection section: un punto per estremita' di cavo, in coordinate
+        # locali del riquadro -> il glue resta valido quando la forma si sposta.
+        conn_rows = "".join(
+            f'<Row IX="{i}"><Cell N="X" V="{a["lx"]:.4f}"/><Cell N="Y" V="{a["ly"]:.4f}"/></Row>'
+            for i, a in enumerate(anchors))
+        conn_section = f'<Section N="Connection">{conn_rows}</Section>' if anchors else ''
+        # Quadratini di aggancio: FIGLI del gruppo (coordinate locali), quindi
+        # seguono il dispositivo quando l'utente lo trascina in Visio.
+        children = []
+        for a in anchors:
+            csid = next_id()
+            children.append(f'''
+            <Shape ID="{csid}" Type="Shape">
+              <Cell N="PinX" V="{a["lx"]:.4f}"/>
+              <Cell N="PinY" V="{a["ly"]:.4f}"/>
+              <Cell N="Width" V="{sq:.4f}"/>
+              <Cell N="Height" V="{sq:.4f}"/>
+              <Cell N="LocPinX" V="{sq/2:.4f}"/>
+              <Cell N="LocPinY" V="{sq/2:.4f}"/>
+              <Cell N="FillForegnd" V="{_hex_to_rgb_fraction(a["color"])}"/>
+              <Cell N="LinePattern" V="0"/>
+              <Section N="Geometry" IX="0">
+                <Row T="MoveTo" IX="1"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>
+                <Row T="LineTo" IX="2"><Cell N="X" V="{sq:.4f}"/><Cell N="Y" V="0"/></Row>
+                <Row T="LineTo" IX="3"><Cell N="X" V="{sq:.4f}"/><Cell N="Y" V="{sq:.4f}"/></Row>
+                <Row T="LineTo" IX="4"><Cell N="X" V="0"/><Cell N="Y" V="{sq:.4f}"/></Row>
+                <Row T="LineTo" IX="5"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>
+              </Section>
+            </Shape>''')
+        shape_type = "Group" if children else "Shape"
+        group_cells = '<Cell N="DisplayMode" V="2"/>' if children else ''
+        children_xml = f'<Shapes>{"".join(children)}</Shapes>' if children else ''
         shapes_xml.append(f'''
-        <Shape ID="{sid}" Type="Shape">
+        <Shape ID="{sid}" Type="{shape_type}">
           <Cell N="PinX" V="{px:.4f}"/>
           <Cell N="PinY" V="{py:.4f}"/>
           <Cell N="Width" V="{box_w:.4f}"/>
@@ -121,7 +204,9 @@ def build_vsdx(nodes, edges, primitives=None) -> bytes:
           <Cell N="FillForegnd" V="{fill}"/>
           <Cell N="LineColor" V="{border}"/>
           <Cell N="LineWeight" V="0.01"/>
+          {group_cells}
           {char_section(_pt(12), "#1a2430")}
+          {conn_section}
           <Section N="Geometry" IX="0">
             <Row T="MoveTo" IX="1"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>
             <Row T="LineTo" IX="2"><Cell N="X" V="{box_w:.4f}"/><Cell N="Y" V="0"/></Row>
@@ -130,6 +215,7 @@ def build_vsdx(nodes, edges, primitives=None) -> bytes:
             <Row T="LineTo" IX="5"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>
           </Section>
           <Text>{escape(text)}</Text>
+          {children_xml}
         </Shape>''')
 
     # --- Percorso generico (polilinea/poligono) in coordinate pagina ---------
@@ -191,6 +277,54 @@ def build_vsdx(nodes, edges, primitives=None) -> bytes:
           <Text>{escape(text)}</Text>
         </Shape>''')
 
+    # --- Connettori strutturati: forme 1-D continue INCOLLATE ai riquadri -----
+    connects_xml = []
+    for g in conn_glue:
+        c = g["c"]
+        pts = [(tx(p[0]), ty(p[1])) for p in c["points"]]
+        xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+        x0, y0 = min(xs), min(ys)
+        w = max(max(xs) - x0, 0.01); h = max(max(ys) - y0, 0.01)
+        sid = next_id()
+        rows = "".join(
+            f'<Row T="{"MoveTo" if i == 0 else "LineTo"}" IX="{i+1}">'
+            f'<Cell N="X" V="{x-x0:.4f}"/><Cell N="Y" V="{y-y0:.4f}"/></Row>'
+            for i, (x, y) in enumerate(pts))
+        dash_cell = '<Cell N="LinePattern" V="2"/>' if c.get("dash") else ''
+        # ObjType=2: connettore instradabile -> Visio lo re-instrada quando
+        # l'utente sposta una forma incollata; Begin/End restano sui quadratini.
+        shapes_xml.append(f'''
+        <Shape ID="{sid}" Type="Shape">
+          <Cell N="ObjType" V="2"/>
+          <Cell N="BeginX" V="{pts[0][0]:.4f}"/>
+          <Cell N="BeginY" V="{pts[0][1]:.4f}"/>
+          <Cell N="EndX" V="{pts[-1][0]:.4f}"/>
+          <Cell N="EndY" V="{pts[-1][1]:.4f}"/>
+          <Cell N="PinX" V="{x0:.4f}"/>
+          <Cell N="PinY" V="{y0:.4f}"/>
+          <Cell N="Width" V="{w:.4f}"/>
+          <Cell N="Height" V="{h:.4f}"/>
+          <Cell N="LocPinX" V="0"/>
+          <Cell N="LocPinY" V="0"/>
+          <Cell N="LineColor" V="{_hex_to_rgb_fraction(c.get("color"))}"/>
+          <Cell N="LineWeight" V="{max(float(c.get("width", 1.8)) * _SCALE, 0.008):.4f}"/>
+          {dash_cell}
+          <Section N="Geometry" IX="0">
+            <Cell N="NoFill" V="1"/>
+            {rows}
+          </Section>
+        </Shape>''')
+        # Glue: BeginX/EndX -> Connections.Xn dei riquadri (FromPart 9=inizio,
+        # 12=fine; ToPart 100+i = i-esimo connection point della forma).
+        for cell, part, node_key, idx_key in (("BeginX", 9, "from", "from_idx"),
+                                              ("EndX", 12, "to", "to_idx")):
+            nid = node_shape_id.get(c.get(node_key))
+            idx = g.get(idx_key)
+            if nid is not None and idx is not None:
+                connects_xml.append(
+                    f'<Connect FromSheet="{sid}" FromCell="{cell}" FromPart="{part}" '
+                    f'ToSheet="{nid}" ToCell="Connections.X{idx+1}" ToPart="{100+idx}"/>')
+
     if primitives:
         # Ordine di disegno = ordine del canvas: poligoni/rettangoli/linee/testi
         # arrivano già sequenziati dal registratore; si mantiene la z-order
@@ -247,10 +381,11 @@ def build_vsdx(nodes, edges, primitives=None) -> bytes:
           <Text>{escape(label)}</Text>
         </Shape>''')
 
+    connects_block = f'\n  <Connects>{"".join(connects_xml)}</Connects>' if connects_xml else ''
     page_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <PageContents xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">
   <Shapes>{"".join(shapes_xml)}
-  </Shapes>
+  </Shapes>{connects_block}
 </PageContents>'''
 
     # Visio (desktop e online) considera "danneggiato" un pacchetto senza le
@@ -359,18 +494,23 @@ if __name__ == "__main__":
         {"source": "10.0.0.1", "target": "10.0.0.2", "label": "Po1", "color": "#FFB84D"},
     ]
     fake_prims = {
-        "lines": [{"points": [[80, 0], [240, 0], [240, 200], [320, 200]],
-                   "color": "#8B4513", "alpha": 1, "width": 1.8, "dash": False},
-                  {"points": [[80, 11], [251, 11], [251, 211], [320, 211]],
-                   "color": "#8B4513", "alpha": 1, "width": 1.8, "dash": False}],
+        "lines": [],
         "polys": [{"points": [[230, 90], [260, 90], [260, 120], [230, 120], [230, 90]],
                    "fill": "#8B4513", "alpha": 0.16}],
         "rects": [{"x": 200, "y": 60, "w": 30, "h": 14, "fill": "#ffffff", "alpha": 1}],
         "texts": [{"x": 215, "y": 67, "text": "po1", "color": "#8B4513",
                    "size": 10, "bold": True, "w": 24}],
     }
-    for prims in (None, fake_prims):
-        data = build_vsdx(fake_nodes, fake_edges, prims)
+    fake_conns = [
+        {"from": "10.0.0.1", "to": "10.0.0.2",
+         "points": [[80, 0], [240, 0], [240, 200], [320, 200]],
+         "color": "#8B4513", "width": 1.8, "dash": False},
+        {"from": "10.0.0.1", "to": "10.0.0.2",
+         "points": [[80, 11], [251, 11], [251, 211], [320, 211]],
+         "color": "#8B4513", "width": 1.8, "dash": False},
+    ]
+    for prims, conns in ((None, None), (fake_prims, fake_conns)):
+        data = build_vsdx(fake_nodes, fake_edges, prims, conns)
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             names = z.namelist()
             required = [
@@ -383,4 +523,8 @@ if __name__ == "__main__":
             for part in required:
                 assert part in names, f"Parte mancante: {part}"
                 minidom.parseString(z.read(part))  # solleva se XML non valido
+            if conns:
+                page = z.read("visio/pages/page1.xml").decode()
+                assert '<Connects>' in page and 'Connections.X1' in page
+                assert page.count('Type="Group"') == 2  # riquadri con quadratini
         print(f"OK ({'primitives' if prims else 'classic'}): vsdx valido, {len(data)} bytes.")
