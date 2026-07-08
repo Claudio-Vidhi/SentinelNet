@@ -1147,6 +1147,9 @@
           <button class="btn btn-secondary btn-small" onclick="exportVisioMap()" style="width:auto; margin:0;" data-i18n="btnExportVisio">
             <i class="fa-solid fa-diagram-project"></i> Esporta Visio
           </button>
+          <button class="btn btn-secondary btn-small" onclick="exportPdfMap()" style="width:auto; margin:0;" data-i18n="btnExportPdf">
+            <i class="fa-solid fa-file-pdf"></i> Esporta PDF
+          </button>
         </div>
       </div>
 
@@ -2210,6 +2213,7 @@
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
         btnExportVisio: '<i class="fa-solid fa-diagram-project"></i> Esporta Visio',
+        btnExportPdf: '<i class="fa-solid fa-file-pdf"></i> Esporta PDF',
         legendOnline: "Dispositivo Online",
         legendOffline: "Dispositivo Offline",
         legendAuthFailed: "Autenticazione Fallita",
@@ -2581,6 +2585,7 @@
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
         btnExportVisio: '<i class="fa-solid fa-diagram-project"></i> Export Visio',
+        btnExportPdf: '<i class="fa-solid fa-file-pdf"></i> Export PDF',
         legendOnline: "Device Online",
         legendOffline: "Device Offline",
         legendAuthFailed: "Authentication Failed",
@@ -4233,6 +4238,11 @@
     function renderDeviceFilterMenu(nodesData, group) {
         const box = document.getElementById('deviceFilterList');
         if (!box) return;
+        // Solo i dispositivi del Tenant scelto: i nodi "boundary" degli altri
+        // tenant restano in mappa ma non compaiono nella checklist.
+        if (group !== 'all' && Array.isArray(nodesData)) {
+            nodesData = nodesData.filter(n => n.group === group);
+        }
         if (!nodesData || !nodesData.length) {
             box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No devices':'Nessun dispositivo'}</div>`;
             return;
@@ -5094,17 +5104,26 @@
             return null;
         };
         // Capture sul contenitore: intercetta PRIMA di vis.js così il trascinamento
-        // della pillola non fa panning/selezione della vista.
-        container.addEventListener('mousedown', ev => {
+        // della pillola non fa panning/selezione della vista. Vis.js (Hammer)
+        // ascolta i POINTER event, non solo mousedown: vanno bloccati entrambi,
+        // altrimenti trascinando la pillola si muove anche tutta la mappa.
+        const beginPillDrag = ev => {
             if (getMapView() !== 'minimal' || !networkInstance) return;
             const hit = hitAt(toNet(ev));
             if (!hit) return;
             ev.preventDefault(); ev.stopPropagation();
+            if (pillDrag) return; // già iniziato dall'altro tipo di evento
             const a = pillAdj(hit.p.key);
             pillDrag = { key: hit.p.key, mode: hit.mode, startM: toNet(ev),
                          orig: { dx: a.dx, dy: a.dy, scale: a.scale },
                          cx: hit.p.cx, cy: hit.p.cy };
             container.style.cursor = hit.mode === 'resize' ? 'nwse-resize' : 'move';
+        };
+        container.addEventListener('pointerdown', beginPillDrag, true);
+        container.addEventListener('mousedown', beginPillDrag, true);
+        container.addEventListener('touchstart', ev => {
+            // Blocca anche il touch: Hammer altrimenti avvia il pan della mappa.
+            if (pillDrag) { ev.preventDefault(); ev.stopPropagation(); }
         }, true);
         window.addEventListener('mousemove', ev => {
             if (!pillDrag || !networkInstance) return;
@@ -5130,6 +5149,7 @@
             if (pillInteractionReady) document.getElementById('networkGraphContainer').style.cursor = '';
         };
         window.addEventListener('mouseup', endDrag);
+        window.addEventListener('pointerup', endDrag);
         // Click destro su un cavo: menu per assegnare/rimuovere una categoria
         // personalizzata al collegamento (Task categorie link).
         container.addEventListener('contextmenu', ev => {
@@ -5947,7 +5967,10 @@
         }
     }
 
-    function downloadTopology() {
+    // Cattura la mappa corrente su un canvas ad alta risoluzione (fit su tutta
+    // la topologia, sfondo opaco) e lo passa a cb; poi ripristina la vista.
+    // Usata sia dall'export PNG che da quello PDF.
+    function captureMapCanvas(cb) {
         if (!networkInstance) {
             alert(i18n[currentLang].alertNoTopology);
             return;
@@ -5986,20 +6009,72 @@
                 out.width  = src.width;
                 out.height = src.height;
                 const ctx = out.getContext("2d");
-                ctx.fillStyle = "#150f23";
+                // La nuova mappa minimalista ha sfondo bianco, la classica scuro.
+                ctx.fillStyle = getMapView() === 'minimal' ? "#ffffff" : "#150f23";
                 ctx.fillRect(0, 0, out.width, out.height);
                 ctx.drawImage(src, 0, 0);
-
-                const link = document.createElement("a");
-                link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".png";
-                link.href = out.toDataURL("image/png");
-                link.click();
+                cb(out);
             } catch (e) {
                 console.error("Export mappa fallito:", e);
             } finally {
                 restore();
             }
         }));
+    }
+
+    function downloadTopology() {
+        captureMapCanvas(out => {
+            const link = document.createElement("a");
+            link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".png";
+            link.href = out.toDataURL("image/png");
+            link.click();
+        });
+    }
+
+    // Esporta la mappa come PDF a pagina singola, tutto lato client: il canvas
+    // viene compresso in JPEG e incapsulato a mano in un PDF minimale (XObject
+    // /DCTDecode). Nessuna libreria, nessuna chiamata al backend.
+    function jpegToPdf(jpeg, w, h) {
+        const pw = (w * 72 / 96).toFixed(2), ph = (h * 72 / 96).toFixed(2);
+        const enc = new TextEncoder();
+        const chunks = [], offsets = [];
+        let len = 0;
+        const push = b => { chunks.push(b); len += b.length; };
+        const pushStr = s => push(enc.encode(s));
+        const obj = (n, body) => { offsets[n] = len; pushStr(`${n} 0 obj\n${body}\nendobj\n`); };
+        pushStr('%PDF-1.4\n');
+        obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+        obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+        obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+        offsets[4] = len;
+        pushStr(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
+        push(jpeg);
+        pushStr('\nendstream\nendobj\n');
+        const content = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+        obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+        const xrefPos = len;
+        let xref = 'xref\n0 6\n0000000000 65535 f \n';
+        for (let i = 1; i <= 5; i++) xref += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+        pushStr(xref + `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`);
+        const bytes = new Uint8Array(len);
+        let o = 0;
+        chunks.forEach(c => { bytes.set(c, o); o += c.length; });
+        return bytes;
+    }
+
+    function exportPdfMap() {
+        captureMapCanvas(out => {
+            const b64 = out.toDataURL("image/jpeg", 0.92).split(',')[1];
+            const bin = atob(b64);
+            const jpeg = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) jpeg[i] = bin.charCodeAt(i);
+            const pdf = jpegToPdf(jpeg, out.width, out.height);
+            const link = document.createElement("a");
+            link.download = "sentinelnet-topology-" + new Date().toISOString().slice(0,10) + ".pdf";
+            link.href = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
     }
 
     // Esporta la mappa interattiva corrente come file Visio (.vsdx) nativo ed

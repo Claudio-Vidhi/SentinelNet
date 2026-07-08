@@ -81,7 +81,7 @@ def build_vsdx(nodes, edges) -> bytes:
         ip = n.get("ip") or n["id"]
         text = "\n".join(filter(None, [label, model, ip]))
         shapes_xml.append(f'''
-        <Shape ID="{sid}" Type="Shape" LineStyle="3" FillStyle="3" TextStyle="3">
+        <Shape ID="{sid}" Type="Shape">
           <Cell N="PinX" V="{px:.4f}"/>
           <Cell N="PinY" V="{py:.4f}"/>
           <Cell N="Width" V="{box_w:.4f}"/>
@@ -117,17 +117,20 @@ def build_vsdx(nodes, edges) -> bytes:
         x1, y1 = dpx + box_w / 2, dpy + box_h / 2
         w = x1 - x0
         h = y1 - y0
+        # Width/Height del riquadro shape sempre positivi (Visio rifiuta valori
+        # negativi); la geometria usa coordinate locali con segno.
         shapes_xml.append(f'''
-        <Shape ID="{sid}" Type="Shape" LineStyle="3" TextStyle="3">
+        <Shape ID="{sid}" Type="Shape">
           <Cell N="PinX" V="{x0:.4f}"/>
           <Cell N="PinY" V="{y0:.4f}"/>
-          <Cell N="Width" V="{w if w else 0.001:.4f}"/>
-          <Cell N="Height" V="{h if h else 0.001:.4f}"/>
+          <Cell N="Width" V="{max(abs(w), 0.01):.4f}"/>
+          <Cell N="Height" V="{max(abs(h), 0.01):.4f}"/>
           <Cell N="LocPinX" V="0"/>
           <Cell N="LocPinY" V="0"/>
           <Cell N="LineColor" V="{color}"/>
           <Cell N="LineWeight" V="0.02"/>
           <Section N="Geometry" IX="0">
+            <Cell N="NoFill" V="1"/>
             <Row T="MoveTo" IX="1"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>
             <Row T="LineTo" IX="2"><Cell N="X" V="{w:.4f}"/><Cell N="Y" V="{h:.4f}"/></Row>
           </Section>
@@ -140,6 +143,9 @@ def build_vsdx(nodes, edges) -> bytes:
   </Shapes>
 </PageContents>'''
 
+    # Visio (desktop e online) considera "danneggiato" un pacchetto senza le
+    # parti standard: docProps (core/app/custom) e visio/windows.xml, oltre a un
+    # document.xml conforme (PageSheet NON è un figlio valido di VisioDocument).
     content_types = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -147,30 +153,61 @@ def build_vsdx(nodes, edges) -> bytes:
   <Override PartName="/visio/document.xml" ContentType="application/vnd.ms-visio.drawing.main+xml"/>
   <Override PartName="/visio/pages/pages.xml" ContentType="application/vnd.ms-visio.pages+xml"/>
   <Override PartName="/visio/pages/page1.xml" ContentType="application/vnd.ms-visio.page+xml"/>
+  <Override PartName="/visio/windows.xml" ContentType="application/vnd.ms-visio.windows+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  <Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>
 </Types>'''
 
     root_rels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/document" Target="visio/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+  <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties" Target="docProps/custom.xml"/>
 </Relationships>'''
 
-    document_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<VisioDocument xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">
-  <PageSheet/>
-</VisioDocument>'''
+    document_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<VisioDocument xmlns="http://schemas.microsoft.com/office/visio/2012/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve"/>'''
 
     document_rels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/pages" Target="pages/pages.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.microsoft.com/visio/2010/relationships/windows" Target="windows.xml"/>
 </Relationships>'''
+
+    windows_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Windows xmlns="http://schemas.microsoft.com/office/visio/2012/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ClientWidth="1600" ClientHeight="900" xml:space="preserve">
+  <Window ID="0" WindowType="Drawing" WindowState="1073741824" ContainerType="Page" Page="0" ViewScale="1" ViewCenterX="{page_w/2:.4f}" ViewCenterY="{page_h/2:.4f}"/>
+</Windows>'''
+
+    core_props = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>SentinelNet Map</dc:title>
+  <dc:creator>SentinelNet</dc:creator>
+</cp:coreProperties>'''
+
+    app_props = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Microsoft Visio</Application>
+</Properties>'''
+
+    custom_props = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="IsMetric"><vt:bool>false</vt:bool></property>
+</Properties>'''
 
     pages_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main"
        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <Page ID="0" Name="SentinelNet Map">
+  <Page ID="0" NameU="Page-1" Name="SentinelNet Map">
     <PageSheet>
       <Cell N="PageWidth" V="{page_w:.4f}"/>
       <Cell N="PageHeight" V="{page_h:.4f}"/>
+      <Cell N="PageScale" V="1" U="IN_F"/>
+      <Cell N="DrawingScale" V="1" U="IN_F"/>
+      <Cell N="DrawingSizeType" V="3"/>
+      <Cell N="DrawingScaleType" V="0"/>
     </PageSheet>
     <Rel r:id="rId1"/>
   </Page>
@@ -185,7 +222,11 @@ def build_vsdx(nodes, edges) -> bytes:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", content_types)
         z.writestr("_rels/.rels", root_rels)
+        z.writestr("docProps/core.xml", core_props)
+        z.writestr("docProps/app.xml", app_props)
+        z.writestr("docProps/custom.xml", custom_props)
         z.writestr("visio/document.xml", document_xml)
+        z.writestr("visio/windows.xml", windows_xml)
         z.writestr("visio/_rels/document.xml.rels", document_rels)
         z.writestr("visio/pages/pages.xml", pages_xml)
         z.writestr("visio/pages/_rels/pages.xml.rels", pages_rels)
@@ -210,6 +251,8 @@ if __name__ == "__main__":
             "[Content_Types].xml", "_rels/.rels", "visio/document.xml",
             "visio/_rels/document.xml.rels", "visio/pages/pages.xml",
             "visio/pages/_rels/pages.xml.rels", "visio/pages/page1.xml",
+            "visio/windows.xml", "docProps/core.xml", "docProps/app.xml",
+            "docProps/custom.xml",
         ]
         names = z.namelist()
         for part in required:
