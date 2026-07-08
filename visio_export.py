@@ -161,21 +161,29 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
         border = _hex_to_rgb_fraction(n.get("border") or "#6A5FC1")
 
         anchors = node_anchors.get(n["id"]) or []
-        # Connection section: un punto per estremita' di cavo, in coordinate
-        # locali del riquadro -> il glue resta valido quando la forma si sposta.
+        # Connection section: un punto per estremita' di cavo sul bordo, in
+        # coordinate locali -> i connettori incollati seguono il riquadro.
         conn_rows = "".join(
             f'<Row IX="{i}"><Cell N="X" V="{a["lx"]:.4f}"/><Cell N="Y" V="{a["ly"]:.4f}"/></Row>'
             for i, a in enumerate(anchors))
         conn_section = f'<Section N="Connection">{conn_rows}</Section>' if anchors else ''
         # Quadratini di aggancio: FIGLI del gruppo (coordinate locali), quindi
-        # seguono il dispositivo quando l'utente lo trascina in Visio.
+        # seguono il dispositivo quando l'utente lo trascina in Visio. Come
+        # nell'app sono appena DENTRO il bordo del riquadro (inset verso il
+        # centro sul lato d'aggancio).
         children = []
+        inset = 3.5 * _SCALE
         for a in anchors:
             csid = next_id()
+            cx_l, cy_l = a["lx"], a["ly"]
+            if cx_l <= 0.02:            cx_l += inset
+            elif cx_l >= box_w - 0.02:  cx_l -= inset
+            if cy_l <= 0.02:            cy_l += inset
+            elif cy_l >= box_h - 0.02:  cy_l -= inset
             children.append(f'''
             <Shape ID="{csid}" Type="Shape">
-              <Cell N="PinX" V="{a["lx"]:.4f}"/>
-              <Cell N="PinY" V="{a["ly"]:.4f}"/>
+              <Cell N="PinX" V="{cx_l:.4f}"/>
+              <Cell N="PinY" V="{cy_l:.4f}"/>
               <Cell N="Width" V="{sq:.4f}"/>
               <Cell N="Height" V="{sq:.4f}"/>
               <Cell N="LocPinX" V="{sq/2:.4f}"/>
@@ -191,7 +199,9 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
               </Section>
             </Shape>''')
         shape_type = "Group" if children else "Shape"
-        group_cells = '<Cell N="DisplayMode" V="2"/>' if children else ''
+        # DisplayMode=1: il riquadro del gruppo dietro ai membri, cosi' i
+        # quadratini di aggancio (figli) restano visibili sopra il riempimento.
+        group_cells = '<Cell N="DisplayMode" V="1"/>' if children else ''
         children_xml = f'<Shapes>{"".join(children)}</Shapes>' if children else ''
         shapes_xml.append(f'''
         <Shape ID="{sid}" Type="{shape_type}">
@@ -277,7 +287,13 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
           <Text>{escape(text)}</Text>
         </Shape>''')
 
-    # --- Connettori strutturati: forme 1-D continue INCOLLATE ai riquadri -----
+    # --- Cavi: connettori 1-D CONTINUI incollati ai connection point ----------
+    # Veri connettori (Begin/End + glue) cosi' l'utente puo' manipolare la
+    # mappa in Visio: spostando un dispositivo i cavi restano agganciati e si
+    # stirano (la geometria e' espressa in FORMULE relative a Width/Height).
+    # NIENTE ObjType=2: il routing automatico di Visio riposizionava i cavi in
+    # modo imprevedibile al minimo tocco di un'etichetta; senza, il percorso
+    # ortogonale resta quello dell'app e si deforma solo proporzionalmente.
     connects_xml = []
     for g in conn_glue:
         c = g["c"]
@@ -286,16 +302,16 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
         x0, y0 = min(xs), min(ys)
         w = max(max(xs) - x0, 0.01); h = max(max(ys) - y0, 0.01)
         sid = next_id()
-        rows = "".join(
-            f'<Row T="{"MoveTo" if i == 0 else "LineTo"}" IX="{i+1}">'
-            f'<Cell N="X" V="{x-x0:.4f}"/><Cell N="Y" V="{y-y0:.4f}"/></Row>'
-            for i, (x, y) in enumerate(pts))
+        rows = []
+        for i, (x, y) in enumerate(pts):
+            fx = (x - x0) / w; fy = (y - y0) / h
+            rows.append(
+                f'<Row T="{"MoveTo" if i == 0 else "LineTo"}" IX="{i+1}">'
+                f'<Cell N="X" V="{x-x0:.4f}" F="Width*{fx:.6f}"/>'
+                f'<Cell N="Y" V="{y-y0:.4f}" F="Height*{fy:.6f}"/></Row>')
         dash_cell = '<Cell N="LinePattern" V="2"/>' if c.get("dash") else ''
-        # ObjType=2: connettore instradabile -> Visio lo re-instrada quando
-        # l'utente sposta una forma incollata; Begin/End restano sui quadratini.
         shapes_xml.append(f'''
         <Shape ID="{sid}" Type="Shape">
-          <Cell N="ObjType" V="2"/>
           <Cell N="BeginX" V="{pts[0][0]:.4f}"/>
           <Cell N="BeginY" V="{pts[0][1]:.4f}"/>
           <Cell N="EndX" V="{pts[-1][0]:.4f}"/>
@@ -311,7 +327,7 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
           {dash_cell}
           <Section N="Geometry" IX="0">
             <Cell N="NoFill" V="1"/>
-            {rows}
+            {''.join(rows)}
           </Section>
         </Shape>''')
         # Glue: BeginX/EndX -> Connections.Xn dei riquadri (FromPart 9=inizio,
@@ -526,5 +542,6 @@ if __name__ == "__main__":
             if conns:
                 page = z.read("visio/pages/page1.xml").decode()
                 assert '<Connects>' in page and 'Connections.X1' in page
+                assert 'ObjType' not in page  # niente routing automatico
                 assert page.count('Type="Group"') == 2  # riquadri con quadratini
         print(f"OK ({'primitives' if prims else 'classic'}): vsdx valido, {len(data)} bytes.")
