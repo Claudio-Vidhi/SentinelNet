@@ -2846,6 +2846,16 @@ def open_browser():
     webbrowser.open(f"http://localhost:{PORT}/")
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="SentinelNet Server")
+    parser.add_argument("--mcp", action="store_true", help="Esegui il server MCP (Model Context Protocol) su stdio")
+    args, _ = parser.parse_known_args()
+
+    if args.mcp:
+        import mcp_server
+        mcp_server.main()
+        return
+
     if not os.path.exists("templates"): 
         os.makedirs("templates")
         
