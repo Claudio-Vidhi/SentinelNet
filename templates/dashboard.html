@@ -1081,6 +1081,15 @@
             <div id="mapCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:180px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
           </details>
 
+          <!-- Elenco dispositivi della Sede selezionata: spunta/deseleziona per
+               escludere singoli apparati (e i relativi link) dalla mappa. Filtro
+               applicato prima del render, quindi vale sia per la vista classica
+               che per quella minimalista. -->
+          <details id="deviceFilterMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
+            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-list-check"></i> <span data-i18n="lblDeviceFilter">Dispositivi</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
+            <div id="deviceFilterList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:220px; max-height:320px; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+          </details>
+
           <!-- Interruttore dispositivi scoperti (CDP/LLDP): nascosti di default -->
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
             <input type="checkbox" id="toggleDiscovered" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #a3a3a3; cursor: pointer; border-radius: 4px;">
@@ -1116,6 +1125,14 @@
                Generato da MINIMAL_LINK_TYPES (stessa tabella usata dal renderer). -->
           <div id="minimalLegendWrap" style="display:none; align-items:center; gap:12px; flex-wrap:wrap; padding-left:10px; border-left:1px solid var(--border);"></div>
 
+          <!-- Categorie personalizzate per i link (nome + colore + tratteggio) e
+               loro assegnazione manuale a un collegamento specifico (click destro
+               su un cavo nella mappa minimalista). Solo nuova mappa. -->
+          <details id="minimalCustomCatMenu" style="display:none; position:relative; padding-left:10px; border-left:1px solid var(--border);">
+            <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-tags"></i> <span data-i18n="lblCustomCats">Categorie link</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
+            <div id="minimalCustomCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:230px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+          </details>
+
         </div>
         <div style="display:flex; gap: 8px;">
           <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
@@ -1126,6 +1143,9 @@
           </button>
           <button class="btn btn-secondary btn-small" onclick="downloadTopology()" style="width:auto; margin:0;" data-i18n="btnDownloadMap">
             <i class="fa-solid fa-download"></i> Scarica Mappa
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="exportVisioMap()" style="width:auto; margin:0;" data-i18n="btnExportVisio">
+            <i class="fa-solid fa-diagram-project"></i> Esporta Visio
           </button>
         </div>
       </div>
@@ -2181,12 +2201,15 @@
         lblHoverInfo: "Info al passaggio",
         lblShowDiscovered: "Mostra Scoperti",
         lblMapCategories: "Categorie",
+        lblDeviceFilter: "Dispositivi",
+        lblCustomCats: "Categorie link",
         legendTitle: "Legenda",
         lblThreatGroup: "Tenant da analizzare:",
         lblThreatDiscovered: "Includi vicini scoperti",
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Schermo Intero',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Aggiorna Vista',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Scarica Mappa',
+        btnExportVisio: '<i class="fa-solid fa-diagram-project"></i> Esporta Visio',
         legendOnline: "Dispositivo Online",
         legendOffline: "Dispositivo Offline",
         legendAuthFailed: "Autenticazione Fallita",
@@ -2260,6 +2283,7 @@
         confirmDeleteDevice: "Sicuro di voler rimuovere il dispositivo {ip}?",
         promptRenameDevice: "Nuovo nome (hostname) per il dispositivo {ip}:",
         alertRenameDeviceError: "Impossibile rinominare il dispositivo.",
+        alertVisioExportError: "Esportazione Visio non riuscita.",
         confirmDeleteGroup: "Eliminare il tenant {name}? Tutti i dispositivi associati passeranno al Tenant Generale.",
         confirmDeleteVendor: "Eliminare vendor \"{name}\"?",
         alertNoTopology: "Nessuna mappa caricata. Esegui prima un Triage.",
@@ -2548,12 +2572,15 @@
         lblHoverInfo: "Hover info",
         lblShowDiscovered: "Show Discovered",
         lblMapCategories: "Categories",
+        lblDeviceFilter: "Devices",
+        lblCustomCats: "Link categories",
         legendTitle: "Legend",
         lblThreatGroup: "Tenant to scan:",
         lblThreatDiscovered: "Include discovered neighbors",
         btnMapFullscreen: '<i class="fa-solid fa-expand"></i> Fullscreen',
         btnRefreshMap: '<i class="fa-solid fa-arrows-rotate"></i> Refresh View',
         btnDownloadMap: '<i class="fa-solid fa-download"></i> Download Map',
+        btnExportVisio: '<i class="fa-solid fa-diagram-project"></i> Export Visio',
         legendOnline: "Device Online",
         legendOffline: "Device Offline",
         legendAuthFailed: "Authentication Failed",
@@ -2627,6 +2654,7 @@
         confirmDeleteDevice: "Are you sure you want to remove the device {ip}?",
         promptRenameDevice: "New name (hostname) for device {ip}:",
         alertRenameDeviceError: "Could not rename the device.",
+        alertVisioExportError: "Visio export failed.",
         confirmDeleteGroup: "Delete the tenant {name}? All associated devices will be moved to the General tenant.",
         confirmDeleteVendor: "Delete vendor \"{name}\"?",
         alertNoTopology: "No map loaded. Please run a Triage first.",
@@ -4181,6 +4209,41 @@
         return container;
     }
 
+    // ===== Checklist dispositivi (filtro esplicito per Sede/Gruppo) =====
+    // ponytail: storage minimale, solo le ESCLUSIONI (default = tutto visibile),
+    // indicizzate per Sede così la scelta non si mescola tra tenant diversi.
+    // {"<gruppo>": ["id1","id2", ...]}
+    let deviceFilterHidden = {};
+    try { deviceFilterHidden = JSON.parse(localStorage.getItem('deviceFilterHidden') || '{}'); } catch (e) { deviceFilterHidden = {}; }
+    function saveDeviceFilterHidden() { localStorage.setItem('deviceFilterHidden', JSON.stringify(deviceFilterHidden)); }
+    function isDeviceHidden(group, id) {
+        const arr = deviceFilterHidden[group];
+        return !!(arr && arr.includes(id));
+    }
+    function toggleDeviceFilter(group, id, hidden) {
+        const arr = deviceFilterHidden[group] || (deviceFilterHidden[group] = []);
+        const idx = arr.indexOf(id);
+        if (hidden && idx === -1) arr.push(id);
+        if (!hidden && idx !== -1) arr.splice(idx, 1);
+        saveDeviceFilterHidden();
+        loadInteractiveMap();
+    }
+    // Popola la checklist coi dispositivi della Sede selezionata (dati grezzi,
+    // prima del filtro per categoria/scoperti: la checklist mostra sempre tutto).
+    function renderDeviceFilterMenu(nodesData, group) {
+        const box = document.getElementById('deviceFilterList');
+        if (!box) return;
+        if (!nodesData || !nodesData.length) {
+            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No devices':'Nessun dispositivo'}</div>`;
+            return;
+        }
+        box.innerHTML = nodesData.map(n => `
+            <label style="display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12px; cursor:pointer; color:var(--text);">
+                <input type="checkbox" ${isDeviceHidden(group, n.id) ? '' : 'checked'} onchange="toggleDeviceFilter('${attrEsc(group)}', '${attrEsc(n.id)}', !this.checked)" style="accent-color:var(--primary);">
+                <span>${escapeHtml(n.label || n.id)}</span>
+            </label>`).join('');
+    }
+
     async function loadInteractiveMap() {
         const groupSelect = document.getElementById('interactiveGroupSelect');
         const selectedGroup = groupSelect ? groupSelect.value : 'all';
@@ -4196,6 +4259,7 @@
 
         renderDeviceTypeLegend();
         renderMapCatMenu();
+        renderDeviceFilterMenu(data.nodes, selectedGroup);
 
         // Filtra i nodi: terminali (server/telefoni/PC) e access point sono nascosti
         // di default, lasciando in mappa solo switch e router.
@@ -4203,6 +4267,8 @@
             // I dispositivi scoperti (CDP/LLDP) si vedono solo col toggle "Mostra
             // Scoperti". La visibilità per TIPO è governata dal selettore Categorie.
             if (n.status === 'discovered' && !showDiscovered) return false;
+            // Esclusione manuale via checklist dispositivi (per Sede/Gruppo).
+            if (isDeviceHidden(selectedGroup, n.id)) return false;
             return isMapCatVisible(n.device_type);
         });
 
@@ -4336,7 +4402,9 @@
                 dashes: emphasize ? [8, 4] : false,
                 arrows: { to: { enabled: false } },
                 width: emphasize ? 5 : 3.5,
-                hoverWidth: 1.5
+                hoverWidth: 1.5,
+                // ponytail: dati "piatti" (no oggetti color vis.js) usati solo dall'export Visio
+                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : '#6A5FC1' }
             };
         });
 
@@ -4364,6 +4432,9 @@
         // Color-picker/legenda dei tipi di link: visibile solo sulla nuova mappa.
         const lw = document.getElementById('minimalLegendWrap');
         if (lw) { lw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none'; if (mapViewMode === 'minimal') renderMinimalLegend(); }
+        // Gestione categorie personalizzate: visibile solo sulla nuova mappa.
+        const cm = document.getElementById('minimalCustomCatMenu');
+        if (cm) { cm.style.display = mapViewMode === 'minimal' ? 'inline-block' : 'none'; if (mapViewMode === 'minimal') renderMinimalCustomCatPanel(); }
     }
     function setMapView(mode) {
         mapViewMode = (mode === 'minimal') ? 'minimal' : 'classic';
@@ -4490,7 +4561,10 @@
             borderWidth: 1,
             borderColor: '#37474f',                // bordo scuro sottile
             margin: { top: 8, right: 12, bottom: 8, left: 12 },
-            font: { multi: 'html', color: '#1a2430', size: 12, face: 'Arial, Helvetica, sans-serif', strokeWidth: 0 },
+            font: { multi: 'html', color: '#1a2430', size: 12, face: 'Arial, Helvetica, sans-serif', strokeWidth: 0,
+                    // <i> = riga di management attenuata e più piccola; <b> = nome host.
+                    ital: { color: '#6b7a8a', size: 10, face: 'Arial, Helvetica, sans-serif' },
+                    bold: { color: '#1a2430', size: 12, face: 'Arial, Helvetica, sans-serif' } },
             offlineOpacity: 0.45,
             // Riempimenti pastello per categoria di apparato (varianti ciano/giallo pallido)
             fill: {
@@ -4551,13 +4625,136 @@
             <label style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted); cursor:pointer; user-select:none;" title="${currentLang==='en'?t.en:t.it}">
                 <input type="color" value="${linkColor(t.key)}" onchange="setMinimalLinkColor('${t.key}', this.value)" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer;">
                 <span>${currentLang==='en'?t.en:t.it}</span>
-            </label>`).join('');
+            </label>`).join('')
+            // Categorie personalizzate (sola visualizzazione: gestione nel pannello
+            // dedicato "Categorie link"), stessa tabella tipo→colore mostrata come
+            // fonte unica di legenda.
+            + Object.keys(minimalCustomCats.categories).map(nm => {
+                const c = minimalCustomCats.categories[nm];
+                return `<span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted);" title="${escapeHtml(nm)}">
+                    <span style="width:18px; height:0; border-top:2px ${c.dash==='dashed'?'dashed':(c.dash==='dotted'?'dotted':'solid')} ${c.color}; display:inline-block;"></span>
+                    <span>${escapeHtml(nm)}</span>
+                </span>`;
+            }).join('');
     }
     function setMinimalLinkColor(key, val) {
         minimalLinkColors[key] = val;
         localStorage.setItem('minimalLinkColors', JSON.stringify(minimalLinkColors));
         renderMinimalLegend();
         loadInteractiveMap();
+    }
+
+    // ===== Categorie personalizzate per i link (assegnazione manuale) =====
+    // ponytail: stessa idea della tabella tipo→colore sopra, ma per categorie
+    // create dall'utente e assegnate a SINGOLI collegamenti (non per tipo).
+    // Storage minimale in localStorage: { categories: {nome:{color,dash}},
+    // assignments: {edgeKey:nome} }. edgeKey = stessa chiave stabile from~to~pcTag
+    // già usata per le pillole Port-Channel spostabili (pillKey), così un solo
+    // formato di chiave copre entrambe le feature.
+    let minimalCustomCats = { categories: {}, assignments: {} };
+    try {
+        const parsed = JSON.parse(localStorage.getItem('minimalCustomCats') || '{}');
+        minimalCustomCats.categories = parsed.categories || {};
+        minimalCustomCats.assignments = parsed.assignments || {};
+    } catch (e) { /* mantiene i default vuoti */ }
+    function saveMinimalCustomCats() { localStorage.setItem('minimalCustomCats', JSON.stringify(minimalCustomCats)); }
+    function dashArrFor(style) { return style === 'dashed' ? [6, 4] : style === 'dotted' ? [2, 3] : null; }
+    // Stile di una categoria personalizzata assegnata a un arco (se presente):
+    // vince sempre sullo stile per-tipo standard in styleFor().
+    function customStyleForEdge(edgeKey) {
+        const nm = minimalCustomCats.assignments[edgeKey];
+        const c = nm && minimalCustomCats.categories[nm];
+        return c ? { color: c.color, dash: dashArrFor(c.dash) } : null;
+    }
+    function addMinimalCustomCat() {
+        const nameInput = document.getElementById('minimalCatNameInput');
+        const colorInput = document.getElementById('minimalCatColorInput');
+        const dashInput = document.getElementById('minimalCatDashInput');
+        const name = (nameInput?.value || '').trim();
+        if (!name) return;
+        minimalCustomCats.categories[name] = { color: colorInput?.value || '#607d8b', dash: dashInput?.value || 'solid' };
+        saveMinimalCustomCats();
+        if (nameInput) nameInput.value = '';
+        renderMinimalCustomCatPanel();
+        loadInteractiveMap();
+    }
+    function deleteMinimalCustomCat(name) {
+        delete minimalCustomCats.categories[name];
+        Object.keys(minimalCustomCats.assignments).forEach(k => {
+            if (minimalCustomCats.assignments[k] === name) delete minimalCustomCats.assignments[k];
+        });
+        saveMinimalCustomCats();
+        renderMinimalCustomCatPanel();
+        loadInteractiveMap();
+    }
+    // Piccola UI di gestione accanto a legenda/color-picker: elenco categorie
+    // (pallino colore + stile tratteggio + elimina) e form nativo per crearne una.
+    function renderMinimalCustomCatPanel() {
+        const box = document.getElementById('minimalCustomCatList');
+        if (!box) return;
+        const names = Object.keys(minimalCustomCats.categories);
+        const dashLabel = d => d === 'dashed' ? (currentLang==='en'?'Dashed':'Tratteggiata')
+                              : d === 'dotted' ? (currentLang==='en'?'Dotted':'Punteggiata')
+                              : (currentLang==='en'?'Solid':'Continua');
+        const rows = names.map(nm => {
+            const c = minimalCustomCats.categories[nm];
+            return `<div style="display:flex; align-items:center; gap:6px; padding:3px 0;">
+                <span style="width:14px; height:14px; border-radius:4px; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
+                <span style="flex:1; font-size:12px; color:var(--text);">${escapeHtml(nm)}</span>
+                <span style="font-size:10px; color:var(--text-muted);">${dashLabel(c.dash)}</span>
+                <button onclick="deleteMinimalCustomCat('${attrEsc(nm)}')" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:#e05656; cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
+            </div>`;
+        }).join('') || `<div style="font-size:12px; color:var(--text-muted); padding:4px 0;">${currentLang==='en'?'No categories yet':'Nessuna categoria'}</div>`;
+        box.innerHTML = rows + `
+            <div style="display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+                <input id="minimalCatNameInput" type="text" placeholder="${currentLang==='en'?'Name':'Nome'}" style="flex:1; min-width:0; padding:4px 6px; border-radius:5px; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:12px;">
+                <input id="minimalCatColorInput" type="color" value="#607d8b" style="width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer;">
+                <select id="minimalCatDashInput" style="padding:3px; border-radius:5px; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:11px;">
+                    <option value="solid">${currentLang==='en'?'Solid':'Continua'}</option>
+                    <option value="dashed">${currentLang==='en'?'Dashed':'Tratteggiata'}</option>
+                    <option value="dotted">${currentLang==='en'?'Dotted':'Punteggiata'}</option>
+                </select>
+                <button onclick="addMinimalCustomCat()" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--primary); color:#fff; border:none; border-radius:5px; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
+            </div>`;
+    }
+    // Menu contestuale (click destro su un cavo nella mappa minimalista) per
+    // assegnare/rimuovere la categoria personalizzata di un singolo collegamento.
+    function closeEdgeCatMenu() {
+        const m = document.getElementById('edgeCatMenu');
+        if (m) m.remove();
+        document.removeEventListener('mousedown', closeEdgeCatMenuOutside, true);
+    }
+    function closeEdgeCatMenuOutside(ev) {
+        const m = document.getElementById('edgeCatMenu');
+        if (m && !m.contains(ev.target)) closeEdgeCatMenu();
+    }
+    function showEdgeCatMenu(x, y, edgeKey) {
+        closeEdgeCatMenu();
+        const names = Object.keys(minimalCustomCats.categories);
+        const cur = minimalCustomCats.assignments[edgeKey];
+        const div = document.createElement('div');
+        div.id = 'edgeCatMenu';
+        div.style.cssText = `position:fixed; left:${x}px; top:${y}px; z-index:9999; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.5); font-family:inherit; font-size:12px; min-width:170px;`;
+        const rowsHtml = names.length ? names.map(nm => `
+            <div class="edgeCatRow" data-nm="${attrEsc(nm)}" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:5px; cursor:pointer; color:var(--text); ${nm===cur?'background:rgba(120,144,156,0.25);':''}">
+                <span style="width:10px; height:10px; border-radius:50%; background:${minimalCustomCats.categories[nm].color}; display:inline-block;"></span>
+                <span>${escapeHtml(nm)}</span>
+            </div>`).join('')
+            : `<div style="padding:4px 6px; color:var(--text-muted);">${currentLang==='en'?'No custom categories yet':'Nessuna categoria personalizzata'}</div>`;
+        const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:5px; cursor:pointer; color:var(--text-muted);">${currentLang==='en'?'None (default style)':'Nessuna (stile predefinito)'}</div>`;
+        div.innerHTML = rowsHtml + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + noneRow;
+        document.body.appendChild(div);
+        div.querySelectorAll('.edgeCatRow').forEach(row => {
+            row.addEventListener('click', () => {
+                const nm = row.getAttribute('data-nm');
+                if (nm) minimalCustomCats.assignments[edgeKey] = nm;
+                else delete minimalCustomCats.assignments[edgeKey];
+                saveMinimalCustomCats();
+                closeEdgeCatMenu();
+                if (networkInstance) networkInstance.redraw();
+            });
+        });
+        setTimeout(() => document.addEventListener('mousedown', closeEdgeCatMenuOutside, true), 0);
     }
 
     // Costruisce nodi/archi/opzioni per la vista minimalista dai medesimi dati già
@@ -4595,7 +4792,17 @@
             const vendorTxt = (resolvedVendor && resolvedVendor !== 'discovered')
                 ? resolvedVendor.charAt(0).toUpperCase() + resolvedVendor.slice(1) : '';
             const modelLine = [vendorTxt, n.model || n.platform || ''].filter(Boolean).join(' ').trim();
-            const label = modelLine ? `<b>${n.label}</b>\n${modelLine}` : `<b>${n.label}</b>`;
+            // Riga di management (piccola, in corsivo/attenuata): VLAN + IP di
+            // gestione mostrati DENTRO il riquadro. La VLAN arriva dal backend
+            // (SVI con l'IP di management); se assente si mostra solo l'IP.
+            const mgmtIp = n.mgmt_ip || (n.status === 'discovered' ? n.reported_ip : n.id) || '';
+            const mgmtBits = [];
+            if (n.mgmt_vlan) mgmtBits.push((currentLang === 'en' ? 'VLAN ' : 'VLAN ') + n.mgmt_vlan);
+            if (mgmtIp) mgmtBits.push(mgmtIp);
+            const mgmtLine = mgmtBits.join('  ·  ');
+            let label = `<b>${n.label}</b>`;
+            if (modelLine) label += `\n${modelLine}`;
+            if (mgmtLine)  label += `\n<i>${mgmtLine}</i>`;
 
             // Riempimento pastello per categoria; col toggle VTP il bordo assume il
             // colore del dominio VTP (il riempimento resta neutro e leggibile).
@@ -4628,7 +4835,7 @@
                 // Testi della targhetta (nome + vendor/modello) usati dal
                 // dimensionamento per garantire che le etichette di porta
                 // disegnate ai bordi non collidano mai col nome centrale.
-                _nameTexts: [n.label || '', modelLine]
+                _nameTexts: [n.label || '', modelLine, mgmtLine]
             };
         });
 
@@ -4719,19 +4926,22 @@
             }
             const type = (isKeepalive && !isPC) ? 'keepalive'
                        : (isPeerLink ? 'peer' : (isPC ? 'pc' : 'link'));
+            // ponytail: formato etichetta "poX/vpc" quando vPC, "poX" altrimenti,
+            // con 'po' minuscolo (richiesta utente). lc() abbassa il prefisso Po→po.
+            const lc = t => (t || '').replace(/^Po/i, 'po');
             bundles.push({
                 from: l.source, to: l.target,
                 pcTag, members: memberPairs, emphasize,
                 // 'peer' = peer-link vPC (verde), 'pc' = aggregato dati (rame),
                 // 'keepalive' = mgmt0↔mgmt0 (verde tratteggiato), 'link' = semplice.
                 type,
-                label: type === 'peer' ? `${pcTag} / vPC`
-                     : (type === 'pc' ? pcTag
+                label: type === 'peer' ? `${lc(pcTag)}/vpc`
+                     : (type === 'pc' ? lc(pcTag)
                      : (type === 'keepalive' ? 'peer-keepalive' : '')),
                 localPcTag, remotePcTag, asymmetricPc: isPC && asymmetricPc,
                 // Etichette per-estremo quando i nomi differiscono tra i due lati.
-                localLabel:  isPeerLink ? `${localPcTag} / vPC`  : localPcTag,
-                remoteLabel: isPeerLink ? `${remotePcTag} / vPC` : remotePcTag
+                localLabel:  isPeerLink ? `${lc(localPcTag)}/vpc`  : lc(localPcTag),
+                remoteLabel: isPeerLink ? `${lc(remotePcTag)}/vpc` : lc(remotePcTag)
             });
 
             // Requisiti di spazio per i due nodi: lo spread dei cavi, la
@@ -4764,13 +4974,23 @@
             };
         });
 
-        // Dimensionamento dinamico dei riquadri (Fix auto-expanding): larghezza
-        // e altezza minime tali che il nome centrale, il vendor/modello e TUTTE
-        // le etichette di porta disegnate ai bordi dall'overlay convivano senza
-        // troncamenti né sovrapposizioni. L'orientamento dei cavi non è noto a
-        // build-time, quindi si copre il caso peggiore su entrambe le dimensioni;
-        // gli slot totali si assumono ripartiti al peggio su due lati opposti.
-        const INSET = 13;
+        // Dimensionamento dinamico dei riquadri (Fix auto-expanding + Fix
+        // leggibilità etichette): larghezza e altezza minime tali che il blocco
+        // di testo centrale (nome + vendor/modello + riga management) e TUTTE le
+        // etichette di porta disegnate ai bordi dall'overlay convivano con un
+        // buffer costante, senza mai sovrapporsi né toccare il bordo.
+        //
+        // Causa radice risolta QUI (layout condiviso, non toppe per-lato): sui
+        // lati N/S l'overlay impila le etichette di porta a partire dal bordo
+        // VERSO il centro (una per riga, LINE_H px); con molte porte finivano
+        // sopra il nome. Riserviamo al centro una "fascia nome" e cresciamo il
+        // riquadro così che la pila peggiore (tutti gli slot su un solo lato)
+        // resti separata dalla fascia nome di almeno BUF px. Sui lati E/W le
+        // etichette stanno sul bordo, già separate dal nome dalla larghezza.
+        const INSET = 13;       // distanza etichetta↔bordo (buffer ampio, ≥ richiesto)
+        const LINE_H = 11;      // passo di impilamento/etichetta (= 'spacing' overlay)
+        const BUF = 6;          // buffer costante etichetta↔fascia-nome / ↔bordo
+        const EDGE_INSET = 14;  // margine ancoraggi dagli angoli (= overlay)
         nodes.forEach(nd => {
             const r = nodeReq[nd.id];
             if (!r) return;
@@ -4778,14 +4998,21 @@
             const nameW = _measCtx.measureText(nd._nameTexts[0] || '').width;
             _measCtx.font = '12px Arial, Helvetica, sans-serif';
             const modelW = _measCtx.measureText(nd._nameTexts[1] || '').width;
-            const textW = Math.max(nameW, modelW);
-            const sideSlots = Math.max(r.spread / 11 + 1, Math.ceil(r.slots / 2));
-            const slotSpread = (Math.max(sideSlots, 1) - 1) * 11;
-            // Larghezza: etichette porta su entrambi i lati + nome al centro.
-            const minW = Math.max(textW + 2 * (r.labelW + INSET + 6),
-                                  slotSpread + 2 * INSET, 100);
-            // Altezza: slot impilati verticalmente + blocco del nome (2 righe).
-            const minH = Math.max(slotSpread + 38, 46);
+            _measCtx.font = 'italic 10px Arial, Helvetica, sans-serif';
+            const mgmtW = _measCtx.measureText(nd._nameTexts[2] || '').width;
+            const textW = Math.max(nameW, modelW, mgmtW);
+            // Fascia verticale occupata dal blocco nome (righe non vuote × ~14px).
+            const nameLines = nd._nameTexts.filter(Boolean).length || 1;
+            const nameH = nameLines * 14;
+            // Caso peggiore: tutti gli slot del nodo impilati su UN solo lato.
+            const stack = r.slots * LINE_H;
+            // Altezza: la pila peggiore su ciascun lato + buffer resta fuori dalla
+            // fascia nome centrata → H/2 ≥ INSET + stack + BUF + nameH/2.
+            const minH = Math.max(2 * (INSET + stack + BUF) + nameH, 46);
+            // Larghezza: nome centrale + etichette porta E/W ai due bordi; e in
+            // più lo spread orizzontale degli ancoraggi N/S con il testo porta.
+            const minW = Math.max(textW + 2 * (r.labelW + INSET + BUF),
+                                  stack + 2 * EDGE_INSET + r.labelW + BUF, 100);
             nd.widthConstraint  = { minimum: Math.round(minW) };
             nd.heightConstraint = { minimum: Math.round(minH) };
         });
@@ -4806,6 +5033,114 @@
         return { nodes, edges, options, bundles, groupsInfo };
     }
 
+    // ponytail: pillole Port-Channel spostabili/ridimensionabili direttamente su
+    // canvas. Per ogni pillola si memorizza uno scostamento {dx,dy} e una scala
+    // in una mappa persistita in localStorage, indicizzata da un id stabile del
+    // Port-Channel (from~to~tag). Interazione più semplice possibile: hit-test in
+    // coordinate rete (DOMtoCanvas) sui rettangoli disegnati; TRASCINA il corpo =
+    // sposta, trascina la MANIGLIA all'angolo = ridimensiona. Niente dipendenze.
+    let pillAdjust = {};
+    try { pillAdjust = JSON.parse(localStorage.getItem('minimalPillAdjust') || '{}'); } catch (e) { pillAdjust = {}; }
+    let pillHitboxes = [];     // ricostruiti a ogni disegno: {key, x,y,w,h, hx,hy,hr}
+    let pillDrag = null;       // {key, mode:'move'|'resize', startM, orig, cx, cy}
+    const pillKey = b => `${b.from}~${b.to}~${b.pcTag || ''}`;
+    const pillAdj = key => pillAdjust[key] || { dx: 0, dy: 0, scale: 1 };
+    // ponytail: hit-test per l'assegnazione categoria via click destro sul cavo.
+    // Stessa chiave stabile di pillKey; segmenti ricostruiti a ogni disegno.
+    let edgeHitSegs = [];      // [{key, segs:[[x1,y1,x2,y2], ...]}]
+    function distToSegment(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1, dy = y2 - y1;
+        const len2 = dx * dx + dy * dy;
+        let t = len2 ? ((px - x1) * dx + (py - y1) * dy) / len2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+    function hitEdgeAt(m, threshold) {
+        threshold = threshold || 6;
+        let best = null, bestD = threshold;
+        edgeHitSegs.forEach(e => e.segs.forEach(s => {
+            const d = distToSegment(m.x, m.y, s[0], s[1], s[2], s[3]);
+            if (d < bestD) { bestD = d; best = e.key; }
+        }));
+        return best;
+    }
+    let pillInteractionReady = false;
+    function initPillInteraction() {
+        if (pillInteractionReady) return;
+        const container = document.getElementById('networkGraphContainer');
+        if (!container) return;
+        pillInteractionReady = true;
+        // Suggerimento d'uso (tooltip nativo del contenitore).
+        container.title = currentLang === 'en'
+            ? 'Port-Channel pill: drag to move, drag the corner handle to resize'
+            : 'Pillola Port-Channel: trascina per spostare, angolo per ridimensionare';
+        // Punto del mouse in coordinate RETE (le stesse dell'overlay).
+        const toNet = ev => {
+            const cv = container.querySelector('canvas');
+            const rect = (cv || container).getBoundingClientRect();
+            return networkInstance.DOMtoCanvas({ x: ev.clientX - rect.left, y: ev.clientY - rect.top });
+        };
+        const hitAt = m => {
+            // La maniglia ha precedenza sul corpo; scorro in ordine inverso (le
+            // ultime disegnate stanno "sopra").
+            for (let i = pillHitboxes.length - 1; i >= 0; i--) {
+                const p = pillHitboxes[i];
+                if (Math.hypot(m.x - p.hx, m.y - p.hy) <= p.hr + 2) return { p, mode: 'resize' };
+            }
+            for (let i = pillHitboxes.length - 1; i >= 0; i--) {
+                const p = pillHitboxes[i];
+                if (m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h) return { p, mode: 'move' };
+            }
+            return null;
+        };
+        // Capture sul contenitore: intercetta PRIMA di vis.js così il trascinamento
+        // della pillola non fa panning/selezione della vista.
+        container.addEventListener('mousedown', ev => {
+            if (getMapView() !== 'minimal' || !networkInstance) return;
+            const hit = hitAt(toNet(ev));
+            if (!hit) return;
+            ev.preventDefault(); ev.stopPropagation();
+            const a = pillAdj(hit.p.key);
+            pillDrag = { key: hit.p.key, mode: hit.mode, startM: toNet(ev),
+                         orig: { dx: a.dx, dy: a.dy, scale: a.scale },
+                         cx: hit.p.cx, cy: hit.p.cy };
+            container.style.cursor = hit.mode === 'resize' ? 'nwse-resize' : 'move';
+        }, true);
+        window.addEventListener('mousemove', ev => {
+            if (!pillDrag || !networkInstance) return;
+            const m = toNet(ev);
+            const a = pillAdjust[pillDrag.key] || (pillAdjust[pillDrag.key] = {});
+            if (pillDrag.mode === 'move') {
+                a.dx = pillDrag.orig.dx + (m.x - pillDrag.startM.x);
+                a.dy = pillDrag.orig.dy + (m.y - pillDrag.startM.y);
+                a.scale = pillDrag.orig.scale;
+            } else {
+                // Scala = rapporto tra distanza attuale dal centro e distanza iniziale.
+                const d0 = Math.max(Math.hypot(pillDrag.startM.x - pillDrag.cx, pillDrag.startM.y - pillDrag.cy), 6);
+                const d1 = Math.hypot(m.x - pillDrag.cx, m.y - pillDrag.cy);
+                a.dx = pillDrag.orig.dx; a.dy = pillDrag.orig.dy;
+                a.scale = Math.min(4, Math.max(0.5, pillDrag.orig.scale * (d1 / d0)));
+            }
+            networkInstance.redraw();
+        });
+        const endDrag = () => {
+            if (!pillDrag) return;
+            pillDrag = null;
+            localStorage.setItem('minimalPillAdjust', JSON.stringify(pillAdjust));
+            if (pillInteractionReady) document.getElementById('networkGraphContainer').style.cursor = '';
+        };
+        window.addEventListener('mouseup', endDrag);
+        // Click destro su un cavo: menu per assegnare/rimuovere una categoria
+        // personalizzata al collegamento (Task categorie link).
+        container.addEventListener('contextmenu', ev => {
+            if (getMapView() !== 'minimal' || !networkInstance) return;
+            const key = hitEdgeAt(toNet(ev));
+            if (!key) return;
+            ev.preventDefault();
+            showEdgeCatMenu(ev.clientX, ev.clientY, key);
+        });
+    }
+
     // ===== Overlay Visio (contenitori Sede + fasci Port-Channel / vPC / peer) =====
     // Contesto già trasformato da vis.js nelle coordinate della rete. Disegna:
     //  1) contenitori tratteggiati per Sede/Gruppo con etichetta;
@@ -4817,6 +5152,9 @@
     function drawMinimalOverlay(ctx, bundles, groupsInfo) {
         if (!networkInstance) return;
         const S = MINIMAL_MAP_STYLE;
+        initPillInteraction();
+        pillHitboxes = [];   // ricostruiti sotto per l'hit-test di drag/resize
+        edgeHitSegs = [];    // ricostruiti sotto per l'hit-test del menu categorie
 
         // --- 1) Contenitori di raggruppamento per Sede/Gruppo ------------------
         if (Array.isArray(groupsInfo) && groupsInfo.length > 1) {
@@ -4864,11 +5202,16 @@
         // per peer-link/keepalive, tinta sobria per i link semplici.
         // ponytail: colore preso dalla tabella tipo→colore (fonte unica), così il
         // color-picker/legenda e il disegno restano sempre allineati.
-        const styleFor = b =>
-              b.type === 'peer'      ? { color: linkColor('peer'),      lw: b.emphasize ? 2.4 : 1.8, dash: null }
-            : b.type === 'keepalive' ? { color: linkColor('keepalive'), lw: 1.2, dash: [4, 3] }
-            : b.type === 'pc'        ? { color: linkColor('pc'),        lw: b.emphasize ? 2.4 : 1.8, dash: null }
-                                     : { color: linkColor('link'),      lw: 1.4, dash: null };
+        // ponytail: una categoria personalizzata assegnata manualmente (click
+        // destro sul cavo) vince sempre sullo stile standard per-tipo.
+        const styleFor = b => {
+            const custom = customStyleForEdge(pillKey(b));
+            if (custom) return { color: custom.color, lw: b.emphasize ? 2.4 : 1.8, dash: custom.dash };
+            return b.type === 'peer'      ? { color: linkColor('peer'),      lw: b.emphasize ? 2.4 : 1.8, dash: null }
+                 : b.type === 'keepalive' ? { color: linkColor('keepalive'), lw: 1.2, dash: [4, 3] }
+                 : b.type === 'pc'        ? { color: linkColor('pc'),        lw: b.emphasize ? 2.4 : 1.8, dash: null }
+                                          : { color: linkColor('link'),      lw: 1.4, dash: null };
+        };
 
         // --- PASSO 1: ancoraggi per lato -----------------------------------
         // Ogni collegamento occupa 'members.length' slot sul lato del riquadro
@@ -5040,6 +5383,9 @@
                 drawTermSquare(mm.A, g.fromSide);
                 drawTermSquare(mm.B, g.toSide);
             });
+            // Segmenti del fascio per l'hit-test del menu categorie (click destro).
+            edgeHitSegs.push({ key: pillKey(b), segs: g.members.flatMap(mm =>
+                mm.pts.slice(0, -1).map((p, k) => [p.x, p.y, mm.pts[k + 1].x, mm.pts[k + 1].y])) });
             ctx.setLineDash([]);
 
             // Centro del fascio e ampiezza (per pillola/etichette).
@@ -5072,11 +5418,16 @@
 
             // --- Pillola ovale standard: SEMPRE presente su ogni Port-Channel
             // e peer-link, qualunque sia il numero di membri visibili.
-            const pillHalfW = 9;
-            const pillHalfSpread = spread + 12;
+            // ponytail: posizione e dimensione regolabili dall'utente (drag/resize);
+            // lo scostamento {dx,dy} e la scala vengono dalla mappa persistita.
+            const adj = pillAdj(pillKey(b));
+            const sc  = adj.scale || 1;
+            const pcx = cx + (adj.dx || 0), pcy = cy + (adj.dy || 0);
+            const pillHalfW = 9 * sc;
+            const pillHalfSpread = (spread + 12) * sc;
             let px, py, pw, ph;
-            if (horizontal) { px = cx - pillHalfW; py = cy - pillHalfSpread; pw = pillHalfW * 2; ph = pillHalfSpread * 2; }
-            else            { px = cx - pillHalfSpread; py = cy - pillHalfW; pw = pillHalfSpread * 2; ph = pillHalfW * 2; }
+            if (horizontal) { px = pcx - pillHalfW; py = pcy - pillHalfSpread; pw = pillHalfW * 2; ph = pillHalfSpread * 2; }
+            else            { px = pcx - pillHalfSpread; py = pcy - pillHalfW; pw = pillHalfSpread * 2; ph = pillHalfW * 2; }
             const r = Math.min(pillHalfW, 8);
             ctx.beginPath();
             ctx.moveTo(px + r, py);
@@ -5090,6 +5441,12 @@
             ctx.lineWidth = b.emphasize ? 2 : 1.4;
             ctx.strokeStyle = color;
             ctx.stroke();
+            // Maniglia di ridimensionamento all'angolo esterno + hitbox per il drag.
+            const hr = 4;
+            ctx.fillStyle = color;
+            ctx.fillRect(px + pw - hr, py + ph - hr, hr * 2, hr * 2);
+            pillHitboxes.push({ key: pillKey(b), x: px, y: py, w: pw, h: ph,
+                                hx: px + pw, hy: py + ph, hr: hr + 2, cx: pcx, cy: pcy });
 
             if (b.asymmetricPc) {
                 // Nomi Port-channel diversi sui due lati (es. Po1 ⇄ Po4): si
@@ -5106,12 +5463,12 @@
                 // ponytail: etichetta (es. "Po1", "Po1 / vPC") accostata alla pillola
                 // e spostata LUNGO il cavo verso lo switch a cui il Port-channel
                 // appartiene (lo switch 'from'), affiancata alla linea come in drawio.
-                const towardX = Math.sign(aC.x - cx) || 1;
-                const towardY = Math.sign(aC.y - cy) || 1;
+                const towardX = Math.sign(aC.x - pcx) || 1;
+                const towardY = Math.sign(aC.y - pcy) || 1;
                 let lx, ly;
-                if (horizontal) { lx = cx + towardX * (pillHalfW + 20); ly = cy - spread - 9; }
-                else            { lx = cx - spread - 16;                ly = cy + towardY * (pillHalfW + 16); }
-                drawTag(b.label || b.pcTag || 'Po', lx, ly);
+                if (horizontal) { lx = pcx + towardX * (pillHalfW + 20); ly = pcy - pillHalfSpread - 9; }
+                else            { lx = pcx - pillHalfSpread - 16;        ly = pcy + towardY * (pillHalfW + 16); }
+                drawTag(b.label || b.pcTag || 'po', lx, ly);
             }
             ctx.restore();
         });
@@ -5643,6 +6000,56 @@
                 restore();
             }
         }));
+    }
+
+    // Esporta la mappa interattiva corrente come file Visio (.vsdx) nativo ed
+    // editabile. Riusa posizioni/dati già presenti nell'istanza vis.js: nessuna
+    // nuova chiamata all'API della topologia, solo un POST al backend che
+    // costruisce il pacchetto OPC.
+    async function exportVisioMap() {
+        if (!networkInstance) {
+            alert(i18n[currentLang].alertNoTopology);
+            return;
+        }
+        const positions = networkInstance.getPositions();
+        const nodesDs = networkInstance.body.data.nodes;
+        const edgesDs = networkInstance.body.data.edges;
+
+        const nodes = nodesDs.get().map(n => {
+            const p = positions[n.id] || { x: 0, y: 0 };
+            const raw = n.nodeDataVal || {};
+            return {
+                id:    n.id,
+                label: n.labelVal || raw.label || String(n.id),
+                model: raw.model || raw.platform || '',
+                ip:    n.id,
+                x: p.x, y: p.y
+            };
+        });
+        const edges = edgesDs.get().map(e => {
+            const ex = e.exportVal || {};
+            return {
+                source: e.from, target: e.to,
+                label: ex.isPortChannel ? (ex.pcName || 'Port-Channel') : '',
+                color: ex.color || '#6A5FC1'
+            };
+        });
+
+        const res = await apiFetch('/api/map/export/vsdx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nodes, edges })
+        });
+        if (!res || !res.ok) {
+            alert(i18n[currentLang].alertVisioExportError);
+            return;
+        }
+        const blob = await res.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'sentinelnet-map.vsdx';
+        link.click();
+        URL.revokeObjectURL(link.href);
     }
 
     async function resetTopology() {

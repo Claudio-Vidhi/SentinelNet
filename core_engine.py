@@ -355,6 +355,23 @@ def extract_hostname_from_config(content: str) -> str:
     return None
 
 
+def extract_mgmt_vlan(content: str, mgmt_ip: str) -> str | None:
+    """Deduce la VLAN di management: cerca l'interfaccia SVI (interface VlanN)
+    la cui `ip address` coincide con l'IP di management del nodo. Se l'IP di
+    management sta su un'interfaccia routed (es. GigabitEthernet0/0 in Mgmt-vrf)
+    non esiste una VLAN e si ritorna None (il frontend mostra solo l'IP)."""
+    if not content or not mgmt_ip:
+        return None
+    # Blocchi "interface Vlan<N> ... ip address <ip>": si abbina l'IP esatto.
+    for m in re.finditer(r'^\s*interface\s+Vlan(\d+)\s*$(.*?)(?=^\s*interface\s|\Z)',
+                         content, re.MULTILINE | re.IGNORECASE | re.DOTALL):
+        vlan_id, block = m.group(1), m.group(2)
+        if re.search(r'^\s*ip address\s+' + re.escape(mgmt_ip) + r'\b',
+                     block, re.MULTILINE | re.IGNORECASE):
+            return vlan_id
+    return None
+
+
 def _parse_sys_description(block: str) -> str | None:
     """
     Estrae la System Description da un blocco LLDP detail.
@@ -1139,6 +1156,11 @@ def generate_network_map(group_filter=None) -> dict:
             "vtp_mode":    pinfo.get("vtp_mode"),
             "vtp_domain":  pinfo.get("vtp_domain"),
             "model":       extract_model_from_backup(pinfo.get("content", "")) if pinfo else None,
+            # IP e VLAN di management mostrati dentro il riquadro nella mappa
+            # minimalista. L'IP è quello di censimento (id nodo); la VLAN si
+            # deduce dall'SVI con quell'IP (None se su interfaccia routed).
+            "mgmt_ip":     ip,
+            "mgmt_vlan":   extract_mgmt_vlan(pinfo.get("content", ""), ip) if pinfo else None,
         }
 
     # Arricchisci la mappa hostname→IP con gli hostname noti dall'inventario
