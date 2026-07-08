@@ -35,6 +35,7 @@ import crypto_vault
 import switch_provisioner
 import site_manager
 import mcp_server
+import visio_export
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
@@ -1251,6 +1252,38 @@ def get_network_map(group: str = "all", current_user = Depends(get_current_user)
     """Restituisce il grafo topologico strutturato per Vis.js."""
     data = core_engine.generate_network_map(group_filter=group)
     return filter_map_to_scope(data, user_group_scope(current_user))
+
+class VisioNodeSchema(BaseModel):
+    id: str
+    label: str = ""
+    model: str = ""
+    ip: str = ""
+    x: float = 0
+    y: float = 0
+
+class VisioEdgeSchema(BaseModel):
+    source: str
+    target: str
+    label: str = ""
+    color: str = "#6A5FC1"
+
+class VisioExportSchema(BaseModel):
+    nodes: List[VisioNodeSchema] = []
+    edges: List[VisioEdgeSchema] = []
+
+@app.post("/api/map/export/vsdx")
+def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_current_user)):
+    """Esporta la mappa di rete corrente (posizioni già calcolate dal frontend) come .vsdx nativo."""
+    data = visio_export.build_vsdx(
+        [n.dict() for n in payload.nodes],
+        [e.dict() for e in payload.edges],
+    )
+    log_audit(f"Export Visio mappa richiesto dall'utente '{current_user.get('sub')}'.")
+    return Response(
+        content=data,
+        media_type="application/vnd.ms-visio.drawing",
+        headers={"Content-Disposition": "attachment; filename=sentinelnet-map.vsdx"}
+    )
 
 @app.get("/api/portchannels")
 def get_portchannels(group: str = "all", current_user = Depends(get_current_user)):
