@@ -4239,9 +4239,14 @@
         const box = document.getElementById('deviceFilterList');
         if (!box) return;
         // Solo i dispositivi del Tenant scelto: i nodi "boundary" degli altri
-        // tenant restano in mappa ma non compaiono nella checklist.
+        // tenant restano in mappa ma non compaiono nella checklist. Se il
+        // dispositivo è in inventario fa fede il SUO tenant, non quello
+        // ereditato via CDP/LLDP dallo switch che lo ha scoperto.
         if (group !== 'all' && Array.isArray(nodesData)) {
-            nodesData = nodesData.filter(n => n.group === group);
+            nodesData = nodesData.filter(n => {
+                const inv = globalDevices.find(d => d.IP === n.id);
+                return (inv ? inv.Group : n.group) === group;
+            });
         }
         if (!nodesData || !nodesData.length) {
             box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No devices':'Nessun dispositivo'}</div>`;
@@ -5052,9 +5057,15 @@
     let pillAdjust = {};
     try { pillAdjust = JSON.parse(localStorage.getItem('minimalPillAdjust') || '{}'); } catch (e) { pillAdjust = {}; }
     let pillHitboxes = [];     // ricostruiti a ogni disegno: {key, x,y,w,h, hx,hy,hr}
-    let pillDrag = null;       // {key, mode:'move'|'resize', startM, orig, cx, cy}
+    let pillDrag = null;       // {key, mode:'move'|'resize'|'label', startM, orig, cx, cy}
     const pillKey = b => `${b.from}~${b.to}~${b.pcTag || ''}`;
     const pillAdj = key => pillAdjust[key] || { dx: 0, dy: 0, scale: 1 };
+    // Scostamento delle ETICHETTE di testo (es. "po1"), indipendente dalla
+    // pillola: ogni cartiglio è trascinabile per conto suo e viene persistito.
+    let labelAdjust = {};
+    try { labelAdjust = JSON.parse(localStorage.getItem('minimalLabelAdjust') || '{}'); } catch (e) { labelAdjust = {}; }
+    let labelHitboxes = [];    // ricostruiti a ogni disegno: {key, x,y,w,h}
+    const labelAdj = key => labelAdjust[key] || { dx: 0, dy: 0 };
     // ponytail: hit-test per l'assegnazione categoria via click destro sul cavo.
     // Stessa chiave stabile di pillKey; segmenti ricostruiti a ogni disegno.
     let edgeHitSegs = [];      // [{key, segs:[[x1,y1,x2,y2], ...]}]
@@ -5091,8 +5102,13 @@
             return networkInstance.DOMtoCanvas({ x: ev.clientX - rect.left, y: ev.clientY - rect.top });
         };
         const hitAt = m => {
-            // La maniglia ha precedenza sul corpo; scorro in ordine inverso (le
-            // ultime disegnate stanno "sopra").
+            // Le etichette di testo hanno precedenza assoluta (sono piccole e
+            // disegnate sopra tutto), poi la maniglia, poi il corpo della pillola;
+            // scorro in ordine inverso (le ultime disegnate stanno "sopra").
+            for (let i = labelHitboxes.length - 1; i >= 0; i--) {
+                const p = labelHitboxes[i];
+                if (m.x >= p.x && m.x <= p.x + p.w && m.y >= p.y && m.y <= p.y + p.h) return { p, mode: 'label' };
+            }
             for (let i = pillHitboxes.length - 1; i >= 0; i--) {
                 const p = pillHitboxes[i];
                 if (Math.hypot(m.x - p.hx, m.y - p.hy) <= p.hr + 2) return { p, mode: 'resize' };
@@ -5113,7 +5129,7 @@
             if (!hit) return;
             ev.preventDefault(); ev.stopPropagation();
             if (pillDrag) return; // già iniziato dall'altro tipo di evento
-            const a = pillAdj(hit.p.key);
+            const a = hit.mode === 'label' ? labelAdj(hit.p.key) : pillAdj(hit.p.key);
             pillDrag = { key: hit.p.key, mode: hit.mode, startM: toNet(ev),
                          orig: { dx: a.dx, dy: a.dy, scale: a.scale },
                          cx: hit.p.cx, cy: hit.p.cy };
@@ -5128,6 +5144,13 @@
         window.addEventListener('mousemove', ev => {
             if (!pillDrag || !networkInstance) return;
             const m = toNet(ev);
+            if (pillDrag.mode === 'label') {
+                const la = labelAdjust[pillDrag.key] || (labelAdjust[pillDrag.key] = {});
+                la.dx = pillDrag.orig.dx + (m.x - pillDrag.startM.x);
+                la.dy = pillDrag.orig.dy + (m.y - pillDrag.startM.y);
+                networkInstance.redraw();
+                return;
+            }
             const a = pillAdjust[pillDrag.key] || (pillAdjust[pillDrag.key] = {});
             if (pillDrag.mode === 'move') {
                 a.dx = pillDrag.orig.dx + (m.x - pillDrag.startM.x);
@@ -5146,6 +5169,7 @@
             if (!pillDrag) return;
             pillDrag = null;
             localStorage.setItem('minimalPillAdjust', JSON.stringify(pillAdjust));
+            localStorage.setItem('minimalLabelAdjust', JSON.stringify(labelAdjust));
             if (pillInteractionReady) document.getElementById('networkGraphContainer').style.cursor = '';
         };
         window.addEventListener('mouseup', endDrag);
@@ -5174,6 +5198,7 @@
         const S = MINIMAL_MAP_STYLE;
         initPillInteraction();
         pillHitboxes = [];   // ricostruiti sotto per l'hit-test di drag/resize
+        labelHitboxes = [];  // ricostruiti sotto per il drag delle etichette
         edgeHitSegs = [];    // ricostruiti sotto per l'hit-test del menu categorie
 
         // --- 1) Contenitori di raggruppamento per Sede/Gruppo ------------------
@@ -5417,8 +5442,11 @@
             const spread = half * spacing;
             const cx = (aC.x + bC.x) / 2, cy = (aC.y + bC.y) / 2;
 
-            // Cartiglio bianco riutilizzabile per i nomi aggregato.
-            const drawTag = (text, lx, ly) => {
+            // Cartiglio bianco riutilizzabile per i nomi aggregato. Se 'key' è
+            // fornita, il cartiglio è trascinabile: applica lo scostamento
+            // dell'utente e registra la propria hitbox per il drag.
+            const drawTag = (text, lx, ly, key) => {
+                if (key) { const la = labelAdj(key); lx += la.dx || 0; ly += la.dy || 0; }
                 ctx.font = 'bold 10px Arial, Helvetica, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -5427,10 +5455,11 @@
                 ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14);
                 ctx.fillStyle = color;
                 ctx.fillText(text, lx, ly);
+                if (key) labelHitboxes.push({ key, x: lx - tw / 2 - 3, y: ly - 7, w: tw + 6, h: 14 });
             };
 
             if (b.type === 'keepalive') {
-                drawTag(b.label || 'peer-keepalive', cx, cy - 10);
+                drawTag(b.label || 'peer-keepalive', cx, cy - 10, pillKey(b) + '~ka');
                 ctx.restore();
                 return;
             }
@@ -5473,11 +5502,11 @@
                 // etichetta ciascun estremo accanto al dispositivo d'origine,
                 // indicando la direzione da cui il nome proviene.
                 if (horizontal) {
-                    drawTag(b.localLabel  || b.localPcTag,  aC.x + sdx * 26, aC.y - spread - 10);
-                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - sdx * 26, bC.y - spread - 10);
+                    drawTag(b.localLabel  || b.localPcTag,  aC.x + sdx * 26, aC.y - spread - 10, pillKey(b) + '~a');
+                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - sdx * 26, bC.y - spread - 10, pillKey(b) + '~b');
                 } else {
-                    drawTag(b.localLabel  || b.localPcTag,  aC.x - spread - 14, aC.y + sdy * 22);
-                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - spread - 14, bC.y - sdy * 22);
+                    drawTag(b.localLabel  || b.localPcTag,  aC.x - spread - 14, aC.y + sdy * 22, pillKey(b) + '~a');
+                    drawTag(b.remoteLabel || b.remotePcTag, bC.x - spread - 14, bC.y - sdy * 22, pillKey(b) + '~b');
                 }
             } else {
                 // ponytail: etichetta (es. "Po1", "Po1 / vPC") accostata alla pillola
@@ -5488,7 +5517,7 @@
                 let lx, ly;
                 if (horizontal) { lx = pcx + towardX * (pillHalfW + 20); ly = pcy - pillHalfSpread - 9; }
                 else            { lx = pcx - pillHalfSpread - 16;        ly = pcy + towardY * (pillHalfW + 16); }
-                drawTag(b.label || b.pcTag || 'po', lx, ly);
+                drawTag(b.label || b.pcTag || 'po', lx, ly, pillKey(b) + '~tag');
             }
             ctx.restore();
         });
