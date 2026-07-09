@@ -5627,12 +5627,10 @@
             ctx.lineWidth = b.emphasize ? 2 : 1.4;
             ctx.strokeStyle = color;
             ctx.stroke();
-            // Maniglia di ridimensionamento all'angolo esterno + hitbox per il drag.
-            const hr = 4;
-            ctx.fillStyle = color;
-            ctx.fillRect(px + pw - hr, py + ph - hr, hr * 2, hr * 2);
+            // Hitbox per il drag della pillola (niente maniglia visibile: il
+            // ridimensionamento resta possibile trascinando l'angolo esterno).
             pillHitboxes.push({ key: pillKey(b), x: px, y: py, w: pw, h: ph,
-                                hx: px + pw, hy: py + ph, hr: hr + 2, cx: pcx, cy: pcy });
+                                hx: px + pw, hy: py + ph, hr: 6, cx: pcx, cy: pcy });
 
             if (b.asymmetricPc) {
                 // Nomi Port-channel diversi sui due lati (es. Po1 ⇄ Po4): si
