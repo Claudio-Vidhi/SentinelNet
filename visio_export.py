@@ -288,12 +288,13 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
         </Shape>''')
 
     # --- Cavi: connettori 1-D CONTINUI incollati ai connection point ----------
-    # Veri connettori (Begin/End + glue) cosi' l'utente puo' manipolare la
-    # mappa in Visio: spostando un dispositivo i cavi restano agganciati e si
-    # stirano (la geometria e' espressa in FORMULE relative a Width/Height).
-    # NIENTE ObjType=2: il routing automatico di Visio riposizionava i cavi in
-    # modo imprevedibile al minimo tocco di un'etichetta; senza, il percorso
-    # ortogonale resta quello dell'app e si deforma solo proporzionalmente.
+    # Veri connettori dinamici (Begin/End + glue + ObjType=2): in Visio si
+    # comportano come quelli creati a mano dai connection point (vertici e
+    # angoli modificabili, re-instradamento al trascinamento delle forme).
+    # ConFixedCode=2 ("never reroute"): il percorso ortogonale esportato
+    # dall'app resta stabile e NON viene riposizionato spontaneamente quando
+    # si spostano etichette o altre forme; cambia solo se l'utente agisce
+    # direttamente sul connettore o sulle forme incollate.
     connects_xml = []
     for g in conn_glue:
         c = g["c"]
@@ -312,6 +313,9 @@ def build_vsdx(nodes, edges, primitives=None, connectors=None) -> bytes:
         dash_cell = '<Cell N="LinePattern" V="2"/>' if c.get("dash") else ''
         shapes_xml.append(f'''
         <Shape ID="{sid}" Type="Shape">
+          <Cell N="ObjType" V="2"/>
+          <Cell N="ConFixedCode" V="2"/>
+          <Cell N="ShapeRouteStyle" V="16"/>
           <Cell N="BeginX" V="{pts[0][0]:.4f}"/>
           <Cell N="BeginY" V="{pts[0][1]:.4f}"/>
           <Cell N="EndX" V="{pts[-1][0]:.4f}"/>
@@ -542,6 +546,6 @@ if __name__ == "__main__":
             if conns:
                 page = z.read("visio/pages/page1.xml").decode()
                 assert '<Connects>' in page and 'Connections.X1' in page
-                assert 'ObjType' not in page  # niente routing automatico
+                assert 'ObjType' in page and 'ConFixedCode' in page
                 assert page.count('Type="Group"') == 2  # riquadri con quadratini
         print(f"OK ({'primitives' if prims else 'classic'}): vsdx valido, {len(data)} bytes.")
