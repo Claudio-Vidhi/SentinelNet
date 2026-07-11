@@ -383,16 +383,43 @@ def search_arp(mac: str = None, ip: str = None, source_ip: str = None,
     return [dict(r) for r in rows]
 
 
+def _access_positions_for(macs, tenants=None) -> dict:
+    """Per un insieme di MAC ritorna { mac: sighting_di_accesso_più_recente },
+    escludendo gli uplink. UNA sola query (a chunk per il limite di parametri di
+    SQLite), invece di una query per MAC."""
+    macs = [m for m in dict.fromkeys(macs) if m]      # unici, ordine preservato
+    if not macs:
+        return {}
+    best = {}
+    tenant_list = list(tenants) if tenants is not None else None
+    CHUNK = 400                                       # < limite ~999 parametri SQLite
+    with _lock, _connect() as c:
+        for i in range(0, len(macs), CHUNK):
+            batch = macs[i:i + CHUNK]
+            q = ("SELECT mac, switch_ip, switch_name, interface, vlan, last_seen "
+                 "FROM mac_sightings WHERE is_uplink=0 "
+                 "AND mac IN (%s)" % ",".join("?" * len(batch)))
+            args = list(batch)
+            if tenant_list is not None:
+                q += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
+                args.extend(tenant_list)
+            q += " ORDER BY last_seen DESC"           # il primo per MAC = più recente
+            for r in c.execute(q, args).fetchall():
+                if r["mac"] not in best:
+                    best[r["mac"]] = dict(r)
+    return best
+
+
 def client_map(mac: str = None, ip: str = None, tenants=None,
                limit: int = 500) -> list:
     """Vista unificata client: binding MAC<->IP (ARP dei gateway) arricchito
     con l'ultima posizione fisica nota (switch/porta della MAC table, uplink
     esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'."""
     entries = search_arp(mac=mac, ip=ip, tenants=tenants, limit=limit)
+    access_by_mac = _access_positions_for((e["mac"] for e in entries), tenants=tenants)
     out = []
     for e in entries:
-        pos = search(mac=e["mac"], tenants=tenants, limit=10)
-        access = next((p for p in pos if not p.get("is_uplink")), None)
+        access = access_by_mac.get(e["mac"])
         out.append({
             **e,
             "switch_ip": access.get("switch_ip") if access else "",

@@ -514,7 +514,11 @@ class FgtTokenSchema(BaseModel):
     ip: str
     token: str = ""                # vuoto = rimuove il token
     port: int = 443
-    verify_tls: bool = False
+    # Verifica TLS del certificato del FortiGate: default SICURO (True). Il
+    # token API è una credenziale a lunga vita: senza verifica un MITM sul path
+    # di management potrebbe intercettarlo. Disabilitabile esplicitamente solo
+    # per apparati con certificato self-signed non ancora fidato.
+    verify_tls: bool = True
 
 class FgtPolicyLookupSchema(BaseModel):
     src_ip: str
@@ -766,6 +770,11 @@ def setup_admin(payload: UserSchema):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Setup già completato. Registrazione non consentita."
         )
+    pw_err = user_manager.password_error(payload.password)
+    if pw_err:
+        raise HTTPException(status_code=400, detail=pw_err)
+    if not payload.username.strip():
+        raise HTTPException(status_code=400, detail="Lo username è obbligatorio.")
     success = user_manager.create_user(payload.username, payload.password, role="admin")
     if success:
         log_audit(f"Nuovo utente amministratore '{payload.username}' registrato con successo via Setup Wizard.")
@@ -810,6 +819,9 @@ def login(payload: LoginRequest):
 def change_password(payload: ChangePasswordSchema,
                     current_user = Depends(get_current_user)):
     username = current_user.get("sub")
+    pw_err = user_manager.password_error(payload.new_password)
+    if pw_err:
+        raise HTTPException(status_code=400, detail=pw_err)
     success = user_manager.change_password(
         username, payload.old_password, payload.new_password
     )
@@ -838,6 +850,9 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
     if not payload.username.strip() or not payload.password:
         raise HTTPException(status_code=400, detail="Username e password obbligatori.")
+    pw_err = user_manager.password_error(payload.password)
+    if pw_err:
+        raise HTTPException(status_code=400, detail=pw_err)
     valid_groups = set(inventory_manager.get_all_groups().keys())
     groups = [g for g in payload.groups if g in valid_groups]
     # Gli account creati da un amministratore devono cambiare la password al
@@ -1480,7 +1495,18 @@ COMMAND_BLACKLIST = [
     r"\breboot\b",
     r"\bconf\s+t\b",
     r"\bconfigure\s+terminal\b",
-    r"\bcopy\s+.*?startup-config\b"
+    r"\bcopy\s+.*?startup-config\b",
+    # Hardening aggiuntivo (denylist): altri comandi distruttivi/di riavvio o di
+    # scrittura config sui vari vendor. Restano fuori i comandi 'show/get/display'.
+    r"\bwr\b",                       # 'wr', 'wr mem', 'wr erase'
+    r"\bwrite\b",                    # 'write memory', 'write erase'
+    r"\bboot\s+system\b",
+    r"\bfactory[-\s]?reset\b",
+    r"\brequest\s+system\b",         # Junos: reboot/halt/zeroize/software
+    r"\brollback\b",
+    r"\bhalt\b",
+    r"\bzeroize\b",
+    r"\bclear\s+config\b",
 ]
 
 def is_command_safe(command: str) -> bool:
@@ -1904,9 +1930,12 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
                 detail="Backup non consentito per il tuo profilo."
             )
 
-    backup_dir = os.path.realpath("backup-config")
+    # Radice ASSOLUTA dei backup (stessa usata da core_engine): un percorso
+    # relativo alla CWD sarebbe fragile sotto exe/servizio e indebolirebbe il
+    # guard anti-traversal.
+    backup_dir = os.path.realpath(core_engine.BACKUP_FOLDER)
     requested = os.path.realpath(os.path.join(backup_dir, ip_or_filename))
-    
+
     # Blocca qualsiasi path che esca dalla cartella backup-config
     if not requested.startswith(backup_dir + os.sep):
         raise HTTPException(status_code=400, detail="Path non consentito.")
