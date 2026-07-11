@@ -41,6 +41,22 @@ def build_config(cfg: dict) -> str:
       lan_to_wan_policy (bool, default True)   -> policy LAN->WAN con NAT
       disable_wan_admin (bool, default True)   -> nessun accesso admin dal WAN
       banner (str)                             -> post-login banner
+
+    Elementi ZTP (FortiOS 7.4 Administration Guide):
+      api_user (dict: name, accprofile, trusthosts list[str])
+          -> crea l'api-user REST per l'osservabilità SentinelNet dal day-0;
+             il token va poi generato sul device con
+             'execute api-user generate-key <name>'.
+      central_mgmt (dict: type "fortiguard"|"fortimanager", fmg_ip)
+          -> config system central-management (tunnel fgfm; con
+             fortimanager richiede fmg_ip). Aggiunge 'fgfm' all'allowaccess
+             dell'interfaccia di management.
+      csf_group (str)      -> abilita Security Fabric (config system csf)
+      netflow_collector (str) -> config system netflow
+      rest_api_logging (bool, default True) -> logga le richieste REST API
+      ha (dict: group_name, mode "a-p"|"a-a", password, hbdev, priority,
+          mgmt_interface, mgmt_ip, mgmt_mask)
+          -> cluster HA con interfaccia di management dedicata (ha-direct)
     """
     hostname = (cfg.get("hostname") or "FortiGate").strip()
     lines = []
@@ -78,14 +94,21 @@ def build_config(cfg: dict) -> str:
         lines.append("    next")
         lines.append("end")
 
+    central = cfg.get("central_mgmt") or {}
+
     sec("INTERFACCE")
     lines.append("config system interface")
     mgmt_if = cfg.get("mgmt_interface")
     if mgmt_if and cfg.get("mgmt_ip"):
+        allowaccess = cfg.get("mgmt_allowaccess") or "ping https ssh"
+        # Il tunnel di management FortiManager/FortiGuard richiede 'fgfm'
+        # sull'interfaccia da cui il device raggiunge il manager.
+        if central.get("type") and "fgfm" not in allowaccess:
+            allowaccess += " fgfm"
         lines.append(f"    edit {_q(mgmt_if)}")
         lines.append("        set mode static")
         lines.append(f"        set ip {cfg['mgmt_ip']} {cfg.get('mgmt_mask') or '255.255.255.0'}")
-        lines.append(f"        set allowaccess {cfg.get('mgmt_allowaccess') or 'ping https ssh'}")
+        lines.append(f"        set allowaccess {allowaccess}")
         lines.append("        set alias \"MGMT\"")
         lines.append("    next")
     wan_if = cfg.get("wan_interface")
@@ -186,6 +209,84 @@ def build_config(cfg: dict) -> str:
         lines.append(f"        set priv-pwd {_q(snmpv3.get('priv_pass') or 'privpass123')}")
         lines.append("    next")
         lines.append("end")
+
+    api_user = cfg.get("api_user") or {}
+    if api_user.get("name"):
+        sec("API USER (REST, osservabilita' SentinelNet)")
+        lines.append("config system api-user")
+        lines.append(f"    edit {_q(api_user['name'])}")
+        lines.append(f"        set accprofile {_q(api_user.get('accprofile') or 'super_admin')}")
+        trusthosts = api_user.get("trusthosts") or []
+        if trusthosts:
+            lines.append("        config trusthost")
+            for i, th in enumerate(trusthosts, 1):
+                lines.append(f"            edit {i}")
+                lines.append(f"                set ipv4-trusthost {th}")
+                lines.append("            next")
+            lines.append("        end")
+        lines.append("    next")
+        lines.append("end")
+        lines.append("# Dopo il primo boot generare il token:")
+        lines.append(f"#   execute api-user generate-key {api_user['name']}")
+
+    if central.get("type"):
+        sec("CENTRAL MANAGEMENT (ZTP)")
+        lines.append("config system central-management")
+        lines.append(f"    set type {central['type']}")
+        if central["type"] == "fortimanager" and central.get("fmg_ip"):
+            lines.append(f"    set fmg {_q(central['fmg_ip'])}")
+        lines.append("end")
+
+    if cfg.get("csf_group"):
+        sec("SECURITY FABRIC")
+        lines.append("config system csf")
+        lines.append("    set status enable")
+        lines.append(f"    set group-name {_q(cfg['csf_group'])}")
+        lines.append("end")
+
+    if cfg.get("netflow_collector"):
+        sec("NETFLOW")
+        lines.append("config system netflow")
+        lines.append(f"    set collector-ip {cfg['netflow_collector']}")
+        lines.append("end")
+
+    if cfg.get("rest_api_logging", True):
+        sec("LOG RICHIESTE REST API")
+        lines.append("config log setting")
+        lines.append("    set rest-api-set enable")
+        lines.append("    set rest-api-get enable")
+        lines.append("end")
+
+    ha = cfg.get("ha") or {}
+    if ha.get("group_name"):
+        sec("HIGH AVAILABILITY")
+        lines.append("config system ha")
+        lines.append(f"    set group-name {_q(ha['group_name'])}")
+        lines.append(f"    set mode {ha.get('mode') or 'a-p'}")
+        if ha.get("password"):
+            lines.append(f"    set password {_q(ha['password'])}")
+        if ha.get("hbdev"):
+            lines.append(f"    set hbdev {_q(ha['hbdev'])} 50")
+        lines.append("    set session-pickup enable")
+        lines.append("    set override enable")
+        lines.append(f"    set priority {int(ha.get('priority') or 200)}")
+        if ha.get("mgmt_interface"):
+            lines.append("    set ha-mgmt-status enable")
+            lines.append("    config ha-mgmt-interfaces")
+            lines.append("        edit 1")
+            lines.append(f"            set interface {_q(ha['mgmt_interface'])}")
+            lines.append("        next")
+            lines.append("    end")
+            lines.append("    set ha-direct enable")
+        lines.append("end")
+        if ha.get("mgmt_interface") and ha.get("mgmt_ip"):
+            lines.append("config system interface")
+            lines.append(f"    edit {_q(ha['mgmt_interface'])}")
+            lines.append(f"        set ip {ha['mgmt_ip']} {ha.get('mgmt_mask') or '255.255.255.0'}")
+            lines.append("        set allowaccess ping https ssh fgfm")
+            lines.append("        set dedicated-to management")
+            lines.append("    next")
+            lines.append("end")
 
     if cfg.get("lan_to_wan_policy", True) and lan_if and wan_if:
         sec("FIREWALL POLICY LAN -> WAN (NAT)")
