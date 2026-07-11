@@ -11,6 +11,17 @@ USERS_JSON = data_config.get_path("users.json")
 #   viewer   → sola lettura (inventario, mappe, threat intel)
 VALID_ROLES = ("admin", "operator", "viewer")
 
+# Policy password minima applicata LATO SERVER (unica fonte di verità: il
+# controllo lato browser è solo un aiuto UX, aggirabile con una chiamata diretta).
+MIN_PASSWORD_LENGTH = 8
+
+def password_error(password: str):
+    """Ritorna un messaggio d'errore se la password non rispetta la policy,
+    altrimenti None. Usato da tutti gli endpoint che impostano una password."""
+    if not password or len(password) < MIN_PASSWORD_LENGTH:
+        return f"La password deve contenere almeno {MIN_PASSWORD_LENGTH} caratteri."
+    return None
+
 def get_users():
     if not os.path.exists(USERS_JSON):
         return {}
