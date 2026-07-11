@@ -13,6 +13,7 @@ from drivers.hp_procurve import HpProcurveDriver
 from drivers.juniper_junos import JuniperJunosDriver
 from drivers.aruba_os import ArubaOsDriver
 from drivers.fortinet import FortinetDriver
+from drivers.cisco_wlc import CiscoWlcDriver
 from drivers.paloalto_panos import PaloAltoDriver
 from crypto_vault import decrypt_password
 from security_manager import log_audit
@@ -78,6 +79,8 @@ DRIVER_REGISTRY = {
     'aruba_os':       (ArubaOsDriver,    'aruba_os'),
     'fortinet':       (FortinetDriver,   'fortinet'),
     'paloalto_panos': (PaloAltoDriver,   'paloalto_panos'),
+    'cisco_wlc':      (CiscoWlcDriver,   'cisco_wlc_ssh'),   # AireOS
+    'cisco_9800':     (CiscoIosDriver,   'cisco_xe'),        # Catalyst 9800 (IOS-XE)
 }
 
 # Fallback nome-vendor → nome-driver, usato quando il registro vendor non
@@ -91,6 +94,8 @@ VENDOR_DRIVER_DEFAULTS = {
     'aruba':    'aruba_os',
     'fortinet': 'fortinet',
     'paloalto': 'paloalto_panos',
+    'cisco_wlc': 'cisco_wlc',
+    'cisco_9800': 'cisco_9800',
 }
 
 def resolve_driver(vendor):

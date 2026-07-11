@@ -167,6 +167,8 @@ def get_all_vendors() -> dict:
         "aruba":   {"euvd_term": "aruba networks",            "driver": "aruba_os"},
         "fortinet":{"euvd_term": "fortinet",                  "driver": "fortinet"},
         "paloalto":{"euvd_term": "palo alto networks",        "driver": "paloalto_panos"},
+        "cisco_wlc":{"euvd_term": "cisco",                    "driver": "cisco_wlc"},
+        "cisco_9800":{"euvd_term": "cisco",                   "driver": "cisco_9800"},
     }
     if not os.path.exists(VENDORS_FILE):
         safe_json_write(VENDORS_FILE, defaults)
