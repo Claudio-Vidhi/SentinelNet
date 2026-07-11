@@ -95,9 +95,10 @@
         radial-gradient(1.5px 1.5px at 88% 30%, rgba(255,255,255,0.24) 50%, transparent 51%),
         radial-gradient(1px 1px at 8% 88%, rgba(255,255,255,0.2) 50%, transparent 51%),
         radial-gradient(1px 1px at 94% 64%, rgba(255,255,255,0.26) 50%, transparent 51%),
-        rgba(21, 15, 35, 0.92);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+        #150f23;
+      /* Sfondo SOLIDO: con alpha<1 + backdrop-filter il contenuto retrostante
+         diventava leggibile ad alcuni livelli di zoom del browser (Chromium
+         scarta il blur al cambio di zoom). */
       z-index: 9999;
       display: flex;
       justify-content: center;
@@ -3018,8 +3019,23 @@
         });
         
         if (res.ok) {
-            alert(i18n[currentLang].alertFirstSetupSuccess);
-            checkAuthRequirements(); // Aggiorna lo stato per passare al form di login
+            // Login automatico con le credenziali appena create: evita di
+            // dover ridigitare la stessa password nel form di login.
+            const loginRes = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: user, password: pass })
+            });
+            if (loginRes.ok) {
+                const data = await loginRes.json();
+                if (data.access_token) sessionStorage.setItem("net_token", data.access_token);
+                document.getElementById('authOverlay').style.display = 'none';
+                appInit();
+            } else {
+                // Fallback improbabile: account creato ma login fallito.
+                alert(i18n[currentLang].alertFirstSetupSuccess);
+                checkAuthRequirements();
+            }
         } else {
             const err = await res.json();
             alert(i18n[currentLang].alertFirstSetupError + (err.detail || "Impossibile creare l'account."));
