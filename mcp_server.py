@@ -125,6 +125,33 @@ TOOLS = {
         lambda a: api("GET", "/api/mac/search",
                       params={k: v for k, v in a.items() if v}),
     ),
+    "mac_to_ip": (
+        "Resolve MAC <-> IP bindings for network clients, collected from the "
+        "ARP tables of the L3 gateways (L3 switches or firewalls, whichever "
+        "routes the VLAN). Search by MAC (full or fragment) or IP prefix.",
+        _obj({"mac": {**_S, "description": "MAC address or fragment"},
+              "ip": {**_S, "description": "IP address or prefix"}}),
+        lambda a: api("GET", "/api/arp/search",
+                      params={k: v for k, v in a.items() if v}),
+    ),
+    "client_map": (
+        "Unified client view: MAC + current IP (from the routing gateway's "
+        "ARP) + access switch/port (from the MAC table). Answers 'who is "
+        "10.0.0.5 and which port is it attached to'.",
+        _obj({"mac": _S, "ip": _S}),
+        lambda a: api("GET", "/api/arp/client-map",
+                      params={k: v for k, v in a.items() if v}),
+    ),
+    "arp_scan": (
+        "Collect the ARP tables from managed L3 devices (switches and "
+        "firewalls) and store MAC<->IP bindings in the historical DB. "
+        "Requires operator role; optionally restrict to one device IP or a "
+        "site/group.",
+        _obj({"ip": {**_S, "description": "Only this device (optional)"},
+              "group": {**_S, "description": "Site/group filter, 'all' default"}}),
+        lambda a: api("POST", "/api/arp/scan",
+                      body={"ip": a.get("ip"), "group": a.get("group", "all")}),
+    ),
     "analyze_config": (
         "Analyze the stored configuration backup of a device: VLANs, SVIs, "
         "routing, trunk/access ports, neighbors, security findings.",
