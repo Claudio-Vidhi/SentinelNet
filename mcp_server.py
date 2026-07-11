@@ -153,6 +153,139 @@ TOOLS = {
         _obj(),
         lambda a: api("GET", "/api/sites"),
     ),
+    "fortigate_status": (
+        "Get live system status of a FortiGate firewall (version, HA, uptime, "
+        "hostname) via REST API or SSH fallback.",
+        _obj({"ip": {**_S, "description": "FortiGate IP (must be in inventory)"}}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/status"),
+    ),
+    "fortigate_interfaces": (
+        "Get live interface state of a FortiGate: IPs, link status, speed, "
+        "counters, VLANs, aggregates.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/interfaces"),
+    ),
+    "fortigate_arp": (
+        "Get the live ARP table of a FortiGate (IP <-> MAC on each interface).",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/arp"),
+    ),
+    "fortigate_dhcp_leases": (
+        "Get active DHCP leases from a FortiGate (client IP, MAC, hostname, "
+        "expiry, interface).",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/dhcp-leases"),
+    ),
+    "fortigate_device_inventory": (
+        "Get the FortiOS device-identification inventory: every client the "
+        "FortiGate has detected with MAC, IP, hostname, OS, ingress interface, "
+        "online/offline state.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/device-inventory"),
+    ),
+    "fortigate_policies": (
+        "Get the configured firewall policies of a FortiGate (full policy "
+        "table: src/dst interfaces and addresses, services, action, NAT, UTM "
+        "profiles, logging).",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/policies"),
+    ),
+    "fortigate_policy_lookup": (
+        "Ask the FortiGate which firewall policy WOULD match a given flow "
+        "(source IP, destination IP/FQDN, protocol, port) without generating "
+        "traffic. Key tool for 'why can't client X reach site Y'.",
+        _obj({"ip": _S,
+              "src_ip": {**_S, "description": "Client source IP"},
+              "dest": {**_S, "description": "Destination IP or FQDN"},
+              "protocol": {**_S, "description": "TCP | UDP | ICMP (default TCP)"},
+              "dest_port": {"type": "integer", "description": "Default 443"}},
+             ["ip", "src_ip", "dest"]),
+        lambda a: api("POST", f"/api/fortigate/{a['ip']}/policy-lookup",
+                      body={"src_ip": a["src_ip"], "dest": a["dest"],
+                            "protocol": a.get("protocol", "TCP"),
+                            "dest_port": a.get("dest_port", 443)}),
+    ),
+    "fortigate_sessions": (
+        "Get active sessions on a FortiGate, filterable by source IP, "
+        "destination IP and destination port.",
+        _obj({"ip": _S, "src_ip": _S, "dst_ip": _S,
+              "dst_port": {"type": "integer"},
+              "count": {"type": "integer", "description": "Max sessions (default 100)"}},
+             ["ip"]),
+        lambda a: api("POST", f"/api/fortigate/{a['ip']}/sessions",
+                      body={k: a.get(k) for k in ("src_ip", "dst_ip", "dst_port", "count")
+                            if a.get(k) is not None}),
+    ),
+    "fortigate_routes": (
+        "Get the live IPv4 routing table of a FortiGate.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/routes"),
+    ),
+    "fortigate_traffic_logs": (
+        "Query FortiGate forward traffic logs (what the firewall logged for a "
+        "client/destination: allowed, denied, UTM verdicts). Filters optional.",
+        _obj({"ip": _S, "src_ip": _S, "dst_ip": _S,
+              "action": {**_S, "description": "accept | deny | ..."},
+              "count": {"type": "integer", "description": "Max rows (default 100)"}},
+             ["ip"]),
+        lambda a: api("POST", f"/api/fortigate/{a['ip']}/logs",
+                      body={k: a.get(k) for k in ("src_ip", "dst_ip", "action", "count")
+                            if a.get(k) is not None}),
+    ),
+    "fortigate_wifi_clients": (
+        "List WiFi clients connected to FortiAPs managed by a FortiGate, with "
+        "signal strength (RSSI/SNR), AP, SSID, data rates. Use for wireless "
+        "disconnection troubleshooting.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/wifi/clients"),
+    ),
+    "fortigate_managed_aps": (
+        "List FortiAPs managed by a FortiGate: status, channel utilization, "
+        "connected clients, firmware.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/wifi/aps"),
+    ),
+    "fortigate_full_config": (
+        "Get the complete live configuration of a FortiGate (full backup "
+        "text). Large output; requires operator role.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/full-config"),
+    ),
+    "fortigate_diagnose_client": (
+        "One-shot diagnosis of a client (IP or MAC) through a FortiGate: "
+        "device inventory, ARP, DHCP lease, active sessions, matching firewall "
+        "policy toward an optional destination, recent traffic logs, WiFi "
+        "state. Answers 'why can't this client reach X' / 'why does this "
+        "client disconnect'.",
+        _obj({"ip": {**_S, "description": "FortiGate IP"},
+              "client": {**_S, "description": "Client IP or MAC address"},
+              "dest": {**_S, "description": "Optional destination IP/FQDN for policy lookup"},
+              "dest_port": {"type": "integer", "description": "Default 443"},
+              "protocol": {**_S, "description": "TCP | UDP | ICMP (default TCP)"}},
+             ["ip", "client"]),
+        lambda a: api("POST", f"/api/fortigate/{a['ip']}/diagnose-client",
+                      body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol")
+                            if a.get(k) is not None}),
+    ),
+    "generate_fortigate_config": (
+        "Generate a hardened day-0 FortiOS configuration for a new FortiGate "
+        "(zero-touch provisioning; does not touch any device). Same parameters "
+        "as the FortiGate ZTP wizard.",
+        _obj({"hostname": _S, "admin_user": _S, "admin_password": _S,
+              "mgmt_interface": _S, "mgmt_ip": _S, "mgmt_mask": _S,
+              "wan_interface": _S, "wan_mode": {**_S, "description": "dhcp | static"},
+              "wan_ip": _S, "wan_mask": _S, "wan_gw": _S,
+              "lan_interface": _S, "lan_ip": _S, "lan_mask": _S,
+              "dhcp_server": {"type": "boolean"}, "dhcp_start": _S, "dhcp_end": _S,
+              "dns_primary": _S, "dns_secondary": _S,
+              "ntp_servers": {"type": "array", "items": _S},
+              "syslog_server": _S,
+              "lan_to_wan_policy": {"type": "boolean"},
+              "disable_wan_admin": {"type": "boolean"},
+              "banner": _S},
+             ["hostname"]),
+        lambda a: api("POST", "/api/provisioner/fgt/generate", body=a),
+    ),
     "generate_switch_config": (
         "Generate a hardened day-0 Cisco IOS/IOS-XE configuration for a new "
         "switch (does not touch any device). Accepts the same parameters as "

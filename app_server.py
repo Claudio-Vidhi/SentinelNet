@@ -34,6 +34,7 @@ import ai_assistant
 import crypto_vault
 import switch_provisioner
 import fortigate_provisioner
+import fortigate_service
 import site_manager
 import mcp_server
 import visio_export
@@ -402,6 +403,7 @@ class AiChatSchema(BaseModel):
     attach_inventory: bool = False   # allega un riepilogo dell'inventario dispositivi
     attach_device_ip: Optional[str] = None  # allega la running-config di un dispositivo
     attach_tenant: Optional[str] = None  # allega il contesto completo di un tenant/sede (gruppo)
+    attach_fortigate_ip: Optional[str] = None  # allega la config completa LIVE di un FortiGate (API/SSH)
 class SwitchProvisionSchema(BaseModel):
     """Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config
     per il significato di ciascun campo (tutti opzionali salvo hostname)."""
@@ -486,6 +488,13 @@ class FortiGateProvisionSchema(BaseModel):
     lan_to_wan_policy: bool = True
     disable_wan_admin: bool = True
     banner: str = ""
+    # Elementi ZTP (FortiOS 7.4 Admin Guide)
+    api_user: dict = {}            # {name, accprofile, trusthosts: [..]}
+    central_mgmt: dict = {}        # {type: fortiguard|fortimanager, fmg_ip}
+    csf_group: str = ""
+    netflow_collector: str = ""
+    rest_api_logging: bool = True
+    ha: dict = {}                  # {group_name, mode, password, hbdev, priority, mgmt_interface, mgmt_ip, mgmt_mask}
 
 class FortiGateProvisionSSHSchema(FortiGateProvisionSchema):
     ssh_host: str
@@ -498,6 +507,38 @@ class FortiGateProvisionSerialSchema(FortiGateProvisionSchema):
     baudrate: int = 9600
     console_user: str = "admin"
     console_password: str = ""
+
+class FgtTokenSchema(BaseModel):
+    ip: str
+    token: str = ""                # vuoto = rimuove il token
+    port: int = 443
+    verify_tls: bool = False
+
+class FgtPolicyLookupSchema(BaseModel):
+    src_ip: str
+    dest: str                      # IP o FQDN di destinazione
+    protocol: str = "TCP"
+    dest_port: int = 443
+    srcintf: Optional[str] = None
+
+class FgtSessionQuerySchema(BaseModel):
+    src_ip: Optional[str] = None
+    dst_ip: Optional[str] = None
+    dst_port: Optional[int] = None
+    count: int = 100
+
+class FgtLogQuerySchema(BaseModel):
+    src_ip: Optional[str] = None
+    dst_ip: Optional[str] = None
+    action: Optional[str] = None   # accept | deny | ...
+    count: int = 100
+    log_device: str = "disk"       # disk | memory
+
+class FgtDiagnoseClientSchema(BaseModel):
+    client: str                    # IP o MAC del client da diagnosticare
+    dest: Optional[str] = None     # destinazione (IP/FQDN) per il policy lookup
+    dest_port: int = 443
+    protocol: str = "TCP"
 class McpSettingsSchema(BaseModel):
     disabled_tools: List[str] = []
 
@@ -2411,6 +2452,27 @@ def _device_running_config_context(ip: str, current_user) -> str:
         raise HTTPException(status_code=500, detail=f"Impossibile leggere il backup di {ip}.")
     return f"Running-config di {ip}:\n\n{config_analyzer.running_config(content)}"
 
+def _fortigate_live_context(ip: str, current_user) -> str:
+    """Contesto AI: configurazione completa LIVE di un FortiGate (API o SSH)
+    più stato di sistema, per domande su policy, NAT, VPN, interfacce.
+    Best-effort: se il FortiGate non risponde si riporta l'errore nel blocco."""
+    device = _fgt_device(ip, current_user)
+    lines = [f"## FortiGate {ip} — dati live"]
+    try:
+        st = fortigate_service.get_system_status(device)
+        lines.append(f"Stato sistema (fonte {st['source']}):\n{json.dumps(st['data'], ensure_ascii=False)[:4000]}")
+    except Exception as e:
+        lines.append(f"Stato sistema non disponibile: {e}")
+    try:
+        cfg = fortigate_service.get_full_config(device)
+        text = cfg["data"] if isinstance(cfg["data"], str) else json.dumps(cfg["data"], ensure_ascii=False)
+        if len(text) > 120_000:
+            text = text[:120_000] + "\n... [config troncata]"
+        lines.append(f"Configurazione completa (fonte {cfg['source']}):\n{text}")
+    except Exception as e:
+        lines.append(f"Configurazione live non disponibile: {e}")
+    return "\n\n".join(lines)
+
 def _tenant_context_block(tenant: str, current_user) -> str:
     """Raccoglie TUTTE le informazioni rilevanti per un singolo tenant/sede
     (gruppo) — dispositivi, config del gruppo, MAC history, config sito VPN —
@@ -2576,6 +2638,8 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
         context_blocks.append(_device_running_config_context(payload.attach_device_ip, current_user))
     if payload.attach_tenant:
         context_blocks.append(_tenant_context_block(payload.attach_tenant, current_user))
+    if payload.attach_fortigate_ip:
+        context_blocks.append(_fortigate_live_context(payload.attach_fortigate_ip, current_user))
     if context_blocks:
         messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
 
@@ -2715,6 +2779,123 @@ def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current
     )
     result["config"] = config_text
     return result
+
+
+# --- FORTIGATE LIVE: osservabilità in tempo reale (REST API + fallback SSH) ---
+
+def _fgt_device(ip: str, current_user) -> dict:
+    """Risolve un IP in un dispositivo FortiGate dell'inventario, con verifica
+    di scoping per sede. 404 se assente, 400 se il vendor non è fortinet."""
+    device = assert_device_allowed(current_user, ip)
+    if device is None:
+        raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
+    if (device.get('Vendor') or '').lower() != 'fortinet':
+        raise HTTPException(status_code=400,
+                            detail=f"Il dispositivo {ip} non è un FortiGate (vendor='{device.get('Vendor')}').")
+    return device
+
+def _fgt_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except fortigate_service.FortiGateError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@app.get("/api/fortigate/tokens")
+def fgt_token_status(current_user = Depends(require_admin)):
+    """IP con token API configurato (i token non vengono mai restituiti)."""
+    return fortigate_service.token_status()
+
+@app.post("/api/fortigate/token")
+def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)):
+    """Salva (cifrato) il token REST API di un FortiGate; token vuoto lo rimuove."""
+    _fgt_device(payload.ip, current_user)
+    fortigate_service.set_api_token(payload.ip, payload.token,
+                                    port=payload.port, verify_tls=payload.verify_tls)
+    action = "configurato" if payload.token else "rimosso"
+    log_audit(f"Token API FortiGate {action} per '{payload.ip}' da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@app.get("/api/fortigate/{ip}/status")
+def fgt_status(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_system_status, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/interfaces")
+def fgt_interfaces(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_interfaces, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/arp")
+def fgt_arp(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_arp_table, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/dhcp-leases")
+def fgt_dhcp_leases(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_dhcp_leases, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/device-inventory")
+def fgt_device_inventory(ip: str, current_user = Depends(get_current_user)):
+    """Device identification FortiOS: MAC/IP/hostname/OS per client rilevato."""
+    return _fgt_call(fortigate_service.get_device_inventory, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/policies")
+def fgt_policies(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_firewall_policies, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/policy-stats")
+def fgt_policy_stats(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_policy_stats, _fgt_device(ip, current_user))
+
+@app.post("/api/fortigate/{ip}/policy-lookup")
+def fgt_policy_lookup(ip: str, payload: FgtPolicyLookupSchema,
+                      current_user = Depends(get_current_user)):
+    """Chiede al FortiGate quale policy matcherebbe il flusso indicato."""
+    return _fgt_call(fortigate_service.policy_lookup, _fgt_device(ip, current_user),
+                     payload.src_ip, payload.dest, protocol=payload.protocol,
+                     dest_port=payload.dest_port, srcintf=payload.srcintf)
+
+@app.post("/api/fortigate/{ip}/sessions")
+def fgt_sessions(ip: str, payload: FgtSessionQuerySchema,
+                 current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_sessions, _fgt_device(ip, current_user),
+                     src_ip=payload.src_ip, dst_ip=payload.dst_ip,
+                     dst_port=payload.dst_port, count=payload.count)
+
+@app.get("/api/fortigate/{ip}/routes")
+def fgt_routes(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_routes, _fgt_device(ip, current_user))
+
+@app.post("/api/fortigate/{ip}/logs")
+def fgt_logs(ip: str, payload: FgtLogQuerySchema,
+             current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_traffic_logs, _fgt_device(ip, current_user),
+                     src_ip=payload.src_ip, dst_ip=payload.dst_ip,
+                     action=payload.action, count=payload.count,
+                     log_device=payload.log_device)
+
+@app.get("/api/fortigate/{ip}/wifi/clients")
+def fgt_wifi_clients(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_wifi_clients, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/wifi/aps")
+def fgt_wifi_aps(ip: str, current_user = Depends(get_current_user)):
+    return _fgt_call(fortigate_service.get_managed_aps, _fgt_device(ip, current_user))
+
+@app.get("/api/fortigate/{ip}/full-config")
+def fgt_full_config(ip: str, current_user = Depends(require_operator)):
+    """Configurazione completa LIVE (contiene segreti: solo ruolo operator+)."""
+    log_audit(f"Full-config FortiGate richiesta per '{ip}' da '{current_user.get('sub')}'.")
+    return _fgt_call(fortigate_service.get_full_config, _fgt_device(ip, current_user))
+
+@app.post("/api/fortigate/{ip}/diagnose-client")
+def fgt_diagnose_client(ip: str, payload: FgtDiagnoseClientSchema,
+                        current_user = Depends(get_current_user)):
+    """Diagnosi aggregata di un client (IP o MAC): inventario device, ARP,
+    DHCP, sessioni, policy match verso una destinazione e ultimi log."""
+    device = _fgt_device(ip, current_user)
+    log_audit(f"Diagnosi client '{payload.client}' su FortiGate '{ip}' da '{current_user.get('sub')}'.")
+    return fortigate_service.diagnose_client(device, payload.client,
+                                             dest=payload.dest,
+                                             dest_port=payload.dest_port,
+                                             protocol=payload.protocol)
 
 
 # --- MCP SERVER: controllo dei tool esposti ai client LLM esterni ---
