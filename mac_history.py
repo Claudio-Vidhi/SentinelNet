@@ -112,6 +112,31 @@ def init_db():
                   interface TEXT NOT NULL, last_seen TEXT NOT NULL,
                   PRIMARY KEY (mac, switch_ip, interface))
             """)
+            # Corrispondenze MAC <-> IP raccolte dalle tabelle ARP dei gateway
+            # L3 (switch con SVI o firewall, a seconda di chi ruota la VLAN).
+            # Una riga per (mac, ip, source_ip): lo stesso MAC può avere più IP
+            # (multi-VLAN) e lo stesso binding può essere visto da più gateway.
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS arp_entries (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mac         TEXT NOT NULL,
+                    ip          TEXT NOT NULL,
+                    vlan        TEXT DEFAULT '',
+                    interface   TEXT DEFAULT '',
+                    source_ip   TEXT NOT NULL,
+                    source_name TEXT DEFAULT '',
+                    source_type TEXT DEFAULT '',
+                    tenant      TEXT DEFAULT '',
+                    site        TEXT DEFAULT 'central',
+                    first_seen  TEXT NOT NULL,
+                    last_seen   TEXT NOT NULL,
+                    seen_count  INTEGER DEFAULT 1
+                )
+            """)
+            c.execute("""CREATE UNIQUE INDEX IF NOT EXISTS ux_arp
+                         ON arp_entries(mac, ip, source_ip)""")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_arp_mac ON arp_entries(mac)")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_arp_ip  ON arp_entries(ip)")
         _init_done = True
 
 
@@ -182,7 +207,9 @@ def prune(retention_days: int = None) -> int:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec='seconds')
     with _lock, _connect() as c:
         cur = c.execute("DELETE FROM mac_sightings WHERE last_seen < ?", (cutoff,))
-        return cur.rowcount
+        removed = cur.rowcount
+        c.execute("DELETE FROM arp_entries WHERE last_seen < ?", (cutoff,))
+        return removed
 
 
 # --- Scrittura avvistamenti (upsert) ---
@@ -275,6 +302,115 @@ def get_switch_if_macs() -> dict:
                          "FROM switch_if_macs").fetchall()
     return {r["mac"]: {"switch_ip": r["switch_ip"], "switch_name": r["switch_name"],
                        "interface": r["interface"]} for r in rows}
+
+
+# --- MAC <-> IP (tabelle ARP dei gateway L3) ---
+
+def record_arp_entries(rows, source_ip: str, source_name: str = "",
+                       source_type: str = "", tenant: str = "",
+                       site: str = "central") -> dict:
+    """Registra (upsert) i binding MAC<->IP letti dalla tabella ARP di UN
+    gateway L3 (switch SVI o firewall).
+
+    rows: iterabile di dict con chiavi: mac e ip (obbligatorie), vlan,
+    interface. Chiave di upsert: (mac, ip, source_ip).
+    """
+    init_db()
+    now = _now_iso()
+    n_new = n_upd = n_skip = 0
+    with _lock, _connect() as c:
+        for r in rows:
+            mac = normalize_mac(r.get("mac"))
+            ip = (r.get("ip") or "").strip()
+            if not mac or not ip:
+                n_skip += 1
+                continue
+            vlan = str(r.get("vlan") or "")
+            iface = (r.get("interface") or "").strip()
+            existing = c.execute(
+                "SELECT id FROM arp_entries WHERE mac=? AND ip=? AND source_ip=?",
+                (mac, ip, source_ip)).fetchone()
+            if existing:
+                c.execute("""UPDATE arp_entries
+                             SET last_seen=?, seen_count=seen_count+1, vlan=?,
+                                 interface=?, source_name=?, source_type=?, tenant=?, site=?
+                             WHERE id=?""",
+                          (now, vlan, iface, source_name, source_type, tenant,
+                           site, existing["id"]))
+                n_upd += 1
+            else:
+                c.execute("""INSERT INTO arp_entries
+                             (mac, ip, vlan, interface, source_ip, source_name,
+                              source_type, tenant, site, first_seen, last_seen, seen_count)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,1)""",
+                          (mac, ip, vlan, iface, source_ip, source_name,
+                           source_type, tenant, site, now, now))
+                n_new += 1
+    return {"new": n_new, "updated": n_upd, "skipped": n_skip}
+
+
+def search_arp(mac: str = None, ip: str = None, source_ip: str = None,
+               tenants=None, limit: int = 500) -> list:
+    """Ricerca i binding MAC<->IP. mac accetta anche frammenti (come search)."""
+    init_db()
+    q = ["SELECT * FROM arp_entries WHERE 1=1"]
+    args = []
+    if mac:
+        norm = normalize_mac(mac)
+        if norm:
+            q.append("AND mac = ?")
+            args.append(norm)
+        else:
+            frag = _HEXONLY.sub('', mac).lower()
+            if frag:
+                q.append("AND REPLACE(mac, ':', '') LIKE ?")
+                args.append('%' + frag + '%')
+    if ip:
+        q.append("AND ip LIKE ?")
+        args.append(ip + '%')
+    if source_ip:
+        q.append("AND source_ip = ?")
+        args.append(source_ip)
+    if tenants is not None:
+        if not tenants:
+            return []
+        q.append("AND tenant IN (%s)" % ",".join("?" * len(tenants)))
+        args.extend(list(tenants))
+    q.append("ORDER BY last_seen DESC LIMIT ?")
+    args.append(max(1, min(5000, int(limit))))
+    with _lock, _connect() as c:
+        rows = c.execute(" ".join(q), args).fetchall()
+    return [dict(r) for r in rows]
+
+
+def client_map(mac: str = None, ip: str = None, tenants=None,
+               limit: int = 500) -> list:
+    """Vista unificata client: binding MAC<->IP (ARP dei gateway) arricchito
+    con l'ultima posizione fisica nota (switch/porta della MAC table, uplink
+    esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'."""
+    entries = search_arp(mac=mac, ip=ip, tenants=tenants, limit=limit)
+    out = []
+    for e in entries:
+        pos = search(mac=e["mac"], tenants=tenants, limit=10)
+        access = next((p for p in pos if not p.get("is_uplink")), None)
+        out.append({
+            **e,
+            "switch_ip": access.get("switch_ip") if access else "",
+            "switch_name": access.get("switch_name") if access else "",
+            "switch_port": access.get("interface") if access else "",
+            "port_vlan": access.get("vlan") if access else "",
+            "port_last_seen": access.get("last_seen") if access else "",
+        })
+    return out
+
+
+def arp_stats() -> dict:
+    init_db()
+    with _lock, _connect() as c:
+        total = c.execute("SELECT COUNT(*) n FROM arp_entries").fetchone()["n"]
+        macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM arp_entries").fetchone()["n"]
+        sources = c.execute("SELECT COUNT(DISTINCT source_ip) n FROM arp_entries").fetchone()["n"]
+    return {"bindings": total, "unique_macs": macs, "sources": sources}
 
 
 # --- Ricerca storica ---

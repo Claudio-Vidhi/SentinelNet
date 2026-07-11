@@ -890,6 +890,9 @@
       <button class="tab-button" onclick="switchTab('tab-mac', this)" data-i18n="tabMacTracker">
         <i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker
       </button>
+      <button class="tab-button" onclick="switchTab('tab-clientmap', this); arpClientSearch(); refreshArpStats();" data-i18n="tabClientMap">
+        <i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)
+      </button>
       <button class="tab-button" onclick="switchTab('tab-config', this)" data-i18n="tabConfigAnalyzer">
         <i class="fa-solid fa-file-code"></i> Config Analyzer
       </button>
@@ -1371,6 +1374,42 @@
       </style>
       <!-- Risultati raggruppati per switch: clic sull'host per espandere i MAC -->
       <div id="macResults"></div>
+    </div>
+
+    <!-- TAB: Client Map (MAC <-> IP dai gateway L3) -->
+    <div id="tab-clientmap" class="tab-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
+        <h3 data-i18n="titleClientMap">Client Map — MAC ↔ IP</h3>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-small requires-write" id="btnArpScan" onclick="runArpScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
+            <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
+          </button>
+        </div>
+      </div>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descClientMap">
+        Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.
+      </p>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px;">
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
+          <input id="arpSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpIp">IP (anche prefisso)</label>
+          <input id="arpSearchIp" class="ui-input" type="text" placeholder="10.0.0." style="width:140px;">
+        </div>
+        <button class="btn btn-primary btn-small" onclick="arpClientSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
+          <i class="fa-solid fa-magnifying-glass"></i> Cerca
+        </button>
+        <button class="btn btn-secondary btn-small" onclick="arpSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
+          <i class="fa-solid fa-rotate-left"></i> Reset
+        </button>
+        <span id="arpStats" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span>
+      </div>
+
+      <div id="arpScanSummary" style="display:none; margin-bottom:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:12px;"></div>
+      <div id="arpResults" style="overflow-x:auto;"></div>
     </div>
 
     <!-- TAB: Config Analyzer -->
@@ -2089,6 +2128,12 @@
         tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.",
+        tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
+        titleClientMap: "Client Map — MAC ↔ IP",
+        descClientMap: "Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.",
+        btnArpScan: '<i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)',
+        lblArpIp: "IP (anche prefisso)",
+        titleArpScanSummary: "Esito raccolta ARP",
         titleMacAdhoc: "Comandi ad-hoc (apparati non standard)",
         descMacAdhoc: "Per apparati dove la MAC-table non si legge in modo standard (es. Catalyst 8000V con bridge-domain: i MAC stanno in 'show bridge-domain'), definisci un comando CLI dedicato e il formato di parsing. Verrà usato al posto di 'show mac address-table' per quell'apparato.",
         lblMacAdhocCmd: "Comando CLI",
@@ -2462,6 +2507,12 @@
         tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Search and history of MAC addresses across the infrastructure: on which switch, interface/port-channel and VLAN a device is (or was) connected.",
+        tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
+        titleClientMap: "Client Map — MAC ↔ IP",
+        descClientMap: "MAC ↔ IP matching for network clients, read from the ARP tables of whoever routes the VLANs (L3 switch or firewall), cross-referenced with the access port detected by the MAC Tracker. Devices that don't route VLANs are skipped automatically.",
+        btnArpScan: '<i class="fa-solid fa-satellite-dish"></i> Collect ARP (L3 gateways)',
+        lblArpIp: "IP (prefix allowed)",
+        titleArpScanSummary: "ARP collection result",
         titleMacAdhoc: "Ad-hoc commands (non-standard devices)",
         descMacAdhoc: "For devices whose MAC-table isn't read the standard way (e.g. Catalyst 8000V with bridge-domain: MACs live in 'show bridge-domain'), define a dedicated CLI command and parsing format. It will be used instead of 'show mac address-table' for that device.",
         lblMacAdhocCmd: "CLI command",
@@ -7454,6 +7505,104 @@
         if (!iso) return '—';
         try { return new Date(iso).toLocaleString(currentLang==='en' ? 'en-US' : 'it-IT'); }
         catch (e) { return iso; }
+    }
+
+    // --- CLIENT MAP: MAC <-> IP dalle ARP dei gateway L3 ---
+
+    async function runArpScan() {
+        const btn = document.getElementById('btnArpScan');
+        btn.disabled = true;
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
+        try {
+            const res = await apiFetch('/api/arp/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group: 'all' })
+            });
+            if (!res) return;
+            const box = document.getElementById('arpScanSummary');
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                box.style.display = 'block';
+                box.innerHTML = `<span style="color:var(--danger);">${escapeHtml(err.detail || 'Errore scansione ARP')}</span>`;
+                return;
+            }
+            const d = await res.json();
+            const rows = Object.entries(d.devices || {}).map(([ip, r]) => {
+                const color = r.status === 'success' ? 'var(--success, #7bd88f)'
+                            : r.status === 'empty' ? 'var(--text-muted)' : 'var(--danger)';
+                const detail = r.status === 'success'
+                    ? `${r.entries} entry (nuove ${r.new}, aggiornate ${r.updated})`
+                    : escapeHtml(r.message || r.status);
+                return `<div>• <b>${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
+            }).join('');
+            box.style.display = 'block';
+            box.innerHTML = `<b data-i18n="titleArpScanSummary">Esito raccolta ARP</b>` +
+                `<div style="margin-top:6px;">${rows || '—'}</div>`;
+            arpClientSearch();
+            refreshArpStats();
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = oldHtml;
+        }
+    }
+
+    async function refreshArpStats() {
+        const res = await apiFetch('/api/arp/stats');
+        if (!res || !res.ok) return;
+        const s = await res.json();
+        const el = document.getElementById('arpStats');
+        if (el) el.innerText = (currentLang === 'en'
+            ? `${s.bindings} bindings · ${s.unique_macs} MACs · ${s.sources} gateways`
+            : `${s.bindings} binding · ${s.unique_macs} MAC · ${s.sources} gateway`);
+    }
+
+    async function arpClientSearch() {
+        const mac = document.getElementById('arpSearchMac').value.trim();
+        const ip = document.getElementById('arpSearchIp').value.trim();
+        const params = new URLSearchParams();
+        if (mac) params.set('mac', mac);
+        if (ip) params.set('ip', ip);
+        const res = await apiFetch('/api/arp/client-map?' + params.toString());
+        if (!res || !res.ok) return;
+        const d = await res.json();
+        renderArpResults(d.results || []);
+    }
+
+    function arpSearchReset() {
+        ['arpSearchMac', 'arpSearchIp'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        arpClientSearch();
+    }
+
+    function renderArpResults(rows) {
+        const en = currentLang === 'en';
+        const box = document.getElementById('arpResults');
+        if (!rows.length) {
+            box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${en
+                ? 'No MAC ↔ IP bindings. Run an ARP collection (and a MAC scan for port matching).'
+                : 'Nessun binding MAC ↔ IP. Esegui una raccolta ARP (e una MAC scan per il match della porta).'}</p>`;
+            return;
+        }
+        const th = (t) => `<th style="text-align:left; padding:8px 10px; font-size:11px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border); white-space:nowrap;">${t}</th>`;
+        const td = (t) => `<td style="padding:8px 10px; font-size:13px; border-bottom:1px solid var(--border); white-space:nowrap;">${t}</td>`;
+        const header = en
+            ? [th('MAC'), th('IP'), th('VLAN'), th('Gateway (routes VLAN)'), th('Type'), th('Access switch'), th('Port'), th('Last seen')]
+            : [th('MAC'), th('IP'), th('VLAN'), th('Gateway (ruota la VLAN)'), th('Tipo'), th('Switch di accesso'), th('Porta'), th('Ultimo avvistamento')];
+        const body = rows.map(r => '<tr>' + [
+            td(`<code>${escapeHtml(r.mac)}</code>`),
+            td(`<code>${escapeHtml(r.ip)}</code>`),
+            td(escapeHtml(r.vlan || '—')),
+            td(`${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip)}</span>`),
+            td(escapeHtml(r.source_type || '—')),
+            td(r.switch_ip ? `${escapeHtml(r.switch_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.switch_ip)}</span>` : '—'),
+            td(escapeHtml(r.switch_port || '—')),
+            td(fmtMacTime(r.last_seen)),
+        ].join('') + '</tr>').join('');
+        box.innerHTML = `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;">` +
+            `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
     }
 
     // Risultati raggruppati per switch: ogni host è un accordion collassato;
