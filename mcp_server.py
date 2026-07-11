@@ -267,6 +267,53 @@ TOOLS = {
                       body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol")
                             if a.get(k) is not None}),
     ),
+    "wlc_status": (
+        "Get status of a Cisco wireless LAN controller (AireOS or Catalyst "
+        "9800): version, uptime, AP/client counts.",
+        _obj({"ip": {**_S, "description": "WLC IP (must be in inventory)"}}, ["ip"]),
+        lambda a: api("GET", f"/api/wlc/{a['ip']}/status"),
+    ),
+    "wlc_ap_summary": (
+        "List access points joined to a Cisco WLC: name, model, IP, clients, "
+        "location, state.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/wlc/{a['ip']}/ap-summary"),
+    ),
+    "wlc_client_summary": (
+        "List wireless clients on a Cisco WLC with AP, WLAN/SSID, state and "
+        "protocol.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/wlc/{a['ip']}/client-summary"),
+    ),
+    "wlc_client_detail": (
+        "Full detail for one wireless client by MAC: AP, SSID, RSSI/SNR, "
+        "data rates, roaming/session history, policy state. Use for "
+        "disconnection troubleshooting.",
+        _obj({"ip": _S, "mac": {**_S, "description": "Client MAC, any format"}},
+             ["ip", "mac"]),
+        lambda a: api("GET", f"/api/wlc/{a['ip']}/client/{a['mac']}"),
+    ),
+    "wlc_wlan_summary": (
+        "List WLANs/SSIDs configured on a Cisco WLC with status and security "
+        "policy.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/wlc/{a['ip']}/wlan-summary"),
+    ),
+    "wlc_rogue_aps": (
+        "List rogue/interfering access points detected by a Cisco WLC "
+        "(possible cause of client disconnections).",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/wlc/{a['ip']}/rogue-aps"),
+    ),
+    "wlc_diagnose_client": (
+        "One-shot wireless diagnosis of a client (MAC) on a Cisco WLC: "
+        "client detail (RSSI/SNR/AP/SSID), AP summary, WLAN summary and "
+        "nearby rogue APs. Answers 'why do clients on this AP disconnect'.",
+        _obj({"ip": {**_S, "description": "WLC IP"},
+              "mac": {**_S, "description": "Client MAC address"}},
+             ["ip", "mac"]),
+        lambda a: api("GET", f"/api/wlc/{a['ip']}/diagnose-client/{a['mac']}"),
+    ),
     "generate_fortigate_config": (
         "Generate a hardened day-0 FortiOS configuration for a new FortiGate "
         "(zero-touch provisioning; does not touch any device). Same parameters "

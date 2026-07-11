@@ -22,5 +22,13 @@
     "paloalto": {
         "euvd_term": "palo alto networks",
         "driver": "paloalto_panos"
+    },
+    "cisco_wlc": {
+        "euvd_term": "cisco",
+        "driver": "cisco_wlc"
+    },
+    "cisco_9800": {
+        "euvd_term": "cisco",
+        "driver": "cisco_9800"
     }
 }
