@@ -45,6 +45,12 @@
 
 ---
 
+## Contribuire
+
+Regole per lo sviluppo (lingua, doppio artefatto, regola async-DB, scope multi-gruppo): [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
 ## Requisiti e Installazione
 
 Il progetto richiede **Python 3.11+** e utilizza `netmiko` per le sessioni SSH, `fastapi`/`uvicorn` per il server web e `cryptography` per la cifratura delle credenziali.
