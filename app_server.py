@@ -71,6 +71,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Header di sicurezza su ogni risposta (audit L-2). La CSP consente solo
+# i CDN effettivamente usati da dashboard.html (fonts, font-awesome, vis-network, xterm).
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'none'; "
+    "object-src 'none'"
+)
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Content-Security-Policy"] = _CSP
+    return response
+
 security_scheme = HTTPBearer(auto_error=False)
 
 def get_resource_path(relative_path):
@@ -375,6 +397,9 @@ class ModelSchema(BaseModel):
 
 class NetworkSettingsSchema(BaseModel):
     host: str
+
+class CliBlacklistSchema(BaseModel):
+    cli_blacklist_operators: bool
 
 class AiProfileSchema(BaseModel):
     """Corpo per la creazione di un profilo di connessione AI."""
@@ -1342,6 +1367,19 @@ def set_network_settings(payload: NetworkSettingsSchema, current_user = Depends(
     log_audit(f"IP di bind impostato a '{host}' dall'utente '{current_user.get('sub')}' (applicato al riavvio).")
     return {"status": "success", "restart_required": True, "host": host}
 
+@app.get("/api/settings/cli-blacklist")
+def get_cli_blacklist_settings(current_user = Depends(require_admin)):
+    """Stato dell'applicazione della blacklist CLI agli operatori (default: attiva)."""
+    return {"cli_blacklist_operators": bool(get_app_settings().get("cli_blacklist_operators", True))}
+
+@app.post("/api/settings/cli-blacklist")
+def set_cli_blacklist_settings(payload: CliBlacklistSchema, current_user = Depends(require_admin)):
+    save_app_settings({"cli_blacklist_operators": payload.cli_blacklist_operators})
+    log_audit(f"Blacklist comandi CLI per gli operatori "
+              f"{'attivata' if payload.cli_blacklist_operators else 'disattivata'} "
+              f"dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success", "cli_blacklist_operators": payload.cli_blacklist_operators}
+
 
 # --- ENDPOINTS COSTRUZIONE MAPPA TOPOLOGICA ---
 
@@ -1517,16 +1555,35 @@ def is_command_safe(command: str) -> bool:
             return False
     return True
 
+def command_allowed(command: str, current_user) -> bool:
+    """Applica la blacklist CLI in base al ruolo (audit M-1): gli admin la
+    bypassano sempre; gli operatori vi sono soggetti solo se l'impostazione
+    'cli_blacklist_operators' è attiva (default: attiva)."""
+    if current_user.get("role") == "admin":
+        return True
+    if not get_app_settings().get("cli_blacklist_operators", True):
+        return True
+    return is_command_safe(command)
+
+def _bypass_note(current_user) -> str:
+    """Nota per l'audit log quando un comando in blacklist viene comunque consentito."""
+    return ("(blacklist bypassata: admin)" if current_user.get("role") == "admin"
+            else "(blacklist disattivata per gli operatori)")
+
 @app.post("/api/send-command")
 def send_command(payload: CommandRequest, current_user = Depends(require_operator)):
-    # Validazione blacklist di sicurezza dei comandi CLI
-    if not is_command_safe(payload.command):
+    # Validazione blacklist di sicurezza dei comandi CLI (admin: bypass; operatori: da impostazione)
+    blacklist_bypass = not is_command_safe(payload.command)
+    if not command_allowed(payload.command, current_user):
         log_audit(f"Tentativo bloccato di esecuzione comando non sicuro '{payload.command}' su '{payload.ip}' dall'utente '{current_user.get('sub')}'.")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Comando non consentito per motivi di sicurezza (in blacklist)."
         )
-        
+    if blacklist_bypass:
+        log_audit(f"Comando in blacklist '{payload.command}' consentito su '{payload.ip}' "
+                  f"all'utente '{current_user.get('sub')}' {_bypass_note(current_user)}.")
+
     devices = inventory_manager.get_all_devices()
     target_device = next((d for d in devices if d['IP'] == payload.ip), None)
     if target_device:
@@ -1550,7 +1607,8 @@ def send_command(payload: CommandRequest, current_user = Depends(require_operato
             return {"status": "queued", "job_id": job['id'],
                     "message": "Comando accodato per la sede agent; esito non ancora "
                                "disponibile (consulta /api/command-jobs/{job_id})."}
-        res = core_engine.send_custom_command(target_device, payload.command)
+        res = core_engine.send_custom_command(target_device, payload.command,
+                                              bypass_blacklist=blacklist_bypass)
         return res
     raise HTTPException(status_code=404, detail="Dispositivo non presente in inventario")
 
@@ -1855,7 +1913,9 @@ async def ws_terminal(websocket: WebSocket, ip: str):
                     data = await websocket.receive_text()
                     for ch in data:
                         if ch in ("\r", "\n"):
-                            if line_buf.strip() and not is_command_safe(line_buf):
+                            _cmd = line_buf.strip()
+                            _ws_user = {"role": _role, "sub": username_from_otp}
+                            if _cmd and not command_allowed(_cmd, _ws_user):
                                 # Annulla la riga sullo switch (kill-line) e avvisa
                                 chan.send("\x15")
                                 await websocket.send_text(
@@ -1864,11 +1924,17 @@ async def ws_terminal(websocket: WebSocket, ip: str):
                                 )
                                 log_audit(
                                     f"Comando da terminale bloccato per blacklist "
-                                    f"('{line_buf.strip()}') su '{ip}' "
+                                    f"('{_cmd}') su '{ip}' "
                                     f"dall'utente '{username_from_otp}'."
                                 )
                                 line_buf = ""
                                 continue
+                            if _cmd and not is_command_safe(_cmd):
+                                log_audit(
+                                    f"Comando da terminale in blacklist ('{_cmd}') "
+                                    f"consentito su '{ip}' all'utente "
+                                    f"'{username_from_otp}' {_bypass_note(_ws_user)}."
+                                )
                             line_buf = ""
                             chan.send(ch)
                         elif ch in ("\x7f", "\x08"):  # backspace
@@ -2412,7 +2478,7 @@ def arp_client_map(mac: Optional[str] = None, ip: Optional[str] = None,
 
 @app.get("/api/arp/stats")
 def arp_stats_ep(current_user = Depends(get_current_user)):
-    return mac_history.arp_stats()
+    return mac_history.arp_stats(tenants=user_group_scope(current_user))
 
 
 # --- CONFIG ANALYZER: analisi running-config dai backup ---
@@ -3194,10 +3260,13 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
         raise HTTPException(status_code=400, detail="Il relay comandi è disponibile solo per sedi in modalità agent.")
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", payload.ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
-    if not is_command_safe(payload.command):
+    if not command_allowed(payload.command, current_user):
         log_audit(f"Relay comando bloccato (blacklist) '{payload.command}' su '{payload.ip}' "
                   f"sede '{site_id}' da '{current_user.get('sub')}'.")
         raise HTTPException(status_code=400, detail="Comando non consentito per motivi di sicurezza (in blacklist).")
+    if not is_command_safe(payload.command):
+        log_audit(f"Relay comando in blacklist '{payload.command}' su '{payload.ip}' sede '{site_id}' "
+                  f"consentito a '{current_user.get('sub')}' {_bypass_note(current_user)}.")
     job = site_manager.enqueue_job(site_id, payload.ip, payload.command,
                                    requested_by=current_user.get("sub"))
     log_audit(f"Comando CLI accodato per sede agent '{site_id}' su '{payload.ip}' "

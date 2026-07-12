@@ -1866,6 +1866,17 @@
           <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
       </div>
+      <div style="margin-top:16px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
+        <h3 style="font-size:15px; margin-bottom:8px;" data-i18n="titleCliBlacklist"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Blacklist comandi CLI</h3>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descCliBlacklist">
+          Gli amministratori bypassano sempre la blacklist dei comandi distruttivi (i comandi restano tracciati nell'audit log). Qui decidi se applicarla agli operatori.
+        </p>
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+          <input type="checkbox" id="cliBlacklistToggle" onchange="saveCliBlacklistSetting()">
+          <span style="font-size:13px;" data-i18n="lblCliBlacklistOperators">Applica blacklist comandi CLI agli operatori</span>
+        </label>
+        <div id="cliBlacklistStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
+      </div>
     </div>
   </main>
 
@@ -2242,6 +2253,35 @@
         lblCaReferencedIn: "riferita in",
         titleCaRawRoute: "Riga di configurazione",
         lblCaShowRawRoute: "Mostra riga di configurazione",
+        titleCaFgIfaces: "Interfacce",
+        titleCaFgPolicies: "Policy Firewall",
+        titleCaFgObjects: "Oggetti",
+        titleCaFgRouting: "Routing / VPN",
+        titleCaValidation: "Validazione",
+        thCaFgAllowaccess: "Accesso mgmt",
+        thCaFgSrcIntf: "Intf sorgente",
+        thCaFgDstIntf: "Intf destinazione",
+        thCaFgSrcAddr: "Indirizzo sorgente",
+        thCaFgDstAddr: "Indirizzo destinazione",
+        thCaFgService: "Servizio",
+        thCaFgAction: "Azione",
+        lblCaFgAddresses: "Indirizzi",
+        lblCaFgAddrGroups: "Gruppi indirizzi",
+        lblCaFgServices: "Servizi",
+        lblCaFgSvcGroups: "Gruppi servizi",
+        lblCaFgVips: "VIP",
+        titleCaVpnP1: "VPN IPsec Phase 1",
+        titleCaVpnP2: "VPN IPsec Phase 2",
+        thCaFgDevice: "Interfaccia",
+        thCaFgDistance: "Distanza",
+        titleCaWlans: "WLAN",
+        thCaSsid: "SSID",
+        thCaProfile: "Profilo",
+        thCaSecurity: "Sicurezza",
+        thCaBroadcast: "Broadcast SSID",
+        titleCaDynIfaces: "Interfacce dinamiche",
+        titleCaRadius: "Server RADIUS",
+        lblCaMobility: "Mobility group",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Apparato da Zero',
         titleProvisioner: "Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)",
@@ -2368,6 +2408,10 @@
         msgRestartRequired: "Salvato. Riavvia SentinelNet per applicare.",
         optAllIfaces: "(tutte le interfacce)",
         optLocalOnly: "(solo locale)",
+        titleCliBlacklist: "Blacklist comandi CLI",
+        descCliBlacklist: "Gli amministratori bypassano sempre la blacklist dei comandi distruttivi (i comandi restano tracciati nell'audit log). Qui decidi se applicarla agli operatori.",
+        lblCliBlacklistOperators: "Applica blacklist comandi CLI agli operatori",
+        msgCliBlacklistSaved: "Impostazione salvata.",
         descUsers: 'Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.',
         thUserName: "Username",
         thUserRole: "Ruolo / Privilegio",
@@ -2621,6 +2665,35 @@
         lblCaReferencedIn: "referenced in",
         titleCaRawRoute: "Configuration line",
         lblCaShowRawRoute: "Show configuration line",
+        titleCaFgIfaces: "Interfaces",
+        titleCaFgPolicies: "Firewall Policies",
+        titleCaFgObjects: "Objects",
+        titleCaFgRouting: "Routing / VPN",
+        titleCaValidation: "Validation",
+        thCaFgAllowaccess: "Mgmt access",
+        thCaFgSrcIntf: "Src intf",
+        thCaFgDstIntf: "Dst intf",
+        thCaFgSrcAddr: "Src address",
+        thCaFgDstAddr: "Dst address",
+        thCaFgService: "Service",
+        thCaFgAction: "Action",
+        lblCaFgAddresses: "Addresses",
+        lblCaFgAddrGroups: "Address groups",
+        lblCaFgServices: "Services",
+        lblCaFgSvcGroups: "Service groups",
+        lblCaFgVips: "VIPs",
+        titleCaVpnP1: "IPsec VPN Phase 1",
+        titleCaVpnP2: "IPsec VPN Phase 2",
+        thCaFgDevice: "Interface",
+        thCaFgDistance: "Distance",
+        titleCaWlans: "WLANs",
+        thCaSsid: "SSID",
+        thCaProfile: "Profile",
+        thCaSecurity: "Security",
+        thCaBroadcast: "Broadcast SSID",
+        titleCaDynIfaces: "Dynamic interfaces",
+        titleCaRadius: "RADIUS servers",
+        lblCaMobility: "Mobility group",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Device',
         titleProvisioner: "Zero-Touch Provisioning (Cisco Switch / FortiGate Firewall)",
@@ -2748,6 +2821,10 @@
         msgRestartRequired: "Saved. Restart SentinelNet to apply.",
         optAllIfaces: "(all interfaces)",
         optLocalOnly: "(local only)",
+        titleCliBlacklist: "CLI command blacklist",
+        descCliBlacklist: "Administrators always bypass the destructive-command blacklist (commands are still recorded in the audit log). Here you decide whether it applies to operators.",
+        lblCliBlacklistOperators: "Enforce CLI command blacklist for operators",
+        msgCliBlacklistSaved: "Setting saved.",
         thUserName: "Username",
         thUserRole: "Role / Privilege",
         thUserGroups: "Visible / manageable tenants",
@@ -6844,6 +6921,32 @@
         if (!res || !res.ok) { box.innerHTML = ''; return; }
         const d = await res.json();
         renderAppSettings(d);
+        loadCliBlacklistSetting();
+    }
+
+    async function loadCliBlacklistSetting() {
+        const cb = document.getElementById('cliBlacklistToggle');
+        if (!cb) return;
+        const res = await apiFetch('/api/settings/cli-blacklist');
+        if (!res || !res.ok) return;
+        const d = await res.json();
+        cb.checked = !!d.cli_blacklist_operators;
+    }
+
+    async function saveCliBlacklistSetting() {
+        const cb = document.getElementById('cliBlacklistToggle');
+        const statusEl = document.getElementById('cliBlacklistStatus');
+        const res = await apiFetch('/api/settings/cli-blacklist', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cli_blacklist_operators: cb.checked })
+        });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || ''));
+            cb.checked = !cb.checked; // ripristina lo stato precedente
+            return;
+        }
+        if (statusEl) statusEl.textContent = i18n[currentLang].msgCliBlacklistSaved;
     }
 
     function renderAppSettings(d) {
@@ -7836,6 +7939,8 @@
     }
 
     function caDeviceCount(dev) {
+        if (dev.config_type === 'fortios') return (dev.policies || []).length;
+        if (dev.config_type === 'wlc-aireos') return (dev.wlans || []).length;
         if (caView === 'vlan') return (dev.vlans || []).length;
         if (caView === 'routing') return (dev.routing && dev.routing.static ? dev.routing.static.length : 0) + (dev.routing && dev.routing.protocols ? dev.routing.protocols.length : 0);
         if (caView === 'acl') return (dev.acls || []).length;
@@ -7860,7 +7965,9 @@
         box.innerHTML = caData.map((dev, idx) => {
             const count = caDeviceCount(dev);
             const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
-            const body = caView === 'vlan' ? caRenderVlans(dev, L, en)
+            const body = dev.config_type === 'fortios' ? caRenderFortios(dev, L, en)
+                       : dev.config_type === 'wlc-aireos' ? caRenderWlc(dev, L, en)
+                       : caView === 'vlan' ? caRenderVlans(dev, L, en)
                        : caView === 'routing' ? caRenderRouting(dev, L, en, idx)
                        : caView === 'acl' ? caRenderAcls(dev, L, en)
                        : caRenderIfaces(dev, L, en);
@@ -8135,7 +8242,72 @@
         if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
     }
 
+    // Etichette it/en per le categorie di validazione multivendor (FortiOS / WLC).
+    const caMvValLabels = {
+        any_any_policies:        { it: 'Policy any-any',                    en: 'Any-any policies' },
+        disabled_policies:       { it: 'Policy disabilitate',               en: 'Disabled policies' },
+        unlogged_policies:       { it: 'Policy senza logging',              en: 'Policies without logging' },
+        unused_addresses:        { it: 'Indirizzi non usati',               en: 'Unused addresses' },
+        unused_addr_groups:      { it: 'Gruppi indirizzi non usati',        en: 'Unused address groups' },
+        unused_services:         { it: 'Servizi non usati',                 en: 'Unused services' },
+        insecure_mgmt_interfaces:{ it: 'Interfacce mgmt non sicure',        en: 'Insecure mgmt interfaces' },
+        admins_without_trusthost:{ it: 'Admin senza trusthost',             en: 'Admins without trusthost' },
+        logging_disabled:        { it: 'Logging disabilitato',              en: 'Logging disabled' },
+        open_wlans:              { it: 'WLAN aperte (senza sicurezza)',     en: 'Open WLANs (no security)' },
+        legacy_tkip_wlans:       { it: 'WLAN con TKIP legacy',              en: 'Legacy TKIP WLANs' },
+        disabled_wlans:          { it: 'WLAN disabilitate',                 en: 'Disabled WLANs' },
+        broadcast_ssid_off:      { it: 'Broadcast SSID disattivato',        en: 'Broadcast SSID off' },
+        management_http:         { it: 'Management HTTP abilitato',         en: 'Management HTTP enabled' }
+    };
+
+    // Rende una voce di validazione (stringa o oggetto) in testo leggibile.
+    function caMvValItemText(x) {
+        if (x == null) return '—';
+        if (typeof x !== 'object') return String(x);
+        const nm = x.name || x.ssid || x.id || x.profile || '';
+        const extra = Array.isArray(x.allowaccess) ? ` (${x.allowaccess.join(', ')})` : '';
+        return nm ? `${nm}${extra}` : JSON.stringify(x);
+    }
+
+    // Pannello Validazione generico: array → chip warning, boolean true → chip danger.
+    function caRenderMvValidationBody(dev, L, en) {
+        const v = dev.validation || {};
+        const sections = [];
+        let total = 0;
+        Object.keys(v).forEach(key => {
+            const lbl = caMvValLabels[key] ? caMvValLabels[key][en ? 'en' : 'it'] : key;
+            const val = v[key];
+            if (Array.isArray(val) && val.length) {
+                total += val.length;
+                const chips = val.map(x => `<span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">${escapeHtml(caMvValItemText(x))}</span>`).join('');
+                sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${escapeHtml(lbl)}</h4><div>${chips}</div>`);
+            } else if (val === true) {
+                total += 1;
+                sections.push(`<div style="margin:10px 0 4px;"><span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(lbl)}</span></div>`);
+            }
+        });
+        if (total === 0) {
+            return { total: 0, body: `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+                <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>` };
+        }
+        return { total, body: sections.join('') };
+    }
+
     function caRenderValidation(dev, L, en) {
+        if (dev.config_type === 'fortios' || dev.config_type === 'wlc-aireos') {
+            const mv = caRenderMvValidationBody(dev, L, en);
+            const tenantMv = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
+            return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+                <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
+                    <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
+                    <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
+                    <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
+                    ${tenantMv}
+                    <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${mv.total}</span>
+                </summary>
+                <div style="padding:0 14px 14px;">${mv.body}</div>
+            </details>`;
+        }
         const v = dev.validation || {};
         const unusedAcls = v.unused_acls || [];
         const missingAcls = v.missing_acls || [];
@@ -8168,6 +8340,178 @@
             </summary>
             <div style="padding:0 14px 14px;">${body}</div>
         </details>`;
+    }
+
+    // ===== Config Analyzer: rendering multivendor (FortiOS / Cisco WLC) =====
+
+    function caMvSectionTitle(txt) {
+        return `<h4 style="font-size:12px; margin:12px 0 4px; color:var(--text-muted);">${txt}</h4>`;
+    }
+
+    function caMvEmpty() {
+        return `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
+    }
+
+    // Lista collassabile di oggetti (indirizzi/servizi/gruppi/VIP FortiOS).
+    function caMvObjList(label, arr) {
+        const items = arr || [];
+        if (!items.length) return `<span class="ca-chip">${escapeHtml(label)}: 0</span>`;
+        const names = items.map(x => escapeHtml(caMvValItemText(x))).join(', ');
+        return `<details style="display:inline-block; margin-right:8px; vertical-align:top;">
+            <summary style="cursor:pointer; font-size:12px;"><span class="ca-chip">${escapeHtml(label)}: ${items.length}</span></summary>
+            <div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin:4px 0 8px; max-width:520px;">${names}</div>
+        </details>`;
+    }
+
+    function caRenderFortios(dev, L, en) {
+        // Interfacce
+        const ifaces = dev.interfaces || [];
+        const ifaceRows = ifaces.map(i => {
+            const st = (i.status || '').toLowerCase();
+            const state = st === 'down' || st === 'disable'
+                ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(i.status)}</span>`
+                : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(i.status || L.lblCaActive)}</span>`;
+            return `<tr>
+                <td>${escapeHtml(i.name)}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
+                <td>${escapeHtml(i.vlanid != null ? String(i.vlanid) : '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((i.allowaccess || []).join(', ') || '—')}</td>
+                <td>${state}</td>
+            </tr>`;
+        }).join('');
+        const ifaceTable = ifaces.length
+            ? `<div class="table-container"><table><thead><tr>
+                <th>${L.thCaIface}</th><th>${L.thCaIp}</th><th>${L.thCaVlanCol}</th><th>${L.thCaFgAllowaccess}</th><th>${L.thCaState}</th>
+                </tr></thead><tbody>${ifaceRows}</tbody></table></div>`
+            : caMvEmpty();
+
+        // Policy firewall
+        const policies = dev.policies || [];
+        const polRows = policies.map(p => {
+            const act = (p.action || '').toLowerCase();
+            const actColor = act === 'accept' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
+            const disabled = (p.status || '').toLowerCase() === 'disable';
+            return `<tr${disabled ? ' style="opacity:0.5;"' : ''}>
+                <td>${escapeHtml(p.id != null ? String(p.id) : '—')}</td>
+                <td>${escapeHtml(p.name || '—')}${disabled ? ` <span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">disable</span>` : ''}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcintf || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstintf || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcaddr || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstaddr || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.service || []).join(', ') || '—')}</td>
+                <td style="color:${actColor}; font-weight:700;">${escapeHtml(p.action || '—')}</td>
+                <td>${escapeHtml(p.nat || '—')}</td>
+                <td>${escapeHtml(p.logtraffic || '—')}</td>
+            </tr>`;
+        }).join('');
+        const polTable = policies.length
+            ? `<div class="table-container"><table><thead><tr>
+                <th>ID</th><th>${L.lblCaName}</th><th>${L.thCaFgSrcIntf}</th><th>${L.thCaFgDstIntf}</th><th>${L.thCaFgSrcAddr}</th><th>${L.thCaFgDstAddr}</th><th>${L.thCaFgService}</th><th>${L.thCaFgAction}</th><th>NAT</th><th>Log</th>
+                </tr></thead><tbody>${polRows}</tbody></table></div>`
+            : caMvEmpty();
+
+        // Oggetti
+        const objects = `<div>
+            ${caMvObjList(L.lblCaFgAddresses, dev.addresses)}
+            ${caMvObjList(L.lblCaFgAddrGroups, dev.addr_groups)}
+            ${caMvObjList(L.lblCaFgServices, dev.services)}
+            ${caMvObjList(L.lblCaFgSvcGroups, dev.service_groups)}
+            ${caMvObjList(L.lblCaFgVips, dev.vips)}
+        </div>`;
+
+        // Routing statico + VPN
+        const statics = (dev.routing && dev.routing.static) || [];
+        const routeRows = statics.map(r => `<tr>
+            <td>${escapeHtml(r.seq != null ? String(r.seq) : '—')}</td>
+            <td style="font-family:var(--font-code);">${escapeHtml(r.prefix || '—')}</td>
+            <td style="font-family:var(--font-code);">${escapeHtml(r.next_hop || '—')}</td>
+            <td>${escapeHtml(r.device || '—')}</td>
+            <td>${escapeHtml(r.distance != null ? String(r.distance) : '—')}</td>
+            </tr>`).join('');
+        const routeTable = statics.length
+            ? `<div class="table-container"><table><thead><tr>
+                <th>${L.thCaAclSeq}</th><th>${L.lblCaPrefix}</th><th>${L.lblCaNextHop}</th><th>${L.thCaFgDevice}</th><th>${L.thCaFgDistance}</th>
+                </tr></thead><tbody>${routeRows}</tbody></table></div>`
+            : caMvEmpty();
+        const vpn = dev.vpn || {};
+        const p1 = vpn.phase1 || [];
+        const p2 = vpn.phase2 || [];
+        const vpnChips = list => list.map(x => `<span class="ca-chip">${escapeHtml(caMvValItemText(x))}</span>`).join('');
+        const vpnHtml = (p1.length || p2.length)
+            ? `${p1.length ? `${caMvSectionTitle(L.titleCaVpnP1)}<div>${vpnChips(p1)}</div>` : ''}
+               ${p2.length ? `${caMvSectionTitle(L.titleCaVpnP2)}<div>${vpnChips(p2)}</div>` : ''}`
+            : '';
+
+        const val = caRenderMvValidationBody(dev, L, en);
+
+        return `${caMvSectionTitle(L.titleCaFgIfaces)}${ifaceTable}
+            ${caMvSectionTitle(L.titleCaFgPolicies)}${polTable}
+            ${caMvSectionTitle(L.titleCaFgObjects)}${objects}
+            ${caMvSectionTitle(L.titleCaFgRouting)}${routeTable}${vpnHtml}
+            ${caMvSectionTitle(L.titleCaValidation)}${val.body}`;
+    }
+
+    function caRenderWlc(dev, L, en) {
+        // WLAN
+        const wlans = dev.wlans || [];
+        const wlanRows = wlans.map(w => {
+            const state = w.enabled
+                ? `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(L.lblCaActive)}</span>`
+                : `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">disabled</span>`;
+            const bcast = w.broadcast_ssid === false ? 'off' : 'on';
+            return `<tr>
+                <td>${escapeHtml(w.id != null ? String(w.id) : '—')}</td>
+                <td>${escapeHtml(w.ssid || '—')}</td>
+                <td>${escapeHtml(w.profile || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(w.security || '—')}${w.tkip ? ` <span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">TKIP</span>` : ''}</td>
+                <td>${state}</td>
+                <td>${escapeHtml(w.interface || '—')}</td>
+                <td>${escapeHtml(bcast)}</td>
+            </tr>`;
+        }).join('');
+        const wlanTable = wlans.length
+            ? `<div class="table-container"><table><thead><tr>
+                <th>ID</th><th>${L.thCaSsid}</th><th>${L.thCaProfile}</th><th>${L.thCaSecurity}</th><th>${L.thCaState}</th><th>${L.thCaIface}</th><th>${L.thCaBroadcast}</th>
+                </tr></thead><tbody>${wlanRows}</tbody></table></div>`
+            : caMvEmpty();
+
+        // Interfacce dinamiche
+        const dyns = dev.dynamic_interfaces || [];
+        const dynRows = dyns.map(d => `<tr>
+            <td>${escapeHtml(d.name || '—')}</td>
+            <td>${escapeHtml(d.vlan != null ? String(d.vlan) : '—')}</td>
+            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(d.ip || '—')}</td>
+            </tr>`).join('');
+        const dynTable = dyns.length
+            ? `<div class="table-container"><table><thead><tr>
+                <th>${L.lblCaName}</th><th>${L.thCaVlanCol}</th><th>${L.thCaIp}</th>
+                </tr></thead><tbody>${dynRows}</tbody></table></div>`
+            : caMvEmpty();
+
+        // RADIUS + mobility group
+        const radius = dev.radius_servers || [];
+        const radiusChips = radius.length
+            ? `<div>${radius.map(r => `<span class="ca-chip">${escapeHtml([r.kind, r.index != null ? '#' + r.index : '', r.ip + (r.port ? ':' + r.port : '')].filter(Boolean).join(' '))}</span>`).join('')}</div>`
+            : caMvEmpty();
+        const mobility = dev.mobility_group
+            ? `<div><span class="ca-chip">${escapeHtml(L.lblCaMobility)}: ${escapeHtml(dev.mobility_group)}</span></div>`
+            : '';
+
+        const val = caRenderMvValidationBody(dev, L, en);
+
+        // Fallback IOS-XE: riusa il rendering IOS esistente su ios_base.
+        let iosHtml = '';
+        if (dev.platform === 'iosxe' && dev.ios_base) {
+            const iosDev = Object.assign({ ip: dev.ip }, dev.ios_base);
+            iosHtml = `${caMvSectionTitle(L.thCaIface)}${caRenderIfaces(iosDev, L, en)}
+                ${caMvSectionTitle('VLAN')}${caRenderVlans(iosDev, L, en)}`;
+        }
+
+        return `${caMvSectionTitle(L.titleCaWlans)}${wlanTable}
+            ${caMvSectionTitle(L.titleCaDynIfaces)}${dynTable}
+            ${caMvSectionTitle(L.titleCaRadius)}${radiusChips}${mobility}
+            ${iosHtml}
+            ${caMvSectionTitle(L.titleCaValidation)}${val.body}`;
     }
 
     // --- VULNERABILITY ADVISORY (EUVD) ---

@@ -15,8 +15,8 @@ Posture is **good for an internal network-operations tool**: bcrypt password sto
 | Severity | Open | Fixed |
 |---|---|---|
 | High | 1 (H-1 TLS) | H-2 password policy |
-| Medium | 3 | M-1 CLI, M-5 verify_tls |
-| Low | 5 | L-4 arp/stats scope |
+| Medium | 3 (M-2, M-3, M-4) | M-1 CLI roles, M-5 verify_tls |
+| Low | 3 (L-1, L-3, L-5) | L-2 headers, L-4 arp/stats scope, DF-1 data files |
 | Info | 2 | — |
 
 ---
@@ -47,8 +47,8 @@ Panel/API serve plain HTTP; JWTs, device creds, FortiGate tokens, configs transi
 ### H-2 — No server-side password policy · ✅ fixed
 `user_manager.MIN_PASSWORD_LENGTH=8` + `password_error()` enforced in register / create-user / change-password; frontend hints aligned to 8. (Recommend raising to 10 + reject username==password later.)
 
-### M-1 — CLI blacklist bypassable · 🔧 in progress
-Denylist (`COMMAND_BLACKLIST`/`DANGEROUS_COMMANDS`) misses abbreviations. Now being reworked so **admins bypass entirely**, **operators are subject to it by an admin-controlled toggle**, and an optional allowlist mode remains the longer-term boundary. Full command+output already audited.
+### M-1 — CLI blacklist bypassable · ✅ fixed (role controls)
+`command_allowed()`: **admins bypass the denylist entirely** (bypass audited), **operators are subject to it via the admin-controlled `cli_blacklist_operators` toggle** (default on; `GET/POST /api/settings/cli-blacklist`, UI switch in Settings). Enforced on send-command, WS terminal and site relay; `core_engine.send_custom_command` gained `bypass_blacklist`. Known limit: on agent sites the relay job carries no bypass flag, so the remote agent still applies `DANGEROUS_COMMANDS`. An optional allowlist mode remains the longer-term boundary.
 
 ### M-2 — Default device credentials `Admin`/`admin` · 📋 planned
 `core_engine.DEFAULT_*` fall back to `Admin/admin/admin` for `default`-profile devices when env unset.
@@ -68,21 +68,20 @@ Default flipped to `True` (`FgtTokenSchema`). Opt-out remains for self-signed ce
 ### L-1 — JWT in `sessionStorage` · 📋 planned (with L-2)
 Readable by any XSS. **Plan:** add CSP header (below); consider httpOnly cookie + CSRF later.
 
-### L-2 — No security headers · 📋 planned
-Missing CSP, `X-Content-Type-Options`, `X-Frame-Options`/`frame-ancestors`, `Referrer-Policy`.
-**Plan:** small response middleware setting these.
+### L-2 — No security headers · ✅ fixed
+Response middleware sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and a CSP restricted to self + the exact CDNs the dashboard uses (fonts.googleapis/gstatic, cdnjs, unpkg, jsdelivr), `frame-ancestors 'none'`, `object-src 'none'`.
 
 ### L-3 — Audit log not tamper-evident · ⏸️ accepted
 Plain rotating file. **Plan (optional):** forward to syslog/SIEM or hash-chain entries.
 
-### L-4 — `/api/arp/stats` not tenant-scoped · 🔧 fixing now
-Returns global aggregate counts to any authenticated user (no addresses leak). Being scoped with `user_group_scope` alongside the per-tenant client-map work.
+### L-4 — `/api/arp/stats` not tenant-scoped · ✅ fixed
+`arp_stats(tenants=...)` now filters all counts by `user_group_scope`; empty scope returns zeroed stats. Client-map join also made tenant-consistent: an ARP entry only pairs with an access position from the **same tenant** (keyed `(mac, tenant)`), so multi-tenant users no longer see cross-tenant joins.
 
 ### L-5 — MCP bridge credentials in client config · ⏸️ documented
 `SENTINELNET_USERNAME/PASSWORD` live in the LLM client's plaintext config.
 **Plan:** document using a dedicated least-privilege account (viewer / single-tenant operator) for MCP.
 
-### DF-1 — Sensitive data files created in the working directory · 🔧 in progress *(new)*
+### DF-1 — Sensitive data files created in the working directory · ✅ fixed
 On exe launch the CWD gains `secret.key`, `jwt_secret.key`, `users.json` (password hashes), `sites.json` (token hashes), `*.db`, `audit.log`, etc. On a shared host these sit beside the exe with default ACLs.
 **Plan (this iteration):** (1) default all state under a dedicated `data/` subdirectory (env `SENTINELNET_DATA_DIR` still wins); (2) restrict ACLs on the secret/credential files to the owner at startup (Windows `icacls`, POSIX `chmod 600`); (3) confirm no endpoint serves the data dir (verified: only specific typed endpoints exist, no static mount). `templates/` is extracted code, not secret.
 

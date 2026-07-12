@@ -557,6 +557,457 @@ def analyze_config(content):
     }
 
 
+# --- Rilevamento tipo config (multi-vendor) ----------------------------------
+
+_FORTIOS_VENDORS = {'fortinet', 'fortigate', 'fortios'}
+_WLC_AIREOS_VENDORS = {'cisco_wlc'}
+
+
+def detect_config_type(content, device=None):
+    """Determina il tipo di configurazione: 'ios' | 'fortios' | 'wlc-aireos'.
+    Usa il campo Vendor dell'inventario se disponibile, altrimenti riconosce
+    il formato dal contenuto (sniffing). Tollerante: default 'ios'."""
+    try:
+        if device:
+            vendor = (device.get('Vendor') or '').strip().lower()
+            if vendor in _FORTIOS_VENDORS:
+                return 'fortios'
+            if vendor in _WLC_AIREOS_VENDORS:
+                return 'wlc-aireos'
+            if vendor:
+                # cisco_9800 (IOS-XE) e altri: formato IOS
+                return 'ios'
+        text = content or ''
+        head = text[:4000]
+        # FortiOS: inizia con #config-version= e usa blocchi config/edit/next/end
+        if '#config-version=' in head:
+            return 'fortios'
+        if re.search(r'^config system (global|interface)\b', text, re.MULTILINE):
+            return 'fortios'
+        # AireOS 'show run-config commands': righe 'config sysname/wlan/interface ...'
+        if re.search(r'^config (sysname|wlan|interface|radius|mobility|network)\b',
+                     text, re.MULTILINE):
+            return 'wlc-aireos'
+        # AireOS 'show run-config' tabellare
+        if re.search(r'^System Name\.{3,}', text, re.MULTILINE):
+            return 'wlc-aireos'
+    except Exception:
+        pass
+    return 'ios'
+
+
+# --- FortiOS ------------------------------------------------------------------
+
+_FORTI_TOKEN = re.compile(r'"[^"]*"|\S+')
+
+
+def _forti_tokens(s):
+    """Tokenizza una riga FortiOS rispettando le stringhe tra doppi apici."""
+    return [t[1:-1] if t.startswith('"') and t.endswith('"') and len(t) >= 2 else t
+            for t in _FORTI_TOKEN.findall(s)]
+
+
+def _forti_tree(content):
+    """Parsa la struttura a blocchi config/edit/next/end di FortiOS in un albero:
+    nodo = {"sets": {chiave: [valori]}, "children": {nome: nodo}}. Tollerante a
+    blocchi non chiusi o annidamenti anomali."""
+    root = {"sets": {}, "children": {}}
+    stack = [root]
+    for raw in (content or '').splitlines():
+        s = raw.strip()
+        if not s or s.startswith('#'):
+            continue
+        low = s.lower()
+        try:
+            if low.startswith('config '):
+                name = s[7:].strip().strip('"')
+                node = stack[-1]["children"].setdefault(
+                    name, {"sets": {}, "children": {}})
+                stack.append(node)
+            elif low.startswith('edit '):
+                key = s[5:].strip().strip('"')
+                node = stack[-1]["children"].setdefault(
+                    key, {"sets": {}, "children": {}})
+                stack.append(node)
+            elif low in ('next', 'end'):
+                if len(stack) > 1:
+                    stack.pop()
+            elif low.startswith('set '):
+                toks = _forti_tokens(s)
+                if len(toks) >= 2:
+                    stack[-1]["sets"][toks[1].lower()] = toks[2:]
+        except Exception:
+            continue
+    return root
+
+
+def _forti_get(root, path):
+    """Naviga l'albero FortiOS per nome sezione (es. 'firewall policy').
+    Ritorna il nodo o None."""
+    return root["children"].get(path)
+
+
+def _forti_set1(node, key, default=''):
+    """Primo valore di un 'set' (stringa), oppure default."""
+    vals = node["sets"].get(key)
+    return vals[0] if vals else default
+
+
+def _forti_ip_cidr(node):
+    """'set ip A.B.C.D MASK' -> 'A.B.C.D/nn'."""
+    vals = node["sets"].get('ip') or []
+    return _ip_addr_to_cidr(vals) if vals else ''
+
+
+def analyze_fortios_config(content):
+    """Analizza una configurazione FortiOS (FortiGate). Pura, tollerante.
+    Ritorna interfacce, policy firewall, oggetti address/service, VIP, rotte
+    statiche, VPN, VLAN e i controlli di validazione specifici."""
+    root = _forti_tree(content)
+
+    # --- Hostname ---
+    hostname = ''
+    glob = _forti_get(root, 'system global')
+    if glob:
+        hostname = _forti_set1(glob, 'hostname')
+
+    # --- Interfacce (+ VLAN) ---
+    interfaces = []
+    vlans = []
+    ifs = _forti_get(root, 'system interface')
+    if ifs:
+        for name, n in ifs["children"].items():
+            iface = {
+                "name": name,
+                "ip": _forti_ip_cidr(n),
+                "allowaccess": n["sets"].get('allowaccess', []),
+                "vdom": _forti_set1(n, 'vdom'),
+                "role": _forti_set1(n, 'role'),
+                "description": _forti_set1(n, 'description'),
+                "vlanid": _forti_set1(n, 'vlanid'),
+                "parent": _forti_set1(n, 'interface'),
+                "status": _forti_set1(n, 'status', 'up'),
+            }
+            interfaces.append(iface)
+            if iface["vlanid"]:
+                vlans.append({"id": iface["vlanid"], "name": name,
+                              "parent": iface["parent"], "ip": iface["ip"]})
+
+    # --- Policy firewall ---
+    policies = []
+    pol = _forti_get(root, 'firewall policy')
+    if pol:
+        for pid, n in pol["children"].items():
+            policies.append({
+                "id": pid,
+                "name": _forti_set1(n, 'name'),
+                "srcintf": n["sets"].get('srcintf', []),
+                "dstintf": n["sets"].get('dstintf', []),
+                "srcaddr": n["sets"].get('srcaddr', []),
+                "dstaddr": n["sets"].get('dstaddr', []),
+                "service": n["sets"].get('service', []),
+                "action": _forti_set1(n, 'action', 'deny'),
+                "schedule": _forti_set1(n, 'schedule'),
+                "nat": _forti_set1(n, 'nat', 'disable'),
+                "status": _forti_set1(n, 'status', 'enable'),
+                "logtraffic": _forti_set1(n, 'logtraffic', ''),
+            })
+
+    # --- Oggetti address/service, gruppi, VIP ---
+    def _names_of(section, extra=None):
+        node = _forti_get(root, section)
+        out = []
+        if node:
+            for name, n in node["children"].items():
+                item = {"name": name}
+                for k in (extra or []):
+                    item[k] = (n["sets"].get(k, [])
+                               if k == 'member' else _forti_set1(n, k))
+                out.append(item)
+        return out
+
+    addresses = _names_of('firewall address', ['subnet', 'type', 'comment'])
+    addr_groups = _names_of('firewall addrgrp', ['member'])
+    services = _names_of('firewall service custom',
+                         ['tcp-portrange', 'udp-portrange', 'protocol'])
+    service_groups = _names_of('firewall service group', ['member'])
+    vips = _names_of('firewall vip',
+                     ['extip', 'mappedip', 'extintf', 'extport', 'mappedport'])
+
+    # --- Rotte statiche ---
+    static_routes = []
+    rst = _forti_get(root, 'router static')
+    if rst:
+        for seq, n in rst["children"].items():
+            dst = n["sets"].get('dst') or []
+            static_routes.append({
+                "seq": seq,
+                "prefix": _ip_addr_to_cidr(dst) or ' '.join(dst) or '0.0.0.0/0',
+                "next_hop": _forti_set1(n, 'gateway'),
+                "device": _forti_set1(n, 'device'),
+                "distance": _forti_set1(n, 'distance'),
+            })
+
+    # --- VPN IPsec (nomi fase 1 / fase 2) ---
+    phase1 = []
+    phase2 = []
+    for sec in ('vpn ipsec phase1-interface', 'vpn ipsec phase1'):
+        node = _forti_get(root, sec)
+        if node:
+            phase1.extend(node["children"].keys())
+    for sec in ('vpn ipsec phase2-interface', 'vpn ipsec phase2'):
+        node = _forti_get(root, sec)
+        if node:
+            phase2.extend(node["children"].keys())
+
+    # --- Validazione ---
+    any_any = []
+    disabled_pol = []
+    unlogged_pol = []
+    for p in policies:
+        label = f"{p['id']}" + (f" ({p['name']})" if p['name'] else '')
+        src_all = any(a.lower() == 'all' for a in p['srcaddr'])
+        dst_all = any(a.lower() == 'all' for a in p['dstaddr'])
+        if p['action'] == 'accept' and src_all and dst_all:
+            any_any.append(label)
+        if p['status'] == 'disable':
+            disabled_pol.append(label)
+        if p['logtraffic'] == 'disable':
+            unlogged_pol.append(label)
+
+    # Oggetti inutilizzati: definiti ma mai riferiti da policy / gruppi
+    used_addr = set()
+    used_svc = set()
+    for p in policies:
+        used_addr.update(a.lower() for a in p['srcaddr'] + p['dstaddr'])
+        used_svc.update(s.lower() for s in p['service'])
+    for g in addr_groups:
+        used_addr.update(m.lower() for m in g.get('member', []))
+    for g in service_groups:
+        used_svc.update(m.lower() for m in g.get('member', []))
+    vip_names = {v['name'].lower() for v in vips}
+    unused_addresses = sorted(
+        a['name'] for a in addresses
+        if a['name'].lower() not in used_addr and a['name'].lower() != 'all')
+    unused_services = sorted(
+        s['name'] for s in services
+        if s['name'].lower() not in used_svc and s['name'].lower() != 'all')
+    unused_addr_groups = sorted(
+        g['name'] for g in addr_groups
+        if g['name'].lower() not in used_addr and g['name'].lower() not in vip_names)
+
+    # Accesso di management insicuro (http/telnet in allowaccess)
+    insecure_mgmt = []
+    for i in interfaces:
+        bad = [a for a in i['allowaccess'] if a.lower() in ('http', 'telnet')]
+        if bad:
+            insecure_mgmt.append({"name": i['name'], "allowaccess": bad})
+
+    # Admin senza trusthost
+    admins_no_trusthost = []
+    adm = _forti_get(root, 'system admin')
+    if adm:
+        for name, n in adm["children"].items():
+            if not any(k.startswith('trusthost') for k in n["sets"]):
+                admins_no_trusthost.append(name)
+
+    # Logging: almeno una sezione 'log ... setting' con 'set status enable'
+    logging_enabled = False
+    for sec_name, node in root["children"].items():
+        if re.match(r'^log\b.*\bsetting$', sec_name):
+            if _forti_set1(node, 'status') == 'enable':
+                logging_enabled = True
+                break
+
+    return {
+        "hostname": hostname,
+        "interfaces": interfaces,
+        "vlans": vlans,
+        "policies": policies,
+        "addresses": addresses,
+        "addr_groups": addr_groups,
+        "services": services,
+        "service_groups": service_groups,
+        "vips": vips,
+        "routing": {"static": static_routes},
+        "vpn": {"phase1": phase1, "phase2": phase2},
+        "validation": {
+            "any_any_policies": any_any,
+            "disabled_policies": disabled_pol,
+            "unlogged_policies": unlogged_pol,
+            "unused_addresses": unused_addresses,
+            "unused_addr_groups": unused_addr_groups,
+            "unused_services": unused_services,
+            "insecure_mgmt_interfaces": insecure_mgmt,
+            "admins_without_trusthost": admins_no_trusthost,
+            "logging_disabled": not logging_enabled,
+        },
+    }
+
+
+# --- Cisco WLC (AireOS) -------------------------------------------------------
+
+def analyze_wlc_config(content):
+    """Analizza la config di un WLC Cisco AireOS ('show run-config commands').
+    Tollera anche il formato IOS-XE (Catalyst 9800): in quel caso riusa il
+    parser IOS come base e aggiunge l'estrazione dei blocchi wlan. Pura."""
+    text = content or ''
+    is_aireos = bool(re.search(
+        r'^config (sysname|wlan|interface|radius|mobility|network)\b',
+        text, re.MULTILINE))
+
+    wlans = {}   # id -> dict
+    dyn_ifaces = {}
+    radius = []
+    mobility_group = ''
+    hostname = ''
+    mgmt_http = False
+    base = None
+
+    def _wlan(wid):
+        return wlans.setdefault(wid, {
+            "id": wid, "ssid": "", "profile": "", "enabled": False,
+            "interface": "", "security": "open", "tkip": False,
+            "broadcast_ssid": True,
+        })
+
+    if is_aireos:
+        for raw in text.splitlines():
+            s = raw.strip()
+            low = s.lower()
+            try:
+                if low.startswith('config sysname '):
+                    hostname = s.split(None, 2)[2]
+                elif low.startswith('config wlan create '):
+                    toks = _forti_tokens(s)
+                    # config wlan create <id> <profile> [<ssid>]
+                    if len(toks) >= 4:
+                        w = _wlan(toks[3])
+                        w["profile"] = toks[4] if len(toks) > 4 else ''
+                        w["ssid"] = toks[5] if len(toks) > 5 else w["profile"]
+                elif re.match(r'config wlan (enable|disable) (\S+)', low):
+                    m = re.match(r'config wlan (enable|disable) (\S+)', low)
+                    if m.group(2) != 'all':
+                        _wlan(m.group(2))["enabled"] = (m.group(1) == 'enable')
+                elif low.startswith('config wlan interface '):
+                    toks = s.split()
+                    if len(toks) >= 5:
+                        _wlan(toks[3])["interface"] = toks[4]
+                elif low.startswith('config wlan broadcast-ssid disable '):
+                    _wlan(s.split()[-1])["broadcast_ssid"] = False
+                elif low.startswith('config wlan security '):
+                    toks = low.split()
+                    wid = toks[-1]
+                    rest = ' '.join(toks[3:-1])
+                    w = _wlan(wid)
+                    if rest == 'wpa disable':
+                        w["security"] = 'open'
+                    elif 'wpa wpa2 enable' in rest:
+                        w["security"] = 'WPA2'
+                    elif 'wpa wpa3 enable' in rest or 'wpa akm sae enable' in rest:
+                        w["security"] = 'WPA3'
+                    elif rest == 'wpa enable' and w["security"] == 'open':
+                        w["security"] = 'WPA'
+                    elif 'wpa wpa1 enable' in rest:
+                        w["security"] = 'WPA'
+                    if 'ciphers tkip enable' in rest:
+                        w["tkip"] = True
+                elif low.startswith('config interface create '):
+                    toks = s.split()
+                    if len(toks) >= 4:
+                        dyn_ifaces[toks[3]] = {"name": toks[3],
+                                               "vlan": toks[4] if len(toks) > 4 else '',
+                                               "ip": ''}
+                elif low.startswith('config interface address '):
+                    toks = s.split()
+                    # config interface address [dynamic-interface] <name> <ip> <mask> [gw]
+                    t = toks[3:]
+                    if t and t[0] == 'dynamic-interface':
+                        t = t[1:]
+                    if len(t) >= 3:
+                        d = dyn_ifaces.setdefault(t[0], {"name": t[0], "vlan": '', "ip": ''})
+                        d["ip"] = _ip_addr_to_cidr(t[1:3])
+                elif low.startswith('config interface vlan '):
+                    toks = s.split()
+                    if len(toks) >= 5:
+                        d = dyn_ifaces.setdefault(toks[3], {"name": toks[3], "vlan": '', "ip": ''})
+                        d["vlan"] = toks[4]
+                elif re.match(r'config radius (auth|acct) add ', low):
+                    toks = s.split()
+                    if len(toks) >= 6:
+                        radius.append({"kind": toks[2], "index": toks[4],
+                                       "ip": toks[5],
+                                       "port": toks[6] if len(toks) > 6 else ''})
+                elif low.startswith('config mobility group domain '):
+                    mobility_group = s.split()[-1]
+                elif low == 'config network webmode enable':
+                    mgmt_http = True
+            except Exception:
+                continue
+    else:
+        # IOS-XE (Catalyst 9800): base IOS + blocchi 'wlan <profile> <id> <ssid>'
+        try:
+            base = analyze_config(text)
+        except Exception:
+            base = None
+        for header, body in _iter_blocks(running_config(text)):
+            m = re.match(r'wlan (\S+) (\d+) (\S+)', header.strip(), re.IGNORECASE)
+            if not m:
+                continue
+            w = _wlan(m.group(2))
+            w["profile"], w["ssid"] = m.group(1), m.group(3)
+            w["enabled"] = True
+            sec = 'WPA2'
+            for b in body:
+                bl = b.strip().lower()
+                if bl == 'shutdown':
+                    w["enabled"] = False
+                elif bl == 'no security wpa':
+                    sec = 'open'
+                elif 'security wpa wpa3' in bl or 'sae' in bl:
+                    sec = 'WPA3'
+                elif 'security wpa wpa1' in bl:
+                    sec = 'WPA'
+                elif 'tkip' in bl:
+                    w["tkip"] = True
+                elif bl == 'no broadcast-ssid':
+                    w["broadcast_ssid"] = False
+            w["security"] = sec
+        m = re.search(r'^hostname (\S+)', text, re.MULTILINE)
+        if m:
+            hostname = m.group(1)
+
+    wlan_list = sorted(wlans.values(),
+                       key=lambda w: int(w["id"]) if w["id"].isdigit() else 0)
+
+    # --- Validazione ---
+    def _label(w):
+        return f"{w['id']}" + (f" ({w['ssid']})" if w['ssid'] else '')
+
+    validation = {
+        "open_wlans": [_label(w) for w in wlan_list if w["security"] == 'open'],
+        "legacy_tkip_wlans": [_label(w) for w in wlan_list
+                              if w["tkip"] or w["security"] == 'WPA'],
+        "disabled_wlans": [_label(w) for w in wlan_list if not w["enabled"]],
+        "broadcast_ssid_off": [_label(w) for w in wlan_list
+                               if not w["broadcast_ssid"]],
+        "management_http": mgmt_http,
+    }
+
+    result = {
+        "hostname": hostname,
+        "platform": "aireos" if is_aireos else "iosxe",
+        "wlans": wlan_list,
+        "dynamic_interfaces": list(dyn_ifaces.values()),
+        "radius_servers": radius,
+        "mobility_group": mobility_group,
+        "validation": validation,
+    }
+    if base:
+        result["ios_base"] = base
+    return result
+
+
 # --- I/O: lettura backup + scoping ------------------------------------------
 
 def _find_freshest_backup(ip):
@@ -597,29 +1048,41 @@ def analyze_device(ip):
     except OSError:
         return None
 
-    result = analyze_config(content)
-
-    # meta: hostname dalla config, tenant/hostname dall'inventario se disponibile
-    hostname = ""
-    m = re.search(r'^hostname (\S+)', content, re.MULTILINE)
-    if m:
-        hostname = m.group(1)
+    # Lookup inventario prima dell'analisi: il Vendor guida il rilevamento tipo
+    dev = None
     tenant = tenant_folder or ""
     try:
         import inventory_manager
         dev = next((d for d in inventory_manager.get_all_devices()
                     if d.get('IP') == ip), None)
-        if dev:
-            tenant = dev.get('Group', tenant) or tenant
-            if not hostname:
-                hostname = dev.get('Hostname', '') or ''
     except Exception:
-        pass
+        dev = None
+
+    config_type = detect_config_type(content, dev)
+
+    if config_type == 'fortios':
+        result = analyze_fortios_config(content)
+        hostname = result.pop("hostname", "")
+    elif config_type == 'wlc-aireos':
+        result = analyze_wlc_config(content)
+        hostname = result.pop("hostname", "")
+    else:
+        result = analyze_config(content)
+        hostname = ""
+        m = re.search(r'^hostname (\S+)', content, re.MULTILINE)
+        if m:
+            hostname = m.group(1)
+        result["vtp"] = parse_vtp_status(content)
+
+    if dev:
+        tenant = dev.get('Group', tenant) or tenant
+        if not hostname:
+            hostname = dev.get('Hostname', '') or ''
 
     result["ip"] = ip
     result["hostname"] = hostname
     result["tenant"] = tenant
-    result["vtp"] = parse_vtp_status(content)
+    result["config_type"] = config_type
     return result
 
 

@@ -384,9 +384,10 @@ def search_arp(mac: str = None, ip: str = None, source_ip: str = None,
 
 
 def _access_positions_for(macs, tenants=None) -> dict:
-    """Per un insieme di MAC ritorna { mac: sighting_di_accesso_più_recente },
-    escludendo gli uplink. UNA sola query (a chunk per il limite di parametri di
-    SQLite), invece di una query per MAC."""
+    """Per un insieme di MAC ritorna { (mac, tenant): sighting_di_accesso_più_recente },
+    escludendo gli uplink. La chiave include il tenant per evitare che la posizione
+    di un tenant venga associata a un binding ARP di un altro tenant (stesso MAC).
+    UNA sola query (a chunk per il limite di parametri di SQLite)."""
     macs = [m for m in dict.fromkeys(macs) if m]      # unici, ordine preservato
     if not macs:
         return {}
@@ -396,17 +397,18 @@ def _access_positions_for(macs, tenants=None) -> dict:
     with _lock, _connect() as c:
         for i in range(0, len(macs), CHUNK):
             batch = macs[i:i + CHUNK]
-            q = ("SELECT mac, switch_ip, switch_name, interface, vlan, last_seen "
+            q = ("SELECT mac, tenant, switch_ip, switch_name, interface, vlan, last_seen "
                  "FROM mac_sightings WHERE is_uplink=0 "
                  "AND mac IN (%s)" % ",".join("?" * len(batch)))
             args = list(batch)
             if tenant_list is not None:
                 q += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
                 args.extend(tenant_list)
-            q += " ORDER BY last_seen DESC"           # il primo per MAC = più recente
+            q += " ORDER BY last_seen DESC"           # il primo per (MAC, tenant) = più recente
             for r in c.execute(q, args).fetchall():
-                if r["mac"] not in best:
-                    best[r["mac"]] = dict(r)
+                key = (r["mac"], r["tenant"])
+                if key not in best:
+                    best[key] = dict(r)
     return best
 
 
@@ -416,10 +418,10 @@ def client_map(mac: str = None, ip: str = None, tenants=None,
     con l'ultima posizione fisica nota (switch/porta della MAC table, uplink
     esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'."""
     entries = search_arp(mac=mac, ip=ip, tenants=tenants, limit=limit)
-    access_by_mac = _access_positions_for((e["mac"] for e in entries), tenants=tenants)
+    best = _access_positions_for((e["mac"] for e in entries), tenants=tenants)
     out = []
     for e in entries:
-        access = access_by_mac.get(e["mac"])
+        access = best.get((e["mac"], e["tenant"]))  # join per-tenant: stessa MAC, stesso tenant
         out.append({
             **e,
             "switch_ip": access.get("switch_ip") if access else "",
@@ -431,12 +433,19 @@ def client_map(mac: str = None, ip: str = None, tenants=None,
     return out
 
 
-def arp_stats() -> dict:
+def arp_stats(tenants=None) -> dict:
+    """Statistiche ARP. tenants: None = nessuna restrizione (admin); lista = solo quei tenant."""
     init_db()
+    where, args = "", []
+    if tenants is not None:
+        if not tenants:
+            return {"bindings": 0, "unique_macs": 0, "sources": 0}
+        where = " WHERE tenant IN (%s)" % ",".join("?" * len(tenants))
+        args = list(tenants)
     with _lock, _connect() as c:
-        total = c.execute("SELECT COUNT(*) n FROM arp_entries").fetchone()["n"]
-        macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM arp_entries").fetchone()["n"]
-        sources = c.execute("SELECT COUNT(DISTINCT source_ip) n FROM arp_entries").fetchone()["n"]
+        total = c.execute("SELECT COUNT(*) n FROM arp_entries" + where, args).fetchone()["n"]
+        macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM arp_entries" + where, args).fetchone()["n"]
+        sources = c.execute("SELECT COUNT(DISTINCT source_ip) n FROM arp_entries" + where, args).fetchone()["n"]
     return {"bindings": total, "unique_macs": macs, "sources": sources}
 
 
