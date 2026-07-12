@@ -162,6 +162,73 @@ async def obs_anomaly_status(
     return {"status": "success", "id": event_id, "new_status": new_status}
 
 
+@router.get("/api/observability/config")
+def obs_get_config(current_user = Depends(require_admin)):
+    """Config effettiva dei listener (settings + eventuali override da env).
+    I listener partono all'avvio: le modifiche richiedono riavvio."""
+    return data_config.obs_config()
+
+
+@router.post("/api/observability/config")
+def obs_set_config(payload: dict, current_user = Depends(require_admin)):
+    """Salva la sezione 'observability' in app_settings.json (§9.5).
+    Chiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},
+    api_poll_s. Richiede riavvio per avere effetto."""
+    allowed = {"enabled", "bind", "api_poll_s"} | {
+        f"{l}_{k}" for l in ("ipfix", "sflow", "syslog", "netflow")
+        for k in ("enabled", "port")}
+    clean = {}
+    for k, v in (payload or {}).items():
+        if k not in allowed:
+            raise HTTPException(status_code=400, detail=f"Chiave non valida: '{k}'.")
+        if k.endswith("_port") or k == "api_poll_s":
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Valore non valido per '{k}'.")
+            if k.endswith("_port") and not (1 <= v <= 65535):
+                raise HTTPException(status_code=400, detail=f"Porta non valida per '{k}'.")
+        clean[k] = v
+    from app_server import get_app_settings, save_app_settings
+    saved = dict(get_app_settings().get("observability", {}) or {})
+    saved.update(clean)
+    save_app_settings({"observability": saved})
+    from security_manager import log_audit
+    log_audit(f"Config observability aggiornata da '{current_user.get('sub')}' "
+              f"(riavvio richiesto): {clean}.")
+    return {"status": "success", "restart_required": True,
+            "effective": data_config.obs_config()}
+
+
+@router.get("/api/observability/api-context")
+async def obs_api_context(
+    device_ip: str = Query(...),
+    current_user = Depends(get_current_user),
+):
+    """Ultimi snapshot REST (api_observations, §9.2) per un dispositivo,
+    scoped per tenant: una riga per kind (la più recente)."""
+    clause, params = _tenant_filter(current_user)
+    rows = await db.read(
+        f"""SELECT ts, tenant, device_ip, kind, summary_json
+            FROM api_observations
+            WHERE device_ip = ?{clause}
+              AND id IN (SELECT MAX(id) FROM api_observations
+                         WHERE device_ip = ? GROUP BY kind)
+            ORDER BY kind""",
+        (device_ip, *params, device_ip))
+    return {"device_ip": device_ip, "observations": [dict(r) for r in rows]}
+
+
+@router.post("/api/observability/api-poll")
+async def obs_api_poll_now(current_user = Depends(require_operator)):
+    """Polling REST one-shot ("Aggiorna ora"): esegue subito un giro del
+    poller API su tutti i FortiGate con token configurato."""
+    import asyncio as _asyncio
+    from observability.ingesters import api_poller
+    n = await _asyncio.to_thread(api_poller.poll_once)
+    return {"status": "success", "snapshots": n}
+
+
 @router.get("/api/observability/health")
 def obs_health(current_user = Depends(require_admin)):
     """Stato pipeline: listener attivi, metriche, dimensione DB, versione

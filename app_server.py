@@ -78,6 +78,7 @@ async def lifespan(app: "FastAPI"):
         from routers import observability as _obs_router_mod
         listeners = (
             ("ipfix", cfg["ipfix"], ipfix.parse, "flow"),
+            ("netflow", cfg["netflow"], ipfix.parse, "flow"),
             ("sflow", cfg["sflow"], sflow.parse, "flow"),
             ("syslog", cfg["syslog"], syslog_parser.parse, "syslog"),
         )
@@ -106,14 +107,20 @@ async def lifespan(app: "FastAPI"):
                                              name="obs-retention")
         app.state.obs_correlation_task = asyncio.create_task(
             correlator.correlation_loop(), name="obs-correlation")
+        # Poller REST (§9.2): snapshot periodici dai FortiGate con token API.
+        if cfg.get("api_poll_s", 0) > 0:
+            from observability.ingesters import api_poller
+            app.state.obs_api_poller_task = asyncio.create_task(
+                api_poller.poll_loop(cfg["api_poll_s"]), name="obs-api-poller")
 
     yield
 
     if retention_task:
         retention_task.cancel()
-        task = getattr(app.state, "obs_correlation_task", None)
-        if task:
-            task.cancel()
+        for attr in ("obs_correlation_task", "obs_api_poller_task"):
+            task = getattr(app.state, attr, None)
+            if task:
+                task.cancel()
     for handle in handles:
         await handle.stop()
     db.stop_writer()
@@ -278,6 +285,7 @@ class DeviceSchema(BaseModel):
     password: str = "admin"
     enable_secret: str = "admin"
     group: str = "Generale"
+    ssh_port: int = Field(22, ge=1, le=65535)
 
 class GroupSchema(BaseModel):
     name: str
@@ -428,6 +436,7 @@ class AiProfileSchema(BaseModel):
     api_key: Optional[str] = None
     base_url: str = ""
     rate_limit_rpm: int = 0
+    allow_unredacted: bool = False  # invio config NON redatte, solo LLM locali
 
 class AiProfileUpdateSchema(BaseModel):
     """Corpo per l'aggiornamento parziale di un profilo AI esistente
@@ -439,6 +448,7 @@ class AiProfileUpdateSchema(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     rate_limit_rpm: Optional[int] = None
+    allow_unredacted: Optional[bool] = None
 
 class AiChatMessage(BaseModel):
     role: str
@@ -451,6 +461,7 @@ class AiChatSchema(BaseModel):
     attach_tenant: Optional[str] = None  # allega il contesto completo di un tenant/sede (gruppo)
     attach_fortigate_ip: Optional[str] = None  # allega la config completa LIVE di un FortiGate (API/SSH)
     attach_top_flows: bool = False   # allega il riassunto dei top flussi (observability, scoped)
+    attach_device_ips: List[str] = []  # multi-selezione: running-config di più dispositivi del tenant
 class SwitchProvisionSchema(BaseModel):
     """Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config
     per il significato di ciascun campo (tutti opzionali salvo hostname)."""
@@ -1028,7 +1039,8 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
         assert_group_allowed(current_user, existing.get('Group', 'Generale'))
     inventory_manager.add_or_update_device(
         device.ip, device.vendor, device.profile,
-        device.username, device.password, device.enable_secret, device.group
+        device.username, device.password, device.enable_secret, device.group,
+        ssh_port=device.ssh_port
     )
     log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "message": "Dispositivo salvato"}
@@ -2542,6 +2554,7 @@ def _mask_ai_profile(p: dict) -> dict:
         "base_url": p.get("base_url", ""),
         "api_key_set": bool(p.get("api_key_enc")),
         "rate_limit_rpm": p.get("rate_limit_rpm", 0),
+        "allow_unredacted": bool(p.get("allow_unredacted", False)),
     }
 
 
@@ -2671,6 +2684,20 @@ def _tenant_context_block(tenant: str, current_user) -> str:
         mac_recent=mac_recent,
     )
 
+def _assert_unredacted_allowed(allow_unredacted: bool, provider: str, base_url: str):
+    """Rifiuta il flag 'allow_unredacted' su provider NON locali: le config
+    non redatte possono raggiungere solo LLM locali fidati (fail-closed)."""
+    if not allow_unredacted:
+        return
+    provider = (provider or "").strip().lower()
+    if provider == "ollama" or (provider == "openai" and ai_assistant._is_local_base_url(base_url)):
+        return
+    raise HTTPException(
+        status_code=400,
+        detail="L'invio di configurazioni non redatte è consentito solo verso LLM locali "
+               "(provider 'ollama' o endpoint OpenAI-compatible su host locale/privato)."
+    )
+
 @app.get("/api/ai/profiles")
 def list_ai_profiles(current_user = Depends(require_admin)):
     """Elenca i profili di connessione AI salvati (chiavi API mascherate) e
@@ -2685,6 +2712,7 @@ def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_a
         raise HTTPException(status_code=400, detail=f"Provider non supportato: '{provider}'.")
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="Il nome del profilo è obbligatorio.")
+    _assert_unredacted_allowed(payload.allow_unredacted, provider, payload.base_url)
     profiles, active = _get_ai_profiles_raw()
     new_profile = {
         "id": uuid.uuid4().hex,
@@ -2694,6 +2722,7 @@ def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_a
         "base_url": payload.base_url.strip(),
         "api_key_enc": crypto_vault.encrypt_password(payload.api_key) if payload.api_key else "",
         "rate_limit_rpm": max(0, int(payload.rate_limit_rpm or 0)),
+        "allow_unredacted": bool(payload.allow_unredacted),
     }
     profiles = profiles + [new_profile]
     if active is None:
@@ -2727,6 +2756,11 @@ def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_u
     # api_key=None -> mantiene quella già salvata; stringa vuota -> la rimuove.
     if payload.api_key is not None:
         profile["api_key_enc"] = crypto_vault.encrypt_password(payload.api_key) if payload.api_key else ""
+    if payload.allow_unredacted is not None:
+        profile["allow_unredacted"] = bool(payload.allow_unredacted)
+    # Difesa in profondità: il flag non-redatto è valido solo su provider locali.
+    _assert_unredacted_allowed(profile.get("allow_unredacted", False),
+                               profile.get("provider", ""), profile.get("base_url", ""))
     save_app_settings({"ai_profiles": profiles, "ai_active_profile": active})
     log_audit(f"Profilo AI '{profile['name']}' aggiornato dall'utente '{current_user.get('sub')}'.")
     return _mask_ai_profile(profile)
@@ -2802,6 +2836,13 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
         context_blocks.append(_device_inventory_summary(current_user))
     if payload.attach_device_ip:
         context_blocks.append(_device_running_config_context(payload.attach_device_ip, current_user))
+    if payload.attach_device_ips:
+        # Multi-selezione: running-config di più dispositivi (scoping per-IP).
+        # Cap di sicurezza sul numero di device per non gonfiare il contesto.
+        for ip in payload.attach_device_ips[:20]:
+            if ip == payload.attach_device_ip:
+                continue  # già allegato sopra
+            context_blocks.append(_device_running_config_context(ip, current_user))
     if payload.attach_tenant:
         context_blocks.append(_tenant_context_block(payload.attach_tenant, current_user))
     if payload.attach_fortigate_ip:
@@ -2822,6 +2863,7 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
             api_key=api_key,
             base_url=profile.get("base_url") or None,
             rate_limit_rpm=profile.get("rate_limit_rpm", 0),
+            allow_unredacted=bool(profile.get("allow_unredacted", False)),
         )
     except ai_assistant.RateLimitExceededError as e:
         raise HTTPException(status_code=429, detail=str(e))

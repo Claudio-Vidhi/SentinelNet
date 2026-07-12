@@ -386,8 +386,24 @@ def list_models(provider, api_key=None, base_url=None, timeout=DEFAULT_TIMEOUT):
 _PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
 
 
+def _is_local_base_url(base_url):
+    """True se il base_url punta a un host locale/privato (loopback o RFC1918)."""
+    import ipaddress
+    from urllib.parse import urlparse
+    if not base_url:
+        return False
+    host = urlparse(base_url).hostname or ""
+    if host.lower() in ("localhost",):
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_loopback or addr.is_private
+    except ValueError:
+        return False
+
+
 def chat(messages, provider, model=None, api_key=None, base_url=None, timeout=DEFAULT_TIMEOUT,
-         rate_limit_rpm=None):
+         rate_limit_rpm=None, allow_unredacted=False):
     """Invia la conversazione al provider indicato e ritorna il testo della risposta.
 
     - ``messages``: lista di dict {"role", "content"} (ruoli: system/user/assistant).
@@ -403,10 +419,15 @@ def chat(messages, provider, model=None, api_key=None, base_url=None, timeout=DE
     """
     if not messages:
         raise AiAssistantError("Nessun messaggio da inviare.")
+    provider_norm = (provider or "").strip().lower()
     # Redazione segreti (finding I-1): unico punto di passaggio prima che il
-    # contesto lasci il processo verso qualunque provider LLM.
-    messages = [dict(m, content=redact(m.get("content", ""))) for m in messages]
-    provider = (provider or "").strip().lower()
+    # contesto lasci il processo verso qualunque provider LLM. Salto consentito
+    # SOLO per LLM locali fidati (ollama, o endpoint su host loopback/privato)
+    # e solo se il profilo lo autorizza esplicitamente — fail-closed altrimenti.
+    is_local = provider_norm == "ollama" or (provider_norm == "openai" and _is_local_base_url(base_url))
+    if not (allow_unredacted and is_local):
+        messages = [dict(m, content=redact(m.get("content", ""))) for m in messages]
+    provider = provider_norm
     if provider not in _PROVIDERS:
         raise AiAssistantError(f"Provider non supportato: '{provider}'.")
 
