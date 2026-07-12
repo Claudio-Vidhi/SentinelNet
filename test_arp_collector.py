@@ -104,6 +104,34 @@ class DbTest(unittest.TestCase):
         self.assertEqual(r["switch_ip"], "10.0.0.10")    # dove è attaccato
         self.assertEqual(r["switch_port"], "GigabitEthernet1/0/5")  # uplink escluso
 
+    def test_client_map_no_cross_tenant_join(self):
+        # Stesso MAC visto in due tenant: la posizione di TenantB non deve
+        # finire sul binding ARP di TenantA (e viceversa).
+        mac = "aa:bb:cc:00:03:33"
+        self.mh.record_arp_entries([{"mac": mac, "ip": "10.1.0.5"}],
+                                   source_ip="10.1.0.254", tenant="TenantA")
+        self.mh.record_arp_entries([{"mac": mac, "ip": "10.2.0.5"}],
+                                   source_ip="10.2.0.254", tenant="TenantB")
+        # posizione fisica solo in TenantB
+        self.mh.record_sightings([{"mac": mac, "vlan": "20", "interface": "Gi1/0/7"}],
+                                 switch_ip="10.2.0.10", switch_name="sw-b",
+                                 tenant="TenantB")
+        rows = self.mh.client_map(tenants=["TenantA", "TenantB"])
+        by_tenant = {r["tenant"]: r for r in rows}
+        self.assertEqual(by_tenant["TenantB"]["switch_ip"], "10.2.0.10")
+        self.assertEqual(by_tenant["TenantA"]["switch_ip"], "")  # nessun cross-join
+
+    def test_arp_stats_tenant_filter(self):
+        self.mh.record_arp_entries([{"mac": "aa:bb:cc:00:04:01", "ip": "10.1.1.1"}],
+                                   source_ip="10.1.0.254", tenant="TenantA")
+        self.mh.record_arp_entries([{"mac": "aa:bb:cc:00:04:02", "ip": "10.2.1.1"}],
+                                   source_ip="10.2.0.254", tenant="TenantB")
+        self.assertEqual(self.mh.arp_stats()["bindings"], 2)          # admin: tutto
+        s = self.mh.arp_stats(tenants=["TenantA"])
+        self.assertEqual(s, {"bindings": 1, "unique_macs": 1, "sources": 1})
+        self.assertEqual(self.mh.arp_stats(tenants=[]),
+                         {"bindings": 0, "unique_macs": 0, "sources": 0})
+
     def test_tenant_scoping(self):
         self.mh.record_arp_entries(
             [{"mac": "aa:bb:cc:00:02:07", "ip": "10.0.20.7"}],

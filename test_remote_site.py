@@ -146,9 +146,30 @@ class RemoteSiteE2E(unittest.TestCase):
 
     def test_relay_blocks_dangerous_command(self):
         sid, token = self._create_agent_site("Roma-Remota")
+        # L'admin BYPASSA la blacklist (M-1): il comando viene accodato.
         r = self.client.post(f"/api/sites/{sid}/command", headers=self.admin_h,
                             json={"ip": "10.9.0.9", "command": "write erase"})
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.status_code, 200, r.text)
+        # Un operatore (con blacklist attiva, default) viene invece bloccato.
+        r = self.client.post("/api/users", headers=self.admin_h,
+                            json={"username": "op_relay", "password": "operatorpw1",
+                                  "role": "operator", "groups": []})
+        self.assertEqual(r.status_code, 200, r.text)
+        # Gli account creati dall'admin devono cambiare password al primo login.
+        r = self.client.post("/api/auth/login",
+                            json={"username": "op_relay", "password": "operatorpw1"})
+        self.assertEqual(r.status_code, 200, r.text)
+        op_h = {"Authorization": "Bearer " + r.json()["access_token"]}
+        r = self.client.post("/api/auth/change-password", headers=op_h,
+                            json={"old_password": "operatorpw1",
+                                  "new_password": "operatorpw2"})
+        if r.status_code == 200:
+            r = self.client.post("/api/auth/login",
+                                json={"username": "op_relay", "password": "operatorpw2"})
+            op_h = {"Authorization": "Bearer " + r.json()["access_token"]}
+        r = self.client.post(f"/api/sites/{sid}/command", headers=op_h,
+                            json={"ip": "10.9.0.9", "command": "write erase"})
+        self.assertEqual(r.status_code, 400, r.text)
         self.assertIn("blacklist", r.json()["detail"].lower())
 
     def test_job_of_other_site_cannot_be_completed(self):

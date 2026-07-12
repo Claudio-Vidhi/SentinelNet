@@ -254,8 +254,10 @@ def run_backup_and_triage(device):
         return {"status": "error", "message": str(e)}
 
 
-def send_custom_command(device, command: str):
-    if any(cmd in command.lower() for cmd in DANGEROUS_COMMANDS):
+def send_custom_command(device, command: str, bypass_blacklist: bool = False):
+    # bypass_blacklist=True quando il chiamante (API) ha già autorizzato il
+    # comando in base al ruolo (admin, o blacklist disattivata per gli operatori).
+    if not bypass_blacklist and any(cmd in command.lower() for cmd in DANGEROUS_COMMANDS):
         return {"status": "error", "message": "Comando non consentito dalla policy di sicurezza aziendale (Blacklisted)"}
 
     vendor = device['Vendor'].lower()

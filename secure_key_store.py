@@ -16,6 +16,8 @@ import os
 import sys
 import ctypes
 
+import data_config
+
 _IS_WINDOWS = sys.platform == "win32"
 
 # Prefisso che marca i file scritti come blob DPAPI: distingue le chiavi protette
@@ -76,6 +78,8 @@ def _atomic_write(path: str, data: bytes):
     with open(tmp, "wb") as f:
         f.write(data)
     os.replace(tmp, path)
+    # ACL restrittive: solo l'utente corrente può leggere la chiave (DF-1).
+    data_config.restrict_permissions(path)
 
 
 def _store(path: str, key: bytes):
