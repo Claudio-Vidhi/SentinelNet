@@ -826,19 +826,92 @@ Tests: captured v5 and v9 datagrams → normalized records with correct exporter
 
 ### 9.6 Continuous .exe rebuild pipeline (execution phase)
 
-**Current state:** only `SentinelNet.spec`; no scripts, no CI.
+**Current state (updated 2026-07-12):** `scripts/build.ps1` (pyinstaller + smoke test) and `scripts/watch-build.ps1` (FileSystemWatcher → debounced rebuild) **already exist**. GitHub Actions CI was **removed by owner decision** (workflow kept failing and is not needed) — do **not** reintroduce `.github/workflows/`. The local rebuild pipeline is the only build gate.
 
 Steps:
-1. `scripts/build.ps1`: `pyinstaller --clean --noconfirm SentinelNet.spec` + smoke test (launch `dist/SentinelNet.exe`, health-probe, kill) — stand this up **first**, before Area 9.1.
-2. `scripts/watch-build.ps1`: `FileSystemWatcher` on `*.py`, `templates/`, `drivers/`, `observability/` with debounce → invokes `build.ps1` (the continuous-rebuild loop during execution).
-3. `.github/workflows/build.yml` (windows-latest): install deps, run pytest, run `build.ps1`, upload `dist/SentinelNet.exe` artifact per push — lands last.
-4. Milestone gate: after each of 9.1–9.5, run `build.ps1`; smoke test must pass before the next area starts.
+1. Milestone gate: after each work area (9.1–9.5 and 10.1–10.4), run `scripts/build.ps1`; smoke test must pass before the next area starts.
+2. During execution, optionally keep `scripts/watch-build.ps1` running for continuous rebuild.
 
 ### 9.7 Bugfix — normal Port-Channels wrongly labeled vPC
 
 **Root cause:** the topology map guesses vPC peer-links from **hostnames alone**. `looksLikePeerPair()` (`templates/dashboard.html:5214-5220`) declares two nodes vPC peers if their hostnames share a prefix and differ only by a trailing `1/2` or `A/B` (e.g. `SW1`/`SW2`). Any port-channel between such a pair is then typed `peer` and labeled `poX/vpc` (`dashboard.html:5286-5303`) and drawn green — even on plain IOS switches with no vPC. Same heuristic drives the mgmt↔mgmt "peer-keepalive" label.
 
 **Fix (execution phase):** only classify a link as vPC when backed by device data: device platform is NX-OS **and** `show vpc` / collected vPC state confirms the port-channel is a peer-link (or has a vPC number). Backend should set an explicit `is_vpc_peerlink` / `vpc_id` flag on the link record; frontend uses that flag and drops the hostname heuristic (or keeps it only as a last-resort visual hint clearly marked as guessed). Until fixed, expect false `po.../vpc` labels on any paired hostnames.
+
+---
+
+## 10. New Requirements (Finalized 2026-07-12, recon at commit `bc696a8`)
+
+Four new work areas, investigated against live code by recon sub-agents. Same rules as Section 9: Italian UI strings, English identifiers, rebuild gate (`scripts/build.ps1` + smoke) after each area. Executor tiering balances model cost: **Haiku** for mechanical UI work, **Sonnet** for well-specified backend work, **Opus** for security-sensitive or cross-layer work.
+
+**Execution order:** 10.4 (config fix, unblocks live NetFlow verification) → 10.3 → 10.1 → 10.2.
+
+### 10.1 AI Assistant UI — dropdown + device checkboxes
+
+**Current state:** tenant dropdown already exists (`dashboard.html:1625-1627`, `aiAttachTenant`, onchange `populateAiAttachDevices()`). Device selection is an HTML `<select multiple size="3">` (`dashboard.html:1623-1624`, Ctrl+click). Backend multi-device is fully wired: `AiChatSchema.attach_device_ips: List[str]` (`app_server.py:457-464`), handler loops capped at 20 (`app_server.py:2839-2845`). **This is a UX conversion, not a new feature.**
+
+Steps:
+1. Replace the `<select multiple>` with a scrollable checkbox list (one `<label><input type="checkbox" value="{ip}"> {hostname} ({ip})</label>` per device), populated by the existing `populateAiAttachDevices()` filtered by the tenant dropdown; preserve checked state across tenant re-filter as today.
+2. Add "Seleziona tutti / Deseleziona tutti" convenience toggles.
+3. Send flow (`dashboard.html:9568-9585`): collect checked values into `attach_device_ips` (replace `selectedOptions` mapping). No backend change.
+4. Keep `attach_tenant` dropdown behavior unchanged.
+
+Tests: checked IPs posted as `attach_device_ips`; tenant switch preserves selections; empty selection = current behavior.
+**Executor:** Haiku (pure frontend, fully specified). **Effort:** S.
+
+### 10.2 AI Assistant — config push to selected device (confirm-first)
+
+**Current state:** `ai_assistant.py` is chat-only, no tool-calling (docstring `ai_assistant.py:19`). Execution primitives exist and must be reused, never bypassed: `core_engine.run_bulk_command(device, commands, config_mode=True, save_after=…)` (`core_engine.py:363-421`, uses `send_config_set`) exposed via `POST /api/bulk-command` (`app_server.py:1637-1692`, `require_operator`, blacklist `is_bulk_command_allowed`/`COMMAND_BLACKLIST` `app_server.py:1550-1588`, audited, async job + poll `GET /api/bulk-command/{job_id}`). CSRF via `X-Requested-With` enforced in `routers/deps.py:29-49`. `fortigate_service.py` has **no** config-write path — FortiGate pushes go through the generic Netmiko path (`drivers/fortinet.py`).
+
+**Design (binding):** the LLM never executes. It **proposes**; the browser renders a preview; the user confirms; the frontend calls the existing `/api/bulk-command`.
+
+Steps:
+1. Prompt contract: extend the system prompt so the assistant, when asked for a change, emits a fenced block ` ```sentinelnet-config {"device_ip": "...", "commands": [...], "config_mode": true, "save_after": false} ``` ` alongside its prose. No new schema fields, no server-side parsing of LLM output into execution.
+2. Frontend (`dashboard.html` AI tab): detect the fenced block in the reply; render a proposal card: target device (must be one of the currently checked devices from 10.1 — reject otherwise), full command list, "Applica" / "Annulla" buttons. Confirmation modal (not native `confirm()` — multi-line content) restating device + commands + Italian warning; on confirm, POST `/api/bulk-command` with `ips=[device_ip]`, `mode=config`, `save` per proposal, then poll job and render output/errors in the chat thread (Italian error toasts on blacklist rejection, 403 out-of-scope, timeout).
+3. Guards unchanged and load-bearing: operator role, group scope (`assert_group_allowed`), blacklist (blocks `conf t` variants at the single-command endpoint — bulk endpoint validates each line; confirm the blacklist behavior for config-mode lines and document which commands remain non-pushable), audit, CSRF.
+4. `save_after=true` requires a second explicit checkbox in the modal ("Salva configurazione di avvio"), default off.
+
+Tests: proposal block parsed and rendered; apply calls bulk endpoint with exact commands; blacklisted line → 400 surfaced in UI; out-of-scope device → 403; cancel sends nothing; viewer role sees no Applica button.
+**Executor:** Opus (security boundary: LLM output → device execution; blacklist/RBAC interplay). **Effort:** M.
+
+### 10.3 Client Map — bugfix: PC 192.168.31.111 tagged "switch"
+
+**Root cause (confirmed):** the Client Map "Tipo" column renders the **gateway's** `source_type`, not the client's. `arp_collector.py:113` hard-defaults `source_type="switch"` (firewall only for PaloAlto; same fallback at `:110`, `:129`); stored per ARP row (`mac_history.py:342-347`); `client_map()` (`mac_history.py:415-433`) spreads it through with **no inventory lookup**; frontend prints it as the client's type (`dashboard.html:7812`). Separately, `core_engine.classify_device_type` (`core_engine.py:538-557`) also falls back to `"switch"` — same forbidden guess, but not on this path.
+
+**Fix (binding rule):** device type certainty comes **only** from the Devices-and-Categories assignments (`inventory_manager.get_category_assignments()`, `inventory_manager.py:275-301`). Anything not assigned → generic `"client"`. Never guess `"switch"`.
+
+Steps:
+1. `mac_history.client_map()`: per row, resolve client type by matching `e["ip"]` (then MAC as secondary) against inventory devices + category assignments; emit new field `client_type` (assigned category, else `"client"`). Keep `source_type` untouched as gateway descriptor.
+2. `dashboard.html:7805-7812`: "Tipo" column renders `client_type`; gateway `source_type` moves to the Gateway column tooltip.
+3. `core_engine.py:545,:557`: change the catch-all auto-guess from `"switch"` to `"client"` for non-inventoried discovered nodes (manual category assignment still overrides via `apply_category`).
+
+Tests: uninventoried ARP host → `client_type="client"`; host with category assignment → that category; gateway type unchanged in its own field; 192.168.31.111 fixture no longer "switch".
+**Executor:** Sonnet (diagnosis done; bounded change across three files). **Effort:** S.
+
+### 10.4 NetFlow ingestion — bugfix: no data despite exporter sending
+
+**Root cause (confirmed by runtime evidence):** pipeline code is fine — NetFlow v5/v9/IPFIX decoders, port 2055 listener (`app_server.py:81`), tenant attribution all present, and exporter 192.168.31.6 **is** in inventory (`network_hosts.csv`, group `Generale` — quarantine ruled out). Two silent config blockers:
+1. **Observability master switch OFF** — `data/app_settings.json` has no `observability` section, so `obs_config()["enabled"]` falls to `False` (`data_config.py:69,81`) and `lifespan` skips all listeners (`app_server.py:74`). Packets hit a closed port.
+2. **Loopback bind** — default `bind=127.0.0.1` (`data_config.py:84-85`); exporter sends to the host LAN IP, so even an enabled listener would receive nothing.
+
+Steps:
+1. Operator fix (no code): set `SENTINELNET_OBS_ENABLE=1` and `SENTINELNET_OBS_BIND=0.0.0.0` (or persist `"observability": {"enabled": true, "bind": "0.0.0.0"}` in `app_settings.json`), restart, verify CML exporter destination port is 2055.
+2. Verify via `GET /api/observability/health`: `enabled:true`, `listeners.netflow.active`, `datagrams_received` rising, then rows in `flow_aggregates` / Live Flows tab. If datagrams rise but rows don't: check `data_before_template_dropped` (v9 template lag — transient with only 13 packets; lower template refresh interval on the switch) and `parse_errors`.
+3. Code hardening (small): startup log (Italian) explicitly stating "osservabilità disabilitata" when `enabled=false`, and a visible banner/state in the Live Flows tab when observability is off or all listeners inactive (query `/health`) — this failure mode was fully silent, which is the real defect.
+4. Docker note: `docker-compose.yml` maps no UDP ports and sets no OBS env — add commented `2055:2055/udp` etc. mappings per plan item 6.1 (not the active path here; host runs from source/exe).
+
+Tests: `enabled=false` → Italian startup log + UI banner; enabled + v9 fixture datagram to 2055 → aggregated row with tenant `Generale`.
+**Executor:** Sonnet (config + small observability UX; diagnosis done). **Effort:** S.
+
+### 10.5 Executor summary (model balance)
+
+| Model | Items | Rationale |
+|---|---|---|
+| Opus | 10.2 | LLM-proposal → device execution boundary; blacklist/RBAC/CSRF interplay |
+| Sonnet | 10.3, 10.4 | Root causes pinned; bounded multi-file changes |
+| Haiku | 10.1 | Mechanical frontend conversion, backend untouched |
+
+Rebuild gate after every area: `scripts/build.ps1` (pyinstaller + smoke) must pass before the next area starts. No CI — local pipeline only (owner decision, Section 9.6).
 
 ---
 
