@@ -419,11 +419,18 @@ def client_map(mac: str = None, ip: str = None, tenants=None,
     esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'."""
     entries = search_arp(mac=mac, ip=ip, tenants=tenants, limit=limit)
     best = _access_positions_for((e["mac"] for e in entries), tenants=tenants)
+    # Tipo del client: certo SOLO se assegnato nella scheda "Dispositivi e
+    # categorie" (assignments per IP); altrimenti generico "client". Mai
+    # ereditare source_type, che descrive il gateway, non il client.
+    import inventory_manager
+    assignments = inventory_manager.get_category_assignments()
     out = []
     for e in entries:
         access = best.get((e["mac"], e["tenant"]))  # join per-tenant: stessa MAC, stesso tenant
+        assigned = assignments.get(e["ip"]) or {}
         out.append({
             **e,
+            "client_type": assigned.get("category") or "client",
             "switch_ip": access.get("switch_ip") if access else "",
             "switch_name": access.get("switch_name") if access else "",
             "switch_port": access.get("interface") if access else "",

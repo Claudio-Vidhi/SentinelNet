@@ -542,7 +542,7 @@ def classify_device_type(hostname: str = "", description: str = "",
     pc|switch."""
     text = " ".join(filter(None, [hostname, description, platform])).lower()
     if not text.strip():
-        return "switch"
+        return "client"
     for t in _TYPE_ORDER:
         if any(s in text for s in _TYPE_SUBSTRINGS.get(t, ())):
             return t
@@ -554,7 +554,8 @@ def classify_device_type(hostname: str = "", description: str = "",
         return "switch"
     if "router" in caps:
         return "router"
-    return "switch"
+    # Nessun indizio affidabile: tipo generico, mai indovinare "switch".
+    return "client"
 
 
 # Versioni firmware: estrae un numero di versione pulito da una stringa libera
