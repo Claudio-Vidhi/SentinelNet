@@ -21,4 +21,23 @@ services:
       # - SENTINELNET_ADMIN_USER=Admin
       # - SENTINELNET_ADMIN_PASS=admin
       # - SENTINELNET_ADMIN_SECRET=admin
+      # TLS nativo opzionale (vedi docs/HARDENING.md). Percorsi relativi a SENTINELNET_DATA_DIR.
+      # - SENTINELNET_SSL_CERTFILE=certs/server.crt
+      # - SENTINELNET_SSL_KEYFILE=certs/server.key
     restart: unless-stopped
+
+  # Reverse proxy consigliato per l'esposizione del pannello (docs/HARDENING.md).
+  # Decommentare e fornire ./proxy/Caddyfile con TLS + security header.
+  # proxy:
+  #   image: caddy:2
+  #   ports:
+  #     - "443:443"
+  #   volumes:
+  #     - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #   depends_on:
+  #     - sentinelnet
+  #   restart: unless-stopped
+
+# volumes:
+#   caddy_data:

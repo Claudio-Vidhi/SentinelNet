@@ -127,6 +127,10 @@ Tutte le variabili sono opzionali. Se non definite, SentinelNet genera e persist
 | `SENTINELNET_PORT` | Porta di ascolto del server. | `8765` |
 | `SENTINELNET_NO_BROWSER` | Se `true`, non apre il browser all'avvio (impostato automaticamente quando host è `0.0.0.0`). | `false` |
 | `SENTINELNET_CORS_ORIGINS` | Lista (separata da virgole) delle origini CORS consentite. | `http://localhost:8765,http://127.0.0.1:8765` |
+| `SENTINELNET_SSL_CERTFILE` | Certificato TLS (PEM) per HTTPS nativo; richiede anche `SENTINELNET_SSL_KEYFILE`. Percorsi relativi risolti in `SENTINELNET_DATA_DIR`. Vedi [docs/HARDENING.md](docs/HARDENING.md). | HTTP |
+| `SENTINELNET_SSL_KEYFILE` | Chiave privata TLS (PEM) per HTTPS nativo. | HTTP |
+
+> ⚠️ **Esposizione del pannello**: non esporre mai il pannello in HTTP su reti non fidate. Guida completa a TLS nativo e reverse proxy: [docs/HARDENING.md](docs/HARDENING.md).
 
 ---
 

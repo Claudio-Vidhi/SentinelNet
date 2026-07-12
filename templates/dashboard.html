@@ -3081,8 +3081,9 @@
     }
 
     function getAuthHeaders() {
-        const token = sessionStorage.getItem("net_token");
-        return token ? { "Authorization": `Bearer ${token}` } : {};
+        // Autenticazione via cookie HttpOnly (impostato dal server al login).
+        // L'header custom è la prova anti-CSRF sulle richieste che modificano stato.
+        return { "X-Requested-With": "SentinelNet" };
     }
 
     // Funzione centralizzata per iniettare e controllare gli header di autenticazione ed evitare disallineamenti della UI
@@ -3110,7 +3111,6 @@
         const data = await res.json();
         
         const overlay = document.getElementById('authOverlay');
-        const token = sessionStorage.getItem("net_token");
         // Il pannello di cambio password è transitorio: lo nascondiamo sempre qui.
         document.getElementById('changePwSection').style.display = 'none';
 
@@ -3124,7 +3124,9 @@
             // Esiste già un amministratore: mostriamo la maschera di login standard
             document.getElementById('wizardSection').style.display = 'none';
             document.getElementById('loginSection').style.display = 'block';
-            if (!token) {
+            // La sessione vive nel cookie HttpOnly: la verifichiamo lato server.
+            const me = await fetch('/api/auth/me');
+            if (!me.ok) {
                 overlay.style.display = 'flex';
                 return false;
             }
@@ -3156,8 +3158,7 @@
                 body: JSON.stringify({ username: user, password: pass })
             });
             if (loginRes.ok) {
-                const data = await loginRes.json();
-                if (data.access_token) sessionStorage.setItem("net_token", data.access_token);
+                // La sessione è nel cookie HttpOnly impostato dal server.
                 document.getElementById('authOverlay').style.display = 'none';
                 appInit();
             } else {
@@ -3188,10 +3189,8 @@
         
         if (res.ok) {
             const data = await res.json();
-            // Salva il token JWT per autenticare le chiamate API successive
-            if (data.access_token) {
-                sessionStorage.setItem("net_token", data.access_token);
-            }
+            // La sessione è nel cookie HttpOnly impostato dal server: nessun
+            // token conservato lato JavaScript (finding L-1).
             if (data.must_change_password) {
                 // Account creato da un amministratore: forziamo il cambio password.
                 pendingOldPass = pass;
@@ -3229,7 +3228,7 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + sessionStorage.getItem("net_token")
+                'X-Requested-With': 'SentinelNet'
             },
             body: JSON.stringify({ old_password: pendingOldPass, new_password: np })
         });
@@ -3246,8 +3245,12 @@
         }
     });
 
-    function logout() {
-        sessionStorage.removeItem("net_token");
+    async function logout() {
+        // Cancella il cookie di sessione lato server (best-effort).
+        try {
+            await fetch('/api/auth/logout', { method: 'POST',
+                headers: { 'X-Requested-With': 'SentinelNet' } });
+        } catch (e) { /* sessione già scaduta: ignora */ }
         currentRole = 'viewer';
         currentUsername = '';
         document.body.classList.remove('role-admin','role-operator','role-viewer');
