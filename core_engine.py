@@ -39,11 +39,26 @@ def sanitize_filename(filename: str) -> str:
     )
     return sanitized or "device_unknown"
 
-def group_backup_dir(group: str) -> str:
-    """Cartella di backup dedicata a un gruppo/sede (creata se assente)."""
+def group_backup_dir(group: str, vendor: str = None) -> str:
+    """Cartella di backup dedicata a un gruppo/sede, con sottocartella per
+    vendor (backup-config/<gruppo>/<vendor>/), creata se assente."""
     path = os.path.join(BACKUP_FOLDER, sanitize_filename(group or "Generale"))
+    if vendor:
+        path = os.path.join(path, sanitize_filename(vendor.lower()))
     os.makedirs(path, exist_ok=True)
     return path
+
+def save_backup(device, sys_name: str, config_out: str) -> str:
+    """Salva il backup testuale in backup-config/<gruppo>/<vendor>/<nome>-<ip>.txt,
+    rimuovendo prima le copie residue dello stesso IP altrove."""
+    ip = device['IP']
+    remove_stale_backups(ip)
+    group_dir = group_backup_dir(device.get('Group', 'Generale'),
+                                 device.get('Vendor', ''))
+    file_path = os.path.join(group_dir, f"{sanitize_filename(sys_name)}-{ip}.txt")
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(config_out)
+    return file_path
 
 def remove_stale_backups(ip: str):
     """Elimina i backup precedenti dello stesso IP in qualunque sottocartella,
@@ -139,9 +154,61 @@ def is_reachable(ip: str, port: int = 22, timeout: int = 2) -> bool:
     except Exception:
         return False
 
+FORTINET_VENDORS = ('fortinet', 'fortigate', 'fortiwifi', 'fortios')
+
+def _fortigate_backup_and_triage(device):
+    """Triage FortiGate: config completa via REST (con fallback SSH gestito da
+    fortigate_service.get_full_config), salvata in backup-config come per gli
+    altri vendor; versione firmware da monitor/system/status."""
+    import json
+    import fortigate_service  # import lazy per evitare ciclo con get_device_credentials
+
+    ip     = device['IP']
+    vendor = device['Vendor'].lower()
+
+    try:
+        cfg = fortigate_service.get_full_config(device)
+    except Exception as e:
+        logging.error(f"Errore su {ip}: {str(e)}")
+        st = "auth_failed" if "auth" in str(e).lower() or "credentials" in str(e).lower() else "offline"
+        update_version_inventory(ip, vendor, "Non Rilevata", st)
+        log_audit(f"Triage fallito per FortiGate '{ip}': {str(e)}.")
+        return {"status": "error", "message": str(e)}
+
+    config_out = cfg["data"] if isinstance(cfg["data"], str) else json.dumps(cfg["data"], ensure_ascii=False)
+
+    version = "Non Rilevata"
+    try:
+        status = fortigate_service.get_system_status(device)
+        data = status.get("data")
+        if isinstance(data, dict):
+            results = data.get("results") if isinstance(data.get("results"), dict) else {}
+            version = data.get("version") or results.get("version") or "Non Rilevata"
+        elif isinstance(data, str):
+            m = re.search(r'^Version:\s*(.+)$', data, re.MULTILINE)
+            if m:
+                version = m.group(1).strip()
+    except Exception:
+        pass
+    update_version_inventory(ip, vendor, version, "online")
+
+    sys_name = extract_hostname_from_config(config_out) or f"{vendor}_{ip}"
+    update_device_hostname(ip, sys_name)
+
+    file_path = save_backup(device, sys_name, config_out)
+    log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' "
+              f"(Firmware: '{version}', fonte config: {cfg['source']}).")
+    return {"status": "success", "version": version, "hostname": sys_name,
+            "file": file_path, "source": cfg["source"]}
+
 def run_backup_and_triage(device):
     ip     = device['IP']
     vendor = device['Vendor'].lower()
+
+    # FortiGate: REST-primary (porta 443) con fallback SSH interno al servizio,
+    # quindi niente pre-check sulla porta 22.
+    if vendor in FORTINET_VENDORS:
+        return _fortigate_backup_and_triage(device)
 
     if not is_reachable(ip):
         update_version_inventory(ip, vendor, "Non Rilevata", "offline")
@@ -235,13 +302,7 @@ def run_backup_and_triage(device):
 
             update_device_hostname(ip, sys_name)
 
-            # Backup salvato nella sottocartella del gruppo/sede dell'apparato.
-            # Prima si rimuovono copie residue (in radice o in altri gruppi).
-            remove_stale_backups(ip)
-            group_dir = group_backup_dir(device.get('Group', 'Generale'))
-            file_path = os.path.join(group_dir, f"{sanitize_filename(sys_name)}-{ip}.txt")
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(config_out)
+            file_path = save_backup(device, sys_name, config_out)
 
             log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' (Firmware: '{version}').")
             return {"status": "success", "version": version, "hostname": sys_name, "file": file_path}
@@ -357,6 +418,10 @@ def extract_hostname_from_config(content: str) -> str:
     if match:
         return match.group(1).strip().strip('"')
     match = re.search(r'^\s*hostname\s+"([^"]+)"', content, re.MULTILINE | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    # FortiOS: `set hostname "X"` dentro config system global
+    match = re.search(r'^\s*set\s+hostname\s+"?([^"\n]+)"?', content, re.MULTILINE | re.IGNORECASE)
     if match:
         return match.group(1).strip()
     return None
