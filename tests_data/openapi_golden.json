@@ -1,0 +1,8140 @@
+{
+ "components": {
+  "schemas": {
+   "AgentDeviceSchema": {
+    "properties": {
+     "hostname": {
+      "default": "",
+      "title": "Hostname",
+      "type": "string"
+     },
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     },
+     "vendor": {
+      "default": "cisco",
+      "title": "Vendor",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip"
+    ],
+    "title": "AgentDeviceSchema",
+    "type": "object"
+   },
+   "AgentInventorySchema": {
+    "properties": {
+     "devices": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/AgentDeviceSchema"
+      },
+      "title": "Devices",
+      "type": "array"
+     }
+    },
+    "title": "AgentInventorySchema",
+    "type": "object"
+   },
+   "AgentJobResultSchema": {
+    "properties": {
+     "result": {
+      "default": "",
+      "title": "Result",
+      "type": "string"
+     },
+     "status": {
+      "default": "done",
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "title": "AgentJobResultSchema",
+    "type": "object"
+   },
+   "AgentMacCollection": {
+    "properties": {
+     "rows": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Rows",
+      "type": "array"
+     },
+     "switch_ip": {
+      "title": "Switch Ip",
+      "type": "string"
+     },
+     "switch_name": {
+      "default": "",
+      "title": "Switch Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "switch_ip"
+    ],
+    "title": "AgentMacCollection",
+    "type": "object"
+   },
+   "AgentMacSchema": {
+    "properties": {
+     "collections": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/AgentMacCollection"
+      },
+      "title": "Collections",
+      "type": "array"
+     }
+    },
+    "title": "AgentMacSchema",
+    "type": "object"
+   },
+   "AiChatMessage": {
+    "properties": {
+     "content": {
+      "title": "Content",
+      "type": "string"
+     },
+     "role": {
+      "title": "Role",
+      "type": "string"
+     }
+    },
+    "required": [
+     "role",
+     "content"
+    ],
+    "title": "AiChatMessage",
+    "type": "object"
+   },
+   "AiChatSchema": {
+    "properties": {
+     "attach_device_ip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Attach Device Ip"
+     },
+     "attach_fortigate_ip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Attach Fortigate Ip"
+     },
+     "attach_inventory": {
+      "default": false,
+      "title": "Attach Inventory",
+      "type": "boolean"
+     },
+     "attach_tenant": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Attach Tenant"
+     },
+     "messages": {
+      "items": {
+       "$ref": "#/components/schemas/AiChatMessage"
+      },
+      "title": "Messages",
+      "type": "array"
+     }
+    },
+    "required": [
+     "messages"
+    ],
+    "title": "AiChatSchema",
+    "type": "object"
+   },
+   "AiProfileSchema": {
+    "description": "Corpo per la creazione di un profilo di connessione AI.",
+    "properties": {
+     "api_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Api Key"
+     },
+     "base_url": {
+      "default": "",
+      "title": "Base Url",
+      "type": "string"
+     },
+     "model": {
+      "default": "",
+      "title": "Model",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "provider": {
+      "title": "Provider",
+      "type": "string"
+     },
+     "rate_limit_rpm": {
+      "default": 0,
+      "title": "Rate Limit Rpm",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name",
+     "provider"
+    ],
+    "title": "AiProfileSchema",
+    "type": "object"
+   },
+   "AiProfileUpdateSchema": {
+    "description": "Corpo per l'aggiornamento parziale di un profilo AI esistente\n(tutti i campi opzionali; ``None`` = non modificare, salvo ``api_key``\nper cui stringa vuota = rimuove la chiave salvata).",
+    "properties": {
+     "api_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Api Key"
+     },
+     "base_url": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Base Url"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "provider": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Provider"
+     },
+     "rate_limit_rpm": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rate Limit Rpm"
+     }
+    },
+    "title": "AiProfileUpdateSchema",
+    "type": "object"
+   },
+   "BulkCommandRequest": {
+    "properties": {
+     "commands": {
+      "title": "Commands",
+      "type": "string"
+     },
+     "ips": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Ips",
+      "type": "array"
+     },
+     "mode": {
+      "default": "exec",
+      "title": "Mode",
+      "type": "string"
+     },
+     "save": {
+      "default": false,
+      "title": "Save",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ips",
+     "commands"
+    ],
+    "title": "BulkCommandRequest",
+    "type": "object"
+   },
+   "CSVImportRequest": {
+    "properties": {
+     "csv_data": {
+      "title": "Csv Data",
+      "type": "string"
+     }
+    },
+    "required": [
+     "csv_data"
+    ],
+    "title": "CSVImportRequest",
+    "type": "object"
+   },
+   "CategoryCreateSchema": {
+    "properties": {
+     "key": {
+      "title": "Key",
+      "type": "string"
+     },
+     "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+     },
+     "subcategory": {
+      "default": "",
+      "title": "Subcategory",
+      "type": "string"
+     }
+    },
+    "required": [
+     "key"
+    ],
+    "title": "CategoryCreateSchema",
+    "type": "object"
+   },
+   "CategoryDeleteSchema": {
+    "properties": {
+     "key": {
+      "title": "Key",
+      "type": "string"
+     }
+    },
+    "required": [
+     "key"
+    ],
+    "title": "CategoryDeleteSchema",
+    "type": "object"
+   },
+   "ChangePasswordSchema": {
+    "properties": {
+     "new_password": {
+      "title": "New Password",
+      "type": "string"
+     },
+     "old_password": {
+      "title": "Old Password",
+      "type": "string"
+     }
+    },
+    "required": [
+     "old_password",
+     "new_password"
+    ],
+    "title": "ChangePasswordSchema",
+    "type": "object"
+   },
+   "CliBlacklistSchema": {
+    "properties": {
+     "cli_blacklist_operators": {
+      "title": "Cli Blacklist Operators",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "cli_blacklist_operators"
+    ],
+    "title": "CliBlacklistSchema",
+    "type": "object"
+   },
+   "CommandRequest": {
+    "properties": {
+     "command": {
+      "title": "Command",
+      "type": "string"
+     },
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip",
+     "command"
+    ],
+    "title": "CommandRequest",
+    "type": "object"
+   },
+   "DeviceCategorySchema": {
+    "properties": {
+     "category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Category"
+     },
+     "ha_group": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ha Group"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "node_id": {
+      "title": "Node Id",
+      "type": "string"
+     },
+     "subcategory": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Subcategory"
+     },
+     "vendor": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Vendor"
+     },
+     "version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Version"
+     }
+    },
+    "required": [
+     "node_id"
+    ],
+    "title": "DeviceCategorySchema",
+    "type": "object"
+   },
+   "DeviceDelete": {
+    "properties": {
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip"
+    ],
+    "title": "DeviceDelete",
+    "type": "object"
+   },
+   "DeviceReassignSchema": {
+    "properties": {
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     },
+     "new_group": {
+      "title": "New Group",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip",
+     "new_group"
+    ],
+    "title": "DeviceReassignSchema",
+    "type": "object"
+   },
+   "DeviceRenameSchema": {
+    "properties": {
+     "hostname": {
+      "title": "Hostname",
+      "type": "string"
+     },
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip",
+     "hostname"
+    ],
+    "title": "DeviceRenameSchema",
+    "type": "object"
+   },
+   "DeviceSchema": {
+    "properties": {
+     "enable_secret": {
+      "default": "admin",
+      "title": "Enable Secret",
+      "type": "string"
+     },
+     "group": {
+      "default": "Generale",
+      "title": "Group",
+      "type": "string"
+     },
+     "ip": {
+      "pattern": "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$",
+      "title": "Ip",
+      "type": "string"
+     },
+     "password": {
+      "default": "admin",
+      "title": "Password",
+      "type": "string"
+     },
+     "profile": {
+      "title": "Profile",
+      "type": "string"
+     },
+     "username": {
+      "default": "Admin",
+      "title": "Username",
+      "type": "string"
+     },
+     "vendor": {
+      "title": "Vendor",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip",
+     "vendor",
+     "profile"
+    ],
+    "title": "DeviceSchema",
+    "type": "object"
+   },
+   "FgtDiagnoseClientSchema": {
+    "properties": {
+     "client": {
+      "title": "Client",
+      "type": "string"
+     },
+     "dest": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dest"
+     },
+     "dest_port": {
+      "default": 443,
+      "title": "Dest Port",
+      "type": "integer"
+     },
+     "protocol": {
+      "default": "TCP",
+      "title": "Protocol",
+      "type": "string"
+     }
+    },
+    "required": [
+     "client"
+    ],
+    "title": "FgtDiagnoseClientSchema",
+    "type": "object"
+   },
+   "FgtLogQuerySchema": {
+    "properties": {
+     "action": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Action"
+     },
+     "count": {
+      "default": 100,
+      "title": "Count",
+      "type": "integer"
+     },
+     "dst_ip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dst Ip"
+     },
+     "log_device": {
+      "default": "disk",
+      "title": "Log Device",
+      "type": "string"
+     },
+     "src_ip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Src Ip"
+     }
+    },
+    "title": "FgtLogQuerySchema",
+    "type": "object"
+   },
+   "FgtPolicyLookupSchema": {
+    "properties": {
+     "dest": {
+      "title": "Dest",
+      "type": "string"
+     },
+     "dest_port": {
+      "default": 443,
+      "title": "Dest Port",
+      "type": "integer"
+     },
+     "protocol": {
+      "default": "TCP",
+      "title": "Protocol",
+      "type": "string"
+     },
+     "src_ip": {
+      "title": "Src Ip",
+      "type": "string"
+     },
+     "srcintf": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Srcintf"
+     }
+    },
+    "required": [
+     "src_ip",
+     "dest"
+    ],
+    "title": "FgtPolicyLookupSchema",
+    "type": "object"
+   },
+   "FgtSessionQuerySchema": {
+    "properties": {
+     "count": {
+      "default": 100,
+      "title": "Count",
+      "type": "integer"
+     },
+     "dst_ip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dst Ip"
+     },
+     "dst_port": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dst Port"
+     },
+     "src_ip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Src Ip"
+     }
+    },
+    "title": "FgtSessionQuerySchema",
+    "type": "object"
+   },
+   "FgtTokenSchema": {
+    "properties": {
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     },
+     "port": {
+      "default": 443,
+      "title": "Port",
+      "type": "integer"
+     },
+     "token": {
+      "default": "",
+      "title": "Token",
+      "type": "string"
+     },
+     "verify_tls": {
+      "default": true,
+      "title": "Verify Tls",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ip"
+    ],
+    "title": "FgtTokenSchema",
+    "type": "object"
+   },
+   "FortiGateProvisionSSHSchema": {
+    "properties": {
+     "admin_password": {
+      "default": "",
+      "title": "Admin Password",
+      "type": "string"
+     },
+     "admin_timeout": {
+      "default": 10,
+      "title": "Admin Timeout",
+      "type": "integer"
+     },
+     "admin_user": {
+      "default": "",
+      "title": "Admin User",
+      "type": "string"
+     },
+     "api_user": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Api User",
+      "type": "object"
+     },
+     "banner": {
+      "default": "",
+      "title": "Banner",
+      "type": "string"
+     },
+     "central_mgmt": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Central Mgmt",
+      "type": "object"
+     },
+     "csf_group": {
+      "default": "",
+      "title": "Csf Group",
+      "type": "string"
+     },
+     "dhcp_end": {
+      "default": "",
+      "title": "Dhcp End",
+      "type": "string"
+     },
+     "dhcp_server": {
+      "default": false,
+      "title": "Dhcp Server",
+      "type": "boolean"
+     },
+     "dhcp_start": {
+      "default": "",
+      "title": "Dhcp Start",
+      "type": "string"
+     },
+     "disable_wan_admin": {
+      "default": true,
+      "title": "Disable Wan Admin",
+      "type": "boolean"
+     },
+     "dns_primary": {
+      "default": "",
+      "title": "Dns Primary",
+      "type": "string"
+     },
+     "dns_secondary": {
+      "default": "",
+      "title": "Dns Secondary",
+      "type": "string"
+     },
+     "ha": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Ha",
+      "type": "object"
+     },
+     "hostname": {
+      "default": "FortiGate",
+      "title": "Hostname",
+      "type": "string"
+     },
+     "lan_interface": {
+      "default": "",
+      "title": "Lan Interface",
+      "type": "string"
+     },
+     "lan_ip": {
+      "default": "",
+      "title": "Lan Ip",
+      "type": "string"
+     },
+     "lan_mask": {
+      "default": "",
+      "title": "Lan Mask",
+      "type": "string"
+     },
+     "lan_to_wan_policy": {
+      "default": true,
+      "title": "Lan To Wan Policy",
+      "type": "boolean"
+     },
+     "lockout": {
+      "default": true,
+      "title": "Lockout",
+      "type": "boolean"
+     },
+     "mgmt_allowaccess": {
+      "default": "ping https ssh",
+      "title": "Mgmt Allowaccess",
+      "type": "string"
+     },
+     "mgmt_interface": {
+      "default": "",
+      "title": "Mgmt Interface",
+      "type": "string"
+     },
+     "mgmt_ip": {
+      "default": "",
+      "title": "Mgmt Ip",
+      "type": "string"
+     },
+     "mgmt_mask": {
+      "default": "",
+      "title": "Mgmt Mask",
+      "type": "string"
+     },
+     "netflow_collector": {
+      "default": "",
+      "title": "Netflow Collector",
+      "type": "string"
+     },
+     "ntp_servers": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Ntp Servers",
+      "type": "array"
+     },
+     "rest_api_logging": {
+      "default": true,
+      "title": "Rest Api Logging",
+      "type": "boolean"
+     },
+     "snmpv3": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Snmpv3",
+      "type": "object"
+     },
+     "ssh_host": {
+      "title": "Ssh Host",
+      "type": "string"
+     },
+     "ssh_password": {
+      "title": "Ssh Password",
+      "type": "string"
+     },
+     "ssh_port": {
+      "default": 22,
+      "title": "Ssh Port",
+      "type": "integer"
+     },
+     "ssh_username": {
+      "title": "Ssh Username",
+      "type": "string"
+     },
+     "strong_crypto": {
+      "default": true,
+      "title": "Strong Crypto",
+      "type": "boolean"
+     },
+     "syslog_server": {
+      "default": "",
+      "title": "Syslog Server",
+      "type": "string"
+     },
+     "timezone": {
+      "default": "Europe/Rome",
+      "title": "Timezone",
+      "type": "string"
+     },
+     "wan_gw": {
+      "default": "",
+      "title": "Wan Gw",
+      "type": "string"
+     },
+     "wan_interface": {
+      "default": "",
+      "title": "Wan Interface",
+      "type": "string"
+     },
+     "wan_ip": {
+      "default": "",
+      "title": "Wan Ip",
+      "type": "string"
+     },
+     "wan_mask": {
+      "default": "",
+      "title": "Wan Mask",
+      "type": "string"
+     },
+     "wan_mode": {
+      "default": "dhcp",
+      "title": "Wan Mode",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ssh_host",
+     "ssh_username",
+     "ssh_password"
+    ],
+    "title": "FortiGateProvisionSSHSchema",
+    "type": "object"
+   },
+   "FortiGateProvisionSchema": {
+    "description": "Parametri del wizard ZTP FortiGate. Vedi fortigate_provisioner.build_config.",
+    "properties": {
+     "admin_password": {
+      "default": "",
+      "title": "Admin Password",
+      "type": "string"
+     },
+     "admin_timeout": {
+      "default": 10,
+      "title": "Admin Timeout",
+      "type": "integer"
+     },
+     "admin_user": {
+      "default": "",
+      "title": "Admin User",
+      "type": "string"
+     },
+     "api_user": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Api User",
+      "type": "object"
+     },
+     "banner": {
+      "default": "",
+      "title": "Banner",
+      "type": "string"
+     },
+     "central_mgmt": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Central Mgmt",
+      "type": "object"
+     },
+     "csf_group": {
+      "default": "",
+      "title": "Csf Group",
+      "type": "string"
+     },
+     "dhcp_end": {
+      "default": "",
+      "title": "Dhcp End",
+      "type": "string"
+     },
+     "dhcp_server": {
+      "default": false,
+      "title": "Dhcp Server",
+      "type": "boolean"
+     },
+     "dhcp_start": {
+      "default": "",
+      "title": "Dhcp Start",
+      "type": "string"
+     },
+     "disable_wan_admin": {
+      "default": true,
+      "title": "Disable Wan Admin",
+      "type": "boolean"
+     },
+     "dns_primary": {
+      "default": "",
+      "title": "Dns Primary",
+      "type": "string"
+     },
+     "dns_secondary": {
+      "default": "",
+      "title": "Dns Secondary",
+      "type": "string"
+     },
+     "ha": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Ha",
+      "type": "object"
+     },
+     "hostname": {
+      "default": "FortiGate",
+      "title": "Hostname",
+      "type": "string"
+     },
+     "lan_interface": {
+      "default": "",
+      "title": "Lan Interface",
+      "type": "string"
+     },
+     "lan_ip": {
+      "default": "",
+      "title": "Lan Ip",
+      "type": "string"
+     },
+     "lan_mask": {
+      "default": "",
+      "title": "Lan Mask",
+      "type": "string"
+     },
+     "lan_to_wan_policy": {
+      "default": true,
+      "title": "Lan To Wan Policy",
+      "type": "boolean"
+     },
+     "lockout": {
+      "default": true,
+      "title": "Lockout",
+      "type": "boolean"
+     },
+     "mgmt_allowaccess": {
+      "default": "ping https ssh",
+      "title": "Mgmt Allowaccess",
+      "type": "string"
+     },
+     "mgmt_interface": {
+      "default": "",
+      "title": "Mgmt Interface",
+      "type": "string"
+     },
+     "mgmt_ip": {
+      "default": "",
+      "title": "Mgmt Ip",
+      "type": "string"
+     },
+     "mgmt_mask": {
+      "default": "",
+      "title": "Mgmt Mask",
+      "type": "string"
+     },
+     "netflow_collector": {
+      "default": "",
+      "title": "Netflow Collector",
+      "type": "string"
+     },
+     "ntp_servers": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Ntp Servers",
+      "type": "array"
+     },
+     "rest_api_logging": {
+      "default": true,
+      "title": "Rest Api Logging",
+      "type": "boolean"
+     },
+     "snmpv3": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Snmpv3",
+      "type": "object"
+     },
+     "strong_crypto": {
+      "default": true,
+      "title": "Strong Crypto",
+      "type": "boolean"
+     },
+     "syslog_server": {
+      "default": "",
+      "title": "Syslog Server",
+      "type": "string"
+     },
+     "timezone": {
+      "default": "Europe/Rome",
+      "title": "Timezone",
+      "type": "string"
+     },
+     "wan_gw": {
+      "default": "",
+      "title": "Wan Gw",
+      "type": "string"
+     },
+     "wan_interface": {
+      "default": "",
+      "title": "Wan Interface",
+      "type": "string"
+     },
+     "wan_ip": {
+      "default": "",
+      "title": "Wan Ip",
+      "type": "string"
+     },
+     "wan_mask": {
+      "default": "",
+      "title": "Wan Mask",
+      "type": "string"
+     },
+     "wan_mode": {
+      "default": "dhcp",
+      "title": "Wan Mode",
+      "type": "string"
+     }
+    },
+    "title": "FortiGateProvisionSchema",
+    "type": "object"
+   },
+   "FortiGateProvisionSerialSchema": {
+    "properties": {
+     "admin_password": {
+      "default": "",
+      "title": "Admin Password",
+      "type": "string"
+     },
+     "admin_timeout": {
+      "default": 10,
+      "title": "Admin Timeout",
+      "type": "integer"
+     },
+     "admin_user": {
+      "default": "",
+      "title": "Admin User",
+      "type": "string"
+     },
+     "api_user": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Api User",
+      "type": "object"
+     },
+     "banner": {
+      "default": "",
+      "title": "Banner",
+      "type": "string"
+     },
+     "baudrate": {
+      "default": 9600,
+      "title": "Baudrate",
+      "type": "integer"
+     },
+     "central_mgmt": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Central Mgmt",
+      "type": "object"
+     },
+     "com_port": {
+      "title": "Com Port",
+      "type": "string"
+     },
+     "console_password": {
+      "default": "",
+      "title": "Console Password",
+      "type": "string"
+     },
+     "console_user": {
+      "default": "admin",
+      "title": "Console User",
+      "type": "string"
+     },
+     "csf_group": {
+      "default": "",
+      "title": "Csf Group",
+      "type": "string"
+     },
+     "dhcp_end": {
+      "default": "",
+      "title": "Dhcp End",
+      "type": "string"
+     },
+     "dhcp_server": {
+      "default": false,
+      "title": "Dhcp Server",
+      "type": "boolean"
+     },
+     "dhcp_start": {
+      "default": "",
+      "title": "Dhcp Start",
+      "type": "string"
+     },
+     "disable_wan_admin": {
+      "default": true,
+      "title": "Disable Wan Admin",
+      "type": "boolean"
+     },
+     "dns_primary": {
+      "default": "",
+      "title": "Dns Primary",
+      "type": "string"
+     },
+     "dns_secondary": {
+      "default": "",
+      "title": "Dns Secondary",
+      "type": "string"
+     },
+     "ha": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Ha",
+      "type": "object"
+     },
+     "hostname": {
+      "default": "FortiGate",
+      "title": "Hostname",
+      "type": "string"
+     },
+     "lan_interface": {
+      "default": "",
+      "title": "Lan Interface",
+      "type": "string"
+     },
+     "lan_ip": {
+      "default": "",
+      "title": "Lan Ip",
+      "type": "string"
+     },
+     "lan_mask": {
+      "default": "",
+      "title": "Lan Mask",
+      "type": "string"
+     },
+     "lan_to_wan_policy": {
+      "default": true,
+      "title": "Lan To Wan Policy",
+      "type": "boolean"
+     },
+     "lockout": {
+      "default": true,
+      "title": "Lockout",
+      "type": "boolean"
+     },
+     "mgmt_allowaccess": {
+      "default": "ping https ssh",
+      "title": "Mgmt Allowaccess",
+      "type": "string"
+     },
+     "mgmt_interface": {
+      "default": "",
+      "title": "Mgmt Interface",
+      "type": "string"
+     },
+     "mgmt_ip": {
+      "default": "",
+      "title": "Mgmt Ip",
+      "type": "string"
+     },
+     "mgmt_mask": {
+      "default": "",
+      "title": "Mgmt Mask",
+      "type": "string"
+     },
+     "netflow_collector": {
+      "default": "",
+      "title": "Netflow Collector",
+      "type": "string"
+     },
+     "ntp_servers": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Ntp Servers",
+      "type": "array"
+     },
+     "rest_api_logging": {
+      "default": true,
+      "title": "Rest Api Logging",
+      "type": "boolean"
+     },
+     "snmpv3": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Snmpv3",
+      "type": "object"
+     },
+     "strong_crypto": {
+      "default": true,
+      "title": "Strong Crypto",
+      "type": "boolean"
+     },
+     "syslog_server": {
+      "default": "",
+      "title": "Syslog Server",
+      "type": "string"
+     },
+     "timezone": {
+      "default": "Europe/Rome",
+      "title": "Timezone",
+      "type": "string"
+     },
+     "wan_gw": {
+      "default": "",
+      "title": "Wan Gw",
+      "type": "string"
+     },
+     "wan_interface": {
+      "default": "",
+      "title": "Wan Interface",
+      "type": "string"
+     },
+     "wan_ip": {
+      "default": "",
+      "title": "Wan Ip",
+      "type": "string"
+     },
+     "wan_mask": {
+      "default": "",
+      "title": "Wan Mask",
+      "type": "string"
+     },
+     "wan_mode": {
+      "default": "dhcp",
+      "title": "Wan Mode",
+      "type": "string"
+     }
+    },
+    "required": [
+     "com_port"
+    ],
+    "title": "FortiGateProvisionSerialSchema",
+    "type": "object"
+   },
+   "GroupDeleteSchema": {
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "GroupDeleteSchema",
+    "type": "object"
+   },
+   "GroupRenameSchema": {
+    "properties": {
+     "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+     },
+     "new_name": {
+      "title": "New Name",
+      "type": "string"
+     },
+     "old_name": {
+      "title": "Old Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "old_name",
+     "new_name"
+    ],
+    "title": "GroupRenameSchema",
+    "type": "object"
+   },
+   "GroupSchema": {
+    "properties": {
+     "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "GroupSchema",
+    "type": "object"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "title": "Detail",
+      "type": "array"
+     }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+   },
+   "MacOverrideDeleteSchema": {
+    "properties": {
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip"
+    ],
+    "title": "MacOverrideDeleteSchema",
+    "type": "object"
+   },
+   "MacOverrideSchema": {
+    "properties": {
+     "command": {
+      "title": "Command",
+      "type": "string"
+     },
+     "fmt": {
+      "default": "generic",
+      "title": "Fmt",
+      "type": "string"
+     },
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip",
+     "command"
+    ],
+    "title": "MacOverrideSchema",
+    "type": "object"
+   },
+   "MacRetentionSchema": {
+    "properties": {
+     "days": {
+      "title": "Days",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "days"
+    ],
+    "title": "MacRetentionSchema",
+    "type": "object"
+   },
+   "MacScanSchema": {
+    "properties": {
+     "group": {
+      "default": "all",
+      "title": "Group",
+      "type": "string"
+     },
+     "ip": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ip"
+     },
+     "ips": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Ips",
+      "type": "array"
+     },
+     "transport": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Transport"
+     }
+    },
+    "title": "MacScanSchema",
+    "type": "object"
+   },
+   "McpSettingsSchema": {
+    "properties": {
+     "disabled_tools": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Disabled Tools",
+      "type": "array"
+     }
+    },
+    "title": "McpSettingsSchema",
+    "type": "object"
+   },
+   "ModelSchema": {
+    "properties": {
+     "model": {
+      "title": "Model",
+      "type": "string"
+     },
+     "vendor": {
+      "title": "Vendor",
+      "type": "string"
+     }
+    },
+    "required": [
+     "vendor",
+     "model"
+    ],
+    "title": "ModelSchema",
+    "type": "object"
+   },
+   "NetworkSettingsSchema": {
+    "properties": {
+     "host": {
+      "title": "Host",
+      "type": "string"
+     }
+    },
+    "required": [
+     "host"
+    ],
+    "title": "NetworkSettingsSchema",
+    "type": "object"
+   },
+   "PingCheckRequest": {
+    "properties": {
+     "group": {
+      "default": "all",
+      "title": "Group",
+      "type": "string"
+     }
+    },
+    "title": "PingCheckRequest",
+    "type": "object"
+   },
+   "PromoteDeviceSchema": {
+    "properties": {
+     "device_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Device Type"
+     },
+     "group": {
+      "default": "Generale",
+      "title": "Group",
+      "type": "string"
+     },
+     "hostname": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Hostname"
+     },
+     "ip": {
+      "pattern": "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$",
+      "title": "Ip",
+      "type": "string"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model"
+     },
+     "node_id": {
+      "title": "Node Id",
+      "type": "string"
+     },
+     "vendor": {
+      "default": "cisco",
+      "title": "Vendor",
+      "type": "string"
+     },
+     "version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Version"
+     }
+    },
+    "required": [
+     "node_id",
+     "ip"
+    ],
+    "title": "PromoteDeviceSchema",
+    "type": "object"
+   },
+   "SiteCommandSchema": {
+    "properties": {
+     "command": {
+      "title": "Command",
+      "type": "string"
+     },
+     "ip": {
+      "title": "Ip",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ip",
+     "command"
+    ],
+    "title": "SiteCommandSchema",
+    "type": "object"
+   },
+   "SiteIdSchema": {
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "title": "SiteIdSchema",
+    "type": "object"
+   },
+   "SiteSchema": {
+    "properties": {
+     "mode": {
+      "default": "central",
+      "title": "Mode",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "subnets": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Subnets",
+      "type": "array"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "SiteSchema",
+    "type": "object"
+   },
+   "SiteUpdateSchema": {
+    "properties": {
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "mode": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mode"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "subnets": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Subnets"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "title": "SiteUpdateSchema",
+    "type": "object"
+   },
+   "SubcategoryDeleteSchema": {
+    "properties": {
+     "key": {
+      "title": "Key",
+      "type": "string"
+     },
+     "subcategory": {
+      "title": "Subcategory",
+      "type": "string"
+     }
+    },
+    "required": [
+     "key",
+     "subcategory"
+    ],
+    "title": "SubcategoryDeleteSchema",
+    "type": "object"
+   },
+   "SubnetScanRequest": {
+    "properties": {
+     "auto_add": {
+      "default": false,
+      "title": "Auto Add",
+      "type": "boolean"
+     },
+     "group": {
+      "default": "Generale",
+      "title": "Group",
+      "type": "string"
+     },
+     "network": {
+      "title": "Network",
+      "type": "string"
+     },
+     "use_default_creds": {
+      "default": true,
+      "title": "Use Default Creds",
+      "type": "boolean"
+     },
+     "vendor": {
+      "default": "cisco",
+      "title": "Vendor",
+      "type": "string"
+     }
+    },
+    "required": [
+     "network"
+    ],
+    "title": "SubnetScanRequest",
+    "type": "object"
+   },
+   "SwitchProvisionSSHSchema": {
+    "properties": {
+     "access_ports": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Access Ports",
+      "type": "array"
+     },
+     "access_vlan": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Access Vlan"
+     },
+     "admin_password": {
+      "default": "",
+      "title": "Admin Password",
+      "type": "string"
+     },
+     "admin_user": {
+      "default": "",
+      "title": "Admin User",
+      "type": "string"
+     },
+     "banner": {
+      "default": "",
+      "title": "Banner",
+      "type": "string"
+     },
+     "bpduguard": {
+      "default": true,
+      "title": "Bpduguard",
+      "type": "boolean"
+     },
+     "cdp_enabled": {
+      "default": true,
+      "title": "Cdp Enabled",
+      "type": "boolean"
+     },
+     "default_route_gw": {
+      "default": "",
+      "title": "Default Route Gw",
+      "type": "string"
+     },
+     "dhcp_snooping": {
+      "default": false,
+      "title": "Dhcp Snooping",
+      "type": "boolean"
+     },
+     "dhcp_snooping_vlans": {
+      "default": "",
+      "title": "Dhcp Snooping Vlans",
+      "type": "string"
+     },
+     "domain": {
+      "default": "",
+      "title": "Domain",
+      "type": "string"
+     },
+     "enable_routing": {
+      "default": true,
+      "title": "Enable Routing",
+      "type": "boolean"
+     },
+     "enable_secret": {
+      "default": "",
+      "title": "Enable Secret",
+      "type": "string"
+     },
+     "errdisable_recovery": {
+      "default": true,
+      "title": "Errdisable Recovery",
+      "type": "boolean"
+     },
+     "hostname": {
+      "default": "Switch",
+      "title": "Hostname",
+      "type": "string"
+     },
+     "lldp_enabled": {
+      "default": true,
+      "title": "Lldp Enabled",
+      "type": "boolean"
+     },
+     "login_block": {
+      "default": true,
+      "title": "Login Block",
+      "type": "boolean"
+     },
+     "mgmt_gw": {
+      "default": "",
+      "title": "Mgmt Gw",
+      "type": "string"
+     },
+     "mgmt_ip": {
+      "default": "",
+      "title": "Mgmt Ip",
+      "type": "string"
+     },
+     "mgmt_mask": {
+      "default": "",
+      "title": "Mgmt Mask",
+      "type": "string"
+     },
+     "mgmt_vlan": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mgmt Vlan"
+     },
+     "no_vstack": {
+      "default": true,
+      "title": "No Vstack",
+      "type": "boolean"
+     },
+     "ntp_servers": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Ntp Servers",
+      "type": "array"
+     },
+     "port_security": {
+      "default": false,
+      "title": "Port Security",
+      "type": "boolean"
+     },
+     "role": {
+      "default": "access",
+      "title": "Role",
+      "type": "string"
+     },
+     "save_after": {
+      "default": true,
+      "title": "Save After",
+      "type": "boolean"
+     },
+     "snmpv3": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Snmpv3",
+      "type": "object"
+     },
+     "ssh_host": {
+      "title": "Ssh Host",
+      "type": "string"
+     },
+     "ssh_only": {
+      "default": true,
+      "title": "Ssh Only",
+      "type": "boolean"
+     },
+     "ssh_password": {
+      "title": "Ssh Password",
+      "type": "string"
+     },
+     "ssh_port": {
+      "default": 22,
+      "title": "Ssh Port",
+      "type": "integer"
+     },
+     "ssh_secret": {
+      "default": "",
+      "title": "Ssh Secret",
+      "type": "string"
+     },
+     "ssh_username": {
+      "title": "Ssh Username",
+      "type": "string"
+     },
+     "storm_control": {
+      "default": false,
+      "title": "Storm Control",
+      "type": "boolean"
+     },
+     "stp_mode": {
+      "default": "rapid-pvst",
+      "title": "Stp Mode",
+      "type": "string"
+     },
+     "svis": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Svis",
+      "type": "array"
+     },
+     "syslog_server": {
+      "default": "",
+      "title": "Syslog Server",
+      "type": "string"
+     },
+     "trunk_allowed_vlans": {
+      "default": "",
+      "title": "Trunk Allowed Vlans",
+      "type": "string"
+     },
+     "trunk_ports": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Trunk Ports",
+      "type": "array"
+     },
+     "uplink_pc_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uplink Pc Id"
+     },
+     "vlans": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Vlans",
+      "type": "array"
+     },
+     "vtp_mode": {
+      "default": "transparent",
+      "title": "Vtp Mode",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ssh_host",
+     "ssh_username",
+     "ssh_password"
+    ],
+    "title": "SwitchProvisionSSHSchema",
+    "type": "object"
+   },
+   "SwitchProvisionSchema": {
+    "description": "Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config\nper il significato di ciascun campo (tutti opzionali salvo hostname).",
+    "properties": {
+     "access_ports": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Access Ports",
+      "type": "array"
+     },
+     "access_vlan": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Access Vlan"
+     },
+     "admin_password": {
+      "default": "",
+      "title": "Admin Password",
+      "type": "string"
+     },
+     "admin_user": {
+      "default": "",
+      "title": "Admin User",
+      "type": "string"
+     },
+     "banner": {
+      "default": "",
+      "title": "Banner",
+      "type": "string"
+     },
+     "bpduguard": {
+      "default": true,
+      "title": "Bpduguard",
+      "type": "boolean"
+     },
+     "cdp_enabled": {
+      "default": true,
+      "title": "Cdp Enabled",
+      "type": "boolean"
+     },
+     "default_route_gw": {
+      "default": "",
+      "title": "Default Route Gw",
+      "type": "string"
+     },
+     "dhcp_snooping": {
+      "default": false,
+      "title": "Dhcp Snooping",
+      "type": "boolean"
+     },
+     "dhcp_snooping_vlans": {
+      "default": "",
+      "title": "Dhcp Snooping Vlans",
+      "type": "string"
+     },
+     "domain": {
+      "default": "",
+      "title": "Domain",
+      "type": "string"
+     },
+     "enable_routing": {
+      "default": true,
+      "title": "Enable Routing",
+      "type": "boolean"
+     },
+     "enable_secret": {
+      "default": "",
+      "title": "Enable Secret",
+      "type": "string"
+     },
+     "errdisable_recovery": {
+      "default": true,
+      "title": "Errdisable Recovery",
+      "type": "boolean"
+     },
+     "hostname": {
+      "default": "Switch",
+      "title": "Hostname",
+      "type": "string"
+     },
+     "lldp_enabled": {
+      "default": true,
+      "title": "Lldp Enabled",
+      "type": "boolean"
+     },
+     "login_block": {
+      "default": true,
+      "title": "Login Block",
+      "type": "boolean"
+     },
+     "mgmt_gw": {
+      "default": "",
+      "title": "Mgmt Gw",
+      "type": "string"
+     },
+     "mgmt_ip": {
+      "default": "",
+      "title": "Mgmt Ip",
+      "type": "string"
+     },
+     "mgmt_mask": {
+      "default": "",
+      "title": "Mgmt Mask",
+      "type": "string"
+     },
+     "mgmt_vlan": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mgmt Vlan"
+     },
+     "no_vstack": {
+      "default": true,
+      "title": "No Vstack",
+      "type": "boolean"
+     },
+     "ntp_servers": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Ntp Servers",
+      "type": "array"
+     },
+     "port_security": {
+      "default": false,
+      "title": "Port Security",
+      "type": "boolean"
+     },
+     "role": {
+      "default": "access",
+      "title": "Role",
+      "type": "string"
+     },
+     "snmpv3": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Snmpv3",
+      "type": "object"
+     },
+     "ssh_only": {
+      "default": true,
+      "title": "Ssh Only",
+      "type": "boolean"
+     },
+     "storm_control": {
+      "default": false,
+      "title": "Storm Control",
+      "type": "boolean"
+     },
+     "stp_mode": {
+      "default": "rapid-pvst",
+      "title": "Stp Mode",
+      "type": "string"
+     },
+     "svis": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Svis",
+      "type": "array"
+     },
+     "syslog_server": {
+      "default": "",
+      "title": "Syslog Server",
+      "type": "string"
+     },
+     "trunk_allowed_vlans": {
+      "default": "",
+      "title": "Trunk Allowed Vlans",
+      "type": "string"
+     },
+     "trunk_ports": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Trunk Ports",
+      "type": "array"
+     },
+     "uplink_pc_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uplink Pc Id"
+     },
+     "vlans": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Vlans",
+      "type": "array"
+     },
+     "vtp_mode": {
+      "default": "transparent",
+      "title": "Vtp Mode",
+      "type": "string"
+     }
+    },
+    "title": "SwitchProvisionSchema",
+    "type": "object"
+   },
+   "SwitchProvisionSerialSchema": {
+    "properties": {
+     "access_ports": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Access Ports",
+      "type": "array"
+     },
+     "access_vlan": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Access Vlan"
+     },
+     "admin_password": {
+      "default": "",
+      "title": "Admin Password",
+      "type": "string"
+     },
+     "admin_user": {
+      "default": "",
+      "title": "Admin User",
+      "type": "string"
+     },
+     "banner": {
+      "default": "",
+      "title": "Banner",
+      "type": "string"
+     },
+     "baudrate": {
+      "default": 9600,
+      "title": "Baudrate",
+      "type": "integer"
+     },
+     "bpduguard": {
+      "default": true,
+      "title": "Bpduguard",
+      "type": "boolean"
+     },
+     "cdp_enabled": {
+      "default": true,
+      "title": "Cdp Enabled",
+      "type": "boolean"
+     },
+     "com_port": {
+      "title": "Com Port",
+      "type": "string"
+     },
+     "default_route_gw": {
+      "default": "",
+      "title": "Default Route Gw",
+      "type": "string"
+     },
+     "dhcp_snooping": {
+      "default": false,
+      "title": "Dhcp Snooping",
+      "type": "boolean"
+     },
+     "dhcp_snooping_vlans": {
+      "default": "",
+      "title": "Dhcp Snooping Vlans",
+      "type": "string"
+     },
+     "domain": {
+      "default": "",
+      "title": "Domain",
+      "type": "string"
+     },
+     "enable_routing": {
+      "default": true,
+      "title": "Enable Routing",
+      "type": "boolean"
+     },
+     "enable_secret": {
+      "default": "",
+      "title": "Enable Secret",
+      "type": "string"
+     },
+     "errdisable_recovery": {
+      "default": true,
+      "title": "Errdisable Recovery",
+      "type": "boolean"
+     },
+     "hostname": {
+      "default": "Switch",
+      "title": "Hostname",
+      "type": "string"
+     },
+     "lldp_enabled": {
+      "default": true,
+      "title": "Lldp Enabled",
+      "type": "boolean"
+     },
+     "login_block": {
+      "default": true,
+      "title": "Login Block",
+      "type": "boolean"
+     },
+     "mgmt_gw": {
+      "default": "",
+      "title": "Mgmt Gw",
+      "type": "string"
+     },
+     "mgmt_ip": {
+      "default": "",
+      "title": "Mgmt Ip",
+      "type": "string"
+     },
+     "mgmt_mask": {
+      "default": "",
+      "title": "Mgmt Mask",
+      "type": "string"
+     },
+     "mgmt_vlan": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mgmt Vlan"
+     },
+     "no_vstack": {
+      "default": true,
+      "title": "No Vstack",
+      "type": "boolean"
+     },
+     "ntp_servers": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Ntp Servers",
+      "type": "array"
+     },
+     "port_security": {
+      "default": false,
+      "title": "Port Security",
+      "type": "boolean"
+     },
+     "role": {
+      "default": "access",
+      "title": "Role",
+      "type": "string"
+     },
+     "snmpv3": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Snmpv3",
+      "type": "object"
+     },
+     "ssh_only": {
+      "default": true,
+      "title": "Ssh Only",
+      "type": "boolean"
+     },
+     "storm_control": {
+      "default": false,
+      "title": "Storm Control",
+      "type": "boolean"
+     },
+     "stp_mode": {
+      "default": "rapid-pvst",
+      "title": "Stp Mode",
+      "type": "string"
+     },
+     "svis": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Svis",
+      "type": "array"
+     },
+     "syslog_server": {
+      "default": "",
+      "title": "Syslog Server",
+      "type": "string"
+     },
+     "trunk_allowed_vlans": {
+      "default": "",
+      "title": "Trunk Allowed Vlans",
+      "type": "string"
+     },
+     "trunk_ports": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Trunk Ports",
+      "type": "array"
+     },
+     "uplink_pc_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Uplink Pc Id"
+     },
+     "vlans": {
+      "default": [],
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "title": "Vlans",
+      "type": "array"
+     },
+     "vtp_mode": {
+      "default": "transparent",
+      "title": "Vtp Mode",
+      "type": "string"
+     }
+    },
+    "required": [
+     "com_port"
+    ],
+    "title": "SwitchProvisionSerialSchema",
+    "type": "object"
+   },
+   "TriageRunRequest": {
+    "properties": {
+     "group": {
+      "default": "all",
+      "title": "Group",
+      "type": "string"
+     }
+    },
+    "title": "TriageRunRequest",
+    "type": "object"
+   },
+   "UserCreateSchema": {
+    "properties": {
+     "groups": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Groups",
+      "type": "array"
+     },
+     "password": {
+      "title": "Password",
+      "type": "string"
+     },
+     "role": {
+      "default": "viewer",
+      "title": "Role",
+      "type": "string"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "password"
+    ],
+    "title": "UserCreateSchema",
+    "type": "object"
+   },
+   "UserDeleteSchema": {
+    "properties": {
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username"
+    ],
+    "title": "UserDeleteSchema",
+    "type": "object"
+   },
+   "UserDisableSchema": {
+    "properties": {
+     "disabled": {
+      "title": "Disabled",
+      "type": "boolean"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "disabled"
+    ],
+    "title": "UserDisableSchema",
+    "type": "object"
+   },
+   "UserGroupsSchema": {
+    "properties": {
+     "groups": {
+      "items": {
+       "type": "string"
+      },
+      "title": "Groups",
+      "type": "array"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "groups"
+    ],
+    "title": "UserGroupsSchema",
+    "type": "object"
+   },
+   "UserRoleSchema": {
+    "properties": {
+     "role": {
+      "title": "Role",
+      "type": "string"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "role"
+    ],
+    "title": "UserRoleSchema",
+    "type": "object"
+   },
+   "UserSchema": {
+    "properties": {
+     "password": {
+      "title": "Password",
+      "type": "string"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username",
+     "password"
+    ],
+    "title": "UserSchema",
+    "type": "object"
+   },
+   "UserTabsSchema": {
+    "properties": {
+     "allowed_tabs": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "title": "Allowed Tabs",
+      "type": "array"
+     },
+     "username": {
+      "title": "Username",
+      "type": "string"
+     }
+    },
+    "required": [
+     "username"
+    ],
+    "title": "UserTabsSchema",
+    "type": "object"
+   },
+   "ValidationError": {
+    "properties": {
+     "ctx": {
+      "title": "Context",
+      "type": "object"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "title": "Location",
+      "type": "array"
+     },
+     "msg": {
+      "title": "Message",
+      "type": "string"
+     },
+     "type": {
+      "title": "Error Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+   },
+   "VendorDeleteSchema": {
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "VendorDeleteSchema",
+    "type": "object"
+   },
+   "VendorSchema": {
+    "properties": {
+     "driver": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Driver"
+     },
+     "euvd_term": {
+      "title": "Euvd Term",
+      "type": "string"
+     },
+     "name": {
+      "title": "Name",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "euvd_term"
+    ],
+    "title": "VendorSchema",
+    "type": "object"
+   },
+   "VisioEdgeSchema": {
+    "properties": {
+     "color": {
+      "default": "#6A5FC1",
+      "title": "Color",
+      "type": "string"
+     },
+     "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+     },
+     "source": {
+      "title": "Source",
+      "type": "string"
+     },
+     "target": {
+      "title": "Target",
+      "type": "string"
+     }
+    },
+    "required": [
+     "source",
+     "target"
+    ],
+    "title": "VisioEdgeSchema",
+    "type": "object"
+   },
+   "VisioExportSchema": {
+    "properties": {
+     "connectors": {
+      "anyOf": [
+       {
+        "items": {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Connectors"
+     },
+     "edges": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/VisioEdgeSchema"
+      },
+      "title": "Edges",
+      "type": "array"
+     },
+     "nodes": {
+      "default": [],
+      "items": {
+       "$ref": "#/components/schemas/VisioNodeSchema"
+      },
+      "title": "Nodes",
+      "type": "array"
+     },
+     "primitives": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Primitives"
+     }
+    },
+    "title": "VisioExportSchema",
+    "type": "object"
+   },
+   "VisioNodeSchema": {
+    "properties": {
+     "border": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Border"
+     },
+     "fill": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fill"
+     },
+     "h": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "H"
+     },
+     "id": {
+      "title": "Id",
+      "type": "string"
+     },
+     "ip": {
+      "default": "",
+      "title": "Ip",
+      "type": "string"
+     },
+     "label": {
+      "default": "",
+      "title": "Label",
+      "type": "string"
+     },
+     "model": {
+      "default": "",
+      "title": "Model",
+      "type": "string"
+     },
+     "w": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "W"
+     },
+     "x": {
+      "default": 0,
+      "title": "X",
+      "type": "number"
+     },
+     "y": {
+      "default": 0,
+      "title": "Y",
+      "type": "number"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "title": "VisioNodeSchema",
+    "type": "object"
+   }
+  },
+  "securitySchemes": {
+   "HTTPBearer": {
+    "scheme": "bearer",
+    "type": "http"
+   }
+  }
+ },
+ "info": {
+  "title": "SentinelNet API",
+  "version": "0.2.0-beta.1"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/": {
+   "get": {
+    "operationId": "read_index__get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Read Index"
+   }
+  },
+  "/api/add-device": {
+   "post": {
+    "operationId": "add_device_api_add_device_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Add Device"
+   }
+  },
+  "/api/agent/heartbeat": {
+   "post": {
+    "operationId": "agent_heartbeat_api_agent_heartbeat_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Agent Heartbeat"
+   }
+  },
+  "/api/agent/inventory": {
+   "post": {
+    "description": "L'agente spinge il proprio inventario locale: viene rispecchiato sul\ncentrale, taggato con la sede. Le credenziali NON sono replicate (i comandi\npassano dal relay, eseguiti in locale dall'agente).",
+    "operationId": "agent_push_inventory_api_agent_inventory_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AgentInventorySchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Agent Push Inventory"
+   }
+  },
+  "/api/agent/jobs": {
+   "get": {
+    "description": "L'agente preleva i job di comando pendenti (marcati 'running').",
+    "operationId": "agent_poll_jobs_api_agent_jobs_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Agent Poll Jobs"
+   }
+  },
+  "/api/agent/jobs/{job_id}/result": {
+   "post": {
+    "operationId": "agent_post_job_result_api_agent_jobs__job_id__result_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "job_id",
+      "required": true,
+      "schema": {
+       "title": "Job Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AgentJobResultSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Agent Post Job Result"
+   }
+  },
+  "/api/agent/mac": {
+   "post": {
+    "description": "L'agente spinge le MAC-table raccolte localmente. Vengono storicizzate con\nattribuzione alla sede (site) per il MAC tracker centrale.",
+    "operationId": "agent_push_mac_api_agent_mac_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AgentMacSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Agent Push Mac"
+   }
+  },
+  "/api/ai/chat": {
+   "post": {
+    "operationId": "ai_chat_api_ai_chat_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AiChatSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Ai Chat"
+   }
+  },
+  "/api/ai/models": {
+   "get": {
+    "description": "Elenca i modelli disponibili che supportano la chat per un provider,\ncosi' l'admin puo' sceglierne uno valido invece di indovinare il nome a\nmano. Usa la API key/base_url del profilo indicato (``profile_id``) o di\nquello attivo se omesso; se anche ``provider`` \u00e8 indicato ed \u00e8 diverso dal\nprovider del profilo, si tenta comunque con la chiave/base_url del\nprofilo (utile per verificare un provider prima di salvarlo).",
+    "operationId": "list_ai_models_api_ai_models_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "provider",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Provider"
+      }
+     },
+     {
+      "in": "query",
+      "name": "profile_id",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Profile Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Ai Models"
+   }
+  },
+  "/api/ai/profiles": {
+   "get": {
+    "description": "Elenca i profili di connessione AI salvati (chiavi API mascherate) e\nl'id del profilo attualmente attivo (usato da /api/ai/chat).",
+    "operationId": "list_ai_profiles_api_ai_profiles_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Ai Profiles"
+   },
+   "post": {
+    "operationId": "create_ai_profile_api_ai_profiles_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AiProfileSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create Ai Profile"
+   }
+  },
+  "/api/ai/profiles/{profile_id}": {
+   "delete": {
+    "operationId": "delete_ai_profile_api_ai_profiles__profile_id__delete",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "profile_id",
+      "required": true,
+      "schema": {
+       "title": "Profile Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete Ai Profile"
+   },
+   "put": {
+    "operationId": "update_ai_profile_api_ai_profiles__profile_id__put",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "profile_id",
+      "required": true,
+      "schema": {
+       "title": "Profile Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AiProfileUpdateSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Update Ai Profile"
+   }
+  },
+  "/api/ai/profiles/{profile_id}/activate": {
+   "post": {
+    "operationId": "activate_ai_profile_api_ai_profiles__profile_id__activate_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "profile_id",
+      "required": true,
+      "schema": {
+       "title": "Profile Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Activate Ai Profile"
+   }
+  },
+  "/api/arp/client-map": {
+   "get": {
+    "description": "Vista client unificata: MAC + IP (dal gateway che ruota la VLAN) +\nswitch/porta di accesso (dalla MAC table). Risponde a 'chi \u00e8 10.0.0.5\ne a quale porta \u00e8 attaccato'.",
+    "operationId": "arp_client_map_api_arp_client_map_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "mac",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Mac"
+      }
+     },
+     {
+      "in": "query",
+      "name": "ip",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Ip"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 500,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Arp Client Map"
+   }
+  },
+  "/api/arp/scan": {
+   "post": {
+    "description": "Raccoglie le tabelle ARP dagli apparati selezionati (scoped per tenant)\ne storicizza i binding MAC<->IP. Nel mondo reale il gateway di una VLAN\npu\u00f2 essere uno switch L3 o un firewall: si interroga tutto ci\u00f2 che \u00e8\nselezionato; chi non ruota VLAN torna vuoto ('empty'), non \u00e8 un errore.",
+    "operationId": "arp_scan_api_arp_scan_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MacScanSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Arp Scan"
+   }
+  },
+  "/api/arp/search": {
+   "get": {
+    "description": "Ricerca i binding MAC<->IP raccolti (filtri combinabili, scoped per tenant).",
+    "operationId": "arp_search_api_arp_search_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "mac",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Mac"
+      }
+     },
+     {
+      "in": "query",
+      "name": "ip",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Ip"
+      }
+     },
+     {
+      "in": "query",
+      "name": "source_ip",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Source Ip"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 500,
+       "title": "Limit",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Arp Search"
+   }
+  },
+  "/api/arp/stats": {
+   "get": {
+    "operationId": "arp_stats_ep_api_arp_stats_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Arp Stats Ep"
+   }
+  },
+  "/api/auth/change-password": {
+   "post": {
+    "operationId": "change_password_api_auth_change_password_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ChangePasswordSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Change Password"
+   }
+  },
+  "/api/auth/login": {
+   "post": {
+    "operationId": "login_api_auth_login_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Login"
+   }
+  },
+  "/api/auth/logout": {
+   "post": {
+    "description": "Chiude la sessione browser cancellando il cookie HttpOnly. Il JWT \u00e8\nstateless: la scadenza resta quella del token (max 60 min).",
+    "operationId": "logout_ep_api_auth_logout_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Logout Ep"
+   }
+  },
+  "/api/auth/me": {
+   "get": {
+    "operationId": "whoami_api_auth_me_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Whoami"
+   }
+  },
+  "/api/auth/register": {
+   "post": {
+    "operationId": "setup_admin_api_auth_register_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Setup Admin"
+   }
+  },
+  "/api/auth/status": {
+   "get": {
+    "operationId": "setup_status_api_auth_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Setup Status"
+   }
+  },
+  "/api/bulk-command": {
+   "post": {
+    "description": "Avvia l'invio degli stessi comandi a pi\u00f9 dispositivi (in background).",
+    "operationId": "start_bulk_command_api_bulk_command_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BulkCommandRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Start Bulk Command"
+   }
+  },
+  "/api/bulk-command/{job_id}": {
+   "get": {
+    "operationId": "get_bulk_command_status_api_bulk_command__job_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "job_id",
+      "required": true,
+      "schema": {
+       "title": "Job Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Bulk Command Status"
+   }
+  },
+  "/api/command-jobs/{job_id}": {
+   "get": {
+    "operationId": "get_command_job_ep_api_command_jobs__job_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "job_id",
+      "required": true,
+      "schema": {
+       "title": "Job Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Command Job Ep"
+   }
+  },
+  "/api/config-analyzer": {
+   "get": {
+    "operationId": "config_analyzer_all_api_config_analyzer_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "group",
+      "required": false,
+      "schema": {
+       "default": "all",
+       "title": "Group",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Config Analyzer All"
+   }
+  },
+  "/api/config-analyzer/{ip}": {
+   "get": {
+    "operationId": "config_analyzer_device_api_config_analyzer__ip__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Config Analyzer Device"
+   }
+  },
+  "/api/delete-device": {
+   "post": {
+    "operationId": "delete_device_api_delete_device_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceDelete"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete Device"
+   }
+  },
+  "/api/device-categories": {
+   "post": {
+    "description": "Crea una categoria custom o aggiunge una sottocategoria (admin/operator).",
+    "operationId": "create_device_category_api_device_categories_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CategoryCreateSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create Device Category"
+   }
+  },
+  "/api/device-categories/assign": {
+   "post": {
+    "description": "Aggiorna gli attributi manuali di un dispositivo: categoria, sottocategoria,\nvendor e/o modello (admin/operator). I campi non forniti restano invariati.",
+    "operationId": "assign_device_category_api_device_categories_assign_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceCategorySchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Assign Device Category"
+   }
+  },
+  "/api/device-categories/delete": {
+   "post": {
+    "operationId": "delete_device_category_api_device_categories_delete_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CategoryDeleteSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete Device Category"
+   }
+  },
+  "/api/device-categories/delete-subcategory": {
+   "post": {
+    "operationId": "delete_subcategory_ep_api_device_categories_delete_subcategory_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SubcategoryDeleteSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete Subcategory Ep"
+   }
+  },
+  "/api/device-classification": {
+   "get": {
+    "description": "Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con\ncategoria, sede e conteggi per categoria. Usato dal pannello Dispositivi.",
+    "operationId": "device_classification_api_device_classification_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Device Classification"
+   }
+  },
+  "/api/download-backup/{ip_or_filename}": {
+   "get": {
+    "operationId": "download_backup_api_download_backup__ip_or_filename__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip_or_filename",
+      "required": true,
+      "schema": {
+       "title": "Ip Or Filename",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Download Backup"
+   }
+  },
+  "/api/export/devices": {
+   "get": {
+    "operationId": "export_devices_csv_api_export_devices_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Export Devices Csv"
+   }
+  },
+  "/api/fortigate/token": {
+   "post": {
+    "description": "Salva (cifrato) il token REST API di un FortiGate; token vuoto lo rimuove.",
+    "operationId": "fgt_set_token_api_fortigate_token_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FgtTokenSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Set Token"
+   }
+  },
+  "/api/fortigate/tokens": {
+   "get": {
+    "description": "IP con token API configurato (i token non vengono mai restituiti).",
+    "operationId": "fgt_token_status_api_fortigate_tokens_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Token Status"
+   }
+  },
+  "/api/fortigate/{ip}/arp": {
+   "get": {
+    "operationId": "fgt_arp_api_fortigate__ip__arp_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Arp"
+   }
+  },
+  "/api/fortigate/{ip}/device-inventory": {
+   "get": {
+    "description": "Device identification FortiOS: MAC/IP/hostname/OS per client rilevato.",
+    "operationId": "fgt_device_inventory_api_fortigate__ip__device_inventory_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Device Inventory"
+   }
+  },
+  "/api/fortigate/{ip}/dhcp-leases": {
+   "get": {
+    "operationId": "fgt_dhcp_leases_api_fortigate__ip__dhcp_leases_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Dhcp Leases"
+   }
+  },
+  "/api/fortigate/{ip}/diagnose-client": {
+   "post": {
+    "description": "Diagnosi aggregata di un client (IP o MAC): inventario device, ARP,\nDHCP, sessioni, policy match verso una destinazione e ultimi log.",
+    "operationId": "fgt_diagnose_client_api_fortigate__ip__diagnose_client_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FgtDiagnoseClientSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Diagnose Client"
+   }
+  },
+  "/api/fortigate/{ip}/full-config": {
+   "get": {
+    "description": "Configurazione completa LIVE (contiene segreti: solo ruolo operator+).",
+    "operationId": "fgt_full_config_api_fortigate__ip__full_config_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Full Config"
+   }
+  },
+  "/api/fortigate/{ip}/interfaces": {
+   "get": {
+    "operationId": "fgt_interfaces_api_fortigate__ip__interfaces_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Interfaces"
+   }
+  },
+  "/api/fortigate/{ip}/logs": {
+   "post": {
+    "operationId": "fgt_logs_api_fortigate__ip__logs_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FgtLogQuerySchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Logs"
+   }
+  },
+  "/api/fortigate/{ip}/policies": {
+   "get": {
+    "operationId": "fgt_policies_api_fortigate__ip__policies_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Policies"
+   }
+  },
+  "/api/fortigate/{ip}/policy-lookup": {
+   "post": {
+    "description": "Chiede al FortiGate quale policy matcherebbe il flusso indicato.",
+    "operationId": "fgt_policy_lookup_api_fortigate__ip__policy_lookup_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FgtPolicyLookupSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Policy Lookup"
+   }
+  },
+  "/api/fortigate/{ip}/policy-stats": {
+   "get": {
+    "operationId": "fgt_policy_stats_api_fortigate__ip__policy_stats_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Policy Stats"
+   }
+  },
+  "/api/fortigate/{ip}/routes": {
+   "get": {
+    "operationId": "fgt_routes_api_fortigate__ip__routes_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Routes"
+   }
+  },
+  "/api/fortigate/{ip}/sessions": {
+   "post": {
+    "operationId": "fgt_sessions_api_fortigate__ip__sessions_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FgtSessionQuerySchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Sessions"
+   }
+  },
+  "/api/fortigate/{ip}/status": {
+   "get": {
+    "operationId": "fgt_status_api_fortigate__ip__status_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Status"
+   }
+  },
+  "/api/fortigate/{ip}/wifi/aps": {
+   "get": {
+    "operationId": "fgt_wifi_aps_api_fortigate__ip__wifi_aps_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Wifi Aps"
+   }
+  },
+  "/api/fortigate/{ip}/wifi/clients": {
+   "get": {
+    "operationId": "fgt_wifi_clients_api_fortigate__ip__wifi_clients_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Wifi Clients"
+   }
+  },
+  "/api/groups": {
+   "get": {
+    "operationId": "list_groups_api_groups_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Groups"
+   },
+   "post": {
+    "operationId": "create_group_api_groups_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create Group"
+   }
+  },
+  "/api/groups/delete": {
+   "post": {
+    "operationId": "remove_group_api_groups_delete_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupDeleteSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Remove Group"
+   }
+  },
+  "/api/groups/rename": {
+   "post": {
+    "description": "Rinomina una sede/gruppo (admin/operator) e riassegna i relativi apparati.\n'Generale' non \u00e8 rinominabile.",
+    "operationId": "rename_group_api_groups_rename_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GroupRenameSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Rename Group"
+   }
+  },
+  "/api/import-csv": {
+   "post": {
+    "operationId": "import_csv_api_import_csv_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CSVImportRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Import Csv"
+   }
+  },
+  "/api/local-devices": {
+   "get": {
+    "operationId": "get_devices_and_versions_api_local_devices_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Devices And Versions"
+   }
+  },
+  "/api/mac/locate": {
+   "get": {
+    "operationId": "mac_locate_api_mac_locate_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "mac",
+      "required": true,
+      "schema": {
+       "title": "Mac",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Locate"
+   }
+  },
+  "/api/mac/overrides": {
+   "get": {
+    "operationId": "mac_list_overrides_api_mac_overrides_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac List Overrides"
+   },
+   "post": {
+    "operationId": "mac_set_override_api_mac_overrides_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MacOverrideSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Set Override"
+   }
+  },
+  "/api/mac/overrides/delete": {
+   "post": {
+    "operationId": "mac_delete_override_api_mac_overrides_delete_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MacOverrideDeleteSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Delete Override"
+   }
+  },
+  "/api/mac/scan": {
+   "post": {
+    "description": "Raccoglie la MAC-table degli apparati selezionati (scoped per tenant) e la\nstoricizza. Manuale, parallelizzato; al termine applica la retention.",
+    "operationId": "mac_scan_api_mac_scan_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MacScanSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Scan"
+   }
+  },
+  "/api/mac/search": {
+   "get": {
+    "operationId": "mac_search_api_mac_search_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "mac",
+      "required": false,
+      "schema": {
+       "title": "Mac",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "vlan",
+      "required": false,
+      "schema": {
+       "title": "Vlan",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "interface",
+      "required": false,
+      "schema": {
+       "title": "Interface",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "switch",
+      "required": false,
+      "schema": {
+       "title": "Switch",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "frm",
+      "required": false,
+      "schema": {
+       "title": "Frm",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "to",
+      "required": false,
+      "schema": {
+       "title": "To",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "tenant",
+      "required": false,
+      "schema": {
+       "title": "Tenant",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Search"
+   }
+  },
+  "/api/mac/settings": {
+   "post": {
+    "operationId": "mac_set_settings_api_mac_settings_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MacRetentionSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Set Settings"
+   }
+  },
+  "/api/mac/stats": {
+   "get": {
+    "operationId": "mac_stats_api_mac_stats_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "tenant",
+      "required": false,
+      "schema": {
+       "title": "Tenant",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Stats"
+   }
+  },
+  "/api/mac/switch/{ip}": {
+   "get": {
+    "operationId": "mac_switch_api_mac_switch__ip__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Mac Switch"
+   }
+  },
+  "/api/map/export/vsdx": {
+   "post": {
+    "description": "Esporta la mappa di rete corrente (posizioni gi\u00e0 calcolate dal frontend) come .vsdx nativo.",
+    "operationId": "export_map_vsdx_api_map_export_vsdx_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VisioExportSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Export Map Vsdx"
+   }
+  },
+  "/api/mcp/settings": {
+   "get": {
+    "description": "Catalogo dei tool MCP con descrizione + elenco dei tool disabilitati.",
+    "operationId": "get_mcp_settings_api_mcp_settings_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Mcp Settings"
+   },
+   "post": {
+    "operationId": "set_mcp_settings_api_mcp_settings_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/McpSettingsSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Set Mcp Settings"
+   }
+  },
+  "/api/mcp/tool-config": {
+   "get": {
+    "description": "Letto dal processo mcp_server.py (con l'account con cui si autentica)\nper sapere quali tool NON esporre al client LLM.",
+    "operationId": "get_mcp_tool_config_api_mcp_tool_config_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Mcp Tool Config"
+   }
+  },
+  "/api/models": {
+   "get": {
+    "operationId": "list_models_api_models_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Models"
+   },
+   "post": {
+    "operationId": "create_model_api_models_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ModelSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create Model"
+   }
+  },
+  "/api/models/delete": {
+   "post": {
+    "operationId": "remove_model_api_models_delete_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ModelSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Remove Model"
+   }
+  },
+  "/api/network-map": {
+   "get": {
+    "description": "Restituisce il grafo topologico strutturato per Vis.js.",
+    "operationId": "get_network_map_api_network_map_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "group",
+      "required": false,
+      "schema": {
+       "default": "all",
+       "title": "Group",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Network Map"
+   }
+  },
+  "/api/ping-check": {
+   "post": {
+    "description": "Verifica la raggiungibilit\u00e0 SSH (porta 22) di tutti i dispositivi\nnel gruppo selezionato, in parallelo con ThreadPoolExecutor.",
+    "operationId": "ping_check_api_ping_check_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PingCheckRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Ping Check"
+   }
+  },
+  "/api/ping/{ip}": {
+   "get": {
+    "operationId": "ping_single_api_ping__ip__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Ping Single"
+   }
+  },
+  "/api/portchannels": {
+   "get": {
+    "description": "Report Port-channel per apparato (per il tab Adjacency List), filtrato per sede.",
+    "operationId": "get_portchannels_api_portchannels_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "group",
+      "required": false,
+      "schema": {
+       "default": "all",
+       "title": "Group",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Portchannels"
+   }
+  },
+  "/api/promote-device": {
+   "post": {
+    "description": "Promuove un dispositivo scoperto (CDP/LLDP) a dispositivo gestito,\naggiungendolo all'inventario cos\u00ec da poter essere sottoposto a triage.\nLe credenziali vanno completate dopo, nella pagina Inventario.",
+    "operationId": "promote_device_api_promote_device_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PromoteDeviceSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Promote Device"
+   }
+  },
+  "/api/provisioner/download": {
+   "post": {
+    "description": "Genera la running-config e la restituisce come file .txt scaricabile.",
+    "operationId": "provisioner_download_api_provisioner_download_post",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "materialized",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Materialized",
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SwitchProvisionSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Provisioner Download"
+   }
+  },
+  "/api/provisioner/fgt/download": {
+   "post": {
+    "description": "Genera la configurazione FortiOS e la restituisce come file .txt.",
+    "operationId": "fgt_provisioner_download_api_provisioner_fgt_download_post",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "materialized",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Materialized",
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FortiGateProvisionSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Provisioner Download"
+   }
+  },
+  "/api/provisioner/fgt/generate": {
+   "post": {
+    "description": "Genera la configurazione FortiOS day-0 e la restituisce come testo.",
+    "operationId": "fgt_provisioner_generate_api_provisioner_fgt_generate_post",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "materialized",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Materialized",
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FortiGateProvisionSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Provisioner Generate"
+   }
+  },
+  "/api/provisioner/fgt/push-serial": {
+   "post": {
+    "description": "Genera la config FortiOS e la applica via console/seriale (day-0).",
+    "operationId": "fgt_provisioner_push_serial_api_provisioner_fgt_push_serial_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FortiGateProvisionSerialSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Provisioner Push Serial"
+   }
+  },
+  "/api/provisioner/fgt/push-ssh": {
+   "post": {
+    "description": "Genera la config FortiOS e la applica via SSH (Netmiko 'fortinet').",
+    "operationId": "fgt_provisioner_push_ssh_api_provisioner_fgt_push_ssh_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FortiGateProvisionSSHSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Fgt Provisioner Push Ssh"
+   }
+  },
+  "/api/provisioner/generate": {
+   "post": {
+    "description": "Genera la running-config e la restituisce come testo (view/copy nella UI).\nDi default i segreti sono placeholder; ``?materialized=true`` per il testo\ncompleto (auditato).",
+    "operationId": "provisioner_generate_api_provisioner_generate_post",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "materialized",
+      "required": false,
+      "schema": {
+       "default": false,
+       "title": "Materialized",
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SwitchProvisionSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Provisioner Generate"
+   }
+  },
+  "/api/provisioner/push-serial": {
+   "post": {
+    "description": "Genera la config e la applica via console/seriale (pyserial) per il\nprovisioning day-0 senza connettivita' di rete.",
+    "operationId": "provisioner_push_serial_api_provisioner_push_serial_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SwitchProvisionSerialSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Provisioner Push Serial"
+   }
+  },
+  "/api/provisioner/push-ssh": {
+   "post": {
+    "description": "Genera la config e la applica via SSH (Netmiko) su un apparato raggiungibile.",
+    "operationId": "provisioner_push_ssh_api_provisioner_push_ssh_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SwitchProvisionSSHSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Provisioner Push Ssh"
+   }
+  },
+  "/api/provisioner/serial-ports": {
+   "get": {
+    "description": "Elenca le porte COM/seriali disponibili sull'host del server.",
+    "operationId": "provisioner_serial_ports_api_provisioner_serial_ports_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Provisioner Serial Ports"
+   }
+  },
+  "/api/reassign-device": {
+   "post": {
+    "description": "Sposta un dispositivo in un gruppo diverso aggiornando solo il campo Group nel CSV.",
+    "operationId": "reassign_device_api_reassign_device_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceReassignSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Reassign Device"
+   }
+  },
+  "/api/rename-device": {
+   "post": {
+    "description": "Rinomina un dispositivo gestito impostandone manualmente l'hostname (il\nnome mostrato in inventario e sulla mappa). admin/operator, con scoping.",
+    "operationId": "rename_device_api_rename_device_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DeviceRenameSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Rename Device"
+   }
+  },
+  "/api/run-triage": {
+   "post": {
+    "operationId": "run_triage_api_run_triage_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TriageRunRequest",
+        "default": {
+         "group": "all"
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Run Triage"
+   }
+  },
+  "/api/scan-subnet": {
+   "post": {
+    "operationId": "start_subnet_scan_api_scan_subnet_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SubnetScanRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Start Subnet Scan"
+   }
+  },
+  "/api/scan-subnet/{job_id}": {
+   "get": {
+    "operationId": "get_subnet_scan_status_api_scan_subnet__job_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "job_id",
+      "required": true,
+      "schema": {
+       "title": "Job Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Subnet Scan Status"
+   }
+  },
+  "/api/search": {
+   "get": {
+    "operationId": "proxy_enisa_search_api_search_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Proxy Enisa Search"
+   }
+  },
+  "/api/send-command": {
+   "post": {
+    "operationId": "send_command_api_send_command_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CommandRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Send Command"
+   }
+  },
+  "/api/settings/cli-blacklist": {
+   "get": {
+    "description": "Stato dell'applicazione della blacklist CLI agli operatori (default: attiva).",
+    "operationId": "get_cli_blacklist_settings_api_settings_cli_blacklist_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Cli Blacklist Settings"
+   },
+   "post": {
+    "operationId": "set_cli_blacklist_settings_api_settings_cli_blacklist_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CliBlacklistSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Set Cli Blacklist Settings"
+   }
+  },
+  "/api/settings/network": {
+   "get": {
+    "description": "Stato attuale del bind IP: host configurato, host effettivo, eventuale\noverride via env, porta e IP locali selezionabili.",
+    "operationId": "get_network_settings_api_settings_network_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Network Settings"
+   },
+   "post": {
+    "description": "Imposta l'IP di bind (applicato al prossimo riavvio). Valida che l'host\nsia tra gli IP locali enumerati (o 0.0.0.0/127.0.0.1).",
+    "operationId": "set_network_settings_api_settings_network_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NetworkSettingsSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Set Network Settings"
+   }
+  },
+  "/api/sites": {
+   "get": {
+    "operationId": "list_sites_ep_api_sites_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Sites Ep"
+   },
+   "post": {
+    "operationId": "create_site_ep_api_sites_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SiteSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create Site Ep"
+   }
+  },
+  "/api/sites/delete": {
+   "post": {
+    "operationId": "delete_site_ep_api_sites_delete_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SiteIdSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete Site Ep"
+   }
+  },
+  "/api/sites/regenerate-token": {
+   "post": {
+    "operationId": "regenerate_site_token_ep_api_sites_regenerate_token_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SiteIdSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Regenerate Site Token Ep"
+   }
+  },
+  "/api/sites/update": {
+   "post": {
+    "operationId": "update_site_ep_api_sites_update_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SiteUpdateSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Update Site Ep"
+   }
+  },
+  "/api/sites/{site_id}/command": {
+   "post": {
+    "description": "Accoda un comando CLI per un dispositivo di una sede agent. L'agente lo\nprelever\u00e0 in polling, lo eseguir\u00e0 localmente e ne poster\u00e0 il risultato.",
+    "operationId": "site_command_ep_api_sites__site_id__command_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "site_id",
+      "required": true,
+      "schema": {
+       "title": "Site Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SiteCommandSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Site Command Ep"
+   }
+  },
+  "/api/sites/{site_id}/command-jobs": {
+   "get": {
+    "operationId": "list_site_command_jobs_ep_api_sites__site_id__command_jobs_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "site_id",
+      "required": true,
+      "schema": {
+       "title": "Site Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Site Command Jobs Ep"
+   }
+  },
+  "/api/topology": {
+   "get": {
+    "description": "Restituisce la lista di adiacenza fisica per il triage testuale.",
+    "operationId": "get_topology_adjacency_api_topology_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "group",
+      "required": false,
+      "schema": {
+       "default": "all",
+       "title": "Group",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Topology Adjacency"
+   }
+  },
+  "/api/topology/reset": {
+   "post": {
+    "operationId": "reset_topology_api_topology_reset_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Reset Topology"
+   }
+  },
+  "/api/triage-status": {
+   "get": {
+    "operationId": "get_triage_status_api_triage_status_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Triage Status"
+   }
+  },
+  "/api/triage/{ip}": {
+   "post": {
+    "operationId": "triage_single_device_api_triage__ip__post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Triage Single Device"
+   }
+  },
+  "/api/users": {
+   "get": {
+    "operationId": "list_users_ep_api_users_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Users Ep"
+   },
+   "post": {
+    "operationId": "create_user_ep_api_users_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserCreateSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create User Ep"
+   }
+  },
+  "/api/users/delete": {
+   "post": {
+    "operationId": "delete_user_ep_api_users_delete_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserDeleteSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete User Ep"
+   }
+  },
+  "/api/users/disable": {
+   "post": {
+    "description": "Abilita/disabilita un utente. Un utente disabilitato non pu\u00f2 autenticarsi.",
+    "operationId": "disable_user_ep_api_users_disable_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserDisableSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Disable User Ep"
+   }
+  },
+  "/api/users/groups": {
+   "post": {
+    "description": "Assegna le sedi/gruppi visibili e gestibili da un utente (vuoto = tutte).",
+    "operationId": "set_user_groups_ep_api_users_groups_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserGroupsSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Set User Groups Ep"
+   }
+  },
+  "/api/users/role": {
+   "post": {
+    "operationId": "set_user_role_ep_api_users_role_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserRoleSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Set User Role Ep"
+   }
+  },
+  "/api/users/tabs": {
+   "post": {
+    "description": "Assegna le tab della dashboard visibili a un utente (vuoto = tutte).\n# ponytail: enforcement solo lato frontend (nasconde i pulsanti tab). Le API\n# sensibili sono gi\u00e0 protette da ruolo/gruppo indipendentemente da questo campo.",
+    "operationId": "set_user_tabs_ep_api_users_tabs_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserTabsSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Set User Tabs Ep"
+   }
+  },
+  "/api/vendors": {
+   "get": {
+    "operationId": "list_vendors_api_vendors_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "List Vendors"
+   },
+   "post": {
+    "operationId": "create_vendor_api_vendors_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VendorSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Create Vendor"
+   }
+  },
+  "/api/vendors/delete": {
+   "post": {
+    "operationId": "delete_vendor_api_vendors_delete_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/VendorDeleteSchema"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Delete Vendor"
+   }
+  },
+  "/api/wlc/{ip}/ap-summary": {
+   "get": {
+    "operationId": "wlc_ap_summary_api_wlc__ip__ap_summary_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Ap Summary"
+   }
+  },
+  "/api/wlc/{ip}/client-summary": {
+   "get": {
+    "operationId": "wlc_client_summary_api_wlc__ip__client_summary_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Client Summary"
+   }
+  },
+  "/api/wlc/{ip}/client/{mac}": {
+   "get": {
+    "operationId": "wlc_client_detail_api_wlc__ip__client__mac__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "mac",
+      "required": true,
+      "schema": {
+       "title": "Mac",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Client Detail"
+   }
+  },
+  "/api/wlc/{ip}/diagnose-client/{mac}": {
+   "get": {
+    "description": "Diagnosi aggregata di un client wireless (dettaglio client + AP +\nWLAN + rogue AP), sezioni best-effort.",
+    "operationId": "wlc_diagnose_client_api_wlc__ip__diagnose_client__mac__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     },
+     {
+      "in": "path",
+      "name": "mac",
+      "required": true,
+      "schema": {
+       "title": "Mac",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Diagnose Client"
+   }
+  },
+  "/api/wlc/{ip}/interfaces": {
+   "get": {
+    "operationId": "wlc_interfaces_api_wlc__ip__interfaces_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Interfaces"
+   }
+  },
+  "/api/wlc/{ip}/rogue-aps": {
+   "get": {
+    "operationId": "wlc_rogue_aps_api_wlc__ip__rogue_aps_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Rogue Aps"
+   }
+  },
+  "/api/wlc/{ip}/status": {
+   "get": {
+    "operationId": "wlc_status_api_wlc__ip__status_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Status"
+   }
+  },
+  "/api/wlc/{ip}/wlan-summary": {
+   "get": {
+    "operationId": "wlc_wlan_summary_api_wlc__ip__wlan_summary_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "ip",
+      "required": true,
+      "schema": {
+       "title": "Ip",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Wlc Wlan Summary"
+   }
+  },
+  "/api/ws-token": {
+   "post": {
+    "description": "Emette un token OTP monouso valido 30 secondi per aprire un WebSocket.",
+    "operationId": "get_ws_token_api_ws_token_post",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "security": [
+     {
+      "HTTPBearer": []
+     }
+    ],
+    "summary": "Get Ws Token"
+   }
+  }
+ }
+}

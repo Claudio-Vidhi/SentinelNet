@@ -386,6 +386,30 @@ TOOLS = {
              ["hostname"]),
         lambda a: api("POST", "/api/provisioner/generate", body=a),
     ),
+    # --- Observability (fase 4.4): SOLO lettura, dati aggregati/riassunti
+    # (mai dump raw), scoping tenant e redazione applicati lato server.
+    # Disabilitati di default: l'admin li abilita dal tab MCP Server.
+    "get_top_talkers": (
+        "Get the top bandwidth consumers (aggregated flow records) for a time "
+        "window. Read-only, tenant-scoped, summarized (top-N only).",
+        _obj({"window": {**_S, "description": "Time window, e.g. 15m, 24h (max 7d)"},
+              "limit": {"type": "integer", "description": "Max flows (default 20, max 100)"},
+              "metric": {**_S, "description": "'bytes' (default) or 'packets'"}}),
+        lambda a: api("GET", "/api/observability/top", params={
+            "window": a.get("window", "15m"),
+            "limit": min(int(a.get("limit", 20)), 100),
+            "metric": a.get("metric", "bytes")}),
+    ),
+    "get_anomalies": (
+        "Get correlated security anomalies (blocked traffic matched with flow "
+        "evidence and switch port). Read-only, tenant-scoped.",
+        _obj({"status": {**_S, "description": "'new' (default), 'ack', 'resolved', 'all'"},
+              "window": {**_S, "description": "Time window, e.g. 24h (max 7d)"}}),
+        lambda a: api("GET", "/api/observability/anomalies", params={
+            "status": a.get("status", "new"),
+            "window": a.get("window", "24h"),
+            "limit": 50}),
+    ),
 }
 
 

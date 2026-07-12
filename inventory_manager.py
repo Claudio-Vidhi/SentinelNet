@@ -75,6 +75,7 @@ def save_groups(groups_dict):
     safe_json_write(GROUPS_JSON, groups_dict)
 
 def safe_write_hosts_csv(devices):
+    invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
     temp_filename = HOSTS_CSV + ".tmp"
     # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
@@ -119,6 +120,44 @@ def get_all_devices():
                 row['Site'] = 'central'
             devices.append(row)
     return devices
+
+# --- Cache IP → device per l'attribuzione tenant all'ingest (fase 3.5) ---
+# Invalidata a ogni scrittura dell'inventario (safe_write_hosts_csv).
+
+_device_ip_cache = None
+_device_ip_cache_lock = threading.Lock()
+
+
+def invalidate_device_ip_cache():
+    global _device_ip_cache
+    with _device_ip_cache_lock:
+        _device_ip_cache = None
+
+
+def get_device_by_ip(ip: str):
+    """Risolve un IP in (hostname, gruppo/tenant) per l'attribuzione dei
+    flussi all'ingest. Ritorna dict {'ip','hostname','tenant'} oppure None se
+    sconosciuto. Se PIÙ device condividono lo stesso IP ritorna il sentinella
+    {'collision': True} (attribuzione rifiutata, anomalia da auditare)."""
+    global _device_ip_cache
+    with _device_ip_cache_lock:
+        if _device_ip_cache is None:
+            cache = {}
+            for d in get_all_devices():
+                key = d.get('IP')
+                if not key:
+                    continue
+                if key in cache:
+                    cache[key] = {"collision": True}
+                    continue
+                cache[key] = {
+                    "ip": key,
+                    "hostname": d.get('Hostname') or "",
+                    "tenant": d.get('Group') or 'Generale',
+                }
+            _device_ip_cache = cache
+        return _device_ip_cache.get(ip)
+
 
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None):
     # Validazione IP robusta
