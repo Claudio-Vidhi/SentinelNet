@@ -104,6 +104,21 @@ class DbTest(unittest.TestCase):
         self.assertEqual(r["switch_ip"], "10.0.0.10")    # dove è attaccato
         self.assertEqual(r["switch_port"], "GigabitEthernet1/0/5")  # uplink escluso
 
+    def test_client_map_type_from_categories_only(self):
+        # Il tipo del client viene SOLO dagli assignment della scheda
+        # "Dispositivi e categorie"; senza assignment → generico "client",
+        # mai il source_type del gateway (bug: PC etichettato "switch").
+        self.mh.record_arp_entries(
+            [{"mac": "aa:bb:cc:00:09:11", "ip": "192.168.31.111"},
+             {"mac": "aa:bb:cc:00:09:12", "ip": "192.168.31.6"}],
+            source_ip="192.168.31.1", source_type="switch")
+        with mock.patch("inventory_manager.get_category_assignments",
+                        return_value={"192.168.31.6": {"category": "switch"}}):
+            rows = {r["ip"]: r for r in self.mh.client_map()}
+        self.assertEqual(rows["192.168.31.111"]["client_type"], "client")
+        self.assertEqual(rows["192.168.31.6"]["client_type"], "switch")
+        self.assertEqual(rows["192.168.31.111"]["source_type"], "switch")  # gateway invariato
+
     def test_client_map_no_cross_tenant_join(self):
         # Stesso MAC visto in due tenant: la posizione di TenantB non deve
         # finire sul binding ARP di TenantA (e viceversa).

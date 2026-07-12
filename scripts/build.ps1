@@ -12,6 +12,11 @@ if (-not $SkipSmoke) {
     $port = 18443
     $env:SENTINELNET_PORT = "$port"
     $env:SENTINELNET_NO_BROWSER = "true"
+    # Bind forzato su loopback: app_settings.json puo' avere "host" sulla LAN,
+    # ma lo smoke test interroga 127.0.0.1. Listener UDP spenti (evita
+    # conflitti di porta con un'istanza reale in esecuzione).
+    $env:SENTINELNET_HOST = "127.0.0.1"
+    $env:SENTINELNET_OBS_ENABLE = "0"
     $proc = Start-Process -FilePath "dist\SentinelNet.exe" -PassThru
     try {
         $ok = $false

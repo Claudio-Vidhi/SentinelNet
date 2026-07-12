@@ -1429,6 +1429,7 @@
       <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descFlows">
         Flussi di rete aggregati (IPFIX/NetFlow/sFlow) per sede, con anomalie correlate agli eventi di sicurezza. I listener si abilitano via variabili d'ambiente (vedi docs/HARDENING.md).
       </p>
+      <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, #e0a800); border-radius:8px; color:var(--warning, #e0a800); font-size:13px;"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
         <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="15m">Ultimi 15 minuti</option>
@@ -1620,8 +1621,13 @@
         <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
           <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
         </label>
-        <select id="aiAttachDeviceIp" multiple size="3" title="Ctrl+click per selezionare più dispositivi" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; min-width:220px;">
-        </select>
+        <div style="min-width:220px;">
+          <div id="aiAttachDeviceList" style="max-height:96px; overflow-y:auto; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></div>
+          <div style="display:flex; gap:8px; margin-top:4px;">
+            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;">Seleziona tutti</a>
+            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;">Deseleziona tutti</a>
+          </div>
+        </div>
         <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           <option value="" data-i18n="optAiNoTenant">Nessuna sede/tenant allegata</option>
         </select>
@@ -7808,8 +7814,8 @@
             td(`<code>${escapeHtml(r.mac)}</code>`),
             td(`<code>${escapeHtml(r.ip)}</code>`),
             td(escapeHtml(r.vlan || '—')),
-            td(`${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip)}</span>`),
-            td(escapeHtml(r.source_type || '—')),
+            td(`<span title="${escapeHtml(r.source_type || '')}">${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip)}</span></span>`),
+            td(escapeHtml(r.client_type || 'client')),
             td(r.switch_ip ? `${escapeHtml(r.switch_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.switch_ip)}</span>` : '—'),
             td(escapeHtml(r.switch_port || '—')),
             td(fmtMacTime(r.last_seen)),
@@ -9291,17 +9297,29 @@
     // Popola la select dei dispositivi allegabili, filtrata per il tenant/sede
     // selezionato: la config allegata deve appartenere al tenant scelto.
     function populateAiAttachDevices() {
-        const sel = document.getElementById('aiAttachDeviceIp');
-        if (!sel) return;
+        const box = document.getElementById('aiAttachDeviceList');
+        if (!box) return;
         const tenant = document.getElementById('aiAttachTenant')?.value || '';
         // Multi-selezione: preserva gli IP già selezionati che restano visibili.
-        const cur = new Set([...sel.selectedOptions].map(o => o.value));
+        const cur = new Set(getAiAttachDeviceIps());
         const devices = (globalDevices || []).filter(d =>
             !tenant || (d.Group || 'Generale') === tenant);
-        sel.innerHTML = devices.map(d =>
-            `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`
-        ).join('');
-        [...sel.options].forEach(o => { o.selected = cur.has(o.value); });
+        box.innerHTML = devices.length ? devices.map(d =>
+            `<label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''}>
+                <span>${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</span>
+            </label>`
+        ).join('') : `<span style="color:var(--text-muted);">Nessun dispositivo</span>`;
+    }
+
+    function getAiAttachDeviceIps() {
+        return [...document.querySelectorAll('#aiAttachDeviceList .ai-attach-device:checked')]
+            .map(cb => cb.value);
+    }
+
+    function setAllAiAttachDevices(checked) {
+        document.querySelectorAll('#aiAttachDeviceList .ai-attach-device')
+            .forEach(cb => { cb.checked = checked; });
     }
 
     function loadAiTab() {
@@ -9538,6 +9556,118 @@
         if (box) box.innerHTML = '';
     }
 
+    // --- Config push proposto dall'AI (§10.2): il modello PROPONE in un blocco
+    // ```sentinelnet-config {...}```; l'utente CONFERMA in un modale; solo allora
+    // il browser chiama /api/bulk-command (operator+blacklist+audit lato server).
+    function parseAiConfigProposal(reply) {
+        const m = (reply || '').match(/```sentinelnet-config\s*\n?([\s\S]*?)```/);
+        if (!m) return null;
+        try {
+            const p = JSON.parse(m[1].trim());
+            if (!p.device_ip || !Array.isArray(p.commands) || !p.commands.length) return null;
+            return p;
+        } catch (e) { return null; }
+    }
+
+    function renderAiConfigProposal(p, attachedIps) {
+        if (!p) return;
+        const box = document.getElementById('aiChatMessages');
+        if (!box) return;
+        const card = document.createElement('div');
+        card.style.cssText = 'border:1px solid var(--warning, #e0a800); border-radius:10px; padding:12px; margin:8px 0; font-size:13px;';
+        if (!(attachedIps || []).includes(p.device_ip)) {
+            card.innerHTML = `⚠️ L'AI ha proposto una modifica per <code>${escapeHtml(p.device_ip)}</code>, che non è tra i dispositivi allegati. Proposta ignorata per sicurezza.`;
+            box.appendChild(card);
+            box.scrollTop = box.scrollHeight;
+            return;
+        }
+        card.innerHTML = `
+            <div style="font-weight:600; margin-bottom:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> Modifica di configurazione proposta — <code>${escapeHtml(p.device_ip)}</code></div>
+            <pre style="background:var(--surface-2); border-radius:8px; padding:10px; overflow:auto; margin:0 0 8px 0;">${escapeHtml(p.commands.join('\n'))}</pre>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-primary btn-small requires-write" style="width:auto;"><i class="fa-solid fa-play"></i> Applica…</button>
+                <button class="btn btn-secondary btn-small" style="width:auto;">Annulla</button>
+                <span class="ai-cfg-status" style="font-size:12px; color:var(--text-muted);"></span>
+            </div>`;
+        const [applyBtn, cancelBtn] = card.querySelectorAll('button');
+        cancelBtn.onclick = () => card.remove();
+        applyBtn.onclick = () => showAiConfigConfirmModal(p, card);
+        box.appendChild(card);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function showAiConfigConfirmModal(p, card) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10000; display:flex; align-items:center; justify-content:center;';
+        overlay.innerHTML = `
+            <div style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:12px; max-width:560px; width:92%; padding:18px;">
+                <h4 style="margin:0 0 10px 0;">Conferma invio configurazione</h4>
+                <p style="font-size:13px; margin:0 0 8px 0;">Stai per inviare <b>${p.commands.length}</b> comandi in modalità configurazione a <code>${escapeHtml(p.device_ip)}</code>. L'operazione viene auditata e i comandi in blacklist vengono bloccati dal server.</p>
+                <pre style="background:var(--surface-2); border-radius:8px; padding:10px; max-height:220px; overflow:auto; font-size:12px;">${escapeHtml(p.commands.join('\n'))}</pre>
+                <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin:8px 0;">
+                    <input type="checkbox" id="aiCfgSaveAfter"${p.save_after ? ' checked' : ''}> Salva configurazione di avvio dopo l'invio
+                </label>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button class="btn btn-secondary btn-small" style="width:auto;">Annulla</button>
+                    <button class="btn btn-primary btn-small" style="width:auto;"><i class="fa-solid fa-play"></i> Conferma e applica</button>
+                </div>
+            </div>`;
+        const [cancelBtn, confirmBtn] = overlay.querySelectorAll('button');
+        cancelBtn.onclick = () => overlay.remove();
+        confirmBtn.onclick = async () => {
+            const save = overlay.querySelector('#aiCfgSaveAfter').checked;
+            overlay.remove();
+            await applyAiConfigProposal(p, save, card);
+        };
+        document.body.appendChild(overlay);
+    }
+
+    async function applyAiConfigProposal(p, save, card) {
+        const statusEl = card.querySelector('.ai-cfg-status');
+        const setStatus = (t, err) => { if (statusEl) { statusEl.textContent = t; statusEl.style.color = err ? 'var(--danger, #d9534f)' : 'var(--text-muted)'; } };
+        card.querySelectorAll('button').forEach(b => b.disabled = true);
+        setStatus('Invio in corso…');
+        try {
+            const res = await apiFetch('/api/bulk-command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ips: [p.device_ip],
+                    commands: p.commands.join('\n'),
+                    mode: p.config_mode === false ? 'exec' : 'config',
+                    save: !!save
+                })
+            });
+            if (!res || !res.ok) {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                setStatus('Errore: ' + (err.detail || 'richiesta rifiutata.'), true);
+                card.querySelectorAll('button').forEach(b => b.disabled = false);
+                return;
+            }
+            const jobId = (await res.json()).job_id;
+            // Poll dello stato del job (max ~120s).
+            for (let i = 0; i < 60; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                const jr = await apiFetch(`/api/bulk-command/${encodeURIComponent(jobId)}`);
+                if (!jr || !jr.ok) continue;
+                const job = await jr.json();
+                if (job.status !== 'running') {
+                    const entry = (job.results || [])[0];
+                    const result = entry ? (entry.result || {}) : { status: 'error', message: 'dispositivo non trovato in inventario.' };
+                    const ok = result.status === 'success';
+                    setStatus(ok ? '✅ Configurazione applicata.' : 'Errore: ' + (result.message || 'invio fallito.'), !ok);
+                    appendAiMessage('assistant', (ok ? '✅ Configurazione applicata a ' : '❌ Invio fallito a ') + p.device_ip + (result.output ? '\n\n' + result.output : (result.message ? '\n\n' + result.message : '')));
+                    return;
+                }
+                setStatus('In esecuzione…');
+            }
+            setStatus('Timeout in attesa del risultato: controlla il job dei comandi bulk.', true);
+        } catch (e) {
+            setStatus('Errore di rete: ' + e, true);
+            card.querySelectorAll('button').forEach(b => b.disabled = false);
+        }
+    }
+
     function appendAiMessage(role, text, meta) {
         const box = document.getElementById('aiChatMessages');
         if (!box) return null;
@@ -9566,7 +9696,7 @@
         appendAiMessage('user', text);
 
         const attachInventory = document.getElementById('aiAttachInventory').checked;
-        const attachDeviceIps = [...document.getElementById('aiAttachDeviceIp').selectedOptions].map(o => o.value);
+        const attachDeviceIps = getAiAttachDeviceIps();
         const attachTenant = document.getElementById('aiAttachTenant')?.value || null;
         const wasTopFlows = aiAttachTopFlowsOnce;
 
@@ -9590,6 +9720,7 @@
                 aiHistory.push({ role: 'assistant', content: data.reply });
                 const meta = [data.profile_name, data.model].filter(Boolean).join(' · ');
                 appendAiMessage('assistant', data.reply, meta);
+                renderAiConfigProposal(parseAiConfigProposal(data.reply), attachDeviceIps);
             } else if (res && res.status === 429) {
                 const err = await res.json().catch(() => ({}));
                 appendAiMessage('assistant', '⏳ ' + (i18n[currentLang].errAiRateLimited || 'Troppe richieste: limite di frequenza superato. Riprova tra qualche secondo.') + (err.detail ? ' (' + err.detail + ')' : ''));
@@ -9628,6 +9759,30 @@
         loadTopTalkers();
         loadAnomalies();
         startFlowsAutoRefresh();
+        checkObsStatusBanner();
+    }
+
+    // Banner di stato: l'assenza di dati era silenziosa quando l'osservabilità
+    // era spenta o nessun listener attivo. /health è solo-admin: 403 → nascosto.
+    async function checkObsStatusBanner() {
+        const banner = document.getElementById('flowsObsBanner');
+        if (!banner) return;
+        try {
+            const res = await apiFetch('/api/observability/health');
+            if (!res || !res.ok) { banner.style.display = 'none'; return; }
+            const h = await res.json();
+            const listeners = h.listeners || {};
+            const anyActive = Object.values(listeners).some(l => l && l.active);
+            if (!h.enabled) {
+                banner.textContent = '⚠️ Osservabilità disabilitata: nessun listener in ascolto. Abilita con SENTINELNET_OBS_ENABLE=1 (o "observability.enabled" in app_settings.json) e riavvia.';
+                banner.style.display = 'block';
+            } else if (!anyActive) {
+                banner.textContent = '⚠️ Osservabilità abilitata ma nessun listener attivo (bind fallito?). Controlla /api/observability/health e i log di avvio.';
+                banner.style.display = 'block';
+            } else {
+                banner.style.display = 'none';
+            }
+        } catch (e) { banner.style.display = 'none'; }
     }
 
     function startFlowsAutoRefresh() {

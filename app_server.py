@@ -112,6 +112,10 @@ async def lifespan(app: "FastAPI"):
             from observability.ingesters import api_poller
             app.state.obs_api_poller_task = asyncio.create_task(
                 api_poller.poll_loop(cfg["api_poll_s"]), name="obs-api-poller")
+    else:
+        print("Observability: osservabilità disabilitata, nessun listener UDP "
+              "in ascolto (abilitare con SENTINELNET_OBS_ENABLE=1 o "
+              "\"observability.enabled\" in app_settings.json).")
 
     yield
 
@@ -2852,6 +2856,21 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
         # scoped per tenant; la redazione avviene nel choke-point di chat().
         from observability.summary import top_flows_context
         context_blocks.append(top_flows_context(user_group_scope(current_user)))
+    if payload.attach_device_ips and current_user.get("role") in ("admin", "operator"):
+        # Contratto di proposta config (§10.2): il modello PROPONE, non esegue.
+        # Il browser mostra la proposta e, solo dopo conferma esplicita
+        # dell'utente, chiama /api/bulk-command (blacklist/RBAC/audit invariati).
+        context_blocks.append(
+            "Se l'utente chiede una modifica di configurazione su uno dei "
+            "dispositivi allegati, oltre alla spiegazione emetti UN blocco "
+            "recintato cosi (JSON su una riga, device_ip tra quelli allegati):\n"
+            "```sentinelnet-config\n"
+            '{"device_ip": "<ip>", "commands": ["<riga config>", "..."], '
+            '"config_mode": true, "save_after": false}\n'
+            "```\n"
+            "Non usare il blocco per comandi show/diagnostici. Non proporre "
+            "comandi distruttivi (reload, erase, write erase, format)."
+        )
     if context_blocks:
         messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
 
