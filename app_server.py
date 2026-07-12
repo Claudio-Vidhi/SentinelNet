@@ -35,6 +35,7 @@ import ai_assistant
 import crypto_vault
 import switch_provisioner
 import fortigate_provisioner
+import provisioning_secrets
 import fortigate_service
 import wlc_service
 import site_manager
@@ -43,7 +44,8 @@ import visio_export
 from network_scanner import parse_network, scan_subnet
 from security_manager import (
     create_access_token, verify_access_token, log_audit,
-    is_locked_out, record_failed_attempt, reset_failed_attempts
+    is_locked_out, record_failed_attempt, reset_failed_attempts,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 
 PORT = 8765
@@ -103,13 +105,32 @@ def get_resource_path(relative_path):
 
 # --- DIPENDENZE DI AUTENTICAZIONE (JWT) ---
 
-def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Security(security_scheme)):
-    if not credentials:
+SESSION_COOKIE = "net_session"
+# Metodi che modificano stato: su autenticazione via cookie richiedono la
+# prova anti-CSRF (header custom X-Requested-With, non impostabile cross-site
+# da un form; vedi docs/HARDENING.md).
+_CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+CSRF_HEADER = "x-requested-with"
+
+
+def get_current_user(request: Request,
+                     credentials: Optional[HTTPAuthorizationCredentials] = Security(security_scheme)):
+    # Doppia accettazione (L-1): Bearer per client programmatici (MCP, agent,
+    # script) e cookie HttpOnly per il browser.
+    token = credentials.credentials if credentials else request.cookies.get(SESSION_COOKIE)
+    if not token:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Autenticazione richiesta. Token mancante o non valido."
         )
-    token = credentials.credentials
+    if not credentials and request.method in _CSRF_METHODS:
+        # Autenticazione via cookie su richiesta che modifica stato: esigi la
+        # prova anti-CSRF. Il Bearer esplicito non è forgiabile cross-site.
+        if not request.headers.get(CSRF_HEADER):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Richiesta rifiutata: header anti-CSRF mancante."
+            )
     payload = verify_access_token(token)
     if not payload:
         raise HTTPException(
@@ -806,8 +827,21 @@ def setup_admin(payload: UserSchema):
         return {"status": "success", "message": "Primo account amministratore creato correttamente."}
     raise HTTPException(status_code=400, detail="Impossibile creare l'account.")
 
+def _set_session_cookie(request: Request, response: Response, token: str):
+    """Imposta il cookie di sessione HttpOnly (L-1). ``Secure`` è attivo quando
+    la richiesta è arrivata su HTTPS (TLS nativo o reverse proxy con
+    X-Forwarded-Proto)."""
+    secure = (request.url.scheme == "https"
+              or request.headers.get("x-forwarded-proto", "").lower() == "https")
+    response.set_cookie(
+        SESSION_COOKIE, token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True, secure=secure, samesite="strict", path="/",
+    )
+
+
 @app.post("/api/auth/login")
-def login(payload: LoginRequest):
+def login(payload: LoginRequest, request: Request, response: Response):
     if is_locked_out(payload.username):
         log_audit(f"Tentativo di login bloccato per lockout (username: '{payload.username}').")
         raise HTTPException(
@@ -826,6 +860,9 @@ def login(payload: LoginRequest):
         role = user_manager.get_role(payload.username) or "viewer"
         access_token = create_access_token(data={"sub": payload.username, "role": role})
         log_audit(f"Utente '{payload.username}' (ruolo: {role}) loggato con successo.")
+        # Cookie HttpOnly per il browser (L-1); il token resta nel body per i
+        # client programmatici (MCP/script) che usano Authorization: Bearer.
+        _set_session_cookie(request, response, access_token)
         return {
             "access_token": access_token,
             "token_type": "bearer",
@@ -854,6 +891,15 @@ def change_password(payload: ChangePasswordSchema,
         raise HTTPException(status_code=400, detail="Password attuale non corretta.")
     log_audit(f"Password cambiata per l'utente '{username}'.")
     return {"status": "success"}
+
+@app.post("/api/auth/logout")
+def logout_ep(response: Response, current_user = Depends(get_current_user)):
+    """Chiude la sessione browser cancellando il cookie HttpOnly. Il JWT è
+    stateless: la scadenza resta quella del token (max 60 min)."""
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    log_audit(f"Logout utente '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
 
 @app.get("/api/auth/me")
 def whoami(current_user = Depends(get_current_user)):
@@ -2815,16 +2861,34 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
             "profile_name": profile.get("name", "")}
 # --- SWITCH PROVISIONER: config "da zero" (view/SSH/console-seriale) ---
 
+def _provision_cfg(payload_dict: dict, materialized: bool, current_user, vendor: str) -> dict:
+    """Prepara il payload del provisioner per la generazione testo (finding I-2):
+    di default i segreti sono sostituiti da placeholder {{VAULT:...}}; la
+    materializzazione completa richiede flag esplicito e viene auditata."""
+    if not materialized:
+        return provisioning_secrets.mask_secrets(payload_dict)
+    log_audit(
+        f"ATTENZIONE: config day-0 {vendor} generata MATERIALIZZATA (segreti in chiaro) "
+        f"per '{payload_dict.get('hostname')}' da '{current_user.get('sub')}'."
+    )
+    return payload_dict
+
 @app.post("/api/provisioner/generate")
-def provisioner_generate(payload: SwitchProvisionSchema, current_user = Depends(require_operator)):
-    """Genera la running-config e la restituisce come testo (view/copy nella UI)."""
-    config_text = switch_provisioner.build_config(payload.dict())
-    return {"status": "success", "config": config_text}
+def provisioner_generate(payload: SwitchProvisionSchema, materialized: bool = False,
+                         current_user = Depends(require_operator)):
+    """Genera la running-config e la restituisce come testo (view/copy nella UI).
+    Di default i segreti sono placeholder; ``?materialized=true`` per il testo
+    completo (auditato)."""
+    cfg = _provision_cfg(payload.dict(), materialized, current_user, "switch")
+    config_text = switch_provisioner.build_config(cfg)
+    return {"status": "success", "config": config_text, "materialized": materialized}
 
 @app.post("/api/provisioner/download")
-def provisioner_download(payload: SwitchProvisionSchema, current_user = Depends(require_operator)):
+def provisioner_download(payload: SwitchProvisionSchema, materialized: bool = False,
+                         current_user = Depends(require_operator)):
     """Genera la running-config e la restituisce come file .txt scaricabile."""
-    config_text = switch_provisioner.build_config(payload.dict())
+    cfg = _provision_cfg(payload.dict(), materialized, current_user, "switch")
+    config_text = switch_provisioner.build_config(cfg)
     from fastapi.responses import Response as FastResponse
     filename = f"{(payload.hostname or 'switch').strip()}-day0.txt"
     log_audit(f"Config day-0 generata (download) per '{payload.hostname}' da '{current_user.get('sub')}'.")
@@ -2851,7 +2915,9 @@ def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depen
         f"Push SSH config day-0 su '{payload.ssh_host}' (hostname target: "
         f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
     )
-    result["config"] = config_text
+    # La config materializzata resta solo in memoria per il push: nella
+    # risposta torna la versione con placeholder (finding I-2).
+    result["config"] = switch_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result
 
 @app.post("/api/provisioner/push-serial")
@@ -2868,7 +2934,7 @@ def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user =
         f"Push seriale ({payload.com_port}) config day-0 (hostname target: "
         f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
     )
-    result["config"] = config_text
+    result["config"] = switch_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result
 
 @app.get("/api/provisioner/serial-ports")
@@ -2880,16 +2946,20 @@ def provisioner_serial_ports(current_user = Depends(require_operator)):
 # --- FORTIGATE PROVISIONER: ZTP firewall FortiGate (view/SSH/console-seriale) ---
 
 @app.post("/api/provisioner/fgt/generate")
-def fgt_provisioner_generate(payload: FortiGateProvisionSchema, current_user = Depends(require_operator)):
+def fgt_provisioner_generate(payload: FortiGateProvisionSchema, materialized: bool = False,
+                             current_user = Depends(require_operator)):
     """Genera la configurazione FortiOS day-0 e la restituisce come testo."""
-    config_text = fortigate_provisioner.build_config(payload.dict())
+    cfg = _provision_cfg(payload.dict(), materialized, current_user, "FortiGate")
+    config_text = fortigate_provisioner.build_config(cfg)
     log_audit(f"Config FortiGate day-0 generata per '{payload.hostname}' da '{current_user.get('sub')}'.")
-    return {"status": "success", "config": config_text}
+    return {"status": "success", "config": config_text, "materialized": materialized}
 
 @app.post("/api/provisioner/fgt/download")
-def fgt_provisioner_download(payload: FortiGateProvisionSchema, current_user = Depends(require_operator)):
+def fgt_provisioner_download(payload: FortiGateProvisionSchema, materialized: bool = False,
+                             current_user = Depends(require_operator)):
     """Genera la configurazione FortiOS e la restituisce come file .txt."""
-    config_text = fortigate_provisioner.build_config(payload.dict())
+    cfg = _provision_cfg(payload.dict(), materialized, current_user, "FortiGate")
+    config_text = fortigate_provisioner.build_config(cfg)
     from fastapi.responses import Response as FastResponse
     filename = f"{(payload.hostname or 'fortigate').strip()}-day0.txt"
     log_audit(f"Config FortiGate day-0 (download) per '{payload.hostname}' da '{current_user.get('sub')}'.")
@@ -2914,7 +2984,7 @@ def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user 
         f"Push SSH config FortiGate day-0 su '{payload.ssh_host}' (hostname target: "
         f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
     )
-    result["config"] = config_text
+    result["config"] = fortigate_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result
 
 @app.post("/api/provisioner/fgt/push-serial")
@@ -2932,7 +3002,7 @@ def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current
         f"Push seriale ({payload.com_port}) config FortiGate day-0 (hostname target: "
         f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
     )
-    result["config"] = config_text
+    result["config"] = fortigate_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result
 
 
@@ -3358,9 +3428,9 @@ def agent_post_job_result(job_id: str, payload: AgentJobResultSchema,
 
 # --- AVVIO E BROWSER AUTOMATICO ---
 
-def open_browser():
+def open_browser(scheme: str = "http"):
     time.sleep(1.5)
-    webbrowser.open(f"http://localhost:{PORT}/")
+    webbrowser.open(f"{scheme}://localhost:{PORT}/")
 
 def main():
     import argparse
@@ -3382,11 +3452,20 @@ def main():
     
     # Disabilita l'apertura automatica del browser in ambiente Docker/containerizzato
     no_browser = os.environ.get("SENTINELNET_NO_BROWSER", "false").lower() == "true" or host == "0.0.0.0"
-    
+
+    # TLS nativo opzionale (finding H-1): fail-closed su configurazione parziale.
+    try:
+        ssl_certfile, ssl_keyfile = data_config.resolve_tls_config()
+    except data_config.TlsConfigError as e:
+        print(f"ERRORE: {e}", file=sys.stderr)
+        sys.exit(1)
+
     if not no_browser:
-        threading.Thread(target=open_browser, daemon=True).start()
-        
-    uvicorn.run(app, host=host, port=port, log_level="info")
+        scheme = "https" if ssl_certfile else "http"
+        threading.Thread(target=open_browser, args=(scheme,), daemon=True).start()
+
+    uvicorn.run(app, host=host, port=port, log_level="info",
+                ssl_certfile=ssl_certfile, ssl_keyfile=ssl_keyfile)
 
 if __name__ == "__main__":
     main()

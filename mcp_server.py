@@ -30,6 +30,8 @@ import time
 
 import requests
 
+from redaction import redact
+
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "sentinelnet", "version": "1.0.0"}
 MAX_TEXT = 200_000   # limite prudenziale sul testo restituito a un client LLM
@@ -74,10 +76,12 @@ def api(method: str, path: str, params: dict = None, body: dict = None):
         except Exception:
             detail = r.text
         raise RuntimeError(f"HTTP {r.status_code}: {detail}")
+    # Redazione segreti (finding I-1): il risultato dei tool va a un client
+    # LLM esterno, quindi passa per lo stesso choke-point dell'assistente in-app.
     try:
-        return r.json()
+        return redact(r.json())
     except ValueError:
-        return r.text
+        return redact(r.text)
 
 
 # --- Definizione dei tool MCP ----------------------------------------------

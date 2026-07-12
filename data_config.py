@@ -49,6 +49,52 @@ def get_path(filename: str) -> str:
     return filename
 
 
+class TlsConfigError(Exception):
+    """Configurazione TLS nativa incompleta o non valida (fail-closed)."""
+    pass
+
+
+def resolve_tls_config():
+    """Risolve la configurazione TLS nativa opzionale (finding H-1).
+
+    Legge SENTINELNET_SSL_CERTFILE e SENTINELNET_SSL_KEYFILE. Ritorna
+    (certfile, keyfile) se entrambe presenti e leggibili, (None, None) se
+    entrambe assenti (HTTP invariato). Se ne è impostata una sola, o un file
+    non è leggibile, solleva TlsConfigError con messaggio in italiano
+    (il chiamante deve terminare con exit code != 0).
+
+    I percorsi relativi sono risolti rispetto a DATA_DIR, così il
+    comportamento è identico tra sorgente, exe e Docker.
+    """
+    cert = os.environ.get("SENTINELNET_SSL_CERTFILE", "").strip()
+    key = os.environ.get("SENTINELNET_SSL_KEYFILE", "").strip()
+    if not cert and not key:
+        return None, None
+    if not cert or not key:
+        missing = "SENTINELNET_SSL_CERTFILE" if not cert else "SENTINELNET_SSL_KEYFILE"
+        raise TlsConfigError(
+            f"Configurazione TLS incompleta: la variabile {missing} non è impostata. "
+            "Impostare entrambe le variabili SENTINELNET_SSL_CERTFILE e "
+            "SENTINELNET_SSL_KEYFILE, oppure nessuna delle due."
+        )
+    paths = {}
+    for var, value in (("SENTINELNET_SSL_CERTFILE", cert), ("SENTINELNET_SSL_KEYFILE", key)):
+        path = value if os.path.isabs(value) else os.path.join(DATA_DIR, value)
+        if not os.path.isfile(path):
+            raise TlsConfigError(
+                f"Il file indicato da {var} non esiste o non è leggibile: {path}"
+            )
+        try:
+            with open(path, "rb"):
+                pass
+        except OSError as e:
+            raise TlsConfigError(
+                f"Impossibile leggere il file indicato da {var} ({path}): {e}"
+            )
+        paths[var] = path
+    return paths["SENTINELNET_SSL_CERTFILE"], paths["SENTINELNET_SSL_KEYFILE"]
+
+
 def _migrate_legacy_files():
     """Migrazione una tantum: sposta i file di stato lasciati in CWD dalle
     versioni precedenti dentro DATA_DIR (senza toccare backup-config/ e

@@ -26,6 +26,8 @@ import time
 
 import requests
 
+from redaction import redact
+
 DEFAULT_TIMEOUT = 60
 
 # Modello di default sensato per provider quando l'utente non ne specifica uno.
@@ -401,6 +403,9 @@ def chat(messages, provider, model=None, api_key=None, base_url=None, timeout=DE
     """
     if not messages:
         raise AiAssistantError("Nessun messaggio da inviare.")
+    # Redazione segreti (finding I-1): unico punto di passaggio prima che il
+    # contesto lasci il processo verso qualunque provider LLM.
+    messages = [dict(m, content=redact(m.get("content", ""))) for m in messages]
     provider = (provider or "").strip().lower()
     if provider not in _PROVIDERS:
         raise AiAssistantError(f"Provider non supportato: '{provider}'.")
