@@ -51,7 +51,83 @@ from security_manager import (
 PORT = 8765
 BASE_URL = "https://euvdservices.enisa.europa.eu"
 
-app = FastAPI(title="SentinelNet API", version="0.2.0-beta.1")
+from contextlib import asynccontextmanager
+
+import db
+
+
+@asynccontextmanager
+async def lifespan(app: "FastAPI"):
+    """Avvio/arresto ordinato (fasi 2.4 + 3.6): (1) migrazione observability.db,
+    (2) writer DB, (3) listener UDP e job di retention se abilitati; chiusura
+    in ordine inverso con drain. Un errore in avvio fa terminare il processo
+    (fail-closed) con messaggio in italiano."""
+    try:
+        db.start_writer()  # esegue anche migrate() con guardia di versione
+    except db.SchemaTooNewError as e:
+        print(f"ERRORE: {e}", file=sys.stderr)
+        raise
+
+    handles = []
+    retention_task = None
+    cfg = data_config.obs_config()
+    if cfg["enabled"]:
+        from observability import rollup
+        from observability.ingesters import ipfix, sflow, syslog as syslog_parser
+        from observability.ingesters.udp_server import start_udp_listener
+        from routers import observability as _obs_router_mod
+        listeners = (
+            ("ipfix", cfg["ipfix"], ipfix.parse, "flow"),
+            ("sflow", cfg["sflow"], sflow.parse, "flow"),
+            ("syslog", cfg["syslog"], syslog_parser.parse, "syslog"),
+        )
+        for name, lcfg, parser, kind in listeners:
+            if not lcfg["enabled"]:
+                _obs_router_mod.listener_status[name] = {"active": False}
+                continue
+            try:
+                handles.append(await start_udp_listener(
+                    cfg["bind"], lcfg["port"], parser, kind, name))
+                _obs_router_mod.listener_status[name] = {
+                    "active": True, "bind": cfg["bind"], "port": lcfg["port"]}
+                print(f"Observability: listener {name} attivo su "
+                      f"{cfg['bind']}:{lcfg['port']} (UDP).")
+            except OSError as e:
+                from observability import metrics as _obs_metrics
+                _obs_metrics.inc("listener_bind_failed", listener=name)
+                _obs_router_mod.listener_status[name] = {
+                    "active": False, "error": str(e)}
+                print(f"ERRORE: bind del listener {name} su "
+                      f"{cfg['bind']}:{lcfg['port']} fallito ({e}). "
+                      "Listener saltato, l'applicazione resta attiva.",
+                      file=sys.stderr)
+        from observability import correlator
+        retention_task = asyncio.create_task(rollup.retention_loop(),
+                                             name="obs-retention")
+        app.state.obs_correlation_task = asyncio.create_task(
+            correlator.correlation_loop(), name="obs-correlation")
+
+    yield
+
+    if retention_task:
+        retention_task.cancel()
+        task = getattr(app.state, "obs_correlation_task", None)
+        if task:
+            task.cancel()
+    for handle in handles:
+        await handle.stop()
+    db.stop_writer()
+
+
+app = FastAPI(title="SentinelNet API", version="0.2.0-beta.1", lifespan=lifespan)
+
+# Router modulari (fase 2.2/2.3): percorsi identici al monolite pre-refactor.
+from routers import fortigate as _fortigate_router
+from routers import wlc as _wlc_router
+from routers import observability as _observability_router
+app.include_router(_fortigate_router.router)
+app.include_router(_wlc_router.router)
+app.include_router(_observability_router.router)
 
 _ws_tokens: dict[str, tuple[str, float]] = {}  # otp -> (username, timestamp)
 
@@ -105,91 +181,13 @@ def get_resource_path(relative_path):
 
 # --- DIPENDENZE DI AUTENTICAZIONE (JWT) ---
 
-SESSION_COOKIE = "net_session"
-# Metodi che modificano stato: su autenticazione via cookie richiedono la
-# prova anti-CSRF (header custom X-Requested-With, non impostabile cross-site
-# da un form; vedi docs/HARDENING.md).
-_CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-CSRF_HEADER = "x-requested-with"
-
-
-def get_current_user(request: Request,
-                     credentials: Optional[HTTPAuthorizationCredentials] = Security(security_scheme)):
-    # Doppia accettazione (L-1): Bearer per client programmatici (MCP, agent,
-    # script) e cookie HttpOnly per il browser.
-    token = credentials.credentials if credentials else request.cookies.get(SESSION_COOKIE)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Autenticazione richiesta. Token mancante o non valido."
-        )
-    if not credentials and request.method in _CSRF_METHODS:
-        # Autenticazione via cookie su richiesta che modifica stato: esigi la
-        # prova anti-CSRF. Il Bearer esplicito non è forgiabile cross-site.
-        if not request.headers.get(CSRF_HEADER):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Richiesta rifiutata: header anti-CSRF mancante."
-            )
-    payload = verify_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token non valido o scaduto."
-        )
-    sub = payload.get("sub")
-    # L'utente deve esistere ancora (gestisce account eliminati con token valido)
-    role = user_manager.get_role(sub)
-    if role is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non più valido.")
-    # Lockout immediato degli account disabilitati anche con token ancora valido
-    if user_manager.is_disabled(sub):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabilitato.")
-    # Allinea sempre il ruolo allo stato corrente su disco.
-    payload["role"] = role
-    return payload
-
-def require_role(*allowed):
-    """Dipendenza FastAPI: consente l'accesso solo ai ruoli indicati."""
-    def _dep(current_user = Depends(get_current_user)):
-        if current_user.get("role") not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Privilegi insufficienti per questa operazione."
-            )
-        return current_user
-    return _dep
-
-require_admin = require_role("admin")              # solo amministratori
-require_operator = require_role("admin", "operator")  # scritture/operazioni di rete
-
-# --- SCOPING PER SEDE/GRUPPO ---
-# Un utente operator/viewer può essere limitato dall'admin a un sottoinsieme di
-# sedi (gruppi). L'admin non ha restrizioni. Lista vuota = tutte le sedi.
-
-def user_group_scope(current_user):
-    """Set dei gruppi consentiti, oppure None se l'utente vede/gestisce tutto."""
-    if current_user.get("role") == "admin":
-        return None
-    groups = user_manager.get_user_groups(current_user.get("sub"))
-    return set(groups) if groups else None
-
-def assert_group_allowed(current_user, group):
-    scope = user_group_scope(current_user)
-    if scope is not None and group not in scope:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Sede '{group}' non consentita per il tuo profilo."
-        )
-
-def assert_device_allowed(current_user, ip):
-    """Verifica che il dispositivo (per IP) appartenga a una sede consentita.
-    Ritorna il device se trovato, None altrimenti (lascia gestire il 404 a valle)."""
-    device = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
-    if device is None:
-        return None
-    assert_group_allowed(current_user, device.get('Group', 'Generale'))
-    return device
+# Autenticazione e scoping multi-gruppo: spostati in routers/deps.py (fase 2.1).
+# Reimportati qui per compatibilità con il resto del monolite e con i test.
+from routers.deps import (  # noqa: F401
+    SESSION_COOKIE, CSRF_HEADER, get_current_user, require_role,
+    require_admin, require_operator, user_group_scope,
+    assert_group_allowed, assert_device_allowed,
+)
 
 def filter_map_to_scope(data, scope):
     """Riduce nodi e link della mappa alle sole sedi consentite."""
@@ -452,6 +450,7 @@ class AiChatSchema(BaseModel):
     attach_device_ip: Optional[str] = None  # allega la running-config di un dispositivo
     attach_tenant: Optional[str] = None  # allega il contesto completo di un tenant/sede (gruppo)
     attach_fortigate_ip: Optional[str] = None  # allega la config completa LIVE di un FortiGate (API/SSH)
+    attach_top_flows: bool = False   # allega il riassunto dei top flussi (observability, scoped)
 class SwitchProvisionSchema(BaseModel):
     """Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config
     per il significato di ciascun campo (tutti opzionali salvo hostname)."""
@@ -556,41 +555,6 @@ class FortiGateProvisionSerialSchema(FortiGateProvisionSchema):
     console_user: str = "admin"
     console_password: str = ""
 
-class FgtTokenSchema(BaseModel):
-    ip: str
-    token: str = ""                # vuoto = rimuove il token
-    port: int = 443
-    # Verifica TLS del certificato del FortiGate: default SICURO (True). Il
-    # token API è una credenziale a lunga vita: senza verifica un MITM sul path
-    # di management potrebbe intercettarlo. Disabilitabile esplicitamente solo
-    # per apparati con certificato self-signed non ancora fidato.
-    verify_tls: bool = True
-
-class FgtPolicyLookupSchema(BaseModel):
-    src_ip: str
-    dest: str                      # IP o FQDN di destinazione
-    protocol: str = "TCP"
-    dest_port: int = 443
-    srcintf: Optional[str] = None
-
-class FgtSessionQuerySchema(BaseModel):
-    src_ip: Optional[str] = None
-    dst_ip: Optional[str] = None
-    dst_port: Optional[int] = None
-    count: int = 100
-
-class FgtLogQuerySchema(BaseModel):
-    src_ip: Optional[str] = None
-    dst_ip: Optional[str] = None
-    action: Optional[str] = None   # accept | deny | ...
-    count: int = 100
-    log_device: str = "disk"       # disk | memory
-
-class FgtDiagnoseClientSchema(BaseModel):
-    client: str                    # IP o MAC del client da diagnosticare
-    dest: Optional[str] = None     # destinazione (IP/FQDN) per il policy lookup
-    dest_port: int = 443
-    protocol: str = "TCP"
 class McpSettingsSchema(BaseModel):
     disabled_tools: List[str] = []
 
@@ -2657,6 +2621,7 @@ def _fortigate_live_context(ip: str, current_user) -> str:
     """Contesto AI: configurazione completa LIVE di un FortiGate (API o SSH)
     più stato di sistema, per domande su policy, NAT, VPN, interfacce.
     Best-effort: se il FortiGate non risponde si riporta l'errore nel blocco."""
+    from routers.fortigate import _fgt_device
     device = _fgt_device(ip, current_user)
     lines = [f"## FortiGate {ip} — dati live"]
     try:
@@ -2841,6 +2806,11 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
         context_blocks.append(_tenant_context_block(payload.attach_tenant, current_user))
     if payload.attach_fortigate_ip:
         context_blocks.append(_fortigate_live_context(payload.attach_fortigate_ip, current_user))
+    if payload.attach_top_flows:
+        # Riassunto server-side (mai contesto raw assemblato dal browser),
+        # scoped per tenant; la redazione avviene nel choke-point di chat().
+        from observability.summary import top_flows_context
+        context_blocks.append(top_flows_context(user_group_scope(current_user)))
     if context_blocks:
         messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
 
@@ -3006,189 +2976,23 @@ def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current
     return result
 
 
-# --- FORTIGATE LIVE: osservabilità in tempo reale (REST API + fallback SSH) ---
-
-def _fgt_device(ip: str, current_user) -> dict:
-    """Risolve un IP in un dispositivo FortiGate dell'inventario, con verifica
-    di scoping per sede. 404 se assente, 400 se il vendor non è fortinet."""
-    device = assert_device_allowed(current_user, ip)
-    if device is None:
-        raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
-    if (device.get('Vendor') or '').lower() != 'fortinet':
-        raise HTTPException(status_code=400,
-                            detail=f"Il dispositivo {ip} non è un FortiGate (vendor='{device.get('Vendor')}').")
-    return device
-
-def _fgt_call(fn, *args, **kwargs):
-    try:
-        return fn(*args, **kwargs)
-    except fortigate_service.FortiGateError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-@app.get("/api/fortigate/tokens")
-def fgt_token_status(current_user = Depends(require_admin)):
-    """IP con token API configurato (i token non vengono mai restituiti)."""
-    return fortigate_service.token_status()
-
-@app.post("/api/fortigate/token")
-def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)):
-    """Salva (cifrato) il token REST API di un FortiGate; token vuoto lo rimuove."""
-    _fgt_device(payload.ip, current_user)
-    fortigate_service.set_api_token(payload.ip, payload.token,
-                                    port=payload.port, verify_tls=payload.verify_tls)
-    action = "configurato" if payload.token else "rimosso"
-    log_audit(f"Token API FortiGate {action} per '{payload.ip}' da '{current_user.get('sub')}'.")
-    return {"status": "success"}
-
-@app.get("/api/fortigate/{ip}/status")
-def fgt_status(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_system_status, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/interfaces")
-def fgt_interfaces(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_interfaces, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/arp")
-def fgt_arp(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_arp_table, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/dhcp-leases")
-def fgt_dhcp_leases(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_dhcp_leases, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/device-inventory")
-def fgt_device_inventory(ip: str, current_user = Depends(get_current_user)):
-    """Device identification FortiOS: MAC/IP/hostname/OS per client rilevato."""
-    return _fgt_call(fortigate_service.get_device_inventory, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/policies")
-def fgt_policies(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_firewall_policies, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/policy-stats")
-def fgt_policy_stats(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_policy_stats, _fgt_device(ip, current_user))
-
-@app.post("/api/fortigate/{ip}/policy-lookup")
-def fgt_policy_lookup(ip: str, payload: FgtPolicyLookupSchema,
-                      current_user = Depends(get_current_user)):
-    """Chiede al FortiGate quale policy matcherebbe il flusso indicato."""
-    return _fgt_call(fortigate_service.policy_lookup, _fgt_device(ip, current_user),
-                     payload.src_ip, payload.dest, protocol=payload.protocol,
-                     dest_port=payload.dest_port, srcintf=payload.srcintf)
-
-@app.post("/api/fortigate/{ip}/sessions")
-def fgt_sessions(ip: str, payload: FgtSessionQuerySchema,
-                 current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_sessions, _fgt_device(ip, current_user),
-                     src_ip=payload.src_ip, dst_ip=payload.dst_ip,
-                     dst_port=payload.dst_port, count=payload.count)
-
-@app.get("/api/fortigate/{ip}/routes")
-def fgt_routes(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_routes, _fgt_device(ip, current_user))
-
-@app.post("/api/fortigate/{ip}/logs")
-def fgt_logs(ip: str, payload: FgtLogQuerySchema,
-             current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_traffic_logs, _fgt_device(ip, current_user),
-                     src_ip=payload.src_ip, dst_ip=payload.dst_ip,
-                     action=payload.action, count=payload.count,
-                     log_device=payload.log_device)
-
-@app.get("/api/fortigate/{ip}/wifi/clients")
-def fgt_wifi_clients(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_wifi_clients, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/wifi/aps")
-def fgt_wifi_aps(ip: str, current_user = Depends(get_current_user)):
-    return _fgt_call(fortigate_service.get_managed_aps, _fgt_device(ip, current_user))
-
-@app.get("/api/fortigate/{ip}/full-config")
-def fgt_full_config(ip: str, current_user = Depends(require_operator)):
-    """Configurazione completa LIVE (contiene segreti: solo ruolo operator+)."""
-    log_audit(f"Full-config FortiGate richiesta per '{ip}' da '{current_user.get('sub')}'.")
-    return _fgt_call(fortigate_service.get_full_config, _fgt_device(ip, current_user))
-
-@app.post("/api/fortigate/{ip}/diagnose-client")
-def fgt_diagnose_client(ip: str, payload: FgtDiagnoseClientSchema,
-                        current_user = Depends(get_current_user)):
-    """Diagnosi aggregata di un client (IP o MAC): inventario device, ARP,
-    DHCP, sessioni, policy match verso una destinazione e ultimi log."""
-    device = _fgt_device(ip, current_user)
-    log_audit(f"Diagnosi client '{payload.client}' su FortiGate '{ip}' da '{current_user.get('sub')}'.")
-    return fortigate_service.diagnose_client(device, payload.client,
-                                             dest=payload.dest,
-                                             dest_port=payload.dest_port,
-                                             protocol=payload.protocol)
-
-
-# --- WLC LIVE: osservabilità wireless Cisco AireOS / Catalyst 9800 (SSH) ---
-
-_WLC_VENDORS = ("cisco_wlc", "cisco_9800", "cisco")
-
-def _wlc_device(ip: str, current_user) -> dict:
-    """Risolve un IP in un controller wireless Cisco dell'inventario, con
-    verifica di scoping per sede. Vendor 'cisco' generico è ammesso e
-    trattato come 9800/IOS-XE."""
-    device = assert_device_allowed(current_user, ip)
-    if device is None:
-        raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
-    if (device.get('Vendor') or '').lower() not in _WLC_VENDORS:
-        raise HTTPException(status_code=400,
-                            detail=f"Il dispositivo {ip} non è un WLC Cisco (vendor='{device.get('Vendor')}').")
-    return device
-
-def _wlc_query(ip, current_user, service, mac=None):
-    device = _wlc_device(ip, current_user)
-    try:
-        return wlc_service.query(device, service, mac=mac)
-    except wlc_service.WlcError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-@app.get("/api/wlc/{ip}/status")
-def wlc_status(ip: str, current_user = Depends(get_current_user)):
-    return _wlc_query(ip, current_user, "status")
-
-@app.get("/api/wlc/{ip}/ap-summary")
-def wlc_ap_summary(ip: str, current_user = Depends(get_current_user)):
-    return _wlc_query(ip, current_user, "ap_summary")
-
-@app.get("/api/wlc/{ip}/client-summary")
-def wlc_client_summary(ip: str, current_user = Depends(get_current_user)):
-    return _wlc_query(ip, current_user, "client_summary")
-
-@app.get("/api/wlc/{ip}/client/{mac}")
-def wlc_client_detail(ip: str, mac: str, current_user = Depends(get_current_user)):
-    return _wlc_query(ip, current_user, "client_detail", mac=mac)
-
-@app.get("/api/wlc/{ip}/wlan-summary")
-def wlc_wlan_summary(ip: str, current_user = Depends(get_current_user)):
-    return _wlc_query(ip, current_user, "wlan_summary")
-
-@app.get("/api/wlc/{ip}/rogue-aps")
-def wlc_rogue_aps(ip: str, current_user = Depends(get_current_user)):
-    return _wlc_query(ip, current_user, "rogue_aps")
-
-@app.get("/api/wlc/{ip}/interfaces")
-def wlc_interfaces(ip: str, current_user = Depends(get_current_user)):
-    return _wlc_query(ip, current_user, "interfaces")
-
-@app.get("/api/wlc/{ip}/diagnose-client/{mac}")
-def wlc_diagnose_client(ip: str, mac: str, current_user = Depends(get_current_user)):
-    """Diagnosi aggregata di un client wireless (dettaglio client + AP +
-    WLAN + rogue AP), sezioni best-effort."""
-    device = _wlc_device(ip, current_user)
-    log_audit(f"Diagnosi client WiFi '{mac}' su WLC '{ip}' da '{current_user.get('sub')}'.")
-    return wlc_service.diagnose_wifi_client(device, mac)
-
+# --- FORTIGATE / WLC LIVE: estratti nei router modulari (fase 2.2/2.3) ---
+# Vedi routers/fortigate.py e routers/wlc.py; inclusi in app più sotto.
 
 # --- MCP SERVER: controllo dei tool esposti ai client LLM esterni ---
 # Il catalogo dei tool vive in mcp_server.TOOLS (unica fonte); qui si gestisce
 # solo l'elenco dei tool DISABILITATI, persistito in app_settings.json ("mcp").
 
+# Tool disabilitati di default finché l'admin non salva una scelta esplicita
+# (Decisione #7 pendente: i dati di flusso verso LLM esterni sono opt-in).
+_MCP_DEFAULT_DISABLED = {"get_top_talkers", "get_anomalies"}
+
+
 def _mcp_disabled_tools() -> list:
-    mcp = get_app_settings().get("mcp", {}) or {}
+    mcp = get_app_settings().get("mcp")
+    if mcp is None:
+        # Nessuna configurazione salvata: vale il default (tool flussi spenti).
+        return sorted(t for t in _MCP_DEFAULT_DISABLED if t in mcp_server.TOOLS)
     return [t for t in (mcp.get("disabled_tools") or []) if t in mcp_server.TOOLS]
 
 @app.get("/api/mcp/settings")

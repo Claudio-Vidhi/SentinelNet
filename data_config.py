@@ -49,6 +49,40 @@ def get_path(filename: str) -> str:
     return filename
 
 
+def obs_config() -> dict:
+    """Configurazione dei listener di osservabilità (fase 3.6).
+
+    Default sicuri: TUTTO SPENTO (exe/desktop e Docker), bind su loopback,
+    porte alte non privilegiate (mai 514 in-process: mapping privilegiato solo
+    via Docker). ``0.0.0.0`` richiede opt-in esplicito.
+    """
+    def _flag(name, default="0"):
+        return os.environ.get(name, default).strip() in ("1", "true", "True")
+
+    enabled = _flag("SENTINELNET_OBS_ENABLE")
+    return {
+        "enabled": enabled,
+        "bind": os.environ.get("SENTINELNET_OBS_BIND", "127.0.0.1").strip(),
+        "ipfix": {
+            "enabled": enabled and _flag("SENTINELNET_OBS_IPFIX_ENABLE", "1"),
+            "port": int(os.environ.get("SENTINELNET_OBS_IPFIX_PORT", "4739")),
+        },
+        "sflow": {
+            "enabled": enabled and _flag("SENTINELNET_OBS_SFLOW_ENABLE", "1"),
+            "port": int(os.environ.get("SENTINELNET_OBS_SFLOW_PORT", "6343")),
+        },
+        "syslog": {
+            "enabled": enabled and _flag("SENTINELNET_OBS_SYSLOG_ENABLE", "1"),
+            "port": int(os.environ.get("SENTINELNET_OBS_SYSLOG_PORT", "5514")),
+        },
+        "retention_days": {
+            "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS", "30")),
+            "syslog_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_SYSLOG_DAYS", "7")),
+            "correlated_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS", "90")),
+        },
+    }
+
+
 class TlsConfigError(Exception):
     """Configurazione TLS nativa incompleta o non valida (fail-closed)."""
     pass

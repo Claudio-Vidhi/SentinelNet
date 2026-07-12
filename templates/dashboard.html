@@ -893,6 +893,9 @@
       <button class="tab-button" onclick="switchTab('tab-clientmap', this); arpClientSearch(); refreshArpStats();" data-i18n="tabClientMap">
         <i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)
       </button>
+      <button class="tab-button" onclick="switchTab('tab-flows', this); flowsTabShown();" data-i18n="tabFlows">
+        <i class="fa-solid fa-wave-square"></i> Flussi Live
+      </button>
       <button class="tab-button" onclick="switchTab('tab-config', this)" data-i18n="tabConfigAnalyzer">
         <i class="fa-solid fa-file-code"></i> Config Analyzer
       </button>
@@ -1413,6 +1416,72 @@
     </div>
 
     <!-- TAB: Config Analyzer -->
+    <div id="tab-flows" class="tab-content">
+      <h3 data-i18n="titleFlows">Flussi Live (Top Talker)</h3>
+      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descFlows">
+        Flussi di rete aggregati (IPFIX/NetFlow/sFlow) per sede, con anomalie correlate agli eventi di sicurezza. I listener si abilitano via variabili d'ambiente (vedi docs/HARDENING.md).
+      </p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+        <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="15m">Ultimi 15 minuti</option>
+          <option value="1h">Ultima ora</option>
+          <option value="24h">Ultime 24 ore</option>
+          <option value="7d">Ultimi 7 giorni</option>
+        </select>
+        <select id="flowsMetric" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="bytes">Per byte</option>
+          <option value="packets">Per pacchetti</option>
+        </select>
+        <button class="btn" onclick="loadTopTalkers()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
+          <input type="checkbox" id="flowsAutoRefresh" checked style="accent-color:var(--primary);">
+          Auto-aggiornamento (30s, in pausa se la scheda non è visibile)
+        </label>
+        <span id="flowsLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
+        <button class="btn requires-write" onclick="analyzeFlowsWithAi()" title="Invia un riassunto aggregato dei flussi all'assistente AI">
+          <i class="fa-solid fa-robot"></i> Analizza con AI
+        </button>
+      </div>
+      <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, #e0a800); margin-bottom:10px;"></div>
+      <div style="max-height:420px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead style="position:sticky; top:0; background:var(--surface-2);">
+            <tr style="font-size:12px; text-align:left;">
+              <th style="padding:8px;">#</th><th>Sede</th><th>Sorgente</th><th>Destinazione</th>
+              <th>Proto/Porta</th><th style="min-width:180px;">Traffico</th><th>Pacchetti</th><th>Flussi</th>
+            </tr>
+          </thead>
+          <tbody id="flowsTableBody">
+            <tr><td colspan="8" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 style="margin-top:24px;">Anomalie correlate</h4>
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+        <select id="anomStatus" onchange="loadAnomalies()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="new">Nuove</option>
+          <option value="ack">Prese in carico</option>
+          <option value="resolved">Risolte</option>
+          <option value="all">Tutte</option>
+        </select>
+        <button class="btn" onclick="loadAnomalies()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+      </div>
+      <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead style="position:sticky; top:0; background:var(--surface-2);">
+            <tr style="font-size:12px; text-align:left;">
+              <th style="padding:8px;">Quando</th><th>Sede</th><th>Tipo</th><th>Sorgente</th>
+              <th>Destinazione</th><th>Porta switch</th><th>Sev</th><th>Stato</th><th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="anomTableBody">
+            <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">Nessuna anomalia.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="tab-config" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
         <h3 data-i18n="titleConfigAnalyzer">Config Analyzer</h3>
@@ -2140,6 +2209,8 @@
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.",
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
+        tabFlows: '<i class="fa-solid fa-wave-square"></i> Flussi Live',
+        titleFlows: 'Flussi Live (Top Talker)',
         titleClientMap: "Client Map — MAC ↔ IP",
         descClientMap: "Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.",
         btnArpScan: '<i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)',
@@ -2552,6 +2623,8 @@
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Search and history of MAC addresses across the infrastructure: on which switch, interface/port-channel and VLAN a device is (or was) connected.",
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
+        tabFlows: '<i class="fa-solid fa-wave-square"></i> Flussi Live',
+        titleFlows: 'Flussi Live (Top Talker)',
         titleClientMap: "Client Map — MAC ↔ IP",
         descClientMap: "MAC ↔ IP matching for network clients, read from the ARP tables of whoever routes the VLANs (L3 switch or firewall), cross-referenced with the access port detected by the MAC Tracker. Devices that don't route VLANs are skipped automatically.",
         btnArpScan: '<i class="fa-solid fa-satellite-dish"></i> Collect ARP (L3 gateways)',
@@ -6699,6 +6772,7 @@
         { id: 'tab-categories', key: 'tabCategories' },
         { id: 'tab-security', key: 'tabSecurity' },
         { id: 'tab-mac', key: 'tabMacTracker' },
+        { id: 'tab-flows', key: 'tabFlows' },
         { id: 'tab-config', key: 'tabConfigAnalyzer' },
         { id: 'tab-ai', key: 'tabAiAssistant' },
         { id: 'tab-provisioner', key: 'tabProvisioner' },
@@ -9459,6 +9533,7 @@
         const attachInventory = document.getElementById('aiAttachInventory').checked;
         const attachDeviceIp = document.getElementById('aiAttachDeviceIp').value || null;
         const attachTenant = document.getElementById('aiAttachTenant')?.value || null;
+        const wasTopFlows = aiAttachTopFlowsOnce;
 
         const placeholder = appendAiMessage('assistant', '...');
 
@@ -9470,7 +9545,8 @@
                     messages: aiHistory,
                     attach_inventory: attachInventory,
                     attach_device_ip: attachDeviceIp,
-                    attach_tenant: attachTenant
+                    attach_tenant: attachTenant,
+                    attach_top_flows: aiAttachTopFlowsOnce
                 })
             });
             if (placeholder) placeholder.remove();
@@ -9491,6 +9567,193 @@
             appendAiMessage('assistant', 'Errore di rete: ' + e);
         } finally {
             if (sendBtn) sendBtn.disabled = false;
+            if (wasTopFlows) aiAttachTopFlowsOnce = false; // allegato una sola volta
+        }
+    }
+
+    // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
+    // Toast minimale non bloccante (il resto della dashboard usa alert()).
+    function showToast(msg, kind) {
+        const el = document.createElement('div');
+        el.textContent = msg;
+        el.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:9999;'
+            + 'padding:10px 16px; border-radius:10px; font-size:13px; color:#fff;'
+            + 'box-shadow:0 4px 16px rgba(0,0,0,0.35); background:'
+            + (kind === 'error' ? '#c0392b' : kind === 'warning' ? '#b9770e' : '#2c3e50') + ';';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+    }
+
+    // Autenticazione via cookie HttpOnly (apiFetch): nessun token lato JS.
+    let flowsRefreshTimer = null;
+    let flowsFetchInFlight = false;
+    let aiAttachTopFlowsOnce = false;
+
+    function flowsTabShown() {
+        loadTopTalkers();
+        loadAnomalies();
+        startFlowsAutoRefresh();
+    }
+
+    function startFlowsAutoRefresh() {
+        stopFlowsAutoRefresh();
+        flowsRefreshTimer = setInterval(() => {
+            const active = document.getElementById('tab-flows')?.classList.contains('active');
+            const auto = document.getElementById('flowsAutoRefresh')?.checked;
+            if (active && auto && !document.hidden) loadTopTalkers();
+        }, 30000);
+    }
+
+    function stopFlowsAutoRefresh() {
+        if (flowsRefreshTimer) { clearInterval(flowsRefreshTimer); flowsRefreshTimer = null; }
+    }
+
+    // Pausa quando la pagina non è visibile; refresh immediato al ritorno.
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden &&
+            document.getElementById('tab-flows')?.classList.contains('active')) {
+            loadTopTalkers();
+        }
+    });
+
+    function fmtBytes(b) {
+        if (!b) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(Math.floor(Math.log(b) / Math.log(1024)), units.length - 1);
+        return (b / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + units[i];
+    }
+
+    async function loadTopTalkers() {
+        if (flowsFetchInFlight) return;         // niente fetch sovrapposti
+        flowsFetchInFlight = true;
+        const tbody = document.getElementById('flowsTableBody');
+        try {
+            const w = document.getElementById('flowsWindow').value;
+            const m = document.getElementById('flowsMetric').value;
+            const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100`);
+            if (!res || !res.ok) {
+                if (res) tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">Errore nel caricamento dei flussi.</td></tr>`;
+                return;
+            }
+            const flows = (await res.json()).flows || [];
+            document.getElementById('flowsLastUpdate').textContent =
+                'Aggiornato: ' + new Date().toLocaleTimeString();
+            if (flows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>`;
+                return;
+            }
+            const maxVal = Math.max(...flows.map(f => m === 'bytes' ? f.total_bytes : f.total_packets));
+            tbody.innerHTML = flows.map((f, i) => {
+                const val = m === 'bytes' ? f.total_bytes : f.total_packets;
+                const pct = maxVal ? (val / maxVal * 100).toFixed(1) : 0;
+                const proto = ({6: 'TCP', 17: 'UDP', 1: 'ICMP'})[f.protocol] || f.protocol || '—';
+                return `<tr style="font-size:12px; border-top:1px solid var(--border);">
+                    <td style="padding:6px 8px;">${i + 1}</td>
+                    <td>${escapeHtml(f.tenant)}</td>
+                    <td><a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.src_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.src_ip)}</a></td>
+                    <td><a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.dst_ip)}</a></td>
+                    <td>${proto}/${f.dst_port ?? '—'}</td>
+                    <td><div style="display:flex; align-items:center; gap:8px;">
+                        <div style="flex:1; height:7px; background:var(--surface-3); border-radius:4px;"><div style="height:100%; width:${pct}%; background:var(--primary); border-radius:4px;"></div></div>
+                        <span style="min-width:64px;">${fmtBytes(f.total_bytes)}</span></div></td>
+                    <td>${f.total_packets}</td>
+                    <td>${f.flow_count}</td>
+                </tr>`;
+            }).join('');
+        } finally {
+            flowsFetchInFlight = false;
+        }
+    }
+
+    // Mappatura IP → nodo topologia: i nodi Vis.js usano l'IP del device come
+    // id (vedi loadInteractiveMap: n.id confrontato con globalDevices[].IP).
+    function highlightInTopology(ip) {
+        switchTab('tab-map-interactive',
+                  document.querySelector(`.tab-button[onclick*="'tab-map-interactive'"]`));
+        const tryFocus = (attempt) => {
+            if (networkInstance && networkInstance.body.data.nodes.get(ip)) {
+                networkInstance.selectNodes([ip]);
+                networkInstance.focus(ip, { scale: 1.3, animation: true });
+                return;
+            }
+            if (attempt < 20) { setTimeout(() => tryFocus(attempt + 1), 250); return; }
+            showToast('Nodo non presente nella topologia.', 'warning');
+        };
+        tryFocus(0);
+    }
+
+    async function analyzeFlowsWithAi() {
+        // Il contesto è assemblato e REDATTO lato server (attach_top_flows):
+        // il browser invia solo la domanda.
+        aiAttachTopFlowsOnce = true;
+        let providerName = '';
+        try {
+            const res = await apiFetch('/api/ai/profiles');
+            if (res && res.ok) {
+                const data = await res.json();
+                const active = (data.profiles || []).find(p => p.id === data.active_profile) || {};
+                providerName = active.provider || '';
+            }
+        } catch (e) { /* nome provider best-effort */ }
+        const note = document.getElementById('flowsAiNote');
+        note.style.display = 'block';
+        note.textContent = '⚠️ I dati aggregati dei flussi (riassunto top-N, con segreti redatti) '
+            + 'verranno inviati al provider AI configurato'
+            + (providerName ? ` (${providerName})` : '') + '.';
+        switchTab('tab-ai', document.querySelector(`.tab-button[onclick*="'tab-ai'"]`));
+        const input = document.getElementById('aiChatInput');
+        input.value = 'Analizza i flussi di rete allegati: individua i top talker anomali, '
+            + 'possibili esfiltrazioni o scansioni, e correla con le anomalie aperte.';
+        input.focus();
+    }
+
+    async function loadAnomalies() {
+        const tbody = document.getElementById('anomTableBody');
+        const status = document.getElementById('anomStatus').value;
+        const res = await apiFetch(`/api/observability/anomalies?status=${encodeURIComponent(status)}&window=7d&limit=100`);
+        if (!res || !res.ok) return;
+        const rows = (await res.json()).anomalies || [];
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">Nessuna anomalia.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows.map(a => {
+            const when = new Date(a.created_ts * 1000).toLocaleString();
+            const actions = [];
+            if (a.status === 'new') {
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'ack')">Prendi in carico</button>`);
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'resolved')">Risolvi</button>`);
+            } else if (a.status === 'ack') {
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'ack', 'resolved')">Risolvi</button>`);
+            }
+            return `<tr style="font-size:12px; border-top:1px solid var(--border);">
+                <td style="padding:6px 8px;">${when}</td>
+                <td>${escapeHtml(a.tenant)}</td>
+                <td>${escapeHtml(a.kind || '—')}</td>
+                <td>${escapeHtml(a.src_ip || '—')}</td>
+                <td>${escapeHtml(a.dst_ip || '—')}</td>
+                <td>${escapeHtml(a.switch_port || '—')}</td>
+                <td>${a.severity ?? '—'}</td>
+                <td>${escapeHtml(a.status)}</td>
+                <td style="display:flex; gap:4px;">${actions.join('')}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function anomTransition(id, fromStatus, toStatus) {
+        const res = await apiFetch(`/api/observability/anomalies/${id}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from_status: fromStatus, status: toStatus })
+        });
+        if (res && res.ok) {
+            loadAnomalies();
+        } else if (res && res.status === 409) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Stato cambiato nel frattempo: ricarico.', 'warning');
+            loadAnomalies();
+        } else if (res) {
+            showToast('Operazione non riuscita.', 'error');
         }
     }
 

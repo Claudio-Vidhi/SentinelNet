@@ -132,7 +132,30 @@ Dal fix del finding **L-1** la sessione browser non usa più `sessionStorage`:
 - Il logout (`POST /api/auth/logout`) cancella il cookie; il JWT è stateless e
   scade comunque entro 60 minuti.
 
-## 4. Altre raccomandazioni
+## 4. Listener di osservabilità (IPFIX/sFlow/syslog)
+
+Spenti di default ovunque (exe e Docker). Abilitazione via env:
+
+```
+SENTINELNET_OBS_ENABLE=1          # master switch
+SENTINELNET_OBS_BIND=127.0.0.1    # 0.0.0.0 solo con opt-in esplicito
+SENTINELNET_OBS_IPFIX_PORT=4739   SENTINELNET_OBS_IPFIX_ENABLE=1
+SENTINELNET_OBS_SFLOW_PORT=6343   SENTINELNET_OBS_SFLOW_ENABLE=1
+SENTINELNET_OBS_SYSLOG_PORT=5514  SENTINELNET_OBS_SYSLOG_ENABLE=1
+SENTINELNET_OBS_RETENTION_FLOWS_DAYS=30   # _SYSLOG_DAYS=7, _EVENTS_DAYS=90
+```
+
+- **Mai la porta 514 in-process**: usare 5514 e, se serve la 514 standard,
+  mapparla solo dal Docker compose (`"514:5514/udp"`).
+- L'ingest UDP non è autenticato: esporlo SOLO su reti di management fidate.
+  I datagrammi da IP non presenti in inventario sono scartati e messi in
+  quarantena (tabella `quarantined_exporters`, voce di audit oraria).
+- **Limite noto (NAT)**: l'attribuzione tenant usa l'IP sorgente del
+  datagramma; exporter dietro NAT verrebbero attribuiti male e vanno gestiti
+  con il relay di sede (fase 6.3 del piano), non esponendo l'UDP sulla VPN.
+- Diagnostica: `GET /api/observability/health` (solo admin).
+
+## 5. Altre raccomandazioni
 
 - Non pubblicare mai la porta 8765 direttamente su Internet.
 - Limitare l'accesso al pannello a VPN/rete di gestione.
