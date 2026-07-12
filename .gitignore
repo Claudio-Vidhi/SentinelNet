@@ -72,3 +72,11 @@ credentials.json
 service-account*.json
 
 app_settings.json
+
+# Observability DB (runtime data, never commit)
+observability.db
+observability.db-wal
+observability.db-shm
+
+# Local API key (never commit)
+c_api_key.txt
