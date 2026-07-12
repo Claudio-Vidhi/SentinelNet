@@ -747,4 +747,99 @@ Defaults in **bold** apply if no decision is recorded before the blocking item s
 
 ---
 
+## 9. Network-Admin Clarifications (Finalized 2026-07-12)
+
+Six clarifications requested by the owner, resolved against the codebase at commit `8bef15b`. Steps are ordered for direct pickup by execution agents. Each area ends with a **rebuild gate**: run `scripts/build.ps1` (Area 9.6) and confirm the smoke test before starting the next area.
+
+**Execution order:** 9.6 (build script only) → 9.1 → 9.4 → 9.3 → 9.2 → 9.5 → 9.6 (CI workflow) → 9.7 (bugfix, anytime).
+
+### 9.1 SSH flexibility — non-standard SSH ports
+
+**Current state:** no port stored anywhere. `core_engine.py` builds Netmiko `device_params` in three places (`run_backup_and_triage` ~L229, `send_custom_command` ~L331, `run_bulk_command` ~L372) with no `port` key → always 22. Reachability pre-check `is_reachable(ip, port=22)` at `core_engine.py:150` is hardcoded. Inventory CSV fieldnames (`inventory_manager.py:82`) have no port column.
+
+**Design:** one optional `SSH Port` CSV column, default 22. Netmiko already accepts `port` — no abstraction needed.
+
+Steps:
+1. `inventory_manager.py`: add `'SSH Port'` to `_fieldnames`; `add_or_update_device` gains `ssh_port=22` (validate 1–65535); `get_all_devices` defaults blank/missing to 22 (legacy rows).
+2. `core_engine.py`: helper `get_device_port(device) -> int` (tolerant parse, fallback 22); add `'port': get_device_port(device)` to all three `device_params`; pass the port to the three `is_reachable` calls.
+3. `fortigate_service.ssh_command` (~L118): pass SSH port from device record (distinct from the REST port already stored per-token in `data/fortigate_tokens.json`).
+4. `app_server.py`: optional `ssh_port` in device create/update schema; `templates/dashboard.html`: numeric "SSH Port" field (default 22) in add/edit form and inventory render.
+
+Tests: CSV round-trip with port 2222; legacy row → 22; invalid port rejected.
+
+### 9.2 API observability — REST context gathering for the GUI
+
+**Current state:** REST-primary/SSH-fallback fully built for FortiGate (`fortigate_service.py`): encrypted per-IP token store `data/fortigate_tokens.json` (`{token_enc, port, verify_tls}`), `_api_or_ssh` helper, ~15 `get_*` calls. GUI hits devices live per view.
+
+**Design:** no generic multi-vendor REST framework (speculative). Reuse FortiGate service; add a thin periodic **poller** that ingests summarized REST results into the observability DB so GUI/AI read cached data.
+
+Step-by-step mechanism (GUI → device):
+1. Admin stores API token per device (existing `set_api_token`); token encrypted at rest, port + TLS-verify per device.
+2. New `observability/ingesters/api_poller.py`: async loop started from `lifespan` when obs enabled; every `SENTINELNET_OBS_API_POLL_S` seconds (default 300, 0 = off) calls a fixed set of `fortigate_service.get_*` per tokened device, reduces each payload to a compact summary, writes via `db.enqueue_write`.
+3. New table `api_observations(ts, tenant, device_ip, kind, summary_json)` in `observability/storage/schema.sql` (bump `SCHEMA_VERSION`, forward-only migration).
+4. New `GET /api/observability/api-context?device_ip=` in `routers/observability.py`, tenant-scoped via existing `_tenant_filter`.
+5. GUI observability tab: panel rendering latest interface/session/wifi summaries + "Refresh now" one-shot poll.
+6. AI keeps live `attach_fortigate_ip` path; falls back to cached `api_observations` when device unreachable.
+
+Tests: poller reduces mocked `get_interfaces` into summary row with correct tenant; endpoint returns only in-scope rows.
+
+### 9.3 Tenant management — multiple devices per tenant in AI Assistant tab
+
+**Current state:** `AiChatSchema` (`app_server.py:447`) supports only single `attach_device_ip` / single `attach_tenant`. `_tenant_context_block` (~L2642) and `ai_assistant.build_tenant_context` already format device lists.
+
+**Design:** per-request multi-select, validated server-side against user scope. No persistent data model (YAGNI).
+
+Steps:
+1. `AiChatSchema`: add `attach_device_ips: List[str] = []`.
+2. `ai_chat` handler: validate each IP via `assert_device_allowed` (403 out-of-scope), build context by feeding filtered device list into `ai_assistant.build_tenant_context` + freshest running-config snippets via `_device_running_config_context`; cap total size.
+3. GUI (`dashboard.html:1605-1618`): tenant `<select>` populates a multi-select checkbox list of that tenant's devices (extend `populateAiAttachDevices`); checked IPs posted as `attach_device_ips`. Keep `attach_tenant` as "select all" convenience.
+
+Tests: context includes only requested+in-scope devices; out-of-scope IP → 403; empty list = current behavior.
+
+### 9.4 Data redaction toggle
+
+**Current state:** `ai_assistant.chat` unconditionally redacts (`ai_assistant.py:408`, `redaction.redact`). Providers: anthropic/openai/gemini/ollama; only ollama is local.
+
+**Design:** per-AI-profile boolean `allow_unredacted` (default False). Enforcement stays at the single choke-point in `chat()`. Unredacted permitted **only if** the profile allows it **and** the provider is local (ollama, or base_url on loopback/RFC1918). Public providers always redacted — fail-closed, toggle ignored.
+
+Steps:
+1. `ai_assistant.chat`: param `allow_unredacted=False`; `_is_local_base_url()` (loopback/RFC1918); skip `redact()` only when `allow_unredacted and is_local`.
+2. `app_server.py`: `allow_unredacted` in profile schemas (~L438), persisted in `app_settings.json` profiles, passed through `_mask_ai_profile` (non-secret); `ai_chat` forwards it.
+3. Server-side guard: reject profile create/update setting the flag on a non-local provider (defense in depth).
+4. GUI profile editor: checkbox "Invia configurazioni non redatte (solo LLM locale attendibile)", greyed unless provider is local.
+
+Tests: unredacted only for ollama/local base_url; public provider + toggle on still redacts; toggle+public provider rejected at create.
+
+### 9.5 NetFlow pipeline — active ingestion from exporter streams
+
+**Current state (mostly built — Phase 3):** `observability/ingesters/ipfix.py` decodes IPFIX + NetFlow v9 + v5 with template cache; sflow/syslog parsers; bounded-queue async UDP listeners on dedicated loop (`udp_server.py`) with tenant attribution via `inventory_manager.get_device_by_ip`; SQLite `flow_aggregates` etc.; rollup/retention/correlator; `routers/observability.py` (`/top`, `/anomalies`, `/health`). Gated by `SENTINELNET_OBS_*` env vars. **Default IPFIX port is 4739 — the classic NetFlow port 2055 is not bound.**
+
+Data path (exporter → GUI): device exports NetFlow/IPFIX datagrams → UDP listener (bounded queue, dedicated loop) → parser normalizes records → exporter IP mapped to tenant (unknown exporters quarantined) → batched writer aggregates into `flow_aggregates` → rollup/retention jobs → tenant-scoped REST endpoints → Live Flows tab.
+
+Gaps to close:
+1. `data_config.obs_config`: add `netflow` listener block, `SENTINELNET_OBS_NETFLOW_PORT` default **2055**, enabled flag; verify `ipfix.parse` on pure v5/v9 datagrams.
+2. `app_server.py` lifespan (~L79): add `("netflow", cfg["netflow"], ipfix.parse, "flow")` to the listeners tuple.
+3. Admin GUI config surface: `GET/POST /api/observability/config` reading/writing enable flags + ports in `app_settings.json` (env stays as override); listeners start at boot, so toggling requires restart (document) or reuse `ListenerHandle.stop()`/`start_udp_listener`.
+4. GUI: listener status panel (from `/health`), per-listener enable+port form, top-talkers/flows-by-tenant views (data already served by `/top`).
+
+Tests: captured v5 and v9 datagrams → normalized records with correct exporter/tenant; config endpoint admin-scoping.
+
+### 9.6 Continuous .exe rebuild pipeline (execution phase)
+
+**Current state:** only `SentinelNet.spec`; no scripts, no CI.
+
+Steps:
+1. `scripts/build.ps1`: `pyinstaller --clean --noconfirm SentinelNet.spec` + smoke test (launch `dist/SentinelNet.exe`, health-probe, kill) — stand this up **first**, before Area 9.1.
+2. `scripts/watch-build.ps1`: `FileSystemWatcher` on `*.py`, `templates/`, `drivers/`, `observability/` with debounce → invokes `build.ps1` (the continuous-rebuild loop during execution).
+3. `.github/workflows/build.yml` (windows-latest): install deps, run pytest, run `build.ps1`, upload `dist/SentinelNet.exe` artifact per push — lands last.
+4. Milestone gate: after each of 9.1–9.5, run `build.ps1`; smoke test must pass before the next area starts.
+
+### 9.7 Bugfix — normal Port-Channels wrongly labeled vPC
+
+**Root cause:** the topology map guesses vPC peer-links from **hostnames alone**. `looksLikePeerPair()` (`templates/dashboard.html:5214-5220`) declares two nodes vPC peers if their hostnames share a prefix and differ only by a trailing `1/2` or `A/B` (e.g. `SW1`/`SW2`). Any port-channel between such a pair is then typed `peer` and labeled `poX/vpc` (`dashboard.html:5286-5303`) and drawn green — even on plain IOS switches with no vPC. Same heuristic drives the mgmt↔mgmt "peer-keepalive" label.
+
+**Fix (execution phase):** only classify a link as vPC when backed by device data: device platform is NX-OS **and** `show vpc` / collected vPC state confirms the port-channel is a peer-link (or has a vPC number). Backend should set an explicit `is_vpc_peerlink` / `vpc_id` flag on the link record; frontend uses that flag and drops the hostname heuristic (or keeps it only as a last-resort visual hint clearly marked as guessed). Until fixed, expect false `po.../vpc` labels on any paired hostnames.
+
+---
+
 *End of Master Implementation Plan (Final). Verify freshness against commit `6fcb9039` before execution — in particular the actual startup mechanism (2.4), the live endpoint inventory (2.2/2.3), and the Vis.js node model (5.3). Re-run `graphify update .` after each phase merges.*
