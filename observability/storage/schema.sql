@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS correlated_events (
 CREATE INDEX IF NOT EXISTS idx_corr_tenant_status
     ON correlated_events(tenant, status);
 
+-- 5. OSSERVAZIONI API (schema v2, §9.2): snapshot periodici via REST poller.
+CREATE TABLE IF NOT EXISTS api_observations (
+    id           INTEGER PRIMARY KEY,
+    ts           INTEGER NOT NULL,
+    tenant       TEXT NOT NULL,
+    device_ip    TEXT NOT NULL,
+    kind         TEXT NOT NULL,            -- system_status | interfaces | sessions | wifi_clients ...
+    summary_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_apiobs_device_kind_ts
+    ON api_observations(device_ip, kind, ts);
+
 -- 4. EXPORTER SCONOSCIUTI in quarantena (ingest 3.5)
 CREATE TABLE IF NOT EXISTS quarantined_exporters (
     exporter_ip  TEXT PRIMARY KEY,

@@ -113,9 +113,10 @@ def api_get(ip: str, path: str, params: dict = None, timeout: int = 30):
 def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
     """Esegue un comando CLI FortiOS via Netmiko e ritorna l'output testuale."""
     from netmiko import ConnectHandler
-    from core_engine import get_device_credentials
+    from core_engine import get_device_credentials, get_device_port
     username, password, _secret = get_device_credentials(device)
     params = {"device_type": "fortinet", "host": device["IP"],
+              "port": get_device_port(device),
               "username": username, "password": password,
               "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15}
     try:

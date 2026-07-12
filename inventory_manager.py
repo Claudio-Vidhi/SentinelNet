@@ -79,7 +79,7 @@ def safe_write_hosts_csv(devices):
     temp_filename = HOSTS_CSV + ".tmp"
     # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
-    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site']
+    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port']
     try:
         with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
@@ -118,6 +118,9 @@ def get_all_devices():
             # Inventari legacy senza colonna 'Site': default alla sede centrale.
             if not row.get('Site'):
                 row['Site'] = 'central'
+            # Inventari legacy senza colonna 'SSH Port': default 22.
+            if not row.get('SSH Port'):
+                row['SSH Port'] = '22'
             devices.append(row)
     return devices
 
@@ -159,11 +162,19 @@ def get_device_by_ip(ip: str):
         return _device_ip_cache.get(ip)
 
 
-def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None):
+def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None, ssh_port=None):
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
         raise ValueError(f"IP non valido: {ip}")
+    # ssh_port=None = preserva la porta del dispositivo esistente (o 22).
+    if ssh_port is not None:
+        try:
+            ssh_port = int(ssh_port)
+        except (TypeError, ValueError):
+            raise ValueError(f"Porta SSH non valida: {ssh_port}")
+        if not (1 <= ssh_port <= 65535):
+            raise ValueError(f"Porta SSH non valida: {ssh_port}")
 
     enc_password = crypto_vault.encrypt_password(password)
     enc_secret = crypto_vault.encrypt_password(enable_secret)
@@ -175,6 +186,8 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
         existing_hostname = existing.get('Hostname') if existing else None
         # Preserva la sede esistente se non ne viene indicata una nuova.
         resolved_site = site or (existing.get('Site') if existing else None) or 'central'
+        resolved_port = ssh_port if ssh_port is not None else \
+            ((existing.get('SSH Port') if existing else None) or 22)
         devices = [d for d in devices if d['IP'] != ip]
 
         new_device = {
@@ -182,6 +195,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
             'Group': group if group in get_all_groups() else 'Generale',
             'Site': resolved_site,
+            'SSH Port': str(resolved_port),
         }
         if existing_hostname:
             new_device['Hostname'] = existing_hostname

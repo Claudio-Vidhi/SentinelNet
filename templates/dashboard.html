@@ -814,7 +814,15 @@
           <input id="devIp" type="text" placeholder="10.0.0.1">
         </div>
       </div>
-      
+
+      <div class="form-group">
+        <label data-i18n="lblSshPort">Porta SSH</label>
+        <div class="input-wrapper">
+          <i class="fa-solid fa-plug"></i>
+          <input id="devSshPort" type="number" min="1" max="65535" value="22">
+        </div>
+      </div>
+
       <div class="form-group">
         <label data-i18n="lblVendor">Vendor Engine</label>
         <div class="input-wrapper">
@@ -1589,6 +1597,12 @@
               <label data-i18n="lblAiRateLimit">Limite richieste/min</label>
               <input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" style="padding-left:12px;">
             </div>
+            <div class="form-group" style="min-width:260px;">
+              <label style="font-size:13px; display:flex; align-items:center; gap:6px; margin-top:22px;">
+                <input type="checkbox" id="aiAllowUnredacted">
+                <span data-i18n="lblAiAllowUnredacted">Invia config non redatte (solo LLM locale attendibile)</span>
+              </label>
+            </div>
           </div>
           <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
             <button class="btn btn-primary" style="width:auto;" onclick="saveAiSettings()" data-i18n="btnAiSaveSettings">
@@ -1606,8 +1620,7 @@
         <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
           <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
         </label>
-        <select id="aiAttachDeviceIp" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
-          <option value="" data-i18n="optAiNoDevice">Nessuna config allegata</option>
+        <select id="aiAttachDeviceIp" multiple size="3" title="Ctrl+click per selezionare più dispositivi" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; min-width:220px;">
         </select>
         <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           <option value="" data-i18n="optAiNoTenant">Nessuna sede/tenant allegata</option>
@@ -2172,6 +2185,7 @@
         titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Provisioning Apparato',
         lblGroup: "Assegna a Tenant",
         lblIp: "IP Apparato",
+        lblSshPort: "Porta SSH",
         lblVendor: "Vendor Engine",
         lblProfile: "Profilo Credenziali",
         optProfileDefault: "Profilo Rete Standard",
@@ -2251,6 +2265,7 @@
         lblAiApiKey: "API Key",
         lblAiBaseUrl: "Endpoint locale (Ollama)",
         lblAiRateLimit: "Limite richieste/min",
+        lblAiAllowUnredacted: "Invia config non redatte (solo LLM locale attendibile)",
         optAiModelCustom: "-- modello personalizzato --",
         btnAiRefreshModelsTitle: "Aggiorna elenco modelli",
         optAiNoProvider: "-- seleziona provider --",
@@ -2586,6 +2601,7 @@
         titleProvisioning: '<i class="fa-solid fa-circle-plus"></i> Device Provisioning',
         lblGroup: "Assign to Tenant",
         lblIp: "Device IP",
+        lblSshPort: "SSH Port",
         lblVendor: "Vendor Engine",
         lblProfile: "Credentials Profile",
         optProfileDefault: "Standard Network Profile",
@@ -2662,6 +2678,7 @@
         lblAiApiKey: "API Key",
         lblAiBaseUrl: "Local endpoint (Ollama)",
         lblAiRateLimit: "Requests/min limit",
+        lblAiAllowUnredacted: "Send unredacted configs (trusted local LLM only)",
         optAiModelCustom: "-- custom model --",
         btnAiRefreshModelsTitle: "Refresh model list",
         optAiNoProvider: "-- select a provider --",
@@ -3665,7 +3682,8 @@
             username: document.getElementById('devUser').value,
             password: document.getElementById('devPass').value,
             enable_secret: document.getElementById('devSecret').value,
-            group: document.getElementById('devGroupSelect').value
+            group: document.getElementById('devGroupSelect').value,
+            ssh_port: parseInt(document.getElementById('devSshPort').value, 10) || 22
         };
 
         if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
@@ -5208,6 +5226,16 @@
         // Nexus-B) dagli hostname, e info di raggruppamento per i contenitori Sede.
         const labelById = {};
         nodeData.forEach(n => { labelById[n.id] = n.label || n.id; });
+        // vPC esiste solo su NX-OS: la coppia peer va confermata dalla
+        // piattaforma (modello/platform Nexus), altrimenti un normale
+        // Port-channel tra "SW1"/"SW2" verrebbe etichettato a torto "poX/vpc"
+        // (fix §9.7 del piano). Heuristica hostname mantenuta SOLO come
+        // condizione aggiuntiva, mai da sola.
+        const isNxos = {};
+        nodeData.forEach(n => {
+            isNxos[n.id] = /nexus|nx-?os|\bn[359]k\b/i.test(
+                [n.model, n.platform, n.version].filter(Boolean).join(' '));
+        });
         const isMgmtPort = p => /mgmt|ma\d|management/i.test(p || '');
         // Due nodi formano una coppia peer se gli hostname condividono lo stesso
         // prefisso e differiscono solo per il suffisso finale (1/2, A/B, _1/_2…).
@@ -5246,8 +5274,12 @@
             const emphasize = isPC && highlightPC;
             // Peer vPC: mgmt0↔mgmt0 = peer-keepalive; PortChannel tra una coppia di
             // peer (hostname appaiati) = peer-link. Entrambi resi in verde.
-            const isKeepalive = isMgmtPort(l.local_port) && isMgmtPort(l.remote_port);
-            const isPeerLink  = isPC && looksLikePeerPair(labelById[l.source], labelById[l.target]);
+            // Entrambi gli estremi devono essere NX-OS (o il backend deve
+            // marcare esplicitamente l.is_vpc): mai vPC su piattaforme IOS.
+            const bothNxos = !!(isNxos[l.source] && isNxos[l.target]);
+            const isKeepalive = bothNxos && isMgmtPort(l.local_port) && isMgmtPort(l.remote_port);
+            const isPeerLink  = isPC && (l.is_vpc === true ||
+                (bothNxos && looksLikePeerPair(labelById[l.source], labelById[l.target])));
 
             const localPorts  = (Array.isArray(l.local_ports)  && l.local_ports.length)  ? l.local_ports  : [l.local_port];
             const remotePorts = (Array.isArray(l.remote_ports) && l.remote_ports.length) ? l.remote_ports : [l.remote_port];
@@ -9262,14 +9294,14 @@
         const sel = document.getElementById('aiAttachDeviceIp');
         if (!sel) return;
         const tenant = document.getElementById('aiAttachTenant')?.value || '';
-        const cur = sel.value;
+        // Multi-selezione: preserva gli IP già selezionati che restano visibili.
+        const cur = new Set([...sel.selectedOptions].map(o => o.value));
         const devices = (globalDevices || []).filter(d =>
             !tenant || (d.Group || 'Generale') === tenant);
-        const opts = devices.map(d =>
+        sel.innerHTML = devices.map(d =>
             `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`
         ).join('');
-        sel.innerHTML = `<option value="">${i18n[currentLang].optAiNoDevice}</option>` + opts;
-        sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+        [...sel.options].forEach(o => { o.selected = cur.has(o.value); });
     }
 
     function loadAiTab() {
@@ -9363,6 +9395,7 @@
             document.getElementById('aiModel').value = '';
             document.getElementById('aiBaseUrl').value = '';
             document.getElementById('aiRateLimitRpm').value = 0;
+            document.getElementById('aiAllowUnredacted').checked = false;
             apiKeyInput.value = '';
             apiKeyInput.placeholder = i18n[currentLang].phAiApiKeyEmpty || 'Inserisci una API key';
             document.getElementById('btnAiDeleteProfile').style.display = 'none';
@@ -9374,6 +9407,7 @@
             document.getElementById('aiModel').value = p.model || '';
             document.getElementById('aiBaseUrl').value = p.base_url || '';
             document.getElementById('aiRateLimitRpm').value = p.rate_limit_rpm || 0;
+            document.getElementById('aiAllowUnredacted').checked = !!p.allow_unredacted;
             apiKeyInput.value = '';
             apiKeyInput.placeholder = p.api_key_set
                 ? (i18n[currentLang].phAiApiKeySet || '•••••• (già impostata, lascia vuoto per non modificare)')
@@ -9452,6 +9486,7 @@
             model: document.getElementById('aiModel').value.trim(),
             base_url: document.getElementById('aiBaseUrl').value.trim(),
             rate_limit_rpm: parseInt(document.getElementById('aiRateLimitRpm').value, 10) || 0,
+            allow_unredacted: document.getElementById('aiAllowUnredacted').checked,
         };
         const key = document.getElementById('aiApiKey').value;
         if (key) body.api_key = key;
@@ -9531,7 +9566,7 @@
         appendAiMessage('user', text);
 
         const attachInventory = document.getElementById('aiAttachInventory').checked;
-        const attachDeviceIp = document.getElementById('aiAttachDeviceIp').value || null;
+        const attachDeviceIps = [...document.getElementById('aiAttachDeviceIp').selectedOptions].map(o => o.value);
         const attachTenant = document.getElementById('aiAttachTenant')?.value || null;
         const wasTopFlows = aiAttachTopFlowsOnce;
 
@@ -9544,7 +9579,7 @@
                 body: JSON.stringify({
                     messages: aiHistory,
                     attach_inventory: attachInventory,
-                    attach_device_ip: attachDeviceIp,
+                    attach_device_ips: attachDeviceIps,
                     attach_tenant: attachTenant,
                     attach_top_flows: aiAttachTopFlowsOnce
                 })

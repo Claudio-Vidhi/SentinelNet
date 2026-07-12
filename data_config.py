@@ -56,25 +56,53 @@ def obs_config() -> dict:
     porte alte non privilegiate (mai 514 in-process: mapping privilegiato solo
     via Docker). ``0.0.0.0`` richiede opt-in esplicito.
     """
-    def _flag(name, default="0"):
-        return os.environ.get(name, default).strip() in ("1", "true", "True")
+    # Base: sezione "observability" di app_settings.json (config da GUI, §9.5);
+    # le variabili d'ambiente, se impostate, hanno la precedenza. I listener
+    # partono all'avvio: le modifiche richiedono riavvio.
+    try:
+        import json as _json
+        with open(get_path("app_settings.json"), encoding="utf-8") as _f:
+            _saved = (_json.load(_f) or {}).get("observability", {}) or {}
+    except Exception:
+        _saved = {}
 
-    enabled = _flag("SENTINELNET_OBS_ENABLE")
+    def _flag(name, key, default=False):
+        env = os.environ.get(name)
+        if env is not None:
+            return env.strip() in ("1", "true", "True")
+        return bool(_saved.get(key, default))
+
+    def _port(name, key, default):
+        env = os.environ.get(name)
+        if env is not None:
+            return int(env)
+        return int(_saved.get(key, default))
+
+    enabled = _flag("SENTINELNET_OBS_ENABLE", "enabled")
     return {
         "enabled": enabled,
-        "bind": os.environ.get("SENTINELNET_OBS_BIND", "127.0.0.1").strip(),
+        "bind": os.environ.get("SENTINELNET_OBS_BIND",
+                               _saved.get("bind", "127.0.0.1")).strip(),
         "ipfix": {
-            "enabled": enabled and _flag("SENTINELNET_OBS_IPFIX_ENABLE", "1"),
-            "port": int(os.environ.get("SENTINELNET_OBS_IPFIX_PORT", "4739")),
+            "enabled": enabled and _flag("SENTINELNET_OBS_IPFIX_ENABLE", "ipfix_enabled", True),
+            "port": _port("SENTINELNET_OBS_IPFIX_PORT", "ipfix_port", 4739),
         },
         "sflow": {
-            "enabled": enabled and _flag("SENTINELNET_OBS_SFLOW_ENABLE", "1"),
-            "port": int(os.environ.get("SENTINELNET_OBS_SFLOW_PORT", "6343")),
+            "enabled": enabled and _flag("SENTINELNET_OBS_SFLOW_ENABLE", "sflow_enabled", True),
+            "port": _port("SENTINELNET_OBS_SFLOW_PORT", "sflow_port", 6343),
         },
         "syslog": {
-            "enabled": enabled and _flag("SENTINELNET_OBS_SYSLOG_ENABLE", "1"),
-            "port": int(os.environ.get("SENTINELNET_OBS_SYSLOG_PORT", "5514")),
+            "enabled": enabled and _flag("SENTINELNET_OBS_SYSLOG_ENABLE", "syslog_enabled", True),
+            "port": _port("SENTINELNET_OBS_SYSLOG_PORT", "syslog_port", 5514),
         },
+        # NetFlow classico (v5/v9) sulla porta canonica 2055: stesso decoder
+        # di ipfix.parse (gestisce v5/v9/IPFIX dall'header).
+        "netflow": {
+            "enabled": enabled and _flag("SENTINELNET_OBS_NETFLOW_ENABLE", "netflow_enabled", True),
+            "port": _port("SENTINELNET_OBS_NETFLOW_PORT", "netflow_port", 2055),
+        },
+        # Poller REST (§9.2): intervallo in secondi, 0 = disattivato.
+        "api_poll_s": _port("SENTINELNET_OBS_API_POLL_S", "api_poll_s", 300),
         "retention_days": {
             "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS", "30")),
             "syslog_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_SYSLOG_DAYS", "7")),

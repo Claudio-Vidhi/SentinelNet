@@ -147,6 +147,14 @@ def driver_factory(vendor, connection):
     driver_cls, _ = resolve_driver(vendor)
     return driver_cls(connection)
 
+def get_device_port(device) -> int:
+    """Porta SSH del device dall'inventario ('SSH Port'), fallback 22."""
+    try:
+        port = int(str(device.get('SSH Port') or '').strip() or 22)
+    except (ValueError, AttributeError):
+        return 22
+    return port if 1 <= port <= 65535 else 22
+
 def is_reachable(ip: str, port: int = 22, timeout: int = 2) -> bool:
     try:
         with socket.create_connection((ip, port), timeout=timeout):
@@ -210,10 +218,11 @@ def run_backup_and_triage(device):
     if vendor in FORTINET_VENDORS:
         return _fortigate_backup_and_triage(device)
 
-    if not is_reachable(ip):
+    ssh_port = get_device_port(device)
+    if not is_reachable(ip, ssh_port):
         update_version_inventory(ip, vendor, "Non Rilevata", "offline")
-        log_audit(f"Triage fallito per dispositivo '{ip}': non raggiungibile sulla porta 22 (SSH).")
-        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta 22 (SSH)"}
+        log_audit(f"Triage fallito per dispositivo '{ip}': non raggiungibile sulla porta {ssh_port} (SSH).")
+        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} (SSH)"}
 
     username, password, secret = get_device_credentials(device)
 
@@ -229,6 +238,7 @@ def run_backup_and_triage(device):
     device_params = {
         'device_type': netmiko_type,
         'host': ip,
+        'port': ssh_port,
         'username': username,
         'password': password,
         'secret': secret,
@@ -331,6 +341,7 @@ def send_custom_command(device, command: str, bypass_blacklist: bool = False):
     device_params = {
         'device_type': netmiko_type,
         'host': device['IP'],
+        'port': get_device_port(device),
         'username': username,
         'password': password,
         'secret': secret,
@@ -359,8 +370,9 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
     La blacklist dei comandi distruttivi è applicata a monte (lato API).
     """
     ip = device['IP']
-    if not is_reachable(ip):
-        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta 22 (SSH)"}
+    ssh_port = get_device_port(device)
+    if not is_reachable(ip, ssh_port):
+        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} (SSH)"}
 
     vendor = device['Vendor'].lower()
     try:
@@ -372,6 +384,7 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
     device_params = {
         'device_type': netmiko_type,
         'host': ip,
+        'port': ssh_port,
         'username': username,
         'password': password,
         'secret': secret,
