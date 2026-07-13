@@ -6,6 +6,7 @@ from netmiko import ConnectHandler
 from inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,
+    parse_transports,
 )
 from drivers.cisco_ios import CiscoIosDriver
 from drivers.cisco_cbs import CiscoCbsDriver
@@ -155,6 +156,30 @@ def get_device_port(device) -> int:
         return 22
     return port if 1 <= port <= 65535 else 22
 
+def get_cli_transport(device):
+    """Trasporto CLI dichiarato del device (§11.6): ritorna (kind, port) dove
+    kind è 'ssh' o 'telnet'. Preferisce SSH; usa Telnet solo se SSH non è
+    dichiarato. Per i device legacy ssh-only preserva ESATTAMENTE il
+    comportamento storico (ssh + porta da 'SSH Port')."""
+    try:
+        transports = parse_transports(device)
+    except Exception:
+        transports = None
+    if transports:
+        if 'ssh' in transports:
+            return 'ssh', transports['ssh'] or 22
+        if 'telnet' in transports:
+            return 'telnet', transports['telnet'] or 23
+    return 'ssh', get_device_port(device)
+
+
+def _cli_device_type(netmiko_type: str, kind: str) -> str:
+    """Variante Netmiko per Telnet (suffisso '_telnet'); invariata per SSH."""
+    if kind == 'telnet' and not netmiko_type.endswith('_telnet'):
+        return netmiko_type + '_telnet'
+    return netmiko_type
+
+
 def is_reachable(ip: str, port: int = 22, timeout: int = 2) -> bool:
     try:
         with socket.create_connection((ip, port), timeout=timeout):
@@ -218,11 +243,11 @@ def run_backup_and_triage(device):
     if vendor in FORTINET_VENDORS:
         return _fortigate_backup_and_triage(device)
 
-    ssh_port = get_device_port(device)
+    cli_kind, ssh_port = get_cli_transport(device)
     if not is_reachable(ip, ssh_port):
         update_version_inventory(ip, vendor, "Non Rilevata", "offline")
-        log_audit(f"Triage fallito per dispositivo '{ip}': non raggiungibile sulla porta {ssh_port} (SSH).")
-        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} (SSH)"}
+        log_audit(f"Triage fallito per dispositivo '{ip}': non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()}).")
+        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}
 
     username, password, secret = get_device_credentials(device)
 
@@ -236,7 +261,7 @@ def run_backup_and_triage(device):
         return {"status": "error", "message": str(ve)}
 
     device_params = {
-        'device_type': netmiko_type,
+        'device_type': _cli_device_type(netmiko_type, cli_kind),
         'host': ip,
         'port': ssh_port,
         'username': username,
@@ -338,10 +363,11 @@ def send_custom_command(device, command: str, bypass_blacklist: bool = False):
         return {"status": "error", "message": str(e)}
 
     username, password, secret = get_device_credentials(device)
+    cli_kind, cli_port = get_cli_transport(device)
     device_params = {
-        'device_type': netmiko_type,
+        'device_type': _cli_device_type(netmiko_type, cli_kind),
         'host': device['IP'],
-        'port': get_device_port(device),
+        'port': cli_port,
         'username': username,
         'password': password,
         'secret': secret,
@@ -370,9 +396,9 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
     La blacklist dei comandi distruttivi è applicata a monte (lato API).
     """
     ip = device['IP']
-    ssh_port = get_device_port(device)
+    cli_kind, ssh_port = get_cli_transport(device)
     if not is_reachable(ip, ssh_port):
-        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} (SSH)"}
+        return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}
 
     vendor = device['Vendor'].lower()
     try:
@@ -382,7 +408,7 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
 
     username, password, secret = get_device_credentials(device)
     device_params = {
-        'device_type': netmiko_type,
+        'device_type': _cli_device_type(netmiko_type, cli_kind),
         'host': ip,
         'port': ssh_port,
         'username': username,

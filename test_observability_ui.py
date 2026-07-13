@@ -168,6 +168,120 @@ class TestAiFlowContext(_Base):
         self.assertNotIn("sede-b", ctx_a)
 
 
+def _seed_flow(tenant, src, dst, proto, dport, tbytes, tpackets):
+    conn = db.get_observability_connection()
+    conn.execute(
+        "INSERT INTO flow_aggregates (window_start, tenant, src_ip, dst_ip, "
+        "protocol, dst_port, total_bytes, total_packets, flow_count) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        (int(time.time()) - (int(time.time()) % 60), tenant, src, dst,
+         proto, dport, tbytes, tpackets))
+    conn.commit()
+    conn.close()
+
+
+class TestAiFlowKeys(_Base):
+    """11.3: analisi AI sulle sole righe flusso selezionate (attach_flow_keys)."""
+
+    def test_single_key_only_that_tuple(self):
+        from observability.summary import top_flows_context
+        _seed_flow("sede-a", "10.2.0.1", "203.0.113.10", 6, 443, 5000, 5)
+        _seed_flow("sede-a", "10.2.0.2", "203.0.113.11", 17, 53, 6000, 6)
+        ctx = top_flows_context({"sede-a"}, keys=[
+            {"src_ip": "10.2.0.1", "dst_ip": "203.0.113.10",
+             "protocol": 6, "dst_port": 443}])
+        self.assertIn("10.2.0.1", ctx)
+        self.assertNotIn("10.2.0.2", ctx)
+
+    def test_multiple_keys(self):
+        from observability.summary import top_flows_context
+        _seed_flow("sede-a", "10.3.0.1", "203.0.113.20", 6, 80, 7000, 7)
+        _seed_flow("sede-a", "10.3.0.2", "203.0.113.21", 6, 8080, 8000, 8)
+        _seed_flow("sede-a", "10.3.0.3", "203.0.113.22", 6, 22, 9000, 9)
+        ctx = top_flows_context({"sede-a"}, keys=[
+            {"src_ip": "10.3.0.1", "dst_ip": "203.0.113.20", "protocol": 6, "dst_port": 80},
+            {"src_ip": "10.3.0.2", "dst_ip": "203.0.113.21", "protocol": 6, "dst_port": 8080}])
+        self.assertIn("10.3.0.1", ctx)
+        self.assertIn("10.3.0.2", ctx)
+        self.assertNotIn("10.3.0.3", ctx)
+
+    def test_null_dst_port_matching(self):
+        from observability.summary import top_flows_context
+        _seed_flow("sede-a", "10.4.0.1", "203.0.113.30", 1, None, 4000, 4)
+        ctx = top_flows_context({"sede-a"}, keys=[
+            {"src_ip": "10.4.0.1", "dst_ip": "203.0.113.30",
+             "protocol": 1, "dst_port": None}])
+        self.assertIn("10.4.0.1", ctx)
+
+    def test_out_of_scope_tenant_key_excluded(self):
+        from observability.summary import top_flows_context
+        _seed_flow("sede-b", "10.9.0.1", "203.0.113.99", 6, 443, 9999, 9)
+        # Anche fornendo la key esatta, lo scope sede-a esclude il flusso sede-b.
+        ctx = top_flows_context({"sede-a"}, keys=[
+            {"src_ip": "10.9.0.1", "dst_ip": "203.0.113.99",
+             "protocol": 6, "dst_port": 443}])
+        self.assertNotIn("10.9.0.1", ctx)
+        self.assertNotIn("sede-b", ctx)
+
+    def test_totals_derived_from_db(self):
+        from observability.summary import top_flows_context
+        _seed_flow("sede-a", "10.5.0.1", "203.0.113.40", 6, 443, 424242, 77)
+        ctx = top_flows_context({"sede-a"}, keys=[
+            {"src_ip": "10.5.0.1", "dst_ip": "203.0.113.40",
+             "protocol": 6, "dst_port": 443}])
+        # Il totale proviene dal DB, non da valori inviati dal client.
+        self.assertIn("424242", ctx)
+        self.assertIn("77", ctx)
+
+    def _chat_with(self, user, payload):
+        with patch.object(app_server, "_get_active_ai_profile", return_value={
+                "provider": "anthropic", "api_key_enc": "x", "model": "m",
+                "name": "test"}), \
+             patch.object(app_server.crypto_vault, "decrypt_password",
+                          return_value="k"), \
+             patch("ai_assistant.requests.post") as mock_post:
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = {"content": [{"type": "text", "text": "ok"}]}
+            mock_post.return_value = resp
+            c = self._client(user)
+            r = c.post("/api/ai/chat", headers=CSRF, json=payload)
+            sent = json.dumps(mock_post.call_args.kwargs["json"]) \
+                if mock_post.call_args else ""
+        return r, sent
+
+    def test_api_attach_flow_keys(self):
+        _seed_flow("sede-a", "10.6.0.1", "203.0.113.50", 6, 443, 11111, 3)
+        r, sent = self._chat_with("op_a", {
+            "messages": [{"role": "user", "content": "analizza"}],
+            "attach_flow_keys": [{"src_ip": "10.6.0.1", "dst_ip": "203.0.113.50",
+                                  "protocol": 6, "dst_port": 443}],
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("10.6.0.1", sent)
+        self.assertIn("11111", sent)  # totale ri-derivato dal server
+
+    def test_api_over_cap_400(self):
+        keys = [{"src_ip": f"10.7.0.{i}", "dst_ip": "203.0.113.60",
+                 "protocol": 6, "dst_port": 443} for i in range(21)]
+        r, _ = self._chat_with("op_a", {
+            "messages": [{"role": "user", "content": "analizza"}],
+            "attach_flow_keys": keys,
+        })
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("massimo 20", r.json()["detail"])
+
+    def test_no_selection_legacy_path(self):
+        # attach_flow_keys None → percorso top-N invariato, nessun 400.
+        _seed_flow("sede-a", "10.8.0.1", "203.0.113.70", 6, 443, 2222, 2)
+        r, sent = self._chat_with("op_a", {
+            "messages": [{"role": "user", "content": "analizza"}],
+            "attach_top_flows": True,
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Top flussi di rete", sent)
+
+
 class TestFrontendGates(_Base):
     HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "templates", "dashboard.html"), encoding="utf-8").read()

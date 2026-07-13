@@ -915,4 +915,108 @@ Rebuild gate after every area: `scripts/build.ps1` (pyinstaller + smoke) must pa
 
 ---
 
+## 11. UI/UX & API-Control Requirements (Finalized 2026-07-13)
+
+Seven work areas surfaced by owner testing and an external code-vs-findings analysis (`comaparing vs findings.md`), re-verified against live code before drafting. The analysis' code blocks are illustrative sketches only — this plan carries binding semantics, not implementation. Same rules as Sections 9–10: Italian UI strings, English identifiers, rebuild gate (`scripts/build.ps1` + smoke) after each area, no CI. Executor tiering: **Haiku** for mechanical frontend, **Sonnet** for bounded backend/frontend, **Opus** for anything on the LLM data path or touching credentials.
+
+**Execution order:** 11.4 (FortiGate token GUI — zero backend, unblocks live FortiGate ops) → 11.1 → 11.2 → 11.5 → 11.6 → 11.3 → 11.7 (doc, outside this plan's code scope).
+
+### 11.1 Flows tab — tenant multi-select filter
+
+**Current state:** `tab-flows` toolbar (`templates/dashboard.html:1433-1449`) has only `flowsWindow` (`:1434`), `flowsMetric` (`:1440`), `flowsAutoRefresh` (`:1446`). `loadTopTalkers()` (`:9816-9856`) fetches `/api/observability/top?limit=100` and renders 8 columns (tenant included) directly into `flowsTableBody` (`:1463`), row `onclick` only calls `highlightInTopology`. Server already scopes results by user group via `_tenant_filter()` (`routers/observability.py:46`); each `/top` row already carries `tenant`. **This is a client-side visual filter over already-fetched, already-scoped data — no server change.**
+
+Steps:
+1. Add a multi-select checkbox dropdown to the toolbar (`flowsTenantBtn` button + `flowsTenantDropdown` panel with a "Tutti" master checkbox and one `<label><input type="checkbox">` per distinct tenant). Populate the tenant list from the distinct `tenant` values of the last fetch, not from `globalGroups` (only tenants actually present in the data are selectable).
+2. Cache the fetched rows in a module-level array; split `loadTopTalkers()` into fetch-and-cache vs. a new `renderFlowsTable()` that applies the current tenant selection before rendering. Rebuild the checkbox list on every fetch, preserving checked state where tenant names persist.
+3. Dropdown label reflects state ("Tutti i tenant" / "N tenant" / "Nessun tenant"); "Tutti" master toggles all; unchecking any un-checks "Tutti". Empty selection renders an Italian empty-state row.
+4. Close the dropdown on outside click.
+
+Tests: distinct tenants populate checkboxes; deselecting a tenant hides its rows without refetch; "Tutti" round-trips; empty selection shows Italian empty state; auto-refresh preserves selection.
+**Executor:** Haiku (pure frontend, no backend, fully specified). **Effort:** S.
+
+### 11.2 Flows table — row selection + detail slide panel
+
+**Current state:** flow rows (`loadTopTalkers` render, `:9816-9856`) have no selection affordance and a whole-row `highlightInTopology` onclick. Helpers available: `escapeHtml` (`:3094`), `fmtBytes` (`:9809`), `highlightInTopology` (`:9860`), `switchTab` (`:4092`), `showToast` (`:9742`), `apiFetch` (`:3186`).
+
+Steps:
+1. Add a leading checkbox column per row plus a header "select all" checkbox; track selected rows in a module-level `Set`. Selection state must survive the tenant re-filter of 11.1 (key by flow tuple, not array index, since filtering reorders rows). This selection set is the input to 11.3.
+2. Row click (outside the checkbox and the existing topology links) opens a right-side detail slide panel (`flowDetailPanel`, fixed, `display:none`→`block`) showing the flow tuple, protocol name, `fmtBytes` traffic, packets and aggregated flow count, formatted as a labelled table.
+3. Detail panel troubleshooting shortcuts: "Mostra sorgente/destinazione in topologia" (`highlightInTopology` + close), a `mac_locate`/client-map lookup of the src IP (reuse the existing client-map/mac-history lookup path — do not invent a new endpoint), and a link that jumps to the anomalies view pre-filtered by the flow's src/dst IPs.
+4. Improve row formatting: protocol number→name map (6→TCP, 17→UDP, 1→ICMP), tenant chip, proto/port cell, traffic bar. Keep the src/dst topology links, stopping propagation so they don't also open the panel.
+
+Tests: checkbox selection persists across tenant filter and refresh; row click opens panel with correct tuple; topology jumps focus the right node; mac_locate shortcut resolves src IP; anomalies link lands filtered by the flow IPs; select-all toggles every visible row.
+**Executor:** Sonnet (multi-feature frontend, selection-model correctness under filtering, cross-view navigation). **Effort:** M.
+
+### 11.3 AI analysis on SELECTED flow rows only
+
+**Current state:** `analyzeFlowsWithAi()` (`:9875-9898`) sets `aiAttachTopFlowsOnce` and relies on the server `attach_top_flows` path (`app_server.py` → `observability.summary.top_flows_context(scope, window_s, limit)`), which summarizes the **entire** scoped top-N server-side. Redaction is the binding guarantee: it happens in the `chat()` choke-point (§0.3), never in the browser. New requirement: analyze only the rows the user selected in 11.2 (one or many).
+
+**Design (binding):** keep the server-side summarization + redaction path; do **not** compose the flow context in the browser (that would bypass the redaction choke-point). Extend the server path to accept an explicit, bounded set of flow keys.
+
+Steps:
+1. Add a schema field to `AiChatSchema` (near `attach_top_flows`), e.g. `attach_flow_keys: List[FlowKeySchema]` where each key is `{src_ip, dst_ip, protocol, dst_port}` — identifiers only, no byte/packet payload trusted from the client. Cap the list length (mirror the 20-cap convention of `attach_device_ips`).
+2. Extend `top_flows_context()` (`observability/summary.py`) with an optional `keys` argument: when provided, constrain the `flow_aggregates` query to those tuples (still `AND tenant IN (scope)` — the tenant scope clause is never relaxed by client-supplied keys), so the server re-derives byte/packet totals itself. Empty/None keys → current whole-window behavior unchanged.
+3. Frontend: `analyzeFlowsWithAi()` (and the panel's per-flow "Analizza con AI") send the selected rows' tuples in `attach_flow_keys`. When a selection exists, send keys; when none selected, fall back to the existing top-N behavior. Keep the Italian redaction warning note; update it to state that only the selected flows are sent.
+4. Redaction path untouched: context still assembled server-side and passed through the `chat()` redactor. No client-assembled raw context, ever.
+
+Tests: selecting 1 row sends exactly that tuple; multiple rows send all tuples; server re-derives totals (client-supplied volumes ignored); tenant scope still filters keys outside the caller's groups; redaction still applied (extend `test_observability_ui.py`); no selection → legacy top-N path.
+**Executor:** Opus (LLM data path; client-supplied flow keys must not relax tenant scope or bypass redaction). **Effort:** M.
+
+### 11.4 FortiGate API token management GUI
+
+**Current state:** backend complete and admin-guarded. `FgtTokenSchema` (`routers/fortigate.py:23-31`: `ip`, `token` empty=delete, `port=443`, `verify_tls=True`), `POST /api/fortigate/token` (`:84-92`, encrypts via `fortigate_service.set_api_token`, `_fgt_device` enforces vendor=fortinet + group scope), `GET /api/fortigate/tokens` (`:79-82`, returns `{ip: {port, verify_tls}}`, never the token), `GET /api/fortigate/{ip}/status` (`:94`) for a live test. All `require_admin`. **Zero HTML calls any of these today. No backend change.**
+
+Steps:
+1. Add an admin-only panel (`requires-admin`) with a status table rendered from `GET /api/fortigate/tokens` (columns IP / porta / verifica TLS / stato), with an Italian empty-state message.
+2. Device select populated from `globalDevices` (`:3079`) filtered to `Vendor === 'fortinet'`; token (`type=password`), port (default 443), and verify-TLS checkbox (default on, with an Italian caption that disabling is only for self-signed).
+3. Set/remove: "Salva token cifrato" POSTs `{ip, token, port, verify_tls}`; "Rimuovi" POSTs `{ip, token: ""}` (empty token = delete per schema), behind an Italian confirm. Clear the token field after save; refresh the table.
+4. "Test": `GET /api/fortigate/{ip}/status`, surface hostname/FortiOS version via `showToast` on success, Italian failure toast otherwise.
+5. Load the panel's status on tab open.
+
+Tests: table lists configured IPs (never the token value); save encrypts and refreshes; empty token deletes the entry; non-fortinet device rejected (error surfaced); test button reflects reachability; viewer/operator see no panel.
+**Executor:** Haiku (mechanical frontend against a complete, verified API). **Effort:** S.
+
+### 11.5 Granular GUI control for API/device connections
+
+Production runs from the exe with no env vars or CLI, so both settings below must be reachable from the GUI. Two independent sub-items.
+
+**(a) Observability settings panel.** **Current state:** `GET`/`POST /api/observability/config` exist (`routers/observability.py:165-200`, `require_admin`); POST allow-lists `enabled`, `bind`, `api_poll_s`, and `{ipfix,sflow,syslog,netflow}_{enabled,port}`, validates ports/ints, persists the `observability` section of `app_settings.json`, returns `{restart_required: true, effective: ...}`. **No GUI exists.** Add a panel in `tab-settings` (`templates/dashboard.html:1946`): load current values from GET, edit master `enabled`, `bind`, per-listener enable/port and `api_poll_s`, POST on save, and prominently display the Italian "riavvio richiesto" notice returned by the endpoint (ties into §10.4's silent-failure fix). No backend change.
+
+**(b) Per-device SSH credential/port editing.** **Current state:** the add form (`templates/dashboard.html:802-874`) + `POST /api/add-device` call `inventory_manager.add_or_update_device(..., ssh_port=…)` (`inventory_manager.py:165`) — verified to be a true **upsert**: an existing IP is re-checked for group scope then overwritten, credentials re-encrypted into `network_hosts.csv`. So editing an existing device's credentials/port needs **no new endpoint**: add a "Modifica" affordance in the device inventory row that pre-fills the existing add form (IP locked) and re-submits to `/api/add-device`; surface success/scope errors via `showToast`.
+
+Tests: (a) config loads, edits round-trip, invalid port rejected (400 surfaced), restart notice shown; (b) editing an existing device updates credentials/ssh_port in place without duplicating the CSV row, group-scope still enforced, encrypted-at-rest preserved.
+**Executor:** Sonnet (bounded backend-adjacent frontend; (b) touches encrypted credential persistence — verify no duplication/leak). **Effort:** M.
+
+### 11.6 Multi-protocol device connectivity (beyond SSH)
+
+**Current state:** per-device connection config is SSH-only — inventory CSV columns end at `SSH Port` (`inventory_manager.py:82`), and the add-device form exposes only `devSshPort`. Yet the codebase already speaks more protocols with **hardcoded defaults**: NETCONF (`mac_collector.collect_via_netconf`, port 830 default, `mac_collector.py:313`), RESTCONF (`collect_via_restconf`, port 443, `:345`), FortiGate REST (per-device port in the token store, §11.4), and Netmiko CLI (`collect_via_cli`, `device_type` param, `:391`). The gap: no per-device way to declare *which* protocols a device supports and on *which* ports, so collectors probe blind or skip.
+
+**Design (binding):** extend the device record — not a parallel store — with per-protocol transport settings. Reuse the existing upsert path (`add_or_update_device` / `/api/add-device`); credentials stay the existing encrypted fields (shared across transports; per-transport credentials are out of scope unless a real need appears). FortiGate REST tokens remain in their existing store (§11.4) — do not merge.
+
+Steps:
+1. Inventory schema: add a `Transports` column to `network_hosts.csv` holding a compact JSON object, e.g. `{"ssh": 22, "telnet": null, "netconf": 830, "restconf": 443}` — key present = protocol enabled, value = port (null = protocol default). Keep the legacy `SSH Port` column read-compatible: on load, if `Transports` is absent, synthesize `{"ssh": <SSH Port>}`. Migration is lazy (rewritten on next upsert), no one-shot migration script.
+2. `add_or_update_device()` + `DeviceSchema` + `/api/add-device`: accept the transports mapping; validate ports (1–65535) and allowed protocol keys (`ssh`, `telnet`, `netconf`, `restconf`); reject unknown keys with an Italian 400.
+3. Consumers: `mac_collector` collection order consults the device's transports — only attempt NETCONF/RESTCONF if declared, using the declared port instead of the hardcoded default; CLI path picks telnet vs ssh `device_type` variant (Netmiko `_telnet` suffix) per transports. `core_engine._connect()` honors the declared CLI transport/port. Undeclared transports → skipped, not probed.
+4. GUI: in the add/edit device form (11.5b), replace the single SSH-port field with a per-protocol block: checkbox + port input per protocol (SSH checked by default, port 22). Italian labels/tooltips.
+5. Security note: telnet is cleartext — enabling it shows a one-line Italian warning in the form and emits an audit entry on save (`log_audit`).
+
+Tests: legacy CSV row without `Transports` loads with ssh-only synthesized; upsert round-trips the mapping; NETCONF collector uses declared port (fixture asserts URL/port); undeclared protocol never attempted (spy on collectors); telnet enable audited; invalid port/protocol → 400 with Italian message.
+**Executor:** Opus (cross-layer: schema + encrypted credential file + connection paths in `core_engine`/`mac_collector`; regressions break backup/triage for the whole fleet). **Effort:** M/L.
+
+### 11.7 Update `docs/APP_STATE_REPORT.md`
+
+Refresh `docs/APP_STATE_REPORT.md` to reflect Sections 10–11 state (flows UI, FortiGate token GUI, observability settings, multi-protocol transports) once merged. Doc-only; noted here for traceability.
+
+### 11.8 Executor summary (model balance)
+
+| Model | Items | Rationale |
+|---|---|---|
+| Opus | 11.3, 11.6 | LLM data path with client-supplied keys; cross-layer transport/credential changes with fleet-wide blast radius |
+| Sonnet | 11.2, 11.5 | Selection-model correctness under filtering; encrypted per-device credential upsert |
+| Haiku | 11.1, 11.4 | Mechanical frontend against verified/complete APIs, no backend change |
+
+Rebuild gate after every area: `scripts/build.ps1` (pyinstaller + smoke) must pass before the next area starts. No CI — local pipeline only (owner decision, Section 9.6).
+
+---
+
 *End of Master Implementation Plan (Final). Verify freshness against commit `6fcb9039` before execution — in particular the actual startup mechanism (2.4), the live endpoint inventory (2.2/2.3), and the Vis.js node model (5.3). Re-run `graphify update .` after each phase merges.*

@@ -800,13 +800,17 @@
     </div>
 
     <div class="requires-write">
-      <h3 style="margin-bottom: 12px; font-size: 16px;" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
+      <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
+
+      <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:8px; color:var(--primary); font-size:12px;" data-i18n="msgEditingDevice">
+        <i class="fa-solid fa-pen-to-square"></i> Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.
+      </div>
 
       <div class="form-group">
         <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
         <select id="devGroupSelect"></select>
       </div>
-      
+
       <div class="form-group">
         <label data-i18n="lblIp">IP Apparato</label>
         <div class="input-wrapper">
@@ -815,11 +819,31 @@
         </div>
       </div>
 
+      <!-- §11.6: trasporti per-device (checkbox + porta per protocollo) -->
       <div class="form-group">
-        <label data-i18n="lblSshPort">Porta SSH</label>
-        <div class="input-wrapper">
-          <i class="fa-solid fa-plug"></i>
-          <input id="devSshPort" type="number" min="1" max="65535" value="22">
+        <label data-i18n="lblTransports">Protocolli di connessione</label>
+        <div id="devTransports" style="border-left: 2px solid var(--border); padding-left: 10px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
+            <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
+            <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
+            <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
+            <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
+          </div>
+          <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="display:none; color: var(--danger, #c0392b); font-size: 12px; margin-bottom:6px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
+            <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
+            <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
+            <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
+            <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
+          </div>
         </div>
       </div>
 
@@ -848,17 +872,20 @@
           <input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
         </div>
         <div class="form-group">
-          <label data-i18n="lblPass">Password</label>
+          <label id="devPassLabel" data-i18n="lblPass">Password</label>
           <input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
         </div>
         <div class="form-group">
-          <label data-i18n="lblSecret">Enable Secret</label>
+          <label id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label>
           <input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
         </div>
       </div>
-      
+
       <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
         <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
+      </button>
+      <button class="btn btn-secondary" id="btnCancelEditDevice" style="display:none; margin-top: 8px;" data-i18n="btnCancelEditDevice" onclick="resetDeviceForm()">
+        <i class="fa-solid fa-xmark"></i> Annulla modifica
       </button>
     </div>
     
@@ -1441,6 +1468,20 @@
           <option value="bytes">Per byte</option>
           <option value="packets">Per pacchetti</option>
         </select>
+        <div style="position:relative; display:inline-block;">
+          <button id="flowsTenantBtn" class="btn" onclick="toggleFlowsTenantDropdown()" style="padding:6px 12px;">
+            <i class="fa-solid fa-filter"></i> Tenants
+          </button>
+          <div id="flowsTenantDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:220px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
+            <div style="padding:8px;">
+              <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; font-weight:500;">
+                <input type="checkbox" id="flowsTenantAll" onchange="toggleFlowsTenantAll()" style="accent-color:var(--primary);">
+                <span>Tutti i tenant</span>
+              </label>
+              <div id="flowsTenantList" style="margin-top:6px;"></div>
+            </div>
+          </div>
+        </div>
         <button class="btn" onclick="loadTopTalkers()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
         <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
           <input type="checkbox" id="flowsAutoRefresh" checked style="accent-color:var(--primary);">
@@ -1456,12 +1497,13 @@
         <table style="width:100%; border-collapse:collapse;">
           <thead style="position:sticky; top:0; background:var(--surface-2);">
             <tr style="font-size:12px; text-align:left;">
+              <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" onclick="toggleFlowsSelectAll(this)" style="accent-color:var(--primary);" title="Seleziona tutti"></th>
               <th style="padding:8px;">#</th><th>Sede</th><th>Sorgente</th><th>Destinazione</th>
               <th>Proto/Porta</th><th style="min-width:180px;">Traffico</th><th>Pacchetti</th><th>Flussi</th>
             </tr>
           </thead>
           <tbody id="flowsTableBody">
-            <tr><td colspan="8" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>
+            <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1475,6 +1517,10 @@
           <option value="all">Tutte</option>
         </select>
         <button class="btn" onclick="loadAnomalies()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        <span id="anomIpFilterChip" style="display:none; align-items:center; gap:6px; font-size:12px; background:var(--surface-3); border-radius:14px; padding:4px 10px;">
+          <span></span>
+          <a href="javascript:void(0)" onclick="clearAnomIpFilter()" title="Rimuovi filtro"><i class="fa-solid fa-xmark"></i></a>
+        </span>
       </div>
       <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
         <table style="width:100%; border-collapse:collapse;">
@@ -1489,6 +1535,14 @@
           </tbody>
         </table>
       </div>
+    </div>
+
+    <div id="flowDetailPanel" style="display:none; position:fixed; top:0; right:0; height:100vh; width:380px; max-width:92vw; background:var(--surface-2); border-left:1px solid var(--border); box-shadow:-8px 0 24px rgba(0,0,0,0.25); z-index:10010; overflow-y:auto; padding:18px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h4 style="margin:0;">Dettaglio flusso</h4>
+        <button class="btn" onclick="closeFlowDetailPanel()" title="Chiudi"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="flowDetailPanelBody"></div>
     </div>
 
     <div id="tab-config" class="tab-content">
@@ -1652,6 +1706,73 @@
       <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descProvisioner">
         Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.
       </p>
+
+      <!-- ADMIN-ONLY PANEL: FortiGate API Token Management -->
+      <details class="requires-admin" id="fgtTokenPanel" style="border:1px solid var(--border); border-radius:10px; padding:0; margin-bottom:18px; background:var(--surface-2); overflow:hidden;">
+        <summary style="cursor:pointer; padding:12px 14px; font-weight:600;">
+          <i class="fa-solid fa-key" style="color:var(--primary); margin-right:8px;"></i>
+          <span data-i18n="titleFgtApiToken">Token API FortiGate</span>
+        </summary>
+        <div style="padding:14px 14px 14px 14px;">
+          <!-- Status table showing configured tokens -->
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
+            <div style="border:1px solid var(--border); border-radius:8px; background:var(--surface); overflow-x:auto;">
+              <table id="fgtTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenIp">IP</th>
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenPort">Porta</th>
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenTls">Verifica TLS</th>
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenStatus">Stato</th>
+                  </tr>
+                </thead>
+                <tbody id="fgtTokensTableBody">
+                </tbody>
+              </table>
+            </div>
+            <div id="fgtTokensEmpty" style="text-align:center; padding:20px; color:var(--text-muted); display:none;" data-i18n="msgFgtTokensEmpty">
+              Nessun token configurato
+            </div>
+          </div>
+
+          <!-- Form to add/configure token -->
+          <div style="border-top:1px solid var(--border); padding-top:14px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
+                <select id="fgtTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label data-i18n="lblFgtTokenValue">Token API (password)</label>
+                <input id="fgtTokenValue" type="password" placeholder="••••••••" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label data-i18n="lblFgtTokenPort">Porta</label>
+                <input id="fgtTokenPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+              <input type="checkbox" id="fgtTokenVerifyTls" checked style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+              <label for="fgtTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-primary" style="width:auto;" onclick="saveFgtToken()" data-i18n="btnFgtTokenSave">
+                <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
+              </button>
+              <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtToken()" data-i18n="btnFgtTokenRemove">
+                <i class="fa-solid fa-trash"></i> Rimuovi
+              </button>
+              <button class="btn btn-secondary" style="width:auto;" onclick="testFgtToken()" data-i18n="btnFgtTokenTest">
+                <i class="fa-solid fa-plug"></i> Test
+              </button>
+            </div>
+            <div id="fgtTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+          </div>
+        </div>
+      </details>
 
       <div class="form-group" style="max-width:320px;">
         <label data-i18n="lblProvVendor">Tipo apparato</label>
@@ -1965,6 +2086,18 @@
         </label>
         <div id="cliBlacklistStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
       </div>
+      <div class="requires-admin" style="margin-top:16px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
+        <h3 style="font-size:15px; margin-bottom:8px;" data-i18n="titleObsSettings"><i class="fa-solid fa-satellite-dish" style="color:var(--primary);"></i> Observability (IPFIX/sFlow/syslog/NetFlow)</h3>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descObsSettings">
+          Configura i listener di telemetria di rete. Le modifiche richiedono il riavvio dell'applicazione per avere effetto.
+        </p>
+        <div id="obsRestartBanner" style="display:none; margin-bottom:14px; padding:10px 14px; border:1px solid var(--warning); border-radius:8px; background:rgba(185,119,14,0.12); color:var(--warning); font-size:13px; font-weight:600;">
+          <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="msgObsRestartRequired">Riavvio richiesto per applicare le modifiche.</span>
+        </div>
+        <div id="obsSettingsBody">
+          <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -2192,11 +2325,18 @@
         lblGroup: "Assegna a Tenant",
         lblIp: "IP Apparato",
         lblSshPort: "Porta SSH",
+        lblTransports: "Protocolli di connessione",
+        lblTelnetWarn: "Attenzione: Telnet trasmette le credenziali in chiaro.",
         lblVendor: "Vendor Engine",
         lblProfile: "Profilo Credenziali",
         optProfileDefault: "Profilo Rete Standard",
         optProfileCustom: "Credenziali dedicate...",
         btnSaveDevice: '<i class="fa-solid fa-floppy-disk"></i> Salva Apparato',
+        titleEditDevice: '<i class="fa-solid fa-pen"></i> Modifica Apparato',
+        btnUpdateDevice: '<i class="fa-solid fa-floppy-disk"></i> Aggiorna dispositivo',
+        btnCancelEditDevice: '<i class="fa-solid fa-xmark"></i> Annulla modifica',
+        msgEditingDevice: "Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.",
+        alertCredsRequiredOnEdit: "Username, password ed enable secret vanno reinseriti per confermare la modifica: per motivi di sicurezza non vengono precompilati.",
         titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Tenant',
         lblGroupName: "Nome Tenant",
         btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Crea Tenant',
@@ -2378,6 +2518,22 @@
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Apparato da Zero',
         titleProvisioner: "Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)",
         descProvisioner: "Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.",
+        // FortiGate API Token Management
+        titleFgtApiToken: "Token API FortiGate",
+        lblFgtTokensConfigured: "Token configurati",
+        colFgtTokenIp: "IP",
+        colFgtTokenPort: "Porta",
+        colFgtTokenTls: "Verifica TLS",
+        colFgtTokenStatus: "Stato",
+        msgFgtTokensEmpty: "Nessun token configurato",
+        lblFgtTokenDevice: "Dispositivo FortiGate",
+        lblFgtTokenValue: "Token API (password)",
+        lblFgtTokenPort: "Porta",
+        lblFgtTokenVerifyTls: "Verifica certificato TLS (disabilitare solo per self-signed)",
+        btnFgtTokenSave: "<i class=\"fa-solid fa-floppy-disk\"></i> Salva token cifrato",
+        btnFgtTokenRemove: "<i class=\"fa-solid fa-trash\"></i> Rimuovi",
+        btnFgtTokenTest: "<i class=\"fa-solid fa-plug\"></i> Test",
+        optFgtSelectDevice: "-- seleziona dispositivo --",
         lblProvVendor: "Tipo apparato",
         lblSecret: "Enable Secret",
         btnMapClassic: "Classica",
@@ -2504,6 +2660,13 @@
         descCliBlacklist: "Gli amministratori bypassano sempre la blacklist dei comandi distruttivi (i comandi restano tracciati nell'audit log). Qui decidi se applicarla agli operatori.",
         lblCliBlacklistOperators: "Applica blacklist comandi CLI agli operatori",
         msgCliBlacklistSaved: "Impostazione salvata.",
+        titleObsSettings: "Observability (IPFIX/sFlow/syslog/NetFlow)",
+        descObsSettings: "Configura i listener di telemetria di rete. Le modifiche richiedono il riavvio dell'applicazione per avere effetto.",
+        lblObsEnabled: "Abilita observability",
+        lblObsBind: "Indirizzo di ascolto (bind)",
+        lblObsApiPoll: "Intervallo polling API (s)",
+        lblObsListeners: "Listener",
+        msgObsRestartRequired: "Riavvio richiesto per applicare le modifiche.",
         descUsers: 'Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.',
         thUserName: "Username",
         thUserRole: "Ruolo / Privilegio",
@@ -2608,11 +2771,18 @@
         lblGroup: "Assign to Tenant",
         lblIp: "Device IP",
         lblSshPort: "SSH Port",
+        lblTransports: "Connection protocols",
+        lblTelnetWarn: "Warning: Telnet transmits credentials in cleartext.",
         lblVendor: "Vendor Engine",
         lblProfile: "Credentials Profile",
         optProfileDefault: "Standard Network Profile",
         optProfileCustom: "Dedicated credentials...",
         btnSaveDevice: '<i class="fa-solid fa-floppy-disk"></i> Save Device',
+        titleEditDevice: '<i class="fa-solid fa-pen"></i> Edit Device',
+        btnUpdateDevice: '<i class="fa-solid fa-floppy-disk"></i> Update device',
+        btnCancelEditDevice: '<i class="fa-solid fa-xmark"></i> Cancel edit',
+        msgEditingDevice: "You are editing an existing device. Credentials must be re-entered to confirm them.",
+        alertCredsRequiredOnEdit: "Username, password and enable secret must be re-entered to confirm the edit: for security reasons they are not pre-filled.",
         titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Add New Tenant',
         lblGroupName: "Tenant Name",
         btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Create Tenant',
@@ -2794,6 +2964,22 @@
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Device',
         titleProvisioner: "Zero-Touch Provisioning (Cisco Switch / FortiGate Firewall)",
         descProvisioner: "Generate a complete, hardened day-0 configuration — IOS/IOS-XE for Cisco switches or FortiOS for FortiGate firewalls — following vendor hardening guidelines, then choose how to deliver it: text, SSH or console/serial.",
+        // FortiGate API Token Management
+        titleFgtApiToken: "FortiGate API Token",
+        lblFgtTokensConfigured: "Configured tokens",
+        colFgtTokenIp: "IP",
+        colFgtTokenPort: "Port",
+        colFgtTokenTls: "Verify TLS",
+        colFgtTokenStatus: "Status",
+        msgFgtTokensEmpty: "No tokens configured",
+        lblFgtTokenDevice: "FortiGate Device",
+        lblFgtTokenValue: "API Token (password)",
+        lblFgtTokenPort: "Port",
+        lblFgtTokenVerifyTls: "Verify TLS certificate (disable only for self-signed)",
+        btnFgtTokenSave: "<i class=\"fa-solid fa-floppy-disk\"></i> Save encrypted token",
+        btnFgtTokenRemove: "<i class=\"fa-solid fa-trash\"></i> Remove",
+        btnFgtTokenTest: "<i class=\"fa-solid fa-plug\"></i> Test",
+        optFgtSelectDevice: "-- select device --",
         lblProvVendor: "Device type",
         lblSecret: "Enable Secret",
         btnMapClassic: "Classic",
@@ -2921,6 +3107,13 @@
         descCliBlacklist: "Administrators always bypass the destructive-command blacklist (commands are still recorded in the audit log). Here you decide whether it applies to operators.",
         lblCliBlacklistOperators: "Enforce CLI command blacklist for operators",
         msgCliBlacklistSaved: "Setting saved.",
+        titleObsSettings: "Observability (IPFIX/sFlow/syslog/NetFlow)",
+        descObsSettings: "Configure network telemetry listeners. Changes require an application restart to take effect.",
+        lblObsEnabled: "Enable observability",
+        lblObsBind: "Listen address (bind)",
+        lblObsApiPoll: "API poll interval (s)",
+        lblObsListeners: "Listeners",
+        msgObsRestartRequired: "Restart required to apply the changes.",
         thUserName: "Username",
         thUserRole: "Role / Privilege",
         thUserGroups: "Visible / manageable tenants",
@@ -3083,6 +3276,7 @@
     let currentRole = 'viewer';   // ruolo dell'utente loggato (admin/operator/viewer)
     let currentUsername = '';
     let isTriagePolling = false;
+    let editingDeviceIp = null;   // §11.5b: IP del dispositivo in modifica (null = modalità aggiunta)
     let appLoading = false;
     let wasTriageRunning = false;
     let _scanJobInterval = null;
@@ -3648,6 +3842,11 @@
                         onclick="openCliModal('${d.IP}')">
                         <i class="fa-solid fa-terminal"></i> CLI
                     </button>
+                    <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
+                        onclick="editDevice('${d.IP}')"
+                        title="${currentLang==='en'?'Edit device':'Modifica dispositivo'}">
+                        <i class="fa-solid fa-pen"></i> ${currentLang==='en'?'Edit':'Modifica'}
+                    </button>
                     <button class="btn btn-primary btn-small"
                         style="margin:0; width:auto; background:var(--cta); color:var(--cta-text); padding:4px 8px;"
                         onclick="downloadBackup('${d.IP}')">
@@ -3680,6 +3879,44 @@
         document.getElementById('customCredsForm').style.display = e.target.value === 'custom' ? 'block' : 'none';
     });
 
+    // §11.6: gestione trasporti per-device (checkbox + porta per protocollo).
+    const TRANSPORT_PROTOS = ['ssh', 'telnet', 'netconf', 'restconf'];
+    const _trCap = (p) => p.charAt(0).toUpperCase() + p.slice(1);
+
+    function updateTelnetWarn() {
+        const on = document.getElementById('trTelnetEnabled').checked;
+        document.getElementById('trTelnetWarn').style.display = on ? 'block' : 'none';
+    }
+    document.getElementById('trTelnetEnabled').addEventListener('change', updateTelnetWarn);
+
+    // Legge il form in una mappa {protocollo: porta|null} coi soli protocolli abilitati.
+    function readTransportsForm() {
+        const out = {};
+        for (const p of TRANSPORT_PROTOS) {
+            if (!document.getElementById('tr' + _trCap(p) + 'Enabled').checked) continue;
+            const raw = document.getElementById('tr' + _trCap(p) + 'Port').value.trim();
+            out[p] = raw ? (parseInt(raw, 10) || null) : null;
+        }
+        return out;
+    }
+
+    // Popola il form dai trasporti del device (mappa {proto: porta|null}).
+    // Assenza => default ssh-only sulla porta indicata.
+    function setTransportsForm(transports, fallbackSshPort) {
+        let map = transports;
+        if (!map || typeof map !== 'object' || !Object.keys(map).length) {
+            map = { ssh: parseInt(fallbackSshPort, 10) || 22 };
+        }
+        const defaults = { ssh: 22, telnet: 23, netconf: 830, restconf: 443 };
+        for (const p of TRANSPORT_PROTOS) {
+            const enabled = Object.prototype.hasOwnProperty.call(map, p);
+            document.getElementById('tr' + _trCap(p) + 'Enabled').checked = enabled;
+            document.getElementById('tr' + _trCap(p) + 'Port').value =
+                (enabled && map[p]) ? map[p] : defaults[p];
+        }
+        updateTelnetWarn();
+    }
+
     document.getElementById('btnSaveDevice').addEventListener('click', async () => {
         const payload = {
             ip: document.getElementById('devIp').value.trim(),
@@ -3689,26 +3926,82 @@
             password: document.getElementById('devPass').value,
             enable_secret: document.getElementById('devSecret').value,
             group: document.getElementById('devGroupSelect').value,
-            ssh_port: parseInt(document.getElementById('devSshPort').value, 10) || 22
+            transports: readTransportsForm()
         };
 
         if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
 
-        const res = await apiFetch('/api/add-device', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify(payload) 
+        // §11.5b: la password non è preservata se vuota (add_or_update_device la
+        // sovrascrive sempre), quindi in modifica va reinserita per intero.
+        if (editingDeviceIp && (!payload.password || !payload.enable_secret)) {
+            alert(i18n[currentLang].alertCredsRequiredOnEdit);
+            return;
+        }
+
+        const res = await apiFetch('/api/add-device', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
         });
         if(res && res.ok) {
-            document.getElementById('devIp').value = '';
-            document.getElementById('devProfile').value = 'default';
-            document.getElementById('customCredsForm').style.display = 'none';
+            resetDeviceForm();
             appInit();
         } else if (res) {
             const err = await res.json();
             alert(`${i18n[currentLang].alertFirstSetupError}${err.detail || i18n[currentLang].alertSaveDeviceError}`);
         }
     });
+
+    // Pre-compila il form di provisioning con i dati del dispositivo esistente
+    // per la modifica (§11.5b). Password/secret restano vuoti: vanno reinseriti,
+    // perché add_or_update_device sovrascrive sempre le credenziali (nessun
+    // "invariato se vuoto" lato backend).
+    function editDevice(ip) {
+        const dev = globalDevices.find(d => d.IP === ip);
+        if (!dev) return;
+        editingDeviceIp = ip;
+
+        document.getElementById('devGroupSelect').value = dev.Group || 'Generale';
+        const ipInput = document.getElementById('devIp');
+        ipInput.value = dev.IP;
+        ipInput.readOnly = true;
+        ipInput.style.opacity = '0.7';
+        let devTransports = null;
+        try { devTransports = dev.Transports ? JSON.parse(dev.Transports) : null; } catch (e) { devTransports = null; }
+        setTransportsForm(devTransports, dev['SSH Port']);
+        document.getElementById('devVendor').value = (dev.Vendor || '').toLowerCase();
+        document.getElementById('devProfile').value = 'custom';
+        document.getElementById('customCredsForm').style.display = 'block';
+        document.getElementById('devUser').value = dev.Username || '';
+        document.getElementById('devPass').value = '';
+        document.getElementById('devSecret').value = '';
+
+        document.getElementById('devFormTitle').innerHTML = i18n[currentLang].titleEditDevice;
+        document.getElementById('devEditNotice').style.display = 'block';
+        document.getElementById('btnSaveDevice').innerHTML = i18n[currentLang].btnUpdateDevice;
+        document.getElementById('btnCancelEditDevice').style.display = 'block';
+
+        document.querySelector('.requires-write').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Riporta il form di provisioning in modalità "aggiunta" (§11.5b).
+    function resetDeviceForm() {
+        editingDeviceIp = null;
+        const ipInput = document.getElementById('devIp');
+        ipInput.value = '';
+        ipInput.readOnly = false;
+        ipInput.style.opacity = '';
+        document.getElementById('devProfile').value = 'default';
+        setTransportsForm(null, 22);
+        document.getElementById('customCredsForm').style.display = 'none';
+        document.getElementById('devUser').value = '';
+        document.getElementById('devPass').value = '';
+        document.getElementById('devSecret').value = '';
+        document.getElementById('devFormTitle').innerHTML = i18n[currentLang].titleProvisioning;
+        document.getElementById('devEditNotice').style.display = 'none';
+        document.getElementById('btnSaveDevice').innerHTML = i18n[currentLang].btnSaveDevice;
+        document.getElementById('btnCancelEditDevice').style.display = 'none';
+    }
 
     async function deleteDevice(ip) {
         if(confirm(i18n[currentLang].confirmDeleteDevice.replace("{ip}", ip))) {
@@ -4087,6 +4380,204 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', provInitToggles);
     else provInitToggles();
 
+    // --- FortiGate API Token Management (Admin-only) ---
+
+    let fgtTokensCache = {};  // Cache dei token configurati
+
+    async function loadFgtTokens() {
+        try {
+            const res = await apiFetch('/api/fortigate/tokens');
+            if (!res || !res.ok) {
+                document.getElementById('fgtTokensEmpty').style.display = '';
+                document.getElementById('fgtTokensTable').style.display = 'none';
+                return;
+            }
+            fgtTokensCache = await res.json();
+            renderFgtTokensTable(fgtTokensCache);
+        } catch(e) {
+            console.error('Errore caricamento token FortiGate:', e);
+        }
+    }
+
+    function renderFgtTokensTable(tokens) {
+        const tbody = document.getElementById('fgtTokensTableBody');
+        const emptyMsg = document.getElementById('fgtTokensEmpty');
+        const table = document.getElementById('fgtTokensTable');
+
+        if (!tbody) return;
+
+        const entries = Object.entries(tokens);
+        if (entries.length === 0) {
+            tbody.innerHTML = '';
+            table.style.display = 'none';
+            emptyMsg.style.display = '';
+            return;
+        }
+
+        table.style.display = '';
+        emptyMsg.style.display = 'none';
+        tbody.innerHTML = entries.map(([ip, conf]) => {
+            const port = conf.port || 443;
+            const verifyTls = conf.verify_tls !== false ? 'Sì' : 'No';
+            const status = '<span style="color:var(--success);"><i class="fa-solid fa-check"></i> Configurato</span>';
+            return `<tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px;">${escapeHtml(ip)}</td>
+                <td style="padding:8px 12px;">${port}</td>
+                <td style="padding:8px 12px;">${verifyTls}</td>
+                <td style="padding:8px 12px;">${status}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function populateFgtDeviceSelect() {
+        const select = document.getElementById('fgtTokenDevice');
+        if (!select) return;
+
+        // Filter globalDevices for FortiGate devices
+        const fgtDevices = globalDevices.filter(dev =>
+            (dev.Vendor || '').toLowerCase() === 'fortinet'
+        );
+
+        const currentValue = select.value;
+        select.innerHTML = '<option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>' +
+            fgtDevices.map(dev =>
+                `<option value="${escapeHtml(dev.IP)}" title="${escapeHtml(dev.Hostname || dev.IP)}">${escapeHtml(dev.IP)} (${escapeHtml(dev.Hostname || 'unknown')})</option>`
+            ).join('');
+
+        if (currentValue) select.value = currentValue;
+    }
+
+    async function saveFgtToken() {
+        const ip = document.getElementById('fgtTokenDevice').value.trim();
+        const token = document.getElementById('fgtTokenValue').value;
+        const port = parseInt(document.getElementById('fgtTokenPort').value) || 443;
+        const verifyTls = document.getElementById('fgtTokenVerifyTls').checked;
+
+        if (!ip) {
+            showToast('Selezionare un dispositivo FortiGate', 'warning');
+            return;
+        }
+
+        // Validate port
+        if (port < 1 || port > 65535) {
+            showToast('Porta non valida (1-65535)', 'error');
+            return;
+        }
+
+        if (!token) {
+            showToast('Inserire un token', 'warning');
+            return;
+        }
+
+        try {
+            const res = await apiFetch('/api/fortigate/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, token, port, verify_tls: verifyTls })
+            });
+
+            if (res && res.ok) {
+                showToast('Token salvato con successo (cifrato)', 'success');
+                document.getElementById('fgtTokenValue').value = '';
+                document.getElementById('fgtTokenPort').value = '443';
+                document.getElementById('fgtTokenVerifyTls').checked = true;
+                document.getElementById('fgtTokenDevice').value = '';
+                await loadFgtTokens();
+            } else {
+                const err = await res.json();
+                showToast(`Errore: ${err.detail || 'Salvataggio token fallito'}`, 'error');
+            }
+        } catch(e) {
+            console.error('Errore saveFgtToken:', e);
+            showToast('Errore di rete', 'error');
+        }
+    }
+
+    async function removeFgtToken() {
+        const ip = document.getElementById('fgtTokenDevice').value.trim();
+        if (!ip) {
+            showToast('Selezionare un dispositivo FortiGate', 'warning');
+            return;
+        }
+
+        if (!confirm(`Rimuovere il token API per ${ip}?`)) return;
+
+        try {
+            const res = await apiFetch('/api/fortigate/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, token: "", port: 443, verify_tls: true })
+            });
+
+            if (res && res.ok) {
+                showToast('Token rimosso con successo', 'success');
+                document.getElementById('fgtTokenDevice').value = '';
+                await loadFgtTokens();
+            } else {
+                const err = await res.json();
+                showToast(`Errore: ${err.detail || 'Rimozione token fallita'}`, 'error');
+            }
+        } catch(e) {
+            console.error('Errore removeFgtToken:', e);
+            showToast('Errore di rete', 'error');
+        }
+    }
+
+    async function testFgtToken() {
+        const ip = document.getElementById('fgtTokenDevice').value.trim();
+        if (!ip) {
+            showToast('Selezionare un dispositivo FortiGate', 'warning');
+            return;
+        }
+
+        const statusDiv = document.getElementById('fgtTokenStatus');
+        statusDiv.textContent = 'Test in corso...';
+        statusDiv.style.color = 'var(--text-muted)';
+
+        try {
+            const res = await apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/status`);
+
+            if (res && res.ok) {
+                const data = await res.json();
+                const source = data.source || 'unknown';
+                const results = data.data || {};
+
+                // Extract hostname and version from results
+                let hostname = results.hostname || results.host || 'Unknown';
+                let version = results.version || results.FortiOS_version || 'Unknown';
+
+                // Handle nested data structure
+                if (results.results) {
+                    hostname = results.results.hostname || hostname;
+                    version = results.results.version || version;
+                }
+
+                const msg = `Test OK (${source}): ${hostname} v${version}`;
+                showToast(msg, 'success');
+                statusDiv.textContent = msg;
+                statusDiv.style.color = 'var(--success)';
+            } else {
+                const err = await res.json();
+                const msg = `Test fallito: ${err.detail || 'Dispositivo non raggiungibile'}`;
+                showToast(msg, 'error');
+                statusDiv.textContent = msg;
+                statusDiv.style.color = 'var(--danger)';
+            }
+        } catch(e) {
+            console.error('Errore testFgtToken:', e);
+            const msg = 'Errore di rete durante il test';
+            showToast(msg, 'error');
+            statusDiv.textContent = msg;
+            statusDiv.style.color = 'var(--danger)';
+        }
+    }
+
+    // Hook per caricare i token quando la tab provisioner si apre
+    function initFgtTokenPanel() {
+        populateFgtDeviceSelect();
+        loadFgtTokens();
+    }
+
     // --- TABS & TOPOLOGY LIST VIEW ---
 
     function switchTab(tabId, clickedBtn) {
@@ -4098,7 +4589,7 @@
         if (btn) {
             btn.classList.add('active');
         }
-        
+
         if (tabId === 'tab-devices') {
             renderDeviceTable();
         } else if(tabId === 'tab-map') loadTopology();
@@ -4113,6 +4604,7 @@
         else if(tabId === 'tab-users') loadUsers();
         else if(tabId === 'tab-sites') loadSites();
         else if(tabId === 'tab-mcp') loadMcpTab();
+        else if(tabId === 'tab-provisioner') initFgtTokenPanel();
         else if(tabId === 'tab-settings') loadAppSettings();
     }
 
@@ -7037,6 +7529,86 @@
         const d = await res.json();
         renderAppSettings(d);
         loadCliBlacklistSetting();
+        loadObsSettings();
+    }
+
+    // --- OBSERVABILITY SETTINGS (§11.5a) ---
+
+    const OBS_LISTENERS = ['ipfix', 'sflow', 'syslog', 'netflow'];
+
+    async function loadObsSettings() {
+        if (currentRole !== 'admin') return;
+        const box = document.getElementById('obsSettingsBody');
+        if (!box) return;
+        const res = await apiFetch('/api/observability/config');
+        if (!res || !res.ok) { box.innerHTML = ''; return; }
+        const d = await res.json();
+        renderObsSettings(d);
+    }
+
+    function renderObsSettings(d) {
+        const box = document.getElementById('obsSettingsBody');
+        if (!box) return;
+        const L = i18n[currentLang];
+        const listenerRows = OBS_LISTENERS.map(l => `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <label style="display:flex; align-items:center; gap:8px; min-width:120px; cursor:pointer;">
+                    <input type="checkbox" id="obs_${l}_enabled" ${d[`${l}_enabled`] ? 'checked' : ''}>
+                    <span style="font-size:13px; text-transform:uppercase;">${l}</span>
+                </label>
+                <input id="obs_${l}_port" type="number" min="1" max="65535"
+                       value="${d[`${l}_port`] != null ? d[`${l}_port`] : ''}"
+                       style="width:100px; padding:6px 10px; border-radius:8px; border:1px solid var(--border);
+                              background:var(--surface-3); color:var(--text); font-family:var(--font-code); font-size:12px;">
+            </div>`).join('');
+        box.innerHTML = `
+            <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:14px;">
+                <input type="checkbox" id="obs_enabled" ${d.enabled ? 'checked' : ''}>
+                <span style="font-size:13px; font-weight:700;" data-i18n="lblObsEnabled">Abilita observability</span>
+            </label>
+            <div class="form-group" style="max-width:280px;">
+                <label data-i18n="lblObsBind">Indirizzo di ascolto (bind)</label>
+                <input id="obs_bind" type="text" value="${escapeHtml(d.bind || '')}" style="padding-left:12px;">
+            </div>
+            <div class="form-group" style="max-width:200px;">
+                <label data-i18n="lblObsApiPoll">Intervallo polling API (s)</label>
+                <input id="obs_api_poll_s" type="number" min="1" value="${d.api_poll_s != null ? d.api_poll_s : ''}" style="padding-left:12px;">
+            </div>
+            <div style="margin-top:10px; margin-bottom:6px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="lblObsListeners">Listener</div>
+            ${listenerRows}
+            <div style="margin-top:12px;">
+                <button class="btn btn-primary btn-small" onclick="saveObsSettings()" data-i18n="btnSave">
+                    <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
+                </button>
+            </div>
+            <div id="obsSettingsError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>`;
+    }
+
+    async function saveObsSettings() {
+        const errEl = document.getElementById('obsSettingsError');
+        if (errEl) errEl.textContent = '';
+        const payload = {
+            enabled: document.getElementById('obs_enabled').checked,
+            bind: document.getElementById('obs_bind').value.trim(),
+            api_poll_s: parseInt(document.getElementById('obs_api_poll_s').value, 10)
+        };
+        OBS_LISTENERS.forEach(l => {
+            payload[`${l}_enabled`] = document.getElementById(`obs_${l}_enabled`).checked;
+            payload[`${l}_port`] = parseInt(document.getElementById(`obs_${l}_port`).value, 10);
+        });
+        const res = await apiFetch('/api/observability/config', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            const msg = (e && e.detail) || (currentLang === 'en' ? 'Save error.' : 'Errore nel salvataggio.');
+            if (errEl) errEl.textContent = msg; else alert(msg);
+            return;
+        }
+        const banner = document.getElementById('obsRestartBanner');
+        if (banner) banner.style.display = 'block';
+        showToast(i18n[currentLang].msgObsRestartRequired || 'Riavvio richiesto per applicare le modifiche.', 'warning');
     }
 
     async function loadCliBlacklistSetting() {
@@ -9699,20 +10271,27 @@
         const attachDeviceIps = getAiAttachDeviceIps();
         const attachTenant = document.getElementById('aiAttachTenant')?.value || null;
         const wasTopFlows = aiAttachTopFlowsOnce;
+        const wasFlowKeys = aiAttachFlowKeysOnce;
 
         const placeholder = appendAiMessage('assistant', '...');
 
         try {
+            const body = {
+                messages: aiHistory,
+                attach_inventory: attachInventory,
+                attach_device_ips: attachDeviceIps,
+                attach_tenant: attachTenant,
+                attach_top_flows: aiAttachTopFlowsOnce
+            };
+            // 11.3: se sono state selezionate righe flusso specifiche, invia le
+            // sole tuple identificative (mai byte/pacchetti — li ri-deriva il server).
+            if (aiAttachFlowKeysOnce && aiAttachFlowKeysOnce.length) {
+                body.attach_flow_keys = aiAttachFlowKeysOnce;
+            }
             const res = await apiFetch('/api/ai/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: aiHistory,
-                    attach_inventory: attachInventory,
-                    attach_device_ips: attachDeviceIps,
-                    attach_tenant: attachTenant,
-                    attach_top_flows: aiAttachTopFlowsOnce
-                })
+                body: JSON.stringify(body)
             });
             if (placeholder) placeholder.remove();
             if (res && res.ok) {
@@ -9734,6 +10313,7 @@
         } finally {
             if (sendBtn) sendBtn.disabled = false;
             if (wasTopFlows) aiAttachTopFlowsOnce = false; // allegato una sola volta
+            if (wasFlowKeys) aiAttachFlowKeysOnce = null;  // allegato una sola volta
         }
     }
 
@@ -9754,6 +10334,13 @@
     let flowsRefreshTimer = null;
     let flowsFetchInFlight = false;
     let aiAttachTopFlowsOnce = false;
+    let aiAttachFlowKeysOnce = null;                  // 11.3: tuple dei flussi selezionati da allegare una sola volta
+    let _flowsRawData = [];                           // cache rows from last fetch
+    let _flowsSelectedTenants = new Set();             // selected tenant names
+    let _flowsAllTenantsChecked = true;                // "Tutti" checkbox state
+    let _flowsSelectedKeys = new Set();                // selected flow keys (tuple string, survives filter/refresh)
+    let _flowPanelFlow = null;                         // flow object currently shown in the detail panel
+    let _anomIpFilter = null;                          // {src, dst} client-side filter for the anomalies table
 
     function flowsTabShown() {
         loadTopTalkers();
@@ -9826,22 +10413,182 @@
                 return;
             }
             const flows = (await res.json()).flows || [];
+            _flowsRawData = flows;                     // cache for filtering
             document.getElementById('flowsLastUpdate').textContent =
                 'Aggiornato: ' + new Date().toLocaleTimeString();
-            if (flows.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>`;
-                return;
+
+            // Rebuild tenant checkbox list from distinct tenants in fetched data
+            rebuildFlowsTenantList(flows);
+
+            // Render filtered table
+            renderFlowsTable();
+        } finally {
+            flowsFetchInFlight = false;
+        }
+    }
+
+    function rebuildFlowsTenantList(flows) {
+        // Extract distinct tenants from flows, maintaining order of appearance
+        const tenants = [...new Set(flows.map(f => f.tenant))].sort();
+        const listDiv = document.getElementById('flowsTenantList');
+        if (!listDiv) return;
+
+        // Preserve checked state for tenants that still exist
+        const newSelected = new Set();
+        for (const t of tenants) {
+            if (_flowsSelectedTenants.has(t) || _flowsAllTenantsChecked) {
+                newSelected.add(t);
             }
-            const maxVal = Math.max(...flows.map(f => m === 'bytes' ? f.total_bytes : f.total_packets));
-            tbody.innerHTML = flows.map((f, i) => {
-                const val = m === 'bytes' ? f.total_bytes : f.total_packets;
-                const pct = maxVal ? (val / maxVal * 100).toFixed(1) : 0;
-                const proto = ({6: 'TCP', 17: 'UDP', 1: 'ICMP'})[f.protocol] || f.protocol || '—';
-                return `<tr style="font-size:12px; border-top:1px solid var(--border);">
-                    <td style="padding:6px 8px;">${i + 1}</td>
+        }
+        _flowsSelectedTenants = newSelected;
+
+        // Update checkbox list
+        listDiv.innerHTML = tenants.map(t => `
+            <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer;">
+                <input type="checkbox" value="${escapeHtml(t)}" onchange="updateFlowsTenantSelection()"
+                       ${newSelected.has(t) ? 'checked' : ''} style="accent-color:var(--primary);">
+                <span>${escapeHtml(t)}</span>
+            </label>
+        `).join('');
+
+        // Update "Tutti" checkbox state
+        const allCheckbox = document.getElementById('flowsTenantAll');
+        if (allCheckbox) {
+            allCheckbox.checked = tenants.length > 0 && tenants.every(t => newSelected.has(t));
+            _flowsAllTenantsChecked = allCheckbox.checked;
+        }
+
+        // Update button label
+        updateFlowsTenantButtonLabel(tenants.length);
+    }
+
+    function updateFlowsTenantSelection() {
+        const checkboxes = Array.from(document.querySelectorAll('#flowsTenantList input[type="checkbox"]'));
+        const selected = new Set(checkboxes.filter(cb => cb.checked).map(cb => cb.value));
+        _flowsSelectedTenants = selected;
+
+        // Update "Tutti" checkbox
+        const allCheckbox = document.getElementById('flowsTenantAll');
+        const totalTenants = checkboxes.length;
+        const checkedCount = checkboxes.filter(cb => cb.checked).length;
+        if (allCheckbox) {
+            allCheckbox.checked = checkedCount === totalTenants;
+            _flowsAllTenantsChecked = allCheckbox.checked;
+        }
+
+        updateFlowsTenantButtonLabel(totalTenants);
+        renderFlowsTable();
+    }
+
+    function toggleFlowsTenantAll() {
+        const allCheckbox = document.getElementById('flowsTenantAll');
+        const checkboxes = Array.from(document.querySelectorAll('#flowsTenantList input[type="checkbox"]'));
+        const shouldCheck = allCheckbox.checked;
+        checkboxes.forEach(cb => cb.checked = shouldCheck);
+        _flowsSelectedTenants = shouldCheck ? new Set(checkboxes.map(cb => cb.value)) : new Set();
+        _flowsAllTenantsChecked = shouldCheck;
+        updateFlowsTenantButtonLabel(checkboxes.length);
+        renderFlowsTable();
+    }
+
+    function updateFlowsTenantButtonLabel(totalTenants) {
+        const btn = document.getElementById('flowsTenantBtn');
+        if (!btn) return;
+        let label = 'Tenants';
+        if (totalTenants === 0) {
+            label = 'Tenants';
+        } else if (_flowsSelectedTenants.size === 0) {
+            label = 'Nessun tenant';
+        } else if (_flowsSelectedTenants.size === totalTenants) {
+            label = 'Tutti i tenant';
+        } else {
+            label = `${_flowsSelectedTenants.size} tenant`;
+        }
+        btn.textContent = label;
+        // Re-add icon
+        btn.innerHTML = `<i class="fa-solid fa-filter"></i> ${label}`;
+    }
+
+    // Chiave di selezione del flusso: per tupla, non per indice riga, così la
+    // selezione sopravvive al filtro tenant (11.1) e al refresh periodico.
+    function flowKey(f) {
+        return `${f.tenant}|${f.src_ip}|${f.dst_ip}|${f.protocol}|${f.dst_port}`;
+    }
+
+    // Input per 11.3 (analisi AI sulle sole righe selezionate).
+    function getSelectedFlows() {
+        return _flowsRawData.filter(f => _flowsSelectedKeys.has(flowKey(f)));
+    }
+
+    // 11.3: tupla identificativa (SOLO identificatori — nessun byte/pacchetto:
+    // il server ri-deriva i totali dal DB).
+    function flowToKey(f) {
+        return {
+            src_ip: f.src_ip,
+            dst_ip: f.dst_ip,
+            protocol: Number(f.protocol),
+            dst_port: (f.dst_port === undefined || f.dst_port === null || f.dst_port === '')
+                ? null : Number(f.dst_port)
+        };
+    }
+
+    function toggleFlowRowSelect(key, checked) {
+        if (checked) _flowsSelectedKeys.add(key); else _flowsSelectedKeys.delete(key);
+        syncFlowsSelectAllCheckbox();
+    }
+
+    function toggleFlowsSelectAll(cb) {
+        const rowBoxes = Array.from(document.querySelectorAll('#flowsTableBody input.flow-row-check'));
+        rowBoxes.forEach(box => {
+            box.checked = cb.checked;
+            if (cb.checked) _flowsSelectedKeys.add(box.dataset.key);
+            else _flowsSelectedKeys.delete(box.dataset.key);
+        });
+    }
+
+    function syncFlowsSelectAllCheckbox() {
+        const all = document.getElementById('flowsSelectAll');
+        const rowBoxes = Array.from(document.querySelectorAll('#flowsTableBody input.flow-row-check'));
+        if (all) all.checked = rowBoxes.length > 0 && rowBoxes.every(b => b.checked);
+    }
+
+    function renderFlowsTable() {
+        const tbody = document.getElementById('flowsTableBody');
+        const m = document.getElementById('flowsMetric').value;
+
+        // Filter by selected tenants
+        const filtered = _flowsRawData.length === 0 ? []
+            : _flowsSelectedTenants.size === 0 ? []
+            : _flowsRawData.filter(f => _flowsSelectedTenants.has(f.tenant));
+
+        // Selection may reference flows no longer present (e.g. window change); prune lazily.
+        const filteredKeys = new Set(filtered.map(flowKey));
+        _flowsSelectedKeys.forEach(k => { if (!filteredKeys.has(k) && !_flowsRawData.some(f => flowKey(f) === k)) _flowsSelectedKeys.delete(k); });
+
+        if (filtered.length === 0) {
+            const emptyMsg = _flowsRawData.length === 0
+                ? 'Nessun flusso nel periodo selezionato.'
+                : 'Nessun flusso nel periodo selezionato.';
+            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">${emptyMsg}</td></tr>`;
+            const all = document.getElementById('flowsSelectAll');
+            if (all) all.checked = false;
+            return;
+        }
+
+        const maxVal = Math.max(...filtered.map(f => m === 'bytes' ? f.total_bytes : f.total_packets));
+        let rowNum = 1;
+        tbody.innerHTML = filtered.map((f) => {
+            const val = m === 'bytes' ? f.total_bytes : f.total_packets;
+            const pct = maxVal ? (val / maxVal * 100).toFixed(1) : 0;
+            const proto = ({6: 'TCP', 17: 'UDP', 1: 'ICMP'})[f.protocol] || f.protocol || '—';
+            const key = flowKey(f);
+            const checked = _flowsSelectedKeys.has(key) ? 'checked' : '';
+            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" onclick="openFlowDetailPanelByKey('${escapeHtml(key)}', event)">
+                    <td style="padding:6px 8px;" onclick="event.stopPropagation();"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} onchange="toggleFlowRowSelect('${escapeHtml(key)}', this.checked)" style="accent-color:var(--primary);"></td>
+                    <td style="padding:6px 8px;">${rowNum++}</td>
                     <td>${escapeHtml(f.tenant)}</td>
-                    <td><a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.src_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.src_ip)}</a></td>
-                    <td><a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.dst_ip)}</a></td>
+                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.src_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.src_ip)}</a></td>
+                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.dst_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.dst_ip)}</a></td>
                     <td>${proto}/${f.dst_port ?? '—'}</td>
                     <td><div style="display:flex; align-items:center; gap:8px;">
                         <div style="flex:1; height:7px; background:var(--surface-3); border-radius:4px;"><div style="height:100%; width:${pct}%; background:var(--primary); border-radius:4px;"></div></div>
@@ -9849,11 +10596,115 @@
                     <td>${f.total_packets}</td>
                     <td>${f.flow_count}</td>
                 </tr>`;
-            }).join('');
-        } finally {
-            flowsFetchInFlight = false;
+        }).join('');
+        syncFlowsSelectAllCheckbox();
+    }
+
+    // --- Pannello dettaglio flusso (slide-in) ---------------------------
+
+    function openFlowDetailPanelByKey(key, evt) {
+        if (evt && evt.target && evt.target.closest('input, a')) return; // checkbox/link già gestiti (stopPropagation)
+        const f = _flowsRawData.find(row => flowKey(row) === key);
+        if (f) openFlowDetailPanel(f);
+    }
+
+    function openFlowDetailPanel(f) {
+        _flowPanelFlow = f;
+        const proto = ({6: 'TCP', 17: 'UDP', 1: 'ICMP'})[f.protocol] || f.protocol || '—';
+        const row = (label, value) => `<tr><td style="padding:4px 8px 4px 0; color:var(--text-muted); white-space:nowrap;">${label}</td><td style="padding:4px 0;">${value}</td></tr>`;
+        const body = document.getElementById('flowDetailPanelBody');
+        body.innerHTML = `
+            <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:14px;">
+                ${row('Sede', escapeHtml(f.tenant))}
+                ${row('Sorgente', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.src_ip)}</a>`)}
+                ${row('Destinazione', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.dst_ip)}</a>`)}
+                ${row('Proto/Porta', `${proto}/${f.dst_port ?? '—'}`)}
+                ${row('Traffico', fmtBytes(f.total_bytes))}
+                ${row('Pacchetti', f.total_packets)}
+                ${row('Flussi aggregati', f.flow_count)}
+            </table>
+            <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+                <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">
+                    <i class="fa-solid fa-diagram-project"></i> Mostra sorgente in topologia
+                </button>
+                <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">
+                    <i class="fa-solid fa-diagram-project"></i> Mostra destinazione in topologia
+                </button>
+                <button class="btn" style="text-align:left;" onclick="jumpToAnomaliesForFlow()">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Vedi anomalie di questo flusso
+                </button>
+                <button class="btn requires-write" style="text-align:left;" onclick="analyzeSingleFlowWithAi()" title="Invia SOLO questo flusso all'assistente AI (identificatori; totali ri-derivati dal server)">
+                    <i class="fa-solid fa-robot"></i> Analizza con AI
+                </button>
+            </div>
+            <h5 style="margin:0 0 8px 0;">Client (sorgente)</h5>
+            <div id="flowPanelClientMap" style="font-size:12px; color:var(--text-muted);">Ricerca in corso…</div>
+        `;
+        document.getElementById('flowDetailPanel').style.display = 'block';
+        loadFlowPanelClientMap(f.src_ip);
+    }
+
+    function closeFlowDetailPanel() {
+        document.getElementById('flowDetailPanel').style.display = 'none';
+        _flowPanelFlow = null;
+    }
+
+    // Riusa l'endpoint del Client Map (§ tab ARP) — nessun nuovo endpoint backend.
+    async function loadFlowPanelClientMap(ip) {
+        const box = document.getElementById('flowPanelClientMap');
+        if (!box) return;
+        try {
+            const res = await apiFetch('/api/arp/client-map?' + new URLSearchParams({ ip }).toString());
+            if (!res || !res.ok) { box.textContent = 'Ricerca client-map non disponibile.'; return; }
+            const d = await res.json();
+            const rows = d.results || [];
+            if (rows.length === 0) {
+                box.textContent = 'Nessun binding MAC/IP noto per questa sorgente.';
+                return;
+            }
+            box.innerHTML = rows.map(r => `
+                <div style="padding:8px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+                    <div><b>MAC</b>: <code>${escapeHtml(r.mac)}</code></div>
+                    <div><b>Gateway</b>: ${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip || '')}</span></div>
+                    <div><b>Switch di accesso</b>: ${r.switch_ip ? `${escapeHtml(r.switch_name || '')} ${escapeHtml(r.switch_ip)}` : '—'}</div>
+                    <div><b>Porta</b>: ${escapeHtml(r.switch_port || '—')}</div>
+                </div>`).join('');
+        } catch (e) {
+            box.textContent = 'Ricerca client-map non disponibile.';
         }
     }
+
+    // Salta alla tabella anomalie filtrata per gli IP src/dst del flusso.
+    function jumpToAnomaliesForFlow() {
+        const f = _flowPanelFlow;
+        if (!f) return;
+        _anomIpFilter = { src: f.src_ip, dst: f.dst_ip };
+        closeFlowDetailPanel();
+        const statusSel = document.getElementById('anomStatus');
+        if (statusSel) statusSel.value = 'all';
+        loadAnomalies();
+        document.querySelector('#tab-flows h4')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function clearAnomIpFilter() {
+        _anomIpFilter = null;
+        loadAnomalies();
+    }
+
+    function toggleFlowsTenantDropdown() {
+        const dropdown = document.getElementById('flowsTenantDropdown');
+        if (!dropdown) return;
+        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', function(e) {
+        const dropdown = document.getElementById('flowsTenantDropdown');
+        const btn = document.getElementById('flowsTenantBtn');
+        if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
 
     // Mappatura IP → nodo topologia: i nodi Vis.js usano l'IP del device come
     // id (vedi loadInteractiveMap: n.id confrontato con globalDevices[].IP).
@@ -9872,10 +10723,18 @@
         tryFocus(0);
     }
 
-    async function analyzeFlowsWithAi() {
-        // Il contesto è assemblato e REDATTO lato server (attach_top_flows):
-        // il browser invia solo la domanda.
-        aiAttachTopFlowsOnce = true;
+    // Percorso comune: prepara il chat AI col contesto flussi (server-side).
+    // ``flows`` non vuoto → analisi delle sole righe selezionate (attach_flow_keys);
+    // altrimenti fallback al riassunto top-N (attach_top_flows).
+    async function _prepareFlowAiChat(flows) {
+        const selected = flows && flows.length;
+        if (selected) {
+            aiAttachFlowKeysOnce = flows.map(flowToKey);
+            aiAttachTopFlowsOnce = false;
+        } else {
+            aiAttachFlowKeysOnce = null;
+            aiAttachTopFlowsOnce = true;
+        }
         let providerName = '';
         try {
             const res = await apiFetch('/api/ai/profiles');
@@ -9887,14 +10746,36 @@
         } catch (e) { /* nome provider best-effort */ }
         const note = document.getElementById('flowsAiNote');
         note.style.display = 'block';
-        note.textContent = '⚠️ I dati aggregati dei flussi (riassunto top-N, con segreti redatti) '
-            + 'verranno inviati al provider AI configurato'
+        // Il contesto è assemblato e REDATTO lato server: il browser invia solo
+        // le tuple identificative (mai byte/pacchetti) e la domanda.
+        note.textContent = '⚠️ ' + (selected
+            ? `Vengono inviati SOLO i ${flows.length} flussi selezionati (identificatori; totali ri-derivati dal server, segreti redatti)`
+            : 'I dati aggregati dei flussi (riassunto top-N, con segreti redatti)')
+            + ' verranno inviati al provider AI configurato'
             + (providerName ? ` (${providerName})` : '') + '.';
         switchTab('tab-ai', document.querySelector(`.tab-button[onclick*="'tab-ai'"]`));
         const input = document.getElementById('aiChatInput');
-        input.value = 'Analizza i flussi di rete allegati: individua i top talker anomali, '
-            + 'possibili esfiltrazioni o scansioni, e correla con le anomalie aperte.';
+        input.value = selected
+            ? `Analizza i ${flows.length} flussi di rete selezionati e allegati: `
+              + 'individua top talker anomali, possibili esfiltrazioni o scansioni, '
+              + 'e correla con le anomalie aperte.'
+            : 'Analizza i flussi di rete allegati: individua i top talker anomali, '
+              + 'possibili esfiltrazioni o scansioni, e correla con le anomalie aperte.';
         input.focus();
+    }
+
+    async function analyzeFlowsWithAi() {
+        // Se l'utente ha selezionato righe (11.2), analizza SOLO quelle;
+        // altrimenti il percorso legacy top-N (attach_top_flows).
+        await _prepareFlowAiChat(getSelectedFlows());
+    }
+
+    // 11.3: analisi AI del singolo flusso dal pannello dettaglio.
+    async function analyzeSingleFlowWithAi() {
+        if (!_flowPanelFlow) return;
+        const f = _flowPanelFlow;
+        closeFlowDetailPanel();
+        await _prepareFlowAiChat([f]);
     }
 
     async function loadAnomalies() {
@@ -9902,7 +10783,21 @@
         const status = document.getElementById('anomStatus').value;
         const res = await apiFetch(`/api/observability/anomalies?status=${encodeURIComponent(status)}&window=7d&limit=100`);
         if (!res || !res.ok) return;
-        const rows = (await res.json()).anomalies || [];
+        let rows = (await res.json()).anomalies || [];
+
+        // Filtro client-side per IP src/dst del flusso, impostato dal pannello dettaglio flussi.
+        const chip = document.getElementById('anomIpFilterChip');
+        if (_anomIpFilter) {
+            const { src, dst } = _anomIpFilter;
+            rows = rows.filter(a => a.src_ip === src || a.dst_ip === src || a.src_ip === dst || a.dst_ip === dst);
+            if (chip) {
+                chip.style.display = 'inline-flex';
+                chip.querySelector('span').textContent = `Filtrato per flusso: ${src} / ${dst}`;
+            }
+        } else if (chip) {
+            chip.style.display = 'none';
+        }
+
         if (rows.length === 0) {
             tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">Nessuna anomalia.</td></tr>`;
             return;

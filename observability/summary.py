@@ -13,24 +13,48 @@ import time
 import db
 
 
-def top_flows_context(scope, window_s: int = 900, limit: int = 20) -> str:
+def top_flows_context(scope, window_s: int = 900, limit: int = 20,
+                      keys=None) -> str:
     """Blocco markdown con i top flussi della finestra, scoped per tenant.
-    ``scope``: set di gruppi consentiti oppure None (nessuna restrizione)."""
+    ``scope``: set di gruppi consentiti oppure None (nessuna restrizione).
+    ``keys`` (11.3): lista opzionale di dict {src_ip, dst_ip, protocol, dst_port}
+    per vincolare il contesto alle sole righe selezionate. Lo scope tenant NON
+    viene MAI rilassato dai key forniti dal client; i totali byte/pacchetti sono
+    ri-derivati qui dal DB (i volumi eventualmente inviati dal client sono
+    ignorati). ``keys`` None/vuoto → comportamento invariato (intera finestra)."""
     cutoff = int(time.time()) - window_s
     clause, params = "", ()
     if scope is not None:
         groups = sorted(scope)
         clause = f" AND tenant IN ({','.join('?' * len(groups))})"
         params = tuple(groups)
+    # Vincolo per-tupla (solo query flussi, mai le anomalie). Lo scope tenant
+    # sopra resta applicato in AND, quindi i key fuori scope non possono
+    # estrarre righe di altri tenant.
+    flow_clause, flow_params = "", ()
+    if keys:
+        parts, kparams = [], []
+        for k in keys:
+            dport = k.get("dst_port")
+            if dport is None:
+                parts.append("(src_ip = ? AND dst_ip = ? AND protocol = ? "
+                             "AND dst_port IS NULL)")
+                kparams.extend([k["src_ip"], k["dst_ip"], k["protocol"]])
+            else:
+                parts.append("(src_ip = ? AND dst_ip = ? AND protocol = ? "
+                             "AND dst_port = ?)")
+                kparams.extend([k["src_ip"], k["dst_ip"], k["protocol"], dport])
+        flow_clause = " AND (" + " OR ".join(parts) + ")"
+        flow_params = tuple(kparams)
     conn = db.get_observability_connection()
     try:
         rows = conn.execute(
             f"""SELECT tenant, src_ip, dst_ip, protocol, dst_port,
                        SUM(total_bytes) AS b, SUM(total_packets) AS p
-                FROM flow_aggregates WHERE window_start >= ?{clause}
+                FROM flow_aggregates WHERE window_start >= ?{clause}{flow_clause}
                 GROUP BY tenant, src_ip, dst_ip, protocol, dst_port
                 ORDER BY b DESC LIMIT ?""",
-            (cutoff, *params, limit)).fetchall()
+            (cutoff, *params, *flow_params, limit)).fetchall()
         anomalies = conn.execute(
             f"""SELECT created_ts, tenant, kind, src_ip, dst_ip, switch_port,
                        severity

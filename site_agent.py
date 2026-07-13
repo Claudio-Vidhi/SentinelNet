@@ -126,7 +126,8 @@ class Agent:
                 netmiko_type = "cisco_ios"
             try:
                 res = mac_collector.collect_mac_table(
-                    ip, username, password, secret, device_type=netmiko_type)
+                    ip, username, password, secret, device_type=netmiko_type,
+                    transports=inventory_manager.parse_transports(d))
             except Exception as e:
                 print(f"[mac] {ip}: errore raccolta: {e}")
                 continue
