@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS flow_aggregates (
     total_packets  INTEGER NOT NULL DEFAULT 0,
     flow_count     INTEGER NOT NULL DEFAULT 0,
     exporter_ip    TEXT,
+    source         TEXT,                      -- listener di origine: ipfix|netflow|sflow (NULL = legacy)
     UNIQUE(window_start, tenant, src_ip, dst_ip, protocol, dst_port)
 );
 CREATE INDEX IF NOT EXISTS idx_flow_window_tenant

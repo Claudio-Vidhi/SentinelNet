@@ -1493,17 +1493,21 @@
         </button>
       </div>
       <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, #e0a800); margin-bottom:10px;"></div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+        <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+        <div style="position:relative; display:inline-block; margin-left:auto;">
+          <button id="flowsColsBtn" class="btn btn-small" onclick="toggleFlowsColsDropdown()" style="padding:6px 12px;">
+            <i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span>
+          </button>
+          <div id="flowsColsDropdown" style="display:none; position:absolute; top:100%; right:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:180px; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1); padding:8px;"></div>
+        </div>
+      </div>
       <div style="max-height:420px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
         <table style="width:100%; border-collapse:collapse;">
-          <thead style="position:sticky; top:0; background:var(--surface-2);">
-            <tr style="font-size:12px; text-align:left;">
-              <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" onclick="toggleFlowsSelectAll(this)" style="accent-color:var(--primary);" title="Seleziona tutti"></th>
-              <th style="padding:8px;">#</th><th>Sede</th><th>Sorgente</th><th>Destinazione</th>
-              <th>Proto/Porta</th><th style="min-width:180px;">Traffico</th><th>Pacchetti</th><th>Flussi</th>
-            </tr>
+          <thead id="flowsTableHead" style="position:sticky; top:0; background:var(--surface-2);">
           </thead>
           <tbody id="flowsTableBody">
-            <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>
+            <tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>
           </tbody>
         </table>
       </div>
@@ -2690,6 +2694,21 @@
         lblAiDevSelected: "selezionati",
         phAiChatInput: "Scrivi un messaggio...",
         msgAiNoDevices: "Nessun dispositivo",
+        chipAllSources: "Tutte le origini",
+        thFlTenant: "Sede",
+        thFlSrc: "Sorgente",
+        thFlDst: "Destinazione",
+        thFlProto: "Proto/Porta",
+        thFlSource: "Origine",
+        thFlTraffic: "Traffico",
+        thFlPackets: "Pacchetti",
+        thFlFlows: "Flussi",
+        thSlWhen: "Quando",
+        thSlDevice: "Dispositivo",
+        thSlSev: "Sev",
+        thSlAction: "Azione",
+        thSlMsg: "Messaggio",
+        msgNoSyslog: "Nessun evento syslog nel periodo selezionato.",
         titleAppAdvanced: "Applicazione (avanzate)",
         descAppAdvanced: "Porta HTTP, TLS, CORS, retention dei dati observability e apertura automatica del browser. Le variabili d'ambiente, se impostate, hanno la precedenza. Le modifiche richiedono il riavvio dell'applicazione.",
         lblAppPort: "Porta HTTP",
@@ -3156,6 +3175,21 @@
         lblAiDevSelected: "selected",
         phAiChatInput: "Type a message...",
         msgAiNoDevices: "No devices",
+        chipAllSources: "All sources",
+        thFlTenant: "Site",
+        thFlSrc: "Source",
+        thFlDst: "Destination",
+        thFlProto: "Proto/Port",
+        thFlSource: "Origin",
+        thFlTraffic: "Traffic",
+        thFlPackets: "Packets",
+        thFlFlows: "Flows",
+        thSlWhen: "When",
+        thSlDevice: "Device",
+        thSlSev: "Sev",
+        thSlAction: "Action",
+        thSlMsg: "Message",
+        msgNoSyslog: "No syslog events in the selected period.",
         titleAppAdvanced: "Application (advanced)",
         descAppAdvanced: "HTTP port, TLS, CORS, observability data retention and automatic browser opening. Environment variables, when set, take precedence. Changes require an application restart.",
         lblAppPort: "HTTP port",
@@ -10508,7 +10542,122 @@
     let _flowPanelFlow = null;                         // flow object currently shown in the detail panel
     let _anomIpFilter = null;                          // {src, dst} client-side filter for the anomalies table
 
+    // --- Filtro per origine dati + colonne dinamiche (flussi vs syslog) ---
+    const FLOWS_SOURCES = ['all', 'netflow', 'ipfix', 'sflow', 'syslog'];
+    const FLOWS_SOURCE_LABELS = { netflow: 'NetFlow', ipfix: 'IPFIX', sflow: 'sFlow', syslog: 'Syslog' };
+    // Colonne del modo flusso che l'utente può nascondere (id → chiave i18n).
+    const FLOW_TOGGLE_COLS = [
+        { id: 'tenant',  lbl: 'thFlTenant' },
+        { id: 'source',  lbl: 'thFlSource' },
+        { id: 'proto',   lbl: 'thFlProto' },
+        { id: 'packets', lbl: 'thFlPackets' },
+        { id: 'flows',   lbl: 'thFlFlows' },
+    ];
+    let _flowsSource = 'all';
+    let _flowsSyslogData = [];
+    let _flowsHiddenCols = new Set(JSON.parse(localStorage.getItem('sentinelnet_flows_hidden_cols') || '[]'));
+
+    function flowsColHidden(id) { return _flowsHiddenCols.has(id); }
+
+    function renderFlowsSourceChips() {
+        const box = document.getElementById('flowsSourceChips');
+        if (!box) return;
+        const L = i18n[currentLang];
+        box.innerHTML = FLOWS_SOURCES.map(s => {
+            const active = s === _flowsSource;
+            const label = s === 'all' ? (L.chipAllSources || 'Tutte le origini') : FLOWS_SOURCE_LABELS[s];
+            return `<button class="btn btn-small" onclick="setFlowsSource('${s}')"
+                style="padding:5px 14px; border-radius:16px; font-size:12px;
+                       ${active ? 'background:var(--primary); color:#fff; border-color:var(--primary);' : ''}">${label}</button>`;
+        }).join('');
+        const colsBtn = document.getElementById('flowsColsBtn');
+        if (colsBtn) colsBtn.style.display = _flowsSource === 'syslog' ? 'none' : '';
+    }
+
+    function setFlowsSource(s) {
+        _flowsSource = s;
+        renderFlowsSourceChips();
+        loadTopTalkers();
+    }
+
+    function toggleFlowsColsDropdown() {
+        const dd = document.getElementById('flowsColsDropdown');
+        if (!dd) return;
+        if (dd.style.display === 'none') {
+            const L = i18n[currentLang];
+            dd.innerHTML = FLOW_TOGGLE_COLS.map(c => `
+                <label style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer; font-size:13px;">
+                    <input type="checkbox" ${flowsColHidden(c.id) ? '' : 'checked'}
+                           onchange="toggleFlowsCol('${c.id}', this.checked)" style="accent-color:var(--primary);">
+                    <span>${escapeHtml(L[c.lbl] || c.id)}</span>
+                </label>`).join('');
+            dd.style.display = 'block';
+        } else {
+            dd.style.display = 'none';
+        }
+    }
+
+    function toggleFlowsCol(id, visible) {
+        if (visible) _flowsHiddenCols.delete(id); else _flowsHiddenCols.add(id);
+        localStorage.setItem('sentinelnet_flows_hidden_cols', JSON.stringify([..._flowsHiddenCols]));
+        renderFlowsTable();
+    }
+
+    document.addEventListener('click', function(e) {
+        const dd = document.getElementById('flowsColsDropdown');
+        const btn = document.getElementById('flowsColsBtn');
+        if (dd && btn && !dd.contains(e.target) && !btn.contains(e.target)) {
+            dd.style.display = 'none';
+        }
+    });
+
+    function renderFlowsThead() {
+        const head = document.getElementById('flowsTableHead');
+        if (!head) return;
+        const L = i18n[currentLang];
+        const th = (txt, style = '') => `<th ${style ? `style="${style}"` : ''}>${txt}</th>`;
+        if (_flowsSource === 'syslog') {
+            head.innerHTML = `<tr style="font-size:12px; text-align:left;">
+                ${th(L.thSlWhen || 'Quando', 'padding:8px;')}${th(L.thFlTenant || 'Sede')}
+                ${th(L.thSlDevice || 'Dispositivo')}${th(L.thSlSev || 'Sev')}
+                ${th(L.thSlAction || 'Azione')}${th(L.thSlMsg || 'Messaggio')}</tr>`;
+            return;
+        }
+        head.innerHTML = `<tr style="font-size:12px; text-align:left;">
+            <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" onclick="toggleFlowsSelectAll(this)" style="accent-color:var(--primary);" title="${escapeHtml(L.lnkSelectAll || 'Seleziona tutti')}"></th>
+            <th style="padding:8px;">#</th>
+            ${flowsColHidden('tenant') ? '' : th(L.thFlTenant || 'Sede')}
+            ${th(L.thFlSrc || 'Sorgente')}${th(L.thFlDst || 'Destinazione')}
+            ${flowsColHidden('proto') ? '' : th(L.thFlProto || 'Proto/Porta')}
+            ${flowsColHidden('source') ? '' : th(L.thFlSource || 'Origine')}
+            ${th(L.thFlTraffic || 'Traffico', 'min-width:180px;')}
+            ${flowsColHidden('packets') ? '' : th(L.thFlPackets || 'Pacchetti')}
+            ${flowsColHidden('flows') ? '' : th(L.thFlFlows || 'Flussi')}</tr>`;
+    }
+
+    function renderSyslogTable() {
+        const tbody = document.getElementById('flowsTableBody');
+        const L = i18n[currentLang];
+        const rows = _flowsSyslogData.filter(e =>
+            _flowsSelectedTenants.size > 0 && _flowsSelectedTenants.has(e.tenant));
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${L.msgNoSyslog || 'Nessun evento syslog nel periodo selezionato.'}</td></tr>`;
+            return;
+        }
+        const sevColor = s => s == null ? 'var(--text-muted)' : s <= 3 ? 'var(--danger)' : s <= 4 ? 'var(--warning)' : 'var(--text-muted)';
+        tbody.innerHTML = rows.map(e => `
+            <tr style="font-size:12px; border-top:1px solid var(--border);">
+                <td style="padding:6px 8px; white-space:nowrap;">${new Date(e.ts * 1000).toLocaleString()}</td>
+                <td>${escapeHtml(e.tenant)}</td>
+                <td>${escapeHtml(e.device_ip || e.exporter_ip || '—')}</td>
+                <td style="color:${sevColor(e.severity)}; font-weight:700;">${e.severity ?? '—'}</td>
+                <td>${escapeHtml(e.action || '—')}</td>
+                <td style="max-width:520px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(e.message || '')}">${escapeHtml(e.message || '')}</td>
+            </tr>`).join('');
+    }
+
     function flowsTabShown() {
+        renderFlowsSourceChips();
         loadTopTalkers();
         loadAnomalies();
         startFlowsAutoRefresh();
@@ -10573,9 +10722,24 @@
         try {
             const w = document.getElementById('flowsWindow').value;
             const m = document.getElementById('flowsMetric').value;
-            const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100`);
+            if (_flowsSource === 'syslog') {
+                const res = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
+                if (!res || !res.ok) {
+                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">Errore nel caricamento degli eventi syslog.</td></tr>`;
+                    return;
+                }
+                _flowsSyslogData = (await res.json()).events || [];
+                document.getElementById('flowsLastUpdate').textContent =
+                    'Aggiornato: ' + new Date().toLocaleTimeString();
+                rebuildFlowsTenantList(_flowsSyslogData);
+                renderFlowsThead();
+                renderSyslogTable();
+                return;
+            }
+            const srcParam = _flowsSource === 'all' ? '' : `&source=${_flowsSource}`;
+            const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}`);
             if (!res || !res.ok) {
-                if (res) tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">Errore nel caricamento dei flussi.</td></tr>`;
+                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">Errore nel caricamento dei flussi.</td></tr>`;
                 return;
             }
             const flows = (await res.json()).flows || [];
@@ -10678,7 +10842,7 @@
     // Chiave di selezione del flusso: per tupla, non per indice riga, così la
     // selezione sopravvive al filtro tenant (11.1) e al refresh periodico.
     function flowKey(f) {
-        return `${f.tenant}|${f.src_ip}|${f.dst_ip}|${f.protocol}|${f.dst_port}`;
+        return `${f.tenant}|${f.src_ip}|${f.dst_ip}|${f.protocol}|${f.dst_port}|${f.source ?? ''}`;
     }
 
     // Input per 11.3 (analisi AI sulle sole righe selezionate).
@@ -10719,6 +10883,8 @@
     }
 
     function renderFlowsTable() {
+        renderFlowsThead();
+        if (_flowsSource === 'syslog') { renderSyslogTable(); return; }
         const tbody = document.getElementById('flowsTableBody');
         const m = document.getElementById('flowsMetric').value;
 
@@ -10732,10 +10898,7 @@
         _flowsSelectedKeys.forEach(k => { if (!filteredKeys.has(k) && !_flowsRawData.some(f => flowKey(f) === k)) _flowsSelectedKeys.delete(k); });
 
         if (filtered.length === 0) {
-            const emptyMsg = _flowsRawData.length === 0
-                ? 'Nessun flusso nel periodo selezionato.'
-                : 'Nessun flusso nel periodo selezionato.';
-            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">${emptyMsg}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>`;
             const all = document.getElementById('flowsSelectAll');
             if (all) all.checked = false;
             return;
@@ -10749,18 +10912,20 @@
             const proto = ({6: 'TCP', 17: 'UDP', 1: 'ICMP'})[f.protocol] || f.protocol || '—';
             const key = flowKey(f);
             const checked = _flowsSelectedKeys.has(key) ? 'checked' : '';
+            const srcLabel = FLOWS_SOURCE_LABELS[f.source] || '—';
             return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" onclick="openFlowDetailPanelByKey('${escapeHtml(key)}', event)">
                     <td style="padding:6px 8px;" onclick="event.stopPropagation();"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} onchange="toggleFlowRowSelect('${escapeHtml(key)}', this.checked)" style="accent-color:var(--primary);"></td>
                     <td style="padding:6px 8px;">${rowNum++}</td>
-                    <td>${escapeHtml(f.tenant)}</td>
+                    ${flowsColHidden('tenant') ? '' : `<td>${escapeHtml(f.tenant)}</td>`}
                     <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.src_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.src_ip)}</a></td>
                     <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.dst_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.dst_ip)}</a></td>
-                    <td>${proto}/${f.dst_port ?? '—'}</td>
+                    ${flowsColHidden('proto') ? '' : `<td>${proto}/${f.dst_port ?? '—'}</td>`}
+                    ${flowsColHidden('source') ? '' : `<td><span style="font-size:11px; padding:2px 8px; border-radius:10px; background:var(--surface-3);">${srcLabel}</span></td>`}
                     <td><div style="display:flex; align-items:center; gap:8px;">
                         <div style="flex:1; height:7px; background:var(--surface-3); border-radius:4px;"><div style="height:100%; width:${pct}%; background:var(--primary); border-radius:4px;"></div></div>
                         <span style="min-width:64px;">${fmtBytes(f.total_bytes)}</span></div></td>
-                    <td>${f.total_packets}</td>
-                    <td>${f.flow_count}</td>
+                    ${flowsColHidden('packets') ? '' : `<td>${f.total_packets}</td>`}
+                    ${flowsColHidden('flows') ? '' : `<td>${f.flow_count}</td>`}
                 </tr>`;
         }).join('');
         syncFlowsSelectAllCheckbox();

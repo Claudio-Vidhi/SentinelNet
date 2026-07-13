@@ -30,7 +30,7 @@ import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 2          # versione schema supportata da questo codice (v2: api_observations)
+SCHEMA_VERSION = 3          # versione schema supportata da questo codice (v3: flow_aggregates.source)
 QUEUE_MAX = 10_000          # payload massimi in coda scritture
 BATCH_SIZE = 500            # payload massimi per singolo commit
 MAX_WRITER_RESTARTS = 5     # riavvii writer consentiti prima del fail-open
@@ -101,6 +101,12 @@ def migrate() -> None:
             )
         with open(_schema_path(), encoding="utf-8") as f:
             conn.executescript(f.read())
+        # v3: colonna 'source' su DB pre-esistenti (ALTER idempotente:
+        # CREATE TABLE IF NOT EXISTS non tocca le tabelle già create).
+        cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(flow_aggregates)").fetchall()}
+        if "source" not in cols:
+            conn.execute("ALTER TABLE flow_aggregates ADD COLUMN source TEXT")
         if current < SCHEMA_VERSION:
             conn.execute("DELETE FROM schema_version")
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
@@ -154,25 +160,27 @@ def flow_window_start(export_ts, receive_ts=None) -> int:
 FLOW_UPSERT_SQL = """
 INSERT INTO flow_aggregates
     (window_start, tenant, src_ip, dst_ip, protocol, dst_port,
-     total_bytes, total_packets, flow_count, exporter_ip)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+     total_bytes, total_packets, flow_count, exporter_ip, source)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
 ON CONFLICT(window_start, tenant, src_ip, dst_ip, protocol, dst_port)
 DO UPDATE SET
     total_bytes   = total_bytes   + excluded.total_bytes,
     total_packets = total_packets + excluded.total_packets,
     flow_count    = flow_count    + 1,
-    exporter_ip   = excluded.exporter_ip
+    exporter_ip   = excluded.exporter_ip,
+    source        = excluded.source
 """
 
 
 def enqueue_flow(tenant: str, src_ip: str, dst_ip: str, protocol, dst_port,
                  total_bytes: int, total_packets: int, exporter_ip: str,
-                 export_ts=None, receive_ts=None) -> bool:
-    """Accoda l'UPSERT di aggregazione al minuto per un flusso (§1.4)."""
+                 export_ts=None, receive_ts=None, source=None) -> bool:
+    """Accoda l'UPSERT di aggregazione al minuto per un flusso (§1.4).
+    ``source``: nome del listener di origine (ipfix|netflow|sflow)."""
     return enqueue_write(FLOW_UPSERT_SQL, (
         flow_window_start(export_ts, receive_ts), tenant, src_ip, dst_ip,
         protocol, dst_port, int(total_bytes or 0), int(total_packets or 0),
-        exporter_ip,
+        exporter_ip, source,
     ))
 
 
