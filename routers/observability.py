@@ -35,11 +35,11 @@ def _parse_window(window: str) -> int:
     m = _WINDOW_RE.match((window or "").strip())
     if not m:
         raise HTTPException(status_code=400,
-                            detail="Finestra non valida: usare es. 15m, 24h, 7d.")
+                            detail="Invalid window: use e.g. 15m, 24h, 7d.")
     seconds = int(m.group(1)) * _WINDOW_UNIT_S[m.group(2)]
     if seconds <= 0 or seconds > MAX_WINDOW_S:
         raise HTTPException(status_code=400,
-                            detail="Finestra fuori dai limiti (max 7d).")
+                            detail="Window out of bounds (max 7d).")
     return seconds
 
 
@@ -126,7 +126,7 @@ async def obs_anomaly_status(
     if (from_status, new_status) not in _ALLOWED_TRANSITIONS:
         raise HTTPException(
             status_code=409,
-            detail=f"Transizione di stato non consentita: "
+            detail=f"Status transition not allowed: "
                    f"'{from_status}' → '{new_status}'.")
 
     scope = user_group_scope(current_user)
@@ -151,11 +151,11 @@ async def obs_anomaly_status(
     import asyncio as _asyncio
     result = await _asyncio.to_thread(_transition)
     if result == "not_found":
-        raise HTTPException(status_code=404, detail="Evento non trovato.")
+        raise HTTPException(status_code=404, detail="Event not found.")
     if result == "stale":
         raise HTTPException(
             status_code=409,
-            detail="Lo stato dell'evento è cambiato nel frattempo: ricarica l'elenco.")
+            detail="The event status changed in the meantime: reload the list.")
     from security_manager import log_audit
     log_audit(f"Anomalia observability #{event_id}: stato '{from_status}' → "
               f"'{new_status}' da '{current_user.get('sub')}'.")
