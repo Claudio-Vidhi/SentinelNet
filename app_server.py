@@ -51,6 +51,26 @@ from security_manager import (
 PORT = 8765
 BASE_URL = "https://euvdservices.enisa.europa.eu"
 
+
+def _app_adv_setting(key, default=None):
+    """Legge una chiave dalla sezione 'app' di app_settings.json (impostazioni
+    avanzate configurabili da GUI). Usata anche a import-time, prima che
+    get_app_settings sia definita. Le variabili d'ambiente hanno la precedenza
+    nei singoli punti di lettura."""
+    try:
+        with open(data_config.get_path("app_settings.json"), encoding="utf-8") as fh:
+            return ((json.load(fh) or {}).get("app") or {}).get(key, default)
+    except Exception:
+        return default
+
+
+def effective_port() -> int:
+    """Porta HTTP effettiva: env SENTINELNET_PORT > app_settings 'app.port' > 8765."""
+    try:
+        return int(os.environ.get("SENTINELNET_PORT") or _app_adv_setting("port") or PORT)
+    except (TypeError, ValueError):
+        return PORT
+
 from contextlib import asynccontextmanager
 
 import db
@@ -146,10 +166,12 @@ _ws_tokens: dict[str, tuple[str, float]] = {}  # otp -> (username, timestamp)
 # (lista separata da virgole). Default: solo localhost sulla porta dell'app.
 # Nota: usare "*" insieme ad allow_credentials=True è invalido per spec ed è
 # rifiutato dai browser, quindi le origini vengono sempre elencate esplicitamente.
-_default_origins = f"http://localhost:{PORT},http://127.0.0.1:{PORT}"
+_default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
 ALLOWED_ORIGINS = [
     o.strip()
-    for o in os.environ.get("SENTINELNET_CORS_ORIGINS", _default_origins).split(",")
+    for o in (os.environ.get("SENTINELNET_CORS_ORIGINS")
+              or _app_adv_setting("cors_origins")
+              or _default_origins).split(",")
     if o.strip()
 ]
 app.add_middleware(
@@ -1395,7 +1417,7 @@ def get_network_settings(current_user = Depends(require_admin)):
         "configured_host": configured,
         "effective_host": effective,
         "env_override": env_host is not None,
-        "port": int(os.environ.get("SENTINELNET_PORT", PORT)),
+        "port": effective_port(),
         "local_ips": list_local_ips(),
     }
 
@@ -1423,6 +1445,71 @@ def set_cli_blacklist_settings(payload: CliBlacklistSchema, current_user = Depen
               f"{'attivata' if payload.cli_blacklist_operators else 'disattivata'} "
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "cli_blacklist_operators": payload.cli_blacklist_operators}
+
+
+# Impostazioni avanzate (sezione 'app' di app_settings.json): configurabili da
+# GUI così l'exe non richiede variabili d'ambiente. Env > JSON > default.
+_APP_ADV_ENV = {
+    "port": "SENTINELNET_PORT",
+    "ssl_certfile": "SENTINELNET_SSL_CERTFILE",
+    "ssl_keyfile": "SENTINELNET_SSL_KEYFILE",
+    "cors_origins": "SENTINELNET_CORS_ORIGINS",
+    "no_browser": "SENTINELNET_NO_BROWSER",
+    "retention_flows_days": "SENTINELNET_OBS_RETENTION_FLOWS_DAYS",
+    "retention_syslog_days": "SENTINELNET_OBS_RETENTION_SYSLOG_DAYS",
+    "retention_events_days": "SENTINELNET_OBS_RETENTION_EVENTS_DAYS",
+}
+_APP_ADV_INT_KEYS = {"port", "retention_flows_days", "retention_syslog_days",
+                     "retention_events_days"}
+_APP_ADV_DEFAULTS = {"port": PORT, "retention_flows_days": 30,
+                     "retention_syslog_days": 7, "retention_events_days": 90}
+
+
+@app.get("/api/settings/app")
+def get_app_advanced_settings(current_user = Depends(require_admin)):
+    saved = get_app_settings().get("app", {}) or {}
+    return {
+        "settings": {k: saved.get(k) for k in _APP_ADV_ENV},
+        "env_overrides": {k: env in os.environ for k, env in _APP_ADV_ENV.items()},
+        "defaults": _APP_ADV_DEFAULTS,
+        "data_dir": data_config.DATA_DIR,
+    }
+
+
+@app.post("/api/settings/app")
+def set_app_advanced_settings(payload: dict, current_user = Depends(require_admin)):
+    clean = {}
+    for k, v in (payload or {}).items():
+        if k not in _APP_ADV_ENV:
+            raise HTTPException(status_code=400, detail=f"Invalid key: '{k}'.")
+        if v in (None, ""):
+            clean[k] = None  # torna al default
+            continue
+        if k in _APP_ADV_INT_KEYS:
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Invalid value for '{k}'.")
+            if k == "port" and not (1 <= v <= 65535):
+                raise HTTPException(status_code=400, detail="Invalid port (1-65535).")
+            if k != "port" and v < 1:
+                raise HTTPException(status_code=400, detail=f"Invalid value for '{k}'.")
+        elif k == "no_browser":
+            v = bool(v)
+        else:
+            v = str(v).strip()
+        clean[k] = v
+    saved = dict(get_app_settings().get("app", {}) or {})
+    saved.update(clean)
+    saved = {k: v for k, v in saved.items() if v is not None}
+    # TLS: o entrambi i percorsi o nessuno (coerente con resolve_tls_config).
+    if bool(saved.get("ssl_certfile")) != bool(saved.get("ssl_keyfile")):
+        raise HTTPException(status_code=400,
+                            detail="TLS: set both certificate and key paths, or neither.")
+    save_app_settings({"app": saved})
+    log_audit(f"Impostazioni applicazione aggiornate da '{current_user.get('sub')}' "
+              f"(riavvio richiesto): {clean}.")
+    return {"status": "success", "restart_required": True, "settings": saved}
 
 
 # --- ENDPOINTS COSTRUZIONE MAPPA TOPOLOGICA ---
@@ -3343,10 +3430,12 @@ def main():
         
     # Ordine di risoluzione: env SENTINELNET_HOST > app_settings.json > 127.0.0.1
     host = resolve_bind_host()
-    port = int(os.environ.get("SENTINELNET_PORT", PORT))
-    
+    port = effective_port()
+
     # Disabilita l'apertura automatica del browser in ambiente Docker/containerizzato
-    no_browser = os.environ.get("SENTINELNET_NO_BROWSER", "false").lower() == "true" or host == "0.0.0.0"
+    _env_nb = os.environ.get("SENTINELNET_NO_BROWSER")
+    _nb = _env_nb.lower() == "true" if _env_nb is not None else bool(_app_adv_setting("no_browser"))
+    no_browser = _nb or host == "0.0.0.0"
 
     # TLS nativo opzionale (finding H-1): fail-closed su configurazione parziale.
     try:
