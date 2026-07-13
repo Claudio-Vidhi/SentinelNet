@@ -1678,8 +1678,8 @@
         <div style="min-width:220px;">
           <div id="aiAttachDeviceList" style="max-height:96px; overflow-y:auto; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></div>
           <div style="display:flex; gap:8px; margin-top:4px;">
-            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;">Seleziona tutti</a>
-            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;">Deseleziona tutti</a>
+            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
+            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
           </div>
         </div>
         <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
@@ -1693,7 +1693,7 @@
       <div id="aiChatMessages" style="border:1px solid var(--border); border-radius:10px; background:var(--surface); min-height:280px; max-height:480px; overflow-y:auto; padding:14px; margin-bottom:12px;"></div>
 
       <div style="display:flex; gap:8px;">
-        <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
+        <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
         <button class="btn btn-primary" id="btnAiSend" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
           <i class="fa-solid fa-paper-plane"></i> Invia
         </button>
@@ -2665,6 +2665,10 @@
         lblObsEnabled: "Abilita observability",
         lblObsBind: "Indirizzo di ascolto (bind)",
         lblObsApiPoll: "Intervallo polling API (s)",
+        lnkSelectAll: "Seleziona tutti",
+        lnkDeselectAll: "Deseleziona tutti",
+        phAiChatInput: "Scrivi un messaggio...",
+        msgAiNoDevices: "Nessun dispositivo",
         lblObsListeners: "Listener",
         hintObsListeners: "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche richiedono il riavvio dell'applicazione.",
         hintObsDefaultPort: "porta predefinita",
@@ -3114,6 +3118,10 @@
         lblObsEnabled: "Enable observability",
         lblObsBind: "Listen address (bind)",
         lblObsApiPoll: "API poll interval (s)",
+        lnkSelectAll: "Select all",
+        lnkDeselectAll: "Deselect all",
+        phAiChatInput: "Type a message...",
+        msgAiNoDevices: "No devices",
         lblObsListeners: "Listeners",
         hintObsListeners: "Enable a protocol and set the UDP port SentinelNet listens on, then point your devices' export at this host on that port. Changes require an application restart.",
         hintObsDefaultPort: "default port",
@@ -9890,7 +9898,7 @@
                 <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''}>
                 <span>${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</span>
             </label>`
-        ).join('') : `<span style="color:var(--text-muted);">Nessun dispositivo</span>`;
+        ).join('') : `<span style="color:var(--text-muted);">${i18n[currentLang].msgAiNoDevices || 'Nessun dispositivo'}</span>`;
     }
 
     function getAiAttachDeviceIps() {

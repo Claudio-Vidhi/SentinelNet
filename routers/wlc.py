@@ -20,10 +20,10 @@ def _wlc_device(ip: str, current_user) -> dict:
     trattato come 9800/IOS-XE."""
     device = assert_device_allowed(current_user, ip)
     if device is None:
-        raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
+        raise HTTPException(status_code=404, detail=f"Device {ip} not found in inventory.")
     if (device.get('Vendor') or '').lower() not in _WLC_VENDORS:
         raise HTTPException(status_code=400,
-                            detail=f"Il dispositivo {ip} non è un WLC Cisco (vendor='{device.get('Vendor')}').")
+                            detail=f"Device {ip} is not a Cisco WLC (vendor='{device.get('Vendor')}').")
     return device
 
 

@@ -62,10 +62,10 @@ def _fgt_device(ip: str, current_user) -> dict:
     di scoping per sede. 404 se assente, 400 se il vendor non è fortinet."""
     device = assert_device_allowed(current_user, ip)
     if device is None:
-        raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato in inventario.")
+        raise HTTPException(status_code=404, detail=f"Device {ip} not found in inventory.")
     if (device.get('Vendor') or '').lower() != 'fortinet':
         raise HTTPException(status_code=400,
-                            detail=f"Il dispositivo {ip} non è un FortiGate (vendor='{device.get('Vendor')}').")
+                            detail=f"Device {ip} is not a FortiGate (vendor='{device.get('Vendor')}').")
     return device
 
 

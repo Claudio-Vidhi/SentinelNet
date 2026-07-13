@@ -37,7 +37,7 @@ def get_current_user(request: Request,
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Autenticazione richiesta. Token mancante o non valido."
+            detail="Authentication required. Token missing or invalid."
         )
     if not credentials and request.method in _CSRF_METHODS:
         # Autenticazione via cookie su richiesta che modifica stato: esigi la
@@ -45,22 +45,22 @@ def get_current_user(request: Request,
         if not request.headers.get(CSRF_HEADER):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Richiesta rifiutata: header anti-CSRF mancante."
+                detail="Request rejected: missing anti-CSRF header."
             )
     payload = verify_access_token(token)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token non valido o scaduto."
+            detail="Invalid or expired token."
         )
     sub = payload.get("sub")
     # L'utente deve esistere ancora (gestisce account eliminati con token valido)
     role = user_manager.get_role(sub)
     if role is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non più valido.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is no longer valid.")
     # Lockout immediato degli account disabilitati anche con token ancora valido
     if user_manager.is_disabled(sub):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabilitato.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled.")
     # Allinea sempre il ruolo allo stato corrente su disco.
     payload["role"] = role
     return payload
@@ -72,7 +72,7 @@ def require_role(*allowed):
         if current_user.get("role") not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Privilegi insufficienti per questa operazione."
+                detail="Insufficient privileges for this operation."
             )
         return current_user
     return _dep
@@ -99,7 +99,7 @@ def assert_group_allowed(current_user, group):
     if scope is not None and group not in scope:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Sede '{group}' non consentita per il tuo profilo."
+            detail=f"Site '{group}' is not allowed for your profile."
         )
 
 
