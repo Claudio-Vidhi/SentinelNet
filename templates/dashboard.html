@@ -1487,14 +1487,14 @@
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, #e0a800); border-radius:8px; color:var(--warning, #e0a800); font-size:13px;"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
         <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
-          <option value="15m">Ultimi 15 minuti</option>
-          <option value="1h">Ultima ora</option>
-          <option value="24h">Ultime 24 ore</option>
-          <option value="7d">Ultimi 7 giorni</option>
+          <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
+          <option value="1h" data-i18n="optWin1h">Ultima ora</option>
+          <option value="24h" data-i18n="optWin24h">Ultime 24 ore</option>
+          <option value="7d" data-i18n="optWin7d">Ultimi 7 giorni</option>
         </select>
         <select id="flowsMetric" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
-          <option value="bytes">Per byte</option>
-          <option value="packets">Per pacchetti</option>
+          <option value="bytes" data-i18n="optByBytes">Per byte</option>
+          <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
         </select>
         <div style="position:relative; display:inline-block;">
           <button id="flowsTenantBtn" class="btn" onclick="toggleFlowsTenantDropdown()" style="padding:6px 12px;">
@@ -1504,20 +1504,20 @@
             <div style="padding:8px;">
               <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; font-weight:500;">
                 <input type="checkbox" id="flowsTenantAll" onchange="toggleFlowsTenantAll()" style="accent-color:var(--primary);">
-                <span>Tutti i tenant</span>
+                <span data-i18n="optArpAllTenants">Tutti i tenant</span>
               </label>
               <div id="flowsTenantList" style="margin-top:6px;"></div>
             </div>
           </div>
         </div>
-        <button class="btn" onclick="loadTopTalkers()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        <button class="btn" onclick="loadTopTalkers()"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
           <input type="checkbox" id="flowsAutoRefresh" checked style="accent-color:var(--primary);">
-          Auto-aggiornamento (30s, in pausa se la scheda non è visibile)
+          <span data-i18n="lblFlowsAutoRefresh">Auto-aggiornamento (30s, in pausa se la scheda non è visibile)</span>
         </label>
         <span id="flowsLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
-        <button class="btn requires-write" onclick="analyzeFlowsWithAi()" title="Invia un riassunto aggregato dei flussi all'assistente AI">
-          <i class="fa-solid fa-robot"></i> Analizza con AI
+        <button class="btn requires-write" onclick="analyzeFlowsWithAi()" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
+          <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
         </button>
       </div>
       <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, #e0a800); margin-bottom:10px;"></div>
@@ -1535,35 +1535,35 @@
           <thead id="flowsTableHead" style="position:sticky; top:0; background:var(--surface-2);">
           </thead>
           <tbody id="flowsTableBody">
-            <tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>
+            <tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlows">Nessun flusso nel periodo selezionato.</td></tr>
           </tbody>
         </table>
       </div>
 
-      <h4 style="margin-top:24px;">Anomalie correlate</h4>
+      <h4 style="margin-top:24px;" data-i18n="titleCorrelatedAnomalies">Anomalie correlate</h4>
       <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
         <select id="anomStatus" onchange="loadAnomalies()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
-          <option value="new">Nuove</option>
-          <option value="ack">Prese in carico</option>
-          <option value="resolved">Risolte</option>
-          <option value="all">Tutte</option>
+          <option value="new" data-i18n="optAnomNew">Nuove</option>
+          <option value="ack" data-i18n="optAnomAck">Prese in carico</option>
+          <option value="resolved" data-i18n="optAnomResolved">Risolte</option>
+          <option value="all" data-i18n="optAnomAll">Tutte</option>
         </select>
-        <button class="btn" onclick="loadAnomalies()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        <button class="btn" onclick="loadAnomalies()"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         <span id="anomIpFilterChip" style="display:none; align-items:center; gap:6px; font-size:12px; background:var(--surface-3); border-radius:14px; padding:4px 10px;">
           <span></span>
-          <a href="javascript:void(0)" onclick="clearAnomIpFilter()" title="Rimuovi filtro"><i class="fa-solid fa-xmark"></i></a>
+          <a href="javascript:void(0)" onclick="clearAnomIpFilter()" data-i18n-title="titleRemoveFilter" title="Rimuovi filtro"><i class="fa-solid fa-xmark"></i></a>
         </span>
       </div>
       <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
         <table style="width:100%; border-collapse:collapse;">
           <thead style="position:sticky; top:0; background:var(--surface-2);">
             <tr style="font-size:12px; text-align:left;">
-              <th style="padding:8px;">Quando</th><th>Sede</th><th>Tipo</th><th>Sorgente</th>
-              <th>Destinazione</th><th>Porta switch</th><th>Sev</th><th>Stato</th><th>Azioni</th>
+              <th style="padding:8px;" data-i18n="thSlWhen">Quando</th><th data-i18n="thFlTenant">Sede</th><th data-i18n="thAnomKind">Tipo</th><th data-i18n="thFlSrc">Sorgente</th>
+              <th data-i18n="thFlDst">Destinazione</th><th data-i18n="thAnomSwitchPort">Porta switch</th><th>Sev</th><th data-i18n="thStatus">Stato</th><th data-i18n="thActions">Azioni</th>
             </tr>
           </thead>
           <tbody id="anomTableBody">
-            <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">Nessuna anomalia.</td></tr>
+            <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);" data-i18n="msgNoAnomalies">Nessuna anomalia.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1827,26 +1827,26 @@
           <div class="form-group"><label>Timezone</label><input id="fgtTimezone" type="text" value="Europe/Rome" style="padding-left:12px;"></div>
           <div class="form-group"><label>Admin aggiuntivo (user)</label><input id="fgtAdminUser" type="text" placeholder="netadmin" style="padding-left:12px;"></div>
           <div class="form-group"><label>Admin aggiuntivo (password)</label><input id="fgtAdminPass" type="password" style="padding-left:12px;"></div>
-          <div class="form-group"><label>Interfaccia MGMT</label><input id="fgtMgmtIf" type="text" placeholder="mgmt / port1" style="padding-left:12px;"></div>
+          <div class="form-group"><label data-i18n="lblProvMgmtIf">Interfaccia MGMT</label><input id="fgtMgmtIf" type="text" placeholder="mgmt / port1" style="padding-left:12px;"></div>
           <div class="form-group"><label>IP MGMT</label><input id="fgtMgmtIp" type="text" placeholder="10.0.0.254" style="padding-left:12px;"></div>
           <div class="form-group"><label>Mask MGMT</label><input id="fgtMgmtMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
-          <div class="form-group"><label>Interfaccia WAN</label><input id="fgtWanIf" type="text" placeholder="wan1" style="padding-left:12px;"></div>
-          <div class="form-group"><label>Modalità WAN</label>
+          <div class="form-group"><label data-i18n="lblProvWanIf">Interfaccia WAN</label><input id="fgtWanIf" type="text" placeholder="wan1" style="padding-left:12px;"></div>
+          <div class="form-group"><label data-i18n="lblProvWanMode">Modalità WAN</label>
             <select id="fgtWanMode" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
               <option value="dhcp">DHCP</option>
-              <option value="static">Statica</option>
+              <option value="static" data-i18n="optProvStatic">Statica</option>
             </select>
           </div>
-          <div class="form-group"><label>IP WAN (statica)</label><input id="fgtWanIp" type="text" placeholder="203.0.113.2" style="padding-left:12px;"></div>
+          <div class="form-group"><label data-i18n="lblProvWanIpStatic">IP WAN (statica)</label><input id="fgtWanIp" type="text" placeholder="203.0.113.2" style="padding-left:12px;"></div>
           <div class="form-group"><label>Mask WAN</label><input id="fgtWanMask" type="text" placeholder="255.255.255.252" style="padding-left:12px;"></div>
           <div class="form-group"><label>Gateway WAN</label><input id="fgtWanGw" type="text" placeholder="203.0.113.1" style="padding-left:12px;"></div>
-          <div class="form-group"><label>Interfaccia LAN</label><input id="fgtLanIf" type="text" placeholder="internal / lan" style="padding-left:12px;"></div>
+          <div class="form-group"><label data-i18n="lblProvLanIf">Interfaccia LAN</label><input id="fgtLanIf" type="text" placeholder="internal / lan" style="padding-left:12px;"></div>
           <div class="form-group"><label>IP LAN</label><input id="fgtLanIp" type="text" placeholder="192.168.1.1" style="padding-left:12px;"></div>
           <div class="form-group"><label>Mask LAN</label><input id="fgtLanMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
           <div class="form-group"><label>DHCP range start</label><input id="fgtDhcpStart" type="text" placeholder="192.168.1.100" style="padding-left:12px;"></div>
           <div class="form-group"><label>DHCP range end</label><input id="fgtDhcpEnd" type="text" placeholder="192.168.1.200" style="padding-left:12px;"></div>
-          <div class="form-group"><label>DNS primario</label><input id="fgtDns1" type="text" placeholder="1.1.1.1" style="padding-left:12px;"></div>
-          <div class="form-group"><label>DNS secondario</label><input id="fgtDns2" type="text" placeholder="8.8.8.8" style="padding-left:12px;"></div>
+          <div class="form-group"><label data-i18n="lblProvDns1">DNS primario</label><input id="fgtDns1" type="text" placeholder="1.1.1.1" style="padding-left:12px;"></div>
+          <div class="form-group"><label data-i18n="lblProvDns2">DNS secondario</label><input id="fgtDns2" type="text" placeholder="8.8.8.8" style="padding-left:12px;"></div>
           <div class="form-group"><label>NTP servers (comma)</label><input id="fgtNtp" type="text" placeholder="it.pool.ntp.org" style="padding-left:12px;"></div>
           <div class="form-group"><label>Syslog server</label><input id="fgtSyslog" type="text" placeholder="10.0.0.50" style="padding-left:12px;"></div>
           <div class="form-group"><label>SNMPv3 user</label><input id="fgtSnmpUser" type="text" style="padding-left:12px;"></div>
@@ -1855,9 +1855,9 @@
           <div class="form-group"><label>Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" style="padding-left:12px;"></div>
         </div>
         <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:16px;">
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtDhcpServer"> DHCP server su LAN</label>
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLanToWan" checked> Policy LAN→WAN con NAT</label>
-          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtNoWanAdmin" checked> Nessun accesso admin dal WAN</label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtDhcpServer"> <span data-i18n="lblFgtDhcpServer">DHCP server su LAN</span></label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLanToWan" checked> <span data-i18n="lblFgtLanToWan">Policy LAN→WAN con NAT</span></label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtNoWanAdmin" checked> <span data-i18n="lblFgtNoWanAdmin">Nessun accesso admin dal WAN</span></label>
           <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLockout" checked> Admin lockout (anti brute-force)</label>
           <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtStrongCrypto" checked> Strong-crypto</label>
         </div>
@@ -1866,7 +1866,7 @@
       <div id="provCiscoSection">
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
         <div class="form-group"><label>Hostname</label><input id="provHostname" type="text" value="SW-NEW-01" style="padding-left:12px;"></div>
-        <div class="form-group"><label>Ruolo</label>
+        <div class="form-group"><label data-i18n="lblProvRole">Ruolo</label>
           <select id="provRole" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
             <option value="access">Access</option>
             <option value="distribution">Distribution/Core (L3)</option>
@@ -2023,15 +2023,15 @@
     </div>
 
     <div id="tab-sites" class="tab-content">
-      <h3><i class="fa-solid fa-sitemap" style="color:var(--primary);"></i> Sedi multi-sito</h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;">
+      <h3><i class="fa-solid fa-sitemap" style="color:var(--primary);"></i> <span data-i18n="titleSites">Sedi multi-sito</span></h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descSites">
         Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.
       </p>
       <div class="table-container">
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Nome</th><th>Modalità</th><th>Subnet</th><th>Ultimo contatto</th><th>Azioni</th>
+              <th>ID</th><th data-i18n="lblSiteName">Nome</th><th data-i18n="lblSiteMode">Modalità</th><th>Subnet</th><th data-i18n="thSiteLastContact">Ultimo contatto</th><th data-i18n="thActions">Azioni</th>
             </tr>
           </thead>
           <tbody id="sitesTableBody"></tbody>
@@ -2039,33 +2039,33 @@
       </div>
 
       <div style="margin-top: 24px;">
-        <h3 style="font-size: 15px; margin-bottom: 12px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> Nuova sede</h3>
+        <h3 style="font-size: 15px; margin-bottom: 12px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> <span data-i18n="titleNewSite">Nuova sede</span></h3>
         <div style="display:grid; grid-template-columns: 1fr 1fr 2fr auto; gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
-            <label>Nome</label>
+            <label data-i18n="lblSiteName">Nome</label>
             <input id="newSiteName" type="text" placeholder="es. Milano" style="padding-left:12px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label>Modalità</label>
+            <label data-i18n="lblSiteMode">Modalità</label>
             <select id="newSiteMode" style="padding-left:12px;">
               <option value="central">Central poll</option>
               <option value="agent">Site agent</option>
             </select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
-            <label>Subnet (separate da virgola)</label>
+            <label data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label>
             <input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" style="padding-left:12px;">
           </div>
           <button class="btn btn-primary btn-small" onclick="createSite()" style="margin:0; white-space:nowrap;">
-            <i class="fa-solid fa-plus"></i> Crea sede
+            <i class="fa-solid fa-plus"></i> <span data-i18n="btnCreateSite">Crea sede</span>
           </button>
         </div>
       </div>
     </div>
 
     <div id="tab-mcp" class="tab-content">
-      <h3><i class="fa-solid fa-plug" style="color:var(--primary);"></i> MCP Server — client LLM esterni</h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;">
+      <h3><i class="fa-solid fa-plug" style="color:var(--primary);"></i> <span data-i18n="titleMcp">MCP Server — client LLM esterni</span></h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descMcp">
         SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo
         <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client,
         si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi
@@ -2075,12 +2075,12 @@
 
       <div style="padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:18px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
-          <h3 style="font-size:15px; margin:0;"><i class="fa-solid fa-file-code" style="color:var(--primary);"></i> Configurazione client</h3>
+          <h3 style="font-size:15px; margin:0;"><i class="fa-solid fa-file-code" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientConfig">Configurazione client</span></h3>
           <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="copyMcpConfig()">
-            <i class="fa-solid fa-copy"></i> Copia JSON
+            <i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyJson">Copia JSON</span>
           </button>
         </div>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;">
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:8px;" data-i18n="descMcpClientConfig">
           Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password
           con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.
         </p>
@@ -2088,15 +2088,15 @@
       </div>
 
       <div style="padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
-        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-toggle-on" style="color:var(--primary);"></i> Tool esposti</h3>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;">
+        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-toggle-on" style="color:var(--primary);"></i> <span data-i18n="titleMcpTools">Tool esposti</span></h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;" data-i18n="descMcpTools">
           Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni
           chiamata viene rifiutata. La modifica vale per tutti i client collegati (ricaricano l'elenco entro ~1 minuto).
         </p>
         <div id="mcpToolList" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:8px;"></div>
         <div style="display:flex; gap:10px; align-items:center; margin-top:14px;">
           <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="saveMcpSettings()">
-            <i class="fa-solid fa-floppy-disk"></i> Salva
+            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
           </button>
           <span id="mcpSettingsStatus" style="font-size:12px; color:var(--text-muted);"></span>
         </div>
@@ -2722,6 +2722,55 @@
         lblAiDevSelected: "selezionati",
         phAiChatInput: "Scrivi un messaggio...",
         msgAiNoDevices: "Nessun dispositivo",
+        descFlows: "Flussi di rete aggregati (IPFIX/NetFlow/sFlow) per sede, con anomalie correlate agli eventi di sicurezza. I listener si configurano in Impostazioni → Observability.",
+        optWin15m: "Ultimi 15 minuti",
+        optWin1h: "Ultima ora",
+        optWin24h: "Ultime 24 ore",
+        optWin7d: "Ultimi 7 giorni",
+        optByBytes: "Per byte",
+        optByPackets: "Per pacchetti",
+        btnRefresh: "Aggiorna",
+        lblFlowsAutoRefresh: "Auto-aggiornamento (30s, in pausa se la scheda non è visibile)",
+        titleAnalyzeFlowsAi: "Invia un riassunto aggregato dei flussi all'assistente AI",
+        btnAnalyzeAi: "Analizza con AI",
+        msgNoFlows: "Nessun flusso nel periodo selezionato.",
+        titleCorrelatedAnomalies: "Anomalie correlate",
+        optAnomNew: "Nuove",
+        optAnomAck: "Prese in carico",
+        optAnomResolved: "Risolte",
+        optAnomAll: "Tutte",
+        titleRemoveFilter: "Rimuovi filtro",
+        thAnomKind: "Tipo",
+        thAnomSwitchPort: "Porta switch",
+        msgNoAnomalies: "Nessuna anomalia.",
+        lblNoTenant: "Nessun tenant",
+        titleSites: "Sedi multi-sito",
+        descSites: "Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.",
+        lblSiteName: "Nome",
+        lblSiteMode: "Modalità",
+        thSiteLastContact: "Ultimo contatto",
+        titleNewSite: "Nuova sede",
+        lblSiteSubnets: "Subnet (separate da virgola)",
+        btnCreateSite: "Crea sede",
+        titleMcp: "MCP Server — client LLM esterni",
+        descMcp: "SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client, si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura, <em>operator</em> se servono i comandi CLI).",
+        titleMcpClientConfig: "Configurazione client",
+        btnCopyJson: "Copia JSON",
+        descMcpClientConfig: "Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.",
+        titleMcpTools: "Tool esposti",
+        descMcpTools: "Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni chiamata viene rifiutata. La modifica vale per tutti i client collegati (ricaricano l'elenco entro ~1 minuto).",
+        lblProvMgmtIf: "Interfaccia MGMT",
+        lblProvWanIf: "Interfaccia WAN",
+        lblProvLanIf: "Interfaccia LAN",
+        lblProvWanMode: "Modalità WAN",
+        optProvStatic: "Statica",
+        lblProvWanIpStatic: "IP WAN (statica)",
+        lblProvDns1: "DNS primario",
+        lblProvDns2: "DNS secondario",
+        lblProvRole: "Ruolo",
+        lblFgtDhcpServer: "DHCP server su LAN",
+        lblFgtLanToWan: "Policy LAN→WAN con NAT",
+        lblFgtNoWanAdmin: "Nessun accesso admin dal WAN",
         lblArpFilterTenant: "Tenant/Sede",
         lblArpFilterGateway: "Gateway",
         optArpAllTenants: "Tutti i tenant",
@@ -3207,6 +3256,55 @@
         lblAiDevSelected: "selected",
         phAiChatInput: "Type a message...",
         msgAiNoDevices: "No devices",
+        descFlows: "Aggregated network flows (IPFIX/NetFlow/sFlow) per site, with anomalies correlated to security events. Listeners are configured in Settings → Observability.",
+        optWin15m: "Last 15 minutes",
+        optWin1h: "Last hour",
+        optWin24h: "Last 24 hours",
+        optWin7d: "Last 7 days",
+        optByBytes: "By bytes",
+        optByPackets: "By packets",
+        btnRefresh: "Refresh",
+        lblFlowsAutoRefresh: "Auto-refresh (30s, paused when the tab is not visible)",
+        titleAnalyzeFlowsAi: "Send an aggregated flow summary to the AI assistant",
+        btnAnalyzeAi: "Analyze with AI",
+        msgNoFlows: "No flows in the selected period.",
+        titleCorrelatedAnomalies: "Correlated anomalies",
+        optAnomNew: "New",
+        optAnomAck: "Acknowledged",
+        optAnomResolved: "Resolved",
+        optAnomAll: "All",
+        titleRemoveFilter: "Remove filter",
+        thAnomKind: "Kind",
+        thAnomSwitchPort: "Switch port",
+        msgNoAnomalies: "No anomalies.",
+        lblNoTenant: "No tenant",
+        titleSites: "Multi-site locations",
+        descSites: "Manage remote sites over VPN. <strong>Central poll</strong>: the central node reaches devices directly via VPN routing. <strong>Site agent</strong>: a remote agent connects outbound to the central node and pushes inventory/MAC data; CLI commands are forwarded through a queue.",
+        lblSiteName: "Name",
+        lblSiteMode: "Mode",
+        thSiteLastContact: "Last contact",
+        titleNewSite: "New site",
+        lblSiteSubnets: "Subnets (comma-separated)",
+        btnCreateSite: "Create site",
+        titleMcp: "MCP Server — external LLM clients",
+        descMcp: "SentinelNet can be used by external LLM clients (Claude Desktop, LM Studio, Cline…) via the <strong>MCP</strong> protocol (Model Context Protocol): the <code>mcp_server.py</code> bridge runs on the client machine, authenticates with a SentinelNet account and forwards requests to the REST API. Roles, tenants and the command blacklist stay enforced server-side. Tip: create a dedicated account (<em>viewer</em> for read-only, <em>operator</em> if CLI commands are needed).",
+        titleMcpClientConfig: "Client configuration",
+        btnCopyJson: "Copy JSON",
+        descMcpClientConfig: "Snippet for <code>claude_desktop_config.json</code> (or your client's equivalent). Replace user and password with the dedicated account; the path must point to the local copy of <code>mcp_server.py</code>.",
+        titleMcpTools: "Exposed tools",
+        descMcpTools: "Choose which tools MCP clients can use. Disabled tools disappear from the client's list and every call is rejected. The change applies to all connected clients (they reload the list within ~1 minute).",
+        lblProvMgmtIf: "MGMT interface",
+        lblProvWanIf: "WAN interface",
+        lblProvLanIf: "LAN interface",
+        lblProvWanMode: "WAN mode",
+        optProvStatic: "Static",
+        lblProvWanIpStatic: "WAN IP (static)",
+        lblProvDns1: "Primary DNS",
+        lblProvDns2: "Secondary DNS",
+        lblProvRole: "Role",
+        lblFgtDhcpServer: "DHCP server on LAN",
+        lblFgtLanToWan: "LAN→WAN policy with NAT",
+        lblFgtNoWanAdmin: "No admin access from WAN",
         lblArpFilterTenant: "Tenant/Site",
         lblArpFilterGateway: "Gateway",
         optArpAllTenants: "All tenants",
@@ -3335,6 +3433,14 @@
             const key = el.getAttribute("data-i18n-placeholder");
             if (i18n[lang] && i18n[lang][key]) {
                 el.setAttribute("placeholder", i18n[lang][key]);
+            }
+        });
+
+        // Traduci elementi con attributo data-i18n-title (tooltip)
+        document.querySelectorAll("[data-i18n-title]").forEach(el => {
+            const key = el.getAttribute("data-i18n-title");
+            if (i18n[lang] && i18n[lang][key]) {
+                el.setAttribute("title", i18n[lang][key]);
             }
         });
 
@@ -4499,7 +4605,7 @@
                     document.getElementById('provComPort').value = data.ports[0].device;
                     alert(data.ports.map(p => `${p.device} — ${p.description}`).join('\n'));
                 } else {
-                    alert('Nessuna porta seriale rilevata sul server.');
+                    alert(currentLang==='en' ? 'No serial port detected on the server.' : 'Nessuna porta seriale rilevata sul server.');
                 }
             }
         });
@@ -4581,18 +4687,18 @@
         const verifyTls = document.getElementById('fgtTokenVerifyTls').checked;
 
         if (!ip) {
-            showToast('Selezionare un dispositivo FortiGate', 'warning');
+            showToast(currentLang==='en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning');
             return;
         }
 
         // Validate port
         if (port < 1 || port > 65535) {
-            showToast('Porta non valida (1-65535)', 'error');
+            showToast(currentLang==='en' ? 'Invalid port (1-65535)' : 'Porta non valida (1-65535)', 'error');
             return;
         }
 
         if (!token) {
-            showToast('Inserire un token', 'warning');
+            showToast(currentLang==='en' ? 'Enter a token' : 'Inserire un token', 'warning');
             return;
         }
 
@@ -4604,7 +4710,7 @@
             });
 
             if (res && res.ok) {
-                showToast('Token salvato con successo (cifrato)', 'success');
+                showToast(currentLang==='en' ? 'Token saved successfully (encrypted)' : 'Token salvato con successo (cifrato)', 'success');
                 document.getElementById('fgtTokenValue').value = '';
                 document.getElementById('fgtTokenPort').value = '443';
                 document.getElementById('fgtTokenVerifyTls').checked = true;
@@ -4612,22 +4718,22 @@
                 await loadFgtTokens();
             } else {
                 const err = await res.json();
-                showToast(`Errore: ${err.detail || 'Salvataggio token fallito'}`, 'error');
+                showToast(`${currentLang==='en' ? 'Error: ' : 'Errore: '}${err.detail || (currentLang==='en' ? 'Token save failed' : 'Salvataggio token fallito')}`, 'error');
             }
         } catch(e) {
             console.error('Errore saveFgtToken:', e);
-            showToast('Errore di rete', 'error');
+            showToast(currentLang==='en' ? 'Network error' : 'Errore di rete', 'error');
         }
     }
 
     async function removeFgtToken() {
         const ip = document.getElementById('fgtTokenDevice').value.trim();
         if (!ip) {
-            showToast('Selezionare un dispositivo FortiGate', 'warning');
+            showToast(currentLang==='en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning');
             return;
         }
 
-        if (!confirm(`Rimuovere il token API per ${ip}?`)) return;
+        if (!confirm(currentLang==='en' ? `Remove the API token for ${ip}?` : `Rimuovere il token API per ${ip}?`)) return;
 
         try {
             const res = await apiFetch('/api/fortigate/token', {
@@ -4637,28 +4743,28 @@
             });
 
             if (res && res.ok) {
-                showToast('Token rimosso con successo', 'success');
+                showToast(currentLang==='en' ? 'Token removed successfully' : 'Token rimosso con successo', 'success');
                 document.getElementById('fgtTokenDevice').value = '';
                 await loadFgtTokens();
             } else {
                 const err = await res.json();
-                showToast(`Errore: ${err.detail || 'Rimozione token fallita'}`, 'error');
+                showToast(`${currentLang==='en' ? 'Error: ' : 'Errore: '}${err.detail || (currentLang==='en' ? 'Token removal failed' : 'Rimozione token fallita')}`, 'error');
             }
         } catch(e) {
             console.error('Errore removeFgtToken:', e);
-            showToast('Errore di rete', 'error');
+            showToast(currentLang==='en' ? 'Network error' : 'Errore di rete', 'error');
         }
     }
 
     async function testFgtToken() {
         const ip = document.getElementById('fgtTokenDevice').value.trim();
         if (!ip) {
-            showToast('Selezionare un dispositivo FortiGate', 'warning');
+            showToast(currentLang==='en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning');
             return;
         }
 
         const statusDiv = document.getElementById('fgtTokenStatus');
-        statusDiv.textContent = 'Test in corso...';
+        statusDiv.textContent = currentLang==='en' ? 'Testing...' : 'Test in corso...';
         statusDiv.style.color = 'var(--text-muted)';
 
         try {
@@ -4685,14 +4791,14 @@
                 statusDiv.style.color = 'var(--success)';
             } else {
                 const err = await res.json();
-                const msg = `Test fallito: ${err.detail || 'Dispositivo non raggiungibile'}`;
+                const msg = `${currentLang==='en' ? 'Test failed: ' : 'Test fallito: '}${err.detail || (currentLang==='en' ? 'Device unreachable' : 'Dispositivo non raggiungibile')}`;
                 showToast(msg, 'error');
                 statusDiv.textContent = msg;
                 statusDiv.style.color = 'var(--danger)';
             }
         } catch(e) {
             console.error('Errore testFgtToken:', e);
-            const msg = 'Errore di rete durante il test';
+            const msg = currentLang==='en' ? 'Network error during the test' : 'Errore di rete durante il test';
             showToast(msg, 'error');
             statusDiv.textContent = msg;
             statusDiv.style.color = 'var(--danger)';
@@ -4779,7 +4885,7 @@
         const mode = document.getElementById('newSiteMode').value;
         const subnets = document.getElementById('newSiteSubnets').value
             .split(',').map(x => x.trim()).filter(Boolean);
-        if (!name) { alert('Nome sede obbligatorio.'); return; }
+        if (!name) { alert(currentLang==='en' ? 'Site name required.' : 'Nome sede obbligatorio.'); return; }
         const res = await apiFetch('/api/sites', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, mode, subnets })
@@ -4789,35 +4895,35 @@
             document.getElementById('newSiteName').value = '';
             document.getElementById('newSiteSubnets').value = '';
             if (data.token) {
-                prompt('Token della sede (mostrato UNA SOLA VOLTA — copialo ora e configuralo nell\'agente):', data.token);
+                prompt(currentLang==='en' ? 'Site token (shown ONLY ONCE — copy it now and configure it in the agent):' : 'Token della sede (mostrato UNA SOLA VOLTA — copialo ora e configuralo nell\'agente):', data.token);
             }
             loadSites();
         } else if (res) {
-            const e = await res.json(); alert('Errore: ' + (e.detail || ''));
+            const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
         }
     }
 
     async function regenSiteToken(id) {
-        if (!confirm(`Rigenerare il token della sede "${id}"? Il vecchio token smetterà di funzionare.`)) return;
+        if (!confirm(currentLang==='en' ? `Regenerate the token for site "${id}"? The old token will stop working.` : `Rigenerare il token della sede "${id}"? Il vecchio token smetterà di funzionare.`)) return;
         const res = await apiFetch('/api/sites/regenerate-token', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
         if (res && res.ok) {
             const data = await res.json();
-            prompt('Nuovo token (mostrato UNA SOLA VOLTA):', data.token);
+            prompt(currentLang==='en' ? 'New token (shown ONLY ONCE):' : 'Nuovo token (mostrato UNA SOLA VOLTA):', data.token);
             loadSites();
-        } else if (res) { const e = await res.json(); alert('Errore: ' + (e.detail || '')); }
+        } else if (res) { const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
     }
 
     async function deleteSite(id) {
-        if (!confirm(`Eliminare la sede "${id}"?`)) return;
+        if (!confirm(currentLang==='en' ? `Delete site "${id}"?` : `Eliminare la sede "${id}"?`)) return;
         const res = await apiFetch('/api/sites/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
         if (res && res.ok) loadSites();
-        else if (res) { const e = await res.json(); alert('Errore: ' + (e.detail || '')); }
+        else if (res) { const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
     }
 
     // --- TAB MCP SERVER (guida + selezione tool esposti ai client LLM) ---
@@ -8613,10 +8719,11 @@
             });
             if (!res) return;
             const box = document.getElementById('arpScanSummary');
+            const en = currentLang === 'en';
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
                 box.style.display = 'block';
-                box.innerHTML = `<span style="color:var(--danger);">${escapeHtml(err.detail || 'Errore scansione ARP')}</span>`;
+                box.innerHTML = `<span style="color:var(--danger);">${escapeHtml(err.detail || (en ? 'ARP scan error' : 'Errore scansione ARP'))}</span>`;
                 return;
             }
             const d = await res.json();
@@ -8624,12 +8731,13 @@
                 const color = r.status === 'success' ? 'var(--success, #7bd88f)'
                             : r.status === 'empty' ? 'var(--text-muted)' : 'var(--danger)';
                 const detail = r.status === 'success'
-                    ? `${r.entries} entry (nuove ${r.new}, aggiornate ${r.updated})`
+                    ? (en ? `${r.entries} entries (${r.new} new, ${r.updated} updated)`
+                          : `${r.entries} entry (nuove ${r.new}, aggiornate ${r.updated})`)
                     : escapeHtml(r.message || r.status);
                 return `<div>• <b>${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
             }).join('');
             box.style.display = 'block';
-            box.innerHTML = `<b data-i18n="titleArpScanSummary">Esito raccolta ARP</b>` +
+            box.innerHTML = `<b>${i18n[currentLang].titleArpScanSummary || 'Esito raccolta ARP'}</b>` +
                 `<div style="margin-top:6px;">${rows || '—'}</div>`;
             arpClientSearch();
             refreshArpStats();
@@ -10387,7 +10495,7 @@
             if (!res || !res.ok) {
                 if (!silent) {
                     const err = res ? await res.json().catch(() => ({})) : {};
-                    if (statusEl) statusEl.textContent = 'Errore elenco modelli: ' + (err.detail || res?.status);
+                    if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Model list error: ' : 'Errore elenco modelli: ') + (err.detail || res?.status);
                 }
                 return;
             }
@@ -10401,9 +10509,9 @@
             sel.onchange = () => {
                 if (sel.value) document.getElementById('aiModel').value = sel.value;
             };
-            if (!silent && statusEl) statusEl.textContent = `Trovati ${(data.models || []).length} modelli.`;
+            if (!silent && statusEl) statusEl.textContent = currentLang==='en' ? `Found ${(data.models || []).length} models.` : `Trovati ${(data.models || []).length} modelli.`;
         } catch (e) {
-            if (!silent && statusEl) statusEl.textContent = 'Errore di rete: ' + e;
+            if (!silent && statusEl) statusEl.textContent = (currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e;
         }
     }
 
@@ -10446,10 +10554,10 @@
                 if (editSel2 && saved.id) { editSel2.value = saved.id; onAiProfileEditSelectChange(); }
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
-                if (statusEl) statusEl.textContent = 'Errore: ' + (err.detail || res?.status);
+                if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Error: ' : 'Errore: ') + (err.detail || res?.status);
             }
         } catch (e) {
-            if (statusEl) statusEl.textContent = 'Errore di rete: ' + e;
+            if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e;
         }
     }
 
@@ -10465,10 +10573,10 @@
                 await loadAiProfiles();
             } else {
                 const err = res ? await res.json().catch(() => ({})) : {};
-                if (statusEl) statusEl.textContent = 'Errore: ' + (err.detail || res?.status);
+                if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Error: ' : 'Errore: ') + (err.detail || res?.status);
             }
         } catch (e) {
-            if (statusEl) statusEl.textContent = 'Errore di rete: ' + e;
+            if (statusEl) statusEl.textContent = (currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e;
         }
     }
 
@@ -10498,17 +10606,17 @@
         const card = document.createElement('div');
         card.style.cssText = 'border:1px solid var(--warning, #e0a800); border-radius:10px; padding:12px; margin:8px 0; font-size:13px;';
         if (!(attachedIps || []).includes(p.device_ip)) {
-            card.innerHTML = `⚠️ L'AI ha proposto una modifica per <code>${escapeHtml(p.device_ip)}</code>, che non è tra i dispositivi allegati. Proposta ignorata per sicurezza.`;
+            card.innerHTML = currentLang==='en' ? `⚠️ The AI proposed a change for <code>${escapeHtml(p.device_ip)}</code>, which is not among the attached devices. Proposal ignored for safety.` : `⚠️ L'AI ha proposto una modifica per <code>${escapeHtml(p.device_ip)}</code>, che non è tra i dispositivi allegati. Proposta ignorata per sicurezza.`;
             box.appendChild(card);
             box.scrollTop = box.scrollHeight;
             return;
         }
         card.innerHTML = `
-            <div style="font-weight:600; margin-bottom:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> Modifica di configurazione proposta — <code>${escapeHtml(p.device_ip)}</code></div>
+            <div style="font-weight:600; margin-bottom:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> ${currentLang==='en' ? 'Proposed configuration change' : 'Modifica di configurazione proposta'} — <code>${escapeHtml(p.device_ip)}</code></div>
             <pre style="background:var(--surface-2); border-radius:8px; padding:10px; overflow:auto; margin:0 0 8px 0;">${escapeHtml(p.commands.join('\n'))}</pre>
             <div style="display:flex; gap:8px; align-items:center;">
-                <button class="btn btn-primary btn-small requires-write" style="width:auto;"><i class="fa-solid fa-play"></i> Applica…</button>
-                <button class="btn btn-secondary btn-small" style="width:auto;">Annulla</button>
+                <button class="btn btn-primary btn-small requires-write" style="width:auto;"><i class="fa-solid fa-play"></i> ${currentLang==='en' ? 'Apply…' : 'Applica…'}</button>
+                <button class="btn btn-secondary btn-small" style="width:auto;">${currentLang==='en' ? 'Cancel' : 'Annulla'}</button>
                 <span class="ai-cfg-status" style="font-size:12px; color:var(--text-muted);"></span>
             </div>`;
         const [applyBtn, cancelBtn] = card.querySelectorAll('button');
@@ -10523,15 +10631,15 @@
         overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10000; display:flex; align-items:center; justify-content:center;';
         overlay.innerHTML = `
             <div style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:12px; max-width:560px; width:92%; padding:18px;">
-                <h4 style="margin:0 0 10px 0;">Conferma invio configurazione</h4>
-                <p style="font-size:13px; margin:0 0 8px 0;">Stai per inviare <b>${p.commands.length}</b> comandi in modalità configurazione a <code>${escapeHtml(p.device_ip)}</code>. L'operazione viene auditata e i comandi in blacklist vengono bloccati dal server.</p>
+                <h4 style="margin:0 0 10px 0;">${currentLang==='en' ? 'Confirm configuration push' : 'Conferma invio configurazione'}</h4>
+                <p style="font-size:13px; margin:0 0 8px 0;">${currentLang==='en' ? `You are about to send <b>${p.commands.length}</b> commands in configuration mode to <code>${escapeHtml(p.device_ip)}</code>. The operation is audited and blacklisted commands are blocked server-side.` : `Stai per inviare <b>${p.commands.length}</b> comandi in modalità configurazione a <code>${escapeHtml(p.device_ip)}</code>. L'operazione viene auditata e i comandi in blacklist vengono bloccati dal server.`}</p>
                 <pre style="background:var(--surface-2); border-radius:8px; padding:10px; max-height:220px; overflow:auto; font-size:12px;">${escapeHtml(p.commands.join('\n'))}</pre>
                 <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin:8px 0;">
-                    <input type="checkbox" id="aiCfgSaveAfter"${p.save_after ? ' checked' : ''}> Salva configurazione di avvio dopo l'invio
+                    <input type="checkbox" id="aiCfgSaveAfter"${p.save_after ? ' checked' : ''}> ${currentLang==='en' ? 'Save startup configuration after the push' : "Salva configurazione di avvio dopo l'invio"}
                 </label>
                 <div style="display:flex; gap:8px; justify-content:flex-end;">
-                    <button class="btn btn-secondary btn-small" style="width:auto;">Annulla</button>
-                    <button class="btn btn-primary btn-small" style="width:auto;"><i class="fa-solid fa-play"></i> Conferma e applica</button>
+                    <button class="btn btn-secondary btn-small" style="width:auto;">${currentLang==='en' ? 'Cancel' : 'Annulla'}</button>
+                    <button class="btn btn-primary btn-small" style="width:auto;"><i class="fa-solid fa-play"></i> ${currentLang==='en' ? 'Confirm and apply' : 'Conferma e applica'}</button>
                 </div>
             </div>`;
         const [cancelBtn, confirmBtn] = overlay.querySelectorAll('button');
@@ -10548,7 +10656,7 @@
         const statusEl = card.querySelector('.ai-cfg-status');
         const setStatus = (t, err) => { if (statusEl) { statusEl.textContent = t; statusEl.style.color = err ? 'var(--danger, #d9534f)' : 'var(--text-muted)'; } };
         card.querySelectorAll('button').forEach(b => b.disabled = true);
-        setStatus('Invio in corso…');
+        setStatus(currentLang==='en' ? 'Sending…' : 'Invio in corso…');
         try {
             const res = await apiFetch('/api/bulk-command', {
                 method: 'POST',
@@ -10562,7 +10670,7 @@
             });
             if (!res || !res.ok) {
                 const err = res ? await res.json().catch(() => ({})) : {};
-                setStatus('Errore: ' + (err.detail || 'richiesta rifiutata.'), true);
+                setStatus((currentLang==='en' ? 'Error: ' : 'Errore: ') + (err.detail || (currentLang==='en' ? 'request rejected.' : 'richiesta rifiutata.')), true);
                 card.querySelectorAll('button').forEach(b => b.disabled = false);
                 return;
             }
@@ -10575,17 +10683,17 @@
                 const job = await jr.json();
                 if (job.status !== 'running') {
                     const entry = (job.results || [])[0];
-                    const result = entry ? (entry.result || {}) : { status: 'error', message: 'dispositivo non trovato in inventario.' };
+                    const result = entry ? (entry.result || {}) : { status: 'error', message: currentLang==='en' ? 'device not found in inventory.' : 'dispositivo non trovato in inventario.' };
                     const ok = result.status === 'success';
-                    setStatus(ok ? '✅ Configurazione applicata.' : 'Errore: ' + (result.message || 'invio fallito.'), !ok);
-                    appendAiMessage('assistant', (ok ? '✅ Configurazione applicata a ' : '❌ Invio fallito a ') + p.device_ip + (result.output ? '\n\n' + result.output : (result.message ? '\n\n' + result.message : '')));
+                    setStatus(ok ? (currentLang==='en' ? '✅ Configuration applied.' : '✅ Configurazione applicata.') : (currentLang==='en' ? 'Error: ' : 'Errore: ') + (result.message || (currentLang==='en' ? 'push failed.' : 'invio fallito.')), !ok);
+                    appendAiMessage('assistant', (ok ? (currentLang==='en' ? '✅ Configuration applied to ' : '✅ Configurazione applicata a ') : (currentLang==='en' ? '❌ Push failed to ' : '❌ Invio fallito a ')) + p.device_ip + (result.output ? '\n\n' + result.output : (result.message ? '\n\n' + result.message : '')));
                     return;
                 }
-                setStatus('In esecuzione…');
+                setStatus(currentLang==='en' ? 'Running…' : 'In esecuzione…');
             }
-            setStatus('Timeout in attesa del risultato: controlla il job dei comandi bulk.', true);
+            setStatus(currentLang==='en' ? 'Timeout waiting for the result: check the bulk command job.' : 'Timeout in attesa del risultato: controlla il job dei comandi bulk.', true);
         } catch (e) {
-            setStatus('Errore di rete: ' + e, true);
+            setStatus((currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e, true);
             card.querySelectorAll('button').forEach(b => b.disabled = false);
         }
     }
@@ -10826,10 +10934,14 @@
             const listeners = h.listeners || {};
             const anyActive = Object.values(listeners).some(l => l && l.active);
             if (!h.enabled) {
-                banner.textContent = '⚠️ Osservabilità disabilitata: nessun listener in ascolto. Abilita con SENTINELNET_OBS_ENABLE=1 (o "observability.enabled" in app_settings.json) e riavvia.';
+                banner.textContent = currentLang === 'en'
+                    ? '⚠️ Observability disabled: no listener running. Enable it with SENTINELNET_OBS_ENABLE=1 (or "observability.enabled" in app_settings.json) and restart.'
+                    : '⚠️ Osservabilità disabilitata: nessun listener in ascolto. Abilita con SENTINELNET_OBS_ENABLE=1 (o "observability.enabled" in app_settings.json) e riavvia.';
                 banner.style.display = 'block';
             } else if (!anyActive) {
-                banner.textContent = '⚠️ Osservabilità abilitata ma nessun listener attivo (bind fallito?). Controlla /api/observability/health e i log di avvio.';
+                banner.textContent = currentLang === 'en'
+                    ? '⚠️ Observability enabled but no active listener (bind failed?). Check /api/observability/health and the startup logs.'
+                    : '⚠️ Osservabilità abilitata ma nessun listener attivo (bind fallito?). Controlla /api/observability/health e i log di avvio.';
                 banner.style.display = 'block';
             } else {
                 banner.style.display = 'none';
@@ -10875,12 +10987,12 @@
             if (_flowsSource === 'syslog') {
                 const res = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
                 if (!res || !res.ok) {
-                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">Errore nel caricamento degli eventi syslog.</td></tr>`;
+                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">${currentLang === 'en' ? 'Error loading syslog events.' : 'Errore nel caricamento degli eventi syslog.'}</td></tr>`;
                     return;
                 }
                 _flowsSyslogData = (await res.json()).events || [];
                 document.getElementById('flowsLastUpdate').textContent =
-                    'Aggiornato: ' + new Date().toLocaleTimeString();
+                    (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
                 rebuildFlowsTenantList(_flowsSyslogData);
                 renderFlowsThead();
                 renderSyslogTable();
@@ -10889,13 +11001,13 @@
             const srcParam = _flowsSource === 'all' ? '' : `&source=${_flowsSource}`;
             const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}`);
             if (!res || !res.ok) {
-                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">Errore nel caricamento dei flussi.</td></tr>`;
+                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">${currentLang === 'en' ? 'Error loading flows.' : 'Errore nel caricamento dei flussi.'}</td></tr>`;
                 return;
             }
             const flows = (await res.json()).flows || [];
             _flowsRawData = flows;                     // cache for filtering
             document.getElementById('flowsLastUpdate').textContent =
-                'Aggiornato: ' + new Date().toLocaleTimeString();
+                (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
 
             // Rebuild tenant checkbox list from distinct tenants in fetched data
             rebuildFlowsTenantList(flows);
@@ -10974,13 +11086,14 @@
     function updateFlowsTenantButtonLabel(totalTenants) {
         const btn = document.getElementById('flowsTenantBtn');
         if (!btn) return;
+        const L = i18n[currentLang];
         let label = 'Tenants';
         if (totalTenants === 0) {
             label = 'Tenants';
         } else if (_flowsSelectedTenants.size === 0) {
-            label = 'Nessun tenant';
+            label = L.lblNoTenant || 'Nessun tenant';
         } else if (_flowsSelectedTenants.size === totalTenants) {
-            label = 'Tutti i tenant';
+            label = L.optArpAllTenants || 'Tutti i tenant';
         } else {
             label = `${_flowsSelectedTenants.size} tenant`;
         }
@@ -11048,7 +11161,7 @@
         _flowsSelectedKeys.forEach(k => { if (!filteredKeys.has(k) && !_flowsRawData.some(f => flowKey(f) === k)) _flowsSelectedKeys.delete(k); });
 
         if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">Nessun flusso nel periodo selezionato.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);">${i18n[currentLang].msgNoFlows || 'Nessun flusso nel periodo selezionato.'}</td></tr>`;
             const all = document.getElementById('flowsSelectAll');
             if (all) all.checked = false;
             return;
@@ -11094,32 +11207,34 @@
         const proto = ({6: 'TCP', 17: 'UDP', 1: 'ICMP'})[f.protocol] || f.protocol || '—';
         const row = (label, value) => `<tr><td style="padding:4px 8px 4px 0; color:var(--text-muted); white-space:nowrap;">${label}</td><td style="padding:4px 0;">${value}</td></tr>`;
         const body = document.getElementById('flowDetailPanelBody');
+        const L = i18n[currentLang];
+        const en = currentLang === 'en';
         body.innerHTML = `
             <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:14px;">
-                ${row('Sede', escapeHtml(f.tenant))}
-                ${row('Sorgente', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.src_ip)}</a>`)}
-                ${row('Destinazione', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.dst_ip)}</a>`)}
-                ${row('Proto/Porta', `${proto}/${f.dst_port ?? '—'}`)}
-                ${row('Traffico', fmtBytes(f.total_bytes))}
-                ${row('Pacchetti', f.total_packets)}
-                ${row('Flussi aggregati', f.flow_count)}
+                ${row(L.thFlTenant || 'Sede', escapeHtml(f.tenant))}
+                ${row(L.thFlSrc || 'Sorgente', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.src_ip)}</a>`)}
+                ${row(L.thFlDst || 'Destinazione', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.dst_ip)}</a>`)}
+                ${row(L.thFlProto || 'Proto/Porta', `${proto}/${f.dst_port ?? '—'}`)}
+                ${row(L.thFlTraffic || 'Traffico', fmtBytes(f.total_bytes))}
+                ${row(L.thFlPackets || 'Pacchetti', f.total_packets)}
+                ${row(en ? 'Aggregated flows' : 'Flussi aggregati', f.flow_count)}
             </table>
             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
                 <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">
-                    <i class="fa-solid fa-diagram-project"></i> Mostra sorgente in topologia
+                    <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show source in topology' : 'Mostra sorgente in topologia'}
                 </button>
                 <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">
-                    <i class="fa-solid fa-diagram-project"></i> Mostra destinazione in topologia
+                    <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show destination in topology' : 'Mostra destinazione in topologia'}
                 </button>
                 <button class="btn" style="text-align:left;" onclick="jumpToAnomaliesForFlow()">
-                    <i class="fa-solid fa-triangle-exclamation"></i> Vedi anomalie di questo flusso
+                    <i class="fa-solid fa-triangle-exclamation"></i> ${en ? 'See anomalies for this flow' : 'Vedi anomalie di questo flusso'}
                 </button>
-                <button class="btn requires-write" style="text-align:left;" onclick="analyzeSingleFlowWithAi()" title="Invia SOLO questo flusso all'assistente AI (identificatori; totali ri-derivati dal server)">
-                    <i class="fa-solid fa-robot"></i> Analizza con AI
+                <button class="btn requires-write" style="text-align:left;" onclick="analyzeSingleFlowWithAi()" title="${en ? 'Send ONLY this flow to the AI assistant (identifiers; totals re-derived server-side)' : 'Invia SOLO questo flusso all\'assistente AI (identificatori; totali ri-derivati dal server)'}">
+                    <i class="fa-solid fa-robot"></i> ${L.btnAnalyzeAi || 'Analizza con AI'}
                 </button>
             </div>
-            <h5 style="margin:0 0 8px 0;">Client (sorgente)</h5>
-            <div id="flowPanelClientMap" style="font-size:12px; color:var(--text-muted);">Ricerca in corso…</div>
+            <h5 style="margin:0 0 8px 0;">${en ? 'Client (source)' : 'Client (sorgente)'}</h5>
+            <div id="flowPanelClientMap" style="font-size:12px; color:var(--text-muted);">${en ? 'Searching…' : 'Ricerca in corso…'}</div>
         `;
         document.getElementById('flowDetailPanel').style.display = 'block';
         loadFlowPanelClientMap(f.src_ip);
@@ -11135,23 +11250,24 @@
         const box = document.getElementById('flowPanelClientMap');
         if (!box) return;
         try {
+            const en = currentLang === 'en';
             const res = await apiFetch('/api/arp/client-map?' + new URLSearchParams({ ip }).toString());
-            if (!res || !res.ok) { box.textContent = 'Ricerca client-map non disponibile.'; return; }
+            if (!res || !res.ok) { box.textContent = en ? 'Client-map lookup unavailable.' : 'Ricerca client-map non disponibile.'; return; }
             const d = await res.json();
             const rows = d.results || [];
             if (rows.length === 0) {
-                box.textContent = 'Nessun binding MAC/IP noto per questa sorgente.';
+                box.textContent = en ? 'No known MAC/IP binding for this source.' : 'Nessun binding MAC/IP noto per questa sorgente.';
                 return;
             }
             box.innerHTML = rows.map(r => `
                 <div style="padding:8px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
                     <div><b>MAC</b>: <code>${escapeHtml(r.mac)}</code></div>
                     <div><b>Gateway</b>: ${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip || '')}</span></div>
-                    <div><b>Switch di accesso</b>: ${r.switch_ip ? `${escapeHtml(r.switch_name || '')} ${escapeHtml(r.switch_ip)}` : '—'}</div>
-                    <div><b>Porta</b>: ${escapeHtml(r.switch_port || '—')}</div>
+                    <div><b>${en ? 'Access switch' : 'Switch di accesso'}</b>: ${r.switch_ip ? `${escapeHtml(r.switch_name || '')} ${escapeHtml(r.switch_ip)}` : '—'}</div>
+                    <div><b>${en ? 'Port' : 'Porta'}</b>: ${escapeHtml(r.switch_port || '—')}</div>
                 </div>`).join('');
         } catch (e) {
-            box.textContent = 'Ricerca client-map non disponibile.';
+            box.textContent = currentLang === 'en' ? 'Client-map lookup unavailable.' : 'Ricerca client-map non disponibile.';
         }
     }
 
@@ -11199,7 +11315,7 @@
                 return;
             }
             if (attempt < 20) { setTimeout(() => tryFocus(attempt + 1), 250); return; }
-            showToast('Nodo non presente nella topologia.', 'warning');
+            showToast(currentLang === 'en' ? 'Node not present in the topology.' : 'Nodo non presente nella topologia.', 'warning');
         };
         tryFocus(0);
     }
@@ -11229,19 +11345,33 @@
         note.style.display = 'block';
         // Il contesto è assemblato e REDATTO lato server: il browser invia solo
         // le tuple identificative (mai byte/pacchetti) e la domanda.
-        note.textContent = '⚠️ ' + (selected
-            ? `Vengono inviati SOLO i ${flows.length} flussi selezionati (identificatori; totali ri-derivati dal server, segreti redatti)`
-            : 'I dati aggregati dei flussi (riassunto top-N, con segreti redatti)')
-            + ' verranno inviati al provider AI configurato'
-            + (providerName ? ` (${providerName})` : '') + '.';
+        const en = currentLang === 'en';
+        note.textContent = en
+            ? '⚠️ ' + (selected
+                ? `ONLY the ${flows.length} selected flows (identifiers; totals re-derived server-side, secrets redacted)`
+                : 'The aggregated flow data (top-N summary, secrets redacted)')
+                + ' will be sent to the configured AI provider'
+                + (providerName ? ` (${providerName})` : '') + '.'
+            : '⚠️ ' + (selected
+                ? `Vengono inviati SOLO i ${flows.length} flussi selezionati (identificatori; totali ri-derivati dal server, segreti redatti)`
+                : 'I dati aggregati dei flussi (riassunto top-N, con segreti redatti)')
+                + ' verranno inviati al provider AI configurato'
+                + (providerName ? ` (${providerName})` : '') + '.';
         switchTab('tab-ai', document.querySelector(`.tab-button[onclick*="'tab-ai'"]`));
         const input = document.getElementById('aiChatInput');
-        input.value = selected
-            ? `Analizza i ${flows.length} flussi di rete selezionati e allegati: `
-              + 'individua top talker anomali, possibili esfiltrazioni o scansioni, '
-              + 'e correla con le anomalie aperte.'
-            : 'Analizza i flussi di rete allegati: individua i top talker anomali, '
-              + 'possibili esfiltrazioni o scansioni, e correla con le anomalie aperte.';
+        input.value = en
+            ? (selected
+                ? `Analyze the ${flows.length} selected attached network flows: `
+                  + 'spot anomalous top talkers, possible exfiltration or scans, '
+                  + 'and correlate with the open anomalies.'
+                : 'Analyze the attached network flows: spot anomalous top talkers, '
+                  + 'possible exfiltration or scans, and correlate with the open anomalies.')
+            : (selected
+                ? `Analizza i ${flows.length} flussi di rete selezionati e allegati: `
+                  + 'individua top talker anomali, possibili esfiltrazioni o scansioni, '
+                  + 'e correla con le anomalie aperte.'
+                : 'Analizza i flussi di rete allegati: individua i top talker anomali, '
+                  + 'possibili esfiltrazioni o scansioni, e correla con le anomalie aperte.');
         input.focus();
     }
 
@@ -11273,24 +11403,27 @@
             rows = rows.filter(a => a.src_ip === src || a.dst_ip === src || a.src_ip === dst || a.dst_ip === dst);
             if (chip) {
                 chip.style.display = 'inline-flex';
-                chip.querySelector('span').textContent = `Filtrato per flusso: ${src} / ${dst}`;
+                chip.querySelector('span').textContent = `${currentLang === 'en' ? 'Filtered by flow' : 'Filtrato per flusso'}: ${src} / ${dst}`;
             }
         } else if (chip) {
             chip.style.display = 'none';
         }
 
+        const en = currentLang === 'en';
         if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">Nessuna anomalia.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">${i18n[currentLang].msgNoAnomalies || 'Nessuna anomalia.'}</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(a => {
             const when = new Date(a.created_ts * 1000).toLocaleString();
             const actions = [];
+            const lblAck = en ? 'Acknowledge' : 'Prendi in carico';
+            const lblResolve = en ? 'Resolve' : 'Risolvi';
             if (a.status === 'new') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'ack')">Prendi in carico</button>`);
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'resolved')">Risolvi</button>`);
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'ack')">${lblAck}</button>`);
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'resolved')">${lblResolve}</button>`);
             } else if (a.status === 'ack') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'ack', 'resolved')">Risolvi</button>`);
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'ack', 'resolved')">${lblResolve}</button>`);
             }
             return `<tr style="font-size:12px; border-top:1px solid var(--border);">
                 <td style="padding:6px 8px;">${when}</td>
@@ -11316,10 +11449,10 @@
             loadAnomalies();
         } else if (res && res.status === 409) {
             const err = await res.json().catch(() => ({}));
-            showToast(err.detail || 'Stato cambiato nel frattempo: ricarico.', 'warning');
+            showToast(err.detail || (currentLang === 'en' ? 'Status changed in the meantime: reloading.' : 'Stato cambiato nel frattempo: ricarico.'), 'warning');
             loadAnomalies();
         } else if (res) {
-            showToast('Operazione non riuscita.', 'error');
+            showToast(currentLang === 'en' ? 'Operation failed.' : 'Operazione non riuscita.', 'error');
         }
     }
 
