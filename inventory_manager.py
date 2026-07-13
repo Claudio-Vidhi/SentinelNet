@@ -13,6 +13,58 @@ VENDORS_FILE = data_config.get_path("vendors.json")
 
 IP_PATTERN = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 
+# --- Trasporti per-device (§11.6) ---
+# Protocolli di connessione dichiarabili per apparato e relativa porta di
+# default (null nella mappa = usa questa porta di default del protocollo).
+ALLOWED_TRANSPORTS = ("ssh", "telnet", "netconf", "restconf")
+TRANSPORT_DEFAULT_PORTS = {"ssh": 22, "telnet": 23, "netconf": 830, "restconf": 443}
+
+
+def parse_transports(device) -> dict:
+    """Ritorna la mappa trasporti dichiarati {protocollo: porta|None} di un
+    device. Inventari legacy senza colonna 'Transports': sintetizza uno
+    ssh-only {'ssh': <SSH Port>|22} per retrocompatibilità."""
+    raw = device.get('Transports') if isinstance(device, dict) else None
+    if raw:
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            data = None
+        if isinstance(data, dict):
+            out = {k: v for k, v in data.items() if k in ALLOWED_TRANSPORTS}
+            if out:
+                return out
+    # Legacy: ssh-only derivato dalla colonna 'SSH Port'.
+    try:
+        p = int(str(device.get('SSH Port') or '').strip() or 22)
+    except (ValueError, AttributeError):
+        p = 22
+    return {"ssh": p}
+
+
+def _validate_transports(transports):
+    """Valida/normalizza una mappa {protocollo: porta|None}. Lancia ValueError
+    (messaggi in italiano) su chiave o porta non valide. None => None."""
+    if transports is None:
+        return None
+    if not isinstance(transports, dict):
+        raise ValueError("Trasporti non validi: atteso un oggetto protocollo→porta.")
+    clean = {}
+    for proto, port in transports.items():
+        if proto not in ALLOWED_TRANSPORTS:
+            raise ValueError(f"Protocollo di trasporto non supportato: '{proto}'.")
+        if port is None or port == "":
+            clean[proto] = None
+            continue
+        try:
+            p = int(port)
+        except (TypeError, ValueError):
+            raise ValueError(f"Porta non valida per il protocollo '{proto}': {port}.")
+        if not (1 <= p <= 65535):
+            raise ValueError(f"Porta non valida per il protocollo '{proto}': {port}.")
+        clean[proto] = p
+    return clean
+
 # Lock rientrante che serializza le sequenze read-modify-write sui file di stato
 # condivisi (CSV inventario e JSON versioni/gruppi). Necessario perché il triage
 # e la scansione subnet eseguono fino a 50 worker concorrenti che altrimenti
@@ -79,7 +131,7 @@ def safe_write_hosts_csv(devices):
     temp_filename = HOSTS_CSV + ".tmp"
     # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
-    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port']
+    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port', 'Transports']
     try:
         with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
@@ -162,7 +214,7 @@ def get_device_by_ip(ip: str):
         return _device_ip_cache.get(ip)
 
 
-def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None, ssh_port=None):
+def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None, ssh_port=None, transports=None):
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -175,6 +227,8 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             raise ValueError(f"Porta SSH non valida: {ssh_port}")
         if not (1 <= ssh_port <= 65535):
             raise ValueError(f"Porta SSH non valida: {ssh_port}")
+    # Mappa trasporti esplicita (§11.6): validata; None = deriva da esistente/legacy.
+    transports = _validate_transports(transports)
 
     enc_password = crypto_vault.encrypt_password(password)
     enc_secret = crypto_vault.encrypt_password(enable_secret)
@@ -188,6 +242,18 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
         resolved_site = site or (existing.get('Site') if existing else None) or 'central'
         resolved_port = ssh_port if ssh_port is not None else \
             ((existing.get('SSH Port') if existing else None) or 22)
+        # Trasporti: esplicito > esistente (se già migrato) > sintesi ssh-only.
+        if transports is not None:
+            resolved_transports = transports
+        elif existing is not None and existing.get('Transports'):
+            resolved_transports = parse_transports(existing)
+        else:
+            resolved_transports = {"ssh": int(resolved_port)}
+        # Rispecchia la porta SSH nella colonna legacy 'SSH Port' per
+        # retrocompatibilità di lettura (get_device_port, is_reachable).
+        ssh_mirror = resolved_transports.get('ssh')
+        if ssh_mirror is None:
+            ssh_mirror = resolved_port
         devices = [d for d in devices if d['IP'] != ip]
 
         new_device = {
@@ -195,7 +261,8 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
             'Group': group if group in get_all_groups() else 'Generale',
             'Site': resolved_site,
-            'SSH Port': str(resolved_port),
+            'SSH Port': str(ssh_mirror),
+            'Transports': json.dumps(resolved_transports, separators=(',', ':')),
         }
         if existing_hostname:
             new_device['Hostname'] = existing_hostname

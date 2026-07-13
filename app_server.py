@@ -10,7 +10,7 @@ import threading
 import webbrowser
 import requests
 import re
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
 
@@ -290,6 +290,9 @@ class DeviceSchema(BaseModel):
     enable_secret: str = "admin"
     group: str = "Generale"
     ssh_port: int = Field(22, ge=1, le=65535)
+    # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy
+    # (deriva ssh-only dalla porta SSH). Validazione in inventory_manager.
+    transports: Optional[Dict[str, Optional[int]]] = None
 
 class GroupSchema(BaseModel):
     name: str
@@ -458,6 +461,14 @@ class AiChatMessage(BaseModel):
     role: str
     content: str
 
+class FlowKeySchema(BaseModel):
+    """Identificatori di un flusso selezionato (11.3). SOLO identificatori:
+    byte/pacchetti NON sono accettati dal client — il server li ri-deriva dal DB."""
+    src_ip: str
+    dst_ip: str
+    protocol: int
+    dst_port: Optional[int] = None
+
 class AiChatSchema(BaseModel):
     messages: List[AiChatMessage]
     attach_inventory: bool = False   # allega un riepilogo dell'inventario dispositivi
@@ -465,6 +476,7 @@ class AiChatSchema(BaseModel):
     attach_tenant: Optional[str] = None  # allega il contesto completo di un tenant/sede (gruppo)
     attach_fortigate_ip: Optional[str] = None  # allega la config completa LIVE di un FortiGate (API/SSH)
     attach_top_flows: bool = False   # allega il riassunto dei top flussi (observability, scoped)
+    attach_flow_keys: Optional[List[FlowKeySchema]] = None  # 11.3: analisi delle sole righe flusso selezionate (max 20)
     attach_device_ips: List[str] = []  # multi-selezione: running-config di più dispositivi del tenant
 class SwitchProvisionSchema(BaseModel):
     """Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config
@@ -1041,12 +1053,18 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == device.ip), None)
     if existing:
         assert_group_allowed(current_user, existing.get('Group', 'Generale'))
-    inventory_manager.add_or_update_device(
-        device.ip, device.vendor, device.profile,
-        device.username, device.password, device.enable_secret, device.group,
-        ssh_port=device.ssh_port
-    )
+    try:
+        inventory_manager.add_or_update_device(
+            device.ip, device.vendor, device.profile,
+            device.username, device.password, device.enable_secret, device.group,
+            ssh_port=device.ssh_port, transports=device.transports
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
+    # §11.6: Telnet è in chiaro — traccia esplicitamente l'abilitazione.
+    if device.transports and 'telnet' in device.transports:
+        log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "message": "Dispositivo salvato"}
 
 @app.post("/api/delete-device")
@@ -2232,10 +2250,12 @@ def _mac_collect_one(device: dict, transport=None) -> dict:
         netmiko_type = "cisco_ios"
     # Comando ad-hoc configurato per questo apparato (casi non ordinari).
     ov = mac_history.get_override(ip) or {}
+    dev_transports = inventory_manager.parse_transports(device)
     res = mac_collector.collect_mac_table(
         ip, username, password, secret, device_type=netmiko_type,
         uplink_ports=_mac_uplink_ports(ip), transport=transport,
         cli_command=ov.get("command"), cli_format=ov.get("fmt"),
+        transports=dev_transports,
     )
     res["device"] = device
     # Raccogli anche i MAC delle interfacce proprie dello switch (infrastruttura):
@@ -2245,7 +2265,7 @@ def _mac_collect_one(device: dict, transport=None) -> dict:
         try:
             ifres = mac_collector.collect_interface_macs(
                 ip, username, password, secret, device_type=netmiko_type,
-                transport=transport,
+                transport=transport, transports=dev_transports,
             )
             res["if_macs"] = ifres.get("rows") or []
         except Exception:
@@ -2851,11 +2871,21 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
         context_blocks.append(_tenant_context_block(payload.attach_tenant, current_user))
     if payload.attach_fortigate_ip:
         context_blocks.append(_fortigate_live_context(payload.attach_fortigate_ip, current_user))
-    if payload.attach_top_flows:
+    if payload.attach_top_flows or payload.attach_flow_keys:
         # Riassunto server-side (mai contesto raw assemblato dal browser),
         # scoped per tenant; la redazione avviene nel choke-point di chat().
+        # 11.3: se sono state selezionate righe specifiche (attach_flow_keys),
+        # il contesto è vincolato a quelle tuple — ma lo scope tenant NON viene
+        # mai rilassato, e i totali byte/pacchetti sono ri-derivati dal DB
+        # (i valori del client vengono ignorati).
         from observability.summary import top_flows_context
-        context_blocks.append(top_flows_context(user_group_scope(current_user)))
+        keys = None
+        if payload.attach_flow_keys:
+            if len(payload.attach_flow_keys) > 20:
+                raise HTTPException(status_code=400,
+                    detail="Troppi flussi selezionati: massimo 20 righe per analisi.")
+            keys = [k.model_dump() for k in payload.attach_flow_keys]
+        context_blocks.append(top_flows_context(user_group_scope(current_user), keys=keys))
     if payload.attach_device_ips and current_user.get("role") in ("admin", "operator"):
         # Contratto di proposta config (§10.2): il modello PROPONE, non esegue.
         # Il browser mostra la proposta e, solo dopo conferma esplicita

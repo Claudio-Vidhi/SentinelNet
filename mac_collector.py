@@ -578,23 +578,46 @@ def collect_if_macs_via_cli(host, username, password, secret="", device_type="ci
         return None
 
 
+def _resolve_transport_plan(transports, netconf_port, restconf_port, device_type):
+    """Applica i trasporti dichiarati per-device (§11.6). Ritorna
+    (nc_enabled, netconf_port, rc_enabled, restconf_port, cli_enabled, device_type).
+    transports=None => comportamento legacy (tutti i trasporti, porte di default)."""
+    if transports is None:
+        return True, netconf_port, True, restconf_port, True, device_type
+    nc_enabled = 'netconf' in transports
+    rc_enabled = 'restconf' in transports
+    cli_enabled = ('ssh' in transports) or ('telnet' in transports)
+    # Telnet solo se dichiarato e SSH assente → variante Netmiko '_telnet'.
+    if ('telnet' in transports) and ('ssh' not in transports) and not device_type.endswith('_telnet'):
+        device_type = device_type + '_telnet'
+    if nc_enabled and transports.get('netconf'):
+        netconf_port = transports['netconf']
+    if rc_enabled and transports.get('restconf'):
+        restconf_port = transports['restconf']
+    return nc_enabled, netconf_port, rc_enabled, restconf_port, cli_enabled, device_type
+
+
 def collect_interface_macs(host, username, password, secret="", device_type="cisco_ios",
-                           netconf_port=830, restconf_port=443, transport=None) -> dict:
+                           netconf_port=830, restconf_port=443, transport=None,
+                           transports=None) -> dict:
     """Raccolta ad alto livello dei MAC delle interfacce proprie dello switch,
     con fallback NETCONF -> RESTCONF -> CLI (stessa struttura di collect_mac_table).
     Ritorna {rows, method, error}; 'rows' è list[{interface, mac}] (MAC grezzi)."""
     want = (transport or "").strip().lower() or None
+    (nc_enabled, netconf_port, rc_enabled, restconf_port,
+     cli_enabled, device_type) = _resolve_transport_plan(
+        transports, netconf_port, restconf_port, device_type)
     rows = None
     method = None
-    if want in (None, "netconf"):
+    if nc_enabled and want in (None, "netconf"):
         rows = collect_if_macs_via_netconf(host, username, password, port=netconf_port)
         if rows is not None:
             method = "netconf"
-    if rows is None and want in (None, "restconf"):
+    if rows is None and rc_enabled and want in (None, "restconf"):
         rows = collect_if_macs_via_restconf(host, username, password, port=restconf_port)
         if rows is not None:
             method = "restconf"
-    if rows is None and want in (None, "cli"):
+    if rows is None and cli_enabled and want in (None, "cli"):
         rows = collect_if_macs_via_cli(host, username, password, secret, device_type)
         if rows is not None:
             method = "cli"
@@ -607,26 +630,33 @@ def collect_interface_macs(host, username, password, secret="", device_type="cis
 
 def collect_mac_table(host, username, password, secret="", device_type="cisco_ios",
                       uplink_ports=None, netconf_port=830, restconf_port=443,
-                      transport=None, cli_command=None, cli_format=None) -> dict:
+                      transport=None, cli_command=None, cli_format=None,
+                      transports=None) -> dict:
     """Raccolta ad alto livello con fallback NETCONF -> RESTCONF -> CLI.
 
     NETCONF e RESTCONF usano i modelli standardizzati (OpenConfig FDB) oltre a
     Cisco matm-oper (via primaria); il CLI è l'ultima spiaggia (CBS/legacy).
     'transport' (netconf|restconf|cli) forza un singolo trasporto; None = auto.
+    'transports' (§11.6): mappa {protocollo: porta|None} dichiarata per il
+    device — se fornita, si tentano SOLO i protocolli dichiarati, con le porte
+    dichiarate. None = comportamento legacy (tutti, porte di default).
     Ritorna {rows, method, error}: 'rows' è già normalizzato e con is_uplink.
     """
     want = (transport or "").strip().lower() or None
+    (nc_enabled, netconf_port, rc_enabled, restconf_port,
+     cli_enabled, device_type) = _resolve_transport_plan(
+        transports, netconf_port, restconf_port, device_type)
     rows = None
     method = None
-    if want in (None, "netconf"):
+    if nc_enabled and want in (None, "netconf"):
         rows = collect_via_netconf(host, username, password, port=netconf_port)
         if rows is not None:
             method = "netconf"
-    if rows is None and want in (None, "restconf"):
+    if rows is None and rc_enabled and want in (None, "restconf"):
         rows = collect_via_restconf(host, username, password, port=restconf_port)
         if rows is not None:
             method = "restconf"
-    if rows is None and want in (None, "cli"):
+    if rows is None and cli_enabled and want in (None, "cli"):
         rows = collect_via_cli(host, username, password, secret, device_type,
                                command=cli_command, fmt=cli_format)
         if rows is not None:
