@@ -49,6 +49,17 @@ def get_path(filename: str) -> str:
     return filename
 
 
+def _app_adv(key, default=None):
+    """Sezione 'app' di app_settings.json (impostazioni avanzate da GUI).
+    Fallback quando la variabile d'ambiente corrispondente non è impostata."""
+    try:
+        import json as _json
+        with open(get_path("app_settings.json"), encoding="utf-8") as _f:
+            return ((_json.load(_f) or {}).get("app") or {}).get(key, default)
+    except Exception:
+        return default
+
+
 def obs_config() -> dict:
     """Configurazione dei listener di osservabilità (fase 3.6).
 
@@ -104,9 +115,12 @@ def obs_config() -> dict:
         # Poller REST (§9.2): intervallo in secondi, 0 = disattivato.
         "api_poll_s": _port("SENTINELNET_OBS_API_POLL_S", "api_poll_s", 300),
         "retention_days": {
-            "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS", "30")),
-            "syslog_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_SYSLOG_DAYS", "7")),
-            "correlated_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS", "90")),
+            "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
+                                   or _app_adv("retention_flows_days") or 30),
+            "syslog_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_SYSLOG_DAYS")
+                                 or _app_adv("retention_syslog_days") or 7),
+            "correlated_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
+                                     or _app_adv("retention_events_days") or 90),
         },
     }
 
@@ -128,8 +142,10 @@ def resolve_tls_config():
     I percorsi relativi sono risolti rispetto a DATA_DIR, così il
     comportamento è identico tra sorgente, exe e Docker.
     """
-    cert = os.environ.get("SENTINELNET_SSL_CERTFILE", "").strip()
-    key = os.environ.get("SENTINELNET_SSL_KEYFILE", "").strip()
+    cert = (os.environ.get("SENTINELNET_SSL_CERTFILE")
+            or _app_adv("ssl_certfile") or "").strip()
+    key = (os.environ.get("SENTINELNET_SSL_KEYFILE")
+           or _app_adv("ssl_keyfile") or "").strip()
     if not cert and not key:
         return None, None
     if not cert or not key:
