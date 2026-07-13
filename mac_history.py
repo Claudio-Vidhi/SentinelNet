@@ -413,11 +413,13 @@ def _access_positions_for(macs, tenants=None) -> dict:
 
 
 def client_map(mac: str = None, ip: str = None, tenants=None,
-               limit: int = 500) -> list:
+               limit: int = 500, source_ip: str = None) -> list:
     """Vista unificata client: binding MAC<->IP (ARP dei gateway) arricchito
     con l'ultima posizione fisica nota (switch/porta della MAC table, uplink
-    esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'."""
-    entries = search_arp(mac=mac, ip=ip, tenants=tenants, limit=limit)
+    esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'.
+    source_ip filtra per gateway di provenienza."""
+    entries = search_arp(mac=mac, ip=ip, source_ip=source_ip,
+                         tenants=tenants, limit=limit)
     best = _access_positions_for((e["mac"] for e in entries), tenants=tenants)
     # Tipo del client: certo SOLO se assegnato nella scheda "Dispositivi e
     # categorie" (assignments per IP); altrimenti generico "client". Mai

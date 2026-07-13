@@ -925,7 +925,7 @@
       <button class="tab-button" onclick="switchTab('tab-mac', this)" data-i18n="tabMacTracker">
         <i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker
       </button>
-      <button class="tab-button" onclick="switchTab('tab-clientmap', this); arpClientSearch(); refreshArpStats();" data-i18n="tabClientMap">
+      <button class="tab-button" onclick="switchTab('tab-clientmap', this); loadClientMapTab();" data-i18n="tabClientMap">
         <i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)
       </button>
       <button class="tab-button" onclick="switchTab('tab-flows', this); flowsTabShown();" data-i18n="tabFlows">
@@ -1419,11 +1419,27 @@
       <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
         <h3 data-i18n="titleClientMap">Client Map — MAC ↔ IP</h3>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select id="arpScanGroup" onchange="populateArpScanDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
+          </select>
+          <details id="arpDeviceMenu" style="position:relative;">
+            <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
+              <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
+              <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+            </summary>
+            <div id="arpDeviceList" style="position:absolute; top:110%; right:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+          </details>
           <button class="btn btn-primary btn-small requires-write" id="btnArpScan" onclick="runArpScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
             <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
           </button>
         </div>
       </div>
+      <style>
+        #tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker { display:none; }
+        #tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+        #tab-clientmap #arpDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
+      </style>
       <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descClientMap">
         Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.
       </p>
@@ -1436,6 +1452,18 @@
         <div>
           <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpIp">IP (anche prefisso)</label>
           <input id="arpSearchIp" class="ui-input" type="text" placeholder="10.0.0." style="width:140px;">
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant/Sede</label>
+          <select id="arpFilterTenant" onchange="populateArpGatewayFilter(); arpClientSearch();" class="ui-input" style="width:160px; cursor:pointer;">
+            <option value="all" data-i18n="optArpAllTenants">Tutti i tenant</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
+          <select id="arpFilterGateway" onchange="arpClientSearch()" class="ui-input" style="width:200px; cursor:pointer;">
+            <option value="" data-i18n="optArpAllGateways">Tutti i gateway</option>
+          </select>
         </div>
         <button class="btn btn-primary btn-small" onclick="arpClientSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
           <i class="fa-solid fa-magnifying-glass"></i> Cerca
@@ -2694,6 +2722,10 @@
         lblAiDevSelected: "selezionati",
         phAiChatInput: "Scrivi un messaggio...",
         msgAiNoDevices: "Nessun dispositivo",
+        lblArpFilterTenant: "Tenant/Sede",
+        lblArpFilterGateway: "Gateway",
+        optArpAllTenants: "Tutti i tenant",
+        optArpAllGateways: "Tutti i gateway",
         chipAllSources: "Tutte le origini",
         thFlTenant: "Sede",
         thFlSrc: "Sorgente",
@@ -3175,6 +3207,10 @@
         lblAiDevSelected: "selected",
         phAiChatInput: "Type a message...",
         msgAiNoDevices: "No devices",
+        lblArpFilterTenant: "Tenant/Site",
+        lblArpFilterGateway: "Gateway",
+        optArpAllTenants: "All tenants",
+        optArpAllGateways: "All gateways",
         chipAllSources: "All sources",
         thFlTenant: "Site",
         thFlSrc: "Source",
@@ -8475,16 +8511,105 @@
 
     // --- CLIENT MAP: MAC <-> IP dalle ARP dei gateway L3 ---
 
+    function loadClientMapTab() {
+        const L = i18n[currentLang];
+        const groups = Object.keys(globalGroups || {});
+        const fillGroupSel = (id, allLabel) => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const cur = sel.value;
+            sel.innerHTML = `<option value="all">${allLabel}</option>` +
+                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+            sel.value = groups.includes(cur) ? cur : 'all';
+        };
+        fillGroupSel('arpScanGroup', L.optFilterAll || 'Filtra per Tenant: Tutti');
+        fillGroupSel('arpFilterTenant', L.optArpAllTenants || 'Tutti i tenant');
+        populateArpScanDevices();
+        populateArpGatewayFilter();
+        arpClientSearch();
+        refreshArpStats();
+    }
+
+    // Dispositivi filtrati per il tenant scelto nel selettore di scansione.
+    function arpFilteredDevices(groupSelId) {
+        const g = document.getElementById(groupSelId);
+        const group = g ? g.value : 'all';
+        let devs = globalDevices || [];
+        if (group && group !== 'all') devs = devs.filter(d => (d.Group || 'Generale') === group);
+        return devs;
+    }
+
+    // Multi-selezione dei gateway da interrogare (stesso pattern del MAC Tracker).
+    function populateArpScanDevices() {
+        const box = document.getElementById('arpDeviceList');
+        if (box) {
+            const L = i18n[currentLang];
+            const devs = arpFilteredDevices('arpScanGroup');
+            const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
+                <input type="checkbox" id="arpDevAll" onchange="toggleAllArpDevices(this.checked)" style="accent-color:var(--primary);">
+                <strong>${L.optMacAllDevices || 'Tutti i dispositivi'}</strong></label>`;
+            const items = devs.map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
+                    <input type="checkbox" class="arp-dev-cb" value="${escapeHtml(d.IP)}" onchange="updateArpDeviceSummary()" style="accent-color:var(--primary);">
+                    <span style="font-family:var(--font-code);">${escapeHtml(d.IP)}</span>
+                    <span style="color:var(--text-muted);">${name}</span></label>`;
+            }).join('');
+            box.innerHTML = head + (items ||
+                `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${L.msgAiNoDevices || 'Nessun dispositivo'}</div>`);
+        }
+        updateArpDeviceSummary();
+    }
+
+    function selectedArpDevices() {
+        return [...document.querySelectorAll('#arpDeviceList .arp-dev-cb:checked')].map(cb => cb.value);
+    }
+
+    function toggleAllArpDevices(on) {
+        document.querySelectorAll('#arpDeviceList .arp-dev-cb').forEach(cb => cb.checked = on);
+        updateArpDeviceSummary();
+    }
+
+    function updateArpDeviceSummary() {
+        const total = document.querySelectorAll('#arpDeviceList .arp-dev-cb').length;
+        const sel = selectedArpDevices().length;
+        const all = document.getElementById('arpDevAll');
+        if (all) all.checked = (total > 0 && sel === total);
+        const sum = document.getElementById('arpDeviceSummary');
+        if (sum) sum.textContent = (sel === 0)
+            ? (i18n[currentLang].optMacAllDevices || 'Tutti i dispositivi')
+            : `${sel} ${i18n[currentLang].lblAiDevSelected || 'selezionati'}`;
+    }
+
+    // Il filtro gateway elenca i device del tenant scelto nel filtro di vista.
+    function populateArpGatewayFilter() {
+        const sel = document.getElementById('arpFilterGateway');
+        if (!sel) return;
+        const cur = sel.value;
+        const L = i18n[currentLang];
+        const devs = arpFilteredDevices('arpFilterTenant');
+        sel.innerHTML = `<option value="">${L.optArpAllGateways || 'Tutti i gateway'}</option>` +
+            devs.map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
+            }).join('');
+        sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+    }
+
     async function runArpScan() {
         const btn = document.getElementById('btnArpScan');
         btn.disabled = true;
         const oldHtml = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
         try {
+            const groupSel = document.getElementById('arpScanGroup');
+            const payload = { group: groupSel ? groupSel.value : 'all' };
+            const ips = selectedArpDevices();
+            if (ips.length) payload.ips = ips;
             const res = await apiFetch('/api/arp/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ group: 'all' })
+                body: JSON.stringify(payload)
             });
             if (!res) return;
             const box = document.getElementById('arpScanSummary');
@@ -8527,9 +8652,13 @@
     async function arpClientSearch() {
         const mac = document.getElementById('arpSearchMac').value.trim();
         const ip = document.getElementById('arpSearchIp').value.trim();
+        const tenant = document.getElementById('arpFilterTenant')?.value || 'all';
+        const gw = document.getElementById('arpFilterGateway')?.value || '';
         const params = new URLSearchParams();
         if (mac) params.set('mac', mac);
         if (ip) params.set('ip', ip);
+        if (tenant && tenant !== 'all') params.set('tenant', tenant);
+        if (gw) params.set('source_ip', gw);
         const res = await apiFetch('/api/arp/client-map?' + params.toString());
         if (!res || !res.ok) return;
         const d = await res.json();
@@ -8540,6 +8669,8 @@
         ['arpSearchMac', 'arpSearchIp'].forEach(id => {
             const el = document.getElementById(id); if (el) el.value = '';
         });
+        const t = document.getElementById('arpFilterTenant'); if (t) t.value = 'all';
+        const g = document.getElementById('arpFilterGateway'); if (g) { populateArpGatewayFilter(); g.value = ''; }
         arpClientSearch();
     }
 
@@ -8557,7 +8688,7 @@
         const header = en
             ? [th('MAC'), th('IP'), th('VLAN'), th('Gateway (routes VLAN)'), th('Type'), th('Access switch'), th('Port'), th('Last seen')]
             : [th('MAC'), th('IP'), th('VLAN'), th('Gateway (ruota la VLAN)'), th('Tipo'), th('Switch di accesso'), th('Porta'), th('Ultimo avvistamento')];
-        const body = rows.map(r => '<tr>' + [
+        const rowHtml = r => '<tr>' + [
             td(`<code>${escapeHtml(r.mac)}</code>`),
             td(`<code>${escapeHtml(r.ip)}</code>`),
             td(escapeHtml(r.vlan || '—')),
@@ -8566,9 +8697,28 @@
             td(r.switch_ip ? `${escapeHtml(r.switch_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.switch_ip)}</span>` : '—'),
             td(escapeHtml(r.switch_port || '—')),
             td(fmtMacTime(r.last_seen)),
-        ].join('') + '</tr>').join('');
-        box.innerHTML = `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;">` +
+        ].join('') + '</tr>';
+        const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;">` +
             `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
+        // Dati separati per tenant: una sezione per sede quando ce n'è più di una.
+        const byTenant = {};
+        rows.forEach(r => {
+            const t = r.tenant || 'Generale';
+            (byTenant[t] = byTenant[t] || []).push(r);
+        });
+        const tenants = Object.keys(byTenant).sort();
+        if (tenants.length <= 1) {
+            box.innerHTML = table(rows.map(rowHtml).join(''));
+            return;
+        }
+        box.innerHTML = tenants.map(t => `
+            <div style="margin-bottom:18px;">
+                <h4 style="margin:0 0 8px 0; font-size:13px; display:flex; align-items:center; gap:8px;">
+                    <i class="fa-solid fa-building" style="color:var(--primary);"></i> ${escapeHtml(t)}
+                    <span style="color:var(--text-muted); font-weight:400; font-size:12px;">(${byTenant[t].length})</span>
+                </h4>
+                ${table(byTenant[t].map(rowHtml).join(''))}
+            </div>`).join('');
     }
 
     // Risultati raggruppati per switch: ogni host è un accordion collassato;
