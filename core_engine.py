@@ -549,7 +549,6 @@ _TYPE_SUBSTRINGS = {
 _TYPE_TOKENS = {
     "firewall": ("asa", "ftd", "srx", "fw", "pa"),
     "router":   ("rtr",),
-    "ap":       ("ap",),
     "phone":    ("tel",),
     "server":   ("srv", "host"),
     "pc":       ("pc",),
@@ -567,17 +566,19 @@ def classify_device_type(hostname: str = "", description: str = "",
     Platform e Capabilities (CDP). Ritorna: firewall|wlc|ap|router|phone|server|
     pc|switch."""
     text = " ".join(filter(None, [hostname, description, platform])).lower()
-    if not text.strip():
+    caps = (capabilities or "").lower()
+    if not text.strip() and not caps.strip():
         return "client"
+    # Le Capabilities CDP/LLDP sono il segnale più affidabile: un dispositivo che
+    # si dichiara "Switch" non va riclassificato per una keyword nel nome
+    # (es. hostname con "wifi" o segmento "AP").
+    if "switch" in caps and "access point" not in caps and "wlan" not in caps:
+        return "switch"
     for t in _TYPE_ORDER:
         if any(s in text for s in _TYPE_SUBSTRINGS.get(t, ())):
             return t
         if any(_has_token(text, tok) for tok in _TYPE_TOKENS.get(t, ())):
             return t
-    # Capabilities CDP come ultimo indizio: "Switch" → switch, solo "Router" → router.
-    caps = (capabilities or "").lower()
-    if "switch" in caps:
-        return "switch"
     if "router" in caps:
         return "router"
     # Nessun indizio affidabile: tipo generico, mai indovinare "switch".
