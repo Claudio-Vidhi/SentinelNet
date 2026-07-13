@@ -40,7 +40,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability",)
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
