@@ -30,13 +30,13 @@ NOW = int(time.time())
 
 
 def _seed_flow(conn, tenant, src, dst, ts=None, proto=6, dport=443,
-               nbytes=1000, npkts=10):
+               nbytes=1000, npkts=10, source=None):
     conn.execute(
         "INSERT INTO flow_aggregates (window_start, tenant, src_ip, dst_ip, "
-        "protocol, dst_port, total_bytes, total_packets, flow_count) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+        "protocol, dst_port, total_bytes, total_packets, flow_count, source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
         ((ts or NOW) - ((ts or NOW) % 60), tenant, src, dst, proto, dport,
-         nbytes, npkts))
+         nbytes, npkts, source))
 
 
 def _seed_syslog(conn, tenant, message, ts=None, action="deny", severity=3):
@@ -80,6 +80,12 @@ class TestTopTalkers(_Base):
         _seed_flow(conn, "sede-a", "10.1.0.5", "8.8.8.8", nbytes=5000)
         _seed_flow(conn, "sede-b", "10.2.0.5", "8.8.4.4", nbytes=9000)
         _seed_flow(conn, "sede-c", "10.3.0.5", "1.1.1.1", nbytes=7000)
+        _seed_flow(conn, "sede-a", "10.1.0.9", "8.8.8.8", dport=53,
+                   source="netflow")
+        _seed_flow(conn, "sede-a", "10.1.0.9", "8.8.8.8", dport=123,
+                   source="sflow")
+        _seed_syslog(conn, "sede-a", "link down su Gi1/0/7")
+        _seed_syslog(conn, "sede-b", "admin login failed")
         conn.commit()
         conn.close()
 
@@ -117,6 +123,26 @@ class TestTopTalkers(_Base):
     def test_anonymous_401(self):
         r = TestClient(app_server.app).get("/api/observability/top")
         self.assertEqual(r.status_code, 401)
+
+    def test_source_filter(self):
+        c = self._client("adm")
+        r = c.get("/api/observability/top?window=1h&source=netflow")
+        flows = r.json()["flows"]
+        self.assertTrue(flows)
+        self.assertTrue(all(f["source"] == "netflow" for f in flows))
+        r = c.get("/api/observability/top?window=1h&source=all")
+        self.assertGreater(len(r.json()["flows"]), len(flows))
+        r = c.get("/api/observability/top?window=1h&source=evil")
+        self.assertIn(r.status_code, (400, 422))
+
+    def test_syslog_endpoint_scoped(self):
+        r = self._client("op_a").get("/api/observability/syslog?window=1h")
+        self.assertEqual(r.status_code, 200)
+        events = r.json()["events"]
+        self.assertEqual({e["tenant"] for e in events}, {"sede-a"})
+        r = self._client("adm").get("/api/observability/syslog?window=1h")
+        self.assertEqual({e["tenant"] for e in r.json()["events"]},
+                         {"sede-a", "sede-b"})
 
 
 class TestCorrelator(_Base):

@@ -86,7 +86,7 @@ def _resolve_tenant(exporter_ip: str, recv_ts: float):
     return device["tenant"]
 
 
-def _handle_records(records, kind: str, recv_ts: float):
+def _handle_records(records, kind: str, recv_ts: float, name: str = None):
     for rec in records:
         tenant = _resolve_tenant(rec["exporter_ip"], recv_ts)
         if tenant is None:
@@ -100,7 +100,7 @@ def _handle_records(records, kind: str, recv_ts: float):
                 tenant, rec["src_ip"], rec["dst_ip"], rec["protocol"],
                 rec["dst_port"], rec["bytes"], rec["packets"],
                 rec["exporter_ip"], export_ts=rec.get("flow_end_ts"),
-                receive_ts=recv_ts)
+                receive_ts=recv_ts, source=name)
 
 
 async def _consumer(queue: asyncio.Queue, parser, kind: str, name: str):
@@ -109,7 +109,7 @@ async def _consumer(queue: asyncio.Queue, parser, kind: str, name: str):
         data, src_ip, recv_ts = await queue.get()
         try:
             records = parser(data, src_ip)
-            _handle_records(records, kind, recv_ts)
+            _handle_records(records, kind, recv_ts, name)
         except Exception as e:
             metrics.inc("parse_errors", proto=name)
             if metrics.should_warn(f"consumer_{name}"):

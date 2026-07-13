@@ -90,7 +90,7 @@ class TestAnomalyTransitions(_Base):
         r = c.post(f"/api/observability/anomalies/{eid}/status", headers=CSRF,
                    json={"from_status": "new", "status": "ack"})
         self.assertEqual(r.status_code, 409)
-        self.assertIn("cambiato", r.json()["detail"])
+        self.assertIn("changed", r.json()["detail"])
 
     def test_out_of_scope_is_404_not_403(self):
         eid = _seed_event(tenant="sede-z")

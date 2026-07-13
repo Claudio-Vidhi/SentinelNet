@@ -59,27 +59,53 @@ async def obs_top_talkers(
     window: str = Query("15m"),
     limit: int = Query(50, ge=1, le=MAX_LIMIT),
     metric: str = Query("bytes", pattern="^(bytes|packets)$"),
+    source: str = Query("all", pattern="^(all|ipfix|netflow|sflow)$"),
     current_user = Depends(get_current_user),
 ):
-    """Top talker aggregati sulla finestra richiesta, scoped per tenant."""
+    """Top talker aggregati sulla finestra richiesta, scoped per tenant.
+    ``source`` filtra per listener di origine (le righe legacy senza source
+    compaiono solo con 'all')."""
     import time as _time
     seconds = _parse_window(window)
     cutoff = int(_time.time()) - seconds
     order_col = "total_bytes" if metric == "bytes" else "total_packets"
     clause, params = _tenant_filter(current_user)
+    source_clause = "" if source == "all" else " AND source = ?"
+    source_params = () if source == "all" else (source,)
     rows = await db.read(
-        f"""SELECT tenant, src_ip, dst_ip, protocol, dst_port,
+        f"""SELECT tenant, src_ip, dst_ip, protocol, dst_port, source,
                    SUM(total_bytes) AS total_bytes,
                    SUM(total_packets) AS total_packets,
                    SUM(flow_count) AS flow_count
             FROM flow_aggregates
-            WHERE window_start >= ?{clause}
-            GROUP BY tenant, src_ip, dst_ip, protocol, dst_port
+            WHERE window_start >= ?{clause}{source_clause}
+            GROUP BY tenant, src_ip, dst_ip, protocol, dst_port, source
             ORDER BY SUM({order_col}) DESC
             LIMIT ?""",
-        (cutoff, *params, limit))
-    return {"window": window, "metric": metric,
+        (cutoff, *params, *source_params, limit))
+    return {"window": window, "metric": metric, "source": source,
             "flows": [dict(r) for r in rows]}
+
+
+@router.get("/api/observability/syslog")
+async def obs_syslog(
+    window: str = Query("15m"),
+    limit: int = Query(100, ge=1, le=MAX_LIMIT),
+    current_user = Depends(get_current_user),
+):
+    """Ultimi eventi syslog normalizzati sulla finestra, scoped per tenant."""
+    import time as _time
+    seconds = _parse_window(window)
+    cutoff = int(_time.time()) - seconds
+    clause, params = _tenant_filter(current_user)
+    rows = await db.read(
+        f"""SELECT ts, tenant, device_ip, severity, action, message, exporter_ip
+            FROM syslog_events
+            WHERE ts >= ?{clause}
+            ORDER BY ts DESC
+            LIMIT ?""",
+        (cutoff, *params, limit))
+    return {"window": window, "events": [dict(r) for r in rows]}
 
 
 @router.get("/api/observability/anomalies")
