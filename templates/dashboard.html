@@ -1675,16 +1675,23 @@
         <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
           <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
         </label>
-        <div style="min-width:220px;">
-          <div id="aiAttachDeviceList" style="max-height:96px; overflow-y:auto; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></div>
-          <div style="display:flex; gap:8px; margin-top:4px;">
-            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
-            <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
-          </div>
-        </div>
         <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           <option value="" data-i18n="optAiNoTenant">Nessuna sede/tenant allegata</option>
         </select>
+        <div style="position:relative; display:inline-block;">
+          <button id="aiAttachDeviceBtn" class="btn" onclick="toggleAiDeviceDropdown()" style="padding:6px 12px;">
+            <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
+          </button>
+          <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
+            <div style="padding:8px;">
+              <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
+                <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
+                <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
+              </div>
+              <div id="aiAttachDeviceList" style="font-size:13px;"></div>
+            </div>
+          </div>
+        </div>
         <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="clearAiChat()" data-i18n="btnAiClear">
           <i class="fa-solid fa-trash"></i> Nuova conversazione
         </button>
@@ -2667,6 +2674,8 @@
         lblObsApiPoll: "Intervallo polling API (s)",
         lnkSelectAll: "Seleziona tutti",
         lnkDeselectAll: "Deseleziona tutti",
+        lblAiAttachDevices: "Dispositivi",
+        lblAiDevSelected: "selezionati",
         phAiChatInput: "Scrivi un messaggio...",
         msgAiNoDevices: "Nessun dispositivo",
         lblObsListeners: "Listener",
@@ -3120,6 +3129,8 @@
         lblObsApiPoll: "API poll interval (s)",
         lnkSelectAll: "Select all",
         lnkDeselectAll: "Deselect all",
+        lblAiAttachDevices: "Devices",
+        lblAiDevSelected: "selected",
         phAiChatInput: "Type a message...",
         msgAiNoDevices: "No devices",
         lblObsListeners: "Listeners",
@@ -9894,11 +9905,12 @@
         const devices = (globalDevices || []).filter(d =>
             !tenant || (d.Group || 'Generale') === tenant);
         box.innerHTML = devices.length ? devices.map(d =>
-            `<label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-                <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''}>
+            `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px;">
+                <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''} onchange="updateAiDeviceBtnLabel()" style="accent-color:var(--primary);">
                 <span>${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</span>
             </label>`
-        ).join('') : `<span style="color:var(--text-muted);">${i18n[currentLang].msgAiNoDevices || 'Nessun dispositivo'}</span>`;
+        ).join('') : `<span style="color:var(--text-muted); padding:4px 8px; display:block;">${i18n[currentLang].msgAiNoDevices || 'Nessun dispositivo'}</span>`;
+        updateAiDeviceBtnLabel();
     }
 
     function getAiAttachDeviceIps() {
@@ -9909,7 +9921,31 @@
     function setAllAiAttachDevices(checked) {
         document.querySelectorAll('#aiAttachDeviceList .ai-attach-device')
             .forEach(cb => { cb.checked = checked; });
+        updateAiDeviceBtnLabel();
     }
+
+    function updateAiDeviceBtnLabel() {
+        const el = document.getElementById('aiAttachDeviceBtnLabel');
+        if (!el) return;
+        const L = i18n[currentLang];
+        const n = getAiAttachDeviceIps().length;
+        el.textContent = n > 0
+            ? `${n} ${L.lblAiDevSelected || 'selezionati'}`
+            : (L.lblAiAttachDevices || 'Dispositivi');
+    }
+
+    function toggleAiDeviceDropdown() {
+        const dd = document.getElementById('aiAttachDeviceDropdown');
+        if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+    }
+
+    document.addEventListener('click', function(e) {
+        const dd = document.getElementById('aiAttachDeviceDropdown');
+        const btn = document.getElementById('aiAttachDeviceBtn');
+        if (dd && btn && !dd.contains(e.target) && !btn.contains(e.target)) {
+            dd.style.display = 'none';
+        }
+    });
 
     function loadAiTab() {
         populateAiAttachDevices();
