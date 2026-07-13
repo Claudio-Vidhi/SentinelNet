@@ -2601,12 +2601,17 @@ def arp_search(mac: Optional[str] = None, ip: Optional[str] = None,
 
 @app.get("/api/arp/client-map")
 def arp_client_map(mac: Optional[str] = None, ip: Optional[str] = None,
+                   tenant: Optional[str] = None, source_ip: Optional[str] = None,
                    limit: int = 500, current_user = Depends(get_current_user)):
     """Vista client unificata: MAC + IP (dal gateway che ruota la VLAN) +
     switch/porta di accesso (dalla MAC table). Risponde a 'chi è 10.0.0.5
-    e a quale porta è attaccato'."""
+    e a quale porta è attaccato'. tenant/source_ip restringono la vista
+    (sempre dentro lo scope dell'utente)."""
     tenants = user_group_scope(current_user)
+    if tenant and tenant != "all":
+        tenants = [tenant] if (tenants is None or tenant in tenants) else []
     return {"results": mac_history.client_map(mac=mac, ip=ip, tenants=tenants,
+                                              source_ip=source_ip or None,
                                               limit=limit)}
 
 @app.get("/api/arp/stats")
