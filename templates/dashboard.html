@@ -2666,6 +2666,8 @@
         lblObsBind: "Indirizzo di ascolto (bind)",
         lblObsApiPoll: "Intervallo polling API (s)",
         lblObsListeners: "Listener",
+        hintObsListeners: "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche richiedono il riavvio dell'applicazione.",
+        hintObsDefaultPort: "porta predefinita",
         msgObsRestartRequired: "Riavvio richiesto per applicare le modifiche.",
         descUsers: 'Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.',
         thUserName: "Username",
@@ -3113,6 +3115,8 @@
         lblObsBind: "Listen address (bind)",
         lblObsApiPoll: "API poll interval (s)",
         lblObsListeners: "Listeners",
+        hintObsListeners: "Enable a protocol and set the UDP port SentinelNet listens on, then point your devices' export at this host on that port. Changes require an application restart.",
+        hintObsDefaultPort: "default port",
         msgObsRestartRequired: "Restart required to apply the changes.",
         thUserName: "Username",
         thUserRole: "Role / Privilege",
@@ -7535,6 +7539,7 @@
     // --- OBSERVABILITY SETTINGS (§11.5a) ---
 
     const OBS_LISTENERS = ['ipfix', 'sflow', 'syslog', 'netflow'];
+    const OBS_DEFAULT_PORTS = { ipfix: 4739, sflow: 6343, syslog: 5514, netflow: 2055 };
 
     async function loadObsSettings() {
         if (currentRole !== 'admin') return;
@@ -7558,8 +7563,10 @@
                 </label>
                 <input id="obs_${l}_port" type="number" min="1" max="65535"
                        value="${d[`${l}_port`] != null ? d[`${l}_port`] : ''}"
+                       placeholder="${OBS_DEFAULT_PORTS[l]}"
                        style="width:100px; padding:6px 10px; border-radius:8px; border:1px solid var(--border);
                               background:var(--surface-3); color:var(--text); font-family:var(--font-code); font-size:12px;">
+                <span style="font-size:11px; color:var(--text-muted);">UDP · ${L.hintObsDefaultPort || 'porta predefinita'} ${OBS_DEFAULT_PORTS[l]}</span>
             </div>`).join('');
         box.innerHTML = `
             <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:14px;">
@@ -7574,7 +7581,8 @@
                 <label data-i18n="lblObsApiPoll">Intervallo polling API (s)</label>
                 <input id="obs_api_poll_s" type="number" min="1" value="${d.api_poll_s != null ? d.api_poll_s : ''}" style="padding-left:12px;">
             </div>
-            <div style="margin-top:10px; margin-bottom:6px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="lblObsListeners">Listener</div>
+            <div style="margin-top:10px; margin-bottom:2px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="lblObsListeners">Listener</div>
+            <div style="margin-bottom:8px; font-size:12px; color:var(--text-muted);">${L.hintObsListeners || "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche richiedono il riavvio dell'applicazione."}</div>
             ${listenerRows}
             <div style="margin-top:12px;">
                 <button class="btn btn-primary btn-small" onclick="saveObsSettings()" data-i18n="btnSave">
@@ -7594,7 +7602,8 @@
         };
         OBS_LISTENERS.forEach(l => {
             payload[`${l}_enabled`] = document.getElementById(`obs_${l}_enabled`).checked;
-            payload[`${l}_port`] = parseInt(document.getElementById(`obs_${l}_port`).value, 10);
+            const port = parseInt(document.getElementById(`obs_${l}_port`).value, 10);
+            if (!isNaN(port)) payload[`${l}_port`] = port;
         });
         const res = await apiFetch('/api/observability/config', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

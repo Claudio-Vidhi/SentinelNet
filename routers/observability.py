@@ -180,14 +180,17 @@ def obs_set_config(payload: dict, current_user = Depends(require_admin)):
     clean = {}
     for k, v in (payload or {}).items():
         if k not in allowed:
-            raise HTTPException(status_code=400, detail=f"Chiave non valida: '{k}'.")
+            raise HTTPException(status_code=400, detail=f"Invalid key: '{k}'.")
         if k.endswith("_port") or k == "api_poll_s":
+            if k.endswith("_port") and v in (None, "") \
+                    and not (payload or {}).get(f"{k[:-5]}_enabled"):
+                continue  # listener disabilitato senza porta: mantieni il valore salvato
             try:
                 v = int(v)
             except (TypeError, ValueError):
-                raise HTTPException(status_code=400, detail=f"Valore non valido per '{k}'.")
+                raise HTTPException(status_code=400, detail=f"Invalid value for '{k}'.")
             if k.endswith("_port") and not (1 <= v <= 65535):
-                raise HTTPException(status_code=400, detail=f"Porta non valida per '{k}'.")
+                raise HTTPException(status_code=400, detail=f"Invalid port for '{k}'.")
         clean[k] = v
     from app_server import get_app_settings, save_app_settings
     saved = dict(get_app_settings().get("observability", {}) or {})
