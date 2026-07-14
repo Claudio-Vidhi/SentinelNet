@@ -1048,25 +1048,48 @@
         </div>
       </article>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
-        <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
-          <h3 data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
+      <div class="hero" style="grid-template-columns:1fr;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="invEyebrow"><i class="fa-solid fa-server"></i> Inventario</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="invHeroTitle">Inventario Dispositivi di Rete</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="invHeroSubtitle">Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.</p>
+          <div class="split-footer">
+            <button class="btn btn-primary btn-small requires-write" id="btnRunTriage" style="background: var(--cta); color: var(--cta-text); width: auto; margin: 0;" data-i18n="btnRunTriage">
+              <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:18px;">
+        <div class="kpi">
+          <h4 data-i18n="invKpiOnlineLabel">Dispositivi Online</h4>
+          <strong id="invKpiOnline">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="invKpiOfflineLabel">Dispositivi Offline</h4>
+          <strong id="invKpiOffline">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="invKpiAuthFailedLabel">Autenticazione Fallita</h4>
+          <strong id="invKpiAuthFailed">&mdash;</strong>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <h3 style="margin:0 0 6px; font-size:16px;" data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
+        <div class="filterbar">
           <select id="filterGroupSelect" onchange="renderDeviceTable()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
-          <div style="position:relative;">
-            <i class="fa-solid fa-magnifying-glass" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:12px;"></i>
+          <div class="search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
             <input id="deviceSearch" type="search" oninput="renderDeviceTable()" autocomplete="off"
               placeholder="Cerca IP, hostname, vendor, gruppo..." data-i18n-placeholder="searchInventoryPl"
-              style="padding:6px 10px 6px 30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:240px; transition:var(--transition);"
+              style="padding:6px 10px 6px 30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:100%; transition:var(--transition);"
               onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
               onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
           </div>
-        </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-small requires-write" id="btnRunTriage" style="background: var(--cta); color: var(--cta-text); width: auto; margin: 0;" data-i18n="btnRunTriage">
-            <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
-          </button>
           <button class="btn btn-secondary btn-small requires-write" id="btnTriageSite"
               onclick="triageCurrentSite()"
               style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
@@ -1098,24 +1121,24 @@
             <i class="fa-solid fa-file-csv"></i> Esporta CSV
           </button>
         </div>
-      </div>
-      
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th data-i18n="thStatus">Stato</th>
-              <th data-i18n="thGroup">Gruppo</th>
-              <th>Sede</th>
-              <th data-i18n="thHostname">Hostname</th>
-              <th data-i18n="thIp">Indirizzo IP</th>
-              <th data-i18n="thVendor">Vendor</th>
-              <th data-i18n="thFirmware">Firmware</th>
-              <th data-i18n="thActions">Azioni / Utility</th>
-            </tr>
-          </thead>
-          <tbody id="deviceTableBody"></tbody>
-        </table>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="thStatus">Stato</th>
+                <th data-i18n="thGroup">Gruppo</th>
+                <th>Sede</th>
+                <th data-i18n="thHostname">Hostname</th>
+                <th data-i18n="thIp">Indirizzo IP</th>
+                <th data-i18n="thVendor">Vendor</th>
+                <th data-i18n="thFirmware">Firmware</th>
+                <th data-i18n="thActions">Azioni / Utility</th>
+              </tr>
+            </thead>
+            <tbody id="deviceTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -2715,6 +2738,12 @@
         btnMapMinimal: "Nuova",
 
         // Tab 1
+        invEyebrow: '<i class="fa-solid fa-server"></i> Inventario',
+        invHeroTitle: "Inventario Dispositivi di Rete",
+        invHeroSubtitle: "Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.",
+        invKpiOnlineLabel: "Dispositivi Online",
+        invKpiOfflineLabel: "Dispositivi Offline",
+        invKpiAuthFailedLabel: "Autenticazione Fallita",
         titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
         optFilterAll: "Filtra per Tenant: Tutti",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale',
@@ -3283,6 +3312,12 @@
         btnMapMinimal: "New",
 
         // Tab 1
+        invEyebrow: '<i class="fa-solid fa-server"></i> Inventory',
+        invHeroTitle: "Network Device Inventory",
+        invHeroSubtitle: "Full list of monitored devices: real-time status, per-tenant filtering, and quick triage, ping, and scan actions.",
+        invKpiOnlineLabel: "Online Devices",
+        invKpiOfflineLabel: "Offline Devices",
+        invKpiAuthFailedLabel: "Auth Failed",
         titleInventoryTable: "Monitored Network Devices",
         optFilterAll: "Filter by Tenant: All",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run Global Triage',
@@ -4145,7 +4180,25 @@
         });
     }
 
+    // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
+    // da ricerca/tenant), stessa mappatura stato->led usata per le righe della tabella.
+    function updateInventoryKpis() {
+        let online = 0, offline = 0, authFailed = 0;
+        (globalDevices || []).forEach(d => {
+            const scan = globalVersions[d.IP] || {};
+            if (scan.status === 'online') online++;
+            else if (scan.status === 'auth_failed') authFailed++;
+            else offline++;
+        });
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setText('invKpiOnline', online);
+        setText('invKpiOffline', offline);
+        setText('invKpiAuthFailed', authFailed);
+    }
+
     function renderDeviceTable() {
+        updateInventoryKpis();
+
         const filterSelect  = document.getElementById('filterGroupSelect');
         const selectedGroup = filterSelect ? filterSelect.value : 'all';
 

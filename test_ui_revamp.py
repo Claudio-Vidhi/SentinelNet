@@ -81,5 +81,44 @@ class TestFormRelocation(unittest.TestCase):
             self.assertIn(f'id="{_id}"', html)
 
 
+class TestDevicesTabRestyle(unittest.TestCase):
+    def test_preserve_ids_and_bulk_actions(self):
+        html = _html()
+        for _id in ('deviceTableBody', 'deviceSearch', 'filterGroupSelect',
+                    'btnRunTriage', 'btnTriageSite', 'btnPingCheck'):
+            self.assertIn(f'id="{_id}"', html)
+        # bulk-action controls (no id, but onclick hooks must survive verbatim)
+        for hook in ('openSubnetScanModal()', 'openBulkCommandModal()', 'exportDeviceCsv()'):
+            self.assertIn(hook, html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        for endpoint in ('/api/local-devices', '/api/run-triage', '/api/triage-status',
+                          '/api/export/devices', '/api/ping-check', '/api/ping/',
+                          '/api/scan-subnet', '/api/bulk-command', '/api/config-analyzer',
+                          '/api/triage/', '/api/delete-device', '/api/rename-device',
+                          '/api/reassign-device'):
+            self.assertIn(endpoint, html)
+
+    def test_devices_tab_uses_component_classes(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-devices"')
+        tab_end = html.index('<!-- TAB 2:')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="kpi-grid"',
+                    'class="kpi"', 'class="filterbar"', 'class="search-wrap"',
+                    'class="table-wrap"'):
+            self.assertIn(cls, tab_html)
+
+    def test_kpi_ids_and_i18n_both_langs(self):
+        html = _html()
+        for _id in ('invKpiOnline', 'invKpiOffline', 'invKpiAuthFailed'):
+            self.assertIn(f'id="{_id}"', html)
+        for key in ('invHeroTitle:', 'invHeroSubtitle:', 'invKpiOnlineLabel:',
+                    'invKpiOfflineLabel:', 'invKpiAuthFailedLabel:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+        self.assertIn('Network Device Inventory', html)
+
+
 if __name__ == "__main__":
     unittest.main()
