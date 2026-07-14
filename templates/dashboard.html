@@ -323,44 +323,6 @@
       width: auto;
     }
 
-    /* Tabs Navigation */
-    .tab-nav {
-      display: flex;
-      gap: 8px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 10px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-    }
-
-    .tab-button {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      padding: 10px 16px;
-      cursor: pointer;
-      font-weight: 500;
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.2px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      transition: var(--transition);
-    }
-
-    .tab-button:hover {
-      color: var(--text);
-      background: var(--ghost);
-    }
-
-    .tab-button.active {
-      color: var(--text);
-      background: var(--surface-3);
-      box-shadow: inset 0 -2px 0 var(--primary);
-    }
-
     .tab-content {
       display: none;
       flex-grow: 1;
@@ -833,6 +795,71 @@
       <a href="#" onclick="logout()" style="color: var(--danger); text-decoration: none; font-weight: 700;" data-i18n="btnExit"><i class="fa-solid fa-power-off"></i> Esci</a>
     </div>
 
+    <nav class="sidenav">
+      <div class="nav-group"><h3 data-i18n="navOps">Operations</h3>
+        <button class="nav-item active" onclick="switchTab('tab-devices', this)">
+          <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-mac', this)">
+          <span class="nav-left" data-i18n="tabMacTracker"><i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-clientmap', this); loadClientMapTab();">
+          <span class="nav-left" data-i18n="tabClientMap"><i class="fa-solid fa-map-pin"></i> Client Map (MAC &#8596; IP)</span>
+          <span class="preview-badge">preview</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-flows', this); flowsTabShown();">
+          <span class="nav-left" data-i18n="tabFlows"><i class="fa-solid fa-wave-square"></i> Flussi Live</span>
+          <span class="preview-badge">preview</span>
+        </button>
+      </div>
+      <div class="nav-group"><h3 data-i18n="navAnalysis">Analysis</h3>
+        <button class="nav-item" onclick="switchTab('tab-map', this)">
+          <span class="nav-left" data-i18n="tabMap"><i class="fa-solid fa-link"></i> Port-Channel &amp; Link</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-map-interactive', this)">
+          <span class="nav-left" data-i18n="tabInteractive"><i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-categories', this)">
+          <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-security', this)">
+          <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-config', this)">
+          <span class="nav-left" data-i18n="tabConfigAnalyzer"><i class="fa-solid fa-file-code"></i> Config Analyzer</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-ai', this)">
+          <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
+        </button>
+      </div>
+      <div class="nav-group"><h3 data-i18n="navProvisioning">Provisioning</h3>
+        <button class="nav-item requires-write" onclick="switchTab('tab-provisioner', this)">
+          <span class="nav-left" data-i18n="tabProvisioner"><i class="fa-solid fa-wand-magic-sparkles"></i> Apparato da Zero</span>
+        </button>
+        <button class="nav-item requires-write" onclick="switchTab('tab-import', this)">
+          <span class="nav-left" data-i18n="tabImport"><i class="fa-solid fa-file-csv"></i> Importazione CSV</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-groups', this)">
+          <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi</span>
+        </button>
+      </div>
+      <div class="nav-group"><h3 data-i18n="navAdmin">Administration</h3>
+        <button class="nav-item requires-admin" onclick="switchTab('tab-users', this)">
+          <span class="nav-left" data-i18n="tabUsers"><i class="fa-solid fa-users-gear"></i> Utenti</span>
+        </button>
+        <button class="nav-item requires-admin" onclick="switchTab('tab-sites', this)">
+          <span class="nav-left" data-i18n="tabSites"><i class="fa-solid fa-building"></i> Sedi</span>
+          <span class="preview-badge">preview</span>
+        </button>
+        <button class="nav-item requires-admin" onclick="switchTab('tab-mcp', this)">
+          <span class="nav-left" data-i18n="tabMcp"><i class="fa-solid fa-plug"></i> MCP Server</span>
+        </button>
+        <button class="nav-item requires-admin" onclick="switchTab('tab-settings', this)">
+          <span class="nav-left" data-i18n="tabSettings"><i class="fa-solid fa-gear"></i> Impostazioni</span>
+        </button>
+      </div>
+    </nav>
+
     <div class="requires-write">
       <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
 
@@ -937,60 +964,6 @@
 
   <!-- Area Centrale Principale -->
   <main>
-    <div class="tab-nav">
-      <button class="tab-button active" onclick="switchTab('tab-devices', this)" data-i18n="tabInventory">
-        <i class="fa-solid fa-list-check"></i> Network Inventory
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-groups', this)" data-i18n="tabGroups">
-        <i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-map', this)" data-i18n="tabMap">
-        <i class="fa-solid fa-link"></i> Port-Channel & Link
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-map-interactive', this)" data-i18n="tabInteractive">
-        <i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-categories', this)" data-i18n="tabCategories">
-        <i class="fa-solid fa-shapes"></i> Dispositivi & Categorie
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-security', this)" data-i18n="tabSecurity">
-        <i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-mac', this)" data-i18n="tabMacTracker">
-        <i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-clientmap', this); loadClientMapTab();" data-i18n="tabClientMap">
-        <i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-flows', this); flowsTabShown();" data-i18n="tabFlows">
-        <i class="fa-solid fa-wave-square"></i> Flussi Live
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-config', this)" data-i18n="tabConfigAnalyzer">
-        <i class="fa-solid fa-file-code"></i> Config Analyzer
-      </button>
-      <button class="tab-button" onclick="switchTab('tab-ai', this)" data-i18n="tabAiAssistant">
-        <i class="fa-solid fa-robot"></i> AI Assistant
-      </button>
-      <button class="tab-button requires-write" onclick="switchTab('tab-provisioner', this)" data-i18n="tabProvisioner">
-        <i class="fa-solid fa-wand-magic-sparkles"></i> Apparato da Zero
-      </button>
-      <button class="tab-button requires-write" onclick="switchTab('tab-import', this)" data-i18n="tabImport">
-        <i class="fa-solid fa-file-csv"></i> Importazione CSV
-      </button>
-      <button class="tab-button requires-admin" onclick="switchTab('tab-users', this)" data-i18n="tabUsers">
-        <i class="fa-solid fa-users-gear"></i> Utenti
-      </button>
-      <button class="tab-button requires-admin" onclick="switchTab('tab-sites', this)">
-        <i class="fa-solid fa-sitemap"></i> Sedi
-      </button>
-      <button class="tab-button requires-admin" onclick="switchTab('tab-mcp', this)">
-        <i class="fa-solid fa-plug"></i> MCP Server
-      </button>
-      <button class="tab-button requires-admin" onclick="switchTab('tab-settings', this)" data-i18n="tabSettings">
-        <i class="fa-solid fa-gear"></i> Impostazioni
-      </button>
-    </div>
-
     <!-- TAB 1: Network Inventory (Dispositivi) -->
     <div id="tab-devices" class="tab-content active">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
@@ -2426,9 +2399,17 @@
         lblGroupName: "Nome Tenant",
         btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Crea Tenant',
         
+        // Sidebar nav groups
+        navOps: "Operazioni",
+        navAnalysis: "Analisi",
+        navProvisioning: "Provisioning",
+        navAdmin: "Amministrazione",
+
         // Tabs
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
+        tabSites: '<i class="fa-solid fa-building"></i> Sedi',
+        tabMcp: '<i class="fa-solid fa-plug"></i> Server MCP',
         tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Dispositivi & Categorie',
@@ -2959,9 +2940,17 @@
         lblGroupName: "Tenant Name",
         btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Create Tenant',
         
+        // Sidebar nav groups
+        navOps: "Operations",
+        navAnalysis: "Analysis",
+        navProvisioning: "Provisioning",
+        navAdmin: "Administration",
+
         // Tabs
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
+        tabSites: '<i class="fa-solid fa-building"></i> Sites',
+        tabMcp: '<i class="fa-solid fa-plug"></i> MCP Server',
         tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> 2D Topology Map',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Devices & Categories',
@@ -3836,7 +3825,7 @@
         }
         // ponytail: restrizione solo lato frontend (nasconde i pulsanti); vuoto = tutte le tab.
         if (Array.isArray(allowedTabs) && allowedTabs.length > 0) {
-            document.querySelectorAll('.tab-button').forEach(btn => {
+            document.querySelectorAll('.nav-item').forEach(btn => {
                 const m = btn.getAttribute('onclick').match(/switchTab\('([^']+)'/);
                 const tabId = m && m[1];
                 if (tabId && !allowedTabs.includes(tabId)) btn.style.display = 'none';
@@ -4849,10 +4838,10 @@
 
     function switchTab(tabId, clickedBtn) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
         document.getElementById(tabId).classList.add('active');
         // Se chiamato senza pulsante (es. dopo import CSV) evidenzia comunque la tab corretta
-        const btn = clickedBtn || document.querySelector(`.tab-button[onclick*="'${tabId}'"]`);
+        const btn = clickedBtn || document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
         if (btn) {
             btn.classList.add('active');
         }
@@ -11341,7 +11330,7 @@
     // id (vedi loadInteractiveMap: n.id confrontato con globalDevices[].IP).
     function highlightInTopology(ip) {
         switchTab('tab-map-interactive',
-                  document.querySelector(`.tab-button[onclick*="'tab-map-interactive'"]`));
+                  document.querySelector(`.nav-item[onclick*="'tab-map-interactive'"]`));
         const tryFocus = (attempt) => {
             if (networkInstance && networkInstance.body.data.nodes.get(ip)) {
                 networkInstance.selectNodes([ip]);
@@ -11391,7 +11380,7 @@
                 : 'I dati aggregati dei flussi (riassunto top-N, con segreti redatti)')
                 + ' verranno inviati al provider AI configurato'
                 + (providerName ? ` (${providerName})` : '') + '.';
-        switchTab('tab-ai', document.querySelector(`.tab-button[onclick*="'tab-ai'"]`));
+        switchTab('tab-ai', document.querySelector(`.nav-item[onclick*="'tab-ai'"]`));
         const input = document.getElementById('aiChatInput');
         input.value = en
             ? (selected
