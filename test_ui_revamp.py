@@ -166,5 +166,51 @@ class TestGroupsTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestMapTabRestyle(unittest.TestCase):
+    def test_preserve_ids(self):
+        html = _html()
+        for _id in ('mapViewClassicBtn', 'mapViewMinimalBtn', 'networkGraphContainer',
+                    'topologyGroupSelect', 'interactiveGroupSelect', 'portchannelReport'):
+            self.assertIn(f'id="{_id}"', html)
+        # view-toggle + reset/export hooks preserved verbatim
+        for hook in ("setMapView('classic')", "setMapView('minimal')", 'resetTopology()',
+                     'loadInteractiveMap()', 'downloadTopology()', 'exportVisioMap()',
+                     'exportPdfMap()'):
+            self.assertIn(hook, html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # /api/portchannels (Port-Channel report) and /api/network-map (interactive
+        # map) are both reached verbatim via apiFetch(...) calls.
+        for endpoint in ('/api/portchannels', '/api/network-map'):
+            self.assertIn(endpoint, html)
+        # /api/topology (GET, get_topology_adjacency) is a real server route but,
+        # confirmed by tracing dashboard.html, the frontend only ever calls
+        # /api/topology/reset (POST) -- the bare GET has no frontend caller.
+        # Relaxed to asserting the handler exists server-side (same precedent as
+        # /api/models in TestGroupsTabRestyle) rather than fabricating wiring.
+        self.assertIn('/api/topology/reset', html)
+        import app_server as _app_server
+        self.assertTrue(hasattr(_app_server, 'get_topology_adjacency'))
+
+    def test_map_tabs_use_component_classes(self):
+        html = _html()
+        tab_start = html.index('<!-- TAB 3:')
+        tab_end = html.index('<!-- TAB: Dispositivi & Categorie -->')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+            self.assertGreaterEqual(tab_html.count(cls), 2, f"{cls} expected once per tab (tab-map + tab-map-interactive)")
+        self.assertGreaterEqual(tab_html.count('class="panel"'), 2)
+        # view-toggle buttons carry the .chip class alongside their existing marker class
+        self.assertIn('class="map-view-btn chip"', tab_html)
+        # vis-network render target untouched: still a bare div, no restyle wrapper classes on it
+        self.assertIn('<div id="networkGraphContainer"></div>', tab_html)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('portchannelsEyebrow:', 'mapEyebrow:', 'titlePortchannels:', 'title2DMap:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()

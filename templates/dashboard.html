@@ -1211,32 +1211,45 @@
     <!-- TAB 3: Port-Channel & Link (la lista adjacency testuale è stata rimossa:
          la topologia si consulta nella mappa interattiva) -->
     <div id="tab-map" class="tab-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
-        <div style="display:flex; align-items:center; gap: 15px;">
-          <h3><i class="fa-solid fa-link" style="color: var(--warning);"></i> <span data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</span></h3>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="portchannelsEyebrow"><i class="fa-solid fa-link"></i> Rete</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descPortchannels">
+            Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <select id="topologyGroupSelect" onchange="loadTopology()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
+          <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
+            <i class="fa-solid fa-trash-can"></i> Reset Topologia
+          </button>
         </div>
-        <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
-          <i class="fa-solid fa-trash-can"></i> Reset Topologia
-        </button>
+        <div id="portchannelReport" style="margin-top:14px;"></div>
       </div>
-      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;" data-i18n="descPortchannels">
-        Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.
-      </p>
-      <div id="portchannelReport"></div>
     </div>
 
     <!-- TAB 4: Mappa Topologia 2D (Premium Vis.js) -->
     <div id="tab-map-interactive" class="tab-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
-        <div style="display:flex; align-items:center; gap: 15px;">
-          <h3 data-i18n="title2DMap">Topologia Dinamica 2D Interactive</h3>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="mapEyebrow"><i class="fa-solid fa-diagram-project"></i> Mappa</span>
+          <h2 style="margin:0; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="title2DMap">Topologia Dinamica 2D Interactive</h2>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:15px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap: 15px; flex-wrap: wrap;">
+        <div style="display:flex; align-items:center; gap: 15px; flex-wrap: wrap;">
           <select id="interactiveGroupSelect" onchange="loadInteractiveMap()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
-          
+
           <!-- Selettore categorie da mostrare nella mappa -->
           <details id="mapCatMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
             <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-layer-group"></i> <span data-i18n="lblMapCategories">Categorie</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
@@ -1272,8 +1285,8 @@
 
           <!-- Selettore vista: mappa classica oppure la nuova mappa minimalista -->
           <div style="display:inline-flex; align-items:center; gap:4px; padding-left:10px; border-left:1px solid var(--border);">
-            <button id="mapViewClassicBtn" class="map-view-btn" onclick="setMapView('classic')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapClassic">Classica</button>
-            <button id="mapViewMinimalBtn" class="map-view-btn" onclick="setMapView('minimal')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Nuova</button>
+            <button id="mapViewClassicBtn" class="map-view-btn chip" onclick="setMapView('classic')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapClassic">Classica</button>
+            <button id="mapViewMinimalBtn" class="map-view-btn chip" onclick="setMapView('minimal')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Nuova</button>
           </div>
 
           <!-- Interruttore tooltip al passaggio del mouse: solo per la nuova mappa,
@@ -1313,6 +1326,7 @@
             <i class="fa-solid fa-file-pdf"></i> Esporta PDF
           </button>
         </div>
+      </div>
       </div>
 
       <div id="networkGraphWrapper" style="position: relative; flex-grow: 1;">
@@ -2793,11 +2807,13 @@
         placeholderVendorDriver: "es. mikrotik_routeros",
         
         // Tab 3
+        portchannelsEyebrow: '<i class="fa-solid fa-link"></i> Rete',
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topologia',
         titlePortchannels: "Port-Channel & Interfacce per Switch",
         descPortchannels: "Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.",
-        
+
         // Tab 4
+        mapEyebrow: '<i class="fa-solid fa-diagram-project"></i> Mappa',
         title2DMap: "Topologia Dinamica 2D Interactive",
         lblShowEndDevices: "Mostra Terminali (Server, Telefoni, PC)",
         lblShowAccessPoints: "Mostra Access Point",
@@ -3368,11 +3384,13 @@
         placeholderVendorDriver: "e.g. mikrotik_routeros",
         
         // Tab 3
+        portchannelsEyebrow: '<i class="fa-solid fa-link"></i> Network',
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topology',
         titlePortchannels: "Port-Channels per Switch",
         descPortchannels: "List of Port-Channels configured on each switch with their member interfaces.",
-        
+
         // Tab 4
+        mapEyebrow: '<i class="fa-solid fa-diagram-project"></i> Map',
         title2DMap: "Dynamic 2D Interactive Topology",
         lblShowEndDevices: "Show End Devices (Servers, Phones, PCs)",
         lblShowAccessPoints: "Show Access Points",
