@@ -354,5 +354,122 @@ class TestThreatIntelTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestMacTrackerTabRestyle(unittest.TestCase):
+    """Task 11: #tab-mac (MAC Tracker) + #tab-clientmap (Client Map / ARP)
+    restyle + wiring guard. The two tabs are one feature area (MAC Tracker's
+    scans feed switch/port data that Client Map cross-references against ARP),
+    so both are covered here per the brief's ARP-target-selection preserve-IDs."""
+
+    def test_preserve_ids_mac(self):
+        html = _html()
+        for _id in ('macScanGroup', 'macDeviceMenu', 'macDeviceSummary', 'macDeviceList',
+                    'macScanTransport', 'btnMacScan', 'macRetentionDays',
+                    'macOvDevice', 'macOvCommand', 'macOvFmt', 'macOverridesList',
+                    'macSearchMac', 'macSearchVlan', 'macSearchIface', 'macSearchSwitch',
+                    'macStats', 'macResults',
+                    'kpiMacSightings', 'kpiMacUniqueMacs', 'kpiMacSwitches', 'kpiMacRetention'):
+            self.assertIn(f'id="{_id}"', html)
+        for hook in ('runMacScan()', 'macSearch()', 'macSearchReset()', 'saveMacOverride()',
+                     'saveMacRetention()', 'populateMacScanDevices(); macSearch(); refreshMacStats(false);'):
+            self.assertIn(hook, html)
+        # RBAC preserved: scan is requires-write, retention is requires-admin
+        self.assertIn('id="btnMacScan"', html)
+        scan_start = html.index('id="btnMacScan"')
+        scan_tag = html.rindex('<button', 0, scan_start)
+        self.assertIn('requires-write', html[scan_tag:scan_start])
+        self.assertIn('id="macRetentionDays"', html)
+        ret_idx = html.index('id="macRetentionDays"')
+        admin_wrap = html.rindex('class="requires-admin"', 0, ret_idx)
+        self.assertLess(ret_idx - admin_wrap, 400)
+        # Ad-hoc overrides panel stays write-gated
+        adhoc_idx = html.index('titleMacAdhoc')
+        details_tag = html.rindex('<details', 0, adhoc_idx)
+        self.assertIn('requires-write', html[details_tag:adhoc_idx])
+
+    def test_preserve_ids_clientmap_arp_multiselect(self):
+        html = _html()
+        for _id in ('arpScanGroup', 'arpDeviceMenu', 'arpDeviceSummary', 'arpDeviceList',
+                    'btnArpScan', 'arpSearchMac', 'arpSearchIp', 'arpFilterTenant',
+                    'arpFilterGateway', 'arpStats', 'arpScanSummary', 'arpResults',
+                    'kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'):
+            self.assertIn(f'id="{_id}"', html)
+        for hook in ('runArpScan()', 'arpClientSearch()', 'arpSearchReset()',
+                     'populateArpScanDevices()',
+                     'populateArpGatewayFilter(); arpClientSearch();'):
+            self.assertIn(hook, html)
+        # RBAC: the scan action stays write-gated
+        self.assertIn('id="btnArpScan"', html)
+        scan_start = html.index('id="btnArpScan"')
+        scan_tag = html.rindex('<button', 0, scan_start)
+        self.assertIn('requires-write', html[scan_tag:scan_start])
+        # SAFETY CONSTRAINT: ARP-target selection must remain an EXPLICIT
+        # multi-select (checkbox list the user picks specific gateways from),
+        # never a fire-against-all control. Verify the checkbox-list machinery
+        # (class + per-item onchange + JS helpers) survived the restyle.
+        self.assertIn('class="arp-dev-cb"', html)
+        self.assertIn('id="arpDevAll"', html)
+        self.assertIn('onchange="toggleAllArpDevices(this.checked)"', html)
+        self.assertIn('function selectedArpDevices()', html)
+        self.assertIn("querySelectorAll('#arpDeviceList .arp-dev-cb:checked')", html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # runMacScan() -> apiFetch('/api/mac/scan', {method:'POST', ...})
+        self.assertIn('/api/mac/scan', html)
+        # macSearch() -> apiFetch('/api/mac/search?' + ...)
+        self.assertIn('/api/mac/search', html)
+        # macLocate() -> apiFetch('/api/mac/locate?mac=' + ...). Brief's contract
+        # table lists this as POST, but tracing the JS call and app_server.py
+        # (@app.get("/api/mac/locate")) shows it is actually a GET -- the literal
+        # path string is still asserted verbatim, matching the real call.
+        self.assertIn('/api/mac/locate', html)
+        # loadMacOverrides()/saveMacOverride()/removeMacOverride() -> GET/POST
+        # /api/mac/overrides + POST /api/mac/overrides/delete
+        self.assertIn('/api/mac/overrides', html)
+        self.assertIn('/api/mac/overrides/delete', html)
+        # saveMacRetention() -> POST /api/mac/settings. Brief lists "GET/POST",
+        # but app_server.py only defines @app.post("/api/mac/settings") -- the
+        # current retention value is instead read back from /api/mac/stats
+        # (retention_days field), not a GET on /api/mac/settings. Asserting the
+        # real POST call rather than fabricating a GET wiring, per Task 6/9/10
+        # precedent for contract-table entries that don't match the real route.
+        self.assertIn('/api/mac/settings', html)
+        # refreshMacStats() -> GET /api/mac/stats
+        self.assertIn('/api/mac/stats', html)
+        # runArpScan() -> POST /api/arp/scan (the explicit-multi-select target)
+        self.assertIn('/api/arp/scan', html)
+        # Brief's "Switch drill-down: GET /api/mac/switch/{ip}" has no frontend
+        # caller anywhere in dashboard.html (traced: no JS references
+        # '/api/mac/switch'). This mirrors the Task 6 "/api/models has no
+        # frontend UI" precedent -- it's a real backend route, just not wired
+        # to any control, so relax the assertion to the handler existing
+        # server-side instead of fabricating a UI wiring that isn't there.
+        self.assertNotIn('/api/mac/switch', html)
+        import app_server as _app_server
+        self.assertTrue(hasattr(_app_server, 'mac_switch'))
+
+    def test_mac_and_clientmap_tabs_use_component_classes(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-mac"')
+        tab_end = html.index('<!-- TAB: Config Analyzer')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"', 'class="filterbar"', 'class="table-wrap"'):
+            self.assertIn(cls, tab_html)
+        self.assertGreaterEqual(tab_html.count('class="kpi-grid"'), 2)
+        self.assertGreaterEqual(tab_html.count('class="panel'), 4)
+        # both tabs individually still present within that combined span
+        self.assertIn('<div id="tab-clientmap"', tab_html)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('macEyebrow:', 'titleMacTracker:', 'descMacTracker:',
+                    'macKpiSightingsLabel:', 'macKpiUniqueLabel:', 'macKpiSwitchesLabel:',
+                    'macKpiRetentionLabel:', 'titleMacScanPanel:', 'titleMacSearchPanel:',
+                    'clientmapEyebrow:', 'titleClientMap:', 'descClientMap:',
+                    'arpKpiBindingsLabel:', 'arpKpiUniqueLabel:', 'arpKpiGatewaysLabel:',
+                    'titleArpCollectPanel:', 'titleArpSearchPanel:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
