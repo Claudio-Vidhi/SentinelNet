@@ -212,5 +212,49 @@ class TestMapTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestTopologyTabRestyle(unittest.TestCase):
+    """Task 8: #tab-map-interactive legend polish + wiring guard.
+
+    Task 7 already restyled the toolbar (.panel wrapper, .chip view-toggle
+    buttons, hero header) -- covered by TestMapTabRestyle above. This class
+    only guards the remaining preserve-IDs and the export/reset contract for
+    this specific tab.
+    """
+
+    def test_preserve_ids(self):
+        html = _html()
+        for _id in ('networkGraphWrapper', 'networkGraphContainer', 'networkLegend',
+                    'mapViewClassicBtn', 'mapViewMinimalBtn'):
+            self.assertIn(f'id="{_id}"', html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # /api/topology/reset (POST) is called verbatim by resetTopology().
+        self.assertIn('/api/topology/reset', html)
+        # /api/topology (bare GET, get_topology_adjacency) has no frontend
+        # caller in dashboard.html -- traced exportVisioMap()/downloadTopology()
+        # and neither hits it. Relaxed to the server-side handler name, same
+        # precedent as TestMapTabRestyle.test_endpoint_contract_present above.
+        import app_server as _app_server
+        self.assertTrue(hasattr(_app_server, 'get_topology_adjacency'))
+        # exportVisioMap() posts to /api/map/export/vsdx -- traced the handler
+        # in app_server.py: only a POST route exists (export_map_vsdx), there
+        # is no GET variant, so only the POST endpoint is asserted here.
+        self.assertIn('/api/map/export/vsdx', html)
+        self.assertIn("apiFetch('/api/map/export/vsdx'", html)
+        self.assertTrue(hasattr(_app_server, 'export_map_vsdx'))
+
+    def test_legend_present_and_unmoved(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-map-interactive"')
+        tab_end = html.index('<!-- TAB: Dispositivi & Categorie -->')
+        tab_html = html[tab_start:tab_end]
+        # legend lives inside its tab body, still inside the graph wrapper,
+        # and keeps its overlay positioning class untouched.
+        self.assertIn('id="networkLegend"', tab_html)
+        self.assertIn('class="network-legend" id="networkLegend"', tab_html)
+        self.assertIn('id="legendBody"', tab_html)
+
+
 if __name__ == "__main__":
     unittest.main()
