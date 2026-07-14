@@ -541,5 +541,113 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestAiAssistantTabRestyle(unittest.TestCase):
+    """Task 13: #tab-ai (AI Assistant) restyle + wiring guard.
+
+    Highest-risk preservation of any tab: the chat send path plus a
+    single-use WebSocket OTP (/api/ws-token) live in this file. The restyle
+    only reclasses the STATIC layout (hero header + .panel cards); the chat
+    render container (#aiChatMessages, with its scroll/overflow inline style),
+    the send handler, the model <select>, the profile CRUD controls, and the
+    device multi-select dropdown are all preserved verbatim.
+    """
+
+    def test_preserve_ids(self):
+        html = _html()
+        # Active-profile + admin provider-config controls read/written by
+        # loadAiProfiles()/onAiProfile*Change()/saveAiSettings()/deleteAiProfile()
+        # /refreshAiModels(), the device multi-select machinery, and the chat
+        # container/input the send handler touches.
+        for _id in ('aiProfileSelect', 'aiActiveProfileBadge', 'aiSettingsPanel',
+                    'aiProfileEditSelect', 'aiProfileName', 'aiProvider',
+                    'aiModelSelect', 'aiModel', 'aiApiKeyLabel', 'aiApiKey',
+                    'aiBaseUrl', 'aiRateLimitRpm', 'aiAllowUnredacted',
+                    'btnAiDeleteProfile', 'aiSettingsStatus', 'aiAttachInventory',
+                    'aiAttachTenant', 'aiAttachDeviceBtn', 'aiAttachDeviceBtnLabel',
+                    'aiAttachDeviceDropdown', 'aiAttachDeviceList',
+                    'aiChatMessages', 'aiChatInput', 'btnAiSend'):
+            self.assertIn(f'id="{_id}"', html)
+
+    def test_onclick_hooks_preserved(self):
+        html = _html()
+        for hook in ('onAiProfileSelectChange()', 'onAiProfileEditSelectChange()',
+                     'resetAiModelList()', 'refreshAiModels()', 'saveAiSettings()',
+                     'deleteAiProfile()', 'populateAiAttachDevices()',
+                     'toggleAiDeviceDropdown()', 'setAllAiAttachDevices(true)',
+                     'setAllAiAttachDevices(false)', 'clearAiChat()', 'sendAiChat()'):
+            self.assertIn(hook, html)
+
+    def test_rbac_admin_gating_on_provider_config(self):
+        html = _html()
+        # The provider/profile CRUD panel stays admin-gated: requires-admin must
+        # sit on the #aiSettingsPanel <details> element itself.
+        self.assertIn('id="aiSettingsPanel"', html)
+        panel_idx = html.index('id="aiSettingsPanel"')
+        details_tag = html.rindex('<details', 0, panel_idx)
+        self.assertIn('requires-admin', html[details_tag:panel_idx])
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # sendAiChat() -> apiFetch('/api/ai/chat', {method:'POST', ...})
+        self.assertIn('/api/ai/chat', html)
+        # refreshAiModels() -> apiFetch('/api/ai/models?' + ...)
+        self.assertIn('/api/ai/models', html)
+        # loadAiProfiles()/saveAiSettings() -> GET+POST /api/ai/profiles
+        self.assertIn('/api/ai/profiles', html)
+        # PUT/DELETE /api/ai/profiles/{id} and POST /api/ai/profiles/{id}/activate
+        # are path-parameterized template-literal calls; assert the literal call
+        # forms (Task 6-12 precedent for path-param routes).
+        self.assertIn('`/api/ai/profiles/${encodeURIComponent(profileId)}/activate`', html)
+        self.assertIn('`/api/ai/profiles/${encodeURIComponent(editingId)}`', html)
+        self.assertIn('`/api/ai/profiles/${encodeURIComponent(id)}`', html)
+        # STREAMING/WEBSOCKET WIRING GUARD: the single-use OTP endpoint that
+        # authorizes the WebSocket must still be present verbatim -- proving the
+        # ws-token fetch survived the restyle. (In this codebase /api/ws-token is
+        # consumed by the terminal WebSocket, not the AI chat POST path; asserted
+        # here per the brief's explicit streaming-preservation requirement.)
+        self.assertIn('/api/ws-token', html)
+        self.assertIn('apiFetch("/api/ws-token", { method: "POST" })', html)
+
+    def test_chat_container_untouched(self):
+        html = _html()
+        # The chat render target keeps its exact id + scroll/overflow inline
+        # style that appendAiMessage()/renderAiConfigProposal() depend on for
+        # box.scrollTop = box.scrollHeight. Assert the div is byte-identical.
+        self.assertIn(
+            '<div id="aiChatMessages" style="border:1px solid var(--border); '
+            'border-radius:10px; background:var(--surface); min-height:280px; '
+            'max-height:480px; overflow-y:auto; padding:14px; margin-bottom:12px;"></div>',
+            html)
+
+    def test_device_multiselect_preserved(self):
+        html = _html()
+        # The AI device multi-select dropdown (prior feature) keeps its ids and
+        # per-item checkbox class + onchange used by getAiAttachDeviceIps().
+        self.assertIn('id="aiAttachDeviceDropdown"', html)
+        self.assertIn('id="aiAttachDeviceList"', html)
+        self.assertIn("querySelectorAll('#aiAttachDeviceList .ai-attach-device:checked')", html)
+        self.assertIn("class=\"ai-attach-device\"", html)
+        self.assertIn('onchange="updateAiDeviceBtnLabel()"', html)
+
+    def test_ai_tab_uses_component_classes(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-ai"')
+        tab_end = html.index('<!-- TAB: Switch da Zero (Provisioner) -->')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+                    'class="filterbar"', 'class="panel'):
+            self.assertIn(cls, tab_html)
+        # three panel cards: profile controls, context/device selector, chat
+        self.assertGreaterEqual(tab_html.count('class="panel"'), 3)
+        # active-profile badge reclassed to the .chip state-badge component
+        self.assertIn('id="aiActiveProfileBadge" class="chip"', tab_html)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('aiEyebrow:', 'titleAiContext:', 'titleAiChat:',
+                    'titleAiAssistant:', 'descAiAssistant:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
