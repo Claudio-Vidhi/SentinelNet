@@ -43,5 +43,35 @@ class TestSidebarIA(unittest.TestCase):
         self.assertNotIn('class="tab-nav"', html)
 
 
+class TestHomeTab(unittest.TestCase):
+    def test_home_tab_exists_and_default(self):
+        html = _html()
+        # Home tab body + startup default
+        self.assertIn('id="tab-home"', html)
+        self.assertIn('<div id="tab-home" class="tab-content active">', html)
+        # loadHome function present
+        self.assertIn('function loadHome', html)
+        # Home nav-item present and active
+        self.assertIn("switchTab('tab-home'", html)
+        self.assertIn('data-i18n="tabHome"', html)
+        # runtime-populated ids
+        for eid in ('homeKpiOnline', 'homeKpiAttention',
+                    'homeAttentionBody', 'homeAnomBody'):
+            self.assertIn(f'id="{eid}"', html)
+        # Home wires only to REAL endpoints
+        self.assertIn('/api/local-devices', html)
+        self.assertIn('/api/run-triage', html)
+        self.assertIn("startGroupTriage('all')", html)
+        self.assertIn('/api/observability/anomalies', html)
+        # no fabricated prototype-only controls
+        self.assertNotIn('Open design language', html)
+        self.assertNotIn('Customize view', html)
+
+    def test_home_tab_i18n_keys_both_langs(self):
+        html = _html()
+        # tabHome defined in both maps (label appears twice: it + en)
+        self.assertGreaterEqual(html.count('tabHome:'), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -797,7 +797,10 @@
 
     <nav class="sidenav">
       <div class="nav-group"><h3 data-i18n="navOps">Operations</h3>
-        <button class="nav-item active" onclick="switchTab('tab-devices', this)">
+        <button class="nav-item active" onclick="switchTab('tab-home', this)">
+          <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-grid-2"></i> Home</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-devices', this)">
           <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-mac', this)">
@@ -964,8 +967,85 @@
 
   <!-- Area Centrale Principale -->
   <main>
+    <!-- TAB 0: Operations Home (landing) -->
+    <div id="tab-home" class="tab-content active">
+      <div class="hero">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="homeEyebrow"><i class="fa-solid fa-grip"></i> Operations</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="homeTitle">Panoramica operativa</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:54ch;" data-i18n="homeSubtitle">Stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
+          <div class="split-footer">
+            <button class="btn btn-primary" style="width:auto; margin:0;" onclick="switchTab('tab-devices')" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
+            <button class="btn btn-secondary requires-write" style="width:auto; margin:0; border-color: var(--cta); color: var(--cta);" onclick="startGroupTriage('all')" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
+          </div>
+        </div>
+        <div class="hero-card" style="display:flex; flex-direction:column; gap:14px; justify-content:center;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span style="color:var(--text-muted); font-size:13px;" data-i18n="homeStatDevices">Dispositivi totali</span>
+            <strong id="homeKpiTotal" style="font-family:var(--font-display); font-size:22px;">&mdash;</strong>
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span class="status ok"><span class="led led-success"></span><span data-i18n="homeStOnline">Online</span></span>
+            <strong id="homeStatOnline" style="font-family:var(--font-display); font-size:22px;">&mdash;</strong>
+          </div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span class="status warn"><span class="led led-warning"></span><span data-i18n="homeAttention">Richiede attenzione</span></span>
+            <strong id="homeStatAttention" style="font-family:var(--font-display); font-size:22px;">&mdash;</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:18px;">
+        <div class="kpi">
+          <h4 data-i18n="homeKpiOnlineLabel">Dispositivi online</h4>
+          <strong id="homeKpiOnline">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="homeKpiAttentionLabel">Richiedono attenzione</h4>
+          <strong id="homeKpiAttention">&mdash;</strong>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
+          <h3 style="margin:0; font-size:16px;" data-i18n="homeAttentionQueue"><i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i> Coda attenzione flotta</h3>
+          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="switchTab('tab-devices')" data-i18n="homeViewAll">Vedi tutti</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="homeColHost">Hostname</th>
+                <th data-i18n="homeColIp">Indirizzo IP</th>
+                <th data-i18n="homeColGroup">Tenant</th>
+                <th data-i18n="homeColStatus">Stato</th>
+              </tr>
+            </thead>
+            <tbody id="homeAttentionBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel requires-admin" style="margin-top:18px;">
+        <h3 style="margin:0 0 6px; font-size:16px;" data-i18n="homeAnomTitle"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Anomalie recenti</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="homeAnomKind">Tipo</th>
+                <th data-i18n="homeAnomFlow">Flusso</th>
+                <th data-i18n="homeAnomSeverity">Severit&agrave;</th>
+                <th data-i18n="homeAnomWhen">Quando</th>
+              </tr>
+            </thead>
+            <tbody id="homeAnomBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- TAB 1: Network Inventory (Dispositivi) -->
-    <div id="tab-devices" class="tab-content active">
+    <div id="tab-devices" class="tab-content">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
         <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
           <h3 data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
@@ -2406,8 +2486,35 @@
         navAdmin: "Amministrazione",
 
         // Tabs
+        tabHome: '<i class="fa-solid fa-grid-2"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
+        // Operations Home
+        homeEyebrow: '<i class="fa-solid fa-grip"></i> Operazioni',
+        homeTitle: "Panoramica operativa",
+        homeSubtitle: "Stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.",
+        homeOpenInventory: '<i class="fa-solid fa-list-check"></i> Apri inventario',
+        homeRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale',
+        homeStatDevices: "Dispositivi totali",
+        homeStOnline: "Online",
+        homeStOffline: "Offline",
+        homeStAuth: "Autenticazione fallita",
+        homeAttention: "Richiede attenzione",
+        homeKpiOnlineLabel: "Dispositivi online",
+        homeKpiAttentionLabel: "Richiedono attenzione",
+        homeAttentionQueue: '<i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i> Coda attenzione flotta',
+        homeViewAll: "Vedi tutti",
+        homeColHost: "Hostname",
+        homeColIp: "Indirizzo IP",
+        homeColGroup: "Tenant",
+        homeColStatus: "Stato",
+        homeNoAttention: "Nessun dispositivo richiede attenzione",
+        homeAnomTitle: '<i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Anomalie recenti',
+        homeAnomKind: "Tipo",
+        homeAnomFlow: "Flusso",
+        homeAnomSeverity: "Severità",
+        homeAnomWhen: "Quando",
+        homeNoAnomalies: "Nessuna anomalia recente",
         tabSites: '<i class="fa-solid fa-building"></i> Sedi',
         tabMcp: '<i class="fa-solid fa-plug"></i> Server MCP',
         tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
@@ -2947,8 +3054,35 @@
         navAdmin: "Administration",
 
         // Tabs
+        tabHome: '<i class="fa-solid fa-grid-2"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
+        // Operations Home
+        homeEyebrow: '<i class="fa-solid fa-grip"></i> Operations',
+        homeTitle: "Operations overview",
+        homeSubtitle: "Real-time state of the network fleet. Open the inventory or launch a global triage from here.",
+        homeOpenInventory: '<i class="fa-solid fa-list-check"></i> Open inventory',
+        homeRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run global triage',
+        homeStatDevices: "Total devices",
+        homeStOnline: "Online",
+        homeStOffline: "Offline",
+        homeStAuth: "Auth failed",
+        homeAttention: "Needs attention",
+        homeKpiOnlineLabel: "Online devices",
+        homeKpiAttentionLabel: "Need attention",
+        homeAttentionQueue: '<i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i> Fleet attention queue',
+        homeViewAll: "View all",
+        homeColHost: "Hostname",
+        homeColIp: "IP Address",
+        homeColGroup: "Tenant",
+        homeColStatus: "Status",
+        homeNoAttention: "No device needs attention",
+        homeAnomTitle: '<i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Recent anomalies',
+        homeAnomKind: "Type",
+        homeAnomFlow: "Flow",
+        homeAnomSeverity: "Severity",
+        homeAnomWhen: "When",
+        homeNoAnomalies: "No recent anomalies",
         tabSites: '<i class="fa-solid fa-building"></i> Sites',
         tabMcp: '<i class="fa-solid fa-plug"></i> MCP Server',
         tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
@@ -3956,6 +4090,9 @@
             // Popola Tabella Dispositivi tramite la nuova funzione autonoma filtrabile
             renderDeviceTable();
 
+            // Popola la Home operativa (tab di default al login) coi globals appena caricati
+            loadHome();
+
             // Popola Tabella Gestione Gruppi
             renderGroupsTable();
 
@@ -4846,7 +4983,9 @@
             btn.classList.add('active');
         }
 
-        if (tabId === 'tab-devices') {
+        if (tabId === 'tab-home') {
+            loadHome();
+        } else if (tabId === 'tab-devices') {
             renderDeviceTable();
         } else if(tabId === 'tab-map') loadTopology();
         else if(tabId === 'tab-map-interactive') loadInteractiveMap();
@@ -4862,6 +5001,91 @@
         else if(tabId === 'tab-mcp') loadMcpTab();
         else if(tabId === 'tab-provisioner') initFgtTokenPanel();
         else if(tabId === 'tab-settings') loadAppSettings();
+    }
+
+    // --- OPERATIONS HOME (landing) ---
+    // Mirror renderDeviceTable's canonical status mapping: status is on
+    // globalVersions[device.IP].status, NOT on the device object itself.
+    function homeStatusInfo(status) {
+        if (status === 'online')      return { cls: 'ok',   led: 'led-success', key: 'homeStOnline' };
+        if (status === 'auth_failed') return { cls: 'warn', led: 'led-warning', key: 'homeStAuth' };
+        return { cls: 'bad', led: 'led-danger', key: 'homeStOffline' };
+    }
+
+    async function loadHome() {
+        // Reuse the globals cached at login; fetch only if empty (same shape as appInit).
+        if (!globalDevices || globalDevices.length === 0) {
+            const res = await apiFetch('/api/local-devices');
+            if (res && res.ok) {
+                const data = await res.json();
+                globalDevices  = data.devices || [];
+                if (data.groups) globalGroups = data.groups;
+                globalVersions = data.detected_versions || {};
+            }
+        }
+        const devs = globalDevices || [];
+
+        let online = 0;
+        const attention = [];
+        devs.forEach(d => {
+            const scan = globalVersions[d.IP] || {};
+            if (scan.status === 'online') online++;
+            else attention.push(d); // auth_failed / offline / unknown / missing
+        });
+
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setText('homeKpiTotal', devs.length);
+        setText('homeKpiOnline', online);
+        setText('homeKpiAttention', attention.length);
+        setText('homeStatOnline', online);
+        setText('homeStatAttention', attention.length);
+
+        const body = document.getElementById('homeAttentionBody');
+        if (body) {
+            if (attention.length === 0) {
+                const okMsg = i18n[currentLang].homeNoAttention;
+                body.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted); text-align:center; padding:16px;">${okMsg}</td></tr>`;
+            } else {
+                body.innerHTML = attention.slice(0, 8).map(d => {
+                    const scan  = globalVersions[d.IP] || {};
+                    const info  = homeStatusInfo(scan.status);
+                    const label = i18n[currentLang][info.key] || scan.status || 'offline';
+                    const host  = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">&mdash;</span>';
+                    return `<tr>
+                        <td>${host}</td>
+                        <td><code>${escapeHtml(d.IP || '')}</code></td>
+                        <td><span class="badge">${escapeHtml(d.Group || '')}</span></td>
+                        <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
+                    </tr>`;
+                }).join('');
+            }
+        }
+
+        if (currentRole === 'admin') loadHomeAnomalies();
+    }
+
+    async function loadHomeAnomalies() {
+        const body = document.getElementById('homeAnomBody');
+        if (!body) return;
+        const res = await apiFetch('/api/observability/anomalies?limit=5');
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        const rows = data.anomalies || [];
+        if (rows.length === 0) {
+            body.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted); text-align:center; padding:16px;">${i18n[currentLang].homeNoAnomalies}</td></tr>`;
+            return;
+        }
+        body.innerHTML = rows.map(a => {
+            const sev = (a.severity || '').toString().toLowerCase();
+            const cls = (sev === 'high' || sev === 'critical') ? 'bad' : (sev === 'medium' ? 'warn' : 'ok');
+            const when = a.created_ts ? new Date(a.created_ts * 1000).toLocaleString() : '';
+            return `<tr>
+                <td>${escapeHtml((a.kind || '').toString())}</td>
+                <td><code>${escapeHtml((a.src_ip || '').toString())}</code> &rarr; <code>${escapeHtml((a.dst_ip || '').toString())}</code></td>
+                <td><span class="status ${cls}">${escapeHtml((a.severity || '—').toString())}</span></td>
+                <td style="color:var(--text-muted); font-size:12px;">${escapeHtml(when)}</td>
+            </tr>`;
+        }).join('');
     }
 
     // --- SEDI MULTI-SITO (admin) ---
