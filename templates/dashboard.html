@@ -1144,30 +1144,38 @@
 
     <!-- TAB 2: Gestione Gruppi/Sedi -->
     <div id="tab-groups" class="tab-content">
-      <h3 data-i18n="titleGroupsRegistry">Anagrafica Gruppi, Clienti e Sedi Locali</h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descGroupsRegistry">
-        I gruppi organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un gruppo sposta i dispositivi associati nel gruppo Generale.
-      </p>
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th data-i18n="thGroupName">Nome Sede / Cliente</th>
-              <th data-i18n="thGroupDesc">Descrizione Metadati</th>
-              <th data-i18n="thGroupActions">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="groupsTableBody"></tbody>
-        </table>
+      <div class="hero" style="grid-template-columns:1fr;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="groupsEyebrow"><i class="fa-solid fa-sitemap"></i> Anagrafica</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleGroupsRegistry">Anagrafica Gruppi, Clienti e Sedi Locali</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descGroupsRegistry">
+            I gruppi organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un gruppo sposta i dispositivi associati nel gruppo Generale.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="thGroupName">Nome Sede / Cliente</th>
+                <th data-i18n="thGroupDesc">Descrizione Metadati</th>
+                <th data-i18n="thGroupActions">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="groupsTableBody"></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Gestione Vendor -->
-      <div style="margin-top: 30px;">
+      <div class="panel" style="margin-top: 18px;">
         <h3 style="margin-bottom: 8px; font-size: 16px;" data-i18n="titleVendorRegistry"><i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Gestione Vendor</h3>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descVendorRegistry">
           Registro dei vendor supportati. Il campo EUVD Term è usato nelle query al database europeo delle vulnerabilità ENISA.
         </p>
-        <div class="table-container" style="margin-bottom: 20px;">
+        <div class="table-wrap" style="margin-bottom: 20px;">
           <table>
             <thead>
               <tr>
@@ -2763,6 +2771,7 @@
         thActions: "Azioni / Utility",
         
         // Tab 2
+        groupsEyebrow: '<i class="fa-solid fa-sitemap"></i> Anagrafica',
         titleGroupsRegistry: "Anagrafica Tenant e Clienti",
         descGroupsRegistry: "I Tenant organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un Tenant sposta i dispositivi associati nel Tenant Generale.",
         thGroupName: "Nome Tenant / Cliente",
@@ -3337,6 +3346,7 @@
         thActions: "Actions / Utilities",
         
         // Tab 2
+        groupsEyebrow: '<i class="fa-solid fa-sitemap"></i> Registry',
         titleGroupsRegistry: "Tenants and Clients Registry",
         descGroupsRegistry: "Tenants logically organize your asset topology. Deleting a tenant moves its associated devices to the General tenant.",
         thGroupName: "Tenant / Client Name",

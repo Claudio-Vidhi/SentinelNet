@@ -120,5 +120,51 @@ class TestDevicesTabRestyle(unittest.TestCase):
         self.assertIn('Network Device Inventory', html)
 
 
+class TestGroupsTabRestyle(unittest.TestCase):
+    def test_preserve_ids(self):
+        html = _html()
+        for _id in ('groupsTableBody', 'vendorTableBody'):
+            self.assertIn(f'id="{_id}"', html)
+        # add-vendor form + rename/delete hooks preserved
+        for hook in ('addVendor()', 'renameGroup(', 'deleteGroup(', 'deleteVendor('):
+            self.assertIn(hook, html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # /api/groups, /api/groups/rename, /api/groups/delete, /api/vendors,
+        # /api/vendors/delete all reached verbatim via apiFetch(...)
+        for endpoint in ('/api/groups', '/api/groups/rename', '/api/groups/delete',
+                          '/api/vendors', '/api/vendors/delete'):
+            self.assertIn(endpoint, html)
+        # /api/models + /api/models/delete: real server routes (app_server.py),
+        # but pre-existing state (before this restyle) has NO frontend wiring in
+        # #tab-groups (no models table/JS calls it) -- confirmed by tracing
+        # app_server.py's list_models/create_model/remove_model handlers, which
+        # have zero callers in templates/dashboard.html. Per shared per-tab
+        # rules ("restyle, not rewire" / don't fabricate wiring), relaxed to
+        # asserting the handler function names exist server-side instead of
+        # fabricating a UI table for them.
+        import app_server as _app_server
+        self.assertTrue(hasattr(_app_server, 'list_models'))
+        self.assertTrue(hasattr(_app_server, 'create_model'))
+        self.assertTrue(hasattr(_app_server, 'remove_model'))
+
+    def test_groups_tab_uses_component_classes(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-groups"')
+        tab_end = html.index('<!-- TAB 3:')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+            self.assertIn(cls, tab_html)
+        self.assertEqual(tab_html.count('class="panel"'), 2)
+        self.assertGreaterEqual(tab_html.count('class="table-wrap"'), 2)
+        self.assertNotIn('table-container', tab_html)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('groupsEyebrow:', 'titleGroupsRegistry:', 'descGroupsRegistry:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
