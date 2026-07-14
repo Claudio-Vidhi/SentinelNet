@@ -73,5 +73,13 @@ class TestHomeTab(unittest.TestCase):
         self.assertGreaterEqual(html.count('tabHome:'), 2)
 
 
+class TestFormRelocation(unittest.TestCase):
+    def test_device_form_ids_preserved(self):
+        html = _html()
+        for _id in ('devIp','devGroupSelect','devVendor','btnSaveDevice',
+                    'newGroupName','btnCreateGroup','trSshEnabled'):
+            self.assertIn(f'id="{_id}"', html)
+
+
 if __name__ == "__main__":
     unittest.main()
