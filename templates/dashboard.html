@@ -862,107 +862,6 @@
         </button>
       </div>
     </nav>
-
-    <div class="requires-write">
-      <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
-
-      <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:8px; color:var(--primary); font-size:12px;" data-i18n="msgEditingDevice">
-        <i class="fa-solid fa-pen-to-square"></i> Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.
-      </div>
-
-      <div class="form-group">
-        <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
-        <select id="devGroupSelect"></select>
-      </div>
-
-      <div class="form-group">
-        <label data-i18n="lblIp">IP Apparato</label>
-        <div class="input-wrapper">
-          <i class="fa-solid fa-server"></i>
-          <input id="devIp" type="text" placeholder="10.0.0.1">
-        </div>
-      </div>
-
-      <!-- §11.6: trasporti per-device (checkbox + porta per protocollo) -->
-      <div class="form-group">
-        <label data-i18n="lblTransports">Protocolli di connessione</label>
-        <div id="devTransports" style="border-left: 2px solid var(--border); padding-left: 10px;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-            <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
-            <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
-            <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-            <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
-            <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
-            <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
-          </div>
-          <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="display:none; color: var(--danger, #c0392b); font-size: 12px; margin-bottom:6px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-            <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
-            <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
-            <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
-          </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
-            <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
-            <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
-          </div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label data-i18n="lblVendor">Vendor Engine</label>
-        <div class="input-wrapper">
-          <i class="fa-solid fa-gears"></i>
-          <select id="devVendor" style="padding-left:36px;"></select>
-        </div>
-      </div>
-      
-      <div class="form-group">
-        <label data-i18n="lblProfile">Profilo Credenziali</label>
-        <div class="input-wrapper">
-          <i class="fa-solid fa-key"></i>
-          <select id="devProfile" style="padding-left:36px;">
-            <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
-            <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
-          </select>
-        </div>
-      </div>
-      
-      <div id="customCredsForm" style="display:none; border-left: 2px solid var(--primary); padding-left: 10px; margin-bottom: 10px;">
-        <div class="form-group">
-          <label data-i18n="lblUser">Username</label>
-          <input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
-        </div>
-        <div class="form-group">
-          <label id="devPassLabel" data-i18n="lblPass">Password</label>
-          <input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
-        </div>
-        <div class="form-group">
-          <label id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label>
-          <input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
-        </div>
-      </div>
-
-      <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
-        <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
-      </button>
-      <button class="btn btn-secondary" id="btnCancelEditDevice" style="display:none; margin-top: 8px;" data-i18n="btnCancelEditDevice" onclick="resetDeviceForm()">
-        <i class="fa-solid fa-xmark"></i> Annulla modifica
-      </button>
-    </div>
-    
-    <div class="requires-write" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: auto;">
-      <h3 style="font-size: 14px; margin-bottom: 10px;" data-i18n="titleAddGroup"><i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo</h3>
-      <div class="form-group">
-        <label data-i18n="lblGroupName">Nome Gruppo</label>
-        <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" style="padding-left:12px;">
-      </div>
-      <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text);" data-i18n="btnCreateGroup">
-        <i class="fa-solid fa-folder-plus"></i> Crea Gruppo
-      </button>
-    </div>
   </aside>
 
   <!-- Area Centrale Principale -->
@@ -1046,6 +945,109 @@
 
     <!-- TAB 1: Network Inventory (Dispositivi) -->
     <div id="tab-devices" class="tab-content">
+      <article class="panel requires-write" style="margin-bottom:18px;">
+        <div class="requires-write">
+          <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
+
+          <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:8px; color:var(--primary); font-size:12px;" data-i18n="msgEditingDevice">
+            <i class="fa-solid fa-pen-to-square"></i> Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
+            <select id="devGroupSelect"></select>
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="lblIp">IP Apparato</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-server"></i>
+              <input id="devIp" type="text" placeholder="10.0.0.1">
+            </div>
+          </div>
+
+          <!-- §11.6: trasporti per-device (checkbox + porta per protocollo) -->
+          <div class="form-group">
+            <label data-i18n="lblTransports">Protocolli di connessione</label>
+            <div id="devTransports" style="border-left: 2px solid var(--border); padding-left: 10px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
+                <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
+                <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
+                <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
+                <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
+              </div>
+              <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="display:none; color: var(--danger, #c0392b); font-size: 12px; margin-bottom:6px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
+                <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
+                <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
+                <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
+                <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="lblVendor">Vendor Engine</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-gears"></i>
+              <select id="devVendor" style="padding-left:36px;"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label data-i18n="lblProfile">Profilo Credenziali</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-key"></i>
+              <select id="devProfile" style="padding-left:36px;">
+                <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
+                <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="customCredsForm" style="display:none; border-left: 2px solid var(--primary); padding-left: 10px; margin-bottom: 10px;">
+            <div class="form-group">
+              <label data-i18n="lblUser">Username</label>
+              <input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
+            </div>
+            <div class="form-group">
+              <label id="devPassLabel" data-i18n="lblPass">Password</label>
+              <input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
+            </div>
+            <div class="form-group">
+              <label id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label>
+              <input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
+            <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
+          </button>
+          <button class="btn btn-secondary" id="btnCancelEditDevice" style="display:none; margin-top: 8px;" data-i18n="btnCancelEditDevice" onclick="resetDeviceForm()">
+            <i class="fa-solid fa-xmark"></i> Annulla modifica
+          </button>
+        </div>
+
+        <div class="requires-write" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
+          <h3 style="font-size: 14px; margin-bottom: 10px;" data-i18n="titleAddGroup"><i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo</h3>
+          <div class="form-group">
+            <label data-i18n="lblGroupName">Nome Gruppo</label>
+            <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" style="padding-left:12px;">
+          </div>
+          <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text);" data-i18n="btnCreateGroup">
+            <i class="fa-solid fa-folder-plus"></i> Crea Gruppo
+          </button>
+        </div>
+      </article>
+
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; gap: 15px; flex-wrap: wrap;">
         <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
           <h3 data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
