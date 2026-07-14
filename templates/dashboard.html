@@ -1461,47 +1461,77 @@
 
     <!-- TAB: MAC Address Tracker (storico MAC -> porta/vlan) -->
     <div id="tab-mac" class="tab-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
-        <h3 data-i18n="titleMacTracker">MAC Address Tracker</h3>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <select id="macScanGroup" onchange="populateMacScanDevices(); macSearch(); refreshMacStats(false);" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
-            <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
-          </select>
-          <details id="macDeviceMenu" style="position:relative;">
-            <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
-              <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
-              <span id="macDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
-              <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
-            </summary>
-            <div id="macDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
-          </details>
-          <select id="macScanTransport" title="" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
-            <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
-            <option value="netconf">NETCONF</option>
-            <option value="restconf">RESTCONF</option>
-            <option value="cli">CLI</option>
-          </select>
-          <button class="btn btn-primary btn-small requires-write" id="btnMacScan" onclick="runMacScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnMacScan">
-            <i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan
-          </button>
-          <div class="requires-admin" style="display:flex; align-items:center; gap:6px;">
-            <label style="font-size:12px; color:var(--text-muted);" data-i18n="lblMacRetention">Retention (giorni):</label>
-            <input id="macRetentionDays" type="number" min="1" max="3650" style="width:70px; padding:5px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-            <button class="btn btn-secondary btn-small" onclick="saveMacRetention()" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="macEyebrow"><i class="fa-solid fa-location-crosshairs"></i> Rete</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleMacTracker">MAC Address Tracker</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descMacTracker">
+            Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.
+          </p>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
+        <div class="kpi">
+          <h4 data-i18n="macKpiSightingsLabel">Avvistamenti</h4>
+          <strong id="kpiMacSightings">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="macKpiUniqueLabel">MAC Univoci</h4>
+          <strong id="kpiMacUniqueMacs">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="macKpiSwitchesLabel">Switch</h4>
+          <strong id="kpiMacSwitches">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="macKpiRetentionLabel">Retention (giorni)</h4>
+          <strong id="kpiMacRetention">&mdash;</strong>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleMacScanPanel">Scansione MAC</h3>
+        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <select id="macScanGroup" onchange="populateMacScanDevices(); macSearch(); refreshMacStats(false);" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+              <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
+            </select>
+            <details id="macDeviceMenu" style="position:relative;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
+                <span id="macDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
+                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+              </summary>
+              <div id="macDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            </details>
+            <select id="macScanTransport" title="" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+              <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
+              <option value="netconf">NETCONF</option>
+              <option value="restconf">RESTCONF</option>
+              <option value="cli">CLI</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-primary btn-small requires-write" id="btnMacScan" onclick="runMacScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnMacScan">
+              <i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan
+            </button>
+            <div class="requires-admin" style="display:flex; align-items:center; gap:6px;">
+              <label style="font-size:12px; color:var(--text-muted);" data-i18n="lblMacRetention">Retention (giorni):</label>
+              <input id="macRetentionDays" type="number" min="1" max="3650" style="width:70px; padding:5px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+              <button class="btn btn-secondary btn-small" onclick="saveMacRetention()" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
+            </div>
           </div>
         </div>
       </div>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descMacTracker">
-        Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.
-      </p>
 
       <!-- Comandi ad-hoc per apparati non ordinari (es. C8000V bridge-domain) -->
-      <details class="requires-write" style="margin-bottom:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); overflow:hidden;">
-        <summary style="cursor:pointer; padding:12px 14px; font-weight:700; list-style:none;">
+      <details class="panel requires-write" style="margin-bottom:18px; padding:0; overflow:hidden;">
+        <summary style="cursor:pointer; padding:14px 18px; font-weight:700; list-style:none;">
           <i class="fa-solid fa-terminal" style="color:var(--warning); margin-right:6px;"></i>
           <span data-i18n="titleMacAdhoc">Comandi ad-hoc (apparati non standard)</span>
         </summary>
-        <div style="padding:14px; border-top:1px solid var(--border);">
+        <div style="padding:0 18px 18px; border-top:1px solid var(--border); padding-top:14px;">
           <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;" data-i18n="descMacAdhoc">
             Per apparati dove la MAC-table non si legge in modo standard (es. Catalyst 8000V con bridge-domain: i MAC stanno in "show bridge-domain"), definisci un comando CLI dedicato e il formato di parsing. Verrà usato al posto di "show mac address-table" per quell'apparato.
           </p>
@@ -1528,30 +1558,33 @@
         </div>
       </details>
 
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px;">
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
-          <input id="macSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleMacSearchPanel">Cerca MAC</h3>
+        <div class="filterbar" style="align-items:flex-end; margin-top:0;">
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
+            <input id="macSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacVlan">VLAN</label>
+            <input id="macSearchVlan" class="ui-input" type="text" placeholder="10" style="width:80px;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacIface">Interfaccia / Port-channel</label>
+            <input id="macSearchIface" class="ui-input" type="text" placeholder="Gi1/0/5, Po1" style="width:160px;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label>
+            <input id="macSearchSwitch" class="ui-input" type="text" placeholder="10.0.0.1" style="width:130px;">
+          </div>
+          <button class="btn btn-primary btn-small" onclick="macSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
+            <i class="fa-solid fa-magnifying-glass"></i> Cerca
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="macSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
+            <i class="fa-solid fa-rotate-left"></i> Reset
+          </button>
+          <span id="macStats" class="chip" style="margin-left:auto;"></span>
         </div>
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacVlan">VLAN</label>
-          <input id="macSearchVlan" class="ui-input" type="text" placeholder="10" style="width:80px;">
-        </div>
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacIface">Interfaccia / Port-channel</label>
-          <input id="macSearchIface" class="ui-input" type="text" placeholder="Gi1/0/5, Po1" style="width:160px;">
-        </div>
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label>
-          <input id="macSearchSwitch" class="ui-input" type="text" placeholder="10.0.0.1" style="width:130px;">
-        </div>
-        <button class="btn btn-primary btn-small" onclick="macSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
-          <i class="fa-solid fa-magnifying-glass"></i> Cerca
-        </button>
-        <button class="btn btn-secondary btn-small" onclick="macSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
-          <i class="fa-solid fa-rotate-left"></i> Reset
-        </button>
-        <span id="macStats" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span>
       </div>
 
       <style>
@@ -1565,71 +1598,105 @@
         #tab-mac #macDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
       </style>
       <!-- Risultati raggruppati per switch: clic sull'host per espandere i MAC -->
-      <div id="macResults"></div>
+      <div class="table-wrap">
+        <div id="macResults"></div>
+      </div>
     </div>
 
     <!-- TAB: Client Map (MAC <-> IP dai gateway L3) -->
     <div id="tab-clientmap" class="tab-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
-        <h3 data-i18n="titleClientMap">Client Map — MAC ↔ IP</h3>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <select id="arpScanGroup" onchange="populateArpScanDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
-            <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
-          </select>
-          <details id="arpDeviceMenu" style="position:relative;">
-            <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
-              <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
-              <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
-              <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
-            </summary>
-            <div id="arpDeviceList" style="position:absolute; top:110%; right:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
-          </details>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="clientmapEyebrow"><i class="fa-solid fa-network-wired"></i> Rete</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleClientMap">Client Map — MAC ↔ IP</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descClientMap">
+            Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.
+          </p>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); margin-bottom:18px;">
+        <div class="kpi">
+          <h4 data-i18n="arpKpiBindingsLabel">Binding MAC↔IP</h4>
+          <strong id="kpiArpBindings">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="arpKpiUniqueLabel">MAC Univoci</h4>
+          <strong id="kpiArpUniqueMacs">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="arpKpiGatewaysLabel">Gateway</h4>
+          <strong id="kpiArpGateways">&mdash;</strong>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</h3>
+        <!-- Selezione ESPLICITA dei gateway target (multi-select a checkbox): non esiste
+             una modalità "spara su tutti", l'utente sceglie sempre i gateway specifici o
+             il tenant; questo evita raccolte ARP indiscriminate su apparati non previsti. -->
+        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <select id="arpScanGroup" onchange="populateArpScanDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+              <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
+            </select>
+            <details id="arpDeviceMenu" style="position:relative;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
+                <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
+                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+              </summary>
+              <div id="arpDeviceList" style="position:absolute; top:110%; right:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            </details>
+          </div>
           <button class="btn btn-primary btn-small requires-write" id="btnArpScan" onclick="runArpScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
             <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
           </button>
         </div>
+        <div id="arpScanSummary" style="display:none; margin-top:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:12px;"></div>
       </div>
       <style>
         #tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker { display:none; }
         #tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
         #tab-clientmap #arpDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
       </style>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descClientMap">
-        Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.
-      </p>
 
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:14px;">
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
-          <input id="arpSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
+      <div class="panel">
+        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleArpSearchPanel">Cerca binding MAC ↔ IP</h3>
+        <div class="filterbar" style="align-items:flex-end; margin-top:0;">
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
+            <input id="arpSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpIp">IP (anche prefisso)</label>
+            <input id="arpSearchIp" class="ui-input" type="text" placeholder="10.0.0." style="width:140px;">
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant/Sede</label>
+            <select id="arpFilterTenant" onchange="populateArpGatewayFilter(); arpClientSearch();" class="ui-input" style="width:160px; cursor:pointer;">
+              <option value="all" data-i18n="optArpAllTenants">Tutti i tenant</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
+            <select id="arpFilterGateway" onchange="arpClientSearch()" class="ui-input" style="width:200px; cursor:pointer;">
+              <option value="" data-i18n="optArpAllGateways">Tutti i gateway</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-small" onclick="arpClientSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
+            <i class="fa-solid fa-magnifying-glass"></i> Cerca
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="arpSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
+            <i class="fa-solid fa-rotate-left"></i> Reset
+          </button>
+          <span id="arpStats" class="chip" style="margin-left:auto;"></span>
         </div>
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpIp">IP (anche prefisso)</label>
-          <input id="arpSearchIp" class="ui-input" type="text" placeholder="10.0.0." style="width:140px;">
+
+        <div class="table-wrap">
+          <div id="arpResults" style="overflow-x:auto;"></div>
         </div>
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant/Sede</label>
-          <select id="arpFilterTenant" onchange="populateArpGatewayFilter(); arpClientSearch();" class="ui-input" style="width:160px; cursor:pointer;">
-            <option value="all" data-i18n="optArpAllTenants">Tutti i tenant</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
-          <select id="arpFilterGateway" onchange="arpClientSearch()" class="ui-input" style="width:200px; cursor:pointer;">
-            <option value="" data-i18n="optArpAllGateways">Tutti i gateway</option>
-          </select>
-        </div>
-        <button class="btn btn-primary btn-small" onclick="arpClientSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
-          <i class="fa-solid fa-magnifying-glass"></i> Cerca
-        </button>
-        <button class="btn btn-secondary btn-small" onclick="arpSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
-          <i class="fa-solid fa-rotate-left"></i> Reset
-        </button>
-        <span id="arpStats" style="margin-left:auto; font-size:12px; color:var(--text-muted);"></span>
       </div>
-
-      <div id="arpScanSummary" style="display:none; margin-bottom:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:12px;"></div>
-      <div id="arpResults" style="overflow-x:auto;"></div>
     </div>
 
     <!-- TAB: Config Analyzer -->
@@ -2607,13 +2674,26 @@
         btnCreateCategory: '<i class="fa-solid fa-plus"></i> Crea',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
         tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
+        macEyebrow: '<i class="fa-solid fa-location-crosshairs"></i> Rete',
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.",
+        macKpiSightingsLabel: "Avvistamenti",
+        macKpiUniqueLabel: "MAC Univoci",
+        macKpiSwitchesLabel: "Switch",
+        macKpiRetentionLabel: "Retention (giorni)",
+        titleMacScanPanel: "Scansione MAC",
+        titleMacSearchPanel: "Cerca MAC",
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
         tabFlows: '<i class="fa-solid fa-wave-square"></i> Flussi Live',
         titleFlows: 'Flussi Live (Top Talker)',
+        clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Rete',
         titleClientMap: "Client Map — MAC ↔ IP",
         descClientMap: "Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.",
+        arpKpiBindingsLabel: "Binding MAC↔IP",
+        arpKpiUniqueLabel: "MAC Univoci",
+        arpKpiGatewaysLabel: "Gateway",
+        titleArpCollectPanel: "Raccolta ARP (gateway L3)",
+        titleArpSearchPanel: "Cerca binding MAC ↔ IP",
         btnArpScan: '<i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)',
         lblArpIp: "IP (anche prefisso)",
         titleArpScanSummary: "Esito raccolta ARP",
@@ -3186,13 +3266,26 @@
         btnCreateCategory: '<i class="fa-solid fa-plus"></i> Create',
         tabSecurity: '<i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)',
         tabMacTracker: '<i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker',
+        macEyebrow: '<i class="fa-solid fa-location-crosshairs"></i> Network',
         titleMacTracker: "MAC Address Tracker",
         descMacTracker: "Search and history of MAC addresses across the infrastructure: on which switch, interface/port-channel and VLAN a device is (or was) connected.",
+        macKpiSightingsLabel: "Sightings",
+        macKpiUniqueLabel: "Unique MACs",
+        macKpiSwitchesLabel: "Switches",
+        macKpiRetentionLabel: "Retention (days)",
+        titleMacScanPanel: "MAC Scan",
+        titleMacSearchPanel: "Search MAC",
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
         tabFlows: '<i class="fa-solid fa-wave-square"></i> Flussi Live',
         titleFlows: 'Flussi Live (Top Talker)',
+        clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Network',
         titleClientMap: "Client Map — MAC ↔ IP",
         descClientMap: "MAC ↔ IP matching for network clients, read from the ARP tables of whoever routes the VLANs (L3 switch or firewall), cross-referenced with the access port detected by the MAC Tracker. Devices that don't route VLANs are skipped automatically.",
+        arpKpiBindingsLabel: "MAC↔IP bindings",
+        arpKpiUniqueLabel: "Unique MACs",
+        arpKpiGatewaysLabel: "Gateways",
+        titleArpCollectPanel: "ARP collection (L3 gateways)",
+        titleArpSearchPanel: "Search MAC ↔ IP bindings",
         btnArpScan: '<i class="fa-solid fa-satellite-dish"></i> Collect ARP (L3 gateways)',
         lblArpIp: "IP (prefix allowed)",
         titleArpScanSummary: "ARP collection result",
@@ -8903,6 +8996,11 @@
             if (el) el.textContent = currentLang==='en'
                 ? `${s.sightings} sightings · ${s.unique_macs} MAC · ${s.switches} switches · retention ${s.retention_days}d`
                 : `${s.sightings} avvistamenti · ${s.unique_macs} MAC · ${s.switches} switch · retention ${s.retention_days}g`;
+            // KPI tiles nella hero card: stessa risposta, nessuna chiamata aggiuntiva.
+            const kSight = document.getElementById('kpiMacSightings'); if (kSight) kSight.textContent = s.sightings;
+            const kUniq = document.getElementById('kpiMacUniqueMacs'); if (kUniq) kUniq.textContent = s.unique_macs;
+            const kSw = document.getElementById('kpiMacSwitches'); if (kSw) kSw.textContent = s.switches;
+            const kRet = document.getElementById('kpiMacRetention'); if (kRet) kRet.textContent = s.retention_days;
             const rin = document.getElementById('macRetentionDays');
             if (rin && (fillRetention || !rin.value)) rin.value = s.retention_days;
         } catch (e) {}
@@ -9111,6 +9209,10 @@
         if (el) el.innerText = (currentLang === 'en'
             ? `${s.bindings} bindings · ${s.unique_macs} MACs · ${s.sources} gateways`
             : `${s.bindings} binding · ${s.unique_macs} MAC · ${s.sources} gateway`);
+        // KPI tiles nella hero card: stessa risposta, nessuna chiamata aggiuntiva.
+        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = s.bindings;
+        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = s.unique_macs;
+        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = s.sources;
     }
 
     async function arpClientSearch() {
