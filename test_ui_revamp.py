@@ -471,5 +471,75 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestConfigAnalyzerTabRestyle(unittest.TestCase):
+    """Task 12: #tab-config (Config Analyzer) restyle + wiring guard.
+
+    The tab body is thin static markup (group filter, refresh, view pills, an
+    empty #caResults container); every table/accordion is rendered into
+    #caResults by loadConfigAnalyzer()->fetchConfigAnalyzer()->renderCaResults()
+    and its ca* helpers. So the preserve-IDs are the JS-touched containers/inputs
+    plus the raw-route modal those helpers write into.
+    """
+
+    def test_preserve_ids(self):
+        html = _html()
+        # configGroupSelect (filter), caPills (view switcher container queried by
+        # caSwitchView), caResults (render target). caRawRouteModal/Content are
+        # the modal caShowRawRoute()/caCloseRawRouteModal() write into.
+        for _id in ('configGroupSelect', 'caPills', 'caResults',
+                    'caRawRouteModal', 'caRawRouteContent'):
+            self.assertIn(f'id="{_id}"', html)
+        # onclick / onchange hooks preserved verbatim
+        for hook in ('loadConfigAnalyzer()', 'loadConfigAnalyzer(true)',
+                     "caSwitchView('vlan')", "caSwitchView('routing')",
+                     "caSwitchView('acl')", "caSwitchView('iface')",
+                     "caSwitchView('validation')", 'caCloseRawRouteModal()'):
+            self.assertIn(hook, html)
+        # the five view pills keep their data-view markers
+        for view in ('vlan', 'routing', 'acl', 'iface', 'validation'):
+            self.assertIn(f'data-view="{view}"', html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # fetchConfigAnalyzer() -> apiFetch('/api/config-analyzer?group='+...)
+        self.assertIn('/api/config-analyzer', html)
+        self.assertIn("apiFetch('/api/config-analyzer?group=", html)
+        # downloadBackup(ip) -> apiFetch(`/api/download-backup/${ip}`). This is
+        # a path-parameterized route; assert the literal prefix (matches the real
+        # template-literal call). The button lives in the inventory tab but is
+        # part of this tab's config/backup contract.
+        self.assertIn('/api/download-backup/', html)
+        self.assertIn('apiFetch(`/api/download-backup/${ip}`)', html)
+        # GET /api/config-analyzer/{ip} (per-device) is a real server route
+        # (config_analyzer_device) but has NO frontend caller in dashboard.html
+        # -- traced: the only frontend call is the group-scoped
+        # /api/config-analyzer?group=... ; the per-device path is consumed by
+        # mcp_server.py instead. Per Task 6-11 precedent, relax to asserting the
+        # server-side handler exists rather than fabricating a UI wiring.
+        self.assertNotIn('/api/config-analyzer/', html)
+        import app_server as _app_server
+        self.assertTrue(hasattr(_app_server, 'config_analyzer_device'))
+        self.assertTrue(hasattr(_app_server, 'config_analyzer_all'))
+        self.assertTrue(hasattr(_app_server, 'download_backup'))
+
+    def test_config_tab_uses_component_classes(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-config"')
+        tab_end = html.index('<!-- TAB: AI Assistant -->')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+                    'class="filterbar"', 'class="panel'):
+            self.assertIn(cls, tab_html)
+        # input-filter panel + results panel
+        self.assertGreaterEqual(tab_html.count('class="panel'), 2)
+        # render target untouched: still a bare div inside its panel
+        self.assertIn('<div id="caResults"></div>', tab_html)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('configEyebrow:', 'titleConfigAnalyzer:', 'descConfigAnalyzer:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
