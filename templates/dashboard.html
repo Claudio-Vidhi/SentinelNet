@@ -1428,27 +1428,34 @@
 
     <!-- TAB 5: Threat Intel (EUVD ENISA) -->
     <div id="tab-security" class="tab-content">
-      <div style="margin-bottom: 16px;">
-        <h3 data-i18n="titleThreatIntel">Vulnerability Matcher (EUVD ENISA)</h3>
-        <p style="font-size: 14px; color: var(--text-muted); margin-top: 5px;" data-i18n="descThreatIntel">
-          Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).
-        </p>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="threatEyebrow"><i class="fa-solid fa-shield-virus"></i> Sicurezza</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleThreatIntel">Vulnerability Matcher (EUVD ENISA)</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descThreatIntel">
+            Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).
+          </p>
+        </div>
       </div>
 
       <!-- Controlli: scelta sede + avvio manuale della scansione -->
-      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; padding:14px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px;">
-        <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
-        <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
-          <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
-        </select>
-        <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
-          <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
-          <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
-        </label>
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="filterbar" style="margin-top:0; align-items:center;">
+          <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
+          <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
+            <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
+            <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
+          </label>
+        </div>
       </div>
 
-      <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
-        <!-- Popolato in dinamico con i match delle vulnerabilità -->
+      <div class="panel">
+        <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
+          <!-- Popolato in dinamico con i match delle vulnerabilità -->
+        </div>
       </div>
     </div>
 
@@ -2853,9 +2860,10 @@
         legendPortChannel: "Link Port-Channel / LAG",
         
         // Tab 5
+        threatEyebrow: '<i class="fa-solid fa-shield-virus"></i> Sicurezza',
         titleThreatIntel: "Vulnerability Matcher (EUVD ENISA)",
         descThreatIntel: "Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).",
-        
+
         // Tab 6
         titleImportCsv: "Importazione Massiva da CSV",
         descImportCsv: "Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.",
@@ -3431,9 +3439,10 @@
         legendPortChannel: "Port-Channel / LAG Link",
         
         // Tab 5
+        threatEyebrow: '<i class="fa-solid fa-shield-virus"></i> Security',
         titleThreatIntel: "Vulnerability Matcher (EUVD ENISA)",
         descThreatIntel: "Checks in real time the firmware vulnerabilities detected on active devices by comparing them with the European Vulnerability Database (EUVD).",
-        
+
         // Tab 6
         titleImportCsv: "Bulk CSV Import",
         descImportCsv: "The CSV file must strictly contain the header specified below.",

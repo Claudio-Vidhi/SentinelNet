@@ -312,5 +312,47 @@ class TestCategoriesTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestThreatIntelTabRestyle(unittest.TestCase):
+    """Task 10: #tab-security (Threat Intel / EUVD ENISA) restyle + wiring guard."""
+
+    def test_preserve_ids(self):
+        html = _html()
+        # Preserve-ID list: result container used by loadThreatIntel() (via
+        # startThreatScan()), plus the filter controls that feed it.
+        for _id in ('threatGroupSelect', 'threatIncludeDiscovered', 'securityTriageContainer'):
+            self.assertIn(f'id="{_id}"', html)
+        # onclick hooks preserved verbatim
+        for hook in ('startThreatScan()',):
+            self.assertIn(hook, html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # loadThreatIntel() -> startThreatScan() -> apiFetch('/api/local-devices')
+        # to list online devices, then (if "include discovered" is checked)
+        # apiFetch('/api/network-map?group=...') for CDP/LLDP neighbors. Per-device
+        # "Analizza" clicks (runManagedVulnCheck/runDiscoveredVulnCheck) funnel into
+        # runEuvdQuery(), which hits the local EUVD proxy at '/api/search' -- this
+        # is the "external/EUVD path" the brief anticipated, but it does resolve to
+        # a real local endpoint (not a bare external URL), so it is asserted like
+        # any other contract endpoint rather than relaxed to a JS function name.
+        self.assertIn("apiFetch('/api/local-devices')", html)
+        self.assertIn("apiFetch('/api/network-map?group=", html)
+        self.assertIn("/api/search?", html)
+
+    def test_security_tab_uses_component_classes(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-security"')
+        tab_end = html.index('<!-- TAB: MAC Address Tracker')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"', 'class="filterbar"', 'class="panel'):
+            self.assertIn(cls, tab_html)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('threatEyebrow:', 'titleThreatIntel:', 'descThreatIntel:',
+                    'lblThreatGroup:', 'lblThreatDiscovered:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
