@@ -1799,20 +1799,15 @@
     </div>
 
     <div id="tab-config" class="tab-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:12px;">
-        <h3 data-i18n="titleConfigAnalyzer">Config Analyzer</h3>
-        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-          <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
-            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
-          </select>
-          <button class="btn btn-secondary btn-small" onclick="loadConfigAnalyzer(true)" style="width:auto; margin:0;" data-i18n="btnCaRefresh">
-            <i class="fa-solid fa-rotate"></i> Aggiorna
-          </button>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="configEyebrow"><i class="fa-solid fa-file-code"></i> Configurazioni</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleConfigAnalyzer">Config Analyzer</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descConfigAnalyzer">
+            Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.
+          </p>
         </div>
       </div>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descConfigAnalyzer">
-        Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.
-      </p>
 
       <style>
         #tab-config details.mac-switch > summary::-webkit-details-marker { display:none; }
@@ -1827,15 +1822,29 @@
         #tab-config .ca-route-map { height:220px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-top:8px; }
       </style>
 
-      <div id="caPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
-        <button class="ca-pill active" data-view="vlan" onclick="caSwitchView('vlan')" data-i18n="pillVlans">VLAN</button>
-        <button class="ca-pill" data-view="routing" onclick="caSwitchView('routing')" data-i18n="pillRouting">Routing</button>
-        <button class="ca-pill" data-view="acl" onclick="caSwitchView('acl')" data-i18n="pillAcls">ACL</button>
-        <button class="ca-pill" data-view="iface" onclick="caSwitchView('iface')" data-i18n="pillIfaces">Interfacce</button>
-        <button class="ca-pill" data-view="validation" onclick="caSwitchView('validation')" data-i18n="pillValidation">Validazione</button>
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
+          <div id="caPills" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="ca-pill active" data-view="vlan" onclick="caSwitchView('vlan')" data-i18n="pillVlans">VLAN</button>
+            <button class="ca-pill" data-view="routing" onclick="caSwitchView('routing')" data-i18n="pillRouting">Routing</button>
+            <button class="ca-pill" data-view="acl" onclick="caSwitchView('acl')" data-i18n="pillAcls">ACL</button>
+            <button class="ca-pill" data-view="iface" onclick="caSwitchView('iface')" data-i18n="pillIfaces">Interfacce</button>
+            <button class="ca-pill" data-view="validation" onclick="caSwitchView('validation')" data-i18n="pillValidation">Validazione</button>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+              <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+            </select>
+            <button class="btn btn-secondary btn-small" onclick="loadConfigAnalyzer(true)" style="width:auto; margin:0;" data-i18n="btnCaRefresh">
+              <i class="fa-solid fa-rotate"></i> Aggiorna
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div id="caResults"></div>
+      <div class="panel">
+        <div id="caResults"></div>
+      </div>
     </div>
 
     <!-- TAB: AI Assistant -->
@@ -2721,6 +2730,7 @@
         thMacFirst: "Primo avvistamento",
         thMacLast: "Ultimo avvistamento",
         tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
+        configEyebrow: '<i class="fa-solid fa-file-code"></i> Configurazioni',
         titleConfigAnalyzer: "Config Analyzer",
         descConfigAnalyzer: "Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.",
         tabAiAssistant: '<i class="fa-solid fa-robot"></i> AI Assistant',
@@ -3347,6 +3357,7 @@
         lblAiChatYou: "You",
         lblAiChatAssistant: "AI",
         tabConfigAnalyzer: '<i class="fa-solid fa-file-code"></i> Config Analyzer',
+        configEyebrow: '<i class="fa-solid fa-file-code"></i> Configurations',
         titleConfigAnalyzer: "Config Analyzer",
         descConfigAnalyzer: "Structured analysis of configurations: VLAN, routing, ACL and interfaces per device, with cross-object validation checks.",
         btnCaRefresh: '<i class="fa-solid fa-rotate"></i> Refresh',
