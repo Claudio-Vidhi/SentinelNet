@@ -691,6 +691,37 @@
     .role-pill-admin    { background: rgba(250,127,170,0.15); color: var(--danger);  border: 1px solid rgba(250,127,170,0.35); }
     .role-pill-operator { background: rgba(106,95,193,0.18);  color: #a99ff2;        border: 1px solid rgba(106,95,193,0.45); }
     .role-pill-viewer   { background: rgba(189,184,192,0.12); color: var(--text-muted); border: 1px solid rgba(189,184,192,0.3); }
+
+    /* ===== Revamp component layer (design-language modules) ===== */
+    .hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:18px}
+    .hero-card{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01)),var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:22px}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:rgba(194,239,78,.1);color:var(--lime);border:1px solid rgba(194,239,78,.16);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px}
+    .panel{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01)),var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:18px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+    .kpi{padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px)}
+    .kpi h4{margin:0;font-family:var(--font-display);font-size:17px}.kpi strong{display:block;margin-top:14px;font-family:var(--font-display);font-size:34px;letter-spacing:-.05em}
+    .filterbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .search-wrap{position:relative;min-width:260px;flex:1}.search-wrap>i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-soft)}
+    .table-wrap{margin-top:14px;overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface-2)}
+    .status{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:1px solid transparent}
+    .status.ok{background:rgba(87,217,135,.1);color:var(--success);border-color:rgba(87,217,135,.18)}
+    .status.warn{background:rgba(255,184,77,.1);color:var(--warning);border-color:rgba(255,184,77,.18)}
+    .status.bad{background:rgba(250,127,170,.1);color:var(--danger);border-color:rgba(250,127,170,.18)}
+    .led{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px}
+    .led-success{background:var(--success);box-shadow:0 0 10px rgba(87,217,135,.45)}
+    .led-warning{background:var(--warning);box-shadow:0 0 10px rgba(255,184,77,.45)}
+    .led-danger{background:var(--danger);box-shadow:0 0 10px rgba(250,127,170,.45)}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(169,159,242,.12);color:var(--primary);border:1px solid rgba(169,159,242,.18);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    .split-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .preview-badge{font-size:10px;font-weight:700;text-transform:uppercase;border-radius:999px;padding:3px 7px;letter-spacing:.05em;background:rgba(255,184,77,.16);color:var(--warning);border:1px solid rgba(255,184,77,.24)}
+    .count-badge{font-size:10px;font-weight:700;border-radius:999px;padding:3px 7px;background:rgba(169,159,242,.16);color:var(--primary);border:1px solid rgba(169,159,242,.24)}
+    .nav-group>h3{margin:14px 8px 8px;font-size:11px;color:var(--text-soft);text-transform:uppercase;letter-spacing:.08em}
+    .nav-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:11px 12px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--text-muted);text-align:left;font:inherit;font-size:14px;cursor:pointer;transition:all var(--transition,220ms)}
+    .nav-item:hover{color:var(--text);background:rgba(255,255,255,.05)}
+    .nav-item.active{color:var(--text);background:var(--surface-3);border-color:var(--border);box-shadow:inset 3px 0 0 var(--primary)}
+    .nav-item .nav-left{display:flex;align-items:center;gap:10px;min-width:0}
+    .nav-item .nav-left i{width:16px;text-align:center;color:var(--primary)}
+    @media (max-width:1200px){.hero,.kpi-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
