@@ -256,5 +256,61 @@ class TestTopologyTabRestyle(unittest.TestCase):
         self.assertIn('id="legendBody"', tab_html)
 
 
+class TestCategoriesTabRestyle(unittest.TestCase):
+    """Task 9: #tab-categories (Devices & Categories) restyle + wiring guard."""
+
+    def test_preserve_ids(self):
+        html = _html()
+        for _id in ('categoriesGroupSelect', 'categoriesCatFilter', 'catKeyList',
+                    'categoryColumnsMenu', 'categoryColumnsList', 'categoryCountCards',
+                    'categoriesDeviceList', 'btnSaveCatEdits', 'btnDiscardCatEdits',
+                    'newCatKey', 'newCatLabel', 'newSubcat'):
+            self.assertIn(f'id="{_id}"', html)
+        # onclick hooks preserved verbatim
+        for hook in ('renderCategoriesPanel()', 'saveCategoryEdits()', 'discardCategoryEdits()',
+                     'exportCategoriesCsv()', 'loadCategoriesData()', 'createCategory()'):
+            self.assertIn(hook, html)
+        # RBAC gating preserved on write-gated controls
+        self.assertIn('id="btnSaveCatEdits"', html)
+        save_start = html.index('id="btnSaveCatEdits"')
+        save_tag = html.rindex('<button', 0, save_start)
+        self.assertIn('requires-write', html[save_tag:save_start])
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # GET /api/device-classification -- loadCategoriesData()
+        self.assertIn('/api/device-classification', html)
+        # POST /api/device-categories/assign -- saveCategoryEdits()/confirmConflict()
+        self.assertIn('/api/device-categories/assign', html)
+        # POST /api/device-categories/delete -- deleteCategory()
+        self.assertIn('/api/device-categories/delete', html)
+        # POST /api/device-categories/delete-subcategory -- deleteSubcategory()
+        self.assertIn('/api/device-categories/delete-subcategory', html)
+        # Brief's contract table lists "GET /api/device-categories", but tracing
+        # createCategory() -> apiFetch("/api/device-categories", {method:"POST"...})
+        # and app_server.py confirms only @app.post("/api/device-categories") exists
+        # (create_device_category) -- there is no GET route. The bare path string
+        # is still asserted verbatim (it's how the frontend actually calls it);
+        # additionally assert the real server-side handler exists, per Task 6/7/8
+        # precedent, rather than fabricating a GET wiring that doesn't exist.
+        self.assertIn('"/api/device-categories"', html)
+        import app_server as _app_server
+        self.assertTrue(hasattr(_app_server, 'create_device_category'))
+
+    def test_categories_tab_uses_component_classes(self):
+        html = _html()
+        tab_start = html.index('<div id="tab-categories"')
+        tab_end = html.index('<!-- TAB 5: Threat Intel')
+        tab_html = html[tab_start:tab_end]
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"', 'class="filterbar"'):
+            self.assertIn(cls, tab_html)
+        self.assertGreaterEqual(tab_html.count('class="panel'), 4)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('categoriesEyebrow:', 'titleCategories:', 'descCategories:', 'titleNewCategory:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1351,44 +1351,54 @@
 
     <!-- TAB: Dispositivi & Categorie -->
     <div id="tab-categories" class="tab-content">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; gap: 15px; flex-wrap: wrap;">
-        <div style="display:flex; align-items:center; gap: 15px;">
-          <h3 data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h3>
-          <select id="categoriesGroupSelect" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
-            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
-          </select>
-          <select id="categoriesCatFilter" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
-            <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
-          </select>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button class="btn btn-primary btn-small requires-write" id="btnSaveCatEdits" onclick="saveCategoryEdits()" disabled style="width:auto; margin:0; background:var(--cta); color:var(--cta-text); opacity:0.5;" data-i18n="btnSaveEdits">
-            <i class="fa-solid fa-floppy-disk"></i> Salva Modifiche
-          </button>
-          <button class="btn btn-secondary btn-small requires-write" id="btnDiscardCatEdits" onclick="discardCategoryEdits()" disabled style="width:auto; margin:0; opacity:0.5;" data-i18n="btnDiscardEdits">
-            <i class="fa-solid fa-rotate-left"></i> Annulla
-          </button>
-          <details id="categoryColumnsMenu" style="position:relative;">
-            <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
-            <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
-          </details>
-          <button class="btn btn-secondary btn-small" onclick="exportCategoriesCsv()" style="width:auto; margin:0;" data-i18n="btnExportCsv">
-            <i class="fa-solid fa-file-csv"></i> Esporta CSV
-          </button>
-          <button class="btn btn-secondary btn-small" onclick="loadCategoriesData()" style="width:auto; margin:0;" data-i18n="btnRefreshCategories">
-            <i class="fa-solid fa-arrows-rotate"></i> Aggiorna
-          </button>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="categoriesEyebrow"><i class="fa-solid fa-shapes"></i> Inventario</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descCategories">
+            Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.
+          </p>
         </div>
       </div>
-      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descCategories">
-        Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.
-      </p>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
+          <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
+            <select id="categoriesGroupSelect" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+              <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+            </select>
+            <select id="categoriesCatFilter" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+              <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
+            </select>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-primary btn-small requires-write" id="btnSaveCatEdits" onclick="saveCategoryEdits()" disabled style="width:auto; margin:0; background:var(--cta); color:var(--cta-text); opacity:0.5;" data-i18n="btnSaveEdits">
+              <i class="fa-solid fa-floppy-disk"></i> Salva Modifiche
+            </button>
+            <button class="btn btn-secondary btn-small requires-write" id="btnDiscardCatEdits" onclick="discardCategoryEdits()" disabled style="width:auto; margin:0; opacity:0.5;" data-i18n="btnDiscardEdits">
+              <i class="fa-solid fa-rotate-left"></i> Annulla
+            </button>
+            <details id="categoryColumnsMenu" style="position:relative;">
+              <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
+              <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            </details>
+            <button class="btn btn-secondary btn-small" onclick="exportCategoriesCsv()" style="width:auto; margin:0;" data-i18n="btnExportCsv">
+              <i class="fa-solid fa-file-csv"></i> Esporta CSV
+            </button>
+            <button class="btn btn-secondary btn-small" onclick="loadCategoriesData()" style="width:auto; margin:0;" data-i18n="btnRefreshCategories">
+              <i class="fa-solid fa-arrows-rotate"></i> Aggiorna
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- Riquadri di conteggio per categoria -->
-      <div id="categoryCountCards" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;"></div>
+      <div class="panel" style="margin-bottom:18px;">
+        <div id="categoryCountCards" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;"></div>
+      </div>
 
       <!-- Creazione nuova categoria / sottocategoria (admin/operator) -->
-      <div class="requires-write" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+      <div class="panel requires-write" style="margin-bottom:18px;">
         <h4 style="font-size: 14px; margin-bottom: 10px;"><i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> <span data-i18n="titleNewCategory">Nuova Categoria / Sottocategoria</span></h4>
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items:end;">
           <div>
@@ -1411,7 +1421,9 @@
       </div>
 
       <!-- Lista dispositivi raggruppati per sede -->
-      <div id="categoriesDeviceList"></div>
+      <div class="panel">
+        <div id="categoriesDeviceList"></div>
+      </div>
     </div>
 
     <!-- TAB 5: Threat Intel (EUVD ENISA) -->
@@ -2568,6 +2580,7 @@
         tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Dispositivi & Categorie',
+        categoriesEyebrow: '<i class="fa-solid fa-shapes"></i> Inventario',
         titleCategories: 'Dispositivi Scoperti & Classificazione',
         descCategories: 'Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.',
         optCatAll: 'Tutte le categorie',
@@ -3145,6 +3158,7 @@
         tabMap: '<i class="fa-solid fa-link"></i> Port-Channel & Link',
         tabInteractive: '<i class="fa-solid fa-circle-nodes"></i> 2D Topology Map',
         tabCategories: '<i class="fa-solid fa-shapes"></i> Devices & Categories',
+        categoriesEyebrow: '<i class="fa-solid fa-shapes"></i> Inventory',
         titleCategories: 'Discovered Devices & Classification',
         descCategories: 'Per-category count of inventoried and CDP/LLDP-discovered devices. Operators and admins can manually reclassify devices and create new categories/subcategories.',
         optCatAll: 'All categories',
@@ -7231,10 +7245,12 @@
             const rows = byGroup[g].map(n => `<tr data-node="${attrEsc(n.id)}" class="${pendingEdits[n.id]?'row-dirty':''}">${cols.map(c => cellHtml(c, n)).join('')}</tr>`).join("");
             return `<div style="margin-bottom:18px;">
                 <h4 style="font-size:14px; margin-bottom:8px;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)} <span style="color:var(--text-muted); font-weight:400;">(${byGroup[g].length})</span></h4>
-                <table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
-                    <thead><tr style="background:var(--surface); text-align:left; font-size:11px; color:var(--text-muted); text-transform:uppercase;">${headHtml}</tr></thead>
+                <div class="table-wrap" style="margin-top:0;">
+                <table>
+                    <thead><tr>${headHtml}</tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
+                </div>
             </div>`;
         }).join("");
     }
