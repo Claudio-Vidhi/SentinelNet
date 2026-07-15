@@ -923,7 +923,10 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         html = _html()
         tab = self._tab(html)
         # The select is hidden, NOT removed: provVendorIsFgt() still reads it.
-        self.assertIn('<select id="provVendor" class="visually-hidden">', tab)
+        self.assertIn(
+            '<select id="provVendor" class="visually-hidden" aria-hidden="true" tabindex="-1">',
+            tab,
+        )
         self.assertIn("document.getElementById('provVendor')?.value === 'fortigate'", html)
         for value in ('value="cisco"', 'value="fortigate"'):
             self.assertIn(value, tab)
@@ -934,6 +937,49 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         # ...and reflect the select's value back (two-way sync).
         self.assertIn("chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value))", html)
         self.assertIn('provSyncVendorChips();', html)
+
+    def test_vendor_select_out_of_tab_order(self):
+        """W2 a11y fix: the hidden select is no longer a keyboard trap. Chips
+        are the sole accessible control -- the select must be pulled out of
+        the accessibility tree and the tab order, and no longer carry a
+        `for=` label association that would let a mouse click on the label
+        focus the invisible control."""
+        html = _html()
+        tab = self._tab(html)
+        select_tag = re.search(r'<select id="provVendor" class="visually-hidden"[^>]*>', tab).group(0)
+        self.assertIn('aria-hidden="true"', select_tag)
+        self.assertIn('tabindex="-1"', select_tag)
+        # The visible label must no longer point `for=` at the hidden select --
+        # it now only labels the chip group via aria-labelledby.
+        self.assertNotIn('for="provVendor"', tab)
+        self.assertIn('<label id="provVendorLabel" data-i18n="lblProvVendor">', tab)
+
+    def test_vendor_chips_expose_selected_state(self):
+        """The chips are the real control: each carries aria-pressed and it is
+        actually flipped (not a static true/false pair) whenever the vendor
+        selection changes."""
+        html = _html()
+        tab = self._tab(html)
+        # Radiogroup-like semantics: one labelled group, real <button>s (not
+        # divs/spans faking a control), each with an aria-pressed state.
+        self.assertIn('id="provVendorChips" role="group" aria-labelledby="provVendorLabel"', tab)
+        self.assertEqual(tab.count('<button type="button" class="chip chip-choice"'), 2,
+                          'both vendor chips must be real, focusable <button>s')
+        self.assertIn('data-vendor="cisco" aria-pressed="true"', tab)
+        self.assertIn('data-vendor="fortigate" aria-pressed="false"', tab)
+        # The state is not static markup: provSyncVendorChips() rewrites
+        # aria-pressed on every chip from the live select value, both on
+        # click and on init, so a re-sync (e.g. programmatic vendor change)
+        # keeps the exposed state correct.
+        self.assertIn(
+            "chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value))",
+            html,
+        )
+        self.assertIn('function provSyncVendorChips()', html)
+        self.assertIn('provSyncVendorChips();', html)  # called from provInitVendorChips()
+        # Visible focus indicator reuses design tokens (var(--primary)), not a
+        # new invented color.
+        self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}', html)
 
     def test_token_input_credential_hygiene(self):
         html = _html()
