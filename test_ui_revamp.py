@@ -2194,6 +2194,26 @@ class TestSidebarRail(unittest.TestCase):
         self.assertLessEqual(width, 80, "collapsed rail should be an icon rail (~72px)")
         self.assertGreaterEqual(width, 56, "rail must stay wide enough to click icons")
 
+    def test_collapsed_rail_hides_the_role_pill(self):
+        # .user-badge hides its label text with font-size:0, but .role-pill sets
+        # its own font-size:10px so it does NOT inherit that 0 -- uncollapsed it
+        # is fine, collapsed it rendered 114px wide inside a 72px rail and spilled
+        # out both sides (found in the browser gate, invisible to string asserts).
+        pill = re.search(r'^\s*\.role-pill\s*\{([^}]*)\}', self.css, re.M)
+        self.assertIsNotNone(pill, "could not isolate the .role-pill rule")
+        self.assertRegex(
+            pill.group(1), r'font-size:\s*\d',
+            "if .role-pill stops setting its own font-size this guard is moot")
+        self.assertRegex(
+            self.css,
+            r'body\.sidebar-collapsed\s+\.user-badge\s+\.role-pill\s*\{[^}]*display:\s*none',
+            "collapsed rail must explicitly hide the sidebar role pill")
+        # Scoped to .user-badge: .role-pill is reused in the users table and the
+        # client map, which must keep rendering while the rail is collapsed.
+        self.assertNotRegex(
+            self.css, r'body\.sidebar-collapsed\s+\.role-pill\s*\{',
+            "hiding .role-pill unscoped would also blank the table pills")
+
     def test_collapsed_state_is_desktop_only(self):
         # The <=1000px breakpoint stacks the sidebar full-width above the
         # content; an icon rail there would just be a full-width row of
