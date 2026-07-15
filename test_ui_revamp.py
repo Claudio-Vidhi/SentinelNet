@@ -1248,5 +1248,133 @@ class TestMcpTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestSettingsTabRestyle(unittest.TestCase):
+    """Task 19: #tab-settings restyle + wiring guard.
+
+    The tab body itself holds only ONE real input (cliBlacklistToggle); every
+    other setting is rendered into a container by a JS render function, so the
+    preserve-ID list below is enumerated from the JS (loadAppSettings and the
+    three render/save handlers it fans out to), not from the static markup:
+
+      renderAppSettings   -> netSettingsBody   : netHostSelect, netSettingsNotice
+      loadCliBlacklist*   -> (static)          : cliBlacklistToggle, cliBlacklistStatus
+      renderObsSettings   -> obsSettingsBody   : obs_enabled, obs_bind,
+                                                 obs_api_poll_s, obsSettingsError,
+                                                 obs_<l>_enabled / obs_<l>_port
+      renderAppAdvSettings-> appAdvBody        : appadv_<key> x7, appadv_no_browser,
+                                                 appAdvError
+
+    Some ids are built by interpolation (`obs_${l}_port`, `appadv_${f.key}`) so
+    they never appear literally in the served HTML; those are asserted via the
+    template form plus the driving array, which is what actually determines them.
+    """
+
+    def _tab(self, html):
+        start = html.index('<div id="tab-settings"')
+        return html[start:html.index("</main>", start)]
+
+    def test_preserve_ids_static(self):
+        html = _html()
+        for _id in ("netSettingsBody", "cliBlacklistToggle", "cliBlacklistStatus",
+                    "obsRestartBanner", "obsSettingsBody",
+                    "appAdvRestartBanner", "appAdvBody"):
+            self.assertIn(f'id="{_id}"', self._tab(html), f"lost preserve-ID {_id}")
+
+    def test_preserve_ids_rendered_by_js(self):
+        html = _html()
+        for _id in ("netHostSelect", "netSettingsNotice",
+                    "obs_enabled", "obs_bind", "obs_api_poll_s", "obsSettingsError",
+                    "appadv_no_browser", "appAdvError"):
+            self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
+
+    def test_preserve_interpolated_ids(self):
+        html = _html()
+        # obs_<listener>_enabled / obs_<listener>_port for all four listeners.
+        self.assertIn('id="obs_${l}_enabled"', html)
+        self.assertIn('id="obs_${l}_port"', html)
+        self.assertIn("const OBS_LISTENERS = ['ipfix', 'sflow', 'syslog', 'netflow'];", html)
+        # saveObsSettings() reads back the same interpolated ids.
+        self.assertIn("document.getElementById(`obs_${l}_enabled`)", html)
+        self.assertIn("document.getElementById(`obs_${l}_port`)", html)
+        # appadv_<key> for every APP_ADV_FIELDS entry.
+        self.assertIn('id="appadv_${f.key}"', html)
+        self.assertIn("document.getElementById(`appadv_${f.key}`)", html)
+        for key in ("port", "ssl_certfile", "ssl_keyfile", "cors_origins",
+                    "retention_flows_days", "retention_syslog_days",
+                    "retention_events_days"):
+            self.assertIn(f"key: '{key}'", html, f"lost APP_ADV_FIELDS entry {key}")
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # GET + POST for each of the brief's three contract endpoints.
+        self.assertIn("apiFetch('/api/settings/network')", html)
+        self.assertIn("apiFetch('/api/settings/network', {", html)
+        self.assertIn("apiFetch('/api/settings/app')", html)
+        self.assertIn("apiFetch('/api/settings/app', {", html)
+        self.assertIn("apiFetch('/api/settings/cli-blacklist')", html)
+        self.assertIn("apiFetch('/api/settings/cli-blacklist', {", html)
+        # The observability card is driven by a 4th endpoint the brief omits.
+        self.assertIn("apiFetch('/api/observability/config')", html)
+
+    def test_hooks_preserved(self):
+        html = _html()
+        for hook in ("loadAppSettings()", "saveAppSettings()",
+                     "saveCliBlacklistSetting()", "saveObsSettings()",
+                     "saveAppAdvSettings()"):
+            self.assertIn(hook, html)
+
+    def test_rbac_preserved(self):
+        html = _html()
+        self.assertIn(
+            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-settings', this)\"",
+            html)
+        # The observability and application panels stay admin-gated in-body,
+        # exactly as before the restyle (2 gates, no more, no fewer).
+        self.assertEqual(self._tab(html).count("requires-admin"), 2)
+        self.assertIn('class="panel requires-admin"', self._tab(html))
+        # Every loader is also role-gated server-side of the render.
+        self.assertIn("if (currentRole !== 'admin') return;", html)
+
+    def test_tab_uses_component_classes(self):
+        html = _html()
+        tab = self._tab(html)
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+            self.assertIn(cls, tab)
+        # Four one-concern cards: network exposure, command safety,
+        # observability, application (general).
+        self.assertEqual(tab.count("class=\"panel"), 4)
+
+    def test_i18n_icon_not_clobbered_by_innerhtml(self):
+        # applyI18n does `el.innerHTML = i18n[lang][key]`, so a data-i18n key
+        # whose value carries no icon markup must not sit on an element that
+        # wraps an <i> icon -- it would erase the icon on language switch.
+        # Card titles keep the icon outside and the key on an inner <span>.
+        tab = self._tab(_html())
+        for key in ("titleNetExpose", "titleCliBlacklist", "titleObsSettings",
+                    "titleAppAdvanced"):
+            self.assertIn(f'<span data-i18n="{key}">', tab)
+        self.assertNotIn('<h3 style="font-size:15px; margin-bottom:8px;" data-i18n=', tab)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ("settingsEyebrow:", "titleSettings:", "descSettingsHero:",
+                    "titleNetExpose:", "descNetExpose:", "titleCliBlacklist:",
+                    "descCliBlacklist:", "lblCliBlacklistOperators:",
+                    "titleObsSettings:", "descObsSettings:", "msgObsRestartRequired:",
+                    "titleAppAdvanced:", "descAppAdvanced:",
+                    "appAdvGrpServer:", "appAdvGrpRetention:", "appAdvGrpStartup:"):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+    def test_app_adv_fields_grouped_by_concern(self):
+        html = _html()
+        # The general card mixes three concerns; each field declares the
+        # subsection it renders under. Presentation only -- saveAppAdvSettings()
+        # still posts one combined payload to /api/settings/app.
+        self.assertEqual(html.count("grp: 'appAdvGrpServer'"), 4)
+        self.assertEqual(html.count("grp: 'appAdvGrpRetention'"), 3)
+        self.assertIn("subhead('appAdvGrpStartup', 'Avvio')", html)
+        self.assertIn("const L = i18n[currentLang];", html)
+
+
 if __name__ == "__main__":
     unittest.main()

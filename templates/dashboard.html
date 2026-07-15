@@ -2392,9 +2392,19 @@
     </div>
 
     <div id="tab-settings" class="tab-content">
-      <h3 data-i18n="titleSettings">Impostazioni</h3>
-      <div style="margin-top:16px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
-        <h3 style="font-size:15px; margin-bottom:8px;" data-i18n="titleNetExpose"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> Esposizione in rete</h3>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="settingsEyebrow"><i class="fa-solid fa-gear"></i> Amministrazione</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleSettings">Impostazioni</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descSettingsHero">
+            Configurazione dell'istanza, raggruppata per ambito: esposizione in rete, sicurezza dei comandi, telemetria e parametri applicativi. Le impostazioni contrassegnate richiedono il riavvio dell'applicazione; le variabili d'ambiente, se impostate, hanno sempre la precedenza.
+          </p>
+        </div>
+      </div>
+
+      <!-- Ambito: esposizione in rete -->
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> <span data-i18n="titleNetExpose">Esposizione in rete</span></h3>
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descNetExpose">
           Scegli su quale indirizzo SentinelNet resta in ascolto. 0.0.0.0 espone l'app su tutte le interfacce (raggiungibile dalla LAN); 127.0.0.1 la limita a questo PC.
         </p>
@@ -2402,8 +2412,10 @@
           <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
       </div>
-      <div style="margin-top:16px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
-        <h3 style="font-size:15px; margin-bottom:8px;" data-i18n="titleCliBlacklist"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Blacklist comandi CLI</h3>
+
+      <!-- Ambito: sicurezza dei comandi -->
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> <span data-i18n="titleCliBlacklist">Blacklist comandi CLI</span></h3>
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descCliBlacklist">
           Gli amministratori bypassano sempre la blacklist dei comandi distruttivi (i comandi restano tracciati nell'audit log). Qui decidi se applicarla agli operatori.
         </p>
@@ -2413,8 +2425,10 @@
         </label>
         <div id="cliBlacklistStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
       </div>
-      <div class="requires-admin" style="margin-top:16px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
-        <h3 style="font-size:15px; margin-bottom:8px;" data-i18n="titleObsSettings"><i class="fa-solid fa-satellite-dish" style="color:var(--primary);"></i> Observability (IPFIX/sFlow/syslog/NetFlow)</h3>
+
+      <!-- Ambito: observability (telemetria) -->
+      <div class="panel requires-admin" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-satellite-dish" style="color:var(--primary);"></i> <span data-i18n="titleObsSettings">Observability (IPFIX/sFlow/syslog/NetFlow)</span></h3>
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descObsSettings">
           Configura i listener di telemetria di rete. Le modifiche richiedono il riavvio dell'applicazione per avere effetto.
         </p>
@@ -2425,8 +2439,10 @@
           <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
       </div>
-      <div class="requires-admin" style="margin-top:16px; padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
-        <h3 style="font-size:15px; margin-bottom:8px;" data-i18n="titleAppAdvanced"><i class="fa-solid fa-sliders" style="color:var(--primary);"></i> Applicazione (avanzate)</h3>
+
+      <!-- Ambito: parametri applicativi (card generale: server/TLS, CORS, retention, avvio) -->
+      <div class="panel requires-admin">
+        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-sliders" style="color:var(--primary);"></i> <span data-i18n="titleAppAdvanced">Applicazione (avanzate)</span></h3>
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descAppAdvanced">
           Porta HTTP, TLS, CORS, retention dei dati observability e apertura automatica del browser. Le variabili d'ambiente, se impostate, hanno la precedenza. Le modifiche richiedono il riavvio dell'applicazione.
         </p>
@@ -3055,7 +3071,9 @@
         usersEyebrow: '<i class="fa-solid fa-users-gear"></i> Amministrazione',
         titleUsers: "Gestione Utenti e Privilegi",
         tabSettings: '<i class="fa-solid fa-gear"></i> Impostazioni',
+        settingsEyebrow: '<i class="fa-solid fa-gear"></i> Amministrazione',
         titleSettings: "Impostazioni",
+        descSettingsHero: "Configurazione dell'istanza, raggruppata per ambito: esposizione in rete, sicurezza dei comandi, telemetria e parametri applicativi. Le impostazioni contrassegnate richiedono il riavvio dell'applicazione; le variabili d'ambiente, se impostate, hanno sempre la precedenza.",
         titleNetExpose: "Esposizione in rete",
         descNetExpose: "Scegli su quale indirizzo SentinelNet resta in ascolto. 0.0.0.0 espone l'app su tutte le interfacce (raggiungibile dalla LAN); 127.0.0.1 la limita a questo PC.",
         lblNetHost: "Indirizzo attuale",
@@ -3155,6 +3173,9 @@
         thSlMsg: "Messaggio",
         msgNoSyslog: "Nessun evento syslog nel periodo selezionato.",
         titleAppAdvanced: "Applicazione (avanzate)",
+        appAdvGrpServer: "Server HTTP, TLS e CORS",
+        appAdvGrpRetention: "Retention dati observability",
+        appAdvGrpStartup: "Avvio",
         descAppAdvanced: "Porta HTTP, TLS, CORS, retention dei dati observability e apertura automatica del browser. Le variabili d'ambiente, se impostate, hanno la precedenza. Le modifiche richiedono il riavvio dell'applicazione.",
         lblAppPort: "Porta HTTP",
         lblAppSslCert: "Certificato TLS (percorso file)",
@@ -3665,7 +3686,9 @@
         titleUsers: "User & Privilege Management",
         descUsers: 'Create accounts with different privileges. <strong>Admin</strong>: full control and user management. <strong>Operator</strong>: all network operations (triage, commands, inventory). <strong>Viewer</strong>: read-only.',
         tabSettings: '<i class="fa-solid fa-gear"></i> Settings',
+        settingsEyebrow: '<i class="fa-solid fa-gear"></i> Administration',
         titleSettings: "Settings",
+        descSettingsHero: "Instance configuration, grouped by concern: network exposure, command safety, telemetry and application parameters. Settings marked as such require an application restart; environment variables, when set, always take precedence.",
         titleNetExpose: "Network exposure",
         descNetExpose: "Choose which address SentinelNet listens on. 0.0.0.0 exposes the app on all interfaces (reachable from the LAN); 127.0.0.1 restricts it to this PC only.",
         lblNetHost: "Current address",
@@ -3765,6 +3788,9 @@
         thSlMsg: "Message",
         msgNoSyslog: "No syslog events in the selected period.",
         titleAppAdvanced: "Application (advanced)",
+        appAdvGrpServer: "HTTP server, TLS and CORS",
+        appAdvGrpRetention: "Observability data retention",
+        appAdvGrpStartup: "Startup",
         descAppAdvanced: "HTTP port, TLS, CORS, observability data retention and automatic browser opening. Environment variables, when set, take precedence. Changes require an application restart.",
         lblAppPort: "HTTP port",
         lblAppSslCert: "TLS certificate (file path)",
@@ -8329,14 +8355,16 @@
 
     // --- IMPOSTAZIONI AVANZATE (sezione 'app', solo admin) ---
 
+    // 'grp' raggruppa i campi per ambito dentro la card generale (solo
+    // presentazione: il salvataggio resta un unico POST /api/settings/app).
     const APP_ADV_FIELDS = [
-        { key: 'port',                  type: 'number', lbl: 'lblAppPort' },
-        { key: 'ssl_certfile',          type: 'text',   lbl: 'lblAppSslCert' },
-        { key: 'ssl_keyfile',           type: 'text',   lbl: 'lblAppSslKey' },
-        { key: 'cors_origins',          type: 'text',   lbl: 'lblAppCors' },
-        { key: 'retention_flows_days',  type: 'number', lbl: 'lblAppRetFlows' },
-        { key: 'retention_syslog_days', type: 'number', lbl: 'lblAppRetSyslog' },
-        { key: 'retention_events_days', type: 'number', lbl: 'lblAppRetEvents' },
+        { key: 'port',                  type: 'number', lbl: 'lblAppPort',      grp: 'appAdvGrpServer' },
+        { key: 'ssl_certfile',          type: 'text',   lbl: 'lblAppSslCert',   grp: 'appAdvGrpServer' },
+        { key: 'ssl_keyfile',           type: 'text',   lbl: 'lblAppSslKey',    grp: 'appAdvGrpServer' },
+        { key: 'cors_origins',          type: 'text',   lbl: 'lblAppCors',      grp: 'appAdvGrpServer' },
+        { key: 'retention_flows_days',  type: 'number', lbl: 'lblAppRetFlows',  grp: 'appAdvGrpRetention' },
+        { key: 'retention_syslog_days', type: 'number', lbl: 'lblAppRetSyslog', grp: 'appAdvGrpRetention' },
+        { key: 'retention_events_days', type: 'number', lbl: 'lblAppRetEvents', grp: 'appAdvGrpRetention' },
     ];
 
     async function loadAppAdvSettings() {
@@ -8353,10 +8381,15 @@
         if (!box) return;
         const L = i18n[currentLang];
         const s = d.settings || {}, env = d.env_overrides || {}, def = d.defaults || {};
+        const subhead = (key, fallback) =>
+            `<div style="margin-top:10px; margin-bottom:6px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="${key}">${escapeHtml(L[key] || fallback)}</div>`;
+        let lastGrp = null;
         const rows = APP_ADV_FIELDS.map(f => {
             const over = env[f.key];
             const envNote = over ? `<span style="font-size:11px; color:var(--warning);"> ${escapeHtml(L.msgEnvOverride || 'Sovrascritto da variabile d\'ambiente')}</span>` : '';
-            return `
+            let hdr = '';
+            if (f.grp !== lastGrp) { hdr = subhead(f.grp, f.grp); lastGrp = f.grp; }
+            return `${hdr}
             <div class="form-group" style="max-width:420px;">
                 <label data-i18n="${f.lbl}">${escapeHtml(L[f.lbl] || f.key)}</label>${envNote}
                 <input id="appadv_${f.key}" type="${f.type}" ${f.type === 'number' ? 'min="1"' : ''} ${over ? 'disabled' : ''}
@@ -8366,6 +8399,7 @@
         }).join('');
         box.innerHTML = `
             ${rows}
+            ${subhead('appAdvGrpStartup', 'Avvio')}
             <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:14px;">
                 <input type="checkbox" id="appadv_no_browser" ${s.no_browser ? 'checked' : ''} ${env.no_browser ? 'disabled' : ''}>
                 <span style="font-size:13px;" data-i18n="lblAppNoBrowser">${escapeHtml(L.lblAppNoBrowser || 'Non aprire il browser all\'avvio')}</span>
