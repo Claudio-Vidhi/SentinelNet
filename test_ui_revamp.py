@@ -984,5 +984,87 @@ class TestImportTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestUsersTabRestyle(unittest.TestCase):
+    """Task 16: #tab-users (User & Privilege Management) restyle guard.
+
+    Admin-only tab: users table (role select, per-user tenant-scope editor,
+    per-user allowed-tabs editor, disable/delete) + a create-user form.
+    """
+
+    def _tab(self, html):
+        start = html.index('<div id="tab-users"')
+        end = html.index('<div id="tab-sites"')
+        return html[start:end]
+
+    def test_preserve_ids(self):
+        html = _html()
+        # usersTableBody (brief) + the create-user form fields read directly
+        # by createUser().
+        for _id in ('usersTableBody', 'newUserName', 'newUserPass', 'newUserRole'):
+            self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # GET /api/users (list) and POST /api/users (create) share one literal.
+        self.assertIn("apiFetch('/api/users')", html)
+        self.assertIn("apiFetch('/api/users', {", html)
+        for endpoint in ('/api/users/delete', '/api/users/disable', '/api/users/role',
+                          '/api/users/groups', '/api/users/tabs'):
+            self.assertIn(endpoint, html)
+        # Brief lists "GET /api/users/groups" and "GET/POST /api/users/tabs",
+        # but app_server.py defines ONLY POST for both -- confirmed by tracing
+        # app_server.py (@app.post("/api/users/groups"), @app.post("/api/users/tabs"),
+        # no matching @app.get). There is no separate read endpoint: the scope
+        # (u.groups) and allowed-tabs (u.allowed_tabs) data ride along on the
+        # single GET /api/users listing consumed by renderUsersTable(). Per
+        # shared per-tab rules, relaxed to asserting the real POST routes
+        # exist server-side rather than fabricating a GET call that isn't made.
+        import app_server as _app_server
+        routes = {(r.path, m) for r in _app_server.app.routes
+                  for m in getattr(r, 'methods', set()) or set()}
+        self.assertIn(('/api/users/groups', 'POST'), routes)
+        self.assertIn(('/api/users/tabs', 'POST'), routes)
+        self.assertNotIn(('/api/users/groups', 'GET'), routes)
+        self.assertNotIn(('/api/users/tabs', 'GET'), routes)
+
+    def test_admin_gated_functions_untouched(self):
+        html = _html()
+        # loadUsers() and all mutating handlers must survive byte-for-byte.
+        self.assertIn("async function loadUsers()", html)
+        self.assertIn("if (currentRole !== 'admin') return;", html)
+        for hook in ('createUser()', 'deleteUser(', 'toggleUserDisabled(',
+                      'changeUserRole(', 'saveUserGroups(', 'saveUserTabs(', 'markTabsDirty('):
+            self.assertIn(hook, html)
+
+    def test_rbac_preserved(self):
+        html = _html()
+        # Precedent from Task 14/15 (provisioner/import): the tab is gated at
+        # the nav entry, so the tab body itself carries no requires-admin gate.
+        self.assertIn(
+            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-users', this)\"",
+            html)
+        tab = self._tab(html)
+        self.assertNotIn('requires-admin', tab)
+
+    def test_tab_uses_component_classes(self):
+        html = _html()
+        tab = self._tab(html)
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+                    'class="table-wrap"'):
+            self.assertIn(cls, tab)
+        # users-table panel + create-user-form panel
+        self.assertEqual(tab.count('class="panel"'), 2)
+        self.assertNotIn('table-container', tab)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('usersEyebrow:', 'titleUsers:', 'descUsers:', 'thUserName:',
+                    'thUserRole:', 'thUserGroups:', 'thUserTabs:', 'thUserActions:',
+                    'titleAddUser:', 'lblNewUserName:', 'lblNewUserPass:',
+                    'lblNewUserRole:', 'roleViewer:', 'roleOperator:', 'roleAdmin:',
+                    'btnAddUser:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
