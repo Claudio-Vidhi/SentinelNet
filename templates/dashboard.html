@@ -219,7 +219,7 @@
       font-size: 14px;
     }
 
-    .form-group input, .form-group select {
+    .form-group input:not([type="checkbox"]):not([type="radio"]), .form-group select {
       width: 100%;
       padding: 10px 12px 10px 36px;
       border-radius: 8px;
@@ -967,32 +967,43 @@
             </div>
           </div>
 
-          <!-- §11.6: trasporti per-device (checkbox + porta per protocollo) -->
+          <!-- §11.6: trasporti per-device (checkbox + porta per protocollo).
+               Collassato di default; il riepilogo mostra i protocolli abilitati
+               e si espande da solo in modifica se il device non usa i default
+               (solo SSH:22) -- vedi setTransportsForm(). -->
           <div class="form-group">
             <label data-i18n="lblTransports">Protocolli di connessione</label>
-            <div id="devTransports" style="border-left: 2px solid var(--border); padding-left: 10px;">
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
-                <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
-                <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
+            <details id="devTransports" style="border:1px solid var(--border); border-radius:8px; background:var(--surface-2); overflow:hidden;">
+              <summary style="list-style:none; cursor:pointer; padding:8px 10px; font-size:13px; font-weight:700; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-plug"></i>
+                <span data-i18n="lblTransportsEnabled">Abilitati:</span>
+                <span id="devTransportsSummary" style="color:var(--text);">SSH:22</span>
+                <i class="fa-solid fa-caret-down" style="font-size:11px; margin-left:auto;"></i>
+              </summary>
+              <div style="padding:10px; border-top:1px solid var(--border);">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                  <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
+                  <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
+                  <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                  <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
+                  <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
+                  <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
+                </div>
+                <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="display:none; color: var(--danger, #c0392b); font-size: 12px; margin-bottom:6px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                  <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
+                  <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
+                  <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
+                  <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
+                  <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
+                </div>
               </div>
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
-                <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
-                <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
-              </div>
-              <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="display:none; color: var(--danger, #c0392b); font-size: 12px; margin-bottom:6px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
-              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
-                <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
-                <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
-              </div>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
-                <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
-                <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
-              </div>
-            </div>
+            </details>
           </div>
 
           <div class="form-group">
@@ -2692,6 +2703,8 @@
         lblIp: "IP Apparato",
         lblSshPort: "Porta SSH",
         lblTransports: "Protocolli di connessione",
+        lblTransportsEnabled: "Abilitati:",
+        lblTransportsNone: "Nessuno abilitato",
         lblTelnetWarn: "Attenzione: Telnet trasmette le credenziali in chiaro.",
         lblVendor: "Vendor Engine",
         lblProfile: "Profilo Credenziali",
@@ -3310,6 +3323,8 @@
         lblIp: "Device IP",
         lblSshPort: "SSH Port",
         lblTransports: "Connection protocols",
+        lblTransportsEnabled: "Enabled:",
+        lblTransportsNone: "None enabled",
         lblTelnetWarn: "Warning: Telnet transmits credentials in cleartext.",
         lblVendor: "Vendor Engine",
         lblProfile: "Credentials Profile",
@@ -4620,13 +4635,34 @@
 
     // §11.6: gestione trasporti per-device (checkbox + porta per protocollo).
     const TRANSPORT_PROTOS = ['ssh', 'telnet', 'netconf', 'restconf'];
+    const TRANSPORT_LABELS = { ssh: 'SSH', telnet: 'Telnet', netconf: 'NETCONF', restconf: 'RESTCONF' };
     const _trCap = (p) => p.charAt(0).toUpperCase() + p.slice(1);
 
     function updateTelnetWarn() {
         const on = document.getElementById('trTelnetEnabled').checked;
         document.getElementById('trTelnetWarn').style.display = on ? 'block' : 'none';
     }
+
+    // Riepilogo mostrato nel <summary> del pannello collassabile #devTransports
+    // (es. "SSH:22, NETCONF:830"), tenuto allineato ad ogni modifica di
+    // checkbox/porta. Nessun data-i18n qui dentro: i nomi dei protocolli non
+    // si traducono, quindi changeLanguage() non deve toccare questo nodo.
+    function updateTransportsSummary() {
+        const parts = [];
+        for (const p of TRANSPORT_PROTOS) {
+            if (!document.getElementById('tr' + _trCap(p) + 'Enabled').checked) continue;
+            const port = document.getElementById('tr' + _trCap(p) + 'Port').value.trim();
+            parts.push(TRANSPORT_LABELS[p] + (port ? ':' + port : ''));
+        }
+        document.getElementById('devTransportsSummary').textContent =
+            parts.length ? parts.join(', ') : i18n[currentLang].lblTransportsNone;
+    }
+
     document.getElementById('trTelnetEnabled').addEventListener('change', updateTelnetWarn);
+    for (const p of TRANSPORT_PROTOS) {
+        document.getElementById('tr' + _trCap(p) + 'Enabled').addEventListener('change', updateTransportsSummary);
+        document.getElementById('tr' + _trCap(p) + 'Port').addEventListener('input', updateTransportsSummary);
+    }
 
     // Legge il form in una mappa {protocollo: porta|null} coi soli protocolli abilitati.
     function readTransportsForm() {
@@ -4654,6 +4690,15 @@
                 (enabled && map[p]) ? map[p] : defaults[p];
         }
         updateTelnetWarn();
+        updateTransportsSummary();
+        // Auto-espandi il pannello se il device non usa i default (solo SSH:22):
+        // mai nascondere uno stato non-standard all'utente.
+        const isDefaultState = document.getElementById('trSshEnabled').checked
+            && document.getElementById('trSshPort').value === '22'
+            && !document.getElementById('trTelnetEnabled').checked
+            && !document.getElementById('trNetconfEnabled').checked
+            && !document.getElementById('trRestconfEnabled').checked;
+        document.getElementById('devTransports').open = !isDefaultState;
     }
 
     document.getElementById('btnSaveDevice').addEventListener('click', async () => {
