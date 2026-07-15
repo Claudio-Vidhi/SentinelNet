@@ -2043,9 +2043,12 @@
       <!-- Tipo apparato: chip selector. Il <select id="provVendor"> resta la FONTE
            DI VERITÀ (lo leggono provVendorIsFgt/provPayloadAndBase): è solo nascosto
            visivamente, non rimosso. I chip ne impostano .value e dispatchano un vero
-           evento 'change', così tutto il wiring vendor esistente resta invariato. -->
+           evento 'change', così tutto il wiring vendor esistente resta invariato.
+           I chip sono l'UNICO controllo accessibile: il select è aria-hidden e fuori
+           dal tab order (tabindex="-1"), così un utente da tastiera non finisce mai
+           su un controllo invisibile (WCAG 2.4.7). -->
       <div class="form-group" style="max-width:560px;">
-        <label id="provVendorLabel" for="provVendor" data-i18n="lblProvVendor">Tipo apparato</label>
+        <label id="provVendorLabel" data-i18n="lblProvVendor">Tipo apparato</label>
         <div id="provVendorChips" role="group" aria-labelledby="provVendorLabel" style="display:flex; gap:8px; flex-wrap:wrap;">
           <button type="button" class="chip chip-choice" data-vendor="cisco" aria-pressed="true">
             <i class="fa-solid fa-network-wired"></i><span data-i18n="chipVendorCisco">Switch Cisco (IOS/IOS-XE)</span>
@@ -2054,7 +2057,7 @@
             <i class="fa-solid fa-shield-halved"></i><span data-i18n="chipVendorFortigate">Firewall FortiGate (FortiOS)</span>
           </button>
         </div>
-        <select id="provVendor" class="visually-hidden">
+        <select id="provVendor" class="visually-hidden" aria-hidden="true" tabindex="-1">
           <option value="cisco">Switch Cisco (IOS/IOS-XE)</option>
           <option value="fortigate">Firewall FortiGate (FortiOS)</option>
         </select>
