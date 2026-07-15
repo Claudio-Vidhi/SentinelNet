@@ -657,7 +657,10 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
     def test_mac_and_clientmap_tabs_use_component_classes(self):
         html = _html()
         tab_start = html.index('<div id="tab-mac"')
-        tab_end = html.index('<!-- TAB: Config Analyzer')
+        # Bound on the next tab's own div, not on a comment: the comment that
+        # used to sit here was mislabelled ("Config Analyzer" above #tab-flows)
+        # and Task 20 corrected it, which silently broke this slice.
+        tab_end = html.index('<div id="tab-flows"')
         tab_html = html[tab_start:tab_end]
         for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"', 'class="filterbar"', 'class="table-wrap"'):
             self.assertIn(cls, tab_html)
@@ -1374,6 +1377,180 @@ class TestSettingsTabRestyle(unittest.TestCase):
         self.assertEqual(html.count("grp: 'appAdvGrpRetention'"), 3)
         self.assertIn("subhead('appAdvGrpStartup', 'Avvio')", html)
         self.assertIn("const L = i18n[currentLang];", html)
+
+
+class TestLiveFlowsTabRestyle(unittest.TestCase):
+    """Task 20: #tab-flows (Live Flows) restyle + English relabel + wiring guard.
+
+    Client Map (#tab-clientmap) was already restyled in Task 11 and is guarded
+    by TestMacTrackerTabRestyle; this class covers Live Flows only, plus one
+    structural guard for the Client Map tenant filter (see the last test).
+
+    Most of this tab's controls are rendered from JS (renderFlowsThead,
+    renderFlowsTable, renderSyslogTable, renderFlowsSourceChips, loadAnomalies),
+    so the preserve-ID list is enumerated from that JS, not from static markup.
+    """
+
+    def _tab(self, html):
+        # #flowDetailPanel is a fixed-position sibling that follows the tab body.
+        start = html.index('<div id="tab-flows"')
+        return html[start:html.index('<div id="flowDetailPanel"', start)]
+
+    def test_preserve_ids(self):
+        html = _html()
+        for _id in ('flowsTableHead', 'flowsTableBody', 'anomTableBody',
+                    'flowsWindow', 'flowsMetric', 'flowsTenantBtn',
+                    'flowsTenantDropdown', 'flowsTenantAll', 'flowsTenantList',
+                    'flowsAutoRefresh', 'flowsLastUpdate', 'flowsObsBanner',
+                    'flowsAiNote', 'flowsSourceChips', 'flowsColsBtn',
+                    'flowsColsDropdown', 'anomStatus', 'anomIpFilterChip',
+                    'flowDetailPanel', 'flowDetailPanelBody'):
+            self.assertIn(f'id="{_id}"', html)
+        for hook in ('flowsTabShown()', 'loadTopTalkers()', 'loadAnomalies()',
+                     'toggleFlowsTenantDropdown()', 'toggleFlowsTenantAll()',
+                     'toggleFlowsColsDropdown()', 'analyzeFlowsWithAi()',
+                     'clearAnomIpFilter()', 'closeFlowDetailPanel()'):
+            self.assertIn(hook, html)
+        # Ids created only by JS (never literal in the static markup).
+        for _id in ('flowsSelectAll',):
+            self.assertIn(f"id=\\\"{_id}\\\"", html.replace('"', '\\"'))
+        # RBAC: the two AI actions stay write-gated.
+        idx = html.index('analyzeFlowsWithAi()')
+        self.assertIn('requires-write', html[html.rindex('<button', 0, idx):idx])
+        self.assertIn('class="btn requires-write" style="text-align:left;" '
+                      'onclick="analyzeSingleFlowWithAi()"', html)
+        # Anomaly transitions stay write-gated.
+        self.assertIn('<button class="btn requires-write" style="font-size:11px; '
+                      'padding:3px 8px;" onclick="anomTransition(', html)
+
+    def test_source_filter_chips_and_column_toggle_survive(self):
+        html = _html()
+        # Source chips (incl. the syslog view) are data-driven; the array is
+        # what actually determines the chips, so assert the array itself.
+        self.assertIn("const FLOWS_SOURCES = ['all', 'netflow', 'ipfix', 'sflow', 'syslog'];", html)
+        self.assertIn("function renderFlowsSourceChips()", html)
+        self.assertIn('onclick="setFlowsSource(', html)
+        # Syslog view swaps thead + tbody renderers.
+        self.assertIn("if (_flowsSource === 'syslog')", html)
+        self.assertIn("function renderSyslogTable()", html)
+        # Column-visibility toggle + its persistence.
+        self.assertIn("const FLOW_TOGGLE_COLS = [", html)
+        self.assertIn("onchange=\"toggleFlowsCol('${c.id}', this.checked)\"", html)
+        self.assertIn("localStorage.setItem('sentinelnet_flows_hidden_cols'", html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        for ep in ('/api/observability/top?window=',
+                   '/api/observability/syslog?window=',
+                   '/api/observability/anomalies?status=',
+                   '/api/observability/anomalies/${id}/status',
+                   '/api/observability/health'):
+            self.assertIn(ep, html)
+
+    def test_english_relabel(self):
+        html = _html()
+        tab = self._tab(html)
+        # EN default in the markup...
+        self.assertIn('data-i18n="titleFlows">Live Flows (Top Talkers)', tab)
+        self.assertNotIn('Flussi Live', tab)
+        # ...EN canonical in the en map, Italian retained in the it map.
+        self.assertIn("titleFlows: 'Live Flows (Top Talkers)',", html)
+        self.assertIn("titleFlows: 'Flussi Live (Top Talker)',", html)
+        self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Live Flows\',', html)
+        self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Flussi Live\',', html)
+
+    def test_no_hardcoded_italian_left_in_tab(self):
+        tab = self._tab(_html())
+        # Strings that previously shipped without a data-i18n key.
+        self.assertNotIn('>Dettaglio flusso<', _html())
+        self.assertNotIn('title="Chiudi"', _html())
+        self.assertNotIn('title="Evidenzia nella topologia"', _html())
+        # ...now routed through keys / the file's existing `const L` pattern.
+        self.assertIn('data-i18n="titleFlowDetail"', _html())
+        self.assertIn('data-i18n-title="titleClose"', _html())
+        self.assertIn("const hlTitle = escapeHtml(L.titleHighlightTopology", _html())
+        # Every remaining user-visible string in the tab body carries a key.
+        self.assertNotIn('Anomalie correlate', tab)
+
+    def test_component_classes_applied(self):
+        tab = self._tab(_html())
+        self.assertIn('<div class="hero" style="grid-template-columns:1fr;', tab)
+        self.assertIn('<span class="eyebrow" data-i18n="flowsEyebrow"', tab)
+        # Two cards: top talkers, then correlated anomalies.
+        self.assertEqual(tab.count('<div class="panel"'), 2)
+        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;">'), 1)
+        # Both tables wrapped.
+        self.assertEqual(tab.count('class="table-wrap"'), 2)
+        self.assertIn('class="filterbar"', tab)
+        self.assertIn('id="anomIpFilterChip" class="chip"', tab)
+        # Severity/status badges use the component status/chip classes.
+        html = _html()
+        self.assertIn('<span class="status ${sevClass(s)}">', html)
+        self.assertIn('`<span class="status ok">${escapeHtml(st)}</span>`', html)
+        # Preview badge in the sidebar survives (Task 2).
+        nav = html[html.index("switchTab('tab-flows'"):]
+        self.assertIn('<span class="preview-badge">preview</span>', nav[:400])
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ("tabFlows:", "titleFlows:", "descFlows:", "flowsEyebrow:",
+                    "titleFlowDetail:", "titleClose:", "titleHighlightTopology:",
+                    "titleCorrelatedAnomalies:", "chipAllSources:", "msgNoFlows:",
+                    "msgNoSyslog:", "msgNoAnomalies:"):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+    def test_anomalies_scroll_anchor_is_explicit(self):
+        """jumpToAnomaliesForFlow() used to scroll via `#tab-flows h4`, i.e. the
+        FIRST h4 in the tab -- which was the anomalies heading only by accident of
+        source order. The restyle promotes that heading to <h3> inside a .panel,
+        which would have silently made the selector match nothing (`?.` swallows
+        it) and killed the flow-detail -> anomalies jump. Anchor it to an id."""
+        html = _html()
+        self.assertIn('id="anomSectionTitle"', html)
+        self.assertIn("document.getElementById('anomSectionTitle')?.scrollIntoView(", html)
+        self.assertNotIn("querySelector('#tab-flows h4')", html)
+
+    def test_clientmap_tenant_filter_drives_grouped_and_rows_from_one_path(self):
+        """Task 20 brief lists a 'known bug': the Client Map tenant filter is
+        said to update the grouped results but not the row details.
+
+        IT DOES NOT REPRODUCE -- the structure makes it impossible, and this
+        test pins that structure so a future refactor cannot reintroduce it:
+
+          #arpFilterTenant onchange -> populateArpGatewayFilter(); arpClientSearch();
+          arpClientSearch()  -> ONE server-filtered GET /api/arp/client-map
+                             -> renderArpResults(d.results)
+          renderArpResults() -> derives BOTH the per-tenant grouping (byTenant)
+                                and the detail rows (rowHtml) from the SAME rows
+                                array, in the SAME `box.innerHTML =` write.
+
+        There is exactly one Client Map results container (#arpResults) and no
+        separate row-details element, so grouping and rows cannot diverge.
+
+        LIMIT: no test here executes JS, so this asserts the *source wiring*,
+        not runtime behaviour. It proves the single-render-path property that
+        makes the reported bug unrepresentable; it cannot prove the rendered
+        DOM is correct. Runtime confirmation is the manual gate's job.
+        """
+        html = _html()
+        # One filter-application path: the tenant filter reconciles the gateway
+        # list and then re-runs the single search.
+        self.assertIn('onchange="populateArpGatewayFilter(); arpClientSearch();"', html)
+        # The tenant is applied SERVER-side, on the one fetch the renderer feeds on.
+        search = html[html.index('async function arpClientSearch()'):
+                      html.index('function arpSearchReset()')]
+        self.assertIn("params.set('tenant', tenant)", search)
+        self.assertEqual(search.count("apiFetch('/api/arp/client-map?"), 1)
+        self.assertEqual(search.count('renderArpResults('), 1)
+        # The renderer derives grouping AND rows from the same `rows` argument.
+        render = html[html.index('function renderArpResults(rows)'):
+                      html.index('function renderMacResults(rows)')]
+        self.assertIn('rows.forEach(r => {', render)      # byTenant grouping
+        self.assertIn('byTenant[t].map(rowHtml)', render)  # rows, same source
+        self.assertIn("table(rows.map(rowHtml).join(''))", render)
+        # Exactly one results sink; no second detail container to fall stale.
+        self.assertEqual(html.count('id="arpResults"'), 1)
+        self.assertEqual(render.count("getElementById('arpResults')"), 1)
 
 
 if __name__ == "__main__":

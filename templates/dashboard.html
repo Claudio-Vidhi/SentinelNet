@@ -1699,14 +1699,22 @@
       </div>
     </div>
 
-    <!-- TAB: Config Analyzer -->
+    <!-- TAB: Live Flows -->
     <div id="tab-flows" class="tab-content">
-      <h3 data-i18n="titleFlows">Flussi Live (Top Talker)</h3>
-      <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;" data-i18n="descFlows">
-        Flussi di rete aggregati (IPFIX/NetFlow/sFlow) per sede, con anomalie correlate agli eventi di sicurezza. I listener si abilitano via variabili d'ambiente (vedi docs/HARDENING.md).
-      </p>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="flowsEyebrow"><i class="fa-solid fa-wave-square"></i> Observability</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleFlows">Live Flows (Top Talkers)</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descFlows">
+            Aggregated network flows (IPFIX/NetFlow/sFlow) per site, with anomalies correlated to security events. Listeners are configured in Settings → Observability.
+          </p>
+        </div>
+      </div>
+
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, #e0a800); border-radius:8px; color:var(--warning, #e0a800); font-size:13px;"></div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="filterbar" style="align-items:center; margin-top:0;">
         <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
           <option value="1h" data-i18n="optWin1h">Ultima ora</option>
@@ -1740,29 +1748,31 @@
         <button class="btn requires-write" onclick="analyzeFlowsWithAi()" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
           <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
         </button>
-      </div>
-      <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, #e0a800); margin-bottom:10px;"></div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
-        <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
-        <div style="position:relative; display:inline-block; margin-left:auto;">
-          <button id="flowsColsBtn" class="btn btn-small" onclick="toggleFlowsColsDropdown()" style="padding:6px 12px;">
-            <i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span>
-          </button>
-          <div id="flowsColsDropdown" style="display:none; position:absolute; top:100%; right:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:180px; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1); padding:8px;"></div>
+        </div>
+        <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, #e0a800); margin-top:10px;"></div>
+        <div class="filterbar" style="gap:6px; align-items:center;">
+          <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+          <div style="position:relative; display:inline-block; margin-left:auto;">
+            <button id="flowsColsBtn" class="btn btn-small" onclick="toggleFlowsColsDropdown()" style="padding:6px 12px;">
+              <i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span>
+            </button>
+            <div id="flowsColsDropdown" style="display:none; position:absolute; top:100%; right:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:180px; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1); padding:8px;"></div>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height:420px;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead id="flowsTableHead" style="position:sticky; top:0; background:var(--surface-2);">
+            </thead>
+            <tbody id="flowsTableBody">
+              <tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlows">Nessun flusso nel periodo selezionato.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
-      <div style="max-height:420px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
-        <table style="width:100%; border-collapse:collapse;">
-          <thead id="flowsTableHead" style="position:sticky; top:0; background:var(--surface-2);">
-          </thead>
-          <tbody id="flowsTableBody">
-            <tr><td colspan="10" style="padding:20px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlows">Nessun flusso nel periodo selezionato.</td></tr>
-          </tbody>
-        </table>
-      </div>
 
-      <h4 style="margin-top:24px;" data-i18n="titleCorrelatedAnomalies">Anomalie correlate</h4>
-      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+      <div class="panel">
+      <h3 id="anomSectionTitle" style="margin:0 0 10px; font-size:16px;" data-i18n="titleCorrelatedAnomalies">Correlated anomalies</h3>
+      <div class="filterbar" style="gap:10px; align-items:center; margin-top:0;">
         <select id="anomStatus" onchange="loadAnomalies()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="new" data-i18n="optAnomNew">Nuove</option>
           <option value="ack" data-i18n="optAnomAck">Prese in carico</option>
@@ -1770,12 +1780,12 @@
           <option value="all" data-i18n="optAnomAll">Tutte</option>
         </select>
         <button class="btn" onclick="loadAnomalies()"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
-        <span id="anomIpFilterChip" style="display:none; align-items:center; gap:6px; font-size:12px; background:var(--surface-3); border-radius:14px; padding:4px 10px;">
+        <span id="anomIpFilterChip" class="chip" style="display:none; text-transform:none; letter-spacing:normal;">
           <span></span>
           <a href="javascript:void(0)" onclick="clearAnomIpFilter()" data-i18n-title="titleRemoveFilter" title="Rimuovi filtro"><i class="fa-solid fa-xmark"></i></a>
         </span>
       </div>
-      <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
+      <div class="table-wrap" style="max-height:320px;">
         <table style="width:100%; border-collapse:collapse;">
           <thead style="position:sticky; top:0; background:var(--surface-2);">
             <tr style="font-size:12px; text-align:left;">
@@ -1788,12 +1798,13 @@
           </tbody>
         </table>
       </div>
+      </div>
     </div>
 
     <div id="flowDetailPanel" style="display:none; position:fixed; top:0; right:0; height:100vh; width:380px; max-width:92vw; background:var(--surface-2); border-left:1px solid var(--border); box-shadow:-8px 0 24px rgba(0,0,0,0.25); z-index:10010; overflow-y:auto; padding:18px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h4 style="margin:0;">Dettaglio flusso</h4>
-        <button class="btn" onclick="closeFlowDetailPanel()" title="Chiudi"><i class="fa-solid fa-xmark"></i></button>
+        <h4 style="margin:0;" data-i18n="titleFlowDetail">Flow detail</h4>
+        <button class="btn" onclick="closeFlowDetailPanel()" data-i18n-title="titleClose" title="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div id="flowDetailPanelBody"></div>
     </div>
@@ -2769,6 +2780,10 @@
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
         tabFlows: '<i class="fa-solid fa-wave-square"></i> Flussi Live',
         titleFlows: 'Flussi Live (Top Talker)',
+        flowsEyebrow: '<i class="fa-solid fa-wave-square"></i> Osservabilità',
+        titleFlowDetail: 'Dettaglio flusso',
+        titleClose: 'Chiudi',
+        titleHighlightTopology: 'Evidenzia nella topologia',
         clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Rete',
         titleClientMap: "Client Map — MAC ↔ IP",
         descClientMap: "Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.",
@@ -3381,8 +3396,12 @@
         titleMacScanPanel: "MAC Scan",
         titleMacSearchPanel: "Search MAC",
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
-        tabFlows: '<i class="fa-solid fa-wave-square"></i> Flussi Live',
-        titleFlows: 'Flussi Live (Top Talker)',
+        tabFlows: '<i class="fa-solid fa-wave-square"></i> Live Flows',
+        titleFlows: 'Live Flows (Top Talkers)',
+        flowsEyebrow: '<i class="fa-solid fa-wave-square"></i> Observability',
+        titleFlowDetail: 'Flow detail',
+        titleClose: 'Close',
+        titleHighlightTopology: 'Highlight in topology',
         clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Network',
         titleClientMap: "Client Map — MAC ↔ IP",
         descClientMap: "MAC ↔ IP matching for network clients, read from the ARP tables of whoever routes the VLANs (L3 switch or firewall), cross-referenced with the access port detected by the MAC Tracker. Devices that don't route VLANs are skipped automatically.",
@@ -11754,6 +11773,8 @@
         if (_flowsSource === 'syslog') { renderSyslogTable(); return; }
         const tbody = document.getElementById('flowsTableBody');
         const m = document.getElementById('flowsMetric').value;
+        const L = i18n[currentLang];
+        const hlTitle = escapeHtml(L.titleHighlightTopology || 'Evidenzia nella topologia');
 
         // Filter by selected tenants
         const filtered = _flowsRawData.length === 0 ? []
@@ -11784,8 +11805,8 @@
                     <td style="padding:6px 8px;" onclick="event.stopPropagation();"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} onchange="toggleFlowRowSelect('${escapeHtml(key)}', this.checked)" style="accent-color:var(--primary);"></td>
                     <td style="padding:6px 8px;">${rowNum++}</td>
                     ${flowsColHidden('tenant') ? '' : `<td>${escapeHtml(f.tenant)}</td>`}
-                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.src_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.src_ip)}</a></td>
-                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.dst_ip)}')" title="Evidenzia nella topologia">${escapeHtml(f.dst_ip)}</a></td>
+                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.src_ip)}')" title="${hlTitle}">${escapeHtml(f.src_ip)}</a></td>
+                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.dst_ip)}')" title="${hlTitle}">${escapeHtml(f.dst_ip)}</a></td>
                     ${flowsColHidden('proto') ? '' : `<td>${proto}/${f.dst_port ?? '—'}</td>`}
                     ${flowsColHidden('source') ? '' : `<td><span style="font-size:11px; padding:2px 8px; border-radius:10px; background:var(--surface-3);">${srcLabel}</span></td>`}
                     <td><div style="display:flex; align-items:center; gap:8px;">
@@ -11884,7 +11905,9 @@
         const statusSel = document.getElementById('anomStatus');
         if (statusSel) statusSel.value = 'all';
         loadAnomalies();
-        document.querySelector('#tab-flows h4')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Ancora esplicita: il vecchio selettore '#tab-flows h4' puntava alla prima
+        // h4 del tab (il titolo anomalie) e si rompe appena cambia la gerarchia.
+        document.getElementById('anomSectionTitle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function clearAnomIpFilter() {
@@ -12018,6 +12041,15 @@
             tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">${i18n[currentLang].msgNoAnomalies || 'Nessuna anomalia.'}</td></tr>`;
             return;
         }
+        // Severità = severità syslog (0-7, più bassa = più grave), stessa scala
+        // usata da renderSyslogTable(): <=3 grave, 4 attenzione, oltre informativa.
+        const sevClass = s => s == null ? '' : s <= 3 ? 'bad' : s <= 4 ? 'warn' : 'ok';
+        const sevBadge = s => s == null ? '—'
+            : `<span class="status ${sevClass(s)}">${s}</span>`;
+        // new = da lavorare, ack = presa in carico, resolved = chiusa.
+        const statusBadge = st => st === 'resolved' ? `<span class="status ok">${escapeHtml(st)}</span>`
+            : st === 'ack' ? `<span class="chip">${escapeHtml(st)}</span>`
+            : `<span class="status warn">${escapeHtml(st)}</span>`;
         tbody.innerHTML = rows.map(a => {
             const when = new Date(a.created_ts * 1000).toLocaleString();
             const actions = [];
@@ -12036,8 +12068,8 @@
                 <td>${escapeHtml(a.src_ip || '—')}</td>
                 <td>${escapeHtml(a.dst_ip || '—')}</td>
                 <td>${escapeHtml(a.switch_port || '—')}</td>
-                <td>${a.severity ?? '—'}</td>
-                <td>${escapeHtml(a.status)}</td>
+                <td>${sevBadge(a.severity)}</td>
+                <td>${statusBadge(a.status)}</td>
                 <td style="display:flex; gap:4px;">${actions.join('')}</td>
             </tr>`;
         }).join('');
