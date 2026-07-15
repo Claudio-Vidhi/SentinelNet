@@ -923,5 +923,65 @@ class TestProvisionerTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestImportTabRestyle(unittest.TestCase):
+    """Task 15: #tab-import (CSV Import) restyle guard.
+
+    Small tab: a single file input + submit button POSTing the parsed CSV
+    text to /api/import-csv, with the result (imported/failed counts, one
+    line per failed row) surfaced via alert() -- there is no separate live
+    "result container" DOM node in this codebase (see finding below). The
+    restyle wraps the existing controls in a hero header + two .panel cards
+    without touching the upload handler at all.
+    """
+
+    def _tab(self, html):
+        start = html.index('<div id="tab-import"')
+        end = html.index('<!-- TAB 7: Gestione Utenti (solo admin) -->')
+        return html[start:end]
+
+    def test_preserve_ids(self):
+        html = _html()
+        # csvFileInput is read by the click handler; btnUploadCsv is the
+        # element the handler is attached to via addEventListener.
+        for _id in ('csvFileInput', 'btnUploadCsv'):
+            self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        self.assertIn("apiFetch('/api/import-csv'", html)
+
+    def test_upload_handler_untouched(self):
+        html = _html()
+        # The click handler (addEventListener, not onclick) and its reporting
+        # path must survive byte-for-byte -- restyle must not touch JS here.
+        self.assertIn("document.getElementById('btnUploadCsv').addEventListener('click'", html)
+        self.assertIn("document.getElementById('csvFileInput')", html)
+        self.assertIn('body: JSON.stringify({ csv_data: text })', html)
+
+    def test_rbac_preserved(self):
+        html = _html()
+        # Precedent from Task 14 (provisioner): the tab is gated at the nav
+        # entry (`nav-item requires-write` on the switchTab('tab-import', ...)
+        # button), so the tab body itself carries no write-gate class.
+        self.assertIn(
+            "class=\"nav-item requires-write\" onclick=\"switchTab('tab-import', this)\"",
+            html)
+
+    def test_tab_uses_component_classes(self):
+        html = _html()
+        tab = self._tab(html)
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+            self.assertIn(cls, tab)
+        # upload-form panel + result-info panel
+        self.assertGreaterEqual(tab.count('class="panel"'), 2)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('importEyebrow:', 'titleImportCsv:', 'descImportCsv:',
+                    'importPanelUpload:', 'lblSelectCsv:', 'btnUploadCsv:',
+                    'titleImportResult:', 'descImportResult:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()

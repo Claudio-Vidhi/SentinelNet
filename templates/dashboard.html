@@ -2216,21 +2216,37 @@
 
     <!-- TAB 6: Importazione CSV -->
     <div id="tab-import" class="tab-content">
-      <h3 data-i18n="titleImportCsv">Importazione Massiva da CSV</h3>
-      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descImportCsv">
-        Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.
-      </p>
-      <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Vendor
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="importEyebrow"><i class="fa-solid fa-file-csv"></i> Import</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleImportCsv">Importazione Massiva da CSV</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descImportCsv">
+            Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-upload" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="importPanelUpload">Carica file CSV</span></h3>
+        <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Vendor
 192.168.1.1,admin,Mypass123!,enablepass,SW-Milano-01,Tenant_Milano,cisco
 192.168.2.1,manager,Pwd456!,secret,SW-Roma-Core,Tenant_Roma,hpe</div>
-      
-      <div class="form-group" style="margin-top: 20px; margin-bottom: 20px;">
-        <label data-i18n="lblSelectCsv">Seleziona file CSV</label>
-        <input type="file" id="csvFileInput" accept=".csv" style="padding-left: 12px; cursor: pointer;">
+
+        <div class="form-group" style="margin-top: 20px; margin-bottom: 20px;">
+          <label data-i18n="lblSelectCsv">Seleziona file CSV</label>
+          <input type="file" id="csvFileInput" accept=".csv" style="padding-left: 12px; cursor: pointer;">
+        </div>
+        <button class="btn btn-primary" id="btnUploadCsv" data-i18n="btnUploadCsv">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
+        </button>
       </div>
-      <button class="btn btn-primary" id="btnUploadCsv" data-i18n="btnUploadCsv">
-        <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
-      </button>
+
+      <div class="panel">
+        <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="titleImportResult">Risultato importazione</span></h3>
+        <p style="margin:0; color:var(--text-muted); font-size:13px; line-height:1.55;" data-i18n="descImportResult">
+          Al termine del caricamento viene mostrato un messaggio con il numero di dispositivi importati e il dettaglio di eventuali righe fallite.
+        </p>
+      </div>
     </div>
 
     <!-- TAB 7: Gestione Utenti (solo admin) -->
@@ -2989,10 +3005,14 @@
         descThreatIntel: "Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).",
 
         // Tab 6
+        importEyebrow: '<i class="fa-solid fa-file-csv"></i> Import',
         titleImportCsv: "Importazione Massiva da CSV",
         descImportCsv: "Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.",
+        importPanelUpload: "Carica file CSV",
         lblSelectCsv: "Seleziona file CSV",
         btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa',
+        titleImportResult: "Risultato importazione",
+        descImportResult: "Al termine del caricamento viene mostrato un messaggio con il numero di dispositivi importati e il dettaglio di eventuali righe fallite.",
         
         // Modals / Progress
         titleTriageProgress: '<i class="fa-solid fa-circle-notch fa-spin"></i> Triage in Corso...',
@@ -3588,10 +3608,14 @@
         descThreatIntel: "Checks in real time the firmware vulnerabilities detected on active devices by comparing them with the European Vulnerability Database (EUVD).",
 
         // Tab 6
+        importEyebrow: '<i class="fa-solid fa-file-csv"></i> Import',
         titleImportCsv: "Bulk CSV Import",
         descImportCsv: "The CSV file must strictly contain the header specified below.",
+        importPanelUpload: "Upload CSV file",
         lblSelectCsv: "Select CSV file",
         btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Process and Import',
+        titleImportResult: "Import result",
+        descImportResult: "Once the upload completes, a message shows the number of devices imported and details of any failed rows.",
         
         // Modals / Progress
         titleTriageProgress: '<i class="fa-solid fa-circle-notch fa-spin"></i> Triage in Progress...',
