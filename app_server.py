@@ -202,18 +202,8 @@ def get_resource_path(relative_path):
 from routers.deps import (  # noqa: F401
     SESSION_COOKIE, CSRF_HEADER, get_current_user, require_role,
     require_admin, require_operator, user_group_scope,
-    assert_group_allowed, assert_device_allowed,
+    assert_group_allowed, assert_device_allowed, filter_map_to_scope,
 )
-
-def filter_map_to_scope(data, scope):
-    """Riduce nodi e link della mappa alle sole sedi consentite."""
-    if scope is None:
-        return data
-    allowed_nodes = {n["id"] for n in data.get("nodes", []) if n.get("group") in scope}
-    nodes = [n for n in data.get("nodes", []) if n["id"] in allowed_nodes]
-    links = [l for l in data.get("links", [])
-             if l["source"] in allowed_nodes and l["target"] in allowed_nodes]
-    return {"nodes": nodes, "links": links}
 
 # --- MODELLI DI VALIDAZIONE PYDANTIC ---
 
