@@ -3,6 +3,7 @@
 
 import threading
 import uuid
+import time
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -11,6 +12,8 @@ from pydantic import BaseModel
 from security_manager import log_audit
 from routers.deps import get_current_user, require_operator, assert_group_allowed
 from network_scanner import parse_network, scan_subnet
+import core_engine
+import inventory_manager
 
 router = APIRouter(tags=["Scan"])
 

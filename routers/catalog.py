@@ -11,7 +11,7 @@ import inventory_manager
 import core_engine
 from security_manager import log_audit
 from routers.deps import (
-    get_current_user, require_operator, user_group_scope, filter_map_to_scope
+    get_current_user, require_operator, user_group_scope, filter_map_to_scope, assert_group_allowed
 )
 
 router = APIRouter(tags=["Catalog"])

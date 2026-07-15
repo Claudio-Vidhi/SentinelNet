@@ -2,6 +2,7 @@
 """Router Topology. Estratto da app_server.py (fase 6.6): percorsi, metodi,
 parametri e risposte identici al monolite."""
 
+import os
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException

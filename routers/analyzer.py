@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Router Analyzer. Estratto da app_server.py (fase 6.6)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 
 import config_analyzer
 import inventory_manager

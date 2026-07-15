@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
 import arp_collector
 import inventory_manager
+import mac_history
 from routers.mac import MacScanSchema
 from security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Router MAC. Estratto da app_server.py (fase 6.6)."""
 
+import os
 import time
 from typing import Optional, List, Dict
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +14,7 @@ import core_engine
 import mac_collector
 import mac_history
 from security_manager import log_audit
-from routers.deps import get_current_user, require_operator, require_admin, user_group_scope, assert_group_allowed
+from routers.deps import get_current_user, require_operator, require_admin, user_group_scope, assert_group_allowed, assert_device_allowed
 
 router = APIRouter(tags=["MAC"])
 
@@ -34,6 +35,7 @@ class MacOverrideSchema(BaseModel):
 class MacOverrideDeleteSchema(BaseModel):
     ip: str
 
+_MAC_INFRA_TYPES = {"switch", "router"}
 
 # --- ENDPOINTS E HELPERS ---
 
