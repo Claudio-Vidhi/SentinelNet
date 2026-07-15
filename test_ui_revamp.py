@@ -1485,7 +1485,14 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn('id="anomIpFilterChip" class="chip"', tab)
         # Severity/status badges use the component status/chip classes.
         html = _html()
-        self.assertIn('<span class="status ${sevClass(s)}">', html)
+        # Severity buckets mirror sevColor() in the syslog table: 0-3 bad,
+        # 4 warn, 5+ neutral .chip. 5+ is "medio" (_SEVERITY_KIND in
+        # observability/correlator.py), so it must NOT render as .status ok --
+        # a medium anomaly badged green would read as healthy.
+        self.assertIn('s <= 3 ? `<span class="status bad">${s}</span>`', html)
+        self.assertIn('s <= 4 ? `<span class="status warn">${s}</span>`', html)
+        self.assertIn(': `<span class="chip">${s}</span>`', html)
+        self.assertNotIn('<span class="status ok">${s}</span>', html)
         self.assertIn('`<span class="status ok">${escapeHtml(st)}</span>`', html)
         # Preview badge in the sidebar survives (Task 2).
         nav = html[html.index("switchTab('tab-flows'"):]
