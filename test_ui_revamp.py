@@ -1066,5 +1066,107 @@ class TestUsersTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestSitesTabRestyle(unittest.TestCase):
+    """Task 17: #tab-sites (Multi-site locations) restyle guard -- ENGLISH RELABEL.
+
+    Admin-only tab: sites table (mode badge, last-contact, per-site
+    regenerate-token/delete actions) + a create-site form. Before this task,
+    "Rigenera token" / "Elimina" / "predefinita" were hardcoded Italian
+    literals baked straight into renderSitesTable()'s template string, with
+    NO data-i18n mechanism at all -- the relabel converts them to i18n keys
+    (EN copy canonical, IT retained) looked up via the file's established
+    `const L = i18n[currentLang];` render-fn pattern.
+    """
+
+    def _tab(self, html):
+        start = html.index('<div id="tab-sites"')
+        end = html.index('<div id="tab-mcp"')
+        return html[start:end]
+
+    def test_preserve_ids(self):
+        html = _html()
+        # sitesTableBody (brief) + the create-site form fields read directly
+        # by createSite().
+        for _id in ('sitesTableBody', 'newSiteName', 'newSiteMode', 'newSiteSubnets'):
+            self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # GET /api/sites (list) and POST /api/sites (create) share one literal.
+        self.assertIn("apiFetch('/api/sites')", html)
+        self.assertIn("apiFetch('/api/sites', {", html)
+        for endpoint in ('/api/sites/delete', '/api/sites/regenerate-token'):
+            self.assertIn(endpoint, html)
+        # Brief also lists POST /api/sites/update, POST /api/sites/{id}/command
+        # and GET /api/sites/{id}/command-jobs. Traced app_server.py (routes
+        # exist: update_site_ep, site_command_ep, list_site_command_jobs_ep)
+        # AND dashboard.html (grepped for updateSite/editSite/site command
+        # runner/command-jobs poller): there is NO JS caller for any of the
+        # three anywhere in the file -- no edit-site form, no per-site CLI
+        # command runner, no command-jobs poller. Per shared per-tab rules
+        # ("do NOT fabricate UI"), this is reported rather than invented;
+        # relaxed to asserting the real routes exist server-side by handler
+        # name, and asserting no fabricated hook was added for them.
+        import app_server as _app_server
+        for fn in ('update_site_ep', 'site_command_ep', 'list_site_command_jobs_ep'):
+            self.assertTrue(hasattr(_app_server, fn), f"expected server route {fn} to exist")
+        for hook in ('updateSite(', 'editSite(', 'runSiteCommand(', 'siteCommand(', 'commandJobs('):
+            self.assertNotIn(hook, html)
+
+    def test_admin_gated_functions_untouched(self):
+        html = _html()
+        # loadSites() and all mutating handlers must survive byte-for-byte.
+        self.assertIn("async function loadSites()", html)
+        self.assertIn("if (currentRole !== 'admin') return;", html)
+        for hook in ('createSite()', 'regenSiteToken(', 'deleteSite('):
+            self.assertIn(hook, html)
+
+    def test_rbac_preserved(self):
+        html = _html()
+        # Precedent from Task 14-16: the tab is gated at the nav entry, so the
+        # tab body itself carries no requires-admin gate.
+        self.assertIn(
+            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-sites', this)\"",
+            html)
+        tab = self._tab(html)
+        self.assertNotIn('requires-admin', tab)
+
+    def test_tab_uses_component_classes(self):
+        html = _html()
+        tab = self._tab(html)
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+                    'class="table-wrap"'):
+            self.assertIn(cls, tab)
+        # sites-table panel + create-site-form panel
+        self.assertEqual(tab.count('class="panel"'), 2)
+        self.assertNotIn('table-container', tab)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('sitesEyebrow:', 'titleSites:', 'descSites:', 'lblSiteName:',
+                    'lblSiteMode:', 'thSiteLastContact:', 'titleNewSite:',
+                    'lblSiteSubnets:', 'btnCreateSite:', 'btnRegenSiteToken:',
+                    'btnDeleteSite:', 'lblSiteDefault:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+    def test_relabel_keys_english_default(self):
+        html = _html()
+        # The three previously-unlocalized strings: EN copy is now the map's
+        # canonical/default value, IT retained for the it map.
+        self.assertIn('btnRegenSiteToken: "Regenerate token"', html)
+        self.assertIn('btnDeleteSite: "Delete"', html)
+        self.assertIn('lblSiteDefault: "Default"', html)
+        self.assertIn('btnRegenSiteToken: "Rigenera token"', html)
+        self.assertIn('btnDeleteSite: "Elimina"', html)
+        self.assertIn('lblSiteDefault: "predefinita"', html)
+        # renderSitesTable() looks these up via the established i18n[currentLang]
+        # render-fn pattern (const L = i18n[currentLang]; ... L.btnDeleteSite),
+        # not a newly-invented mechanism.
+        self.assertIn('const L = i18n[currentLang];', html)
+        self.assertIn('L.btnRegenSiteToken', html)
+        self.assertIn('L.btnDeleteSite', html)
+        self.assertIn('L.lblSiteDefault', html)
+
+
 if __name__ == "__main__":
     unittest.main()
