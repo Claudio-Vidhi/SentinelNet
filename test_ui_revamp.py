@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, tempfile
+import os, re, tempfile
 _TMP = tempfile.mkdtemp(prefix="sentinelnet_uirevamp_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
 import unittest
@@ -1352,11 +1352,14 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # whose value carries no icon markup must not sit on an element that
         # wraps an <i> icon -- it would erase the icon on language switch.
         # Card titles keep the icon outside and the key on an inner <span>.
+        # (The general, document-wide regression guard for this bug class is
+        # TestI18nIconWipeGuard below -- it supersedes the exact-style-string
+        # assertNotIn this test used to carry, which broke the moment the
+        # h3's inline style changed for unrelated reasons.)
         tab = self._tab(_html())
         for key in ("titleNetExpose", "titleCliBlacklist", "titleObsSettings",
                     "titleAppAdvanced"):
             self.assertIn(f'<span data-i18n="{key}">', tab)
-        self.assertNotIn('<h3 style="font-size:15px; margin-bottom:8px;" data-i18n=', tab)
 
     def test_i18n_keys_both_langs(self):
         html = _html()
@@ -1558,6 +1561,305 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # Exactly one results sink; no second detail container to fall stale.
         self.assertEqual(html.count('id="arpResults"'), 1)
         self.assertEqual(render.count("getElementById('arpResults')"), 1)
+
+
+# ---------------------------------------------------------------------------
+# i18n EN/IT parity + structural icon-wipe guard (Task 21)
+#
+# The i18n object in the inline <script> is a hand-written JS object literal,
+# not JSON (keys are bare identifiers, values are single/double-quoted
+# strings, some carrying embedded HTML like '<i class="..."></i> Text').
+# The helpers below are a tiny bespoke tokenizer -- not a regex scan -- so
+# they can't silently match zero keys and pass vacuously: they walk the
+# actual `it: { ... }` / `en: { ... }` blocks brace-by-brace (respecting
+# string/comment literals) and raise if the shape they expect is violated.
+# ---------------------------------------------------------------------------
+
+def _find_matching_brace(s, open_idx):
+    """Return the index of the '}' matching the '{' at s[open_idx], walking
+    forward and skipping over // line comments and '/"/`-quoted strings
+    (honouring backslash-escapes) so braces inside JS string literals are
+    never mistaken for structural braces."""
+    depth = 0
+    i = open_idx
+    n = len(s)
+    in_str = None
+    in_line_comment = False
+    while i < n:
+        ch = s[i]
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+            i += 1
+            continue
+        if in_str:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == in_str:
+                in_str = None
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and s[i + 1] == "/":
+            in_line_comment = True
+            i += 2
+            continue
+        if ch in ("'", '"', "`"):
+            in_str = ch
+            i += 1
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    raise AssertionError(f"no matching '}}' found for '{{' at offset {open_idx}")
+
+
+def _extract_object_keys(sub):
+    """Tokenize a flat `key: 'value'|"value",` JS object body (as found
+    inside i18n's `it { ... }` / `en { ... }`) into a {key: value} dict.
+    Every i18n value in this file is a single quoted-string literal -- no
+    nested objects/arrays -- so this is intentionally not a general JS
+    parser, just enough of one to walk this exact shape robustly."""
+    i = 0
+    n = len(sub)
+    keys = {}
+    while i < n:
+        ch = sub[i]
+        if ch in " \t\r\n,":
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and sub[i + 1] == "/":
+            i = sub.index("\n", i) if "\n" in sub[i:] else n
+            continue
+        m = re.match(r"[A-Za-z_$][A-Za-z0-9_$]*", sub[i:])
+        assert m, f"expected an object key at offset {i}: {sub[i:i+40]!r}"
+        key = m.group(0)
+        i += m.end()
+        while sub[i] in " \t\r\n":
+            i += 1
+        assert sub[i] == ":", f"expected ':' after key {key!r} at offset {i}"
+        i += 1
+        while sub[i] in " \t\r\n":
+            i += 1
+        quote = sub[i]
+        assert quote in ("'", '"', "`"), (
+            f"expected a quoted string value for key {key!r} at offset {i}: "
+            f"{sub[i:i+40]!r}")
+        i += 1
+        val_start = i
+        while True:
+            c2 = sub[i]
+            if c2 == "\\":
+                i += 2
+                continue
+            if c2 == quote:
+                break
+            i += 1
+        value = sub[val_start:i]
+        i += 1  # skip closing quote
+        keys[key] = value  # JS semantics: last literal wins on duplicate key
+        while i < n and sub[i] in " \t\r":
+            i += 1
+        if i < n and sub[i] == ",":
+            i += 1
+    return keys
+
+
+def _extract_i18n_maps(html):
+    """Return (it_dict, en_dict) parsed out of `const i18n = { it: {...},
+    en: {...} }` in the rendered page."""
+    start = html.index("const i18n = {")
+    brace_start = html.index("{", start)
+    end = _find_matching_brace(html, brace_start)
+    block = html[brace_start + 1:end]
+
+    def lang_block(name):
+        m = re.search(r"\b" + name + r"\s*:\s*\{", block)
+        assert m, f"'{name}: {{' block not found inside the i18n object"
+        idx = m.end() - 1
+        close = _find_matching_brace(block, idx)
+        return block[idx + 1:close]
+
+    it = _extract_object_keys(lang_block("it"))
+    en = _extract_object_keys(lang_block("en"))
+    assert it, "parsed zero keys out of i18n.it -- parser is matching vacuously"
+    assert en, "parsed zero keys out of i18n.en -- parser is matching vacuously"
+    return it, en
+
+
+class _I18nUsageCollector(HTMLParser):
+    """Collects every element in the rendered document carrying a
+    data-i18n / data-i18n-placeholder / data-i18n-title attribute, and (for
+    every attribute) whether that same element wraps an <i> icon tag before
+    its own closing tag -- the specific shape applyI18n's
+    `el.innerHTML = i18n[lang][key]` would clobber for data-i18n. <script>/
+    <style> bodies are opaque to HTMLParser (CDATA_CONTENT_ELEMENTS), so the
+    i18n object's own JS-string HTML fragments are never mistaken for real
+    markup.
+    """
+
+    VOID_ELEMENTS = {
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    }
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack = []
+        self.usages = []  # (attr, key, wraps_icon)
+
+    def handle_starttag(self, tag, attrs):
+        tagl = tag.lower()
+        d = dict(attrs)
+        pairs = [(a, d[a]) for a in
+                 ("data-i18n", "data-i18n-placeholder", "data-i18n-title")
+                 if d.get(a)]
+        if tagl == "i":
+            for anc in self.stack:
+                anc["wraps_icon"] = True
+        if tagl in self.VOID_ELEMENTS:
+            for a, k in pairs:
+                self.usages.append((a, k, False))
+            return
+        self.stack.append({"tag": tagl, "pairs": pairs, "wraps_icon": tagl == "i"})
+
+    def handle_startendtag(self, tag, attrs):
+        if tag.lower() == "i":
+            for anc in self.stack:
+                anc["wraps_icon"] = True
+
+    def handle_endtag(self, tag):
+        tagl = tag.lower()
+        if tagl in self.VOID_ELEMENTS or not self.stack:
+            return
+        frame = self.stack.pop()
+        for a, k in frame["pairs"]:
+            self.usages.append((a, k, frame["wraps_icon"]))
+
+
+def _collect_i18n_usage(html):
+    c = _I18nUsageCollector()
+    c.feed(html)
+    c.close()
+    return c.usages
+
+
+class TestI18nParity(unittest.TestCase):
+    """Task 21: EN/IT completeness regression guard.
+
+    Every data-i18n / data-i18n-placeholder / data-i18n-title key used
+    anywhere in the rendered markup must resolve in BOTH the `it` and `en`
+    maps of the i18n object, and the two maps must carry the identical key
+    set in both directions (no asymmetry). Parses the real object literal
+    with a bespoke tokenizer (see _extract_i18n_maps/_extract_object_keys
+    above) rather than a regex scan, specifically so a broken/rewritten
+    parser that matches zero keys fails loudly instead of passing vacuously
+    (see test_parser_found_the_expected_key_counts).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _html()
+        cls.it, cls.en = _extract_i18n_maps(cls.html)
+        cls.usages = _collect_i18n_usage(cls.html)
+
+    def test_parser_found_the_expected_key_counts(self):
+        # Guards against the tokenizer silently degrading into a no-op --
+        # a regression here would let every other assertion in this class
+        # pass vacuously against empty dicts.
+        self.assertGreater(len(self.it), 100,
+                            "parsed suspiciously few keys out of i18n.it")
+        self.assertGreater(len(self.en), 100,
+                            "parsed suspiciously few keys out of i18n.en")
+
+    def test_every_used_key_resolves_in_both_maps(self):
+        used_keys = sorted({k for _, k, _ in self.usages})
+        self.assertGreater(
+            len(used_keys), 100,
+            "collected suspiciously few data-i18n* usages from the "
+            "rendered markup -- HTMLParser collection may be broken")
+        missing_it = [k for k in used_keys if k not in self.it]
+        missing_en = [k for k in used_keys if k not in self.en]
+        self.assertEqual(
+            missing_it, [],
+            f"key(s) used in markup but missing from i18n.it: {missing_it}")
+        self.assertEqual(
+            missing_en, [],
+            f"key(s) used in markup but missing from i18n.en: {missing_en}")
+
+    def test_it_and_en_key_sets_are_identical(self):
+        it_only = sorted(set(self.it) - set(self.en))
+        en_only = sorted(set(self.en) - set(self.it))
+        self.assertEqual(
+            it_only, [],
+            f"key(s) present in i18n.it but missing from i18n.en: {it_only}")
+        self.assertEqual(
+            en_only, [],
+            f"key(s) present in i18n.en but missing from i18n.it: {en_only}")
+
+    def test_no_key_resolves_to_an_empty_or_blank_value(self):
+        # A key that exists but resolves to "" (or whitespace-only) would
+        # render as a blank label -- just as broken as a missing key.
+        empty_it = sorted(k for k, v in self.it.items() if not v.strip())
+        empty_en = sorted(k for k, v in self.en.items() if not v.strip())
+        self.assertEqual(
+            empty_it, [], f"key(s) with an empty/blank value in i18n.it: {empty_it}")
+        self.assertEqual(
+            empty_en, [], f"key(s) with an empty/blank value in i18n.en: {empty_en}")
+
+
+class TestI18nIconWipeGuard(unittest.TestCase):
+    """Task 21: structural guard for the icon-wipe bug class.
+
+    changeLanguage() does `el.innerHTML = i18n[lang][key]` for every
+    `[data-i18n]` element. If such an element wraps its own <i> icon while
+    the key's value is plain text with no <i> markup, the icon is silently
+    erased on every language switch. Two established fix patterns coexist in
+    this file: icon outside the data-i18n element with the key on an inner
+    <span> (e.g. titleObsSettings), or the icon markup folded directly into
+    the key's own value (e.g. titleProvisioning). Either satisfies this
+    test -- it only requires that at least one hold.
+
+    Deliberately built on html.parser.HTMLParser (real DOM nesting), not a
+    style-string/line-shape regex -- a prior per-tab guard
+    (test_i18n_icon_not_clobbered_by_innerhtml) asserted an exact `<h3
+    style="...">` string was absent, which would silently stop catching
+    anything the moment that inline style changed for unrelated reasons.
+    This test instead asks the structural question directly: does the
+    element that carries data-i18n contain an <i> descendant, and if so,
+    does the key's value contain <i> markup in both languages?
+
+    NOTE: data-i18n-placeholder and data-i18n-title are collected but NOT
+    checked here -- changeLanguage() sets `.placeholder`/`.title` for those,
+    never `.innerHTML`, so an <i> icon nested under one of those elements is
+    never touched by a language switch and cannot be wiped by it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _html()
+        cls.it, cls.en = _extract_i18n_maps(cls.html)
+        cls.usages = _collect_i18n_usage(cls.html)
+
+    def test_data_i18n_elements_wrapping_an_icon_carry_icon_markup_in_value(self):
+        victims = sorted({
+            key for attr, key, wraps_icon in self.usages
+            if attr == "data-i18n" and wraps_icon
+            and ("<i" not in self.it.get(key, "") or "<i" not in self.en.get(key, ""))
+        })
+        self.assertEqual(
+            victims, [],
+            "data-i18n key(s) wrap their own <i> icon in the markup but the "
+            "key's value has no <i> markup in (at least) one language -- "
+            "changeLanguage()'s `el.innerHTML = i18n[lang][key]` will erase "
+            "the icon on language switch. Fix: move the icon outside the "
+            "data-i18n element (key on an inner <span>) or fold the <i> "
+            "markup into the value -- match whichever pattern neighbouring "
+            f"code already uses. Offending key(s): {victims}")
 
 
 if __name__ == "__main__":
