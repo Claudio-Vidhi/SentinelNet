@@ -12043,9 +12043,13 @@
         }
         // Severità = severità syslog (0-7, più bassa = più grave), stessa scala
         // usata da renderSyslogTable(): <=3 grave, 4 attenzione, oltre informativa.
-        const sevClass = s => s == null ? '' : s <= 3 ? 'bad' : s <= 4 ? 'warn' : 'ok';
+        // Mirrors sevColor() in the syslog table: 0-3 critico/alto, 4 warning,
+        // 5+ is "medio" (see _SEVERITY_KIND in observability/correlator.py) --
+        // neutral, NOT ok/green. A medium anomaly must not read as healthy.
         const sevBadge = s => s == null ? '—'
-            : `<span class="status ${sevClass(s)}">${s}</span>`;
+            : s <= 3 ? `<span class="status bad">${s}</span>`
+            : s <= 4 ? `<span class="status warn">${s}</span>`
+            : `<span class="chip">${s}</span>`;
         // new = da lavorare, ack = presa in carico, resolved = chiusa.
         const statusBadge = st => st === 'resolved' ? `<span class="status ok">${escapeHtml(st)}</span>`
             : st === 'ack' ? `<span class="chip">${escapeHtml(st)}</span>`
