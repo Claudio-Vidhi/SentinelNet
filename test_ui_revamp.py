@@ -2176,8 +2176,14 @@ class TestSidebarRail(unittest.TestCase):
         expanded = re.search(r'--sidebar-w:\s*(\d+)px', body)
         self.assertIsNotNone(expanded, "body must define the expanded --sidebar-w")
         self.assertEqual(int(expanded.group(1)), 340)
-        # and the collapse must be animated with the existing token
-        self.assertIn('transition: var(--transition)', body)
+        # The collapse must be animated, but scoped to the column only.
+        # --transition is "all 0.25s", so using the bare token here would also
+        # animate body's background/color/padding on every theme/state change.
+        tr = re.search(r'transition:\s*([^;]+);', body)
+        self.assertIsNotNone(tr, "body must animate the rail collapse")
+        self.assertIn('grid-template-columns', tr.group(1))
+        self.assertNotIn('var(--transition)', tr.group(1))
+        self.assertNotRegex(tr.group(1), r'\ball\b')
 
     def test_collapsed_rule_shrinks_the_rail(self):
         m = re.search(r'body\.sidebar-collapsed\s*\{\s*--sidebar-w:\s*(\d+)px\s*\}', self.css)

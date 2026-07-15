@@ -78,7 +78,9 @@
       gap: 20px;
       padding: 20px;
       overflow-x: hidden;
-      transition: var(--transition);
+      /* Solo la colonna: --transition è "all", che qui animerebbe anche
+         background/color/padding a ogni cambio di tema o stato. */
+      transition: grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     /* Scrollbar: trattamento coerente col design language — binario trasparente,
