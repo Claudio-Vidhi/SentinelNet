@@ -134,6 +134,8 @@ async def lifespan(app: "FastAPI"):
 
 
 app = FastAPI(title="SentinelNet API", version="0.2.0-beta.1", lifespan=lifespan)
+from routers import inventory as _inventory_router
+app.include_router(_inventory_router.router)
 
 # Router modulari (fase 2.2/2.3/6.6): percorsi identici al monolite pre-refactor.
 from routers import fortigate as _fortigate_router
@@ -209,19 +211,6 @@ from routers.deps import (  # noqa: F401
 
 # --- MODELLI DI VALIDAZIONE PYDANTIC ---
 
-class DeviceSchema(BaseModel):
-    ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
-    vendor: str
-    profile: str
-    username: str = "Admin"
-    password: str = "admin"
-    enable_secret: str = "admin"
-    group: str = "Generale"
-    ssh_port: int = Field(22, ge=1, le=65535)
-    # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy
-    # (deriva ssh-only dalla porta SSH). Validazione in inventory_manager.
-    transports: Optional[Dict[str, Optional[int]]] = None
-
 class GroupSchema(BaseModel):
     name: str
     description: str = ""
@@ -233,13 +222,6 @@ class GroupRenameSchema(BaseModel):
     old_name: str
     new_name: str
     description: str = ""
-
-class DeviceDelete(BaseModel):
-    ip: str
-
-class DeviceRenameSchema(BaseModel):
-    ip: str
-    hostname: str
 
 class MacScanSchema(BaseModel):
     group: str = "all"
@@ -258,9 +240,6 @@ class MacOverrideSchema(BaseModel):
 class MacOverrideDeleteSchema(BaseModel):
     ip: str
 
-class CSVImportRequest(BaseModel):
-    csv_data: str
-
 class CommandRequest(BaseModel):
     ip: str
     command: str
@@ -270,10 +249,6 @@ class BulkCommandRequest(BaseModel):
     commands: str
     mode: str = "exec"   # "exec" (show/operational) | "config" (configuration push)
     save: bool = False   # salva la config dopo l'invio (solo mode="config")
-
-class DeviceReassignSchema(BaseModel):
-    ip: str
-    new_group: str
 
 class PingCheckRequest(BaseModel):
     group: str = "all"
@@ -518,17 +493,6 @@ class AgentJobResultSchema(BaseModel):
     status: str = "done"           # "done" | "error"
     result: str = ""
 
-class PromoteDeviceSchema(BaseModel):
-    node_id: str
-    ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
-    vendor: str = "cisco"
-    group: str = "Generale"
-    # Dati ereditati da CDP/LLDP da preservare sul dispositivo promosso.
-    model: Optional[str] = None
-    version: Optional[str] = None
-    device_type: Optional[str] = None
-    hostname: Optional[str] = None
-
 # --- STATO DEI JOB DI TRIAGE IN BACKGROUND CON LOCK ---
 
 _scan_jobs: dict[str, dict] = {}
@@ -691,7 +655,6 @@ def read_index():
 
 # --- ROTTE DISPOSITIVI (INVENTARIO) ---
 
-@app.get("/api/local-devices")
 def get_devices_and_versions(current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
@@ -708,7 +671,6 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         "groups": groups
     }
 
-@app.get("/api/export/devices")
 def export_devices_csv(current_user = Depends(get_current_user)):
     import csv, io
     scope = user_group_scope(current_user)
@@ -742,7 +704,6 @@ def export_devices_csv(current_user = Depends(get_current_user)):
         headers={"Content-Disposition": "attachment; filename=sentinelnet-devices.csv"}
     )
 
-@app.post("/api/add-device")
 def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     assert_group_allowed(current_user, device.group)
     # Impedisce di modificare un dispositivo esistente in una sede non consentita
@@ -763,14 +724,12 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
         log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "message": "Dispositivo salvato"}
 
-@app.post("/api/delete-device")
 def delete_device(payload: DeviceDelete, current_user = Depends(require_operator)):
     assert_device_allowed(current_user, payload.ip)
     inventory_manager.delete_device(payload.ip)
     log_audit(f"Dispositivo '{payload.ip}' eliminato dall'inventario dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@app.post("/api/rename-device")
 def rename_device(payload: DeviceRenameSchema, current_user = Depends(require_operator)):
     """Rinomina un dispositivo gestito impostandone manualmente l'hostname (il
     nome mostrato in inventario e sulla mappa). admin/operator, con scoping."""
@@ -782,7 +741,6 @@ def rename_device(payload: DeviceRenameSchema, current_user = Depends(require_op
     log_audit(f"Dispositivo '{payload.ip}' rinominato in '{hostname or '(vuoto)'}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@app.post("/api/import-csv")
 def import_csv(payload: CSVImportRequest, current_user = Depends(require_operator)):
     lines = payload.csv_data.split('\n')
     import csv as csv_parser
@@ -1016,7 +974,6 @@ def assign_device_category(payload: DeviceCategorySchema, current_user = Depends
     )
     return {"status": "success"}
 
-@app.post("/api/promote-device")
 def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_operator)):
     """Promuove un dispositivo scoperto (CDP/LLDP) a dispositivo gestito,
     aggiungendolo all'inventario così da poter essere sottoposto a triage.
@@ -1502,7 +1459,6 @@ def get_ws_token(current_user = Depends(require_operator)):
     _ws_tokens[otp] = (current_user.get("sub"), time.time())
     return {"ws_token": otp}
 
-@app.post("/api/reassign-device")
 def reassign_device(payload: DeviceReassignSchema, current_user = Depends(require_operator)):
     """Sposta un dispositivo in un gruppo diverso aggiornando solo il campo Group nel CSV."""
     devices = inventory_manager.get_all_devices()
