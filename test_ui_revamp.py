@@ -2080,5 +2080,279 @@ class TestTransportsCollapsible(unittest.TestCase):
         self.assertIn("getElementById('devTransports').open", set_form)
 
 
+class TestSidebarRail(unittest.TestCase):
+    """Collapsible sidebar icon rail + design-language scrollbar.
+
+    The rail hides labels via `font-size:0` rather than `display:none`
+    precisely so it never competes with the RBAC gate
+    (`body:not(.role-admin) .requires-admin{display:none!important}`), which
+    must stay the ONLY thing deciding whether a .nav-item is visible.
+    test_collapsed_css_never_sets_display_on_nav_item asserts that invariant
+    structurally instead of trusting the comment.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _html()
+        m = re.search(r'<style>(.*?)</style>', cls.html, re.S)
+        assert m, "no <style> block found"
+        cls.css = m.group(1)
+        # The template is served with CRLF line endings, so whitespace is
+        # normalised via \s+ (not a bare '\n' strip) before shape assertions;
+        # the optional trailing `;` before `}` is dropped too, so assertions
+        # pin declarations rather than punctuation style.
+        cls.flat = re.sub(r';+\}', '}', re.sub(r'\s+', '', cls.css))
+
+    # --- helpers -----------------------------------------------------------
+
+    def _rules(self, css=None):
+        """[(selector, body)] for every rule in the stylesheet (flat scan;
+        at-rule preludes are skipped since they carry no declarations)."""
+        css = self.css if css is None else css
+        out = []
+        for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css):
+            sel = sel.strip()
+            if not sel or sel.startswith('@'):
+                continue
+            out.append((sel.split('@media')[-1].strip(), body))
+        return out
+
+    def _rule(self, selector):
+        for sel, body in self._rules():
+            if sel == selector:
+                return body
+        return None
+
+    # --- toggle button -----------------------------------------------------
+
+    def test_toggle_button_exists_with_aria_attributes(self):
+        m = re.search(r'<button[^>]*id="sidebarToggle"[^>]*>', self.html)
+        self.assertIsNotNone(m, "#sidebarToggle button not found in markup")
+        tag = m.group(0)
+        self.assertIn('onclick="toggleSidebar()"', tag)
+        self.assertIn('aria-expanded="true"', tag)
+        # aria-controls must point at an element that actually exists
+        ac = re.search(r'aria-controls="([^"]+)"', tag)
+        self.assertIsNotNone(ac, "toggle must declare aria-controls")
+        self.assertIn(f'<aside id="{ac.group(1)}"', self.html,
+                      "aria-controls must reference the real <aside> id")
+        # icon-only control => needs a non-empty accessible name.
+        # The lookbehind matters: a bare `aria-label="..."` search also matches
+        # inside `data-i18n-aria-label="..."`, which would make this vacuous.
+        self.assertRegex(tag, r'(?<![-\w])aria-label="[^"]+"')
+
+    def test_toggle_accessible_name_is_i18n_in_both_maps(self):
+        tag = re.search(r'<button[^>]*id="sidebarToggle"[^>]*>', self.html).group(0)
+        for attr in ('data-i18n-title', 'data-i18n-aria-label'):
+            m = re.search(attr + r'="([^"]+)"', tag)
+            self.assertIsNotNone(m, f"toggle must carry {attr}")
+            self.assertEqual(m.group(1), 'titleSidebarToggle')
+        it, en = _extract_i18n_maps(self.html)
+        for lang_name, mp in (('it', it), ('en', en)):
+            self.assertIn('titleSidebarToggle', mp,
+                          f"titleSidebarToggle missing from i18n.{lang_name}")
+            self.assertTrue(mp['titleSidebarToggle'].strip())
+        self.assertNotEqual(it['titleSidebarToggle'], en['titleSidebarToggle'],
+                            "IT and EN copy should actually differ")
+
+    def test_aria_label_attribute_is_translated_at_runtime(self):
+        # data-i18n-title was already handled by changeLanguage(); the
+        # aria-label variant is new and must be wired too, or the accessible
+        # name silently stays Italian after switching to EN.
+        self.assertIn('document.querySelectorAll("[data-i18n-aria-label]")', self.html)
+        self.assertIn('el.setAttribute("aria-label", i18n[lang][key])', self.html)
+
+    # --- collapsed state drives the grid ------------------------------------
+
+    def test_collapsed_css_drives_the_body_grid(self):
+        body = self._rule('body')
+        self.assertIsNotNone(body, "could not isolate the `body` CSS rule")
+        # the grid must be expressed through the variable, not a literal width,
+        # otherwise collapsing the rail cannot reflow <main>
+        gtc = re.search(r'grid-template-columns:\s*([^;]+);', body)
+        self.assertIsNotNone(gtc)
+        self.assertIn('var(--sidebar-w)', gtc.group(1))
+        self.assertNotIn('340px', gtc.group(1))
+        expanded = re.search(r'--sidebar-w:\s*(\d+)px', body)
+        self.assertIsNotNone(expanded, "body must define the expanded --sidebar-w")
+        self.assertEqual(int(expanded.group(1)), 340)
+        # and the collapse must be animated with the existing token
+        self.assertIn('transition: var(--transition)', body)
+
+    def test_collapsed_rule_shrinks_the_rail(self):
+        m = re.search(r'body\.sidebar-collapsed\s*\{\s*--sidebar-w:\s*(\d+)px\s*\}', self.css)
+        self.assertIsNotNone(
+            m, "body.sidebar-collapsed must redefine --sidebar-w")
+        width = int(m.group(1))
+        self.assertLess(width, 340)
+        self.assertLessEqual(width, 80, "collapsed rail should be an icon rail (~72px)")
+        self.assertGreaterEqual(width, 56, "rail must stay wide enough to click icons")
+
+    def test_collapsed_state_is_desktop_only(self):
+        # The <=1000px breakpoint stacks the sidebar full-width above the
+        # content; an icon rail there would just be a full-width row of
+        # unlabelled icons. So the collapsed block must be gated >=1001px.
+        m = re.search(r'@media\s*\(min-width:\s*1001px\)\s*\{', self.css)
+        self.assertIsNotNone(m, "collapsed rules must live in a min-width:1001px block")
+        # walk to the matching close brace and assert the rail rules are inside
+        start = m.end()
+        depth, i = 1, start
+        while i < len(self.css) and depth:
+            depth += (self.css[i] == '{') - (self.css[i] == '}')
+            i += 1
+        block = self.css[start:i - 1]
+        self.assertIn('--sidebar-w:72px', block.replace(' ', ''))
+        self.assertIn('.nav-item', block)
+        # mobile layout must still collapse to a single column
+        self.assertRegex(self.css, r'@media\s*\(max-width:\s*1000px\)')
+
+    def test_labels_and_chrome_hide_in_the_rail(self):
+        flat = self.flat
+        # group headers / badges / wordmark / lang select are display:none'd
+        for target in ('.brand-chip', '.aside-tagline', '#langSelect',
+                       '.nav-group>h3', '.preview-badge', '.count-badge'):
+            self.assertIn('body.sidebar-collapsed' + target, flat,
+                          f"{target} is not addressed by the collapsed rules")
+        # nav labels are bare text nodes -> zeroed via font-size, icon restored
+        self.assertIn('body.sidebar-collapsed.nav-item.nav-left{font-size:0', flat)
+        m = re.search(r'body\.sidebar-collapsed\.nav-item\.nav-lefti\{([^}]*)\}', flat)
+        self.assertIsNotNone(m, "collapsed rail must restore the nav icon font-size")
+        icon_rule = m.group(1)
+        self.assertRegex(icon_rule, r'font-size:\d+px')
+        # Regression (caught in Chromium): overriding the base rule's fixed
+        # `width:16px` with `width:auto` collapses the icon box onto the glyph
+        # -- measured width went 16px -> 0px -- and the rail loses its
+        # alignment. The collapsed rule must not touch width at all.
+        self.assertNotIn('width:auto', icon_rule)
+        self.assertIn('width:16px', self._rule('.nav-item .nav-left i'),
+                      "base rule must keep the fixed icon box the rail relies on")
+
+    # --- RBAC must survive the rail ----------------------------------------
+
+    def test_rbac_gate_css_still_present(self):
+        self.assertIn('body.role-viewer.requires-write{display:none!important}', self.flat)
+        self.assertIn('body:not(.role-admin).requires-admin{display:none!important}', self.flat)
+
+    def test_collapsed_css_never_sets_display_on_nav_item(self):
+        """A `body.sidebar-collapsed .nav-item{display:...}` rule would fight
+        the RBAC gate (same specificity + later in the sheet would win for
+        anything the gate does not mark !important, and would in any case make
+        the rail's visibility logic compete with authorization)."""
+        offenders = []
+        for sel, body in self._rules():
+            if 'sidebar-collapsed' not in sel or 'display' not in body:
+                continue
+            for one in sel.split(','):
+                if one.strip().endswith('.nav-item'):
+                    offenders.append((one.strip(), body.strip()))
+        self.assertEqual(offenders, [], f"collapsed CSS sets display on .nav-item: {offenders}")
+
+    def test_gated_nav_items_keep_their_gate_classes_and_hooks(self):
+        # the rail must not have rewritten the nav away from switchTab()
+        for tab, gate in (('tab-provisioner', 'requires-write'),
+                          ('tab-import', 'requires-write'),
+                          ('tab-users', 'requires-admin'),
+                          ('tab-sites', 'requires-admin'),
+                          ('tab-mcp', 'requires-admin'),
+                          ('tab-settings', 'requires-admin')):
+            m = re.search(
+                r'<button class="nav-item ([^"]*)"[^>]*onclick="switchTab\(\'' + tab + r'\'',
+                self.html)
+            self.assertIsNotNone(m, f"nav item for {tab} lost its switchTab onclick")
+            self.assertIn(gate, m.group(1), f"{tab} nav item lost its {gate} gate")
+
+    def test_active_tab_cue_survives_in_the_rail(self):
+        active = self._rule('.nav-item.active')
+        self.assertIsNotNone(active)
+        self.assertIn('inset 3px 0 0 var(--primary)', active)
+
+    # --- persistence --------------------------------------------------------
+
+    def test_localstorage_persistence_wired(self):
+        self.assertIn("const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed'", self.html)
+        self.assertIn("localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')",
+                      self.html)
+        # toggle flips the class and keeps aria-expanded in sync
+        self.assertIn("function applySidebarCollapsed(collapsed)", self.html)
+        self.assertIn("document.body.classList.toggle('sidebar-collapsed', collapsed)", self.html)
+        self.assertIn("btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true')", self.html)
+
+    def test_state_restored_before_first_paint(self):
+        # Restoring at DOMContentLoaded would paint the expanded sidebar and
+        # then animate it shut. The restore must run in markup order BEFORE
+        # the <aside> is parsed.
+        restore = self.html.find("localStorage.getItem('sidebarCollapsed') === '1'")
+        self.assertNotEqual(restore, -1, "no pre-paint restore of the collapsed state")
+        self.assertIn("document.body.classList.add('sidebar-collapsed')",
+                      self.html[restore:restore + 250])
+        self.assertLess(restore, self.html.find('<aside'),
+                        "collapsed state must be restored before <aside> is parsed")
+
+    # --- tooltips -----------------------------------------------------------
+
+    def test_tooltips_are_derived_from_the_translated_label(self):
+        start = self.html.index('function syncNavTooltips()')
+        end = self.html.index('function ', start + len('function syncNavTooltips()'))
+        fn = self.html[start:end]
+        # derived from the live label, never a second hardcoded copy
+        self.assertIn("btn.querySelector('.nav-left')", fn)
+        self.assertIn('label.textContent', fn)
+        self.assertIn("btn.setAttribute('title', text)", fn)
+        # only while collapsed -- expanded labels are already visible
+        self.assertIn("btn.removeAttribute('title')", fn)
+        # and refreshed whenever the language changes, or EN users would keep
+        # seeing Italian tooltips
+        cl_start = self.html.index('function changeLanguage(lang)')
+        cl_end = self.html.index('function initLanguageSelector()')
+        self.assertIn('syncNavTooltips()', self.html[cl_start:cl_end])
+
+    # --- scrollbar ----------------------------------------------------------
+
+    def test_scrollbar_is_token_driven_with_transparent_track(self):
+        track = self._rule('::-webkit-scrollbar-track')
+        self.assertIsNotNone(track)
+        self.assertIn('transparent', track)
+        self.assertNotIn('var(--bg)', track)
+        thumb = self._rule('::-webkit-scrollbar-thumb')
+        self.assertIsNotNone(thumb)
+        self.assertIn('background: var(--border)', thumb)
+        self.assertNotIn('--surface-3', thumb)
+        hover = self._rule('::-webkit-scrollbar-thumb:hover')
+        self.assertIsNotNone(hover)
+        self.assertIn('var(--primary)', hover)
+
+    def test_no_raw_colors_anywhere_in_the_scrollbar_rules(self):
+        offenders = []
+        for sel, body in self._rules():
+            if 'scrollbar' not in sel and 'scrollbar-color' not in body:
+                continue
+            for decl in re.findall(r'#[0-9a-fA-F]{3,8}\b|\brgb a?\([^)]*\)', body):
+                offenders.append((sel, decl))
+        self.assertEqual(offenders, [],
+                         f"scrollbar rules must use tokens, found raw colors: {offenders}")
+
+    def test_scrollbar_styled_for_both_engines(self):
+        # Firefox ignores ::-webkit-* entirely; without scrollbar-color the
+        # restyle silently does nothing there.
+        self.assertIn('scrollbar-color: var(--border) transparent', self.css)
+        self.assertIn('scrollbar-width: thin', self.css)
+
+    def test_sidebar_thumb_is_invisible_at_rest_but_tables_keep_theirs(self):
+        self.assertIn('aside::-webkit-scrollbar-thumb{background:transparent',
+                      self.flat, "sidebar thumb must fade out at rest")
+        self.assertIn(
+            'aside:hover::-webkit-scrollbar-thumb,aside:focus-within::-webkit-scrollbar-thumb'
+            '{background:var(--border)}',
+            self.flat, "sidebar thumb must come back on hover/focus-within")
+        self.assertIn('aside{scrollbar-color:transparenttransparent}', self.flat)
+        self.assertIn('aside:hover,aside:focus-within{scrollbar-color:var(--border)transparent}',
+                      self.flat)
+        # The rest-invisible treatment must stay scoped to `aside`: a bare
+        # `::-webkit-scrollbar-thumb{background:transparent}` would make every
+        # table and modal scrollbar invisible too.
+        thumb = self._rule('::-webkit-scrollbar-thumb')
+        self.assertNotIn('background: transparent', thumb)
+
+
 if __name__ == "__main__":
     unittest.main()

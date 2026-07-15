@@ -71,17 +71,32 @@
       color: var(--text);
       min-height: 100vh;
       display: grid;
-      grid-template-columns: 340px 1fr;
+      /* --sidebar-w è l'unico punto di verità della larghezza della sidebar:
+         la rail collassata la riscrive e la griglia (quindi <main>) si riadatta. */
+      --sidebar-w: 340px;
+      grid-template-columns: var(--sidebar-w) 1fr;
       gap: 20px;
       padding: 20px;
       overflow-x: hidden;
+      transition: var(--transition);
     }
 
-    /* Scrollbar Styling */
+    /* Scrollbar: trattamento coerente col design language — binario trasparente,
+       pollice hairline (--border) che vira su --primary al passaggio del mouse.
+       Globale di proposito: tabelle e modali mantengono un affordance visibile.
+       La sidebar lo sovrascrive più sotto per farlo sparire a riposo. */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
+      /* bordo trasparente + background-clip: pollice sottile ma area di presa piena */
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary); background-clip: padding-box; }
+    /* Firefox: nessun pseudo-elemento, si usano le proprietà standard. */
+    html { scrollbar-color: var(--border) transparent; }
 
     /* Login / Setup Glassmorphic Overlay */
     #authOverlay {
@@ -153,6 +168,17 @@
       overflow-y: auto; /* Abilita lo scorrimento autonomo del form sui monitor piccoli o elenchi lunghi */
       scrollbar-width: thin;
     }
+
+    /* Sidebar: il pollice resta invisibile a riposo così il bordo della sidebar
+       resta pulito, e compare solo mentre ci si passa sopra (lo scroll con la
+       rotella implica :hover) o quando la tastiera è dentro (:focus-within). */
+    aside::-webkit-scrollbar-thumb { background: transparent; }
+    aside:hover::-webkit-scrollbar-thumb,
+    aside:focus-within::-webkit-scrollbar-thumb { background: var(--border); }
+    aside:hover::-webkit-scrollbar-thumb:hover,
+    aside:focus-within::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    aside { scrollbar-color: transparent transparent; }
+    aside:hover, aside:focus-within { scrollbar-color: var(--border) transparent; }
 
     h2, h3 {
       font-family: var(--font-display);
@@ -704,10 +730,66 @@
     .nav-item.active{color:var(--text);background:var(--surface-3);border-color:var(--border);box-shadow:inset 3px 0 0 var(--primary)}
     .nav-item .nav-left{display:flex;align-items:center;gap:10px;min-width:0}
     .nav-item .nav-left i{width:16px;text-align:center;color:var(--primary)}
+
+    /* --- Sidebar rail (collassabile) --- */
+    .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%}
+    .aside-actions{display:flex;align-items:center;gap:8px;flex:none}
+    .sidebar-toggle{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;padding:0;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-muted);cursor:pointer;transition:var(--transition)}
+    .sidebar-toggle:hover{color:var(--text);border-color:var(--primary)}
+    .sidebar-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+    .sidebar-toggle i{transition:var(--transition)}
+    body.sidebar-collapsed .sidebar-toggle i{transform:rotate(180deg)}
+
+    /* Stato collassato: solo da 1001px in su. Sotto i 1000px la sidebar si impila
+       già a piena larghezza sopra il contenuto, dove una rail di icone non ha senso
+       (e lascerebbe le etichette nascoste su tutta la riga). */
+    @media (min-width:1001px){
+      body.sidebar-collapsed{--sidebar-w:72px}
+      body.sidebar-collapsed aside{padding:24px 10px;align-items:center}
+      body.sidebar-collapsed .aside-header{width:100%;align-items:center}
+      body.sidebar-collapsed .brand-row{justify-content:center}
+      /* Le etichette sono nodi di testo nudi accanto alle <i>: font-size:0 le
+         azzera senza toccare il markup né i valori i18n (che contengono le <i>),
+         e a differenza di display:none il testo resta leggibile dagli screen reader. */
+      body.sidebar-collapsed .aside-header h2{font-size:0;gap:0}
+      body.sidebar-collapsed .aside-header h2 i{font-size:20px}
+      body.sidebar-collapsed .brand-chip,
+      body.sidebar-collapsed .aside-tagline,
+      body.sidebar-collapsed #langSelect,
+      body.sidebar-collapsed .nav-group>h3,
+      body.sidebar-collapsed .preview-badge,
+      body.sidebar-collapsed .count-badge{display:none}
+      body.sidebar-collapsed .user-badge{flex-direction:column;gap:12px;padding:10px 4px;font-size:0;width:100%}
+      body.sidebar-collapsed .user-badge i{font-size:14px}
+      body.sidebar-collapsed .sidenav{width:100%}
+      /* NB: nessuna regola qui tocca `display` di .nav-item — i gate RBAC
+         (body:not(.role-admin) .requires-admin{display:none!important}) restano
+         gli unici a deciderne la visibilità. */
+      body.sidebar-collapsed .nav-item{justify-content:center;padding:11px 0}
+      body.sidebar-collapsed .nav-item .nav-left{font-size:0;gap:0}
+      /* Solo font-size: la width:16px della regola base va conservata, è quella
+         che dà alle icone una cassetta di larghezza fissa (quindi allineata) —
+         con width:auto la cassetta collassa sulla glifo e la rail si disallinea. */
+      body.sidebar-collapsed .nav-item .nav-left i{font-size:15px}
+    }
+    @media (max-width:1000px){.sidebar-toggle{display:none}}
     @media (max-width:1200px){.hero,.kpi-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
+  <script>
+    // Ripristina lo stato della sidebar PRIMA del primo paint: applicare la classe
+    // più tardi (a DOMContentLoaded) farebbe vedere la sidebar espansa che si
+    // richiude. Qui il valore iniziale è già 72px, quindi la transizione non parte.
+    // NB: questo script ha uno scope separato e non vede SIDEBAR_COLLAPSED_KEY,
+    // quindi la chiave è ripetuta come letterale: se la si rinomina va cambiata
+    // anche qui (TestSidebarRail fissa entrambe le occorrenze).
+    try {
+      if (localStorage.getItem('sidebarCollapsed') === '1') {
+        document.body.classList.add('sidebar-collapsed');
+      }
+    } catch (e) { /* localStorage non disponibile: si resta espansi */ }
+  </script>
 
   <!-- Overlay Login Glassmorphic / Setup Wizard -->
   <div id="authOverlay">
@@ -802,12 +884,24 @@
   </div>
 
   <!-- Sidebar di Provisioning & Gruppi -->
-  <aside>
+  <aside id="appSidebar">
     <div class="aside-header">
-      <h2><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Sentinel<span class="brand-chip">Net</span></h2>
-      <span style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Network Intelligence Platform</span>
+      <div class="brand-row">
+        <h2><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Sentinel<span class="brand-chip">Net</span></h2>
+        <div class="aside-actions">
+          <!-- #langSelect viene iniettato qui da initLanguageSelector() -->
+          <button type="button" id="sidebarToggle" class="sidebar-toggle" onclick="toggleSidebar()"
+                  aria-expanded="true" aria-controls="appSidebar"
+                  aria-label="Comprimi o espandi la barra laterale"
+                  title="Comprimi o espandi la barra laterale"
+                  data-i18n-title="titleSidebarToggle" data-i18n-aria-label="titleSidebarToggle">
+            <i class="fa-solid fa-angles-left"></i>
+          </button>
+        </div>
+      </div>
+      <span class="aside-tagline" style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Network Intelligence Platform</span>
     </div>
-    
+
     <div class="user-badge">
       <span id="userBadgeLabel"><i class="fa-solid fa-user-shield"></i> Amministratore</span>
       <a href="#" onclick="logout()" style="color: var(--danger); text-decoration: none; font-weight: 700;" data-i18n="btnExit"><i class="fa-solid fa-power-off"></i> Esci</a>
@@ -2840,6 +2934,7 @@
         flowsEyebrow: '<i class="fa-solid fa-wave-square"></i> Osservabilità',
         titleFlowDetail: 'Dettaglio flusso',
         titleClose: 'Chiudi',
+        titleSidebarToggle: 'Comprimi o espandi la barra laterale',
         titleHighlightTopology: 'Evidenzia nella topologia',
         clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Rete',
         titleClientMap: "Client Map — MAC ↔ IP",
@@ -3464,6 +3559,7 @@
         flowsEyebrow: '<i class="fa-solid fa-wave-square"></i> Observability',
         titleFlowDetail: 'Flow detail',
         titleClose: 'Close',
+        titleSidebarToggle: 'Collapse or expand the sidebar',
         titleHighlightTopology: 'Highlight in topology',
         clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Network',
         titleClientMap: "Client Map — MAC ↔ IP",
@@ -3996,6 +4092,18 @@
             }
         });
 
+        // Traduci elementi con attributo data-i18n-aria-label (nome accessibile
+        // dei controlli con la sola icona, es. il toggle della sidebar)
+        document.querySelectorAll("[data-i18n-aria-label]").forEach(el => {
+            const key = el.getAttribute("data-i18n-aria-label");
+            if (i18n[lang] && i18n[lang][key]) {
+                el.setAttribute("aria-label", i18n[lang][key]);
+            }
+        });
+
+        // I tooltip della rail derivano dai label tradotti: vanno rigenerati qui.
+        syncNavTooltips();
+
         // Aggiorna il badge utente (ruolo localizzato)
         if (currentUsername) applyRoleUI(currentUsername, currentRole);
 
@@ -4028,16 +4136,10 @@
     }
 
     function initLanguageSelector() {
-        const asideHeader = document.querySelector('.aside-header');
-        if (asideHeader && !document.getElementById("langSelect")) {
-            const langContainer = document.createElement('div');
-            langContainer.style.cssText = "display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px;";
-            
-            const h2 = asideHeader.querySelector('h2');
-            if (h2) {
-                langContainer.appendChild(h2);
-            }
-            
+        // Il selettore viene iniettato nello slot .aside-actions, prima del
+        // pulsante di collasso (che è già nel markup).
+        const actions = document.querySelector('.aside-header .aside-actions');
+        if (actions && !document.getElementById("langSelect")) {
             const select = document.createElement('select');
             select.id = "langSelect";
             select.style.cssText = "padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 11px; cursor: pointer; outline: none;";
@@ -4047,11 +4149,44 @@
             `;
             select.value = currentLang;
             select.onchange = (e) => changeLanguage(e.target.value);
-            
-            langContainer.appendChild(select);
-            asideHeader.insertBefore(langContainer, asideHeader.firstChild);
+
+            actions.insertBefore(select, actions.firstChild);
         }
         changeLanguage(currentLang);
+        // Allinea aria-expanded e i tooltip allo stato ripristinato prima del paint.
+        applySidebarCollapsed(document.body.classList.contains('sidebar-collapsed'));
+    }
+
+    // --- SIDEBAR RAIL (collasso a icone) ---
+
+    const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed';
+
+    // Con la rail collassata restano solo le icone: il tooltip nativo è l'unica
+    // etichetta disponibile. Il testo viene DERIVATO dal label già tradotto, così
+    // non esiste una seconda copia della stringa da tenere allineata: basta
+    // richiamare questa funzione dopo ogni cambio lingua.
+    function syncNavTooltips() {
+        const collapsed = document.body.classList.contains('sidebar-collapsed');
+        document.querySelectorAll('.sidenav .nav-item').forEach(btn => {
+            const label = btn.querySelector('.nav-left');
+            if (!label) return;
+            const text = label.textContent.trim();
+            if (collapsed && text) btn.setAttribute('title', text);
+            else btn.removeAttribute('title');
+        });
+    }
+
+    function applySidebarCollapsed(collapsed) {
+        document.body.classList.toggle('sidebar-collapsed', collapsed);
+        const btn = document.getElementById('sidebarToggle');
+        if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        syncNavTooltips();
+    }
+
+    function toggleSidebar() {
+        const collapsed = !document.body.classList.contains('sidebar-collapsed');
+        try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
+        applySidebarCollapsed(collapsed);
     }
 
     let globalDevices = [];
