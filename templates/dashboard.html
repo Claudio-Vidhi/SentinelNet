@@ -763,6 +763,10 @@
       body.sidebar-collapsed .count-badge{display:none}
       body.sidebar-collapsed .user-badge{flex-direction:column;gap:12px;padding:10px 4px;font-size:0;width:100%}
       body.sidebar-collapsed .user-badge i{font-size:14px}
+      /* .role-pill dichiara font-size:10px, quindi non eredita lo 0 di
+         .user-badge e traboccherebbe dalla rail da 72px. Va nascosta esplicitamente.
+         Scoped a .user-badge: le role-pill nelle tabelle non c'entrano. */
+      body.sidebar-collapsed .user-badge .role-pill{display:none}
       body.sidebar-collapsed .sidenav{width:100%}
       /* NB: nessuna regola qui tocca `display` di .nav-item — i gate RBAC
          (body:not(.role-admin) .requires-admin{display:none!important}) restano
