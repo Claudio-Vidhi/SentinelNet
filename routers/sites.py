@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Router Sites. Estratto da app_server.py (fase 6.6)."""
 
+import re
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 
 from security_manager import log_audit
 from routers.deps import require_admin, require_operator
+from routers.commands import command_allowed, is_command_safe, _bypass_note
 import site_manager
 
 router = APIRouter(tags=["Sites"])
