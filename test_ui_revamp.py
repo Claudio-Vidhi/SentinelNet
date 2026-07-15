@@ -649,5 +649,73 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
+class TestProvisionerTabRestyle(unittest.TestCase):
+    """Task 14: #tab-provisioner (Zero-Touch Provisioner) restyle guard.
+
+    The flagship form: two vendor sections toggled at runtime, an admin-gated
+    inline FortiGate token model, and dual endpoint families reached through a
+    computed base path.
+    """
+
+    def _tab(self, html):
+        start = html.index('<div id="tab-provisioner"')
+        end = html.index('<!-- TAB 6: Importazione CSV -->')
+        return html[start:end]
+
+    def test_preserve_ids(self):
+        html = _html()
+        for _id in ('fgtTokenPanel', 'fgtTokensTable', 'fgtTokensTableBody',
+                    'provFgtSection', 'provCiscoSection', 'provVendor', 'provRole',
+                    'btnProvGenerate', 'btnProvDownload', 'provDeliveryMode',
+                    'provSshFields', 'provSerialFields', 'provOutput'):
+            self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        # Both vendor bases are chosen by provPayloadAndBase(); the four verbs
+        # are then reached as `${base}/<verb>` template literals, so assert the
+        # bases and the suffixes rather than concatenated literals that never
+        # appear in the source.
+        self.assertIn("base: '/api/provisioner/fgt'", html)
+        self.assertIn("base: '/api/provisioner'", html)
+        for suffix in ('generate', 'download', 'push-ssh', 'push-serial'):
+            self.assertIn('apiFetch(`${base}/%s`' % suffix, html,
+                          f"lost the {suffix} call site")
+        self.assertIn("apiFetch('/api/provisioner/serial-ports')", html)
+        # FortiGate token model: list (plural) + create/delete (singular).
+        self.assertIn("apiFetch('/api/fortigate/tokens')", html)
+        self.assertIn("apiFetch('/api/fortigate/token'", html)
+
+    def test_vendor_toggle_intact(self):
+        html = _html()
+        # Restyling must not break which vendor section is visible.
+        self.assertIn("function provVendorIsFgt()", html)
+        self.assertIn("getElementById('provCiscoSection').style.display = fgt ? 'none' : ''", html)
+        self.assertIn("getElementById('provFgtSection').style.display = fgt ? '' : 'none'", html)
+
+    def test_rbac_preserved(self):
+        html = _html()
+        tab = self._tab(html)
+        # The token panel stays admin-gated; the tab itself is gated at the nav
+        # entry (requires-write), which is why the body carries no write gate.
+        self.assertIn('class="panel requires-admin" id="fgtTokenPanel"', tab)
+        self.assertEqual(tab.count('requires-admin'), 1)
+
+    def test_tab_uses_component_classes(self):
+        html = _html()
+        tab = self._tab(html)
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+                    'class="table-wrap"'):
+            self.assertIn(cls, tab)
+        # token panel + device/params card + generate/deliver card
+        self.assertGreaterEqual(tab.count('class="panel'), 3)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('provisionerEyebrow:', 'provPanelDevice:', 'provPanelDeploy:',
+                    'titleProvisioner:', 'descProvisioner:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
