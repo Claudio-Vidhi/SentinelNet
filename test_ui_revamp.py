@@ -3,6 +3,7 @@ import os, tempfile
 _TMP = tempfile.mkdtemp(prefix="sentinelnet_uirevamp_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
 import unittest
+from html.parser import HTMLParser  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP
@@ -11,6 +12,211 @@ import app_server  # noqa: E402
 
 def _html():
     return TestClient(app_server.app).get("/").text
+
+
+# ---------------------------------------------------------------------------
+# HTML nesting/balance guard (Task 14 finding)
+#
+# Every other test in this file only checks substring presence (an id, a
+# class, an onclick hook). That cannot catch a *nesting* bug: deleting a
+# single </div> leaves every id/class/hook byte-for-byte present, just
+# parented under the wrong ancestor. A reviewer proved this by deleting the
+# </div> that closes #provFgtSection -- #provCiscoSection silently becomes
+# its child, breaking the runtime vendor toggle -- and the whole suite
+# still passed. _NestingParser below drives stdlib html.parser.HTMLParser
+# over the *rendered* HTML to check real nesting, not text membership.
+# ---------------------------------------------------------------------------
+
+class _NestingParser(HTMLParser):
+    """Generic tag-nesting/balance checker built on stdlib HTMLParser.
+
+    - <script>/<style> bodies are never scanned for tags: HTMLParser's
+      built-in CDATA_CONTENT_ELEMENTS handling treats everything up to the
+      matching </script>/</style> as opaque text, so the many HTML-shaped
+      template-literal strings inside this file's inline JS (e.g. the SVG
+      markup built by the topology renderer) are never mistaken for real
+      markup.
+    - Void/self-closing elements (<br>, <img>, <input>, <meta>, <link>,
+      <hr>, <source>, ...) never require a closing tag and are therefore
+      never pushed onto the nesting stack.
+    - For any id passed in `watch_ids`, records the (line, col) position of
+      its opening tag and, once the LIFO stack pops it, the position of
+      whichever closing tag actually popped it. That "whichever" is the
+      crux: browsers (and this parser) resolve a bare </div> against the
+      *nearest* open <div> regardless of id, which is exactly the mechanism
+      that lets one missing </div> silently re-parent a sibling as a child
+      instead of raising a hard parse error.
+    """
+
+    VOID_ELEMENTS = {
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    }
+
+    def __init__(self, watch_ids=()):
+        super().__init__(convert_charrefs=True)
+        self.watch_ids = set(watch_ids)
+        self.stack = []        # [{"tag":str, "id":str|None}, ...]
+        self.errors = []       # stray/mismatched closing tags
+        self.spans = {}        # id -> {"start": (line,col), "end": (line,col)|None}
+        self.push_counts = {}  # id -> number of times an element with that id opened
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in self.VOID_ELEMENTS:
+            return
+        _id = dict(attrs).get("id")
+        self.stack.append({"tag": tag, "id": _id})
+        if _id in self.watch_ids:
+            self.push_counts[_id] = self.push_counts.get(_id, 0) + 1
+            self.spans[_id] = {"start": self.getpos(), "end": None}
+
+    def handle_startendtag(self, tag, attrs):
+        # Explicitly self-closed, e.g. `<path d="..."/>` in inline SVG --
+        # balanced by construction, never pushed (mirrors handle_starttag's
+        # void-element skip so we don't double-count).
+        return
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in self.VOID_ELEMENTS:
+            return
+        if not self.stack:
+            self.errors.append(f"stray closing tag </{tag}> at {self.getpos()}")
+            return
+        top = self.stack[-1]
+        if top["tag"] != tag:
+            self.errors.append(
+                f"mismatch at {self.getpos()}: expected </{top['tag']}> "
+                f"(id={top['id']!r}) but found </{tag}>")
+            return
+        self.stack.pop()
+        if top["id"] in self.watch_ids:
+            self.spans[top["id"]]["end"] = self.getpos()
+
+
+def _parse(html, watch_ids=()):
+    p = _NestingParser(watch_ids)
+    p.feed(html)
+    p.close()
+    return p
+
+
+# All #tab-* bodies, in the order they actually appear in the rendered
+# document (verified against templates/dashboard.html).
+TAB_IDS_IN_DOC_ORDER = [
+    "tab-home", "tab-devices", "tab-groups", "tab-map", "tab-map-interactive",
+    "tab-categories", "tab-security", "tab-mac", "tab-clientmap", "tab-flows",
+    "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-users",
+    "tab-sites", "tab-mcp", "tab-settings",
+]
+
+
+class TestTabNestingBalance(unittest.TestCase):
+    """Task 14 finding: regression guard for HTML element nesting/balance.
+
+    Deleting the </div> that closes #provFgtSection (so #provCiscoSection
+    nests inside it instead of being its sibling) passed all 55 pre-existing
+    tests. These tests parse the rendered HTML with html.parser and check
+    real nesting -- verified locally to fail against that exact mutation and
+    pass once the file is restored.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _html()
+        cls.watch_ids = set(TAB_IDS_IN_DOC_ORDER) | {"provFgtSection", "provCiscoSection"}
+        cls.parsed = _parse(cls.html, watch_ids=cls.watch_ids)
+        # cumulative char offset of the start of each line, for slicing.
+        cls.line_offsets = []
+        total = 0
+        for line in cls.html.splitlines(keepends=True):
+            cls.line_offsets.append(total)
+            total += len(line)
+        cls.line_offsets.append(total)
+
+    def _offset(self, pos):
+        line, col = pos
+        return self.line_offsets[line - 1] + col
+
+    def test_document_has_no_stray_or_mismatched_closing_tags(self):
+        # A single deleted </div> doesn't necessarily raise an immediate
+        # tag-name mismatch (div still matches div) -- but the deficit it
+        # creates always surfaces by end-of-document, either as an explicit
+        # mismatch (a later real tag colliding with the missing close) or
+        # as unclosed tags left on the stack at EOF. Both are asserted.
+        self.assertEqual(self.parsed.errors, [],
+                          "stray/mismatched closing tag(s) found while parsing "
+                          "the rendered dashboard -- see positions above")
+        self.assertEqual(self.parsed.stack, [],
+                          f"document ends with unclosed tag(s): {self.parsed.stack}")
+
+    def test_every_tab_body_opens_once_and_closes(self):
+        for tab_id in TAB_IDS_IN_DOC_ORDER:
+            with self.subTest(tab=tab_id):
+                self.assertEqual(self.parsed.push_counts.get(tab_id), 1,
+                                  f"#{tab_id} should open exactly once")
+                span = self.parsed.spans.get(tab_id)
+                self.assertIsNotNone(span, f"#{tab_id} not found in rendered HTML")
+                self.assertIsNotNone(
+                    span["end"],
+                    f"#{tab_id} <div> is never closed before end-of-document -- "
+                    f"a missing </div> upstream is swallowing its close tag")
+
+    def test_each_tab_body_is_internally_balanced(self):
+        # Re-parse each tab's own slice in isolation, so an internal
+        # imbalance (not just the outer wrapper) is caught and localized to
+        # the specific tab, independent of the whole-document check above.
+        for tab_id in TAB_IDS_IN_DOC_ORDER:
+            with self.subTest(tab=tab_id):
+                span = self.parsed.spans[tab_id]
+                if span["end"] is None:
+                    self.fail(f"#{tab_id} <div> never closes -- cannot slice "
+                              f"it for an internal-balance re-check (see "
+                              f"test_every_tab_body_opens_once_and_closes)")
+                start = self._offset(span["start"])
+                end = self._offset(span["end"])
+                end = self.html.index(">", end) + 1  # include the closing </div>
+                fragment = self.html[start:end]
+                sub = _parse(fragment)
+                self.assertEqual(sub.errors, [],
+                                  f"#{tab_id} internal markup has mismatched tags: {sub.errors}")
+                self.assertEqual(sub.stack, [],
+                                  f"#{tab_id} internal markup left tag(s) open: {sub.stack}")
+
+    def test_tabs_are_siblings_never_nested(self):
+        # The invariant that actually catches the Task 14 mutation: each
+        # tab body must close before the next one opens. HTMLParser.getpos()
+        # positions are (line, col) tuples that compare in document order.
+        for a, b in zip(TAB_IDS_IN_DOC_ORDER, TAB_IDS_IN_DOC_ORDER[1:]):
+            with self.subTest(prev=a, next=b):
+                end_a = self.parsed.spans[a]["end"]
+                start_b = self.parsed.spans[b]["start"]
+                self.assertIsNotNone(
+                    end_a, f"#{a} never closes, so #{b} can't be verified as its sibling")
+                self.assertLess(
+                    end_a, start_b,
+                    f"#{a} closes at {end_a} but #{b} opens at {start_b} -- "
+                    f"#{b} is nested inside #{a} instead of being its sibling")
+
+    def test_prov_fgt_and_cisco_sections_are_siblings(self):
+        # Pins the exact Task 14 mutation target: deleting the </div> that
+        # closes #provFgtSection nests #provCiscoSection inside it. Both
+        # ids are toggled independently at runtime by provVendorIsFgt()'s
+        # style.display swap, so neither may be an ancestor of the other.
+        fgt = self.parsed.spans.get("provFgtSection")
+        cisco = self.parsed.spans.get("provCiscoSection")
+        self.assertIsNotNone(fgt, "#provFgtSection not found in rendered HTML")
+        self.assertIsNotNone(cisco, "#provCiscoSection not found in rendered HTML")
+        self.assertIsNotNone(fgt["end"], "#provFgtSection <div> is never closed")
+        self.assertIsNotNone(cisco["end"], "#provCiscoSection <div> is never closed")
+        nested = (fgt["start"] < cisco["start"] < fgt["end"]) or \
+                 (cisco["start"] < fgt["start"] < cisco["end"])
+        self.assertFalse(
+            nested,
+            "#provFgtSection and #provCiscoSection must be siblings (neither "
+            "an ancestor of the other) -- provVendorIsFgt() sets "
+            "style.display on both independently at runtime")
 
 
 class TestComponentLayer(unittest.TestCase):
