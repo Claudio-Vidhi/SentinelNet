@@ -76,5 +76,48 @@ class TestRouterParity(unittest.TestCase):
             )
 
 
+PRE_DESTRUCTURE = os.path.join(os.path.dirname(__file__), "tests_data",
+                               "openapi_pre_destructure.json")
+
+
+class TestFullParity(unittest.TestCase):
+    """Gate del destructuring (fase 6.6): OGNI percorso, metodo, parametro e
+    schema deve restare identico allo snapshot catturato prima dell'estrazione.
+    Unica differenza ammessa: i ``tags`` aggiunti dai router."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(PRE_DESTRUCTURE, encoding="utf-8") as f:
+            cls.snap = json.load(f)
+        cls.current = app_server.app.openapi()
+
+    def test_path_set_identical(self):
+        self.assertEqual(sorted(self.snap["paths"]), sorted(self.current["paths"]),
+                         "l'insieme dei percorsi è cambiato")
+
+    def test_every_operation_identical(self):
+        for path, ops in self.snap["paths"].items():
+            cur_ops = self.current["paths"][path]
+            self.assertEqual(set(ops), set(cur_ops), f"metodi diversi su {path}")
+            for method, op in ops.items():
+                self.assertEqual(
+                    json.dumps(_normalize(op), sort_keys=True),
+                    json.dumps(_normalize(cur_ops[method]), sort_keys=True),
+                    f"contratto cambiato: {method.upper()} {path}",
+                )
+
+    def test_every_schema_identical(self):
+        snap_schemas = self.snap.get("components", {}).get("schemas", {})
+        cur_schemas = self.current.get("components", {}).get("schemas", {})
+        self.assertEqual(sorted(snap_schemas), sorted(cur_schemas),
+                         "l'insieme degli schemi componenti è cambiato")
+        for name, schema in snap_schemas.items():
+            self.assertEqual(
+                json.dumps(schema, sort_keys=True),
+                json.dumps(cur_schemas[name], sort_keys=True),
+                f"schema {name} cambiato",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
