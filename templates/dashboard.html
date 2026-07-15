@@ -2244,26 +2244,34 @@
 
     <!-- TAB 7: Gestione Utenti (solo admin) -->
     <div id="tab-users" class="tab-content">
-      <h3 data-i18n="titleUsers">Gestione Utenti e Privilegi</h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descUsers">
-        Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.
-      </p>
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th data-i18n="thUserName">Username</th>
-              <th data-i18n="thUserRole">Ruolo / Privilegio</th>
-              <th data-i18n="thUserGroups">Sedi visibili / gestibili</th>
-              <th data-i18n="thUserTabs">Tab dashboard visibili</th>
-              <th data-i18n="thUserActions">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="usersTableBody"></tbody>
-        </table>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="usersEyebrow"><i class="fa-solid fa-users-gear"></i> Amministrazione</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleUsers">Gestione Utenti e Privilegi</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descUsers">
+            Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.
+          </p>
+        </div>
       </div>
 
-      <div style="margin-top: 24px;">
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="thUserName">Username</th>
+                <th data-i18n="thUserRole">Ruolo / Privilegio</th>
+                <th data-i18n="thUserGroups">Sedi visibili / gestibili</th>
+                <th data-i18n="thUserTabs">Tab dashboard visibili</th>
+                <th data-i18n="thUserActions">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3 style="font-size: 15px; margin-bottom: 12px;" data-i18n="titleAddUser"><i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente</h3>
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
@@ -3031,6 +3039,7 @@
         // Ricerca inventario + gestione utenti
         searchInventoryPl: "Cerca IP, hostname, vendor, tenant...",
         tabUsers: '<i class="fa-solid fa-users-gear"></i> Utenti',
+        usersEyebrow: '<i class="fa-solid fa-users-gear"></i> Amministrazione',
         titleUsers: "Gestione Utenti e Privilegi",
         tabSettings: '<i class="fa-solid fa-gear"></i> Impostazioni',
         titleSettings: "Impostazioni",
@@ -3632,6 +3641,7 @@
         // Inventory search + user management
         searchInventoryPl: "Search IP, hostname, vendor, tenant...",
         tabUsers: '<i class="fa-solid fa-users-gear"></i> Users',
+        usersEyebrow: '<i class="fa-solid fa-users-gear"></i> Administration',
         titleUsers: "User & Privilege Management",
         descUsers: 'Create accounts with different privileges. <strong>Admin</strong>: full control and user management. <strong>Operator</strong>: all network operations (triage, commands, inventory). <strong>Viewer</strong>: read-only.',
         tabSettings: '<i class="fa-solid fa-gear"></i> Settings',
