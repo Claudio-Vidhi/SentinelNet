@@ -677,6 +677,23 @@
     .led-warning{background:var(--warning);box-shadow:0 0 10px rgba(255,184,77,.45)}
     .led-danger{background:var(--danger);box-shadow:0 0 10px rgba(250,127,170,.45)}
     .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(169,159,242,.12);color:var(--primary);border:1px solid rgba(169,159,242,.18);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    /* Variante interattiva di .chip: selettore a scelta singola (Tipo apparato ZTP).
+       Non selezionato = neutro; selezionato = accento primary (stessi canali di .chip). */
+    .chip-choice{cursor:pointer;font-family:inherit;font-size:12px;padding:8px 14px;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);transition:var(--transition)}
+    .chip-choice:hover{color:var(--text);border-color:rgba(169,159,242,.45)}
+    .chip-choice[aria-pressed="true"]{background:rgba(169,159,242,.12);color:var(--primary);border-color:rgba(169,159,242,.45)}
+    .chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+    /* Utility: nascosto visivamente ma vivo per screen reader, tastiera e JS.
+       !important perché `.form-group select` è più specifico su width/padding. */
+    .visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important}
+    /* Token API FortiGate inline: nascosto finché non si seleziona FortiGate.
+       Guidato dalla classe .is-visible (mai da style inline) così il gate
+       `body:not(.role-admin) .requires-admin{display:none!important}` vince sempre. */
+    #provFgtTokenSection{display:none}
+    #provFgtTokenSection.is-visible{display:block}
+    .fgt-token-reveal{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;padding:4px;cursor:pointer;color:var(--text-muted);font-size:13px;line-height:1;border-radius:6px;transition:var(--transition)}
+    .fgt-token-reveal:hover{color:var(--primary)}
+    .fgt-token-reveal:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
     .split-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
     .preview-badge{font-size:10px;font-weight:700;text-transform:uppercase;border-radius:999px;padding:3px 7px;letter-spacing:.05em;background:rgba(255,184,77,.16);color:var(--warning);border:1px solid rgba(255,184,77,.24)}
     .count-badge{font-size:10px;font-weight:700;border-radius:999px;padding:3px 7px;background:rgba(169,159,242,.16);color:var(--primary);border:1px solid rgba(169,159,242,.24)}
@@ -2020,81 +2037,105 @@
         </div>
       </div>
 
-      <!-- ADMIN-ONLY PANEL: FortiGate API Token Management -->
-      <details class="panel requires-admin" id="fgtTokenPanel" style="padding:0; margin-bottom:18px; overflow:hidden;">
-        <summary style="cursor:pointer; padding:12px 14px; font-weight:600;">
-          <i class="fa-solid fa-key" style="color:var(--primary); margin-right:8px;"></i>
-          <span data-i18n="titleFgtApiToken">Token API FortiGate</span>
-        </summary>
-        <div style="padding:14px 14px 14px 14px;">
-          <!-- Status table showing configured tokens -->
-          <div style="margin-bottom:14px;">
-            <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
-            <div class="table-wrap" style="margin-top:0;">
-              <table id="fgtTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
-                <thead>
-                  <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
-                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenIp">IP</th>
-                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenPort">Porta</th>
-                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenTls">Verifica TLS</th>
-                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenStatus">Stato</th>
-                  </tr>
-                </thead>
-                <tbody id="fgtTokensTableBody">
-                </tbody>
-              </table>
-            </div>
-            <div id="fgtTokensEmpty" style="text-align:center; padding:20px; color:var(--text-muted); display:none;" data-i18n="msgFgtTokensEmpty">
-              Nessun token configurato
-            </div>
-          </div>
-
-          <!-- Form to add/configure token -->
-          <div style="border-top:1px solid var(--border); padding-top:14px;">
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
-              <div class="form-group" style="margin-bottom:0;">
-                <label data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
-                <select id="fgtTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-                  <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
-                </select>
-              </div>
-              <div class="form-group" style="margin-bottom:0;">
-                <label data-i18n="lblFgtTokenValue">Token API (password)</label>
-                <input id="fgtTokenValue" type="password" placeholder="••••••••" style="padding-left:12px; font-size:13px;">
-              </div>
-              <div class="form-group" style="margin-bottom:0;">
-                <label data-i18n="lblFgtTokenPort">Porta</label>
-                <input id="fgtTokenPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
-              </div>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-              <input type="checkbox" id="fgtTokenVerifyTls" checked style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-              <label for="fgtTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
-            </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-primary" style="width:auto;" onclick="saveFgtToken()" data-i18n="btnFgtTokenSave">
-                <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
-              </button>
-              <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtToken()" data-i18n="btnFgtTokenRemove">
-                <i class="fa-solid fa-trash"></i> Rimuovi
-              </button>
-              <button class="btn btn-secondary" style="width:auto;" onclick="testFgtToken()" data-i18n="btnFgtTokenTest">
-                <i class="fa-solid fa-plug"></i> Test
-              </button>
-            </div>
-            <div id="fgtTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
-          </div>
-        </div>
-      </details>
-
       <div class="panel" style="margin-bottom:18px;">
       <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-sliders" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="provPanelDevice">Apparato & parametri</span></h3>
-      <div class="form-group" style="max-width:320px;">
-        <label data-i18n="lblProvVendor">Tipo apparato</label>
-        <select id="provVendor" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+
+      <!-- Tipo apparato: chip selector. Il <select id="provVendor"> resta la FONTE
+           DI VERITÀ (lo leggono provVendorIsFgt/provPayloadAndBase): è solo nascosto
+           visivamente, non rimosso. I chip ne impostano .value e dispatchano un vero
+           evento 'change', così tutto il wiring vendor esistente resta invariato. -->
+      <div class="form-group" style="max-width:560px;">
+        <label id="provVendorLabel" for="provVendor" data-i18n="lblProvVendor">Tipo apparato</label>
+        <div id="provVendorChips" role="group" aria-labelledby="provVendorLabel" style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="chip chip-choice" data-vendor="cisco" aria-pressed="true">
+            <i class="fa-solid fa-network-wired"></i><span data-i18n="chipVendorCisco">Switch Cisco (IOS/IOS-XE)</span>
+          </button>
+          <button type="button" class="chip chip-choice" data-vendor="fortigate" aria-pressed="false">
+            <i class="fa-solid fa-shield-halved"></i><span data-i18n="chipVendorFortigate">Firewall FortiGate (FortiOS)</span>
+          </button>
+        </div>
+        <select id="provVendor" class="visually-hidden">
           <option value="cisco">Switch Cisco (IOS/IOS-XE)</option>
           <option value="fortigate">Firewall FortiGate (FortiOS)</option>
         </select>
+      </div>
+
+      <!-- Nota statica: gli switch Cisco non usano token API. Visibile solo per Cisco. -->
+      <p id="provCiscoTokenHint" style="display:flex; align-items:center; gap:6px; margin:0 0 16px; font-size:12px; color:var(--text-muted);">
+        <i class="fa-solid fa-circle-info" style="color:var(--primary);"></i><span data-i18n="msgProvCiscoNoToken">Nessun token API richiesto per gli switch Cisco: la consegna avviene via SSH o console/seriale.</span>
+      </p>
+
+      <!-- Token API FortiGate: inline sotto il Tipo apparato, admin-only, mostrato
+           solo quando il vendor selezionato è FortiGate (classe .is-visible, vedi CSS). -->
+      <div class="requires-admin" id="provFgtTokenSection" style="border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-2); padding:14px; margin-bottom:16px;">
+        <h4 style="display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 12px;">
+          <i class="fa-solid fa-key" style="color:var(--primary);"></i><span data-i18n="titleFgtApiToken">Token API FortiGate</span>
+        </h4>
+
+        <!-- Status table showing configured tokens -->
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
+          <div class="table-wrap" style="margin-top:0;">
+            <table id="fgtTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenIp">IP</th>
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenPort">Porta</th>
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenTls">Verifica TLS</th>
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenStatus">Stato</th>
+                </tr>
+              </thead>
+              <tbody id="fgtTokensTableBody">
+              </tbody>
+            </table>
+          </div>
+          <div id="fgtTokensEmpty" style="text-align:center; padding:20px; color:var(--text-muted); display:none;" data-i18n="msgFgtTokensEmpty">
+            Nessun token configurato
+          </div>
+        </div>
+
+        <!-- Form to add/configure token -->
+        <div style="border-top:1px solid var(--border); padding-top:14px;">
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="fgtTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
+              <select id="fgtTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="fgtTokenValue" data-i18n="lblFgtTokenValue">Token API (password)</label>
+              <!-- autocomplete="new-password": impedisce al browser di autofillare
+                   una credenziale salvata per un altro apparato in questo campo. -->
+              <div style="position:relative; display:flex; align-items:center;">
+                <input id="fgtTokenValue" type="password" autocomplete="new-password" placeholder="••••••••" style="padding-left:12px; padding-right:38px; font-size:13px;">
+                <button type="button" id="fgtTokenReveal" class="fgt-token-reveal" onclick="toggleFgtTokenReveal()" title="Mostra/nascondi token" data-i18n-title="titleFgtTokenReveal">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="fgtTokenPort" data-i18n="lblFgtTokenPort">Porta</label>
+              <input id="fgtTokenPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+            <input type="checkbox" id="fgtTokenVerifyTls" checked style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+            <label for="fgtTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-primary" style="width:auto;" onclick="saveFgtToken()" data-i18n="btnFgtTokenSave">
+              <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
+            </button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtToken()" data-i18n="btnFgtTokenRemove">
+              <i class="fa-solid fa-trash"></i> Rimuovi
+            </button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="testFgtToken()" data-i18n="btnFgtTokenTest">
+              <i class="fa-solid fa-plug"></i> Test
+            </button>
+          </div>
+          <div id="fgtTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+        </div>
       </div>
 
       <div id="provFgtSection" style="display:none;">
@@ -2973,7 +3014,11 @@
         btnFgtTokenRemove: "<i class=\"fa-solid fa-trash\"></i> Rimuovi",
         btnFgtTokenTest: "<i class=\"fa-solid fa-plug\"></i> Test",
         optFgtSelectDevice: "-- seleziona dispositivo --",
+        titleFgtTokenReveal: "Mostra/nascondi token",
         lblProvVendor: "Tipo apparato",
+        chipVendorCisco: "Switch Cisco (IOS/IOS-XE)",
+        chipVendorFortigate: "Firewall FortiGate (FortiOS)",
+        msgProvCiscoNoToken: "Nessun token API richiesto per gli switch Cisco: la consegna avviene via SSH o console/seriale.",
         lblSecret: "Enable Secret",
         btnMapClassic: "Classica",
         btnMapMinimal: "Nuova",
@@ -3593,7 +3638,11 @@
         btnFgtTokenRemove: "<i class=\"fa-solid fa-trash\"></i> Remove",
         btnFgtTokenTest: "<i class=\"fa-solid fa-plug\"></i> Test",
         optFgtSelectDevice: "-- select device --",
+        titleFgtTokenReveal: "Show/hide token",
         lblProvVendor: "Device type",
+        chipVendorCisco: "Cisco Switch (IOS/IOS-XE)",
+        chipVendorFortigate: "FortiGate Firewall (FortiOS)",
+        msgProvCiscoNoToken: "No API token is required for Cisco switches: delivery happens over SSH or console/serial.",
         lblSecret: "Enable Secret",
         btnMapClassic: "Classic",
         btnMapMinimal: "New",
@@ -5057,6 +5106,41 @@
             : { payload: provCollectPayload(), base: '/api/provisioner' };
     }
 
+    // I chip "Tipo apparato" sono solo una skin del <select id="provVendor">, che
+    // resta la fonte di verità: qui li riallineiamo al value corrente del select.
+    function provSyncVendorChips() {
+        const sel = document.getElementById('provVendor');
+        if (!sel) return;
+        document.querySelectorAll('#provVendorChips .chip-choice').forEach(chip => {
+            chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value));
+        });
+    }
+
+    function provInitVendorChips() {
+        const sel = document.getElementById('provVendor');
+        if (!sel) return;
+        document.querySelectorAll('#provVendorChips .chip-choice').forEach(chip => {
+            chip.addEventListener('click', () => {
+                if (sel.value === chip.dataset.vendor) return;
+                sel.value = chip.dataset.vendor;
+                // Evento 'change' reale: rieffettua tutto il wiring vendor esistente
+                // (sezioni Cisco/FGT, campi console, token inline) senza duplicarlo.
+                sel.dispatchEvent(new Event('change'));
+            });
+        });
+        provSyncVendorChips();
+    }
+
+    function toggleFgtTokenReveal() {
+        const inp = document.getElementById('fgtTokenValue');
+        const btn = document.getElementById('fgtTokenReveal');
+        if (!inp || !btn) return;
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        btn.innerHTML = show ? '<i class="fa-solid fa-eye-slash"></i>'
+                             : '<i class="fa-solid fa-eye"></i>';
+    }
+
     function provInitToggles() {
         const roleSel = document.getElementById('provRole');
         if (!roleSel) return;
@@ -5067,7 +5151,26 @@
             // Campi login console: servono solo al push seriale FortiGate.
             document.getElementById('fgtConsoleUserGroup').style.display = fgt ? 'block' : 'none';
             document.getElementById('fgtConsolePassGroup').style.display = fgt ? 'block' : 'none';
+            // Token API inline: solo per FortiGate. Si commuta una CLASSE, mai
+            // style.display, così il gate CSS requires-admin (!important) continua
+            // a vincere e un non-admin non vede la sezione nemmeno da FortiGate.
+            const tokenSec = document.getElementById('provFgtTokenSection');
+            if (tokenSec) tokenSec.classList.toggle('is-visible', fgt);
+            const ciscoHint = document.getElementById('provCiscoTokenHint');
+            if (ciscoHint) ciscoHint.style.display = fgt ? 'none' : 'flex';
+            if (!fgt) {
+                // Igiene credenziali: uscendo da FortiGate non lasciamo un token
+                // digitato (né in chiaro) in un form ora destinato a un altro vendor.
+                const tokenInput = document.getElementById('fgtTokenValue');
+                if (tokenInput) { tokenInput.value = ''; tokenInput.type = 'password'; }
+                const revealBtn = document.getElementById('fgtTokenReveal');
+                if (revealBtn) revealBtn.innerHTML = '<i class="fa-solid fa-eye"></i>';
+                const tokenStatus = document.getElementById('fgtTokenStatus');
+                if (tokenStatus) tokenStatus.textContent = '';
+            }
+            provSyncVendorChips();
         });
+        provInitVendorChips();
         roleSel.addEventListener('change', () => {
             const isDist = roleSel.value === 'distribution';
             document.getElementById('provSvisGroup').style.display = isDist ? 'block' : 'none';
