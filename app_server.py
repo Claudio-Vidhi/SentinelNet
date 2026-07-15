@@ -133,6 +133,8 @@ async def lifespan(app: "FastAPI"):
 
 
 app = FastAPI(title="SentinelNet API", version="0.2.0-beta.1", lifespan=lifespan)
+from routers import mcp as _mcp_router
+app.include_router(_mcp_router.router)
 from routers import provisioner as _provisioner_router
 app.include_router(_provisioner_router.router)
 from routers import ai as _ai_router
@@ -279,8 +281,6 @@ class SubnetScanRequest(BaseModel):
 
 
 
-class McpSettingsSchema(BaseModel):
-    disabled_tools: List[str] = []
 
 class SiteSchema(BaseModel):
     name: str
@@ -815,37 +815,9 @@ _AI_PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
 _MCP_DEFAULT_DISABLED = {"get_top_talkers", "get_anomalies"}
 
 
-def _mcp_disabled_tools() -> list:
-    mcp = get_app_settings().get("mcp")
-    if mcp is None:
-        # Nessuna configurazione salvata: vale il default (tool flussi spenti).
-        return sorted(t for t in _MCP_DEFAULT_DISABLED if t in mcp_server.TOOLS)
-    return [t for t in (mcp.get("disabled_tools") or []) if t in mcp_server.TOOLS]
 
-@app.get("/api/mcp/settings")
-def get_mcp_settings(current_user = Depends(require_admin)):
-    """Catalogo dei tool MCP con descrizione + elenco dei tool disabilitati."""
-    return {
-        "tools": [{"name": name, "description": desc}
-                  for name, (desc, _schema, _fn) in mcp_server.TOOLS.items()],
-        "disabled_tools": _mcp_disabled_tools(),
-    }
 
-@app.post("/api/mcp/settings")
-def set_mcp_settings(payload: McpSettingsSchema, current_user = Depends(require_admin)):
-    unknown = [t for t in payload.disabled_tools if t not in mcp_server.TOOLS]
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"Tool sconosciuti: {', '.join(unknown)}")
-    save_app_settings({"mcp": {"disabled_tools": payload.disabled_tools}})
-    log_audit(f"Tool MCP disabilitati impostati a {payload.disabled_tools or '[]'} "
-              f"da '{current_user.get('sub')}'.")
-    return {"status": "success"}
 
-@app.get("/api/mcp/tool-config")
-def get_mcp_tool_config(current_user = Depends(get_current_user)):
-    """Letto dal processo mcp_server.py (con l'account con cui si autentica)
-    per sapere quali tool NON esporre al client LLM."""
-    return {"disabled_tools": _mcp_disabled_tools()}
 
 
 # --- SCANSIONE SUBNET IN BACKGROUND ---
