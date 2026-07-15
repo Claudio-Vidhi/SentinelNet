@@ -133,6 +133,8 @@ async def lifespan(app: "FastAPI"):
 
 
 app = FastAPI(title="SentinelNet API", version="0.2.0-beta.1", lifespan=lifespan)
+from routers import analyzer as _analyzer_router
+app.include_router(_analyzer_router.router)
 from routers import arp as _arp_router
 app.include_router(_arp_router.router)
 from routers import mac as _mac_router
@@ -874,25 +876,8 @@ _MAC_INFRA_TYPES = {"switch", "router"}
 
 # --- CONFIG ANALYZER: analisi running-config dai backup ---
 
-@app.get("/api/config-analyzer")
-def config_analyzer_all(group: str = "all", current_user = Depends(get_current_user)):
-    scope = user_group_scope(current_user)
-    return config_analyzer.analyze_all(group_filter=group, allowed_groups=scope)
 
 
-@app.get("/api/config-analyzer/{ip}")
-def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
-    scope = user_group_scope(current_user)
-    device = next((d for d in inventory_manager.get_all_devices() if d.get('IP') == ip), None)
-    if device is not None and scope is not None:
-        if device.get('Group', 'Generale') not in scope:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dispositivo non consentito per il tuo profilo.")
-    result = config_analyzer.analyze_device(ip)
-    if result is None:
-        raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
-    return result
 
 
 # --- AI ASSISTANT: provider pluggabili (Anthropic/OpenAI/Gemini/Ollama) ---
