@@ -2347,16 +2347,21 @@
     </div>
 
     <div id="tab-mcp" class="tab-content">
-      <h3><i class="fa-solid fa-plug" style="color:var(--primary);"></i> <span data-i18n="titleMcp">MCP Server — client LLM esterni</span></h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descMcp">
-        SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo
-        <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client,
-        si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi
-        restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura,
-        <em>operator</em> se servono i comandi CLI).
-      </p>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="mcpEyebrow"><i class="fa-solid fa-plug"></i> Integrazioni</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleMcp">MCP Server — client LLM esterni</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descMcp">
+            SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo
+            <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client,
+            si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi
+            restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura,
+            <em>operator</em> se servono i comandi CLI).
+          </p>
+        </div>
+      </div>
 
-      <div style="padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:18px;">
+      <div class="panel" style="margin-bottom:18px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
           <h3 style="font-size:15px; margin:0;"><i class="fa-solid fa-file-code" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientConfig">Configurazione client</span></h3>
           <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="copyMcpConfig()">
@@ -2370,7 +2375,7 @@
         <pre id="mcpConfigSnippet" style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; font-family:var(--font-code); font-size:12px; overflow-x:auto; white-space:pre;"></pre>
       </div>
 
-      <div style="padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2);">
+      <div class="panel">
         <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-toggle-on" style="color:var(--primary);"></i> <span data-i18n="titleMcpTools">Tool esposti</span></h3>
         <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;" data-i18n="descMcpTools">
           Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni
@@ -3108,6 +3113,7 @@
         btnRegenSiteToken: "Rigenera token",
         btnDeleteSite: "Elimina",
         lblSiteDefault: "predefinita",
+        mcpEyebrow: '<i class="fa-solid fa-plug"></i> Integrazioni',
         titleMcp: "MCP Server — client LLM esterni",
         descMcp: "SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client, si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura, <em>operator</em> se servono i comandi CLI).",
         titleMcpClientConfig: "Configurazione client",
@@ -3115,6 +3121,8 @@
         descMcpClientConfig: "Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.",
         titleMcpTools: "Tool esposti",
         descMcpTools: "Scegli quali tool i client MCP possono usare. I tool disattivati spariscono dall'elenco del client e ogni chiamata viene rifiutata. La modifica vale per tutti i client collegati (ricaricano l'elenco entro ~1 minuto).",
+        mcpStEnabled: "Abilitato",
+        mcpStDisabled: "Disabilitato",
         lblProvMgmtIf: "Interfaccia MGMT",
         lblProvWanIf: "Interfaccia WAN",
         lblProvLanIf: "Interfaccia LAN",
@@ -3715,6 +3723,7 @@
         btnRegenSiteToken: "Regenerate token",
         btnDeleteSite: "Delete",
         lblSiteDefault: "Default",
+        mcpEyebrow: '<i class="fa-solid fa-plug"></i> Integrations',
         titleMcp: "MCP Server — external LLM clients",
         descMcp: "SentinelNet can be used by external LLM clients (Claude Desktop, LM Studio, Cline…) via the <strong>MCP</strong> protocol (Model Context Protocol): the <code>mcp_server.py</code> bridge runs on the client machine, authenticates with a SentinelNet account and forwards requests to the REST API. Roles, tenants and the command blacklist stay enforced server-side. Tip: create a dedicated account (<em>viewer</em> for read-only, <em>operator</em> if CLI commands are needed).",
         titleMcpClientConfig: "Client configuration",
@@ -3722,6 +3731,8 @@
         descMcpClientConfig: "Snippet for <code>claude_desktop_config.json</code> (or your client's equivalent). Replace user and password with the dedicated account; the path must point to the local copy of <code>mcp_server.py</code>.",
         titleMcpTools: "Exposed tools",
         descMcpTools: "Choose which tools MCP clients can use. Disabled tools disappear from the client's list and every call is rejected. The change applies to all connected clients (they reload the list within ~1 minute).",
+        mcpStEnabled: "Enabled",
+        mcpStDisabled: "Disabled",
         lblProvMgmtIf: "MGMT interface",
         lblProvWanIf: "WAN interface",
         lblProvLanIf: "LAN interface",
@@ -5491,12 +5502,22 @@
         if (!res || !res.ok) { list.innerHTML = '<span style="color:var(--text-muted); font-size:12px;">Impossibile caricare le impostazioni MCP.</span>'; return; }
         const data = await res.json();
         const disabled = new Set(data.disabled_tools || []);
-        list.innerHTML = (data.tools || []).map(t => `
+        const L = i18n[currentLang];
+        list.innerHTML = (data.tools || []).map(t => {
+            const isEnabled = !disabled.has(t.name);
+            const stKey = isEnabled ? 'mcpStEnabled' : 'mcpStDisabled';
+            return `
             <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;">
-              <input type="checkbox" class="mcp-tool-toggle" value="${escapeHtml(t.name)}" ${disabled.has(t.name) ? '' : 'checked'} style="margin-top:2px;">
-              <span><code style="font-size:12px;">${escapeHtml(t.name)}</code><br>
-                <span style="color:var(--text-muted); font-size:11px;">${escapeHtml(t.description || '')}</span></span>
-            </label>`).join('');
+              <input type="checkbox" class="mcp-tool-toggle" value="${escapeHtml(t.name)}" ${isEnabled ? 'checked' : ''} style="margin-top:2px;">
+              <span style="flex:1;">
+                <span style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                  <code style="font-size:12px;">${escapeHtml(t.name)}</code>
+                  <span class="status ${isEnabled ? 'ok' : 'bad'}"><span class="led ${isEnabled ? 'led-success' : 'led-danger'}"></span><span data-i18n="${stKey}">${escapeHtml(L[stKey])}</span></span>
+                </span>
+                <span style="color:var(--text-muted); font-size:11px;">${escapeHtml(t.description || '')}</span>
+              </span>
+            </label>`;
+        }).join('');
     }
 
     async function saveMcpSettings() {

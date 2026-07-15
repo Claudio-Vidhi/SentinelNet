@@ -1168,5 +1168,85 @@ class TestSitesTabRestyle(unittest.TestCase):
         self.assertIn('L.lblSiteDefault', html)
 
 
+class TestMcpTabRestyle(unittest.TestCase):
+    """Task 18: #tab-mcp (MCP Server) restyle + wiring guard.
+
+    Two panels: a client-config snippet (copy-to-clipboard) and a per-tool
+    enable/disable list rendered by loadMcpTab() -> GET /api/mcp/settings,
+    saved via saveMcpSettings() -> POST /api/mcp/settings. The brief also
+    lists GET/POST /api/mcp/tool-config: traced app_server.py -- only a GET
+    handler exists (get_mcp_tool_config), no POST, and it's read by the
+    separate mcp_server.py bridge process (see mcp_server.py:426), not by
+    dashboard.html. No frontend caller exists for it. Per shared per-tab
+    rules ("do NOT fabricate UI"), relaxed to asserting the real GET handler
+    exists server-side rather than inventing a dashboard control for it.
+    """
+
+    def _tab(self, html):
+        start = html.index('<div id="tab-mcp"')
+        end = html.index('<div id="tab-settings"')
+        return html[start:end]
+
+    def test_preserve_ids(self):
+        html = _html()
+        for _id in ('mcpConfigSnippet', 'mcpToolList', 'mcpSettingsStatus'):
+            self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
+        # class used by saveMcpSettings()'s querySelectorAll, not an id, but
+        # equally load-bearing wiring that must survive the restyle.
+        self.assertIn('class="mcp-tool-toggle"', html)
+
+    def test_endpoint_contract_present(self):
+        html = _html()
+        self.assertIn("apiFetch('/api/mcp/settings')", html)
+        self.assertIn("apiFetch('/api/mcp/settings', {", html)
+        # /api/mcp/tool-config: no POST route, no dashboard.html caller --
+        # only mcp_server.py's own GET request against the running server.
+        # Relax to the handler name rather than fabricating a UI wiring.
+        self.assertNotIn('/api/mcp/tool-config', html)
+        import app_server as _app_server
+        self.assertTrue(hasattr(_app_server, 'get_mcp_tool_config'))
+        self.assertTrue(hasattr(_app_server, 'get_mcp_settings'))
+        self.assertTrue(hasattr(_app_server, 'set_mcp_settings'))
+
+    def test_hooks_preserved(self):
+        html = _html()
+        for hook in ('loadMcpTab()', 'copyMcpConfig()', 'saveMcpSettings()'):
+            self.assertIn(hook, html)
+
+    def test_rbac_preserved(self):
+        html = _html()
+        # Precedent from Task 14-17: gated at the nav entry, tab body itself
+        # carries no requires-admin gate.
+        self.assertIn(
+            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-mcp', this)\"",
+            html)
+        tab = self._tab(html)
+        self.assertNotIn('requires-admin', tab)
+
+    def test_tab_uses_component_classes(self):
+        html = _html()
+        tab = self._tab(html)
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+                    'class="panel"'):
+            self.assertIn(cls, tab)
+        # client-config panel + tool-list panel
+        self.assertEqual(tab.count('class="panel"'), 2)
+
+    def test_status_chip_classes_present_in_render_fn(self):
+        html = _html()
+        # loadMcpTab()'s per-tool row now surfaces a .status badge reflecting
+        # the same enabled/disabled state the checkbox already carries.
+        self.assertIn('class="status ${isEnabled ? \'ok\' : \'bad\'}"', html)
+        self.assertIn("class=\"led ${isEnabled ? 'led-success' : 'led-danger'}\"", html)
+        self.assertIn('const L = i18n[currentLang];', html)
+
+    def test_i18n_keys_both_langs(self):
+        html = _html()
+        for key in ('mcpEyebrow:', 'titleMcp:', 'descMcp:', 'titleMcpClientConfig:',
+                    'btnCopyJson:', 'descMcpClientConfig:', 'titleMcpTools:',
+                    'descMcpTools:', 'btnSave:', 'mcpStEnabled:', 'mcpStDisabled:'):
+            self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+
 if __name__ == "__main__":
     unittest.main()
