@@ -1862,5 +1862,89 @@ class TestI18nIconWipeGuard(unittest.TestCase):
             f"code already uses. Offending key(s): {victims}")
 
 
+class TestTransportsCollapsible(unittest.TestCase):
+    """Part A/B guard: checkbox-stretch CSS regression + the collapsible
+    #devTransports panel that replaced the plain always-open <div>.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _html()
+
+    def test_all_transport_ids_present(self):
+        for _id in ('devTransports', 'trSshEnabled', 'trSshPort',
+                    'trTelnetEnabled', 'trTelnetPort', 'trTelnetWarn',
+                    'trNetconfEnabled', 'trNetconfPort',
+                    'trRestconfEnabled', 'trRestconfPort'):
+            self.assertIn(f'id="{_id}"', self.html)
+        for proto in ('ssh', 'telnet', 'netconf', 'restconf'):
+            self.assertIn(f'data-proto="{proto}"', self.html)
+
+    def test_checkbox_stretch_regression_guard(self):
+        # Pin the Part A fix: the .form-group input/select rule must exclude
+        # checkboxes and radios, otherwise width:100% + padding-left:36px
+        # (meant to clear the .input-wrapper icon) stretches every checkbox
+        # row in #devTransports (and any other checkbox living inside a
+        # .form-group, e.g. #aiAllowUnredacted) across the full row width.
+        m = re.search(
+            r'\.form-group\s+input([^,{]*),\s*\.form-group\s+select\s*\{([^}]*)\}',
+            self.html)
+        self.assertIsNotNone(m, "could not find the .form-group input/select CSS rule")
+        selector_suffix, body = m.group(1), m.group(2)
+        self.assertIn('[type="checkbox"]', selector_suffix)
+        self.assertIn('[type="radio"]', selector_suffix)
+        self.assertIn('width: 100%', body)
+        self.assertIn('padding: 10px 12px 10px 36px', body)
+
+    def test_devtransports_is_a_collapsible_details_with_summary(self):
+        # <details id="devTransports"> ... <summary>...</summary> ... </details>
+        m = re.search(r'<details[^>]*id="devTransports"[^>]*>(.*?)</details>',
+                      self.html, re.S)
+        self.assertIsNotNone(m, "#devTransports must be a <details> element")
+        body = m.group(1)
+        self.assertIn('<summary', body)
+        self.assertIn('id="devTransportsSummary"', body)
+        # the actual checkbox/port rows must still live inside the <details>
+        for _id in ('trSshEnabled', 'trTelnetEnabled', 'trNetconfEnabled', 'trRestconfEnabled'):
+            self.assertIn(f'id="{_id}"', body)
+
+    def test_devtransports_summary_i18n_keys_both_langs(self):
+        for key in ('lblTransportsEnabled', 'lblTransportsNone'):
+            self.assertGreaterEqual(self.html.count(f'{key}:'), 2,
+                f"i18n key {key} must be defined in both it and en maps")
+
+    def test_telnet_warning_wiring_intact(self):
+        # Same wiring the pre-existing feature relied on: a change listener
+        # on trTelnetEnabled toggling trTelnetWarn's visibility, untouched by
+        # the collapsible refactor.
+        self.assertIn("document.getElementById('trTelnetEnabled').addEventListener('change', updateTelnetWarn)",
+                      self.html)
+        self.assertIn("function updateTelnetWarn()", self.html)
+        self.assertIn("document.getElementById('trTelnetWarn').style.display", self.html)
+
+    def test_summary_updates_on_checkbox_and_port_change(self):
+        self.assertIn("function updateTransportsSummary()", self.html)
+        # wired for every protocol's checkbox (change) and port (input)
+        self.assertIn(
+            "document.getElementById('tr' + _trCap(p) + 'Enabled').addEventListener('change', updateTransportsSummary)",
+            self.html)
+        self.assertIn(
+            "document.getElementById('tr' + _trCap(p) + 'Port').addEventListener('input', updateTransportsSummary)",
+            self.html)
+        # setTransportsForm() must refresh the summary after populating the form
+        start = self.html.index('function setTransportsForm(')
+        end = self.html.index('function ', start + len('function setTransportsForm('))
+        set_form = self.html[start:end]
+        self.assertIn('updateTransportsSummary()', set_form)
+
+    def test_auto_expand_on_non_default_transports(self):
+        # setTransportsForm() must open <details> when the device's transports
+        # deviate from the SSH:22-only default -- never hide non-default state.
+        start = self.html.index('function setTransportsForm(')
+        end = self.html.index('function ', start + len('function setTransportsForm('))
+        set_form = self.html[start:end]
+        self.assertIn("getElementById('devTransports').open", set_form)
+
+
 if __name__ == "__main__":
     unittest.main()
