@@ -19,8 +19,6 @@ from routers.deps import SESSION_COOKIE, get_current_user, require_admin
 
 router = APIRouter(tags=["Auth"])
 
-# --- MODELLI DI VALIDAZIONE PYDANTIC ---
-
 class UserSchema(BaseModel):
     username: str
     password: str
