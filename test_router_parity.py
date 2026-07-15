@@ -19,7 +19,7 @@ import app_server  # noqa: E402
 GOLDEN = os.path.join(os.path.dirname(__file__), "tests_data", "openapi_golden.json")
 
 # Prefissi degli endpoint già migrati nei router modulari.
-MIGRATED_PREFIXES = ("/api/fortigate", "/api/wlc")
+MIGRATED_PREFIXES = ("/api/fortigate", "/api/wlc", "/api/auth", "/api/users")
 
 
 def _normalize(op: dict) -> dict:
