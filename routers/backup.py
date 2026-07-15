@@ -27,6 +27,7 @@ ENISA_SEARCH_PARAMS = {
 
 # --- ENDPOINTS ---
 
+@router.get("/api/download-backup/{ip_or_filename}")
 def download_backup(ip_or_filename: str, current_user = Depends(require_operator)):
     log_audit(f"Download del file di backup '{ip_or_filename}' richiesto dall'utente '{current_user.get('sub')}'.")
 
