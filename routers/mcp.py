@@ -6,10 +6,13 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from security_manager import log_audit
 
 from routers.settings import get_app_settings, save_app_settings
 from routers.deps import get_current_user, require_admin
 import mcp_server
+
+_MCP_DEFAULT_DISABLED = {"get_top_talkers", "get_anomalies"}
 
 router = APIRouter(tags=["MCP"])
 
