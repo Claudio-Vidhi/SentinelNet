@@ -2298,22 +2298,30 @@
     </div>
 
     <div id="tab-sites" class="tab-content">
-      <h3><i class="fa-solid fa-sitemap" style="color:var(--primary);"></i> <span data-i18n="titleSites">Sedi multi-sito</span></h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px; margin-bottom: 15px;" data-i18n="descSites">
-        Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.
-      </p>
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th data-i18n="lblSiteName">Nome</th><th data-i18n="lblSiteMode">Modalità</th><th>Subnet</th><th data-i18n="thSiteLastContact">Ultimo contatto</th><th data-i18n="thActions">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="sitesTableBody"></tbody>
-        </table>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="sitesEyebrow"><i class="fa-solid fa-sitemap"></i> Multi-sito</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleSites">Sedi multi-sito</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descSites">
+            Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.
+          </p>
+        </div>
       </div>
 
-      <div style="margin-top: 24px;">
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th data-i18n="lblSiteName">Nome</th><th data-i18n="lblSiteMode">Modalità</th><th>Subnet</th><th data-i18n="thSiteLastContact">Ultimo contatto</th><th data-i18n="thActions">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="sitesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3 style="font-size: 15px; margin-bottom: 12px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> <span data-i18n="titleNewSite">Nuova sede</span></h3>
         <div style="display:grid; grid-template-columns: 1fr 1fr 2fr auto; gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
@@ -3088,6 +3096,7 @@
         thAnomSwitchPort: "Porta switch",
         msgNoAnomalies: "Nessuna anomalia.",
         lblNoTenant: "Nessun tenant",
+        sitesEyebrow: '<i class="fa-solid fa-sitemap"></i> Multi-sito',
         titleSites: "Sedi multi-sito",
         descSites: "Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.",
         lblSiteName: "Nome",
@@ -3096,6 +3105,9 @@
         titleNewSite: "Nuova sede",
         lblSiteSubnets: "Subnet (separate da virgola)",
         btnCreateSite: "Crea sede",
+        btnRegenSiteToken: "Rigenera token",
+        btnDeleteSite: "Elimina",
+        lblSiteDefault: "predefinita",
         titleMcp: "MCP Server — client LLM esterni",
         descMcp: "SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo <strong>MCP</strong> (Model Context Protocol): il ponte <code>mcp_server.py</code> gira sulla macchina del client, si autentica con un account SentinelNet e inoltra le richieste all'API REST. Ruoli, tenant e blacklist comandi restano applicati lato server. Consiglio: crea un account dedicato (<em>viewer</em> per sola lettura, <em>operator</em> se servono i comandi CLI).",
         titleMcpClientConfig: "Configurazione client",
@@ -3691,6 +3703,7 @@
         thAnomSwitchPort: "Switch port",
         msgNoAnomalies: "No anomalies.",
         lblNoTenant: "No tenant",
+        sitesEyebrow: '<i class="fa-solid fa-sitemap"></i> Multi-site',
         titleSites: "Multi-site locations",
         descSites: "Manage remote sites over VPN. <strong>Central poll</strong>: the central node reaches devices directly via VPN routing. <strong>Site agent</strong>: a remote agent connects outbound to the central node and pushes inventory/MAC data; CLI commands are forwarded through a queue.",
         lblSiteName: "Name",
@@ -3699,6 +3712,9 @@
         titleNewSite: "New site",
         lblSiteSubnets: "Subnets (comma-separated)",
         btnCreateSite: "Create site",
+        btnRegenSiteToken: "Regenerate token",
+        btnDeleteSite: "Delete",
+        lblSiteDefault: "Default",
         titleMcp: "MCP Server — external LLM clients",
         descMcp: "SentinelNet can be used by external LLM clients (Claude Desktop, LM Studio, Cline…) via the <strong>MCP</strong> protocol (Model Context Protocol): the <code>mcp_server.py</code> bridge runs on the client machine, authenticates with a SentinelNet account and forwards requests to the REST API. Roles, tenants and the command blacklist stay enforced server-side. Tip: create a dedicated account (<em>viewer</em> for read-only, <em>operator</em> if CLI commands are needed).",
         titleMcpClientConfig: "Client configuration",
@@ -5374,21 +5390,22 @@
     function renderSitesTable(sites) {
         const body = document.getElementById('sitesTableBody');
         if (!body) return;
+        const L = i18n[currentLang];
         body.innerHTML = sites.map(s => {
             const isCentral = s.id === 'central';
             const modeBadge = s.mode === 'agent'
-                ? '<span class="role-pill" style="background:rgba(93,169,255,0.15); color:var(--primary); border:1px solid rgba(93,169,255,0.35);">SITE AGENT</span>'
-                : '<span class="role-pill" style="background:rgba(120,200,120,0.15); color:var(--success); border:1px solid rgba(120,200,120,0.35);">CENTRAL POLL</span>';
+                ? '<span class="chip">SITE AGENT</span>'
+                : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
             const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
             const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
             let actions = '';
             if (s.mode === 'agent') {
-                actions += `<button data-s="${escapeHtml(s.id)}" onclick="regenSiteToken(this.dataset.s)" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> Rigenera token</button>`;
+                actions += `<button data-s="${escapeHtml(s.id)}" onclick="regenSiteToken(this.dataset.s)" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
             }
             if (!isCentral) {
-                actions += `<button data-s="${escapeHtml(s.id)}" onclick="deleteSite(this.dataset.s)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> Elimina</button>`;
+                actions += `<button data-s="${escapeHtml(s.id)}" onclick="deleteSite(this.dataset.s)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
             } else {
-                actions = '<span style="color:var(--text-muted); font-size:12px;">predefinita</span>';
+                actions = `<span class="chip">${L.lblSiteDefault}</span>`;
             }
             return `<tr>
                 <td><strong>${escapeHtml(s.id)}</strong></td>
