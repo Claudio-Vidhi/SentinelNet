@@ -111,3 +111,14 @@ def assert_device_allowed(current_user, ip):
         return None
     assert_group_allowed(current_user, device.get('Group', 'Generale'))
     return device
+
+
+def filter_map_to_scope(data, scope):
+    """Riduce nodi e link della mappa alle sole sedi consentite."""
+    if scope is None:
+        return data
+    allowed_nodes = {n["id"] for n in data.get("nodes", []) if n.get("group") in scope}
+    nodes = [n for n in data.get("nodes", []) if n["id"] in allowed_nodes]
+    links = [l for l in data.get("links", [])
+             if l["source"] in allowed_nodes and l["target"] in allowed_nodes]
+    return {"nodes": nodes, "links": links}
