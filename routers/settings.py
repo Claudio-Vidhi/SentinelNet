@@ -7,10 +7,26 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips
+from app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
 import core_engine
 from security_manager import log_audit
 from routers.deps import require_admin
+import data_config
+
+_APP_ADV_ENV = {
+    "port": "SENTINELNET_PORT",
+    "ssl_certfile": "SENTINELNET_SSL_CERTFILE",
+    "ssl_keyfile": "SENTINELNET_SSL_KEYFILE",
+    "cors_origins": "SENTINELNET_CORS_ORIGINS",
+    "no_browser": "SENTINELNET_NO_BROWSER",
+    "retention_flows_days": "SENTINELNET_OBS_RETENTION_FLOWS_DAYS",
+    "retention_syslog_days": "SENTINELNET_OBS_RETENTION_SYSLOG_DAYS",
+    "retention_events_days": "SENTINELNET_OBS_RETENTION_EVENTS_DAYS",
+}
+_APP_ADV_INT_KEYS = {"port", "retention_flows_days", "retention_syslog_days",
+                     "retention_events_days"}
+_APP_ADV_DEFAULTS = {"port": PORT, "retention_flows_days": 30,
+                     "retention_syslog_days": 7, "retention_events_days": 90}
 
 router = APIRouter(tags=["Settings"])
 

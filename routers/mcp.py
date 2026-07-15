@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from security_manager import log_audit
 
-from routers.settings import get_app_settings, save_app_settings
+from app_settings import get_app_settings, save_app_settings
 from routers.deps import get_current_user, require_admin
 import mcp_server
 
