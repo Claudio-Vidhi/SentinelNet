@@ -928,10 +928,12 @@ class TestImportTabRestyle(unittest.TestCase):
 
     Small tab: a single file input + submit button POSTing the parsed CSV
     text to /api/import-csv, with the result (imported/failed counts, one
-    line per failed row) surfaced via alert() -- there is no separate live
-    "result container" DOM node in this codebase (see finding below). The
-    restyle wraps the existing controls in a hero header + two .panel cards
-    without touching the upload handler at all.
+    line per failed row) surfaced via alert() -- there is no "result
+    container" DOM node in this codebase. The brief's preserve-ID list names
+    one, but it does not exist; no results panel is rendered, since a card
+    captioned "Import result" that can never show a result reads as a
+    permanently-empty results area. The restyle is a hero header + one
+    .panel around the existing controls, handler untouched.
     """
 
     def _tab(self, html):
@@ -972,14 +974,13 @@ class TestImportTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
             self.assertIn(cls, tab)
-        # upload-form panel + result-info panel
-        self.assertGreaterEqual(tab.count('class="panel"'), 2)
+        # the upload-form panel
+        self.assertGreaterEqual(tab.count('class="panel"'), 1)
 
     def test_i18n_keys_both_langs(self):
         html = _html()
         for key in ('importEyebrow:', 'titleImportCsv:', 'descImportCsv:',
-                    'importPanelUpload:', 'lblSelectCsv:', 'btnUploadCsv:',
-                    'titleImportResult:', 'descImportResult:'):
+                    'importPanelUpload:', 'lblSelectCsv:', 'btnUploadCsv:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
