@@ -19,7 +19,7 @@ import app_server  # noqa: E402
 GOLDEN = os.path.join(os.path.dirname(__file__), "tests_data", "openapi_golden.json")
 
 # Prefissi degli endpoint già migrati nei router modulari.
-MIGRATED_PREFIXES = ("/api/fortigate", "/api/wlc", "/api/auth", "/api/users", "/api/local-devices", "/api/export", "/api/add-device", "/api/delete-device", "/api/rename-device", "/api/import-csv", "/api/promote-device", "/api/reassign-device", "/api/groups", "/api/vendors", "/api/models", "/api/device-categories", "/api/device-classification", "/api/settings", "/api/topology", "/api/network-map", "/api/portchannels", "/api/map/export", "/api/run-triage", "/api/triage", "/api/ping", "/api/send-command", "/api/bulk-command", "/api/ws-token", "/api/ws-terminal", "/api/download-backup", "/api/search", "/api/mac")
+MIGRATED_PREFIXES = ("/api/fortigate", "/api/wlc", "/api/auth", "/api/users", "/api/local-devices", "/api/export", "/api/add-device", "/api/delete-device", "/api/rename-device", "/api/import-csv", "/api/promote-device", "/api/reassign-device", "/api/groups", "/api/vendors", "/api/models", "/api/device-categories", "/api/device-classification", "/api/settings", "/api/topology", "/api/network-map", "/api/portchannels", "/api/map/export", "/api/run-triage", "/api/triage", "/api/ping", "/api/send-command", "/api/bulk-command", "/api/ws-token", "/api/ws-terminal", "/api/download-backup", "/api/search", "/api/mac", "/api/config-analyzer")
 
 
 def _normalize(op: dict) -> dict:
