@@ -1988,13 +1988,18 @@
 
     <!-- TAB: Switch da Zero (Provisioner) -->
     <div id="tab-provisioner" class="tab-content">
-      <h3 data-i18n="titleProvisioner">Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)</h3>
-      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;" data-i18n="descProvisioner">
-        Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.
-      </p>
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="provisionerEyebrow"><i class="fa-solid fa-screwdriver-wrench"></i> Provisioning</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleProvisioner">Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descProvisioner">
+            Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.
+          </p>
+        </div>
+      </div>
 
       <!-- ADMIN-ONLY PANEL: FortiGate API Token Management -->
-      <details class="requires-admin" id="fgtTokenPanel" style="border:1px solid var(--border); border-radius:10px; padding:0; margin-bottom:18px; background:var(--surface-2); overflow:hidden;">
+      <details class="panel requires-admin" id="fgtTokenPanel" style="padding:0; margin-bottom:18px; overflow:hidden;">
         <summary style="cursor:pointer; padding:12px 14px; font-weight:600;">
           <i class="fa-solid fa-key" style="color:var(--primary); margin-right:8px;"></i>
           <span data-i18n="titleFgtApiToken">Token API FortiGate</span>
@@ -2003,7 +2008,7 @@
           <!-- Status table showing configured tokens -->
           <div style="margin-bottom:14px;">
             <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
-            <div style="border:1px solid var(--border); border-radius:8px; background:var(--surface); overflow-x:auto;">
+            <div class="table-wrap" style="margin-top:0;">
               <table id="fgtTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
                 <thead>
                   <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
@@ -2060,6 +2065,8 @@
         </div>
       </details>
 
+      <div class="panel" style="margin-bottom:18px;">
+      <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-sliders" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="provPanelDevice">Apparato & parametri</span></h3>
       <div class="form-group" style="max-width:320px;">
         <label data-i18n="lblProvVendor">Tipo apparato</label>
         <select id="provVendor" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
@@ -2156,8 +2163,11 @@
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provNoVstack" checked> Disabilita Smart Install (no vstack)</label>
       </div>
       </div>
+      </div>
 
-      <div style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+      <div class="panel">
+      <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-rocket" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="provPanelDeploy">Genera & consegna</span></h3>
+      <div style="margin-top:0; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
         <button class="btn btn-primary" id="btnProvGenerate"><i class="fa-solid fa-file-code"></i> Genera Config</button>
         <button class="btn" id="btnProvDownload"><i class="fa-solid fa-download"></i> Scarica .txt</button>
         <select id="provDeliveryMode" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
@@ -2200,6 +2210,7 @@
       <div style="margin-top:20px;">
         <label style="font-size:13px; color:var(--text-muted);">Config generata / esito operazione</label>
         <textarea id="provOutput" readonly style="width:100%; height:320px; margin-top:6px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
+      </div>
       </div>
     </div>
 
@@ -2867,6 +2878,9 @@
         lblCaMobility: "Mobility group",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Apparato da Zero',
+        provisionerEyebrow: '<i class="fa-solid fa-screwdriver-wrench"></i> Provisioning',
+        provPanelDevice: "Apparato & parametri",
+        provPanelDeploy: "Genera & consegna",
         titleProvisioner: "Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)",
         descProvisioner: "Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.",
         // FortiGate API Token Management
@@ -3463,6 +3477,9 @@
         lblCaMobility: "Mobility group",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Device',
+        provisionerEyebrow: '<i class="fa-solid fa-screwdriver-wrench"></i> Provisioning',
+        provPanelDevice: "Device & parameters",
+        provPanelDeploy: "Generate & deliver",
         titleProvisioner: "Zero-Touch Provisioning (Cisco Switch / FortiGate Firewall)",
         descProvisioner: "Generate a complete, hardened day-0 configuration — IOS/IOS-XE for Cisco switches or FortiOS for FortiGate firewalls — following vendor hardening guidelines, then choose how to deliver it: text, SSH or console/serial.",
         // FortiGate API Token Management
@@ -5046,7 +5063,7 @@
         tbody.innerHTML = entries.map(([ip, conf]) => {
             const port = conf.port || 443;
             const verifyTls = conf.verify_tls !== false ? 'Sì' : 'No';
-            const status = '<span style="color:var(--success);"><i class="fa-solid fa-check"></i> Configurato</span>';
+            const status = '<span class="status ok"><i class="fa-solid fa-check"></i> Configurato</span>';
             return `<tr style="border-bottom:1px solid var(--border);">
                 <td style="padding:8px 12px;">${escapeHtml(ip)}</td>
                 <td style="padding:8px 12px;">${port}</td>
