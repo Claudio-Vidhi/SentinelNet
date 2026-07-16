@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import db
 import data_config
+from app_settings import get_app_settings, save_app_settings
 from observability import metrics
 from observability.ingesters import ipfix
 from routers.deps import (get_current_user, require_admin, require_operator,
@@ -218,7 +219,6 @@ def obs_set_config(payload: dict, current_user = Depends(require_admin)):
             if k.endswith("_port") and not (1 <= v <= 65535):
                 raise HTTPException(status_code=400, detail=f"Invalid port for '{k}'.")
         clean[k] = v
-    from app_server import get_app_settings, save_app_settings
     saved = dict(get_app_settings().get("observability", {}) or {})
     saved.update(clean)
     save_app_settings({"observability": saved})
