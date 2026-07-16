@@ -554,6 +554,10 @@ _TYPE_TOKENS = {
     "pc":       ("pc",),
 }
 _TYPE_ORDER = ("firewall", "wlc", "ap", "router", "phone", "server", "pc")
+# Keyword positivi per "switch", cercati SOLO in description/platform (mai
+# nell'hostname: un hostname come "sw-wifi-floor2" non deve confondersi con un
+# AP). Questa evidenza ha precedenza sulle keyword "ap" basate su hostname.
+_SWITCH_SUBSTRINGS = ("catalyst", "ws-c", "c9200", "c9300", "c9500", "switch")
 
 
 def _has_token(text: str, token: str) -> bool:
@@ -574,11 +578,20 @@ def classify_device_type(hostname: str = "", description: str = "",
     # (es. hostname con "wifi" o segmento "AP").
     if "switch" in caps and "access point" not in caps and "wlan" not in caps:
         return "switch"
+    # Evidenza "switch" da description/platform (CDP/LLDP), MAI da hostname:
+    # batte le keyword "ap" basate solo sull'hostname (es. "sw-wifi-floor2"
+    # con platform "Cisco Catalyst 9300" -> switch, non ap).
+    desc_plat = " ".join(filter(None, [description, platform])).lower()
+    switch_evidence = any(s in desc_plat for s in _SWITCH_SUBSTRINGS)
     for t in _TYPE_ORDER:
+        if t == "ap" and switch_evidence:
+            return "switch"
         if any(s in text for s in _TYPE_SUBSTRINGS.get(t, ())):
             return t
         if any(_has_token(text, tok) for tok in _TYPE_TOKENS.get(t, ())):
             return t
+    if switch_evidence:
+        return "switch"
     if "router" in caps:
         return "router"
     # Nessun indizio affidabile: tipo generico, mai indovinare "switch".
@@ -1248,6 +1261,26 @@ def generate_network_map(group_filter=None) -> dict:
         }
         hostname_to_ip[hostname.lower()] = ip
 
+    # Pre-scan degli annunci CDP/LLDP di tutti i backup per costruire un lookup
+    # hostname/ip -> {platform, capabilities, description}. Serve a passare
+    # platform/capabilities reali alla classificazione dei nodi inventariati:
+    # senza questo, uno switch annunciato come vicino da un altro apparato ma
+    # con "wifi"/"wlan" nell'hostname (es. "SW-WIFI-01") verrebbe classificato
+    # come AP per mancanza di segnali migliori (solo hostname+vendor).
+    neighbor_info: dict = {}
+    for _ip, _info in parsed_devices.items():
+        for _n in parse_cdp_lldp_neighbors(_info["content"]):
+            _nid  = _n["neighbor_id"]
+            _base = _nid.split('.')[0] if '.' in _nid else _nid
+            _entry = {
+                "platform":     _n.get("platform") or "",
+                "capabilities": _n.get("capabilities") or "",
+                "description":  _n.get("description") or "",
+            }
+            for _key in (_nid.lower(), _base.lower(), _n.get("neighbor_ip")):
+                if _key:
+                    neighbor_info.setdefault(_key, _entry)
+
     # Nodi inventariati
     versions = get_detected_versions()
     for ip, d in ip_to_device.items():
@@ -1256,8 +1289,19 @@ def generate_network_map(group_filter=None) -> dict:
         status = versions.get(ip, {}).get("status", "offline")
         vendor = d.get('Vendor', 'cisco')
         # Il vendor partecipa alla classificazione: un apparato Fortinet/Palo Alto
-        # è un firewall anche se l'hostname non lo dice.
-        auto_type = classify_device_type(label, description=vendor)
+        # è un firewall anche se l'hostname non lo dice. Se il nodo è stato
+        # annunciato come vicino CDP/LLDP da un altro apparato, usa anche
+        # platform/capabilities/System Description reali (vedi neighbor_info).
+        _ninfo = (neighbor_info.get(label.lower())
+                  or neighbor_info.get(label.split('.')[0].lower())
+                  or neighbor_info.get(ip)
+                  or {})
+        auto_type = classify_device_type(
+            label,
+            description=_ninfo.get("description") or vendor,
+            platform=_ninfo.get("platform", ""),
+            capabilities=_ninfo.get("capabilities", ""),
+        )
         nodes_map[ip] = {
             "id":          ip,
             "label":       label,
