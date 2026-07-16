@@ -6612,18 +6612,27 @@
         loadInteractiveMap();
     }
 
-    // Opzioni Vis.js della mappa classica. La fisica serve SOLO a calcolare un
-    // layout iniziale ben distanziato: viene spenta al termine della
-    // stabilizzazione, così i nodi non derivano e restano dove l'utente li mette.
+    // Fisica barnesHut condivisa da entrambe le viste (classica e minimalista).
+    // Causa radice risolta QUI, non con toppe per-lato: valori tarati per nodi
+    // grandi (riquadri SVG ~248px, vedi createNodeSvg) così i riquadri restano
+    // compatti e non si sovrappongono ma nemmeno "volano via". La fisica serve
+    // SOLO a calcolare un layout iniziale ben distanziato: viene spenta al
+    // termine della stabilizzazione (freezeLayout), così i nodi non derivano e
+    // restano dove l'utente li mette.
+    function sharedMapPhysics() {
+        return {
+            enabled: true, solver: 'barnesHut',
+            stabilization: { enabled: true, iterations: 300, updateInterval: 25, onlyDynamicEdges: false, fit: true },
+            barnesHut: { gravitationalConstant: -3000, centralGravity: 0.4, springLength: 220, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
+            minVelocity: 0.75
+        };
+    }
+
+    // Opzioni Vis.js della mappa classica.
     function classicMapOptions() {
         return {
             layout: { improvedLayout: true, randomSeed: 42 },
-            physics: {
-                enabled: true, solver: 'barnesHut',
-                stabilization: { enabled: true, iterations: 600, updateInterval: 25, onlyDynamicEdges: false, fit: true },
-                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.12, springLength: 240, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
-                minVelocity: 0.75
-            },
+            physics: sharedMapPhysics(),
             interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
             nodes: { shadow: { enabled: true, color: "rgba(0,0,0,0.5)", size: 10, x: 0, y: 4 } },
             edges: { smooth: { type: 'cubicBezier', forceDirection: 'none', roundness: 0.5 }, shadow: { enabled: true, color: "rgba(0,0,0,0.4)", size: 4, x: 0, y: 2 } }
@@ -7216,12 +7225,7 @@
 
         const options = {
             layout: { improvedLayout: true, randomSeed: 42 },
-            physics: {
-                enabled: true, solver: 'barnesHut',
-                stabilization: { enabled: true, iterations: 600, updateInterval: 25, onlyDynamicEdges: false, fit: true },
-                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.08, springLength: 260, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
-                minVelocity: 0.75
-            },
+            physics: sharedMapPhysics(),
             interaction: { hover: hoverInfo, hoverConnectedEdges: hoverInfo, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
             nodes: { shadow: { enabled: false } },
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
