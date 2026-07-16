@@ -578,6 +578,14 @@ def classify_device_type(hostname: str = "", description: str = "",
     # (es. hostname con "wifi" o segmento "AP").
     if "switch" in caps and "access point" not in caps and "wlan" not in caps:
         return "switch"
+    # Le Capabilities hanno precedenza assoluta su hostname/description/platform:
+    # es. Capabilities "Router" non deve perdere contro un hostname con token
+    # debole tipo "srv-core-01" (convenzione di naming del sito), che altrimenti
+    # farebbe match "server" prima ancora di guardare le capabilities.
+    if caps.strip():
+        for t in _TYPE_ORDER:
+            if any(s in caps for s in _TYPE_SUBSTRINGS.get(t, ())):
+                return t
     # Evidenza "switch" da description/platform (CDP/LLDP), MAI da hostname:
     # batte le keyword "ap" basate solo sull'hostname (es. "sw-wifi-floor2"
     # con platform "Cisco Catalyst 9300" -> switch, non ap).
@@ -592,8 +600,6 @@ def classify_device_type(hostname: str = "", description: str = "",
             return t
     if switch_evidence:
         return "switch"
-    if "router" in caps:
-        return "router"
     # Nessun indizio affidabile: tipo generico, mai indovinare "switch".
     return "client"
 
