@@ -11,6 +11,7 @@ import os
 import json
 import uuid
 import threading
+import logging
 
 import data_config
 from crypto_vault import encrypt_password, decrypt_password
@@ -22,8 +23,13 @@ _lock = threading.RLock()
 def _load() -> list:
     if not os.path.exists(IDENTITIES_JSON):
         return []
-    with open(IDENTITIES_JSON, "r", encoding="utf-8") as f:
-        return json.load(f).get("identities", [])
+    try:
+        with open(IDENTITIES_JSON, "r", encoding="utf-8") as f:
+            return json.load(f).get("identities", [])
+    except Exception as e:
+        # Tolleranza per identities.json corrotto: log avviso e ritorna lista vuota
+        logging.warning(f"Errore caricamento identities.json: {e}")
+        return []
 
 
 def _save(identities: list):
@@ -95,10 +101,10 @@ def update_identity(identity_id: str, name: str, tenant: str,
 def delete_identity(identity_id: str):
     """Ritorna (ok, devices_bloccanti). Rifiuta se qualche device usa
     l'identita' (il chiamante risponde 409 con la lista IP)."""
-    devices = _devices_using(identity_id)
-    if devices:
-        return False, devices
     with _lock:
+        devices = _devices_using(identity_id)
+        if devices:
+            return False, devices
         rows = [r for r in _load() if r["id"] != identity_id]
         _save(rows)
     return True, []
