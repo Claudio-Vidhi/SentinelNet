@@ -16,7 +16,8 @@ IP_PATTERN = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 # --- Trasporti per-device (§11.6) ---
 # Protocolli di connessione dichiarabili per apparato e relativa porta di
 # default (null nella mappa = usa questa porta di default del protocollo).
-ALLOWED_TRANSPORTS = ("ssh", "telnet", "netconf", "restconf")
+# tcp/udp: protocolli generici senza porta di default, la sceglie l'utente.
+ALLOWED_TRANSPORTS = ("ssh", "telnet", "netconf", "restconf", "tcp", "udp")
 TRANSPORT_DEFAULT_PORTS = {"ssh": 22, "telnet": 23, "netconf": 830, "restconf": 443}
 
 
