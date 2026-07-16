@@ -6222,8 +6222,12 @@
             const dcol = vtpDomainColor(vtp.domain);
             borderGradStart = dcol;
             const dEsc = String(vtp.domain).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 24);
+            // Se disponibile, aggiunge la modalità VTP (server/client/transparent/off)
+            // accanto al dominio; troncata per stare nella pillola larga 216px.
+            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
+            const pillTxt = (modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30);
             vtpDomainSvg = `<rect x="16" y="80" width="216" height="16" rx="4" fill="${dcol}22" stroke="${dcol}" stroke-opacity="0.45" stroke-width="1" />
-          <text x="124" y="91.5" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${dEsc}</text>`;
+          <text x="124" y="91.5" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${pillTxt}</text>`;
         }
         const cardH = hasVtp ? 106 : 84;
 
