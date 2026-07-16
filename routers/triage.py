@@ -12,11 +12,18 @@ from pydantic import BaseModel, Field
 import inventory_manager
 import core_engine
 from security_manager import log_audit
-from routers.deps import get_current_user, require_operator, user_group_scope, assert_device_allowed
+from routers.deps import get_current_user, require_operator, user_group_scope, assert_device_allowed, assert_group_allowed
 
 router = APIRouter(tags=["Triage"])
 
 triage_lock = threading.Lock()
+triage_job = {
+    "status": "idle",
+    "total": 0,
+    "progress": 0,
+    "results": [],
+    "current_device": ""
+}
 
 class TriageRunRequest(BaseModel):
     group: str = "all"
