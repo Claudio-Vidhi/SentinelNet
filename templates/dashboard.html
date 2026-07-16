@@ -5211,8 +5211,11 @@
         if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
 
         // §11.5b: la password non è preservata se vuota (add_or_update_device la
-        // sovrascrive sempre), quindi in modifica va reinserita per intero.
-        if (editingDeviceIp && (!payload.password || !payload.enable_secret)) {
+        // sovrascrive sempre), quindi in modifica va reinserita per intero --
+        // ma solo per il profilo 'custom': con un profilo 'default'/'identity:<id>'
+        // le credenziali vivono altrove (rete standard o identità salvata) e non
+        // vanno reinserite qui.
+        if (editingDeviceIp && payload.profile === 'custom' && (!payload.password || !payload.enable_secret)) {
             alert(i18n[currentLang].alertCredsRequiredOnEdit);
             return;
         }
@@ -5235,7 +5238,7 @@
     // per la modifica (§11.5b). Password/secret restano vuoti: vanno reinseriti,
     // perché add_or_update_device sovrascrive sempre le credenziali (nessun
     // "invariato se vuoto" lato backend).
-    function editDevice(ip) {
+    async function editDevice(ip) {
         const dev = globalDevices.find(d => d.IP === ip);
         if (!dev) return;
         editingDeviceIp = ip;
@@ -5253,8 +5256,24 @@
         try { devTransports = dev.Transports ? JSON.parse(dev.Transports) : null; } catch (e) { devTransports = null; }
         setTransportsForm(devTransports, dev['SSH Port']);
         document.getElementById('devVendor').value = (dev.Vendor || '').toLowerCase();
-        document.getElementById('devProfile').value = 'custom';
-        document.getElementById('customCredsForm').style.display = 'block';
+
+        // switchTab('tab-provisioning') ha già ricaricato le identità per il
+        // tenant precedentemente selezionato (loadProvisioningTab chiama
+        // refreshIdentityOptions/renderIdentitiesPanel): devGroupSelect.value
+        // è stato appena riassegnato sopra ma senza far scattare 'change',
+        // quindi il pannello identità è ancora sul tenant sbagliato -- va
+        // ricaricato esplicitamente per il tenant del device in modifica.
+        const profileIsIdentity = (dev.Profile || '').startsWith('identity:');
+        // Il profilo desiderato va esplicitato come "preserve": 'default' non
+        // può contare sul valore residuo della select (potrebbe restare
+        // 'custom' da una modifica precedente), quindi si passa sempre un
+        // valore concreto invece di fare affidamento sul fallback di keep.
+        const desiredProfile = profileIsIdentity ? dev.Profile
+            : (dev.Profile === 'custom' ? 'custom' : 'default');
+        await refreshIdentityOptions(desiredProfile);
+        renderIdentitiesPanel();
+        document.getElementById('customCredsForm').style.display =
+            document.getElementById('devProfile').value === 'custom' ? 'block' : 'none';
         document.getElementById('devUser').value = dev.Username || '';
         document.getElementById('devPass').value = '';
         document.getElementById('devSecret').value = '';
