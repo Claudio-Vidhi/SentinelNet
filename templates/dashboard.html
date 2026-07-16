@@ -11532,8 +11532,13 @@
             if (!res || !res.ok) return;
             const vendors = await res.json();
             const entries = Object.entries(vendors || {}).filter(([, v]) => v && v.euvd_term);
+            // Escape per il contesto stringa JS (dentro l'onclick single-quoted) PRIMA
+            // di passare per escapeHtml (contesto attributo HTML) — stesso pattern di
+            // analyzeTenant(tenant) più sopra: l'entity-encoding da solo non basta a
+            // prevenire una breakout di stringa JS dentro l'attributo.
+            const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
             btnWrap.innerHTML = entries.map(([name, v], idx) =>
-                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" onclick="vwSelectVendor('${escapeHtml(v.euvd_term)}', this)" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
+                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" onclick="vwSelectVendor('${escapeHtml(jsStr(v.euvd_term))}', this)" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
             ).join('');
             if (entries.length) {
                 vwState.vendor = entries[0][1].euvd_term;
@@ -11619,8 +11624,12 @@
         const item = vwState.filtered[idx];
         const drawer = document.getElementById('vwDrawer');
         if (!item || !drawer) return;
+        // Solo http(s):// diventa un link cliccabile: blocca schemi javascript:/data:
+        // che escapeHtml (entity-encoding) da solo non filtrerebbe.
         const refsHtml = item.references.length
-            ? item.references.map(r => `<div><a href="${escapeHtml(r)}" target="_blank" rel="noopener">${escapeHtml(r)}</a></div>`).join('')
+            ? item.references.map(r => /^https?:\/\//i.test(r.trim())
+                ? `<div><a href="${escapeHtml(r.trim())}" target="_blank" rel="noopener">${escapeHtml(r)}</a></div>`
+                : `<div>${escapeHtml(r)}</div>`).join('')
             : '<div style="color:var(--text-muted);">—</div>';
         drawer.innerHTML = `
             <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" onclick="document.getElementById('vwDrawer').style.display='none';"><i class="fa-solid fa-xmark"></i></button>
