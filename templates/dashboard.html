@@ -780,6 +780,7 @@
     }
     @media (max-width:1000px){.sidebar-toggle{display:none}}
     @media (max-width:1200px){.hero,.kpi-grid{grid-template-columns:1fr}}
+    @media (max-width: 1100px) { .prov-grid { grid-template-columns: 1fr !important; } }
   </style>
 </head>
 <body>
@@ -1170,129 +1171,161 @@
         </div>
       </div>
 
-      <article class="panel requires-write" style="margin-bottom:18px;">
-        <div class="requires-write">
-          <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
+      <div style="display:grid; grid-template-columns: minmax(380px, 1fr) minmax(320px, 420px); gap:18px; align-items:start;" class="prov-grid">
+        <article class="panel requires-write">
+          <div class="requires-write">
+            <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
 
-          <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:8px; color:var(--primary); font-size:12px;">
-            <i class="fa-solid fa-pen-to-square"></i> <span data-i18n="msgEditingDevice">Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.</span>
-          </div>
-
-          <div class="form-group">
-            <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
-            <select id="devGroupSelect"></select>
-          </div>
-
-          <div class="form-group">
-            <label data-i18n="lblIp">IP Apparato</label>
-            <div class="input-wrapper">
-              <i class="fa-solid fa-server"></i>
-              <input id="devIp" type="text" placeholder="10.0.0.1">
+            <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:8px; color:var(--primary); font-size:12px;">
+              <i class="fa-solid fa-pen-to-square"></i> <span data-i18n="msgEditingDevice">Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.</span>
             </div>
-          </div>
 
-          <!-- §11.6: trasporti per-device (checkbox + porta per protocollo).
-               Collassato di default; il riepilogo mostra i protocolli abilitati
-               e si espande da solo in modifica se il device non usa i default
-               (solo SSH:22) -- vedi setTransportsForm(). -->
-          <div class="form-group">
-            <label data-i18n="lblTransports">Protocolli di connessione</label>
-            <details id="devTransports" style="border:1px solid var(--border); border-radius:8px; background:var(--surface-2); overflow:hidden;">
-              <summary style="list-style:none; cursor:pointer; padding:8px 10px; font-size:13px; font-weight:700; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
-                <i class="fa-solid fa-plug"></i>
-                <span data-i18n="lblTransportsEnabled">Abilitati:</span>
-                <span id="devTransportsSummary" style="color:var(--text);">SSH:22</span>
-                <i class="fa-solid fa-caret-down" style="font-size:11px; margin-left:auto;"></i>
-              </summary>
-              <div style="padding:10px; border-top:1px solid var(--border); display:grid; grid-template-columns:auto 90px; gap:6px 8px; align-items:center;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
-                  <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
-                </div>
-                <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
-                  <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
-                </div>
-                <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
-                <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger, #c0392b); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
-                  <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
-                </div>
-                <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
-                  <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
-                </div>
-                <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <input type="checkbox" id="trTcpEnabled" data-proto="tcp">
-                  <label for="trTcpEnabled" style="min-width:80px; margin:0;">TCP</label>
-                </div>
-                <input id="trTcpPort" type="number" min="1" max="65535" value="" style="width:90px;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <input type="checkbox" id="trUdpEnabled" data-proto="udp">
-                  <label for="trUdpEnabled" style="min-width:80px; margin:0;">UDP</label>
-                </div>
-                <input id="trUdpPort" type="number" min="1" max="65535" value="" style="width:90px;">
+            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-building"></i> <span data-i18n="secTenant">1 · Tenant</span>
+            </h4>
+            <div class="form-group">
+              <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <select id="devGroupSelect" style="flex:1;"></select>
+                <button class="btn btn-secondary" id="btnInlineNewTenant" type="button" title="Nuovo tenant" style="white-space:nowrap;"><i class="fa-solid fa-plus"></i></button>
               </div>
-            </details>
-          </div>
-
-          <div class="form-group">
-            <label data-i18n="lblVendor">Vendor Engine</label>
-            <div class="input-wrapper">
-              <i class="fa-solid fa-gears"></i>
-              <select id="devVendor" style="padding-left:36px;"></select>
+              <div id="inlineNewTenantRow" style="display:none; margin-top:8px; gap:8px;">
+                <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" style="flex:1; padding-left:12px;">
+                <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text);" data-i18n="btnCreateGroup"><i class="fa-solid fa-folder-plus"></i> Crea Gruppo</button>
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label data-i18n="lblProfile">Profilo Credenziali</label>
-            <div class="input-wrapper">
-              <i class="fa-solid fa-key"></i>
-              <select id="devProfile" style="padding-left:36px;">
-                <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
-                <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
-              </select>
-            </div>
-          </div>
-
-          <div id="customCredsForm" style="display:none; border-left: 2px solid var(--primary); padding-left: 10px; margin-bottom: 10px;">
+            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-server"></i> <span data-i18n="secDevice">2 · Dispositivo</span>
+            </h4>
             <div class="form-group">
-              <label data-i18n="lblUser">Username</label>
-              <input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
+              <label data-i18n="lblIp">IP Apparato</label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-server"></i>
+                <input id="devIp" type="text" placeholder="10.0.0.1">
+              </div>
+              <div id="devIpHint" style="display:none; font-size:12px; margin-top:4px;"></div>
             </div>
-            <div class="form-group">
-              <label id="devPassLabel" data-i18n="lblPass">Password</label>
-              <input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
-            </div>
-            <div class="form-group">
-              <label id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label>
-              <input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
-            </div>
-          </div>
 
-          <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
-            <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
-          </button>
-          <button class="btn btn-secondary" id="btnCancelEditDevice" style="display:none; margin-top: 8px;" data-i18n="btnCancelEditDevice" onclick="resetDeviceForm()">
-            <i class="fa-solid fa-xmark"></i> Annulla modifica
-          </button>
-        </div>
+            <div class="form-group">
+              <label data-i18n="lblVendor">Vendor Engine</label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-gears"></i>
+                <select id="devVendor" style="padding-left:36px;"></select>
+              </div>
+            </div>
 
-        <div class="requires-write" style="border-top: 1px solid var(--border); padding-top: 15px; margin-top: 15px;">
-          <h3 style="font-size: 14px; margin-bottom: 10px;" data-i18n="titleAddGroup"><i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Gruppo</h3>
-          <div class="form-group">
-            <label data-i18n="lblGroupName">Nome Gruppo</label>
-            <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" style="padding-left:12px;">
+            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-plug"></i> <span data-i18n="secConnectivity">3 · Connettività</span>
+            </h4>
+            <!-- §11.6: trasporti per-device (checkbox + porta per protocollo).
+                 Collassato di default; il riepilogo mostra i protocolli abilitati
+                 e si espande da solo in modifica se il device non usa i default
+                 (solo SSH:22) -- vedi setTransportsForm(). -->
+            <div class="form-group">
+              <label data-i18n="lblTransports">Protocolli di connessione</label>
+              <details id="devTransports" style="border:1px solid var(--border); border-radius:8px; background:var(--surface-2); overflow:hidden;">
+                <summary style="list-style:none; cursor:pointer; padding:8px 10px; font-size:13px; font-weight:700; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+                  <i class="fa-solid fa-plug"></i>
+                  <span data-i18n="lblTransportsEnabled">Abilitati:</span>
+                  <span id="devTransportsSummary" style="color:var(--text);">SSH:22</span>
+                  <i class="fa-solid fa-caret-down" style="font-size:11px; margin-left:auto;"></i>
+                </summary>
+                <div style="padding:10px; border-top:1px solid var(--border); display:grid; grid-template-columns:auto 90px; gap:6px 8px; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
+                    <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
+                  </div>
+                  <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
+                    <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
+                  </div>
+                  <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
+                  <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger, #c0392b); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
+                    <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
+                  </div>
+                  <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
+                    <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
+                  </div>
+                  <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="trTcpEnabled" data-proto="tcp">
+                    <label for="trTcpEnabled" style="min-width:80px; margin:0;">TCP</label>
+                  </div>
+                  <input id="trTcpPort" type="number" min="1" max="65535" value="" style="width:90px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="trUdpEnabled" data-proto="udp">
+                    <label for="trUdpEnabled" style="min-width:80px; margin:0;">UDP</label>
+                  </div>
+                  <input id="trUdpPort" type="number" min="1" max="65535" value="" style="width:90px;">
+                </div>
+              </details>
+            </div>
+
+            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
+              <i class="fa-solid fa-key"></i> <span data-i18n="secCredentials">4 · Credenziali</span>
+            </h4>
+            <div class="form-group">
+              <label data-i18n="lblProfile">Profilo Credenziali</label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-key"></i>
+                <select id="devProfile" style="padding-left:36px;">
+                  <option value="default" data-i18n="optProfileDefault">Profilo Rete Standard</option>
+                  <option value="custom" data-i18n="optProfileCustom">Credenziali dedicate...</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="customCredsForm" style="display:none; border-left: 2px solid var(--primary); padding-left: 10px; margin-bottom: 10px;">
+              <div class="form-group">
+                <label data-i18n="lblUser">Username</label>
+                <input id="devUser" type="text" placeholder="Admin" style="padding-left:12px;">
+              </div>
+              <div class="form-group">
+                <label id="devPassLabel" data-i18n="lblPass">Password</label>
+                <input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
+              </div>
+              <div class="form-group">
+                <label id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label>
+                <input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
+              </div>
+            </div>
+
+            <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
+              <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
+            </button>
+            <button class="btn btn-secondary" id="btnCancelEditDevice" style="display:none; margin-top: 8px;" data-i18n="btnCancelEditDevice" onclick="resetDeviceForm()">
+              <i class="fa-solid fa-xmark"></i> Annulla modifica
+            </button>
           </div>
-          <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text);" data-i18n="btnCreateGroup">
-            <i class="fa-solid fa-folder-plus"></i> Crea Gruppo
-          </button>
-        </div>
-      </article>
+        </article>
+
+        <article class="panel requires-write" id="identitiesPanel">
+          <h3 style="font-size:16px; margin-bottom:6px;" data-i18n="titleIdentities"><i class="fa-solid fa-id-badge"></i> Identità del Tenant</h3>
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;" data-i18n="descIdentities">Profili credenziali riusabili, legati al tenant selezionato nel form.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th data-i18n="thIdentName">Nome</th><th>Username</th><th data-i18n="thIdentDevices">Device</th><th data-i18n="thIdentActions">Azioni</th></tr></thead>
+              <tbody id="identitiesTableBody"></tbody>
+            </table>
+          </div>
+          <div id="identityForm" style="display:none; border-left:2px solid var(--primary); padding-left:10px; margin-top:12px;">
+            <input type="hidden" id="identEditId">
+            <div class="form-group"><label data-i18n="thIdentName">Nome</label><input id="identName" type="text" style="padding-left:12px;"></div>
+            <div class="form-group"><label>Username</label><input id="identUser" type="text" style="padding-left:12px;"></div>
+            <div class="form-group"><label data-i18n="lblPass">Password</label><input id="identPass" type="password" style="padding-left:12px;"></div>
+            <div class="form-group"><label data-i18n="lblSecret">Enable Secret</label><input id="identSecret" type="password" style="padding-left:12px;"></div>
+            <button class="btn btn-primary" id="btnSaveIdentity" data-i18n="btnSaveIdentity"><i class="fa-solid fa-floppy-disk"></i> Salva Identità</button>
+            <button class="btn btn-secondary" id="btnCancelIdentity" data-i18n="btnCancelIdentity"><i class="fa-solid fa-xmark"></i> Annulla</button>
+          </div>
+          <button class="btn btn-secondary" id="btnNewIdentity" style="margin-top:10px;" data-i18n="btnNewIdentity"><i class="fa-solid fa-plus"></i> Nuova Identità</button>
+        </article>
+      </div>
     </div>
 
     <!-- TAB 2: Gestione Gruppi/Sedi -->
@@ -2900,7 +2933,28 @@
         titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Aggiungi Nuovo Tenant',
         lblGroupName: "Nome Tenant",
         btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Crea Tenant',
-        
+
+        // Provisioning: sezioni form + pannello identità tenant
+        secTenant: "1 · Tenant",
+        secDevice: "2 · Dispositivo",
+        secConnectivity: "3 · Connettività",
+        secCredentials: "4 · Credenziali",
+        titleIdentities: '<i class="fa-solid fa-id-badge"></i> Identità del Tenant',
+        descIdentities: "Profili credenziali riusabili, legati al tenant selezionato nel form.",
+        thIdentName: "Nome",
+        thIdentDevices: "Device",
+        thIdentActions: "Azioni",
+        btnNewIdentity: '<i class="fa-solid fa-plus"></i> Nuova Identità',
+        btnSaveIdentity: '<i class="fa-solid fa-floppy-disk"></i> Salva Identità',
+        btnCancelIdentity: '<i class="fa-solid fa-xmark"></i> Annulla',
+        emptyIdentities: "Nessuna identità configurata per questo tenant.",
+        confirmDeleteIdentity: "Eliminare questa identità?",
+        alertIdentityInUse: "Identità in uso dai seguenti device:",
+        alertIdentityFields: "Nome, username e password sono obbligatori.",
+        hintIpInvalid: "Indirizzo IP non valido.",
+        hintIpExists: "IP già in inventario.",
+        hintIpEditLink: "Passa a modifica",
+
         // Sidebar nav groups
         navOps: "Operazioni",
         navAnalysis: "Analisi",
@@ -3568,7 +3622,28 @@
         titleAddGroup: '<i class="fa-solid fa-folder-plus"></i> Add New Tenant',
         lblGroupName: "Tenant Name",
         btnCreateGroup: '<i class="fa-solid fa-folder-plus"></i> Create Tenant',
-        
+
+        // Provisioning: form sections + tenant identities panel
+        secTenant: "1 · Tenant",
+        secDevice: "2 · Device",
+        secConnectivity: "3 · Connectivity",
+        secCredentials: "4 · Credentials",
+        titleIdentities: '<i class="fa-solid fa-id-badge"></i> Tenant Identities',
+        descIdentities: "Reusable credential profiles, tied to the tenant selected in the form.",
+        thIdentName: "Name",
+        thIdentDevices: "Devices",
+        thIdentActions: "Actions",
+        btnNewIdentity: '<i class="fa-solid fa-plus"></i> New Identity',
+        btnSaveIdentity: '<i class="fa-solid fa-floppy-disk"></i> Save Identity',
+        btnCancelIdentity: '<i class="fa-solid fa-xmark"></i> Cancel',
+        emptyIdentities: "No identity configured for this tenant.",
+        confirmDeleteIdentity: "Delete this identity?",
+        alertIdentityInUse: "Identity in use by the following devices:",
+        alertIdentityFields: "Name, username and password are required.",
+        hintIpInvalid: "Invalid IP address.",
+        hintIpExists: "IP already in inventory.",
+        hintIpEditLink: "Switch to edit",
+
         // Sidebar nav groups
         navOps: "Operations",
         navAnalysis: "Analysis",
@@ -4940,6 +5015,118 @@
         document.getElementById('customCredsForm').style.display = e.target.value === 'custom' ? 'block' : 'none';
     });
 
+    // Toggle inline "+ nuovo tenant" row accanto a devGroupSelect.
+    document.getElementById('btnInlineNewTenant').addEventListener('click', () => {
+        const row = document.getElementById('inlineNewTenantRow');
+        row.style.display = row.style.display === 'flex' ? 'none' : 'flex';
+    });
+
+    // Validazione IP inline + hint duplicato con link rapido a modifica.
+    document.getElementById('devIp').addEventListener('input', () => {
+        const v = document.getElementById('devIp').value.trim();
+        const hint = document.getElementById('devIpHint');
+        const ipRe = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (!v) { hint.style.display = 'none'; return; }
+        if (!ipRe.test(v) || v.split('.').some(o => +o > 255)) {
+            hint.style.display = 'block'; hint.style.color = 'var(--danger)';
+            hint.innerHTML = i18n[currentLang].hintIpInvalid;
+            return;
+        }
+        const existing = (globalDevices || []).find(d => d.IP === v);
+        if (existing && !editingDeviceIp) {
+            hint.style.display = 'block'; hint.style.color = 'var(--warning)';
+            hint.innerHTML = `${i18n[currentLang].hintIpExists} <a href="#" onclick="editDevice('${v}'); return false;">${i18n[currentLang].hintIpEditLink}</a>`;
+        } else { hint.style.display = 'none'; }
+    });
+
+    // Carica le identita' del tenant selezionato nella select devProfile,
+    // preservando default/custom. Chiamata al load della tab e al cambio tenant.
+    async function refreshIdentityOptions(preserve) {
+        const tenant = document.getElementById('devGroupSelect').value;
+        const sel = document.getElementById('devProfile');
+        const keep = preserve || sel.value;
+        const res = await apiFetch('/api/identities?tenant=' + encodeURIComponent(tenant));
+        const idents = res && res.ok ? (await res.json()).identities : [];
+        sel.innerHTML = `<option value="default">${i18n[currentLang].optProfileDefault.replace(/<[^>]*>/g,'')}</option>` +
+            idents.map(i => `<option value="identity:${i.id}">${escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('') +
+            `<option value="custom">${i18n[currentLang].optProfileCustom.replace(/<[^>]*>/g,'')}</option>`;
+        sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : 'default';
+        document.getElementById('customCredsForm').style.display = sel.value === 'custom' ? 'block' : 'none';
+        window._tenantIdentities = idents;
+    }
+    document.getElementById('devGroupSelect').addEventListener('change', () => { refreshIdentityOptions(); renderIdentitiesPanel(); });
+
+    // --- IDENTITIES CRUD (pannello destro della tab Provisioning) ---
+
+    function renderIdentitiesPanel() {
+        const body = document.getElementById('identitiesTableBody');
+        const idents = window._tenantIdentities || [];
+        body.innerHTML = idents.length ? idents.map(i => `<tr>
+            <td>${escapeHtml(i.name)}</td>
+            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.username)}</td>
+            <td>${i.devices_using}</td>
+            <td>
+              <button class="btn-icon" onclick="editIdentity('${i.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn-icon" onclick="deleteIdentity('${i.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </td></tr>`).join('')
+          : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
+    }
+
+    function editIdentity(id) {
+        const i = (window._tenantIdentities || []).find(x => x.id === id);
+        if (!i) return;
+        document.getElementById('identEditId').value = id;
+        document.getElementById('identName').value = i.name;
+        document.getElementById('identUser').value = i.username;
+        document.getElementById('identPass').value = '';
+        document.getElementById('identSecret').value = '';
+        document.getElementById('identityForm').style.display = 'block';
+    }
+
+    async function deleteIdentity(id) {
+        if (!confirm(i18n[currentLang].confirmDeleteIdentity)) return;
+        const res = await apiFetch('/api/identities/' + id, { method: 'DELETE' });
+        if (res && res.status === 409) {
+            const err = await res.json();
+            alert(i18n[currentLang].alertIdentityInUse + '\n' + (err.detail.devices || []).join(', '));
+            return;
+        }
+        await refreshIdentityOptions(); renderIdentitiesPanel();
+    }
+
+    document.getElementById('btnNewIdentity').addEventListener('click', () => {
+        document.getElementById('identEditId').value = '';
+        ['identName','identUser','identPass','identSecret'].forEach(i => document.getElementById(i).value = '');
+        document.getElementById('identityForm').style.display = 'block';
+    });
+    document.getElementById('btnCancelIdentity').addEventListener('click', () =>
+        document.getElementById('identityForm').style.display = 'none');
+    document.getElementById('btnSaveIdentity').addEventListener('click', async () => {
+        const id = document.getElementById('identEditId').value;
+        const payload = {
+            name: document.getElementById('identName').value.trim(),
+            tenant: document.getElementById('devGroupSelect').value,
+            username: document.getElementById('identUser').value.trim(),
+            password: document.getElementById('identPass').value,
+            enable_secret: document.getElementById('identSecret').value,
+        };
+        if (!payload.name || !payload.username || !payload.password) {
+            alert(i18n[currentLang].alertIdentityFields); return;
+        }
+        const res = await apiFetch(id ? '/api/identities/' + id : '/api/identities', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res && res.ok) {
+            document.getElementById('identityForm').style.display = 'none';
+            await refreshIdentityOptions(); renderIdentitiesPanel();
+        } else if (res) {
+            const err = await res.json();
+            alert(err.detail || 'Errore');
+        }
+    });
+
     // §11.6: gestione trasporti per-device (checkbox + porta per protocollo).
     const TRANSPORT_PROTOS = ['ssh', 'telnet', 'netconf', 'restconf', 'tcp', 'udp'];
     const TRANSPORT_LABELS = { ssh: 'SSH', telnet: 'Telnet', netconf: 'NETCONF', restconf: 'RESTCONF', tcp: 'TCP', udp: 'UDP' };
@@ -5147,7 +5334,15 @@
         });
         if(res && res.ok) {
             document.getElementById('newGroupName').value = '';
-            appInit();
+            document.getElementById('inlineNewTenantRow').style.display = 'none';
+            await appInit();
+            // Seleziona il tenant appena creato nella select del form di provisioning.
+            const groupSelect = document.getElementById('devGroupSelect');
+            if (groupSelect && Array.from(groupSelect.options).some(o => o.value === name)) {
+                groupSelect.value = name;
+            }
+            await refreshIdentityOptions();
+            renderIdentitiesPanel();
         } else if (res) {
             alert(i18n[currentLang].alertGroupCreateError);
         }
@@ -5750,6 +5945,8 @@
 
     function loadProvisioningTab() {
         populateProvisioningFormSelects();
+        refreshIdentityOptions();
+        renderIdentitiesPanel();
     }
 
     function switchTab(tabId, clickedBtn) {
