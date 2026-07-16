@@ -1811,6 +1811,9 @@
         #tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker { display:none; }
         #tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
         #tab-clientmap #arpDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
+        #tab-clientmap #arpTenantMenu > summary::-webkit-details-marker { display:none; }
+        #tab-clientmap #arpTenantMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+        #tab-clientmap #arpTenantList label:hover { background: var(--surface-3); border-radius:6px; }
       </style>
 
       <div class="panel">
@@ -1826,9 +1829,16 @@
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant/Sede</label>
-            <select id="arpFilterTenant" onchange="populateArpGatewayFilter(); arpClientSearch();" class="ui-input" style="width:160px; cursor:pointer;">
-              <option value="all" data-i18n="optArpAllTenants">Tutti i tenant</option>
-            </select>
+            <!-- Multi-selezione tenant a checkbox (nessun tenant di default): evita di
+                 mostrare tutti i binding di tutti i tenant senza una scelta esplicita. -->
+            <details id="arpTenantMenu" style="position:relative;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px; width:160px;">
+                <i class="fa-solid fa-building" style="color:var(--text-muted);"></i>
+                <span id="arpTenantSummary" data-i18n="arpPickTenantHint" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Seleziona un tenant per visualizzare i binding</span>
+                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted); margin-left:auto;"></i>
+              </summary>
+              <div id="arpTenantList" style="position:absolute; top:110%; left:0; z-index:60; min-width:200px; max-height:260px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            </details>
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
@@ -3401,6 +3411,7 @@
         lblFgtNoWanAdmin: "Nessun accesso admin dal WAN",
         lblArpFilterTenant: "Tenant/Sede",
         lblArpFilterGateway: "Gateway",
+        arpPickTenantHint: "Seleziona un tenant per visualizzare i binding",
         optArpAllTenants: "Tutti i tenant",
         optArpAllGateways: "Tutti i gateway",
         chipAllSources: "Tutte le origini",
@@ -4069,6 +4080,7 @@
         lblFgtNoWanAdmin: "No admin access from WAN",
         lblArpFilterTenant: "Tenant/Site",
         lblArpFilterGateway: "Gateway",
+        arpPickTenantHint: "Select a tenant to view bindings",
         optArpAllTenants: "All tenants",
         optArpAllGateways: "All gateways",
         chipAllSources: "All sources",
@@ -9728,11 +9740,10 @@
             sel.value = groups.includes(cur) ? cur : 'all';
         };
         fillGroupSel('arpScanGroup', L.optFilterAll || 'Filtra per Tenant: Tutti');
-        fillGroupSel('arpFilterTenant', L.optArpAllTenants || 'Tutti i tenant');
+        populateArpTenantFilter();
         populateArpScanDevices();
         populateArpGatewayFilter();
         arpClientSearch();
-        refreshArpStats();
     }
 
     // Dispositivi filtrati per il tenant scelto nel selettore di scansione.
@@ -9786,13 +9797,62 @@
             : `${sel} ${i18n[currentLang].lblAiDevSelected || 'selezionati'}`;
     }
 
-    // Il filtro gateway elenca i device del tenant scelto nel filtro di vista.
+    // Multi-selezione tenant per la ricerca binding: nessuno selezionato di default,
+    // ordine di selezione mantenuto per renderizzare le tabelle nello stesso ordine.
+    let arpSelectedTenantOrder = [];
+
+    function populateArpTenantFilter() {
+        const box = document.getElementById('arpTenantList');
+        if (!box) return;
+        const groups = Object.keys(globalGroups || {});
+        // Scarta selezioni di tenant non più esistenti.
+        arpSelectedTenantOrder = arpSelectedTenantOrder.filter(t => groups.includes(t));
+        const L = i18n[currentLang];
+        box.innerHTML = groups.map(g => `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
+            <input type="checkbox" class="arp-tenant-cb" value="${escapeHtml(g)}" onchange="onArpTenantToggle(this)" ${arpSelectedTenantOrder.includes(g) ? 'checked' : ''} style="accent-color:var(--primary);">
+            <span>${escapeHtml(g)}</span></label>`).join('') ||
+            `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${L.msgAiNoDevices || 'Nessun tenant'}</div>`;
+        updateArpTenantSummary();
+    }
+
+    function selectedArpTenants() {
+        return arpSelectedTenantOrder.slice();
+    }
+
+    function onArpTenantToggle(cb) {
+        const name = cb.value;
+        if (cb.checked) {
+            if (!arpSelectedTenantOrder.includes(name)) arpSelectedTenantOrder.push(name);
+        } else {
+            arpSelectedTenantOrder = arpSelectedTenantOrder.filter(t => t !== name);
+        }
+        updateArpTenantSummary();
+        populateArpGatewayFilter();
+        arpClientSearch();
+    }
+
+    function updateArpTenantSummary() {
+        const sum = document.getElementById('arpTenantSummary');
+        if (!sum) return;
+        sum.textContent = arpSelectedTenantOrder.length === 0
+            ? (i18n[currentLang].arpPickTenantHint || 'Seleziona un tenant per visualizzare i binding')
+            : arpSelectedTenantOrder.join(', ');
+    }
+
+    // Dispositivi filtrati per i tenant selezionati nel filtro di ricerca.
+    function arpFilteredDevicesByTenants(tenants) {
+        let devs = globalDevices || [];
+        if (tenants && tenants.length) devs = devs.filter(d => tenants.includes(d.Group || 'Generale'));
+        return devs;
+    }
+
+    // Il filtro gateway elenca i device dei tenant scelti nel filtro di vista.
     function populateArpGatewayFilter() {
         const sel = document.getElementById('arpFilterGateway');
         if (!sel) return;
         const cur = sel.value;
         const L = i18n[currentLang];
-        const devs = arpFilteredDevices('arpFilterTenant');
+        const devs = arpFilteredDevicesByTenants(selectedArpTenants());
         sel.innerHTML = `<option value="">${L.optArpAllGateways || 'Tutti i gateway'}</option>` +
             devs.map(d => {
                 const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
@@ -9839,56 +9899,81 @@
             box.innerHTML = `<b>${i18n[currentLang].titleArpScanSummary || 'Esito raccolta ARP'}</b>` +
                 `<div style="margin-top:6px;">${rows || '—'}</div>`;
             arpClientSearch();
-            refreshArpStats();
         } finally {
             btn.disabled = false;
             btn.innerHTML = oldHtml;
         }
     }
 
-    async function refreshArpStats() {
-        const res = await apiFetch('/api/arp/stats');
-        if (!res || !res.ok) return;
-        const s = await res.json();
+    // KPI e riepilogo calcolati lato client dai risultati già filtrati per tenant
+    // selezionati (nessuna chiamata separata a /api/arp/stats, che non è scopabile
+    // per tenant): "KPI contano solo i tenant selezionati".
+    function updateArpKpisFromResults(tenants, byTenant) {
+        let bindings = 0;
+        const macs = new Set();
+        const gws = new Set();
+        tenants.forEach(t => (byTenant[t] || []).forEach(r => {
+            bindings++;
+            if (r.mac) macs.add(String(r.mac).toLowerCase());
+            if (r.source_ip) gws.add(r.source_ip);
+        }));
+        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = bindings;
+        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = macs.size;
+        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = gws.size;
         const el = document.getElementById('arpStats');
         if (el) el.innerText = (currentLang === 'en'
-            ? `${s.bindings} bindings · ${s.unique_macs} MACs · ${s.sources} gateways`
-            : `${s.bindings} binding · ${s.unique_macs} MAC · ${s.sources} gateway`);
-        // KPI tiles nella hero card: stessa risposta, nessuna chiamata aggiuntiva.
-        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = s.bindings;
-        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = s.unique_macs;
-        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = s.sources;
+            ? `${bindings} bindings · ${macs.size} MACs · ${gws.size} gateways`
+            : `${bindings} binding · ${macs.size} MAC · ${gws.size} gateway`);
+    }
+
+    function clearArpKpis() {
+        ['kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.textContent = '—';
+        });
+        const stats = document.getElementById('arpStats'); if (stats) stats.innerText = '';
     }
 
     async function arpClientSearch() {
         const mac = document.getElementById('arpSearchMac').value.trim();
         const ip = document.getElementById('arpSearchIp').value.trim();
-        const tenant = document.getElementById('arpFilterTenant')?.value || 'all';
+        const tenants = selectedArpTenants();
         const gw = document.getElementById('arpFilterGateway')?.value || '';
-        const params = new URLSearchParams();
-        if (mac) params.set('mac', mac);
-        if (ip) params.set('ip', ip);
-        if (tenant && tenant !== 'all') params.set('tenant', tenant);
-        if (gw) params.set('source_ip', gw);
-        const res = await apiFetch('/api/arp/client-map?' + params.toString());
-        if (!res || !res.ok) return;
-        const d = await res.json();
-        renderArpResults(d.results || []);
+        const box = document.getElementById('arpResults');
+        if (!tenants.length) {
+            // Nessun tenant scelto: nessuna fetch, solo il placeholder e KPI vuoti.
+            if (box) box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${escapeHtml(i18n[currentLang].arpPickTenantHint || 'Seleziona un tenant per visualizzare i binding')}</p>`;
+            clearArpKpis();
+            return;
+        }
+        const byTenant = {};
+        for (const t of tenants) {
+            const params = new URLSearchParams();
+            if (mac) params.set('mac', mac);
+            if (ip) params.set('ip', ip);
+            params.set('tenant', t);
+            if (gw) params.set('source_ip', gw);
+            const res = await apiFetch('/api/arp/client-map?' + params.toString());
+            byTenant[t] = (res && res.ok) ? (await res.json()).results || [] : [];
+        }
+        renderArpResults(tenants, byTenant);
+        updateArpKpisFromResults(tenants, byTenant);
     }
 
     function arpSearchReset() {
         ['arpSearchMac', 'arpSearchIp'].forEach(id => {
             const el = document.getElementById(id); if (el) el.value = '';
         });
-        const t = document.getElementById('arpFilterTenant'); if (t) t.value = 'all';
         const g = document.getElementById('arpFilterGateway'); if (g) { populateArpGatewayFilter(); g.value = ''; }
         arpClientSearch();
     }
 
-    function renderArpResults(rows) {
+    // Una tabella separata per tenant, nell'ordine di selezione: mai unite in
+    // un'unica tabella, ognuna con la propria intestazione.
+    function renderArpResults(tenants, byTenant) {
         const en = currentLang === 'en';
         const box = document.getElementById('arpResults');
-        if (!rows.length) {
+        const totalRows = tenants.reduce((n, t) => n + (byTenant[t] || []).length, 0);
+        if (!totalRows) {
             box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${en
                 ? 'No MAC ↔ IP bindings. Run an ARP collection (and a MAC scan for port matching).'
                 : 'Nessun binding MAC ↔ IP. Esegui una raccolta ARP (e una MAC scan per il match della porta).'}</p>`;
@@ -9913,25 +9998,20 @@
         ].join('') + '</tr>';
         const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;">` +
             `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
-        // Dati separati per tenant: una sezione per sede quando ce n'è più di una.
-        const byTenant = {};
-        rows.forEach(r => {
-            const t = r.tenant || 'Generale';
-            (byTenant[t] = byTenant[t] || []).push(r);
-        });
-        const tenants = Object.keys(byTenant).sort();
-        if (tenants.length <= 1) {
-            box.innerHTML = table(rows.map(rowHtml).join(''));
-            return;
-        }
-        box.innerHTML = tenants.map(t => `
+        box.innerHTML = tenants.map(t => {
+            const rows = byTenant[t] || [];
+            const body = rows.length
+                ? table(rows.map(rowHtml).join(''))
+                : `<p style="color:var(--text-muted); font-size:12px;">${en ? 'No bindings for this tenant.' : 'Nessun binding per questo tenant.'}</p>`;
+            return `
             <div style="margin-bottom:18px;">
                 <h4 style="margin:0 0 8px 0; font-size:13px; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-building" style="color:var(--primary);"></i> ${escapeHtml(t)}
-                    <span style="color:var(--text-muted); font-weight:400; font-size:12px;">(${byTenant[t].length})</span>
+                    <span style="color:var(--text-muted); font-weight:400; font-size:12px;">(${rows.length})</span>
                 </h4>
-                ${table(byTenant[t].map(rowHtml).join(''))}
-            </div>`).join('');
+                ${body}
+            </div>`;
+        }).join('');
     }
 
     // Risultati raggruppati per switch: ogni host è un accordion collassato;
