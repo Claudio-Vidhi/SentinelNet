@@ -67,6 +67,19 @@ class TestClassifyDeviceType(unittest.TestCase):
     def test_no_evidence_falls_back_to_client(self):
         self.assertEqual(classify_device_type(), "client")
 
+    def test_router_capability_beats_server_hostname_token(self):
+        # Bug reale: CDP Capabilities "Router" e' il segnale piu' affidabile,
+        # ma un hostname con il token debole "srv" (es. "srv-core-01",
+        # convenzione di naming del sito) veniva classificato "server" prima
+        # ancora di controllare le capabilities, perche' il fallback
+        # "router" in caps era in fondo alla funzione, raggiunto solo se
+        # nessuna keyword hostname/description/platform avesse gia' fatto
+        # match. Le capabilities devono avere precedenza assoluta.
+        self.assertEqual(
+            classify_device_type("srv-core-01", capabilities="Router"),
+            "router",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
