@@ -139,7 +139,7 @@ class TestAiFlowContext(_Base):
 
         # Profilo AI fittizio + chiamata provider mockata: si verifica il
         # payload in uscita (choke-point redazione).
-        with patch.object(app_server, "_get_active_ai_profile", return_value={
+        with patch("routers.ai._get_active_ai_profile", return_value={
                 "provider": "anthropic", "api_key_enc": "x", "model": "m",
                 "name": "test"}), \
              patch.object(app_server.crypto_vault, "decrypt_password",
@@ -234,7 +234,7 @@ class TestAiFlowKeys(_Base):
         self.assertIn("77", ctx)
 
     def _chat_with(self, user, payload):
-        with patch.object(app_server, "_get_active_ai_profile", return_value={
+        with patch("routers.ai._get_active_ai_profile", return_value={
                 "provider": "anthropic", "api_key_enc": "x", "model": "m",
                 "name": "test"}), \
              patch.object(app_server.crypto_vault, "decrypt_password",
