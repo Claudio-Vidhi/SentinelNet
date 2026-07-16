@@ -1,13 +1,15 @@
-# Device Provisioning: Tenant Identities + Tab Reorganization — Design
+# Device Provisioning Identities + Threat Intel Revamp — Design
 
 Date: 2026-07-17
 Status: approved
 
 ## Goal
 
-Improve Device Provisioning tab UX for a network security engineer:
-named credential profiles ("identities") scoped to a tenant, and a
-reorganized two-column tab layout.
+Two features:
+1. Device Provisioning tab: named credential profiles ("identities")
+   scoped to a tenant, reorganized two-column layout.
+2. Threat Intel tab: port euvd_dashboard vendor-watch UI + rework the
+   matcher into tenant/category-grouped batch analysis.
 
 ## 1. Data: tenant identities
 
@@ -77,14 +79,52 @@ convention):
 - delete blocked while a device references the identity.
 - `get_device_credentials` resolves `identity:<id>` correctly.
 
-## 6. Execution
+## 6. Threat Intel tab revamp (templates/dashboard.html, tab-security)
 
-Subagent-driven: Task A backend (identity_manager + endpoints +
-core_engine + tests), Task B frontend (tab reorg + identities panel),
-B depends on A's API contract. Final step: rebuild exe with
-`pyinstaller SentinelNet.spec`.
+Two sub-tabs, using the same sub-tab pattern as the analyzer firewall
+sub-tab.
+
+### Sub-tab A: Vendor Watch (ported from ~/dev_ved/euvd_dashboard)
+
+- Vendor scope buttons generated dynamically from the SentinelNet vendor
+  registry (`euvd_term` field), not hardcoded.
+- Filters: min CVSS score, min EPSS, exploited-only toggle, date range,
+  free-text search over loaded rows.
+- Results table: CVE/EUVD id, product, severity badge, CVSS, EPSS,
+  exploited, published date. Row click opens a right-side drawer with
+  summary, scores, dates, and reference links.
+- Data source: existing authenticated proxy `GET /api/search`
+  (routers/backup.py) — no new backend endpoints.
+- Restyled to SentinelNet CSS variables and theme; all strings i18n
+  IT + EN.
+
+### Sub-tab B: Vulnerability Matcher (rework of existing view)
+
+- Devices grouped tenant → device-type category (from existing category
+  assignments; "Uncategorized" fallback). Inventory devices and
+  discovered neighbors (with detected version) shown in the same tree.
+- Per-tenant "Analyze all": runs EUVD queries for every online device
+  with a known firmware version, throttled to ~4 concurrent requests,
+  with a progress indicator and a per-tenant severity rollup
+  (critical / high / exploited counts).
+- Per-device Analyze button kept; existing `runManagedVulnCheck` /
+  `runDiscoveredVulnCheck` reused for the actual query + rendering.
+- No persistence of scan results, no server-side version matching.
+
+## 7. Execution
+
+Subagent-driven, three tasks:
+- Task A: backend identities (identity_manager + endpoints +
+  core_engine + tests).
+- Task B: provisioning tab UI (reorg + identities panel). Depends on
+  Task A's API contract.
+- Task C: threat intel UI (Vendor Watch port + Matcher rework).
+  Independent of A/B.
+
+Final step: rebuild exe with `pyinstaller SentinelNet.spec`.
 
 ## Out of scope
 
 - SNMP/API-token identities (SSH credentials only).
 - Changes to the Zero-Touch Provisioner tab (tab-provisioner).
+- Server-side CVE version-range matching; scan result persistence.
