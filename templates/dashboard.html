@@ -954,6 +954,9 @@
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navProvisioning">Provisioning</h3>
+        <button class="nav-item requires-write" onclick="switchTab('tab-provisioning', this)">
+          <span class="nav-left" data-i18n="tabProvisioning"><i class="fa-solid fa-plus"></i> Provisioning Apparato</span>
+        </button>
         <button class="nav-item requires-write" onclick="switchTab('tab-provisioner', this)">
           <span class="nav-left" data-i18n="tabProvisioner"><i class="fa-solid fa-wand-magic-sparkles"></i> Apparato da Zero</span>
         </button>
@@ -1063,6 +1066,110 @@
 
     <!-- TAB 1: Network Inventory (Dispositivi) -->
     <div id="tab-devices" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="invEyebrow"><i class="fa-solid fa-server"></i> Inventario</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="invHeroTitle">Inventario Dispositivi di Rete</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="invHeroSubtitle">Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.</p>
+          <div class="split-footer">
+            <button class="btn btn-primary btn-small requires-write" id="btnRunTriage" style="background: var(--cta); color: var(--cta-text); width: auto; margin: 0;" data-i18n="btnRunTriage">
+              <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:18px;">
+        <div class="kpi">
+          <h4 data-i18n="invKpiOnlineLabel">Dispositivi Online</h4>
+          <strong id="invKpiOnline">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="invKpiOfflineLabel">Dispositivi Offline</h4>
+          <strong id="invKpiOffline">&mdash;</strong>
+        </div>
+        <div class="kpi">
+          <h4 data-i18n="invKpiAuthFailedLabel">Autenticazione Fallita</h4>
+          <strong id="invKpiAuthFailed">&mdash;</strong>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <h3 style="margin:0 0 6px; font-size:16px;" data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
+        <div class="filterbar">
+          <select id="filterGroupSelect" onchange="renderDeviceTable()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+          </select>
+          <div class="search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="deviceSearch" type="search" oninput="renderDeviceTable()" autocomplete="off"
+              placeholder="Cerca IP, hostname, vendor, gruppo..." data-i18n-placeholder="searchInventoryPl"
+              style="padding:6px 10px 6px 30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:100%; transition:var(--transition);"
+              onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
+              onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
+          </div>
+          <button class="btn btn-secondary btn-small requires-write" id="btnTriageSite"
+              onclick="triageCurrentSite()"
+              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
+              data-i18n="btnTriageSite">
+            <i class="fa-solid fa-bolt"></i> Triage Sede
+          </button>
+          <button class="btn btn-secondary btn-small requires-write" id="btnPingCheck"
+              onclick="runPingCheck()"
+              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
+              data-i18n="btnPingCheck">
+            <i class="fa-solid fa-wifi"></i> Ping Sede
+          </button>
+          <button class="btn btn-secondary btn-small requires-write"
+              onclick="openSubnetScanModal()"
+              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
+              data-i18n="btnSubnetScan">
+            <i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet
+          </button>
+          <button class="btn btn-secondary btn-small requires-write"
+              onclick="openBulkCommandModal()"
+              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
+              data-i18n="btnBulkCommand">
+            <i class="fa-solid fa-terminal"></i> Invio Comandi
+          </button>
+          <button class="btn btn-secondary btn-small"
+              onclick="exportDeviceCsv()"
+              style="width:auto; margin:0;"
+              data-i18n="btnExportCsv">
+            <i class="fa-solid fa-file-csv"></i> Esporta CSV
+          </button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="thStatus">Stato</th>
+                <th data-i18n="thGroup">Gruppo</th>
+                <th>Sede</th>
+                <th data-i18n="thHostname">Hostname</th>
+                <th data-i18n="thIp">Indirizzo IP</th>
+                <th data-i18n="thVendor">Vendor</th>
+                <th data-i18n="thFirmware">Firmware</th>
+                <th data-i18n="thActions">Azioni / Utility</th>
+              </tr>
+            </thead>
+            <tbody id="deviceTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1b: Provisioning Apparato (estratto da Network Inventory) -->
+    <div id="tab-provisioning" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="provisioningEyebrow"><i class="fa-solid fa-plus"></i> Provisioning</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="provisioningHeroTitle">Provisioning Apparato</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="provisioningHeroSubtitle">Aggiungi o modifica un dispositivo esistente nell'inventario, assegnalo a un tenant e configura protocolli di connessione e credenziali. Crea qui anche nuovi tenant.</p>
+        </div>
+      </div>
+
       <article class="panel requires-write" style="margin-bottom:18px;">
         <div class="requires-write">
           <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
@@ -1176,99 +1283,6 @@
           </button>
         </div>
       </article>
-
-      <div class="hero" style="grid-template-columns:1fr;">
-        <div class="hero-card">
-          <span class="eyebrow" data-i18n="invEyebrow"><i class="fa-solid fa-server"></i> Inventario</span>
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="invHeroTitle">Inventario Dispositivi di Rete</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="invHeroSubtitle">Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.</p>
-          <div class="split-footer">
-            <button class="btn btn-primary btn-small requires-write" id="btnRunTriage" style="background: var(--cta); color: var(--cta-text); width: auto; margin: 0;" data-i18n="btnRunTriage">
-              <i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:18px;">
-        <div class="kpi">
-          <h4 data-i18n="invKpiOnlineLabel">Dispositivi Online</h4>
-          <strong id="invKpiOnline">&mdash;</strong>
-        </div>
-        <div class="kpi">
-          <h4 data-i18n="invKpiOfflineLabel">Dispositivi Offline</h4>
-          <strong id="invKpiOffline">&mdash;</strong>
-        </div>
-        <div class="kpi">
-          <h4 data-i18n="invKpiAuthFailedLabel">Autenticazione Fallita</h4>
-          <strong id="invKpiAuthFailed">&mdash;</strong>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-top:18px;">
-        <h3 style="margin:0 0 6px; font-size:16px;" data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
-        <div class="filterbar">
-          <select id="filterGroupSelect" onchange="renderDeviceTable()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
-            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
-          </select>
-          <div class="search-wrap">
-            <i class="fa-solid fa-magnifying-glass"></i>
-            <input id="deviceSearch" type="search" oninput="renderDeviceTable()" autocomplete="off"
-              placeholder="Cerca IP, hostname, vendor, gruppo..." data-i18n-placeholder="searchInventoryPl"
-              style="padding:6px 10px 6px 30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:100%; transition:var(--transition);"
-              onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
-              onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
-          </div>
-          <button class="btn btn-secondary btn-small requires-write" id="btnTriageSite"
-              onclick="triageCurrentSite()"
-              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
-              data-i18n="btnTriageSite">
-            <i class="fa-solid fa-bolt"></i> Triage Sede
-          </button>
-          <button class="btn btn-secondary btn-small requires-write" id="btnPingCheck"
-              onclick="runPingCheck()"
-              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
-              data-i18n="btnPingCheck">
-            <i class="fa-solid fa-wifi"></i> Ping Sede
-          </button>
-          <button class="btn btn-secondary btn-small requires-write"
-              onclick="openSubnetScanModal()"
-              style="width:auto; margin:0; border-color: var(--primary); color: var(--primary);"
-              data-i18n="btnSubnetScan">
-            <i class="fa-solid fa-magnifying-glass-location"></i> Scansione Subnet
-          </button>
-          <button class="btn btn-secondary btn-small requires-write"
-              onclick="openBulkCommandModal()"
-              style="width:auto; margin:0; border-color: var(--warning); color: var(--warning);"
-              data-i18n="btnBulkCommand">
-            <i class="fa-solid fa-terminal"></i> Invio Comandi
-          </button>
-          <button class="btn btn-secondary btn-small"
-              onclick="exportDeviceCsv()"
-              style="width:auto; margin:0;"
-              data-i18n="btnExportCsv">
-            <i class="fa-solid fa-file-csv"></i> Esporta CSV
-          </button>
-        </div>
-
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th data-i18n="thStatus">Stato</th>
-                <th data-i18n="thGroup">Gruppo</th>
-                <th>Sede</th>
-                <th data-i18n="thHostname">Hostname</th>
-                <th data-i18n="thIp">Indirizzo IP</th>
-                <th data-i18n="thVendor">Vendor</th>
-                <th data-i18n="thFirmware">Firmware</th>
-                <th data-i18n="thActions">Azioni / Utility</th>
-              </tr>
-            </thead>
-            <tbody id="deviceTableBody"></tbody>
-          </table>
-        </div>
-      </div>
     </div>
 
     <!-- TAB 2: Gestione Gruppi/Sedi -->
@@ -1964,11 +1978,14 @@
       <div class="panel" style="margin-bottom:18px;">
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div id="caPills" style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="ca-pill active" data-view="vlan" onclick="caSwitchView('vlan')" data-i18n="pillVlans">VLAN</button>
+            <button class="ca-pill active" data-view="home" onclick="caSwitchView('home')" data-i18n="pillCaHome">Home</button>
+            <button class="ca-pill" data-view="vlan" onclick="caSwitchView('vlan')" data-i18n="pillVlans">VLAN</button>
             <button class="ca-pill" data-view="routing" onclick="caSwitchView('routing')" data-i18n="pillRouting">Routing</button>
             <button class="ca-pill" data-view="acl" onclick="caSwitchView('acl')" data-i18n="pillAcls">ACL</button>
             <button class="ca-pill" data-view="iface" onclick="caSwitchView('iface')" data-i18n="pillIfaces">Interfacce</button>
             <button class="ca-pill" data-view="validation" onclick="caSwitchView('validation')" data-i18n="pillValidation">Validazione</button>
+            <button class="ca-pill" data-view="understand" onclick="caSwitchView('understand')" data-i18n="pillCaUnderstand">Comprendi</button>
+            <button class="ca-pill" data-view="convert" onclick="caSwitchView('convert')" data-i18n="pillCaConvert">Converti</button>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
@@ -2934,6 +2951,7 @@
         macKpiRetentionLabel: "Retention (giorni)",
         titleMacScanPanel: "Scansione MAC",
         titleMacSearchPanel: "Cerca MAC",
+        devTypeClient: "Client",
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
         tabFlows: '<i class="fa-solid fa-wave-square"></i> Flussi Live',
         titleFlows: 'Flussi Live (Top Talker)',
@@ -3023,6 +3041,30 @@
         pillAcls: "ACL",
         pillIfaces: "Interfacce",
         pillValidation: "Validazione",
+        pillCaHome: "Home",
+        pillCaUnderstand: "Comprendi",
+        pillCaConvert: "Converti",
+        caHomeAnalyzeTitle: "Analizza",
+        caHomeAnalyzeDesc: "Vista strutturata delle configurazioni: VLAN, routing, ACL, interfacce e validazione.",
+        caHomeUnderstandDesc: "Spiegazione guidata della configurazione di un dispositivo, sezione per sezione (AI).",
+        caHomeConvertDesc: "Anteprima di conversione deterministica FortiOS ↔ Cisco IOS, senza AI.",
+        caUnderstandTitle: "Comprendi la configurazione",
+        caExplainBtn: "Spiega",
+        caExplainLoading: "Generazione della spiegazione in corso…",
+        caExplainError: "Errore durante la generazione della spiegazione.",
+        caConvertTitle: "Config Converter (anteprima)",
+        caConvSource: "Sorgente",
+        caConvTarget: "Destinazione",
+        caConvPreviewBtn: "Anteprima",
+        caConvMapped: "Elementi mappati",
+        caConvUnmapped: "Non mappati",
+        caConvDownload: "Scarica .txt",
+        caConvDevicePick: "— dispositivo (backup più recente) —",
+        caConvTextPh: "Incolla qui la configurazione sorgente, oppure scegli un dispositivo…",
+        caUndDevicePick: "— scegli un dispositivo —",
+        thCaConvSource: "Sorgente",
+        thCaConvTarget: "Destinazione",
+        thCaConvNote: "Nota",
         thCaVlanId: "VLAN",
         thCaVlanName: "Nome",
         thCaSvi: "SVI",
@@ -3063,6 +3105,10 @@
         titleCaRouteAclRefs: "Riferimenti Route ↔ ACL",
         msgCaNoIssues: "Nessun problema rilevato",
         msgCaNoDevices: "Nessun apparato disponibile.",
+        btnPortConfig: "Config porta",
+        portConfigTitle: "Configurazione porta",
+        portConfigNotFound: "Nessuna configurazione trovata per questa porta",
+        openInAnalyzer: "Apri nel Config Analyzer",
         lblCaReferencedIn: "riferita in",
         titleCaRawRoute: "Riga di configurazione",
         lblCaShowRawRoute: "Mostra riga di configurazione",
@@ -3096,6 +3142,10 @@
         titleCaRadius: "Server RADIUS",
         lblCaMobility: "Mobility group",
         tabImport: '<i class="fa-solid fa-file-csv"></i> Importazione CSV',
+        tabProvisioning: '<i class="fa-solid fa-plus"></i> Provisioning Apparato',
+        provisioningEyebrow: '<i class="fa-solid fa-plus"></i> Provisioning',
+        provisioningHeroTitle: "Provisioning Apparato",
+        provisioningHeroSubtitle: "Aggiungi o modifica un dispositivo esistente nell'inventario, assegnalo a un tenant e configura protocolli di connessione e credenziali. Crea qui anche nuovi tenant.",
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Apparato da Zero',
         provisionerEyebrow: '<i class="fa-solid fa-screwdriver-wrench"></i> Provisioning',
         provPanelDevice: "Apparato & parametri",
@@ -3559,6 +3609,7 @@
         macKpiRetentionLabel: "Retention (days)",
         titleMacScanPanel: "MAC Scan",
         titleMacSearchPanel: "Search MAC",
+        devTypeClient: "Client",
         tabClientMap: '<i class="fa-solid fa-map-pin"></i> Client Map (MAC ↔ IP)',
         tabFlows: '<i class="fa-solid fa-wave-square"></i> Live Flows',
         titleFlows: 'Live Flows (Top Talkers)',
@@ -3648,6 +3699,30 @@
         pillAcls: "ACL",
         pillIfaces: "Interfaces",
         pillValidation: "Validation",
+        pillCaHome: "Home",
+        pillCaUnderstand: "Understand",
+        pillCaConvert: "Convert",
+        caHomeAnalyzeTitle: "Analyze",
+        caHomeAnalyzeDesc: "Structured view of configurations: VLAN, routing, ACL, interfaces and validation.",
+        caHomeUnderstandDesc: "Guided explanation of a device configuration, section by section (AI).",
+        caHomeConvertDesc: "Deterministic FortiOS ↔ Cisco IOS conversion preview, no AI.",
+        caUnderstandTitle: "Understand the configuration",
+        caExplainBtn: "Explain",
+        caExplainLoading: "Generating explanation…",
+        caExplainError: "Error while generating the explanation.",
+        caConvertTitle: "Config Converter (preview)",
+        caConvSource: "Source",
+        caConvTarget: "Target",
+        caConvPreviewBtn: "Preview",
+        caConvMapped: "Mapped items",
+        caConvUnmapped: "Unmapped",
+        caConvDownload: "Download .txt",
+        caConvDevicePick: "— device (freshest backup) —",
+        caConvTextPh: "Paste the source configuration here, or pick a device…",
+        caUndDevicePick: "— pick a device —",
+        thCaConvSource: "Source",
+        thCaConvTarget: "Target",
+        thCaConvNote: "Note",
         thCaVlanId: "VLAN",
         thCaVlanName: "Name",
         thCaSvi: "SVI",
@@ -3688,6 +3763,10 @@
         titleCaRouteAclRefs: "Route ↔ ACL references",
         msgCaNoIssues: "No issues detected",
         msgCaNoDevices: "No devices available.",
+        btnPortConfig: "Port config",
+        portConfigTitle: "Port configuration",
+        portConfigNotFound: "No configuration found for this port",
+        openInAnalyzer: "Open in Config Analyzer",
         lblCaReferencedIn: "referenced in",
         titleCaRawRoute: "Configuration line",
         lblCaShowRawRoute: "Show configuration line",
@@ -3721,6 +3800,10 @@
         titleCaRadius: "RADIUS servers",
         lblCaMobility: "Mobility group",
         tabImport: '<i class="fa-solid fa-file-csv"></i> CSV Import',
+        tabProvisioning: '<i class="fa-solid fa-plus"></i> Device Provisioning',
+        provisioningEyebrow: '<i class="fa-solid fa-plus"></i> Provisioning',
+        provisioningHeroTitle: "Device Provisioning",
+        provisioningHeroSubtitle: "Add or edit an existing device in the inventory, assign it to a tenant, and configure connection protocols and credentials. New tenants can also be created here.",
         tabProvisioner: '<i class="fa-solid fa-screwdriver-wrench"></i> Zero-Touch Device',
         provisionerEyebrow: '<i class="fa-solid fa-screwdriver-wrench"></i> Provisioning',
         provPanelDevice: "Device & parameters",
@@ -4575,18 +4658,9 @@
             const vRes = await apiFetch('/api/vendors');
             if (vRes && vRes.ok) globalVendors = await vRes.json();
 
-            // Popola tendine Vendor
-            const devVendorSel = document.getElementById('devVendor');
-            if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
-            const scanVendorSel = document.getElementById('scanVendorSelect');
-            if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
-            renderVendorTable();
-
-            // Popola tendina Gruppi nel form
-            const groupSelect = document.getElementById('devGroupSelect');
-            groupSelect.innerHTML = Object.keys(globalGroups).map(g =>
-                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
-            ).join('');
+            // Popola tendine Vendor + tendina Gruppi del form di provisioning
+            // (estratto in populateProvisioningFormSelects: riusato anche da loadProvisioningTab).
+            populateProvisioningFormSelects();
 
             // Memorizza la selezione corrente del filtro se esiste
             const filterSelect = document.getElementById('filterGroupSelect');
@@ -4938,6 +5012,10 @@
         if (!dev) return;
         editingDeviceIp = ip;
 
+        // La form di provisioning ora vive nella sua tab dedicata: prima di
+        // precompilarla assicurati che sia quella visibile.
+        switchTab('tab-provisioning');
+
         document.getElementById('devGroupSelect').value = dev.Group || 'Generale';
         const ipInput = document.getElementById('devIp');
         ipInput.value = dev.IP;
@@ -4958,7 +5036,7 @@
         document.getElementById('btnSaveDevice').innerHTML = i18n[currentLang].btnUpdateDevice;
         document.getElementById('btnCancelEditDevice').style.display = 'block';
 
-        document.querySelector('.requires-write').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('devFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     // Riporta il form di provisioning in modalità "aggiunta" (§11.5b).
@@ -5611,6 +5689,28 @@
 
     // --- TABS & TOPOLOGY LIST VIEW ---
 
+    // Popola le select del form di Provisioning Apparato (devVendor, scanVendorSelect,
+    // devGroupSelect). Estratto da appInit() perché ora serve anche quando si apre
+    // la tab dedicata tab-provisioning senza passare da un reload completo.
+    function populateProvisioningFormSelects() {
+        const devVendorSel = document.getElementById('devVendor');
+        if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
+        const scanVendorSel = document.getElementById('scanVendorSelect');
+        if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
+        renderVendorTable();
+
+        const groupSelect = document.getElementById('devGroupSelect');
+        if (groupSelect) {
+            groupSelect.innerHTML = Object.keys(globalGroups).map(g =>
+                `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
+            ).join('');
+        }
+    }
+
+    function loadProvisioningTab() {
+        populateProvisioningFormSelects();
+    }
+
     function switchTab(tabId, clickedBtn) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -5625,6 +5725,8 @@
             loadHome();
         } else if (tabId === 'tab-devices') {
             renderDeviceTable();
+        } else if (tabId === 'tab-provisioning') {
+            loadProvisioningTab();
         } else if(tabId === 'tab-map') loadTopology();
         else if(tabId === 'tab-map-interactive') loadInteractiveMap();
         else if(tabId === 'tab-categories') loadCategoriesData();
@@ -5984,20 +6086,43 @@
         mapCatVis = {};
         Object.keys(DEVICE_TYPE_META).forEach(k => { mapCatVis[k] = MAP_DEFAULT_CATS.includes(k); });
     }
-    function isMapCatVisible(c) { return mapCatVis[c] !== false; }
+    function isMapCatVisible(c) {
+        // Categorie note (DEVICE_TYPE_META) sono sempre seminate in mapCatVis.
+        // Le categorie dinamiche (custom o "client") non ancora viste vengono
+        // trattate come "other": nascoste finché l'utente non le abilita, ma
+        // comunque presenti/gestibili nel menu una volta apparse in mappa.
+        if (Object.prototype.hasOwnProperty.call(mapCatVis, c)) return mapCatVis[c] !== false;
+        return false;
+    }
     function toggleMapCat(cat, on) {
         mapCatVis[cat] = on;
         localStorage.setItem('mapCatVis', JSON.stringify(mapCatVis));
         loadInteractiveMap();
     }
-    function renderMapCatMenu() {
+    // Metadati (colore + etichetta) per una categoria di mappa, incluse quelle
+    // dinamiche non presenti in DEVICE_TYPE_META (es. "client" o categorie
+    // custom create dall'utente).
+    function mapCatMeta(k) {
+        if (DEVICE_TYPE_META[k]) return DEVICE_TYPE_META[k];
+        if (k === 'client') return { color: DEVICE_TYPE_META.other.color, it: i18n.it.devTypeClient, en: i18n.en.devTypeClient };
+        return { color: DEVICE_TYPE_META.other.color, it: k, en: k };
+    }
+    function mapCatLabel(k) { const m = mapCatMeta(k); return currentLang === 'en' ? m.en : m.it; }
+    function renderMapCatMenu(nodesData) {
         const box = document.getElementById('mapCatList');
         if (!box) return;
-        box.innerHTML = Object.keys(DEVICE_TYPE_META).map(k => `
+        // Menu = categorie built-in + qualsiasi device_type dinamico presente
+        // nei nodi correnti (custom category, "client", ecc.), così anche
+        // queste diventano filtrabili invece di restare sempre visibili.
+        const cats = Object.keys(DEVICE_TYPE_META);
+        (nodesData || []).forEach(n => {
+            if (n.device_type && !cats.includes(n.device_type)) cats.push(n.device_type);
+        });
+        box.innerHTML = cats.map(k => `
             <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:pointer; color:var(--text);">
                 <input type="checkbox" ${isMapCatVisible(k)?'checked':''} onchange="toggleMapCat('${k}', this.checked)" style="accent-color:var(--primary);">
-                <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${DEVICE_TYPE_META[k].color};"></span>
-                ${deviceTypeLabel(k)}
+                <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${mapCatMeta(k).color};"></span>
+                ${mapCatLabel(k)}
             </label>`).join('');
     }
 
@@ -6059,14 +6184,19 @@
         vtp = vtp || {};
         const badgeText = deviceTypeLabel(deviceType);
         const badgeColor = typeColor;
+        // VTP pill: quando presente il riquadro cresce in altezza (vedi hasVtp più
+        // sotto) e la pillola prende una fascia orizzontale propria SOTTO le righe
+        // IP/badge, così non si sovrappone più al badge tipo né all'hostname.
         let vtpDomainSvg = '';
-        if (vtp.showDomain && vtp.domain) {
+        const hasVtp = !!(vtp.showDomain && vtp.domain);
+        if (hasVtp) {
             const dcol = vtpDomainColor(vtp.domain);
             borderGradStart = dcol;
             const dEsc = String(vtp.domain).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 24);
-            vtpDomainSvg = `<rect x="138" y="26" width="94" height="13" rx="3" fill="${dcol}22" stroke="${dcol}" stroke-opacity="0.45" stroke-width="1" />
-          <text x="185" y="35.5" font-family="'Rubik','Inter',sans-serif" font-size="7.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${dEsc}</text>`;
+            vtpDomainSvg = `<rect x="16" y="80" width="216" height="16" rx="4" fill="${dcol}22" stroke="${dcol}" stroke-opacity="0.45" stroke-width="1" />
+          <text x="124" y="91.5" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${dEsc}</text>`;
         }
+        const cardH = hasVtp ? 106 : 84;
 
         // Carica icone vettoriali moderne basate sulla tipologia di apparato
         let iconSvg = "";
@@ -6105,7 +6235,7 @@
         const gradId = escapedIp.replace(/[^a-zA-Z0-9]/g, '_');
 
         const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="240" height="84" viewBox="0 0 240 84">
+        <svg xmlns="http://www.w3.org/2000/svg" width="240" height="${cardH}" viewBox="0 0 240 ${cardH}">
           <defs>
             <linearGradient id="cardGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stop-color="#251c3e" />
@@ -6116,12 +6246,12 @@
               <stop offset="100%" stop-color="${borderGradEnd}" />
             </linearGradient>
           </defs>
-          
+
           <!-- Sfondo della scheda con gradiente scuro e bordo lucido nello stato corrente -->
-          <rect x="2" y="2" width="236" height="80" rx="12" fill="url(#cardGrad_${gradId})" stroke="url(#borderGrad_${gradId})" stroke-width="1.5" />
-          
-          <!-- Barra d'accento laterale colorata in base allo stato -->
-          <path d="M2 14C2 7.37 7.37 2 14 2H18V82H14C7.37 82 2 76.63 2 70V14Z" fill="${statusColor}" opacity="0.85" />
+          <rect x="2" y="2" width="236" height="${cardH - 4}" rx="12" fill="url(#cardGrad_${gradId})" stroke="url(#borderGrad_${gradId})" stroke-width="1.5" />
+
+          <!-- Barra d'accento laterale colorata in base allo stato (altezza segue cardH) -->
+          <path d="M2 14C2 7.37 7.37 2 14 2H18V${cardH - 2}H14C7.37 ${cardH - 2} 2 ${cardH - 7.37} 2 ${cardH - 14}V14Z" fill="${statusColor}" opacity="0.85" />
           
           <!-- Cerchio contenitore per l'icona dell'apparato (bordo nel colore del tipo) -->
           <circle cx="44" cy="42" r="22" fill="#1f1633" stroke="${typeColor}" stroke-dasharray="1.5" stroke-width="1.5" />
@@ -6136,20 +6266,23 @@
           <!-- Badge tipo apparato (in alto a destra) -->
           <rect x="138" y="9" width="94" height="15" rx="4" fill="${badgeColor}22" stroke="${badgeColor}" stroke-opacity="0.5" stroke-width="1" />
           <text x="185" y="19.5" font-family="'Rubik', 'Inter', sans-serif" font-size="8.5" font-weight="900" fill="${badgeColor}" text-anchor="middle" letter-spacing="0.3">${escapedBadge}</text>
-          ${vtpDomainSvg}
 
           <!-- Informazioni testuali: Hostname e Indirizzo IP -->
           <text x="78" y="32" font-family="'Rubik', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="#ffffff" letter-spacing="-0.3">${escapedLabel}</text>
           <text x="78" y="49" font-family="Menlo, monospace" font-size="11" font-weight="700" fill="#bdb8c0">${escapedIp}</text>
-          
+
           <!-- Badge del Vendor (Cisco, HPE) -->
           <rect x="78" y="58" width="55" height="14" rx="4" fill="rgba(44, 188, 195, 0.1)" stroke="rgba(44, 188, 195, 0.2)" stroke-width="1" />
           <text x="105.5" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="9" font-weight="900" fill="#b1a7f0" text-anchor="middle" letter-spacing="0.5">${escapedVendor}</text>
-          
+
           <!-- Badge dello Stato Operativo (ONLINE, OFFLINE...) -->
           <rect x="139" y="58" width="70" height="14" rx="4" fill="${statusBg}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
           <text x="174" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="8" font-weight="900" fill="${statusColor}" text-anchor="middle" letter-spacing="0.5">${statusText}</text>
-          
+
+          <!-- Fascia VTP dedicata sotto le righe IP/badge (solo se presente): mai
+               sovrapposta al badge tipo o all'hostname (Fix B). -->
+          ${vtpDomainSvg}
+
         </svg>
         `;
         return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -6258,7 +6391,7 @@
         const showDiscovered   = document.getElementById("toggleDiscovered")?.checked || false;
 
         renderDeviceTypeLegend();
-        renderMapCatMenu();
+        renderMapCatMenu(data.nodes);
         renderDeviceFilterMenu(data.nodes, selectedGroup);
 
         // Filtra i nodi: terminali (server/telefoni/PC) e access point sono nascosti
@@ -6310,7 +6443,10 @@
                 shape: "image",
                 image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor, vtp),
                 title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
-                size: 38,
+                // Fix B: la card SVG cresce (84->106) quando mostra la fascia VTP; il
+                // nodo vis.js deve crescere di conseguenza, altrimenti l'immagine più
+                // alta viene ridotta in scala e il testo torna illeggibile.
+                size: (vtp.showDomain && vtp.domain) ? 46 : 38,
                 labelVal: n.label,
                 deviceTypeVal: n.device_type,
                 isBoundaryVal: n.is_boundary || false,
@@ -6510,12 +6646,21 @@
             });
         }
         let mapFrozen = false;
+        const isMinimal = getMapView() === 'minimal';
         const freezeLayout = () => {
-            if (networkInstance && !mapFrozen) { mapFrozen = true; networkInstance.setOptions({ physics: false }); }
+            // Fix A: forma esplicita {enabled:false} (non solo lo shorthand booleano)
+            // così vis.js disattiva anche il solver di stabilizzazione, non solo il
+            // rendering della fisica: sulla mappa minimalista, con riquadri grandi e
+            // avoidOverlap:1, il solver può non emettere mai 'stabilized' e restare
+            // in animazione perenne se non forzato esplicitamente allo stop.
+            if (networkInstance && !mapFrozen) { mapFrozen = true; networkInstance.setOptions({ physics: { enabled: false } }); }
         };
         networkInstance.once('stabilizationIterationsDone', freezeLayout);
         networkInstance.once('stabilized', freezeLayout);
-        networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, 5000));
+        // Sulla mappa minimalista il solver barnesHut con riquadri grandi/avoidOverlap
+        // può non stabilizzarsi mai: fallback più aggressivo (2.5s) per non lasciarla
+        // in animazione percepibile "per sempre". La classica resta a 5s (invariata).
+        networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, isMinimal ? 2500 : 5000));
     }
 
     // Separazione AABB dei riquadri dopo un trascinamento: il nodo mosso viene
@@ -6551,6 +6696,11 @@
             });
             if (!pushed) break;
         }
+        // moveNode() qui è un salto diretto (nessuna fisica coinvolta): ribadiamo
+        // comunque physics disattivata per difesa, nel caso una regressione futura
+        // la riattivasse durante il drag (Fix A: la mappa non deve mai tornare ad
+        // animarsi da sola dopo la stabilizzazione iniziale).
+        networkInstance.setOptions({ physics: { enabled: false } });
         networkInstance.redraw();
     }
 
@@ -8436,6 +8586,7 @@
         { id: 'tab-flows', key: 'tabFlows' },
         { id: 'tab-config', key: 'tabConfigAnalyzer' },
         { id: 'tab-ai', key: 'tabAiAssistant' },
+        { id: 'tab-provisioning', key: 'tabProvisioning' },
         { id: 'tab-provisioner', key: 'tabProvisioner' },
         { id: 'tab-import', key: 'tabImport' },
     ];
@@ -9718,7 +9869,9 @@
             td(`<span title="${escapeHtml(r.source_type || '')}">${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip)}</span></span>`),
             td(escapeHtml(r.client_type || 'client')),
             td(r.switch_ip ? `${escapeHtml(r.switch_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.switch_ip)}</span>` : '—'),
-            td(escapeHtml(r.switch_port || '—')),
+            td(escapeHtml(r.switch_port || '—') + (r.switch_ip && r.switch_port
+                ? `<button onclick="showPortConfig('${escapeHtml(r.switch_ip)}','${escapeHtml(r.switch_port)}','${escapeHtml(r.switch_name || '')}')" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
+                : '')),
             td(fmtMacTime(r.last_seen)),
         ].join('') + '</tr>';
         const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;">` +
@@ -9782,6 +9935,9 @@
                 const originCell = r.is_uplink
                     ? `<span title="${currentLang==='en'?'In transit on an uplink':'In transito su un uplink'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${currentLang==='en'?'transit':'transito'}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
                     : `<span title="${currentLang==='en'?'Access port – device attached here':'Porta di accesso – dispositivo collegato qui'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${currentLang==='en'?'access':'accesso'}</span>`;
+                const portCfgBtn = (g.ip && r.interface)
+                    ? `<button onclick="showPortConfig('${escapeHtml(g.ip)}','${escapeHtml(r.interface)}','${escapeHtml(g.name || '')}')" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
+                    : '';
                 const locateBtn = `<button onclick="macLocate('${escapeHtml(r.mac)}')" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
                 // MAC di un'interfaccia propria dello switch: infrastruttura, non endpoint.
                 const isSwitchIf = (r.origin_type || r.device_type) === 'switch-interface';
@@ -9793,7 +9949,7 @@
                 const rowStyle = isSwitchIf ? ' style="color:var(--text-muted);"' : '';
                 return `<tr${rowStyle}>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}${switchBadge}</td>
-                    <td>${port}${uplink}</td>
+                    <td>${port}${uplink}${portCfgBtn}</td>
                     <td>${escapeHtml(r.vlan || '—')}</td>
                     <td style="white-space:nowrap;">${originCell}${locateBtn}</td>
                     <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(r.first_seen))}</td>
@@ -9907,6 +10063,75 @@
         document.body.appendChild(ov);
     }
 
+    // Espande le abbreviazioni comuni delle interfacce ('Gi1/0/5' -> 'GigabitEthernet1/0/5').
+    // Speculare a expand_iface() di mac_collector.py: tenerli allineati.
+    function expandIface(name) {
+        if (!name) return '';
+        name = String(name).trim();
+        const abbr = [
+            [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
+            [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
+            [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
+            [/^Eth(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
+        ];
+        for (const [pat, full] of abbr) {
+            if (pat.test(name)) return name.replace(pat, full);
+        }
+        return name;
+    }
+
+    // Deep-link verso il Config Analyzer (impostati da showPortConfig, letti da renderCaResults).
+    let caFocusIp = null;
+    let caFocusPort = null;
+
+    function closePortConfigModal() {
+        const m = document.getElementById('portConfigModal');
+        if (m) m.remove();
+    }
+
+    async function showPortConfig(switchIp, port, switchName) {
+        const L = i18n[currentLang];
+        let iface = null;
+        try {
+            const res = await apiFetch('/api/config-analyzer/' + encodeURIComponent(switchIp));
+            if (res && res.ok) {
+                const d = await res.json();
+                const want = expandIface(port).toLowerCase();
+                iface = (d.interfaces || []).find(i => expandIface(i.name).toLowerCase() === want) || null;
+            }
+        } catch (e) { /* trattato come non trovato */ }
+
+        closePortConfigModal();
+        const body = iface
+            ? `<pre style="font-family:var(--font-code); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; margin:0; white-space:pre-wrap; font-size:12px;">${escapeHtml(iface.raw || '—')}</pre>`
+            : `<div style="font-size:13px; color:var(--text-muted); padding:10px 0;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.portConfigNotFound)}</div>`;
+        const ov = document.createElement('div');
+        ov.id = 'portConfigModal';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.innerHTML = `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <h3 style="font-size:16px;"><i class="fa-solid fa-ethernet" style="color:var(--primary);"></i> ${escapeHtml(L.portConfigTitle)}</h3>
+                    <i class="fa-solid fa-xmark" onclick="closePortConfigModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+                </div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(switchName || switchIp)} — ${escapeHtml(port)}</div>
+                ${body}
+                <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
+                    <button onclick="openPortInAnalyzer('${escapeHtml(switchIp)}','${escapeHtml(port)}')" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-up-right-from-square"></i> ${escapeHtml(L.openInAnalyzer)}</button>
+                    <button onclick="closePortConfigModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Close':'Chiudi'}</button>
+                </div>
+            </div>`;
+        ov.addEventListener('click', e => { if (e.target === ov) closePortConfigModal(); });
+        document.body.appendChild(ov);
+    }
+
+    function openPortInAnalyzer(switchIp, port) {
+        caFocusIp = switchIp;
+        caFocusPort = port;
+        closePortConfigModal();
+        switchTab('tab-config');
+    }
+
     async function saveMacRetention() {
         const days = parseInt(document.getElementById('macRetentionDays') ? document.getElementById('macRetentionDays').value : '', 10);
         if (!days || days < 1) { alert(currentLang==='en'?'Enter a valid number of days.':'Inserisci un numero di giorni valido.'); return; }
@@ -9928,7 +10153,7 @@
     // Dati cache lato client: un solo fetch per tenant selezionato, i pill di
     // vista ri-renderizzano senza richiamare l'API (come richiesto).
     let caData = null;
-    let caView = 'vlan';
+    let caView = 'home';
     let caRouteGroupMode = 'flat'; // 'flat' | 'byhop' — ricordato per la sessione
     let caNetworks = {};   // ip -> vis.Network istanza mappa route (lazy, per device aperto)
 
@@ -9988,12 +10213,25 @@
         if (!box) return;
         const L = i18n[currentLang];
         const en = currentLang === 'en';
+        if (caView === 'home') {
+            // Il deep-link (caApplyFocus) deve poter scavalcare la home:
+            // se c'è un focus pendente si passa subito alla vista interfacce.
+            if (caFocusIp && caData && caData.length) {
+                caApplyFocus();
+                if (caView !== 'home') return; // ha commutato su 'iface'
+            }
+            box.innerHTML = caRenderHome(L);
+            return;
+        }
+        if (caView === 'understand') { box.innerHTML = caRenderUnderstand(L); return; }
+        if (caView === 'convert') { box.innerHTML = caRenderConvert(L); return; }
         if (!caData || !caData.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
             return;
         }
         if (caView === 'validation') {
             box.innerHTML = caData.map(dev => caRenderValidation(dev, L, en)).join('');
+            caApplyFocus();
             return;
         }
         const openAll = caData.length === 1;
@@ -10017,6 +10255,189 @@
                 <div style="padding:0 14px 14px;">${body}</div>
             </details>`;
         }).join('');
+        caApplyFocus();
+    }
+
+    // Deep-link dal modale "Config porta": apre il device e evidenzia l'interfaccia.
+    function caApplyFocus() {
+        if (!caFocusIp || !caData || !caData.length) return;
+        const idx = caData.findIndex(d => d.ip === caFocusIp);
+        if (idx === -1) { caFocusIp = caFocusPort = null; return; }
+        if (caView !== 'iface') {
+            // caSwitchView richiama renderCaResults, che a sua volta rientra qui con la vista giusta.
+            caSwitchView('iface');
+            return;
+        }
+        const port = caFocusPort;
+        caFocusIp = caFocusPort = null;
+        const detailsEl = document.querySelector(`details[data-ca-idx="${idx}"]`);
+        if (!detailsEl) return;
+        detailsEl.open = true;
+        const want = expandIface(port || '').toLowerCase();
+        const row = detailsEl.querySelector(`tr[data-ca-iface="${CSS.escape(want)}"]`);
+        const target = row || detailsEl;
+        setTimeout(() => {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (row) {
+                row.style.outline = '2px solid var(--primary)';
+                row.style.outlineOffset = '-2px';
+                setTimeout(() => { row.style.outline = ''; row.style.outlineOffset = ''; }, 2500);
+            }
+        }, 50);
+    }
+
+    // ===== Config Analyzer: Home / Comprendi / Converti =====
+
+    function caDeviceOptions(L, pickKey) {
+        const opts = (caData || []).map(d =>
+            `<option value="${escapeHtml(d.ip)}">${escapeHtml(d.hostname || d.ip)} — ${escapeHtml(d.ip)} (${escapeHtml(d.config_type || 'ios')})</option>`).join('');
+        return `<option value="">${escapeHtml(L[pickKey])}</option>` + opts;
+    }
+
+    function caRenderHome(L) {
+        const card = (view, icon, title, desc) => `
+            <div class="hero-card" onclick="caSwitchView('${view}')" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:22px 18px; transition:var(--transition);"
+                 onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+                <div style="font-size:26px; color:var(--primary); margin-bottom:10px;"><i class="fa-solid ${icon}"></i></div>
+                <div style="font-weight:600; font-size:15px; margin-bottom:6px;">${escapeHtml(title)}</div>
+                <div style="font-size:12px; color:var(--text-muted); line-height:1.5;">${escapeHtml(desc)}</div>
+            </div>`;
+        return `<div style="display:flex; gap:14px; flex-wrap:wrap; padding:8px 2px;">
+            ${card('vlan', 'fa-magnifying-glass-chart', L.caHomeAnalyzeTitle, L.caHomeAnalyzeDesc)}
+            ${card('understand', 'fa-graduation-cap', L.pillCaUnderstand, L.caHomeUnderstandDesc)}
+            ${card('convert', 'fa-right-left', L.pillCaConvert, L.caHomeConvertDesc)}
+        </div>`;
+    }
+
+    function caRenderUnderstand(L) {
+        return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
+            <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-graduation-cap" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caUnderstandTitle)}</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+                <select id="caUndDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:260px;">
+                    ${caDeviceOptions(L, 'caUndDevicePick')}
+                </select>
+                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caExplain()"><i class="fa-solid fa-wand-magic-sparkles"></i> ${escapeHtml(L.caExplainBtn)}</button>
+            </div>
+            <div id="caUndResult"></div>
+        </div>`;
+    }
+
+    async function caExplain() {
+        const L = i18n[currentLang];
+        const sel = document.getElementById('caUndDevice');
+        const out = document.getElementById('caUndResult');
+        if (!sel || !sel.value || !out) return;
+        out.innerHTML = `<div style="color:var(--text-muted); font-size:13px; padding:12px;"><i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(L.caExplainLoading)}</div>`;
+        try {
+            const res = await apiFetch(`/api/config-analyzer/${encodeURIComponent(sel.value)}/explain`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lang: currentLang })
+            });
+            const d = res ? await res.json() : null;
+            if (!res || !res.ok) throw new Error((d && d.detail) || 'HTTP');
+            out.innerHTML = `<div style="white-space:pre-wrap; font-size:13px; line-height:1.6; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:14px;">${escapeHtml(d.explanation || '')}</div>`;
+        } catch (e) {
+            out.innerHTML = `<div style="color:var(--danger); font-size:13px; padding:12px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(L.caExplainError)} ${escapeHtml(e && e.message !== 'HTTP' ? (e.message || '') : '')}</div>`;
+        }
+    }
+
+    let caConvLastPreview = '';
+
+    function caRenderConvert(L) {
+        const vendorOpts = (sel) => ['ios', 'fortios'].map(v =>
+            `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'ios' ? 'Cisco IOS' : 'FortiOS'}</option>`).join('');
+        return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
+            <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+                <select id="caConvDevice" onchange="caConvPickDevice()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
+                    ${caDeviceOptions(L, 'caConvDevicePick')}
+                </select>
+                <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
+                <select id="caConvSource" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
+                <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvTarget)}</label>
+                <select id="caConvTarget" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('ios')}</select>
+                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caConvertPreview()"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
+            </div>
+            <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
+            <div id="caConvResult" style="margin-top:12px;"></div>
+        </div>`;
+    }
+
+    function caConvPickDevice() {
+        // Selezione device: usa la conversione con {ip} per farsi restituire
+        // anche il testo sorgente (source_text) e riempire la textarea.
+        const sel = document.getElementById('caConvDevice');
+        if (!sel || !sel.value) return;
+        const dev = (caData || []).find(d => d.ip === sel.value);
+        const srcSel = document.getElementById('caConvSource');
+        const tgtSel = document.getElementById('caConvTarget');
+        if (dev && srcSel && tgtSel) {
+            const src = dev.config_type === 'fortios' ? 'fortios' : 'ios';
+            srcSel.value = src;
+            tgtSel.value = src === 'fortios' ? 'ios' : 'fortios';
+        }
+        caConvertPreview(true);
+    }
+
+    async function caConvertPreview(useIp) {
+        const L = i18n[currentLang];
+        const out = document.getElementById('caConvResult');
+        const ta = document.getElementById('caConvText');
+        const devSel = document.getElementById('caConvDevice');
+        if (!out || !ta) return;
+        const text = ta.value.trim();
+        const body = { source: document.getElementById('caConvSource').value,
+                       target: document.getElementById('caConvTarget').value };
+        if (useIp === true || (!text && devSel && devSel.value)) body.ip = devSel.value;
+        else body.text = text;
+        if (!body.ip && !body.text) return;
+        out.innerHTML = `<div style="color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-notch fa-spin"></i></div>`;
+        try {
+            const res = await apiFetch('/api/config-analyzer/convert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const d = res ? await res.json() : null;
+            if (!res || !res.ok) throw new Error((d && d.detail) || 'HTTP error');
+            if (d.source_text) ta.value = d.source_text;
+            caConvLastPreview = d.preview_text || '';
+            const rows = (d.mapped || []).map(m => `<tr>
+                <td style="white-space:pre-wrap; font-family:var(--font-code); font-size:11px; vertical-align:top;">${escapeHtml(m.source)}</td>
+                <td style="white-space:pre-wrap; font-family:var(--font-code); font-size:11px; vertical-align:top;">${escapeHtml(m.target)}</td>
+                <td style="font-size:11px; color:var(--text-muted); vertical-align:top;">${escapeHtml(m.note || '')}</td></tr>`).join('');
+            const unmapped = (d.unmapped || []);
+            out.innerHTML = `
+                <div style="font-weight:600; font-size:13px; margin:8px 0;">${escapeHtml(L.caConvMapped)} (${(d.mapped || []).length})</div>
+                <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:8px;">
+                <table class="data-table" style="width:100%;"><thead><tr>
+                    <th>${escapeHtml(L.thCaConvSource)}</th><th>${escapeHtml(L.thCaConvTarget)}</th><th>${escapeHtml(L.thCaConvNote)}</th>
+                </tr></thead><tbody>${rows || `<tr><td colspan="3" style="color:var(--text-muted); font-size:12px;">—</td></tr>`}</tbody></table></div>
+                <details style="margin-top:10px;">
+                    <summary style="cursor:pointer; font-weight:600; font-size:13px;">${escapeHtml(L.caConvUnmapped)} (${unmapped.length})</summary>
+                    <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:10px; margin-top:8px; max-height:240px; overflow:auto;">${escapeHtml(unmapped.join('\n\n'))}</pre>
+                </details>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
+                    <div style="font-weight:600; font-size:13px;">Preview</div>
+                    <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="caConvDownload()"><i class="fa-solid fa-download"></i> ${escapeHtml(L.caConvDownload)}</button>
+                </div>
+                <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:10px; margin-top:8px; max-height:320px; overflow:auto;">${escapeHtml(caConvLastPreview)}</pre>`;
+        } catch (e) {
+            out.innerHTML = `<div style="color:var(--danger); font-size:13px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(e.message || 'Error')}</div>`;
+        }
+    }
+
+    function caConvDownload() {
+        if (!caConvLastPreview) return;
+        const tgt = document.getElementById('caConvTarget');
+        const blob = new Blob([caConvLastPreview], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `converted-${tgt ? tgt.value : 'config'}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
     }
 
     // Le mappe route (vis.js) si creano solo quando l'accordion del device viene
@@ -10259,7 +10680,7 @@
                 ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">shutdown</span>`
                 : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(L.lblCaActive)}</span>`;
             const rowId = `caIfaceRaw_${dev.ip || ''}_${ii}`.replace(/[^a-zA-Z0-9_]/g, '_');
-            return `<tr style="cursor:pointer;" onclick="caToggleIfaceRaw('${rowId}')">
+            return `<tr style="cursor:pointer;" data-ca-iface="${escapeHtml(expandIface(i.name).toLowerCase())}" onclick="caToggleIfaceRaw('${rowId}')">
                     <td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.description || '—')}</td><td><span class="badge" style="font-size:10px;">${escapeHtml(mode)}</span></td>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(String(vlanCol))}</td>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>

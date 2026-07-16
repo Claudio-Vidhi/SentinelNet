@@ -1008,6 +1008,192 @@ def analyze_wlc_config(content):
     return result
 
 
+# --- Config Converter (deterministico, FortiOS <-> IOS) ----------------------
+
+_CONVERT_VENDORS = {'ios', 'fortios'}
+
+
+def _prefix_to_mask(pfx):
+    """Da lunghezza prefisso (int) a mask dotted. '' se non valida."""
+    try:
+        n = int(pfx)
+        if not 0 <= n <= 32:
+            return ''
+        v = (0xFFFFFFFF << (32 - n)) & 0xFFFFFFFF if n else 0
+        return '.'.join(str((v >> s) & 0xFF) for s in (24, 16, 8, 0))
+    except Exception:
+        return ''
+
+
+def _cidr_split(cidr):
+    """'a.b.c.d/nn' -> ('a.b.c.d', 'mask dotted') oppure (None, None)."""
+    if not cidr or '/' not in cidr:
+        return None, None
+    ip, _, pfx = cidr.partition('/')
+    mask = _prefix_to_mask(pfx)
+    return (ip, mask) if mask else (None, None)
+
+
+def _forti_render_stanza(section, key, node):
+    """Ricostruisce il testo di una stanza FortiOS (config/edit/set/next/end)
+    dal nodo dell'albero. Solo il livello 'sets' (sufficiente come stanza raw)."""
+    lines = [f'config {section}', f'    edit "{key}"']
+    for k, vals in node["sets"].items():
+        rendered = ' '.join(f'"{v}"' if (' ' in v or v == '') else v for v in vals)
+        lines.append(f'        set {k} {rendered}'.rstrip())
+    lines.extend(['    next', 'end'])
+    return '\n'.join(lines)
+
+
+def _convert_fortios_to_ios(source_text):
+    root = _forti_tree(source_text)
+    mapped = []
+    unmapped = []
+    handled = {'system interface', 'router static', 'firewall address',
+               'system global'}
+
+    ifs = _forti_get(root, 'system interface')
+    if ifs:
+        for name, n in ifs["children"].items():
+            src = _forti_render_stanza('system interface', name, n)
+            vlanid = _forti_set1(n, 'vlanid')
+            parent = _forti_set1(n, 'interface')
+            tgt_name = f"{parent}.{vlanid}" if (vlanid and parent) else name
+            lines = [f"interface {tgt_name}"]
+            if vlanid and parent:
+                lines.append(f" encapsulation dot1Q {vlanid}")
+            desc = _forti_set1(n, 'description') or _forti_set1(n, 'alias')
+            if desc:
+                lines.append(f" description {desc}")
+            ip, mask = _cidr_split(_forti_ip_cidr(n))
+            if ip:
+                lines.append(f" ip address {ip} {mask}")
+            if _forti_set1(n, 'status', 'up').lower() == 'down':
+                lines.append(" shutdown")
+            dropped = sorted(k for k in n["sets"]
+                             if k not in ('ip', 'description', 'alias', 'status',
+                                          'vlanid', 'interface'))
+            note = f"set non convertiti: {', '.join(dropped)}" if dropped else ''
+            mapped.append({"source": src, "target": '\n'.join(lines), "note": note})
+
+    rst = _forti_get(root, 'router static')
+    if rst:
+        for seq, n in rst["children"].items():
+            src = _forti_render_stanza('router static', seq, n)
+            dst = n["sets"].get('dst') or ['0.0.0.0', '0.0.0.0']
+            net = dst[0]
+            mask = dst[1] if len(dst) > 1 else '0.0.0.0'
+            gw = _forti_set1(n, 'gateway')
+            dev = _forti_set1(n, 'device')
+            hop = gw or dev
+            if not hop:
+                unmapped.append(src)
+                continue
+            dist = _forti_set1(n, 'distance')
+            target = f"ip route {net} {mask} {hop}" + (f" {dist}" if dist else '')
+            note = 'next-hop = interfaccia di uscita' if (dev and not gw) else ''
+            mapped.append({"source": src, "target": target, "note": note})
+
+    adr = _forti_get(root, 'firewall address')
+    if adr:
+        for name, n in adr["children"].items():
+            src = _forti_render_stanza('firewall address', name, n)
+            subnet = n["sets"].get('subnet') or []
+            atype = _forti_set1(n, 'type', 'ipmask')
+            if atype not in ('ipmask', '') or len(subnet) < 2:
+                unmapped.append(src)
+                continue
+            ip, mask = subnet[0], subnet[1]
+            if mask == '255.255.255.255':
+                body = f" host {ip}"
+            else:
+                body = f" subnet {ip} {mask}"
+            mapped.append({"source": src,
+                           "target": f"object network {name}\n{body}",
+                           "note": ''})
+
+    # Policy e ogni altra sezione non gestita -> unmapped (stanza raw)
+    for section, node in root["children"].items():
+        if section in handled:
+            continue
+        if node["children"]:
+            for key, child in node["children"].items():
+                unmapped.append(_forti_render_stanza(section, key, child))
+        elif node["sets"]:
+            unmapped.append(_forti_render_stanza(section, '', node)
+                            .replace('    edit ""\n', '').replace('    next\n', ''))
+    return mapped, unmapped
+
+
+def _convert_ios_to_fortios(source_text):
+    mapped = []
+    unmapped = []
+    seq = 0
+    for header, body in _iter_blocks(running_config(source_text)):
+        low = header.lower()
+        src = '\n'.join([header] + body)
+        if low.startswith('interface '):
+            iface = _parse_interface(header, body)
+            lines = ['config system interface', f'    edit "{iface["name"]}"']
+            if iface["description"]:
+                lines.append(f'        set description "{iface["description"]}"')
+            if iface["ip"]:
+                ip, mask = _cidr_split(iface["ip"])
+                if ip:
+                    lines.append(f'        set ip {ip} {mask}')
+            if iface["shutdown"]:
+                lines.append('        set status down')
+            lines.extend(['    next', 'end'])
+            note = ''
+            if iface["mode"] in ('access', 'trunk'):
+                note = 'configurazione switchport non convertita'
+            mapped.append({"source": src, "target": '\n'.join(lines), "note": note})
+        elif low.startswith('ip route '):
+            r = _parse_static_route(header.strip())
+            if not r or r.get("vrf"):
+                unmapped.append(src)
+                continue
+            net, mask = _cidr_split(r["prefix"])
+            if not net:
+                toks = r["prefix"].split()
+                net, mask = (toks + ['', ''])[:2]
+            seq += 1
+            lines = ['config router static', f'    edit {seq}',
+                     f'        set dst {net} {mask}',
+                     f'        set gateway {r["next_hop"]}']
+            if r.get("ad"):
+                lines.append(f'        set distance {r["ad"]}')
+            lines.extend(['    next', 'end'])
+            mapped.append({"source": src, "target": '\n'.join(lines), "note": ''})
+        else:
+            unmapped.append(src)
+    return mapped, unmapped
+
+
+def convert_config(source_text, source_vendor, target_vendor):
+    """Conversione deterministica (preview) tra 'fortios' e 'ios'.
+    Ritorna {"mapped": [{source,target,note}], "unmapped": [str],
+    "preview_text": str}. Solleva ValueError su vendor non validi."""
+    sv = (source_vendor or '').strip().lower()
+    tv = (target_vendor or '').strip().lower()
+    if sv not in _CONVERT_VENDORS or tv not in _CONVERT_VENDORS:
+        raise ValueError(f"Vendor non supportato: {source_vendor!r} -> {target_vendor!r} "
+                         f"(supportati: {sorted(_CONVERT_VENDORS)})")
+    if sv == tv:
+        raise ValueError("Vendor sorgente e destinazione coincidono.")
+    if sv == 'fortios':
+        mapped, unmapped = _convert_fortios_to_ios(source_text or '')
+        comment = '!'
+    else:
+        mapped, unmapped = _convert_ios_to_fortios(source_text or '')
+        comment = '#'
+    header = (f"{comment} Anteprima conversione {sv} -> {tv} — SentinelNet Config Converter\n"
+              f"{comment} {len(mapped)} elementi mappati, {len(unmapped)} non mappati "
+              f"(vedi elenco 'unmapped').\n")
+    preview_text = header + '\n' + '\n\n'.join(m["target"] for m in mapped) + '\n'
+    return {"mapped": mapped, "unmapped": unmapped, "preview_text": preview_text}
+
+
 # --- I/O: lettura backup + scoping ------------------------------------------
 
 def _find_freshest_backup(ip):
