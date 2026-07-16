@@ -263,3 +263,49 @@ def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current
     result["config"] = fortigate_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result
 
+# ── Identita' tenant (profili credenziali riusabili) ────────────────────────
+import identity_manager
+
+class IdentitySchema(BaseModel):
+    name: str
+    tenant: str
+    username: str
+    password: str
+    enable_secret: str = ""
+
+@router.get("/api/identities")
+def identities_list(tenant: Optional[str] = None, current_user = Depends(require_operator)):
+    """Lista identita' (senza segreti), opzionalmente filtrate per tenant."""
+    return {"identities": identity_manager.get_identities(tenant=tenant)}
+
+@router.post("/api/identities")
+def identities_create(payload: IdentitySchema, current_user = Depends(require_operator)):
+    if not payload.name.strip() or not payload.username or not payload.password:
+        raise HTTPException(status_code=400, detail="Nome, username e password sono obbligatori.")
+    ident = identity_manager.add_identity(payload.name, payload.tenant,
+                                          payload.username, payload.password,
+                                          payload.enable_secret)
+    log_audit(f"Identita' '{payload.name}' (tenant '{payload.tenant}') creata da '{current_user.get('sub')}'.")
+    return {"status": "success", "id": ident["id"]}
+
+@router.put("/api/identities/{identity_id}")
+def identities_update(identity_id: str, payload: IdentitySchema,
+                      current_user = Depends(require_operator)):
+    if not payload.name.strip() or not payload.username or not payload.password:
+        raise HTTPException(status_code=400, detail="Nome, username e password sono obbligatori.")
+    if not identity_manager.update_identity(identity_id, payload.name, payload.tenant,
+                                            payload.username, payload.password,
+                                            payload.enable_secret):
+        raise HTTPException(status_code=404, detail="Identita' non trovata.")
+    log_audit(f"Identita' '{payload.name}' aggiornata da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@router.delete("/api/identities/{identity_id}")
+def identities_delete(identity_id: str, current_user = Depends(require_operator)):
+    ok, devices = identity_manager.delete_identity(identity_id)
+    if not ok:
+        raise HTTPException(status_code=409,
+                            detail={"error": "in_use", "devices": devices})
+    log_audit(f"Identita' '{identity_id}' eliminata da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
