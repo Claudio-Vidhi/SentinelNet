@@ -67,6 +67,27 @@ class TestClassifyDeviceType(unittest.TestCase):
     def test_no_evidence_falls_back_to_client(self):
         self.assertEqual(classify_device_type(), "client")
 
+    def test_platform_router_evidence_beats_firewall_hostname_token(self):
+        # Bug reale (segnalato da review): hostname "fw-edge1" contiene il
+        # token "fw" (firewall), ma la platform CDP "Cisco ISR4321" e'
+        # evidenza reale di router. Platform deve battere l'hostname: prima
+        # del fix, hostname e platform erano fusi in un'unica stringa
+        # valutata per _TYPE_ORDER (firewall prima di router), quindi il
+        # token debole nel nome vinceva sull'evidenza CDP/LLDP reale.
+        self.assertEqual(
+            classify_device_type("fw-edge1", platform="Cisco ISR4321"),
+            "router",
+        )
+
+    def test_description_wlc_evidence_beats_firewall_hostname_token(self):
+        # Stesso bug lato description: hostname "fw-backup1" (token "fw")
+        # contro una System Description LLDP che descrive un vero Wireless
+        # LAN Controller Aruba. La description deve prevalere sull'hostname.
+        self.assertEqual(
+            classify_device_type("fw-backup1", description="Aruba Wireless LAN Controller"),
+            "wlc",
+        )
+
     def test_router_capability_beats_server_hostname_token(self):
         # Bug reale: CDP Capabilities "Router" e' il segnale piu' affidabile,
         # ma un hostname con il token debole "srv" (es. "srv-core-01",
