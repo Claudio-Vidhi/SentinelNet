@@ -1623,24 +1623,56 @@
         </div>
       </div>
 
-      <!-- Controlli: scelta sede + avvio manuale della scansione -->
-      <div class="panel" style="margin-bottom:18px;">
-        <div class="filterbar" style="margin-top:0; align-items:center;">
-          <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
-          <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
-            <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
-          </select>
-          <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
-            <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
-            <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
-          </label>
+      <!-- Sub-tab: Vulnerability Matcher (dispositivi interni) vs Vendor Watch (EUVD globale) -->
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" id="tiTabMatcher" onclick="tiSwitchView('matcher')" data-i18n="tiTabMatcher"><i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher</button>
+        <button class="btn btn-secondary ti-subtab" id="tiTabWatch" onclick="tiSwitchView('watch')" data-i18n="tiTabWatch"><i class="fa-solid fa-satellite-dish"></i> Vendor Watch</button>
+      </div>
+
+      <div id="tiViewMatcher">
+        <!-- Controlli: scelta sede + avvio manuale della scansione -->
+        <div class="panel" style="margin-bottom:18px;">
+          <div class="filterbar" style="margin-top:0; align-items:center;">
+            <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
+            <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+              <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+            </select>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
+              <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
+              <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
+            <!-- Popolato in dinamico con i match delle vulnerabilità, raggruppati per tenant/categoria -->
+          </div>
         </div>
       </div>
 
-      <div class="panel">
-        <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
-          <!-- Popolato in dinamico con i match delle vulnerabilità -->
+      <div id="tiViewWatch" style="display:none;">
+        <div class="panel" style="margin-bottom:14px;">
+          <div id="vwVendorBtns" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;"></div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+            <div class="form-group" style="margin:0;"><label data-i18n="vwLblMinCvss">CVSS min</label>
+              <select id="vwMinScore"><option value="">—</option><option>7</option><option>8</option><option selected>9</option></select></div>
+            <div class="form-group" style="margin:0;"><label>EPSS min %</label>
+              <input id="vwMinEpss" type="number" min="0" max="100" value="" style="width:90px; padding-left:10px;"></div>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
+              <input type="checkbox" id="vwExploited" style="accent-color:var(--primary);"> <span data-i18n="vwLblExploited">Solo sfruttate</span></label>
+            <div class="form-group" style="margin:0;"><label data-i18n="vwLblFrom">Da</label><input id="vwFromDate" type="date"></div>
+            <div class="form-group" style="margin:0;"><label data-i18n="vwLblSearch">Cerca</label><input id="vwText" type="text" placeholder="CVE, prodotto..." style="padding-left:10px;"></div>
+            <button class="btn btn-primary" id="vwRefresh" onclick="vwFetch()"><i class="fa-solid fa-rotate"></i></button>
+          </div>
         </div>
+        <div class="panel">
+          <div id="vwStatus" style="font-size:13px; color:var(--text-muted); margin-bottom:10px;"></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>CVE / EUVD</th><th data-i18n="vwThProduct">Prodotto</th><th data-i18n="vwThSeverity">Severità</th><th>CVSS</th><th>EPSS</th><th data-i18n="vwThExploited">Sfruttata</th><th data-i18n="vwThPublished">Pubblicata</th></tr></thead>
+            <tbody id="vwBody"></tbody></table></div>
+        </div>
+        <div id="vwDrawer" style="display:none; position:fixed; top:0; right:0; bottom:0; width:min(480px, 90vw); background:var(--surface); border-left:1px solid var(--border); z-index:1000; padding:20px; overflow-y:auto;"></div>
       </div>
     </div>
 
@@ -2024,6 +2056,7 @@
         #tab-config .ca-pill { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; transition:var(--transition); }
         #tab-config .ca-pill.active { background:var(--primary); color:#fff; border-color:var(--primary); }
         #tab-config .ca-pill:hover:not(.active) { background:var(--surface-3); }
+        .ti-subtab.active { border-color:var(--primary) !important; color:var(--primary) !important; }
         #tab-config .ca-chip { display:inline-flex; align-items:center; gap:4px; font-size:10px; border-radius:5px; padding:1px 6px; border:1px solid var(--border); color:var(--text-muted); margin:2px 4px 2px 0; }
         #tab-config .ca-route-map { height:220px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-top:8px; }
       </style>
@@ -3535,6 +3568,22 @@
         
         // Dynamic UI / JS Alerts
         noDevicesText: "Nessun apparato online con firmware rilevato. Esegui prima un <strong>Triage Globale</strong>.",
+        tiTabMatcher: '<i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher',
+        tiTabWatch: '<i class="fa-solid fa-satellite-dish"></i> Vendor Watch',
+        vwLblMinCvss: "CVSS min",
+        vwLblExploited: "Solo sfruttate",
+        vwLblFrom: "Da",
+        vwLblSearch: "Cerca",
+        vwThProduct: "Prodotto",
+        vwThSeverity: "Severità",
+        vwThExploited: "Sfruttata",
+        vwThPublished: "Pubblicata",
+        vwStatusLoading: "Caricamento dati EUVD...",
+        vwStatusRows: "risultati mostrati",
+        vwStatusError: "Impossibile caricare i dati EUVD: ",
+        btnAnalyzeTenant: '<i class="fa-solid fa-bolt"></i> Analizza tutti',
+        tiCatUncategorized: "Senza categoria",
+        tiCatDiscovered: "Scoperti",
         discoveredNeighborsTitle: '<i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i> Vicini Scoperti via CDP/LLDP',
         discoveredNeighborsDesc: "Questi apparati non sono in inventario ma sono stati rilevati tramite neighbor discovery. Seleziona quelli da analizzare per vulnerabilità note.",
         btnAnalyzeVuln: '<i class="fa-solid fa-magnifying-glass-chart"></i> Analizza Vulnerabilità',
@@ -4224,6 +4273,22 @@
         
         // Dynamic UI / JS Alerts
         noDevicesText: "No online devices with detected firmware. Please run a <strong>Global Triage</strong> first.",
+        tiTabMatcher: '<i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher',
+        tiTabWatch: '<i class="fa-solid fa-satellite-dish"></i> Vendor Watch',
+        vwLblMinCvss: "CVSS min",
+        vwLblExploited: "Exploited only",
+        vwLblFrom: "From",
+        vwLblSearch: "Search",
+        vwThProduct: "Product",
+        vwThSeverity: "Severity",
+        vwThExploited: "Exploited",
+        vwThPublished: "Published",
+        vwStatusLoading: "Loading EUVD data...",
+        vwStatusRows: "rows shown",
+        vwStatusError: "Unable to load EUVD data: ",
+        btnAnalyzeTenant: '<i class="fa-solid fa-bolt"></i> Analyze all',
+        tiCatUncategorized: "Uncategorized",
+        tiCatDiscovered: "Discovered",
         discoveredNeighborsTitle: '<i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i> Discovered Neighbors via CDP/LLDP',
         discoveredNeighborsDesc: "These devices are not in the inventory but have been detected via neighbor discovery. Select those to analyze for known vulnerabilities.",
         btnAnalyzeVuln: '<i class="fa-solid fa-magnifying-glass-chart"></i> Analyze Vulnerabilities',
@@ -11389,6 +11454,190 @@
 
     // --- VULNERABILITY ADVISORY (EUVD) ---
 
+    // ===== Threat Intel: sub-tab switcher (Matcher interno vs Vendor Watch EUVD) =====
+    function tiSwitchView(v) {
+        document.getElementById('tiViewMatcher').style.display = v === 'matcher' ? 'block' : 'none';
+        document.getElementById('tiViewWatch').style.display = v === 'watch' ? 'block' : 'none';
+        document.getElementById('tiTabMatcher').classList.toggle('active', v === 'matcher');
+        document.getElementById('tiTabWatch').classList.toggle('active', v === 'watch');
+        if (v === 'watch' && !window._vwLoaded) { vwInit(); window._vwLoaded = true; }
+    }
+
+    // ===== Vendor Watch (EUVD globale per vendor, indipendente dall'inventario) =====
+    const vwState = { vendor: '', data: [], filtered: [] };
+
+    function vwPick(obj, keys) {
+        for (let i = 0; i < keys.length; i++) {
+            const val = obj ? obj[keys[i]] : undefined;
+            if (val !== undefined && val !== null && val !== '') return val;
+        }
+        return '';
+    }
+
+    function vwSeverityClass(score) {
+        if (score >= 9) return 'CRITICAL';
+        if (score >= 7) return 'HIGH';
+        if (score >= 4) return 'MEDIUM';
+        return 'LOW';
+    }
+
+    // Normalizza un record EUVD grezzo nella forma usata dalla tabella/drawer
+    // (porting adattato da euvd_dashboard/dashboard.html: normalizeRecord()).
+    function vwNormalize(item) {
+        const score = Number(vwPick(item, ['baseScore', 'cvssBaseScore', 'score', 'cvssScore', 'maxBaseScore']));
+        const epssRaw = Number(vwPick(item, ['epss', 'epssScore', 'epssPercent']));
+        const epss = (Number.isFinite(epssRaw) && epssRaw <= 1) ? epssRaw * 100 : epssRaw;
+        const date = vwPick(item, ['datePublished', 'published', 'publishedDate', 'date', 'created']);
+        const summary = vwPick(item, ['description', 'summary', 'title', 'details']);
+
+        const nestedVendor = (Array.isArray(item.enisaIdVendor) && item.enisaIdVendor[0] && item.enisaIdVendor[0].vendor && item.enisaIdVendor[0].vendor.name) ? item.enisaIdVendor[0].vendor.name : '';
+        let vendor = vwPick(item, ['vendor', 'vendorName']) || nestedVendor || item.assigner || '';
+        if (String(vendor).toLowerCase() === 'n/a') vendor = '';
+
+        const nestedProduct = (Array.isArray(item.enisaIdProduct) && item.enisaIdProduct[0] && item.enisaIdProduct[0].product && item.enisaIdProduct[0].product.name) ? item.enisaIdProduct[0].product.name : '';
+        let product = vwPick(item, ['product', 'productName', 'affectedProduct']) || nestedProduct || '';
+        if (String(product).toLowerCase() === 'n/a') product = '';
+
+        const cveRaw = vwPick(item, ['cve', 'cveId', 'cveID', 'aliases']);
+        const cve = String(cveRaw).split('\n').find(v => v.trim().startsWith('CVE-')) || String(cveRaw).split('\n')[0] || '';
+        const euvd = vwPick(item, ['id', 'euvdId', 'enisaId']);
+        const exploitedRaw = vwPick(item, ['exploited', 'isExploited']);
+        const exploited = typeof exploitedRaw === 'boolean' ? exploitedRaw : String(exploitedRaw).toLowerCase() === 'true';
+        const rawReferences = item.references || item.links || item.externalReferences || [];
+        const references = Array.isArray(rawReferences) ? rawReferences : String(rawReferences).split('\n').map(v => v.trim()).filter(Boolean);
+
+        return {
+            raw: item,
+            cve: cve || 'N/A',
+            euvd: euvd || '—',
+            product: product || '—',
+            vendor: vendor || '—',
+            score: Number.isFinite(score) ? score : NaN,
+            epss: Number.isFinite(epss) ? epss : NaN,
+            exploited: exploited,
+            date: date,
+            summary: summary || (currentLang === 'en' ? 'No summary provided by the feed.' : 'Nessun riassunto disponibile.'),
+            references: references,
+            severity: vwSeverityClass(Number.isFinite(score) ? score : 0)
+        };
+    }
+
+    // Popola i pulsanti vendor dal registro (solo vendor con euvd_term configurato)
+    // e avvia il primo caricamento sul primo vendor disponibile.
+    async function vwInit() {
+        const btnWrap = document.getElementById('vwVendorBtns');
+        if (!btnWrap) return;
+        try {
+            const res = await apiFetch('/api/vendors');
+            if (!res || !res.ok) return;
+            const vendors = await res.json();
+            const entries = Object.entries(vendors || {}).filter(([, v]) => v && v.euvd_term);
+            btnWrap.innerHTML = entries.map(([name, v], idx) =>
+                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" onclick="vwSelectVendor('${escapeHtml(v.euvd_term)}', this)" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
+            ).join('');
+            if (entries.length) {
+                vwState.vendor = entries[0][1].euvd_term;
+                vwFetch();
+            } else {
+                const statusEl = document.getElementById('vwStatus');
+                if (statusEl) statusEl.textContent = i18n[currentLang].noDevicesText.replace(/<[^>]*>/g, '');
+            }
+        } catch (err) {
+            const statusEl = document.getElementById('vwStatus');
+            if (statusEl) statusEl.textContent = i18n[currentLang].vwStatusError + err.message;
+        }
+    }
+
+    function vwSelectVendor(term, btnEl) {
+        window._vwVendor = term;
+        vwState.vendor = term;
+        document.querySelectorAll('.vw-vendor-btn').forEach(b => b.classList.toggle('active', b === btnEl));
+        vwFetch();
+    }
+
+    // Interroga /api/search (proxy EUVD autenticato) con i filtri correnti.
+    async function vwFetch() {
+        const statusEl = document.getElementById('vwStatus');
+        const bodyEl = document.getElementById('vwBody');
+        if (!statusEl || !bodyEl) return;
+        statusEl.textContent = i18n[currentLang].vwStatusLoading;
+
+        const params = new URLSearchParams();
+        if (vwState.vendor) params.set('vendor', vwState.vendor);
+        const minScore = document.getElementById('vwMinScore').value;
+        if (minScore) params.set('fromScore', minScore);
+        params.set('size', '40');
+        if (document.getElementById('vwExploited').checked) params.set('exploited', 'true');
+        const fromDate = document.getElementById('vwFromDate').value;
+        if (fromDate) params.set('fromDate', fromDate);
+        const minEpss = document.getElementById('vwMinEpss').value;
+        if (minEpss) params.set('fromEpss', minEpss);
+
+        try {
+            const res = await apiFetch('/api/search?' + params.toString());
+            if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
+            const payload = await res.json();
+            const records = Array.isArray(payload) ? payload : Array.isArray(payload.items) ? payload.items : Array.isArray(payload.content) ? payload.content : [];
+            vwState.data = records.map(vwNormalize).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+            vwApplyTextFilter();
+        } catch (err) {
+            vwState.data = [];
+            vwState.filtered = [];
+            vwRenderTable();
+            statusEl.textContent = i18n[currentLang].vwStatusError + err.message;
+        }
+    }
+
+    // Filtro testuale lato client sulle righe già caricate (come euvd_dashboard: applySearchFilter()).
+    function vwApplyTextFilter() {
+        const q = (document.getElementById('vwText').value || '').trim().toLowerCase();
+        vwState.filtered = q
+            ? vwState.data.filter(r => [r.cve, r.euvd, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1)
+            : vwState.data;
+        vwRenderTable();
+        const statusEl = document.getElementById('vwStatus');
+        if (statusEl) statusEl.textContent = vwState.filtered.length + ' ' + i18n[currentLang].vwStatusRows;
+    }
+
+    function vwRenderTable() {
+        const bodyEl = document.getElementById('vwBody');
+        if (!bodyEl) return;
+        bodyEl.innerHTML = vwState.filtered.map((item, idx) => `
+            <tr data-idx="${idx}" style="cursor:pointer;" onclick="vwOpenDrawer(${idx})">
+                <td><div>${escapeHtml(item.cve)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.euvd)}</div></td>
+                <td><div>${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.vendor)}</div></td>
+                <td><span class="severity-pill severity-${item.severity}">${item.severity}</span></td>
+                <td>${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
+                <td>${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</td>
+                <td>${item.exploited ? '<span class="badge exploited">Exploited</span>' : '<span class="badge">—</span>'}</td>
+                <td>${item.date ? new Date(item.date).toLocaleDateString() : '—'}</td>
+            </tr>`).join('');
+    }
+
+    // Apre il drawer laterale con i dettagli completi del record selezionato.
+    function vwOpenDrawer(idx) {
+        const item = vwState.filtered[idx];
+        const drawer = document.getElementById('vwDrawer');
+        if (!item || !drawer) return;
+        const refsHtml = item.references.length
+            ? item.references.map(r => `<div><a href="${escapeHtml(r)}" target="_blank" rel="noopener">${escapeHtml(r)}</a></div>`).join('')
+            : '<div style="color:var(--text-muted);">—</div>';
+        drawer.innerHTML = `
+            <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" onclick="document.getElementById('vwDrawer').style.display='none';"><i class="fa-solid fa-xmark"></i></button>
+            <h3 style="margin:0 0 6px;">${escapeHtml(item.cve)} <span style="font-size:12px; color:var(--text-muted);">(${escapeHtml(item.euvd)})</span></h3>
+            <div style="margin-bottom:10px;"><span class="severity-pill severity-${item.severity}">${item.severity}</span>
+              <span style="margin-left:8px;">CVSS ${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</span>
+              <span style="margin-left:8px;">EPSS ${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</span></div>
+            <div style="margin-bottom:10px; color:var(--text-muted);">${item.vendor} · ${item.product}</div>
+            <div style="margin-bottom:14px; line-height:1.5;">${escapeHtml(item.summary)}</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">${item.date ? new Date(item.date).toLocaleDateString() : '—'}</div>
+            <div style="font-size:12px; word-break:break-all;">${refsHtml}</div>
+        `;
+        drawer.style.display = 'block';
+    }
+
+    document.getElementById('vwText') && document.getElementById('vwText').addEventListener('input', vwApplyTextFilter);
+
     // Parallelizzazione delle query ENISA tramite Promise.all (Ottimizzazione Performance)
     // Aperta la tab: prepara i controlli (sedi consentite) e avvia automaticamente la scansione.
     function loadThreatIntel() {
@@ -11405,6 +11654,66 @@
 
     // Costruisce la lista di dispositivi da analizzare; le query EUVD reali partono
     // solo al clic del pulsante "Analizza" su ogni singolo dispositivo.
+    // Sostituisce i caratteri non alfanumerici per ottenere id/selettori DOM sicuri.
+    function cssSafe(s) {
+        return String(s).replace(/[^a-zA-Z0-9]/g, '-');
+    }
+
+    // Markup di UNA card dispositivo (inventariato o scoperto). Riusa i pulsanti
+    // e i container esistenti (btn-mgd-/btn-disc-, results-/disc-results-) così
+    // runManagedVulnCheck/runDiscoveredVulnCheck restano invariati.
+    function tiRenderManagedCard(d, scan) {
+        const safeIpId = d.IP.replace(/\./g, '-');
+        return `<div class="vuln-card" style="margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                <div>
+                    <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
+                    <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
+                    <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
+                    <button id="btn-mgd-${safeIpId}"
+                        data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
+                        onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
+                        style="padding:8px 14px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
+                        ${i18n[currentLang].btnAnalyzeVuln}
+                    </button>
+                </div>
+            </div>
+            <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;"></div>
+        </div>`;
+    }
+
+    function tiRenderDiscoveredCard(n) {
+        const safeId = n.id.replace(/[^a-zA-Z0-9]/g, '-');
+        const versionShort = extractReadableVersion(n.version);
+        return `<div id="disc-card-${safeId}" style="background:var(--surface-2); border:2px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; user-select:none;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                <div>
+                    <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
+                    <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
+                </div>
+                <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
+                <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
+            </div>
+            <button
+                id="btn-disc-${safeId}"
+                data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
+                data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
+                data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
+                onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
+                style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer;">
+                ${i18n[currentLang].btnAnalyzeVuln}
+            </button>
+            <div id="disc-results-${safeId}" style="margin-top:10px;"></div>
+        </div>`;
+    }
+
+    // Raggruppa i dispositivi online (inventariati + scoperti) per tenant → categoria
+    // e disegna i blocchi con pulsante "Analizza tutti" per tenant.
     async function startThreatScan() {
         if (window._threatScanBusy) return;
         window._threatScanBusy = true;
@@ -11417,9 +11726,17 @@
         const queryingText = i18n[currentLang].queryingEnisa.replace(/<[^>]*>/g, '');
         container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${queryingText}</div>`;
 
-        const res = await apiFetch('/api/local-devices');
+        const [res, classRes] = await Promise.all([
+            apiFetch('/api/local-devices'),
+            apiFetch('/api/device-classification')
+        ]);
         if (!res) return;
         const data = await res.json();
+        const classData = classRes && classRes.ok ? await classRes.json() : { categories: {}, nodes: [] };
+        const catLabels = classData.categories || {};
+        // Mappa id nodo (IP per inventariati, id sintetico per scoperti) -> categoria (device_type).
+        const catByNodeId = {};
+        (classData.nodes || []).forEach(n => { catByNodeId[n.id] = n.device_type || ''; });
 
         let onlineDevices = data.devices.filter(d => {
             const scan = data.detected_versions[d.IP];
@@ -11427,128 +11744,114 @@
         });
         if (selGroup !== 'all') onlineDevices = onlineDevices.filter(d => d.Group === selGroup);
 
-        container.innerHTML = "";
+        // Struttura: { [tenant]: { [categoriaLabel]: [htmlCard, ...] } }
+        const tenants = {};
+        const catLabel = (key) => (catLabels[key] && catLabels[key].label) || key || i18n[currentLang].tiCatUncategorized;
+        const uncategorized = i18n[currentLang].tiCatUncategorized;
 
-        // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
-        if (onlineDevices.length === 0) {
-            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
+        onlineDevices.forEach(d => {
+            const scan = data.detected_versions[d.IP];
+            const tenant = d.Group || 'Generale';
+            const catKey = catByNodeId[d.IP];
+            const cat = catKey ? catLabel(catKey) : uncategorized;
+            tenants[tenant] = tenants[tenant] || {};
+            tenants[tenant][cat] = tenants[tenant][cat] || [];
+            tenants[tenant][cat].push(tiRenderManagedCard(d, scan));
+        });
+
+        let discoveredWithVersion = [];
+        if (includeDiscovered) {
+            const mapRes = await apiFetch('/api/network-map?group=' + encodeURIComponent(selGroup));
+            if (mapRes && mapRes.ok) {
+                const mapData = await mapRes.json();
+                discoveredWithVersion = (mapData.nodes || []).filter(n =>
+                    n.status === 'discovered' && n.version && n.version.trim() !== ''
+                );
+                if (selGroup !== 'all') discoveredWithVersion = discoveredWithVersion.filter(n => n.group === selGroup);
+            }
+        }
+        discoveredWithVersion.forEach(n => {
+            const tenant = n.group || 'Generale';
+            const cat = i18n[currentLang].tiCatDiscovered;
+            tenants[tenant] = tenants[tenant] || {};
+            tenants[tenant][cat] = tenants[tenant][cat] || [];
+            tenants[tenant][cat].push(tiRenderDiscoveredCard(n));
+        });
+
+        const tenantNames = Object.keys(tenants);
+        if (tenantNames.length === 0) {
+            container.innerHTML = `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
                 ${i18n[currentLang].noDevicesText}
             </div>`;
-        } else {
-            // Card SELEZIONABILI: la query EUVD parte SOLO quando l'utente sceglie
-            // un singolo dispositivo (pulsante Analizza), non su tutti insieme.
-            onlineDevices.forEach(d => {
-                const scan = data.detected_versions[d.IP];
-                const safeIpId = d.IP.replace(/\./g, '-');
-
-                const devCard = document.createElement("div");
-                devCard.className = "vuln-card";
-                devCard.style.marginBottom = "12px";
-                devCard.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                        <div>
-                            <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
-                            <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
-                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:12px;">
-                            <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
-                            <button id="btn-mgd-${safeIpId}"
-                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
-                                onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
-                                style="padding:8px 14px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
-                                ${i18n[currentLang].btnAnalyzeVuln}
-                            </button>
-                        </div>
-                    </div>
-                    <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;"></div>
-                `;
-                container.appendChild(devCard);
-            });
+            return;
         }
 
-        // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – solo se richiesto ──────────
-        if (!includeDiscovered) return;
-        const mapRes = await apiFetch('/api/network-map?group=' + encodeURIComponent(selGroup));
-        if (!mapRes || !mapRes.ok) return;
-        const mapData = await mapRes.json();
-
-        let discoveredWithVersion = (mapData.nodes || []).filter(n =>
-            n.status === 'discovered' && n.version && n.version.trim() !== ''
-        );
-        if (selGroup !== 'all') discoveredWithVersion = discoveredWithVersion.filter(n => n.group === selGroup);
-
-        if (discoveredWithVersion.length === 0) return;
-
-        // Header sezione
-        const sectionHeader = document.createElement("div");
-        sectionHeader.innerHTML = `
-            <div style="border-top: 1px solid var(--border); margin: 25px 0 15px 0; padding-top: 20px;">
-                <h3 style="font-size:16px; margin-bottom:6px;">
-                    ${i18n[currentLang].discoveredNeighborsTitle}
-                </h3>
-                <p style="font-size:13px; color:var(--text-muted);">
-                    ${i18n[currentLang].discoveredNeighborsDesc}
-                </p>
-            </div>
-        `;
-        container.appendChild(sectionHeader);
-
-        // Griglia di card selezionabili
-        const grid = document.createElement("div");
-        grid.style.cssText = "display:grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px; margin-bottom:18px;";
-        container.appendChild(grid);
-
-        discoveredWithVersion.forEach(n => {
-            const safeId = n.id.replace(/[^a-zA-Z0-9]/g, '-');
-            const versionShort = extractReadableVersion(n.version);
-
-            const card = document.createElement("div");
-            card.id = `disc-card-${safeId}`;
-            card.style.cssText = `
-                background: var(--surface-2);
-                border: 2px solid var(--border);
-                border-radius: 10px;
-                padding: 14px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                user-select: none;
-            `;
-            card.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                    <div>
-                        <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
-                        <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
+        container.innerHTML = tenantNames.map(tenant => {
+            const cats = tenants[tenant];
+            const catsHtml = Object.keys(cats).map(cat => `
+                <h4 style="font-size:13px; color:var(--text-muted); margin:14px 0 8px;">${escapeHtml(cat)}</h4>
+                ${cats[cat].join('')}
+            `).join('');
+            return `<div id="tenant-block-${cssSafe(tenant)}" style="border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:16px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
+                    <h3 style="margin:0; font-size:15px;"><i class="fa-solid fa-building" style="color:var(--primary);"></i> ${escapeHtml(tenant)}</h3>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span id="rollup-${cssSafe(tenant)}" style="font-size:12px; color:var(--text-muted);"></span>
+                        <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="analyzeTenant('${escapeHtml(tenant).replace(/'/g, "\\'")}')" data-i18n="btnAnalyzeTenant">${i18n[currentLang].btnAnalyzeTenant}</button>
                     </div>
-                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
                 </div>
-                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
-                    <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
-                </div>
-                <button
-                    id="btn-disc-${safeId}"
-                    data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
-                    data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
-                    data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
-                    onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
-                    style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
-                    ${i18n[currentLang].btnAnalyzeVuln}
-                </button>
-            `;
-            card.onmouseenter = () => card.style.borderColor = 'var(--warning)';
-            card.onmouseleave = () => {
-                if (!card.dataset.checked) card.style.borderColor = 'var(--border)';
-            };
-            grid.appendChild(card);
-
-            const resultArea = document.createElement("div");
-            resultArea.id = `disc-results-${safeId}`;
-            resultArea.style.cssText = "display:none; grid-column:1/-1;";
-            grid.appendChild(resultArea);
-        });
+                ${catsHtml}
+            </div>`;
+        }).join('');
         } finally {
             window._threatScanBusy = false;
         }
+    }
+
+    // Attende che l'analisi avviata dal click su un pulsante (Analizza) sia
+    // terminata: runManagedVulnCheck/runDiscoveredVulnCheck riabilitano il
+    // pulsante e ne cambiano il testo in "Riscansiona" a fine query.
+    function waitForResult(btn) {
+        return new Promise(resolve => {
+            const started = Date.now();
+            const timeoutMs = 60000;
+            (function poll() {
+                if (!btn.disabled || (Date.now() - started) > timeoutMs) {
+                    resolve();
+                    return;
+                }
+                setTimeout(poll, 500);
+            })();
+        });
+    }
+
+    // Analizza in sequenza (max 4 worker concorrenti) tutti i dispositivi online
+    // di un tenant, riusando i pulsanti "Analizza" già renderizzati nel blocco.
+    async function analyzeTenant(tenant) {
+        const safe = cssSafe(tenant);
+        const block = document.getElementById('tenant-block-' + safe);
+        if (!block) return;
+        const btns = Array.from(block.querySelectorAll('button[id^="btn-mgd-"], button[id^="btn-disc-"]'));
+        const queue = btns.slice();
+        let done = 0;
+        const rollup = document.getElementById('rollup-' + safe);
+
+        async function worker() {
+            while (queue.length) {
+                const b = queue.shift();
+                if (b.disabled) continue;
+                b.click();
+                await waitForResult(b);
+                done++;
+                if (rollup) rollup.textContent = `${done}/${btns.length}`;
+            }
+        }
+        await Promise.all([worker(), worker(), worker(), worker()]);
+
+        const critical = block.querySelectorAll('[data-sev="critical"]').length;
+        const high = block.querySelectorAll('[data-sev="high"]').length;
+        const exploited = block.querySelectorAll('[data-exploited="1"]').length;
+        if (rollup) rollup.innerHTML = `<span style="color:var(--danger);">${critical} critical</span> · ${high} high · ${exploited} exploited`;
     }
 
     function extractReadableVersion(sysDesc) {
@@ -11692,8 +11995,9 @@
                             else                 severity = "LOW";
                         }
 
+                        const exploitedFlag = (v.exploited === true || String(v.exploited).toLowerCase() === 'true') ? '1' : '0';
                         cardsEl.innerHTML += `
-                            <div style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
+                            <div data-sev="${severity.toLowerCase()}" data-exploited="${exploitedFlag}" style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <strong style="color:var(--primary);">${escapeHtml(enisaId)}</strong>
