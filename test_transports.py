@@ -62,6 +62,14 @@ class TestUpsertRoundTrip(unittest.TestCase):
         # Colonna legacy 'SSH Port' rispecchia la porta ssh dichiarata.
         self.assertEqual(dev["SSH Port"], "22")
 
+    def test_roundtrip_tcp_udp_transports(self):
+        # tcp/udp: protocolli generici a porta libera, scelta dall'utente.
+        tr = {"ssh": 22, "tcp": 9000, "udp": 161}
+        inventory_manager.add_or_update_device(
+            "10.0.0.30", "cisco", "default", "u", "p", "s", "Generale", transports=tr)
+        dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "10.0.0.30")
+        self.assertEqual(inventory_manager.parse_transports(dev), tr)
+
     def test_legacy_upsert_synthesizes_ssh(self):
         # Upsert senza transports (chiamante legacy) → ssh-only dalla ssh_port.
         inventory_manager.add_or_update_device(

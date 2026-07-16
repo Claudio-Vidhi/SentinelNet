@@ -1204,28 +1204,38 @@
                 <span id="devTransportsSummary" style="color:var(--text);">SSH:22</span>
                 <i class="fa-solid fa-caret-down" style="font-size:11px; margin-left:auto;"></i>
               </summary>
-              <div style="padding:10px; border-top:1px solid var(--border);">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <div style="padding:10px; border-top:1px solid var(--border); display:grid; grid-template-columns:auto 90px; gap:6px 8px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
                   <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
-                  <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
                 </div>
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
+                <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
                   <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
-                  <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
                 </div>
-                <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="display:none; color: var(--danger, #c0392b); font-size: 12px; margin-bottom:6px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
+                <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger, #c0392b); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+                <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
                   <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
-                  <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
                 </div>
+                <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
                 <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
                   <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
-                  <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
                 </div>
+                <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="trTcpEnabled" data-proto="tcp">
+                  <label for="trTcpEnabled" style="min-width:80px; margin:0;">TCP</label>
+                </div>
+                <input id="trTcpPort" type="number" min="1" max="65535" value="" style="width:90px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="trUdpEnabled" data-proto="udp">
+                  <label for="trUdpEnabled" style="min-width:80px; margin:0;">UDP</label>
+                </div>
+                <input id="trUdpPort" type="number" min="1" max="65535" value="" style="width:90px;">
               </div>
             </details>
           </div>
@@ -4919,8 +4929,8 @@
     });
 
     // §11.6: gestione trasporti per-device (checkbox + porta per protocollo).
-    const TRANSPORT_PROTOS = ['ssh', 'telnet', 'netconf', 'restconf'];
-    const TRANSPORT_LABELS = { ssh: 'SSH', telnet: 'Telnet', netconf: 'NETCONF', restconf: 'RESTCONF' };
+    const TRANSPORT_PROTOS = ['ssh', 'telnet', 'netconf', 'restconf', 'tcp', 'udp'];
+    const TRANSPORT_LABELS = { ssh: 'SSH', telnet: 'Telnet', netconf: 'NETCONF', restconf: 'RESTCONF', tcp: 'TCP', udp: 'UDP' };
     const _trCap = (p) => p.charAt(0).toUpperCase() + p.slice(1);
 
     function updateTelnetWarn() {
@@ -4967,12 +4977,13 @@
         if (!map || typeof map !== 'object' || !Object.keys(map).length) {
             map = { ssh: parseInt(fallbackSshPort, 10) || 22 };
         }
+        // tcp/udp non hanno una porta di default: l'utente deve inserirla.
         const defaults = { ssh: 22, telnet: 23, netconf: 830, restconf: 443 };
         for (const p of TRANSPORT_PROTOS) {
             const enabled = Object.prototype.hasOwnProperty.call(map, p);
             document.getElementById('tr' + _trCap(p) + 'Enabled').checked = enabled;
             document.getElementById('tr' + _trCap(p) + 'Port').value =
-                (enabled && map[p]) ? map[p] : defaults[p];
+                (enabled && map[p]) ? map[p] : (defaults[p] ?? '');
         }
         updateTelnetWarn();
         updateTransportsSummary();
