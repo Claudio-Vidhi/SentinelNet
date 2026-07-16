@@ -6,18 +6,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-import ai_assistant
 import config_analyzer
-import crypto_vault
 import inventory_manager
 from routers.deps import get_current_user, user_group_scope, assert_device_allowed
 
 router = APIRouter(tags=["Analyzer"])
-
-
-class ExplainSchema(BaseModel):
-    """Corpo per la modalita' 'Comprendi' (spiegazione guidata via LLM)."""
-    lang: str = "it"  # 'it' | 'en'
 
 
 class ConvertSchema(BaseModel):
@@ -25,8 +18,8 @@ class ConvertSchema(BaseModel):
     dispositivo (in tal caso si usa il backup piu' recente)."""
     text: Optional[str] = None
     ip: Optional[str] = None
-    source: str  # 'ios' | 'fortios'
-    target: str  # 'ios' | 'fortios'
+    source: str  # 'fortios' | 'panos'
+    target: str  # 'fortios' | 'panos'
 
 
 def _load_backup_text(ip: str, current_user) -> str:
@@ -70,7 +63,7 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
 
 @router.post("/api/config-analyzer/convert")
 def config_analyzer_convert(payload: ConvertSchema, current_user = Depends(get_current_user)):
-    """Conversione deterministica (preview) FortiOS <-> IOS. Accetta testo
+    """Conversione deterministica (preview) FortiOS <-> PAN-OS. Accetta testo
     esplicito oppure {ip} -> backup piu' recente del dispositivo (scoped)."""
     text = payload.text
     from_ip = False
@@ -86,48 +79,4 @@ def config_analyzer_convert(payload: ConvertSchema, current_user = Depends(get_c
     if from_ip:
         result["source_text"] = text
     return result
-
-
-@router.post("/api/config-analyzer/{ip}/explain")
-def config_analyzer_explain(ip: str, payload: ExplainSchema, current_user = Depends(get_current_user)):
-    """Modalita' 'Comprendi': spiegazione guidata (LLM) della config piu'
-    recente del dispositivo. Riusa il profilo AI attivo di /api/ai/chat;
-    la config viene redatta (segreti) prima dell'invio."""
-    from routers.ai import _get_active_ai_profile  # riuso risoluzione profilo AI
-    config_text = _load_backup_text(ip, current_user)
-
-    profile = _get_active_ai_profile()
-    if profile is None:
-        raise HTTPException(status_code=400, detail="Nessun profilo AI configurato/attivo. Un amministratore deve crearne uno prima.")
-    provider = profile.get("provider", "")
-    api_key = crypto_vault.decrypt_password(profile.get("api_key_enc", "")) if profile.get("api_key_enc") else None
-    if provider != "ollama" and not api_key:
-        raise HTTPException(status_code=400, detail="API key non configurata per il profilo AI attivo.")
-
-    lang_name = "English" if (payload.lang or "it").lower().startswith("en") else "Italian"
-    system_prompt = (
-        "You are a guide for a network security engineer. Explain this device "
-        "configuration section by section — what each part does and why it might "
-        "be configured this way. Factual, educational, no security judgments or "
-        f"scoring. Respond in {lang_name}."
-    )
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": ai_assistant.redact(config_text)},
-    ]
-    try:
-        reply = ai_assistant.chat(
-            messages,
-            provider=provider,
-            model=profile.get("model") or None,
-            api_key=api_key,
-            base_url=profile.get("base_url") or None,
-            rate_limit_rpm=profile.get("rate_limit_rpm", 0),
-            allow_unredacted=bool(profile.get("allow_unredacted", False)),
-        )
-    except ai_assistant.RateLimitExceededError as e:
-        raise HTTPException(status_code=429, detail=str(e))
-    except ai_assistant.AiAssistantError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    return {"explanation": reply}
 

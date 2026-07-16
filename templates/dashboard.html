@@ -1204,28 +1204,38 @@
                 <span id="devTransportsSummary" style="color:var(--text);">SSH:22</span>
                 <i class="fa-solid fa-caret-down" style="font-size:11px; margin-left:auto;"></i>
               </summary>
-              <div style="padding:10px; border-top:1px solid var(--border);">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <div style="padding:10px; border-top:1px solid var(--border); display:grid; grid-template-columns:auto 90px; gap:6px 8px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trSshEnabled" data-proto="ssh" checked>
                   <label for="trSshEnabled" style="min-width:80px; margin:0;">SSH</label>
-                  <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
                 </div>
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input id="trSshPort" type="number" min="1" max="65535" value="22" style="width:90px;">
+                <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trTelnetEnabled" data-proto="telnet">
                   <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
-                  <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
                 </div>
-                <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="display:none; color: var(--danger, #c0392b); font-size: 12px; margin-bottom:6px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
+                <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger, #c0392b); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+                <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
                   <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
-                  <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
                 </div>
+                <input id="trNetconfPort" type="number" min="1" max="65535" value="830" style="width:90px;">
                 <div style="display:flex; align-items:center; gap:8px;">
                   <input type="checkbox" id="trRestconfEnabled" data-proto="restconf">
                   <label for="trRestconfEnabled" style="min-width:80px; margin:0;">RESTCONF</label>
-                  <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
                 </div>
+                <input id="trRestconfPort" type="number" min="1" max="65535" value="443" style="width:90px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="trTcpEnabled" data-proto="tcp">
+                  <label for="trTcpEnabled" style="min-width:80px; margin:0;">TCP</label>
+                </div>
+                <input id="trTcpPort" type="number" min="1" max="65535" value="" style="width:90px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="trUdpEnabled" data-proto="udp">
+                  <label for="trUdpEnabled" style="min-width:80px; margin:0;">UDP</label>
+                </div>
+                <input id="trUdpPort" type="number" min="1" max="65535" value="" style="width:90px;">
               </div>
             </details>
           </div>
@@ -1801,6 +1811,9 @@
         #tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker { display:none; }
         #tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
         #tab-clientmap #arpDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
+        #tab-clientmap #arpTenantMenu > summary::-webkit-details-marker { display:none; }
+        #tab-clientmap #arpTenantMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+        #tab-clientmap #arpTenantList label:hover { background: var(--surface-3); border-radius:6px; }
       </style>
 
       <div class="panel">
@@ -1816,9 +1829,16 @@
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant/Sede</label>
-            <select id="arpFilterTenant" onchange="populateArpGatewayFilter(); arpClientSearch();" class="ui-input" style="width:160px; cursor:pointer;">
-              <option value="all" data-i18n="optArpAllTenants">Tutti i tenant</option>
-            </select>
+            <!-- Multi-selezione tenant a checkbox (nessun tenant di default): evita di
+                 mostrare tutti i binding di tutti i tenant senza una scelta esplicita. -->
+            <details id="arpTenantMenu" style="position:relative;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px; width:160px;">
+                <i class="fa-solid fa-building" style="color:var(--text-muted);"></i>
+                <span id="arpTenantSummary" data-i18n="arpPickTenantHint" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Seleziona un tenant per visualizzare i binding</span>
+                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted); margin-left:auto;"></i>
+              </summary>
+              <div id="arpTenantList" style="position:absolute; top:110%; left:0; z-index:60; min-width:200px; max-height:260px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            </details>
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
@@ -1984,7 +2004,7 @@
             <button class="ca-pill" data-view="acl" onclick="caSwitchView('acl')" data-i18n="pillAcls">ACL</button>
             <button class="ca-pill" data-view="iface" onclick="caSwitchView('iface')" data-i18n="pillIfaces">Interfacce</button>
             <button class="ca-pill" data-view="validation" onclick="caSwitchView('validation')" data-i18n="pillValidation">Validazione</button>
-            <button class="ca-pill" data-view="understand" onclick="caSwitchView('understand')" data-i18n="pillCaUnderstand">Comprendi</button>
+            <button class="ca-pill" data-view="firewall" onclick="caSwitchView('firewall')" data-i18n="pillCaFirewall">Firewall</button>
             <button class="ca-pill" data-view="convert" onclick="caSwitchView('convert')" data-i18n="pillCaConvert">Converti</button>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -3042,16 +3062,26 @@
         pillIfaces: "Interfacce",
         pillValidation: "Validazione",
         pillCaHome: "Home",
-        pillCaUnderstand: "Comprendi",
+        pillCaFirewall: "Firewall",
+        pillCaFwPolicy: "Policy",
+        pillCaFwIfaces: "Interfacce/Zone",
+        pillCaFwNat: "NAT/VIP",
+        pillCaFwObjects: "Oggetti",
+        msgCaFwUnsupportedVendor: "Vendor non supportato (solo FortiGate).",
+        thCaFgVdom: "VDOM",
+        thCaFgZone: "Zona",
+        thCaFgExtIp: "IP esterno",
+        thCaFgMappedIp: "IP mappato",
+        thCaFgExtIntf: "Intf esterna",
+        thCaFgExtPort: "Porta esterna",
+        thCaFgMappedPort: "Porta mappata",
+        thCaFgKind: "Tipo",
+        thCaFgValue: "Valore",
+        thCaFgType: "Dettaglio",
         pillCaConvert: "Converti",
         caHomeAnalyzeTitle: "Analizza",
         caHomeAnalyzeDesc: "Vista strutturata delle configurazioni: VLAN, routing, ACL, interfacce e validazione.",
-        caHomeUnderstandDesc: "Spiegazione guidata della configurazione di un dispositivo, sezione per sezione (AI).",
-        caHomeConvertDesc: "Anteprima di conversione deterministica FortiOS ↔ Cisco IOS, senza AI.",
-        caUnderstandTitle: "Comprendi la configurazione",
-        caExplainBtn: "Spiega",
-        caExplainLoading: "Generazione della spiegazione in corso…",
-        caExplainError: "Errore durante la generazione della spiegazione.",
+        caHomeConvertDesc: "Anteprima di conversione deterministica firewall-to-firewall FortiOS ↔ Palo Alto (PAN-OS), senza AI.",
         caConvertTitle: "Config Converter (anteprima)",
         caConvSource: "Sorgente",
         caConvTarget: "Destinazione",
@@ -3061,7 +3091,6 @@
         caConvDownload: "Scarica .txt",
         caConvDevicePick: "— dispositivo (backup più recente) —",
         caConvTextPh: "Incolla qui la configurazione sorgente, oppure scegli un dispositivo…",
-        caUndDevicePick: "— scegli un dispositivo —",
         thCaConvSource: "Sorgente",
         thCaConvTarget: "Destinazione",
         thCaConvNote: "Nota",
@@ -3382,6 +3411,7 @@
         lblFgtNoWanAdmin: "Nessun accesso admin dal WAN",
         lblArpFilterTenant: "Tenant/Sede",
         lblArpFilterGateway: "Gateway",
+        arpPickTenantHint: "Seleziona un tenant per visualizzare i binding",
         optArpAllTenants: "Tutti i tenant",
         optArpAllGateways: "Tutti i gateway",
         chipAllSources: "Tutte le origini",
@@ -3700,16 +3730,26 @@
         pillIfaces: "Interfaces",
         pillValidation: "Validation",
         pillCaHome: "Home",
-        pillCaUnderstand: "Understand",
+        pillCaFirewall: "Firewall",
+        pillCaFwPolicy: "Policy",
+        pillCaFwIfaces: "Interfaces/Zones",
+        pillCaFwNat: "NAT/VIP",
+        pillCaFwObjects: "Objects",
+        msgCaFwUnsupportedVendor: "Vendor not supported (FortiGate only).",
+        thCaFgVdom: "VDOM",
+        thCaFgZone: "Zone",
+        thCaFgExtIp: "External IP",
+        thCaFgMappedIp: "Mapped IP",
+        thCaFgExtIntf: "External intf",
+        thCaFgExtPort: "External port",
+        thCaFgMappedPort: "Mapped port",
+        thCaFgKind: "Kind",
+        thCaFgValue: "Value",
+        thCaFgType: "Detail",
         pillCaConvert: "Convert",
         caHomeAnalyzeTitle: "Analyze",
         caHomeAnalyzeDesc: "Structured view of configurations: VLAN, routing, ACL, interfaces and validation.",
-        caHomeUnderstandDesc: "Guided explanation of a device configuration, section by section (AI).",
-        caHomeConvertDesc: "Deterministic FortiOS ↔ Cisco IOS conversion preview, no AI.",
-        caUnderstandTitle: "Understand the configuration",
-        caExplainBtn: "Explain",
-        caExplainLoading: "Generating explanation…",
-        caExplainError: "Error while generating the explanation.",
+        caHomeConvertDesc: "Deterministic firewall-to-firewall FortiOS ↔ Palo Alto (PAN-OS) conversion preview, no AI.",
         caConvertTitle: "Config Converter (preview)",
         caConvSource: "Source",
         caConvTarget: "Target",
@@ -3719,7 +3759,6 @@
         caConvDownload: "Download .txt",
         caConvDevicePick: "— device (freshest backup) —",
         caConvTextPh: "Paste the source configuration here, or pick a device…",
-        caUndDevicePick: "— pick a device —",
         thCaConvSource: "Source",
         thCaConvTarget: "Target",
         thCaConvNote: "Note",
@@ -4041,6 +4080,7 @@
         lblFgtNoWanAdmin: "No admin access from WAN",
         lblArpFilterTenant: "Tenant/Site",
         lblArpFilterGateway: "Gateway",
+        arpPickTenantHint: "Select a tenant to view bindings",
         optArpAllTenants: "All tenants",
         optArpAllGateways: "All gateways",
         chipAllSources: "All sources",
@@ -4901,8 +4941,8 @@
     });
 
     // §11.6: gestione trasporti per-device (checkbox + porta per protocollo).
-    const TRANSPORT_PROTOS = ['ssh', 'telnet', 'netconf', 'restconf'];
-    const TRANSPORT_LABELS = { ssh: 'SSH', telnet: 'Telnet', netconf: 'NETCONF', restconf: 'RESTCONF' };
+    const TRANSPORT_PROTOS = ['ssh', 'telnet', 'netconf', 'restconf', 'tcp', 'udp'];
+    const TRANSPORT_LABELS = { ssh: 'SSH', telnet: 'Telnet', netconf: 'NETCONF', restconf: 'RESTCONF', tcp: 'TCP', udp: 'UDP' };
     const _trCap = (p) => p.charAt(0).toUpperCase() + p.slice(1);
 
     function updateTelnetWarn() {
@@ -4949,12 +4989,13 @@
         if (!map || typeof map !== 'object' || !Object.keys(map).length) {
             map = { ssh: parseInt(fallbackSshPort, 10) || 22 };
         }
+        // tcp/udp non hanno una porta di default: l'utente deve inserirla.
         const defaults = { ssh: 22, telnet: 23, netconf: 830, restconf: 443 };
         for (const p of TRANSPORT_PROTOS) {
             const enabled = Object.prototype.hasOwnProperty.call(map, p);
             document.getElementById('tr' + _trCap(p) + 'Enabled').checked = enabled;
             document.getElementById('tr' + _trCap(p) + 'Port').value =
-                (enabled && map[p]) ? map[p] : defaults[p];
+                (enabled && map[p]) ? map[p] : (defaults[p] ?? '');
         }
         updateTelnetWarn();
         updateTransportsSummary();
@@ -6193,8 +6234,12 @@
             const dcol = vtpDomainColor(vtp.domain);
             borderGradStart = dcol;
             const dEsc = String(vtp.domain).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 24);
+            // Se disponibile, aggiunge la modalità VTP (server/client/transparent/off)
+            // accanto al dominio; troncata per stare nella pillola larga 216px.
+            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
+            const pillTxt = (modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30);
             vtpDomainSvg = `<rect x="16" y="80" width="216" height="16" rx="4" fill="${dcol}22" stroke="${dcol}" stroke-opacity="0.45" stroke-width="1" />
-          <text x="124" y="91.5" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${dEsc}</text>`;
+          <text x="124" y="91.5" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${pillTxt}</text>`;
         }
         const cardH = hasVtp ? 106 : 84;
 
@@ -6583,18 +6628,27 @@
         loadInteractiveMap();
     }
 
-    // Opzioni Vis.js della mappa classica. La fisica serve SOLO a calcolare un
-    // layout iniziale ben distanziato: viene spenta al termine della
-    // stabilizzazione, così i nodi non derivano e restano dove l'utente li mette.
+    // Fisica barnesHut condivisa da entrambe le viste (classica e minimalista).
+    // Causa radice risolta QUI, non con toppe per-lato: valori tarati per nodi
+    // grandi (riquadri SVG ~248px, vedi createNodeSvg) così i riquadri restano
+    // compatti e non si sovrappongono ma nemmeno "volano via". La fisica serve
+    // SOLO a calcolare un layout iniziale ben distanziato: viene spenta al
+    // termine della stabilizzazione (freezeLayout), così i nodi non derivano e
+    // restano dove l'utente li mette.
+    function sharedMapPhysics() {
+        return {
+            enabled: true, solver: 'barnesHut',
+            stabilization: { enabled: true, iterations: 300, updateInterval: 25, onlyDynamicEdges: false, fit: true },
+            barnesHut: { gravitationalConstant: -3000, centralGravity: 0.4, springLength: 280, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
+            minVelocity: 0.75
+        };
+    }
+
+    // Opzioni Vis.js della mappa classica.
     function classicMapOptions() {
         return {
             layout: { improvedLayout: true, randomSeed: 42 },
-            physics: {
-                enabled: true, solver: 'barnesHut',
-                stabilization: { enabled: true, iterations: 600, updateInterval: 25, onlyDynamicEdges: false, fit: true },
-                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.12, springLength: 240, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
-                minVelocity: 0.75
-            },
+            physics: sharedMapPhysics(),
             interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
             nodes: { shadow: { enabled: true, color: "rgba(0,0,0,0.5)", size: 10, x: 0, y: 4 } },
             edges: { smooth: { type: 'cubicBezier', forceDirection: 'none', roundness: 0.5 }, shadow: { enabled: true, color: "rgba(0,0,0,0.4)", size: 4, x: 0, y: 2 } }
@@ -7187,12 +7241,7 @@
 
         const options = {
             layout: { improvedLayout: true, randomSeed: 42 },
-            physics: {
-                enabled: true, solver: 'barnesHut',
-                stabilization: { enabled: true, iterations: 600, updateInterval: 25, onlyDynamicEdges: false, fit: true },
-                barnesHut: { gravitationalConstant: -16000, centralGravity: 0.08, springLength: 260, springConstant: 0.05, damping: 0.4, avoidOverlap: 1 },
-                minVelocity: 0.75
-            },
+            physics: sharedMapPhysics(),
             interaction: { hover: hoverInfo, hoverConnectedEdges: hoverInfo, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
             nodes: { shadow: { enabled: false } },
             edges: { smooth: { type: 'continuous', roundness: 0.2 }, shadow: { enabled: false } }
@@ -9691,11 +9740,10 @@
             sel.value = groups.includes(cur) ? cur : 'all';
         };
         fillGroupSel('arpScanGroup', L.optFilterAll || 'Filtra per Tenant: Tutti');
-        fillGroupSel('arpFilterTenant', L.optArpAllTenants || 'Tutti i tenant');
+        populateArpTenantFilter();
         populateArpScanDevices();
         populateArpGatewayFilter();
         arpClientSearch();
-        refreshArpStats();
     }
 
     // Dispositivi filtrati per il tenant scelto nel selettore di scansione.
@@ -9749,13 +9797,62 @@
             : `${sel} ${i18n[currentLang].lblAiDevSelected || 'selezionati'}`;
     }
 
-    // Il filtro gateway elenca i device del tenant scelto nel filtro di vista.
+    // Multi-selezione tenant per la ricerca binding: nessuno selezionato di default,
+    // ordine di selezione mantenuto per renderizzare le tabelle nello stesso ordine.
+    let arpSelectedTenantOrder = [];
+
+    function populateArpTenantFilter() {
+        const box = document.getElementById('arpTenantList');
+        if (!box) return;
+        const groups = Object.keys(globalGroups || {});
+        // Scarta selezioni di tenant non più esistenti.
+        arpSelectedTenantOrder = arpSelectedTenantOrder.filter(t => groups.includes(t));
+        const L = i18n[currentLang];
+        box.innerHTML = groups.map(g => `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
+            <input type="checkbox" class="arp-tenant-cb" value="${escapeHtml(g)}" onchange="onArpTenantToggle(this)" ${arpSelectedTenantOrder.includes(g) ? 'checked' : ''} style="accent-color:var(--primary);">
+            <span>${escapeHtml(g)}</span></label>`).join('') ||
+            `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${L.msgAiNoDevices || 'Nessun tenant'}</div>`;
+        updateArpTenantSummary();
+    }
+
+    function selectedArpTenants() {
+        return arpSelectedTenantOrder.slice();
+    }
+
+    function onArpTenantToggle(cb) {
+        const name = cb.value;
+        if (cb.checked) {
+            if (!arpSelectedTenantOrder.includes(name)) arpSelectedTenantOrder.push(name);
+        } else {
+            arpSelectedTenantOrder = arpSelectedTenantOrder.filter(t => t !== name);
+        }
+        updateArpTenantSummary();
+        populateArpGatewayFilter();
+        arpClientSearch();
+    }
+
+    function updateArpTenantSummary() {
+        const sum = document.getElementById('arpTenantSummary');
+        if (!sum) return;
+        sum.textContent = arpSelectedTenantOrder.length === 0
+            ? (i18n[currentLang].arpPickTenantHint || 'Seleziona un tenant per visualizzare i binding')
+            : arpSelectedTenantOrder.join(', ');
+    }
+
+    // Dispositivi filtrati per i tenant selezionati nel filtro di ricerca.
+    function arpFilteredDevicesByTenants(tenants) {
+        let devs = globalDevices || [];
+        if (tenants && tenants.length) devs = devs.filter(d => tenants.includes(d.Group || 'Generale'));
+        return devs;
+    }
+
+    // Il filtro gateway elenca i device dei tenant scelti nel filtro di vista.
     function populateArpGatewayFilter() {
         const sel = document.getElementById('arpFilterGateway');
         if (!sel) return;
         const cur = sel.value;
         const L = i18n[currentLang];
-        const devs = arpFilteredDevices('arpFilterTenant');
+        const devs = arpFilteredDevicesByTenants(selectedArpTenants());
         sel.innerHTML = `<option value="">${L.optArpAllGateways || 'Tutti i gateway'}</option>` +
             devs.map(d => {
                 const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
@@ -9802,56 +9899,81 @@
             box.innerHTML = `<b>${i18n[currentLang].titleArpScanSummary || 'Esito raccolta ARP'}</b>` +
                 `<div style="margin-top:6px;">${rows || '—'}</div>`;
             arpClientSearch();
-            refreshArpStats();
         } finally {
             btn.disabled = false;
             btn.innerHTML = oldHtml;
         }
     }
 
-    async function refreshArpStats() {
-        const res = await apiFetch('/api/arp/stats');
-        if (!res || !res.ok) return;
-        const s = await res.json();
+    // KPI e riepilogo calcolati lato client dai risultati già filtrati per tenant
+    // selezionati (nessuna chiamata separata a /api/arp/stats, che non è scopabile
+    // per tenant): "KPI contano solo i tenant selezionati".
+    function updateArpKpisFromResults(tenants, byTenant) {
+        let bindings = 0;
+        const macs = new Set();
+        const gws = new Set();
+        tenants.forEach(t => (byTenant[t] || []).forEach(r => {
+            bindings++;
+            if (r.mac) macs.add(String(r.mac).toLowerCase());
+            if (r.source_ip) gws.add(r.source_ip);
+        }));
+        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = bindings;
+        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = macs.size;
+        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = gws.size;
         const el = document.getElementById('arpStats');
         if (el) el.innerText = (currentLang === 'en'
-            ? `${s.bindings} bindings · ${s.unique_macs} MACs · ${s.sources} gateways`
-            : `${s.bindings} binding · ${s.unique_macs} MAC · ${s.sources} gateway`);
-        // KPI tiles nella hero card: stessa risposta, nessuna chiamata aggiuntiva.
-        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = s.bindings;
-        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = s.unique_macs;
-        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = s.sources;
+            ? `${bindings} bindings · ${macs.size} MACs · ${gws.size} gateways`
+            : `${bindings} binding · ${macs.size} MAC · ${gws.size} gateway`);
+    }
+
+    function clearArpKpis() {
+        ['kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.textContent = '—';
+        });
+        const stats = document.getElementById('arpStats'); if (stats) stats.innerText = '';
     }
 
     async function arpClientSearch() {
         const mac = document.getElementById('arpSearchMac').value.trim();
         const ip = document.getElementById('arpSearchIp').value.trim();
-        const tenant = document.getElementById('arpFilterTenant')?.value || 'all';
+        const tenants = selectedArpTenants();
         const gw = document.getElementById('arpFilterGateway')?.value || '';
-        const params = new URLSearchParams();
-        if (mac) params.set('mac', mac);
-        if (ip) params.set('ip', ip);
-        if (tenant && tenant !== 'all') params.set('tenant', tenant);
-        if (gw) params.set('source_ip', gw);
-        const res = await apiFetch('/api/arp/client-map?' + params.toString());
-        if (!res || !res.ok) return;
-        const d = await res.json();
-        renderArpResults(d.results || []);
+        const box = document.getElementById('arpResults');
+        if (!tenants.length) {
+            // Nessun tenant scelto: nessuna fetch, solo il placeholder e KPI vuoti.
+            if (box) box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${escapeHtml(i18n[currentLang].arpPickTenantHint || 'Seleziona un tenant per visualizzare i binding')}</p>`;
+            clearArpKpis();
+            return;
+        }
+        const byTenant = {};
+        for (const t of tenants) {
+            const params = new URLSearchParams();
+            if (mac) params.set('mac', mac);
+            if (ip) params.set('ip', ip);
+            params.set('tenant', t);
+            if (gw) params.set('source_ip', gw);
+            const res = await apiFetch('/api/arp/client-map?' + params.toString());
+            byTenant[t] = (res && res.ok) ? (await res.json()).results || [] : [];
+        }
+        renderArpResults(tenants, byTenant);
+        updateArpKpisFromResults(tenants, byTenant);
     }
 
     function arpSearchReset() {
         ['arpSearchMac', 'arpSearchIp'].forEach(id => {
             const el = document.getElementById(id); if (el) el.value = '';
         });
-        const t = document.getElementById('arpFilterTenant'); if (t) t.value = 'all';
         const g = document.getElementById('arpFilterGateway'); if (g) { populateArpGatewayFilter(); g.value = ''; }
         arpClientSearch();
     }
 
-    function renderArpResults(rows) {
+    // Una tabella separata per tenant, nell'ordine di selezione: mai unite in
+    // un'unica tabella, ognuna con la propria intestazione.
+    function renderArpResults(tenants, byTenant) {
         const en = currentLang === 'en';
         const box = document.getElementById('arpResults');
-        if (!rows.length) {
+        const totalRows = tenants.reduce((n, t) => n + (byTenant[t] || []).length, 0);
+        if (!totalRows) {
             box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${en
                 ? 'No MAC ↔ IP bindings. Run an ARP collection (and a MAC scan for port matching).'
                 : 'Nessun binding MAC ↔ IP. Esegui una raccolta ARP (e una MAC scan per il match della porta).'}</p>`;
@@ -9876,25 +9998,20 @@
         ].join('') + '</tr>';
         const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;">` +
             `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
-        // Dati separati per tenant: una sezione per sede quando ce n'è più di una.
-        const byTenant = {};
-        rows.forEach(r => {
-            const t = r.tenant || 'Generale';
-            (byTenant[t] = byTenant[t] || []).push(r);
-        });
-        const tenants = Object.keys(byTenant).sort();
-        if (tenants.length <= 1) {
-            box.innerHTML = table(rows.map(rowHtml).join(''));
-            return;
-        }
-        box.innerHTML = tenants.map(t => `
+        box.innerHTML = tenants.map(t => {
+            const rows = byTenant[t] || [];
+            const body = rows.length
+                ? table(rows.map(rowHtml).join(''))
+                : `<p style="color:var(--text-muted); font-size:12px;">${en ? 'No bindings for this tenant.' : 'Nessun binding per questo tenant.'}</p>`;
+            return `
             <div style="margin-bottom:18px;">
                 <h4 style="margin:0 0 8px 0; font-size:13px; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-building" style="color:var(--primary);"></i> ${escapeHtml(t)}
-                    <span style="color:var(--text-muted); font-weight:400; font-size:12px;">(${byTenant[t].length})</span>
+                    <span style="color:var(--text-muted); font-weight:400; font-size:12px;">(${rows.length})</span>
                 </h4>
-                ${table(byTenant[t].map(rowHtml).join(''))}
-            </div>`).join('');
+                ${body}
+            </div>`;
+        }).join('');
     }
 
     // Risultati raggruppati per switch: ogni host è un accordion collassato;
@@ -10154,6 +10271,7 @@
     // vista ri-renderizzano senza richiamare l'API (come richiesto).
     let caData = null;
     let caView = 'home';
+    let caFwView = 'policy'; // sub-menu del pill "Firewall": policy | iface | nat | objects
     let caRouteGroupMode = 'flat'; // 'flat' | 'byhop' — ricordato per la sessione
     let caNetworks = {};   // ip -> vis.Network istanza mappa route (lazy, per device aperto)
 
@@ -10223,8 +10341,8 @@
             box.innerHTML = caRenderHome(L);
             return;
         }
-        if (caView === 'understand') { box.innerHTML = caRenderUnderstand(L); return; }
         if (caView === 'convert') { box.innerHTML = caRenderConvert(L); return; }
+        if (caView === 'firewall') { box.innerHTML = caRenderFirewallView(L, en); return; }
         if (!caData || !caData.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
             return;
@@ -10286,7 +10404,7 @@
         }, 50);
     }
 
-    // ===== Config Analyzer: Home / Comprendi / Converti =====
+    // ===== Config Analyzer: Home / Firewall / Converti =====
 
     function caDeviceOptions(L, pickKey) {
         const opts = (caData || []).map(d =>
@@ -10304,49 +10422,15 @@
             </div>`;
         return `<div style="display:flex; gap:14px; flex-wrap:wrap; padding:8px 2px;">
             ${card('vlan', 'fa-magnifying-glass-chart', L.caHomeAnalyzeTitle, L.caHomeAnalyzeDesc)}
-            ${card('understand', 'fa-graduation-cap', L.pillCaUnderstand, L.caHomeUnderstandDesc)}
             ${card('convert', 'fa-right-left', L.pillCaConvert, L.caHomeConvertDesc)}
         </div>`;
-    }
-
-    function caRenderUnderstand(L) {
-        return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
-            <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-graduation-cap" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caUnderstandTitle)}</div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-                <select id="caUndDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:260px;">
-                    ${caDeviceOptions(L, 'caUndDevicePick')}
-                </select>
-                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caExplain()"><i class="fa-solid fa-wand-magic-sparkles"></i> ${escapeHtml(L.caExplainBtn)}</button>
-            </div>
-            <div id="caUndResult"></div>
-        </div>`;
-    }
-
-    async function caExplain() {
-        const L = i18n[currentLang];
-        const sel = document.getElementById('caUndDevice');
-        const out = document.getElementById('caUndResult');
-        if (!sel || !sel.value || !out) return;
-        out.innerHTML = `<div style="color:var(--text-muted); font-size:13px; padding:12px;"><i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(L.caExplainLoading)}</div>`;
-        try {
-            const res = await apiFetch(`/api/config-analyzer/${encodeURIComponent(sel.value)}/explain`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lang: currentLang })
-            });
-            const d = res ? await res.json() : null;
-            if (!res || !res.ok) throw new Error((d && d.detail) || 'HTTP');
-            out.innerHTML = `<div style="white-space:pre-wrap; font-size:13px; line-height:1.6; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:14px;">${escapeHtml(d.explanation || '')}</div>`;
-        } catch (e) {
-            out.innerHTML = `<div style="color:var(--danger); font-size:13px; padding:12px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(L.caExplainError)} ${escapeHtml(e && e.message !== 'HTTP' ? (e.message || '') : '')}</div>`;
-        }
     }
 
     let caConvLastPreview = '';
 
     function caRenderConvert(L) {
-        const vendorOpts = (sel) => ['ios', 'fortios'].map(v =>
-            `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'ios' ? 'Cisco IOS' : 'FortiOS'}</option>`).join('');
+        const vendorOpts = (sel) => ['fortios', 'panos'].map(v =>
+            `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'fortios' ? 'FortiGate (FortiOS)' : 'Palo Alto (PAN-OS)'}</option>`).join('');
         return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
             <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
@@ -10356,7 +10440,7 @@
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
                 <select id="caConvSource" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvTarget)}</label>
-                <select id="caConvTarget" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('ios')}</select>
+                <select id="caConvTarget" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
                 <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caConvertPreview()"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
             </div>
             <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
@@ -10373,9 +10457,9 @@
         const srcSel = document.getElementById('caConvSource');
         const tgtSel = document.getElementById('caConvTarget');
         if (dev && srcSel && tgtSel) {
-            const src = dev.config_type === 'fortios' ? 'fortios' : 'ios';
+            const src = dev.config_type === 'panos' ? 'panos' : 'fortios';
             srcSel.value = src;
-            tgtSel.value = src === 'fortios' ? 'ios' : 'fortios';
+            tgtSel.value = src === 'fortios' ? 'panos' : 'fortios';
         }
         caConvertPreview(true);
     }
@@ -10905,6 +10989,123 @@
             ${caMvSectionTitle(L.titleCaFgObjects)}${objects}
             ${caMvSectionTitle(L.titleCaFgRouting)}${routeTable}${vpnHtml}
             ${caMvSectionTitle(L.titleCaValidation)}${val.body}`;
+    }
+
+    // ===== Config Analyzer: sub-tab Firewall (FortiGate) =====
+
+    function caSwitchFwView(view) {
+        caFwView = view;
+        renderCaResults();
+    }
+
+    function caRenderFwPolicies(dev, L) {
+        const rows = (dev.firewall.policies || []).map(p => {
+            const act = (p.action || '').toLowerCase();
+            const actColor = act === 'accept' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
+            const disabled = (p.status || '').toLowerCase() === 'disable';
+            return `<tr${disabled ? ' style="opacity:0.5;"' : ''}>
+                <td>${escapeHtml(p.id != null ? String(p.id) : '—')}</td>
+                <td>${escapeHtml(p.name || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcintf || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstintf || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcaddr || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstaddr || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.service || []).join(', ') || '—')}</td>
+                <td style="color:${actColor}; font-weight:700;">${escapeHtml(p.action || '—')}</td>
+                <td>${escapeHtml(p.nat || '—')}</td>
+            </tr>`;
+        }).join('');
+        if (!rows) return caMvEmpty();
+        return `<div class="table-container"><table><thead><tr>
+            <th>ID</th><th>${L.lblCaName}</th><th>${L.thCaFgSrcIntf}</th><th>${L.thCaFgDstIntf}</th><th>${L.thCaFgSrcAddr}</th><th>${L.thCaFgDstAddr}</th><th>${L.thCaFgService}</th><th>${L.thCaFgAction}</th><th>NAT</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    function caRenderFwIfaces(dev, L) {
+        const rows = (dev.firewall.interfaces_zones || []).map(i => {
+            const st = (i.status || '').toLowerCase();
+            const state = st === 'down' || st === 'disable'
+                ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(i.status)}</span>`
+                : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(i.status || L.lblCaActive)}</span>`;
+            return `<tr>
+                <td>${escapeHtml(i.name)}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
+                <td>${escapeHtml(i.vdom || '—')}</td>
+                <td>${escapeHtml(i.zone || '—')}</td>
+                <td>${state}</td>
+            </tr>`;
+        }).join('');
+        if (!rows) return caMvEmpty();
+        return `<div class="table-container"><table><thead><tr>
+            <th>${L.thCaIface}</th><th>${L.thCaIp}</th><th>${L.thCaFgVdom}</th><th>${L.thCaFgZone}</th><th>${L.thCaState}</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    function caRenderFwNat(dev, L) {
+        const rows = (dev.firewall.vips_nat || []).map(v => `<tr>
+            <td>${escapeHtml(v.name || '—')}</td>
+            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(v.extip || '—')}</td>
+            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(v.mappedip || '—')}</td>
+            <td>${escapeHtml(v.extintf || '—')}</td>
+            <td>${escapeHtml(v.extport || '—')}</td>
+            <td>${escapeHtml(v.mappedport || '—')}</td>
+        </tr>`).join('');
+        if (!rows) return caMvEmpty();
+        return `<div class="table-container"><table><thead><tr>
+            <th>${L.lblCaName}</th><th>${L.thCaFgExtIp}</th><th>${L.thCaFgMappedIp}</th><th>${L.thCaFgExtIntf}</th><th>${L.thCaFgExtPort}</th><th>${L.thCaFgMappedPort}</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    function caRenderFwObjects(dev, L) {
+        const rows = (dev.firewall.addresses_services || []).map(o => `<tr>
+            <td><span class="badge" style="font-size:10px;">${escapeHtml(o.kind || '—')}</span></td>
+            <td>${escapeHtml(o.name || '—')}</td>
+            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(o.subnet || o.tcp_portrange || o.udp_portrange || '—')}</td>
+            <td>${escapeHtml(o.type || o.protocol || '—')}</td>
+        </tr>`).join('');
+        if (!rows) return caMvEmpty();
+        return `<div class="table-container"><table><thead><tr>
+            <th>${L.thCaFgKind}</th><th>${L.lblCaName}</th><th>${L.thCaFgValue}</th><th>${L.thCaFgType}</th>
+            </tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    function caRenderFirewallView(L, en) {
+        const fwDevices = (caData || []).filter(d => d.is_firewall);
+        const subPills = [
+            ['policy', L.pillCaFwPolicy], ['iface', L.pillCaFwIfaces],
+            ['nat', L.pillCaFwNat], ['objects', L.pillCaFwObjects],
+        ].map(([v, lbl]) => `<button class="ca-pill${caFwView === v ? ' active' : ''}" onclick="caSwitchFwView('${v}')">${escapeHtml(lbl)}</button>`).join('');
+        const subBar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">${subPills}</div>`;
+
+        if (!fwDevices.length) {
+            return subBar + `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
+        }
+        const openAll = fwDevices.length === 1;
+        const body = fwDevices.map((dev, idx) => {
+            const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
+            let inner;
+            if (!dev.firewall) {
+                inner = `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(L.msgCaFwUnsupportedVendor)}</div>`;
+            } else if (caFwView === 'iface') {
+                inner = caRenderFwIfaces(dev, L);
+            } else if (caFwView === 'nat') {
+                inner = caRenderFwNat(dev, L);
+            } else if (caFwView === 'objects') {
+                inner = caRenderFwObjects(dev, L);
+            } else {
+                inner = caRenderFwPolicies(dev, L);
+            }
+            return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
+                <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
+                    <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
+                    <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
+                    <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
+                    ${tenant}
+                </summary>
+                <div style="padding:0 14px 14px;">${inner}</div>
+            </details>`;
+        }).join('');
+        return subBar + body;
     }
 
     function caRenderWlc(dev, L, en) {

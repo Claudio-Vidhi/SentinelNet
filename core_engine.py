@@ -578,22 +578,40 @@ def classify_device_type(hostname: str = "", description: str = "",
     # (es. hostname con "wifi" o segmento "AP").
     if "switch" in caps and "access point" not in caps and "wlan" not in caps:
         return "switch"
+    # Le Capabilities hanno precedenza assoluta su hostname/description/platform:
+    # es. Capabilities "Router" non deve perdere contro un hostname con token
+    # debole tipo "srv-core-01" (convenzione di naming del sito), che altrimenti
+    # farebbe match "server" prima ancora di guardare le capabilities.
+    if caps.strip():
+        for t in _TYPE_ORDER:
+            if any(s in caps for s in _TYPE_SUBSTRINGS.get(t, ())):
+                return t
     # Evidenza "switch" da description/platform (CDP/LLDP), MAI da hostname:
     # batte le keyword "ap" basate solo sull'hostname (es. "sw-wifi-floor2"
     # con platform "Cisco Catalyst 9300" -> switch, non ap).
     desc_plat = " ".join(filter(None, [description, platform])).lower()
     switch_evidence = any(s in desc_plat for s in _SWITCH_SUBSTRINGS)
+    # Platform+Description (CDP/LLDP) hanno precedenza sull'hostname, che è il
+    # segnale più debole: es. hostname "fw-edge1" con platform "Cisco ISR4321"
+    # è un router, non un firewall solo perché il nome contiene il token "fw".
+    # Valutati PRIMA e SEPARATAMENTE dall'hostname (mai fusi in un'unica
+    # stringa), altrimenti un token debole nel nome batterebbe evidenza reale.
     for t in _TYPE_ORDER:
         if t == "ap" and switch_evidence:
             return "switch"
-        if any(s in text for s in _TYPE_SUBSTRINGS.get(t, ())):
+        if any(s in desc_plat for s in _TYPE_SUBSTRINGS.get(t, ())):
             return t
-        if any(_has_token(text, tok) for tok in _TYPE_TOKENS.get(t, ())):
+        if any(_has_token(desc_plat, tok) for tok in _TYPE_TOKENS.get(t, ())):
             return t
     if switch_evidence:
         return "switch"
-    if "router" in caps:
-        return "router"
+    # Ultimo: l'hostname da solo, il segnale più debole.
+    hostname_l = (hostname or "").lower()
+    for t in _TYPE_ORDER:
+        if any(s in hostname_l for s in _TYPE_SUBSTRINGS.get(t, ())):
+            return t
+        if any(_has_token(hostname_l, tok) for tok in _TYPE_TOKENS.get(t, ())):
+            return t
     # Nessun indizio affidabile: tipo generico, mai indovinare "switch".
     return "client"
 
