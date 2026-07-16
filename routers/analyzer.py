@@ -18,8 +18,8 @@ class ConvertSchema(BaseModel):
     dispositivo (in tal caso si usa il backup piu' recente)."""
     text: Optional[str] = None
     ip: Optional[str] = None
-    source: str  # 'ios' | 'fortios'
-    target: str  # 'ios' | 'fortios'
+    source: str  # 'fortios' | 'panos'
+    target: str  # 'fortios' | 'panos'
 
 
 def _load_backup_text(ip: str, current_user) -> str:
@@ -63,7 +63,7 @@ def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
 
 @router.post("/api/config-analyzer/convert")
 def config_analyzer_convert(payload: ConvertSchema, current_user = Depends(get_current_user)):
-    """Conversione deterministica (preview) FortiOS <-> IOS. Accetta testo
+    """Conversione deterministica (preview) FortiOS <-> PAN-OS. Accetta testo
     esplicito oppure {ip} -> backup piu' recente del dispositivo (scoped)."""
     text = payload.text
     from_ip = False

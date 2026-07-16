@@ -3061,7 +3061,7 @@
         pillCaConvert: "Converti",
         caHomeAnalyzeTitle: "Analizza",
         caHomeAnalyzeDesc: "Vista strutturata delle configurazioni: VLAN, routing, ACL, interfacce e validazione.",
-        caHomeConvertDesc: "Anteprima di conversione deterministica FortiOS ↔ Cisco IOS, senza AI.",
+        caHomeConvertDesc: "Anteprima di conversione deterministica firewall-to-firewall FortiOS ↔ Palo Alto (PAN-OS), senza AI.",
         caConvertTitle: "Config Converter (anteprima)",
         caConvSource: "Sorgente",
         caConvTarget: "Destinazione",
@@ -3728,7 +3728,7 @@
         pillCaConvert: "Convert",
         caHomeAnalyzeTitle: "Analyze",
         caHomeAnalyzeDesc: "Structured view of configurations: VLAN, routing, ACL, interfaces and validation.",
-        caHomeConvertDesc: "Deterministic FortiOS ↔ Cisco IOS conversion preview, no AI.",
+        caHomeConvertDesc: "Deterministic firewall-to-firewall FortiOS ↔ Palo Alto (PAN-OS) conversion preview, no AI.",
         caConvertTitle: "Config Converter (preview)",
         caConvSource: "Source",
         caConvTarget: "Target",
@@ -10330,8 +10330,8 @@
     let caConvLastPreview = '';
 
     function caRenderConvert(L) {
-        const vendorOpts = (sel) => ['ios', 'fortios'].map(v =>
-            `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'ios' ? 'Cisco IOS' : 'FortiOS'}</option>`).join('');
+        const vendorOpts = (sel) => ['fortios', 'panos'].map(v =>
+            `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'fortios' ? 'FortiGate (FortiOS)' : 'Palo Alto (PAN-OS)'}</option>`).join('');
         return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
             <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
@@ -10341,7 +10341,7 @@
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
                 <select id="caConvSource" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvTarget)}</label>
-                <select id="caConvTarget" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('ios')}</select>
+                <select id="caConvTarget" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
                 <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caConvertPreview()"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
             </div>
             <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
@@ -10358,9 +10358,9 @@
         const srcSel = document.getElementById('caConvSource');
         const tgtSel = document.getElementById('caConvTarget');
         if (dev && srcSel && tgtSel) {
-            const src = dev.config_type === 'fortios' ? 'fortios' : 'ios';
+            const src = dev.config_type === 'panos' ? 'panos' : 'fortios';
             srcSel.value = src;
-            tgtSel.value = src === 'fortios' ? 'ios' : 'fortios';
+            tgtSel.value = src === 'fortios' ? 'panos' : 'fortios';
         }
         caConvertPreview(true);
     }
