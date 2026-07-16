@@ -845,6 +845,99 @@ def analyze_fortios_config(content):
     }
 
 
+def parse_fortigate_config(text):
+    """Parser dedicato al sub-tab Firewall del Config Analyzer: estrae policy,
+    interfacce/zone, VIP/NAT e oggetti address/service da una config FortiOS
+    grezza. Sezione-based (config/edit/set/next/end), pura e tollerante —
+    non solleva mai eccezioni su input vuoto o non riconosciuto."""
+    try:
+        root = _forti_tree(text or '')
+
+        # --- Policy firewall ---
+        policies = []
+        pol = _forti_get(root, 'firewall policy')
+        if pol:
+            for pid, n in pol["children"].items():
+                policies.append({
+                    "id": pid,
+                    "name": _forti_set1(n, 'name'),
+                    "srcintf": n["sets"].get('srcintf', []),
+                    "dstintf": n["sets"].get('dstintf', []),
+                    "srcaddr": n["sets"].get('srcaddr', []),
+                    "dstaddr": n["sets"].get('dstaddr', []),
+                    "service": n["sets"].get('service', []),
+                    "action": _forti_set1(n, 'action', 'deny'),
+                    "nat": _forti_set1(n, 'nat', 'disable'),
+                    "status": _forti_set1(n, 'status', 'enable'),
+                })
+
+        # --- Zone: nome zona -> interfacce membro ---
+        zone_of_iface = {}
+        zones = _forti_get(root, 'system zone')
+        if zones:
+            for zname, n in zones["children"].items():
+                for member in n["sets"].get('interface', []):
+                    zone_of_iface[member] = zname
+
+        # --- Interfacce (+ zona) ---
+        interfaces_zones = []
+        ifs = _forti_get(root, 'system interface')
+        if ifs:
+            for name, n in ifs["children"].items():
+                interfaces_zones.append({
+                    "name": name,
+                    "ip": _forti_ip_cidr(n),
+                    "vdom": _forti_set1(n, 'vdom'),
+                    "zone": zone_of_iface.get(name, ''),
+                    "status": _forti_set1(n, 'status', 'up'),
+                })
+
+        # --- VIP / NAT ---
+        vips_nat = []
+        vip = _forti_get(root, 'firewall vip')
+        if vip:
+            for name, n in vip["children"].items():
+                vips_nat.append({
+                    "name": name,
+                    "extip": _forti_set1(n, 'extip'),
+                    "mappedip": _forti_set1(n, 'mappedip'),
+                    "extintf": _forti_set1(n, 'extintf'),
+                    "extport": _forti_set1(n, 'extport'),
+                    "mappedport": _forti_set1(n, 'mappedport'),
+                })
+
+        # --- Oggetti address/service ---
+        addresses_services = []
+        addr = _forti_get(root, 'firewall address')
+        if addr:
+            for name, n in addr["children"].items():
+                addresses_services.append({
+                    "kind": "address",
+                    "name": name,
+                    "subnet": _ip_addr_to_cidr(n["sets"].get('subnet', [])),
+                    "type": _forti_set1(n, 'type'),
+                })
+        svc = _forti_get(root, 'firewall service custom')
+        if svc:
+            for name, n in svc["children"].items():
+                addresses_services.append({
+                    "kind": "service",
+                    "name": name,
+                    "tcp_portrange": _forti_set1(n, 'tcp-portrange'),
+                    "udp_portrange": _forti_set1(n, 'udp-portrange'),
+                    "protocol": _forti_set1(n, 'protocol'),
+                })
+
+        return {
+            "policies": policies,
+            "interfaces_zones": interfaces_zones,
+            "vips_nat": vips_nat,
+            "addresses_services": addresses_services,
+        }
+    except Exception:
+        return {"policies": [], "interfaces_zones": [], "vips_nat": [], "addresses_services": []}
+
+
 # --- Cisco WLC (AireOS) -------------------------------------------------------
 
 def analyze_wlc_config(content):
@@ -1246,9 +1339,13 @@ def analyze_device(ip):
 
     config_type = detect_config_type(content, dev)
 
+    is_firewall = False
+    firewall = None
     if config_type == 'fortios':
         result = analyze_fortios_config(content)
         hostname = result.pop("hostname", "")
+        is_firewall = True
+        firewall = parse_fortigate_config(content)
     elif config_type == 'wlc-aireos':
         result = analyze_wlc_config(content)
         hostname = result.pop("hostname", "")
@@ -1264,11 +1361,17 @@ def analyze_device(ip):
         tenant = dev.get('Group', tenant) or tenant
         if not hostname:
             hostname = dev.get('Hostname', '') or ''
+        # Firewall non-FortiGate (es. rilevato dall'inventario/CDP): tab
+        # Firewall visibile ma senza il parsing dedicato (solo FortiGate).
+        if not is_firewall and (dev.get('Type') or '').strip().lower() == 'firewall':
+            is_firewall = True
 
     result["ip"] = ip
     result["hostname"] = hostname
     result["tenant"] = tenant
     result["config_type"] = config_type
+    result["is_firewall"] = is_firewall
+    result["firewall"] = firewall
     return result
 
 
