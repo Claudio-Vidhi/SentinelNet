@@ -78,6 +78,15 @@ def get_device_credentials(device):
     profile = device.get('Profile', 'custom').lower()
     if profile == 'default':
         return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
+    if profile.startswith('identity:'):
+        # Identita' tenant (identity_manager): fallback ai default se
+        # l'identita' non esiste piu' (non dovrebbe: delete bloccata se in uso).
+        import identity_manager
+        creds = identity_manager.get_identity_credentials(
+            device.get('Profile', '')[len('identity:'):])
+        if creds:
+            return creds
+        return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
     username = device.get('Username') or DEFAULT_USERNAME
     password = decrypt_password(device.get('Password')) or DEFAULT_PASSWORD
     secret   = decrypt_password(device.get('Enable Secret')) or DEFAULT_SECRET
