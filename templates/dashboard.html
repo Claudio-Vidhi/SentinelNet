@@ -1984,7 +1984,6 @@
             <button class="ca-pill" data-view="acl" onclick="caSwitchView('acl')" data-i18n="pillAcls">ACL</button>
             <button class="ca-pill" data-view="iface" onclick="caSwitchView('iface')" data-i18n="pillIfaces">Interfacce</button>
             <button class="ca-pill" data-view="validation" onclick="caSwitchView('validation')" data-i18n="pillValidation">Validazione</button>
-            <button class="ca-pill" data-view="understand" onclick="caSwitchView('understand')" data-i18n="pillCaUnderstand">Comprendi</button>
             <button class="ca-pill" data-view="convert" onclick="caSwitchView('convert')" data-i18n="pillCaConvert">Converti</button>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -3042,16 +3041,10 @@
         pillIfaces: "Interfacce",
         pillValidation: "Validazione",
         pillCaHome: "Home",
-        pillCaUnderstand: "Comprendi",
         pillCaConvert: "Converti",
         caHomeAnalyzeTitle: "Analizza",
         caHomeAnalyzeDesc: "Vista strutturata delle configurazioni: VLAN, routing, ACL, interfacce e validazione.",
-        caHomeUnderstandDesc: "Spiegazione guidata della configurazione di un dispositivo, sezione per sezione (AI).",
         caHomeConvertDesc: "Anteprima di conversione deterministica FortiOS ↔ Cisco IOS, senza AI.",
-        caUnderstandTitle: "Comprendi la configurazione",
-        caExplainBtn: "Spiega",
-        caExplainLoading: "Generazione della spiegazione in corso…",
-        caExplainError: "Errore durante la generazione della spiegazione.",
         caConvertTitle: "Config Converter (anteprima)",
         caConvSource: "Sorgente",
         caConvTarget: "Destinazione",
@@ -3061,7 +3054,6 @@
         caConvDownload: "Scarica .txt",
         caConvDevicePick: "— dispositivo (backup più recente) —",
         caConvTextPh: "Incolla qui la configurazione sorgente, oppure scegli un dispositivo…",
-        caUndDevicePick: "— scegli un dispositivo —",
         thCaConvSource: "Sorgente",
         thCaConvTarget: "Destinazione",
         thCaConvNote: "Nota",
@@ -3700,16 +3692,10 @@
         pillIfaces: "Interfaces",
         pillValidation: "Validation",
         pillCaHome: "Home",
-        pillCaUnderstand: "Understand",
         pillCaConvert: "Convert",
         caHomeAnalyzeTitle: "Analyze",
         caHomeAnalyzeDesc: "Structured view of configurations: VLAN, routing, ACL, interfaces and validation.",
-        caHomeUnderstandDesc: "Guided explanation of a device configuration, section by section (AI).",
         caHomeConvertDesc: "Deterministic FortiOS ↔ Cisco IOS conversion preview, no AI.",
-        caUnderstandTitle: "Understand the configuration",
-        caExplainBtn: "Explain",
-        caExplainLoading: "Generating explanation…",
-        caExplainError: "Error while generating the explanation.",
         caConvertTitle: "Config Converter (preview)",
         caConvSource: "Source",
         caConvTarget: "Target",
@@ -3719,7 +3705,6 @@
         caConvDownload: "Download .txt",
         caConvDevicePick: "— device (freshest backup) —",
         caConvTextPh: "Paste the source configuration here, or pick a device…",
-        caUndDevicePick: "— pick a device —",
         thCaConvSource: "Source",
         thCaConvTarget: "Target",
         thCaConvNote: "Note",
@@ -10223,7 +10208,6 @@
             box.innerHTML = caRenderHome(L);
             return;
         }
-        if (caView === 'understand') { box.innerHTML = caRenderUnderstand(L); return; }
         if (caView === 'convert') { box.innerHTML = caRenderConvert(L); return; }
         if (!caData || !caData.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
@@ -10304,42 +10288,8 @@
             </div>`;
         return `<div style="display:flex; gap:14px; flex-wrap:wrap; padding:8px 2px;">
             ${card('vlan', 'fa-magnifying-glass-chart', L.caHomeAnalyzeTitle, L.caHomeAnalyzeDesc)}
-            ${card('understand', 'fa-graduation-cap', L.pillCaUnderstand, L.caHomeUnderstandDesc)}
             ${card('convert', 'fa-right-left', L.pillCaConvert, L.caHomeConvertDesc)}
         </div>`;
-    }
-
-    function caRenderUnderstand(L) {
-        return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
-            <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-graduation-cap" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caUnderstandTitle)}</div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-                <select id="caUndDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:260px;">
-                    ${caDeviceOptions(L, 'caUndDevicePick')}
-                </select>
-                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caExplain()"><i class="fa-solid fa-wand-magic-sparkles"></i> ${escapeHtml(L.caExplainBtn)}</button>
-            </div>
-            <div id="caUndResult"></div>
-        </div>`;
-    }
-
-    async function caExplain() {
-        const L = i18n[currentLang];
-        const sel = document.getElementById('caUndDevice');
-        const out = document.getElementById('caUndResult');
-        if (!sel || !sel.value || !out) return;
-        out.innerHTML = `<div style="color:var(--text-muted); font-size:13px; padding:12px;"><i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(L.caExplainLoading)}</div>`;
-        try {
-            const res = await apiFetch(`/api/config-analyzer/${encodeURIComponent(sel.value)}/explain`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lang: currentLang })
-            });
-            const d = res ? await res.json() : null;
-            if (!res || !res.ok) throw new Error((d && d.detail) || 'HTTP');
-            out.innerHTML = `<div style="white-space:pre-wrap; font-size:13px; line-height:1.6; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:14px;">${escapeHtml(d.explanation || '')}</div>`;
-        } catch (e) {
-            out.innerHTML = `<div style="color:var(--danger); font-size:13px; padding:12px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(L.caExplainError)} ${escapeHtml(e && e.message !== 'HTTP' ? (e.message || '') : '')}</div>`;
-        }
     }
 
     let caConvLastPreview = '';
