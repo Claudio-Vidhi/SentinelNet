@@ -536,7 +536,9 @@ class TestThreatIntelTabRestyle(unittest.TestCase):
             self.assertIn(hook, html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadThreatIntel/startThreatScan/runEuvdQuery moved to
+        # static/js/threat-intel.js -- frontend_source() concatenates it.
+        html = frontend_source()
         # loadThreatIntel() -> startThreatScan() -> apiFetch('/api/local-devices')
         # to list online devices, then (if "include discovered" is checked)
         # apiFetch('/api/network-map?group=...') for CDP/LLDP neighbors. Per-device
