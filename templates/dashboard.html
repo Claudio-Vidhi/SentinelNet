@@ -1641,6 +1641,10 @@
               <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
               <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
             </label>
+            <!-- Filtro per categoria dei dispositivi scoperti; popolato dinamicamente in startThreatScan() -->
+            <select id="tiDiscCatFilter" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+              <option value="all" data-i18n="tiCatFilterAll">Tutte le categorie</option>
+            </select>
           </div>
         </div>
 
@@ -3585,6 +3589,10 @@
         btnAnalyzeTenant: '<i class="fa-solid fa-bolt"></i> Analizza tutti',
         tiCatUncategorized: "Senza categoria",
         tiCatDiscovered: "Scoperti",
+        // Testo dello spinner mentre si caricano i dispositivi locali (non interroga ancora EUVD).
+        tiLoadingDevices: "Caricamento dispositivi...",
+        // Filtro categoria per i dispositivi scoperti (default: nessun filtro).
+        tiCatFilterAll: "Tutte le categorie",
         discoveredNeighborsTitle: '<i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i> Vicini Scoperti via CDP/LLDP',
         discoveredNeighborsDesc: "Questi apparati non sono in inventario ma sono stati rilevati tramite neighbor discovery. Seleziona quelli da analizzare per vulnerabilità note.",
         btnAnalyzeVuln: '<i class="fa-solid fa-magnifying-glass-chart"></i> Analizza Vulnerabilità',
@@ -4291,6 +4299,8 @@
         btnAnalyzeTenant: '<i class="fa-solid fa-bolt"></i> Analyze all',
         tiCatUncategorized: "Uncategorized",
         tiCatDiscovered: "Discovered",
+        tiLoadingDevices: "Loading devices...",
+        tiCatFilterAll: "All categories",
         discoveredNeighborsTitle: '<i class="fa-solid fa-satellite-dish" style="color:var(--warning);"></i> Discovered Neighbors via CDP/LLDP',
         discoveredNeighborsDesc: "These devices are not in the inventory but have been detected via neighbor discovery. Select those to analyze for known vulnerabilities.",
         btnAnalyzeVuln: '<i class="fa-solid fa-magnifying-glass-chart"></i> Analyze Vulnerabilities',
@@ -11736,9 +11746,13 @@
         if (!container) return;
         const selGroup = document.getElementById("threatGroupSelect")?.value || 'all';
         const includeDiscovered = document.getElementById("threatIncludeDiscovered")?.checked || false;
+        const discCatFilterEl = document.getElementById("tiDiscCatFilter");
+        // Il filtro categoria si applica solo agli scoperti: leggilo prima di ricostruire le opzioni.
+        const curDiscCatFilter = discCatFilterEl ? discCatFilterEl.value : 'all';
 
-        const queryingText = i18n[currentLang].queryingEnisa.replace(/<[^>]*>/g, '');
-        container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${queryingText}</div>`;
+        // Non interroga ancora EUVD qui: sta solo caricando i dispositivi locali.
+        const loadingText = i18n[currentLang].tiLoadingDevices.replace(/<[^>]*>/g, '');
+        container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${loadingText}</div>`;
 
         const [res, classRes] = await Promise.all([
             apiFetch('/api/local-devices'),
@@ -11758,19 +11772,23 @@
         });
         if (selGroup !== 'all') onlineDevices = onlineDevices.filter(d => d.Group === selGroup);
 
-        // Struttura: { [tenant]: { [categoriaLabel]: [htmlCard, ...] } }
+        // Struttura: { [tenant]: { managed: { [categoriaLabel]: [htmlCard, ...] }, discovered: { [categoriaLabel]: [htmlCard, ...] } } }
         const tenants = {};
         const catLabel = (key) => (catLabels[key] && catLabels[key].label) || key || i18n[currentLang].tiCatUncategorized;
         const uncategorized = i18n[currentLang].tiCatUncategorized;
+        const tenantSlot = (tenant) => {
+            tenants[tenant] = tenants[tenant] || { managed: {}, discovered: {} };
+            return tenants[tenant];
+        };
 
         onlineDevices.forEach(d => {
             const scan = data.detected_versions[d.IP];
             const tenant = d.Group || 'Generale';
             const catKey = catByNodeId[d.IP];
             const cat = catKey ? catLabel(catKey) : uncategorized;
-            tenants[tenant] = tenants[tenant] || {};
-            tenants[tenant][cat] = tenants[tenant][cat] || [];
-            tenants[tenant][cat].push(tiRenderManagedCard(d, scan));
+            const slot = tenantSlot(tenant);
+            slot.managed[cat] = slot.managed[cat] || [];
+            slot.managed[cat].push(tiRenderManagedCard(d, scan));
         });
 
         let discoveredWithVersion = [];
@@ -11784,12 +11802,34 @@
                 if (selGroup !== 'all') discoveredWithVersion = discoveredWithVersion.filter(n => n.group === selGroup);
             }
         }
+        // Categoria reale del nodo scoperto (stessa mappa usata per gli inventariati),
+        // non più l'etichetta generica "Scoperti".
         discoveredWithVersion.forEach(n => {
+            const catKey = catByNodeId[n.id];
+            n._catLabel = catKey ? catLabel(catKey) : uncategorized;
+        });
+
+        // Popola il filtro categoria con le categorie realmente presenti tra gli
+        // scoperti di questa scansione, preservando la selezione corrente se ancora valida.
+        if (discCatFilterEl) {
+            const discCats = Array.from(new Set(discoveredWithVersion.map(n => n._catLabel))).sort();
+            const allLabel = i18n[currentLang].tiCatFilterAll;
+            discCatFilterEl.innerHTML = `<option value="all">${escapeHtml(allLabel)}</option>` +
+                discCats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            discCatFilterEl.value = discCats.includes(curDiscCatFilter) ? curDiscCatFilter : 'all';
+            discCatFilterEl.disabled = !includeDiscovered;
+            discCatFilterEl.style.display = includeDiscovered ? '' : 'none';
+        }
+        const activeDiscCatFilter = discCatFilterEl ? discCatFilterEl.value : 'all';
+        const filteredDiscovered = activeDiscCatFilter === 'all'
+            ? discoveredWithVersion
+            : discoveredWithVersion.filter(n => n._catLabel === activeDiscCatFilter);
+
+        filteredDiscovered.forEach(n => {
             const tenant = n.group || 'Generale';
-            const cat = i18n[currentLang].tiCatDiscovered;
-            tenants[tenant] = tenants[tenant] || {};
-            tenants[tenant][cat] = tenants[tenant][cat] || [];
-            tenants[tenant][cat].push(tiRenderDiscoveredCard(n));
+            const slot = tenantSlot(tenant);
+            slot.discovered[n._catLabel] = slot.discovered[n._catLabel] || [];
+            slot.discovered[n._catLabel].push(tiRenderDiscoveredCard(n));
         });
 
         const tenantNames = Object.keys(tenants);
@@ -11801,11 +11841,22 @@
         }
 
         container.innerHTML = tenantNames.map(tenant => {
-            const cats = tenants[tenant];
-            const catsHtml = Object.keys(cats).map(cat => `
+            const slot = tenants[tenant];
+            const managedHtml = Object.keys(slot.managed).map(cat => `
                 <h4 style="font-size:13px; color:var(--text-muted); margin:14px 0 8px;">${escapeHtml(cat)}</h4>
-                ${cats[cat].join('')}
+                ${slot.managed[cat].join('')}
             `).join('');
+            const discoveredCats = Object.keys(slot.discovered);
+            // Sezione scoperti separata e chiaramente marcata, raggruppata per categoria.
+            const discoveredHtml = discoveredCats.length === 0 ? '' : `
+                <h4 style="font-size:13px; color:var(--warning); margin:20px 0 8px; padding-top:10px; border-top:1px dashed var(--border); text-transform:uppercase; letter-spacing:.04em;">
+                    <i class="fa-solid fa-satellite-dish"></i> ${escapeHtml(i18n[currentLang].tiCatDiscovered)}
+                </h4>
+                ${discoveredCats.map(cat => `
+                    <h4 style="font-size:13px; color:var(--text-muted); margin:14px 0 8px;">${escapeHtml(cat)}</h4>
+                    ${slot.discovered[cat].join('')}
+                `).join('')}
+            `;
             return `<div id="tenant-block-${cssSafe(tenant)}" style="border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:16px;">
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
                     <h3 style="margin:0; font-size:15px;"><i class="fa-solid fa-building" style="color:var(--primary);"></i> ${escapeHtml(tenant)}</h3>
@@ -11814,7 +11865,8 @@
                         <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="analyzeTenant('${escapeHtml(jsStr(tenant))}')" data-i18n="btnAnalyzeTenant">${i18n[currentLang].btnAnalyzeTenant}</button>
                     </div>
                 </div>
-                ${catsHtml}
+                ${managedHtml}
+                ${discoveredHtml}
             </div>`;
         }).join('');
         } finally {
