@@ -2382,5 +2382,20 @@ class TestSidebarRail(unittest.TestCase):
         self.assertNotIn('background: transparent', thumb)
 
 
+class TestCaSearch(unittest.TestCase):
+    """Il Config Analyzer deve avere una ricerca client-side (#caSearch)
+    riapplicata dopo ogni render (caApplySearch)."""
+
+    def test_search_input_and_filter_present(self):
+        html = open(os.path.join(os.path.dirname(__file__),
+                                 "templates", "dashboard.html"),
+                    encoding="utf-8").read()
+        self.assertIn('id="caSearch"', html)
+        self.assertIn("function caApplySearch", html)
+        # riapplicata a ogni render
+        block = html[html.index("function renderCaResults"):]
+        self.assertIn("caApplySearch()", block[:200])
+
+
 if __name__ == "__main__":
     unittest.main()
