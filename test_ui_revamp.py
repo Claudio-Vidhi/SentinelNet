@@ -1570,7 +1570,8 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn('onclick="setFlowsSource(', html)
         # Syslog view swaps thead + tbody renderers.
         self.assertIn("if (_flowsSource === 'syslog')", html)
-        self.assertIn("function renderSyslogTable()", html)
+        # Dual-target: main table (syslog view) or the all-sources section below the flows.
+        self.assertIn("function renderSyslogTable(tbodyId = 'flowsTableBody')", html)
         # Column-visibility toggle + its persistence.
         self.assertIn("const FLOW_TOGGLE_COLS = [", html)
         self.assertIn("onchange=\"toggleFlowsCol('${c.id}', this.checked)\"", html)
@@ -1617,8 +1618,8 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # Two cards: top talkers, then correlated anomalies.
         self.assertEqual(tab.count('<div class="panel"'), 2)
         self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;">'), 1)
-        # Both tables wrapped.
-        self.assertEqual(tab.count('class="table-wrap"'), 2)
+        # All tables wrapped: flows, syslog-in-all-sources, correlated anomalies.
+        self.assertEqual(tab.count('class="table-wrap"'), 3)
         self.assertIn('class="filterbar"', tab)
         self.assertIn('id="anomIpFilterChip" class="chip"', tab)
         # Severity/status badges use the component status/chip classes.
