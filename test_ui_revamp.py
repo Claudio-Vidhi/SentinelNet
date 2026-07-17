@@ -1194,7 +1194,8 @@ class TestUsersTabRestyle(unittest.TestCase):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadUsers()/createUser()/etc. moved to static/js/settings.js.
+        html = frontend_source()
         # GET /api/users (list) and POST /api/users (create) share one literal.
         self.assertIn("apiFetch('/api/users')", html)
         self.assertIn("apiFetch('/api/users', {", html)
@@ -1218,7 +1219,8 @@ class TestUsersTabRestyle(unittest.TestCase):
         self.assertNotIn(('/api/users/tabs', 'GET'), routes)
 
     def test_admin_gated_functions_untouched(self):
-        html = _html()
+        # loadUsers() and friends moved to static/js/settings.js.
+        html = frontend_source()
         # loadUsers() and all mutating handlers must survive byte-for-byte.
         self.assertIn("async function loadUsers()", html)
         self.assertIn("if (currentRole !== 'admin') return;", html)
@@ -1281,7 +1283,8 @@ class TestSitesTabRestyle(unittest.TestCase):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadSites()/createSite()/etc. moved to static/js/settings.js.
+        html = frontend_source()
         # GET /api/sites (list) and POST /api/sites (create) share one literal.
         self.assertIn("apiFetch('/api/sites')", html)
         self.assertIn("apiFetch('/api/sites', {", html)
@@ -1304,7 +1307,8 @@ class TestSitesTabRestyle(unittest.TestCase):
             self.assertNotIn(hook, html)
 
     def test_admin_gated_functions_untouched(self):
-        html = _html()
+        # loadSites() and friends moved to static/js/settings.js.
+        html = frontend_source()
         # loadSites() and all mutating handlers must survive byte-for-byte.
         self.assertIn("async function loadSites()", html)
         self.assertIn("if (currentRole !== 'admin') return;", html)
@@ -1379,7 +1383,8 @@ class TestMcpTabRestyle(unittest.TestCase):
         return html[start:end]
 
     def test_preserve_ids(self):
-        html = _html()
+        # loadMcpTab()'s .mcp-tool-toggle template moved to static/js/settings.js.
+        html = frontend_source()
         for _id in ('mcpConfigSnippet', 'mcpToolList', 'mcpSettingsStatus'):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
         # class used by saveMcpSettings()'s querySelectorAll, not an id, but
@@ -1387,7 +1392,8 @@ class TestMcpTabRestyle(unittest.TestCase):
         self.assertIn('class="mcp-tool-toggle"', html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadMcpTab()/saveMcpSettings() moved to static/js/settings.js.
+        html = frontend_source()
         self.assertIn("apiFetch('/api/mcp/settings')", html)
         self.assertIn("apiFetch('/api/mcp/settings', {", html)
         # /api/mcp/tool-config: no POST route, no dashboard.html caller --
@@ -1400,7 +1406,9 @@ class TestMcpTabRestyle(unittest.TestCase):
         self.assertTrue(hasattr(routers.mcp, 'set_mcp_settings'))
 
     def test_hooks_preserved(self):
-        html = _html()
+        # loadMcpTab() is invoked from core.js's switchTab dispatcher, not
+        # from static markup, so use the concatenated frontend source.
+        html = frontend_source()
         for hook in ('loadMcpTab()', 'copyMcpConfig()', 'saveMcpSettings()'):
             self.assertIn(hook, html)
 
@@ -1424,7 +1432,8 @@ class TestMcpTabRestyle(unittest.TestCase):
         self.assertEqual(tab.count('class="panel"'), 2)
 
     def test_status_chip_classes_present_in_render_fn(self):
-        html = _html()
+        # loadMcpTab() moved to static/js/settings.js.
+        html = frontend_source()
         # loadMcpTab()'s per-tool row now surfaces a .status badge reflecting
         # the same enabled/disabled state the checkbox already carries.
         self.assertIn('class="status ${isEnabled ? \'ok\' : \'bad\'}"', html)
@@ -1523,7 +1532,8 @@ class TestSettingsTabRestyle(unittest.TestCase):
             self.assertIn(hook, html)
 
     def test_rbac_preserved(self):
-        html = _html()
+        # loadAppSettings()/etc. moved to static/js/settings.js.
+        html = frontend_source()
         self.assertIn(
             "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-settings', this)\"",
             html)
@@ -1568,7 +1578,8 @@ class TestSettingsTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
     def test_app_adv_fields_grouped_by_concern(self):
-        html = _html()
+        # APP_ADV_FIELDS/renderAppAdvSettings moved to static/js/settings.js.
+        html = frontend_source()
         # The general card mixes three concerns; each field declares the
         # subsection it renders under. Presentation only -- saveAppAdvSettings()
         # still posts one combined payload to /api/settings/app.
