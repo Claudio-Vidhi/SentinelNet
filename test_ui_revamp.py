@@ -2326,13 +2326,16 @@ class TestSidebarRail(unittest.TestCase):
     # --- persistence --------------------------------------------------------
 
     def test_localstorage_persistence_wired(self):
-        self.assertIn("const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed'", self.html)
+        # Task 4: sidebar rail JS moved to static/js/core.js; frontend_source()
+        # concatenates dashboard.html + static js/css so the assertions still hold.
+        html = frontend_source()
+        self.assertIn("const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed'", html)
         self.assertIn("localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')",
-                      self.html)
+                      html)
         # toggle flips the class and keeps aria-expanded in sync
-        self.assertIn("function applySidebarCollapsed(collapsed)", self.html)
-        self.assertIn("document.body.classList.toggle('sidebar-collapsed', collapsed)", self.html)
-        self.assertIn("btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true')", self.html)
+        self.assertIn("function applySidebarCollapsed(collapsed)", html)
+        self.assertIn("document.body.classList.toggle('sidebar-collapsed', collapsed)", html)
+        self.assertIn("btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true')", html)
 
     def test_state_restored_before_first_paint(self):
         # Restoring at DOMContentLoaded would paint the expanded sidebar and
