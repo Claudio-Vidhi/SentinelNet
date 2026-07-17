@@ -278,7 +278,7 @@ class TestHomeTab(unittest.TestCase):
         self.assertNotIn('Customize view', html)
 
     def test_home_tab_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         # tabHome defined in both maps (label appears twice: it + en)
         self.assertGreaterEqual(html.count('tabHome:'), 2)
 
@@ -321,7 +321,7 @@ class TestDevicesTabRestyle(unittest.TestCase):
             self.assertIn(cls, tab_html)
 
     def test_kpi_ids_and_i18n_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for _id in ('invKpiOnline', 'invKpiOffline', 'invKpiAuthFailed'):
             self.assertIn(f'id="{_id}"', html)
         for key in ('invHeroTitle:', 'invHeroSubtitle:', 'invKpiOnlineLabel:',
@@ -371,7 +371,7 @@ class TestGroupsTabRestyle(unittest.TestCase):
         self.assertNotIn('table-container', tab_html)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('groupsEyebrow:', 'titleGroupsRegistry:', 'descGroupsRegistry:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
@@ -417,7 +417,7 @@ class TestMapTabRestyle(unittest.TestCase):
         self.assertIn('<div id="networkGraphContainer"></div>', tab_html)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('portchannelsEyebrow:', 'mapEyebrow:', 'titlePortchannels:', 'title2DMap:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
@@ -517,7 +517,7 @@ class TestCategoriesTabRestyle(unittest.TestCase):
         self.assertGreaterEqual(tab_html.count('class="panel'), 4)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('categoriesEyebrow:', 'titleCategories:', 'descCategories:', 'titleNewCategory:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
@@ -558,7 +558,7 @@ class TestThreatIntelTabRestyle(unittest.TestCase):
             self.assertIn(cls, tab_html)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('threatEyebrow:', 'titleThreatIntel:', 'descThreatIntel:',
                     'lblThreatGroup:', 'lblThreatDiscovered:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
@@ -674,7 +674,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         self.assertIn('<div id="tab-clientmap"', tab_html)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('macEyebrow:', 'titleMacTracker:', 'descMacTracker:',
                     'macKpiSightingsLabel:', 'macKpiUniqueLabel:', 'macKpiSwitchesLabel:',
                     'macKpiRetentionLabel:', 'titleMacScanPanel:', 'titleMacSearchPanel:',
@@ -749,7 +749,7 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
         self.assertIn('<div id="caResults"></div>', tab_html)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('configEyebrow:', 'titleConfigAnalyzer:', 'descConfigAnalyzer:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
@@ -856,7 +856,7 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         self.assertIn('id="aiActiveProfileBadge" class="chip"', tab_html)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('aiEyebrow:', 'titleAiContext:', 'titleAiChat:',
                     'titleAiAssistant:', 'descAiAssistant:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
@@ -1061,7 +1061,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         self.assertIn('.chip-choice[aria-pressed="true"]', frontend_source())
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('provisionerEyebrow:', 'provPanelDevice:', 'provPanelDeploy:',
                     'titleProvisioner:', 'descProvisioner:',
                     # W2 additions.
@@ -1125,7 +1125,7 @@ class TestImportTabRestyle(unittest.TestCase):
         self.assertGreaterEqual(tab.count('class="panel"'), 1)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('importEyebrow:', 'titleImportCsv:', 'descImportCsv:',
                     'importPanelUpload:', 'lblSelectCsv:', 'btnUploadCsv:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
@@ -1204,7 +1204,7 @@ class TestUsersTabRestyle(unittest.TestCase):
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('usersEyebrow:', 'titleUsers:', 'descUsers:', 'thUserName:',
                     'thUserRole:', 'thUserGroups:', 'thUserTabs:', 'thUserActions:',
                     'titleAddUser:', 'lblNewUserName:', 'lblNewUserPass:',
@@ -1289,7 +1289,7 @@ class TestSitesTabRestyle(unittest.TestCase):
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('sitesEyebrow:', 'titleSites:', 'descSites:', 'lblSiteName:',
                     'lblSiteMode:', 'thSiteLastContact:', 'titleNewSite:',
                     'lblSiteSubnets:', 'btnCreateSite:', 'btnRegenSiteToken:',
@@ -1297,7 +1297,8 @@ class TestSitesTabRestyle(unittest.TestCase):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
     def test_relabel_keys_english_default(self):
-        html = _html()
+        # i18n dict e stato spostato in static/js/i18n.js (Task 3).
+        html = frontend_source()
         # The three previously-unlocalized strings: EN copy is now the map's
         # canonical/default value, IT retained for the it map.
         self.assertIn('btnRegenSiteToken: "Regenerate token"', html)
@@ -1388,7 +1389,7 @@ class TestMcpTabRestyle(unittest.TestCase):
         self.assertIn('const L = i18n[currentLang];', html)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ('mcpEyebrow:', 'titleMcp:', 'descMcp:', 'titleMcpClientConfig:',
                     'btnCopyJson:', 'descMcpClientConfig:', 'titleMcpTools:',
                     'descMcpTools:', 'btnSave:', 'mcpStEnabled:', 'mcpStDisabled:'):
@@ -1506,7 +1507,7 @@ class TestSettingsTabRestyle(unittest.TestCase):
             self.assertIn(f'<span data-i18n="{key}">', tab)
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ("settingsEyebrow:", "titleSettings:", "descSettingsHero:",
                     "titleNetExpose:", "descNetExpose:", "titleCliBlacklist:",
                     "descCliBlacklist:", "lblCliBlacklistOperators:",
@@ -1602,10 +1603,12 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn('data-i18n="titleFlows">Live Flows (Top Talkers)', tab)
         self.assertNotIn('Flussi Live', tab)
         # ...EN canonical in the en map, Italian retained in the it map.
-        self.assertIn("titleFlows: 'Live Flows (Top Talkers)',", html)
-        self.assertIn("titleFlows: 'Flussi Live (Top Talker)',", html)
-        self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Live Flows\',', html)
-        self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Flussi Live\',', html)
+        # i18n dict e stato spostato in static/js/i18n.js (Task 3).
+        src = frontend_source()
+        self.assertIn("titleFlows: 'Live Flows (Top Talkers)',", src)
+        self.assertIn("titleFlows: 'Flussi Live (Top Talker)',", src)
+        self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Live Flows\',', src)
+        self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Flussi Live\',', src)
 
     def test_no_hardcoded_italian_left_in_tab(self):
         tab = self._tab(_html())
@@ -1647,7 +1650,7 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn('<span class="preview-badge">preview</span>', nav[:400])
 
     def test_i18n_keys_both_langs(self):
-        html = _html()
+        html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ("tabFlows:", "titleFlows:", "descFlows:", "flowsEyebrow:",
                     "titleFlowDetail:", "titleClose:", "titleHighlightTopology:",
                     "titleCorrelatedAnomalies:", "chipAllSources:", "msgNoFlows:",
@@ -1909,7 +1912,9 @@ class TestI18nParity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = _html()
-        cls.it, cls.en = _extract_i18n_maps(cls.html)
+        # i18n dict e stato spostato in static/js/i18n.js (Task 3):
+        # frontend_source() lo concatena, _html() no.
+        cls.it, cls.en = _extract_i18n_maps(frontend_source())
         cls.usages = _collect_i18n_usage(cls.html)
 
     def test_parser_found_the_expected_key_counts(self):
@@ -1987,7 +1992,9 @@ class TestI18nIconWipeGuard(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = _html()
-        cls.it, cls.en = _extract_i18n_maps(cls.html)
+        # i18n dict e stato spostato in static/js/i18n.js (Task 3):
+        # frontend_source() lo concatena, _html() no.
+        cls.it, cls.en = _extract_i18n_maps(frontend_source())
         cls.usages = _collect_i18n_usage(cls.html)
 
     def test_data_i18n_elements_wrapping_an_icon_carry_icon_markup_in_value(self):
@@ -2059,8 +2066,10 @@ class TestTransportsCollapsible(unittest.TestCase):
             self.assertIn(f'id="{_id}"', body)
 
     def test_devtransports_summary_i18n_keys_both_langs(self):
+        # i18n dict e stato spostato in static/js/i18n.js (Task 3).
+        src = frontend_source()
         for key in ('lblTransportsEnabled', 'lblTransportsNone'):
-            self.assertGreaterEqual(self.html.count(f'{key}:'), 2,
+            self.assertGreaterEqual(src.count(f'{key}:'), 2,
                 f"i18n key {key} must be defined in both it and en maps")
 
     def test_telnet_warning_wiring_intact(self):
@@ -2165,7 +2174,9 @@ class TestSidebarRail(unittest.TestCase):
             m = re.search(attr + r'="([^"]+)"', tag)
             self.assertIsNotNone(m, f"toggle must carry {attr}")
             self.assertEqual(m.group(1), 'titleSidebarToggle')
-        it, en = _extract_i18n_maps(self.html)
+        # i18n dict e stato spostato in static/js/i18n.js (Task 3):
+        # frontend_source() lo concatena, self.html (_html()) no.
+        it, en = _extract_i18n_maps(frontend_source())
         for lang_name, mp in (('it', it), ('en', en)):
             self.assertIn('titleSidebarToggle', mp,
                           f"titleSidebarToggle missing from i18n.{lang_name}")
@@ -2177,8 +2188,10 @@ class TestSidebarRail(unittest.TestCase):
         # data-i18n-title was already handled by changeLanguage(); the
         # aria-label variant is new and must be wired too, or the accessible
         # name silently stays Italian after switching to EN.
-        self.assertIn('document.querySelectorAll("[data-i18n-aria-label]")', self.html)
-        self.assertIn('el.setAttribute("aria-label", i18n[lang][key])', self.html)
+        # changeLanguage() e stato spostato in static/js/i18n.js (Task 3).
+        src = frontend_source()
+        self.assertIn('document.querySelectorAll("[data-i18n-aria-label]")', src)
+        self.assertIn('el.setAttribute("aria-label", i18n[lang][key])', src)
 
     # --- collapsed state drives the grid ------------------------------------
 
@@ -2335,9 +2348,11 @@ class TestSidebarRail(unittest.TestCase):
     # --- tooltips -----------------------------------------------------------
 
     def test_tooltips_are_derived_from_the_translated_label(self):
-        start = self.html.index('function syncNavTooltips()')
-        end = self.html.index('function ', start + len('function syncNavTooltips()'))
-        fn = self.html[start:end]
+        # syncNavTooltips()/changeLanguage() sono in static/js/i18n.js (Task 3).
+        src = frontend_source()
+        start = src.index('function syncNavTooltips()')
+        end = src.index('function ', start + len('function syncNavTooltips()'))
+        fn = src[start:end]
         # derived from the live label, never a second hardcoded copy
         self.assertIn("btn.querySelector('.nav-left')", fn)
         self.assertIn('label.textContent', fn)
@@ -2346,9 +2361,9 @@ class TestSidebarRail(unittest.TestCase):
         self.assertIn("btn.removeAttribute('title')", fn)
         # and refreshed whenever the language changes, or EN users would keep
         # seeing Italian tooltips
-        cl_start = self.html.index('function changeLanguage(lang)')
-        cl_end = self.html.index('function initLanguageSelector()')
-        self.assertIn('syncNavTooltips()', self.html[cl_start:cl_end])
+        cl_start = src.index('function changeLanguage(lang)')
+        cl_end = src.index('function initLanguageSelector()')
+        self.assertIn('syncNavTooltips()', src[cl_start:cl_end])
 
     # --- scrollbar ----------------------------------------------------------
 
