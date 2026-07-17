@@ -572,3 +572,74 @@ function renderIdentitiesPanel() {
         </td></tr>`).join('')
       : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
 }
+
+// ===== Port Config Modal (promosso da static/js/topology.js: usato anche
+// dal tab MAC-tracker/ARP inline e da static/js/config-analyzer.js) =====
+    // Espande le abbreviazioni comuni delle interfacce ('Gi1/0/5' -> 'GigabitEthernet1/0/5').
+    // Speculare a expand_iface() di mac_collector.py: tenerli allineati.
+    function expandIface(name) {
+        if (!name) return '';
+        name = String(name).trim();
+        const abbr = [
+            [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
+            [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
+            [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
+            [/^Eth(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
+        ];
+        for (const [pat, full] of abbr) {
+            if (pat.test(name)) return name.replace(pat, full);
+        }
+        return name;
+    }
+
+    // Deep-link verso il Config Analyzer (impostati da showPortConfig, letti da renderCaResults).
+    let caFocusIp = null;
+    let caFocusPort = null;
+
+    function closePortConfigModal() {
+        const m = document.getElementById('portConfigModal');
+        if (m) m.remove();
+    }
+
+    async function showPortConfig(switchIp, port, switchName) {
+        const L = i18n[currentLang];
+        let iface = null;
+        try {
+            const res = await apiFetch('/api/config-analyzer/' + encodeURIComponent(switchIp));
+            if (res && res.ok) {
+                const d = await res.json();
+                const want = expandIface(port).toLowerCase();
+                iface = (d.interfaces || []).find(i => expandIface(i.name).toLowerCase() === want) || null;
+            }
+        } catch (e) { /* trattato come non trovato */ }
+
+        closePortConfigModal();
+        const body = iface
+            ? `<pre style="font-family:var(--font-code); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; margin:0; white-space:pre-wrap; font-size:12px;">${escapeHtml(iface.raw || '—')}</pre>`
+            : `<div style="font-size:13px; color:var(--text-muted); padding:10px 0;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.portConfigNotFound)}</div>`;
+        const ov = document.createElement('div');
+        ov.id = 'portConfigModal';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.innerHTML = `
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <h3 style="font-size:16px;"><i class="fa-solid fa-ethernet" style="color:var(--primary);"></i> ${escapeHtml(L.portConfigTitle)}</h3>
+                    <i class="fa-solid fa-xmark" onclick="closePortConfigModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+                </div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(switchName || switchIp)} — ${escapeHtml(port)}</div>
+                ${body}
+                <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
+                    <button onclick="openPortInAnalyzer('${escapeHtml(switchIp)}','${escapeHtml(port)}')" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-up-right-from-square"></i> ${escapeHtml(L.openInAnalyzer)}</button>
+                    <button onclick="closePortConfigModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Close':'Chiudi'}</button>
+                </div>
+            </div>`;
+        ov.addEventListener('click', e => { if (e.target === ov) closePortConfigModal(); });
+        document.body.appendChild(ov);
+    }
+
+    function openPortInAnalyzer(switchIp, port) {
+        caFocusIp = switchIp;
+        caFocusPort = port;
+        closePortConfigModal();
+        switchTab('tab-config');
+    }
