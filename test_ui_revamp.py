@@ -2421,9 +2421,7 @@ class TestCaSearch(unittest.TestCase):
     riapplicata dopo ogni render (caApplySearch)."""
 
     def test_search_input_and_filter_present(self):
-        html = open(os.path.join(os.path.dirname(__file__),
-                                 "templates", "dashboard.html"),
-                    encoding="utf-8").read()
+        html = frontend_source()
         self.assertIn('id="caSearch"', html)
         self.assertIn("function caApplySearch", html)
         # riapplicata a ogni render
