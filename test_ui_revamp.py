@@ -270,9 +270,12 @@ class TestHomeTab(unittest.TestCase):
             self.assertIn(f'id="{eid}"', html)
         # Home wires only to REAL endpoints
         self.assertIn('/api/local-devices', html)
-        self.assertIn('/api/run-triage', html)
-        self.assertIn("startGroupTriage('all')", html)
         self.assertIn('/api/observability/anomalies', html)
+        # startGroupTriage('all') moved to static/js/devices.js -- frontend_source()
+        # concatenates dashboard.html + all static js/css.
+        js = frontend_source()
+        self.assertIn('/api/run-triage', js)
+        self.assertIn("startGroupTriage('all')", js)
         # no fabricated prototype-only controls
         self.assertNotIn('Open design language', html)
         self.assertNotIn('Customize view', html)
@@ -302,7 +305,9 @@ class TestDevicesTabRestyle(unittest.TestCase):
             self.assertIn(hook, html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # Most of these apiFetch(...) calls now live in static/js/devices.js --
+        # frontend_source() concatenates dashboard.html + all static js/css.
+        html = frontend_source()
         for endpoint in ('/api/local-devices', '/api/run-triage', '/api/triage-status',
                           '/api/export/devices', '/api/ping-check', '/api/ping/',
                           '/api/scan-subnet', '/api/bulk-command', '/api/config-analyzer',
@@ -335,14 +340,20 @@ class TestGroupsTabRestyle(unittest.TestCase):
         html = _html()
         for _id in ('groupsTableBody', 'vendorTableBody'):
             self.assertIn(f'id="{_id}"', html)
-        # add-vendor form + rename/delete hooks preserved
-        for hook in ('addVendor()', 'renameGroup(', 'deleteGroup(', 'deleteVendor('):
-            self.assertIn(hook, html)
+        # add-vendor form static onclick + rename/delete hooks (the latter two
+        # are emitted inside JS template literals in renderGroupsTable, moved
+        # to static/js/devices.js -- frontend_source() concatenates both).
+        self.assertIn('addVendor()', html)
+        js = frontend_source()
+        for hook in ('renameGroup(', 'deleteGroup(', 'deleteVendor('):
+            self.assertIn(hook, js)
 
     def test_endpoint_contract_present(self):
-        html = _html()
         # /api/groups, /api/groups/rename, /api/groups/delete, /api/vendors,
-        # /api/vendors/delete all reached verbatim via apiFetch(...)
+        # /api/vendors/delete all reached verbatim via apiFetch(...) in
+        # static/js/devices.js -- frontend_source() concatenates dashboard.html
+        # + all static js/css.
+        html = frontend_source()
         for endpoint in ('/api/groups', '/api/groups/rename', '/api/groups/delete',
                           '/api/vendors', '/api/vendors/delete'):
             self.assertIn(endpoint, html)
@@ -1112,11 +1123,15 @@ class TestImportTabRestyle(unittest.TestCase):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # CSV upload JS moved to static/js/devices.js -- frontend_source()
+        # concatenates dashboard.html + all static js/css.
+        html = frontend_source()
         self.assertIn("apiFetch('/api/import-csv'", html)
 
     def test_upload_handler_untouched(self):
-        html = _html()
+        # CSV upload JS moved to static/js/devices.js -- frontend_source()
+        # concatenates dashboard.html + all static js/css.
+        html = frontend_source()
         # The click handler (addEventListener, not onclick) and its reporting
         # path must survive byte-for-byte -- restyle must not touch JS here.
         self.assertIn("document.getElementById('btnUploadCsv').addEventListener('click'", html)
@@ -2059,6 +2074,10 @@ class TestTransportsCollapsible(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = _html()
+        # updateTelnetWarn/updateTransportsSummary/setTransportsForm moved to
+        # static/js/devices.js -- frontend_source() concatenates dashboard.html
+        # + all static js/css.
+        cls.js = frontend_source()
 
     def test_all_transport_ids_present(self):
         for _id in ('devTransports', 'trSshEnabled', 'trSshPort',
@@ -2114,31 +2133,31 @@ class TestTransportsCollapsible(unittest.TestCase):
         # on trTelnetEnabled toggling trTelnetWarn's visibility, untouched by
         # the collapsible refactor.
         self.assertIn("document.getElementById('trTelnetEnabled').addEventListener('change', updateTelnetWarn)",
-                      self.html)
-        self.assertIn("function updateTelnetWarn()", self.html)
-        self.assertIn("document.getElementById('trTelnetWarn').style.display", self.html)
+                      self.js)
+        self.assertIn("function updateTelnetWarn()", self.js)
+        self.assertIn("document.getElementById('trTelnetWarn').style.display", self.js)
 
     def test_summary_updates_on_checkbox_and_port_change(self):
-        self.assertIn("function updateTransportsSummary()", self.html)
+        self.assertIn("function updateTransportsSummary()", self.js)
         # wired for every protocol's checkbox (change) and port (input)
         self.assertIn(
             "document.getElementById('tr' + _trCap(p) + 'Enabled').addEventListener('change', updateTransportsSummary)",
-            self.html)
+            self.js)
         self.assertIn(
             "document.getElementById('tr' + _trCap(p) + 'Port').addEventListener('input', updateTransportsSummary)",
-            self.html)
+            self.js)
         # setTransportsForm() must refresh the summary after populating the form
-        start = self.html.index('function setTransportsForm(')
-        end = self.html.index('function ', start + len('function setTransportsForm('))
-        set_form = self.html[start:end]
+        start = self.js.index('function setTransportsForm(')
+        end = self.js.index('function ', start + len('function setTransportsForm('))
+        set_form = self.js[start:end]
         self.assertIn('updateTransportsSummary()', set_form)
 
     def test_auto_expand_on_non_default_transports(self):
         # setTransportsForm() must open <details> when the device's transports
         # deviate from the SSH:22-only default -- never hide non-default state.
-        start = self.html.index('function setTransportsForm(')
-        end = self.html.index('function ', start + len('function setTransportsForm('))
-        set_form = self.html[start:end]
+        start = self.js.index('function setTransportsForm(')
+        end = self.js.index('function ', start + len('function setTransportsForm('))
+        set_form = self.js[start:end]
         self.assertIn("getElementById('devTransports').open", set_form)
 
 
