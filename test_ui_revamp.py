@@ -1429,14 +1429,19 @@ class TestSettingsTabRestyle(unittest.TestCase):
             self.assertIn(f'id="{_id}"', self._tab(html), f"lost preserve-ID {_id}")
 
     def test_preserve_ids_rendered_by_js(self):
-        html = _html()
+        # obs_* ids are built inside renderObsSettings's template literal,
+        # which now lives in static/js/observability.js -- use the
+        # concatenated frontend source, not the raw served HTML.
+        html = frontend_source()
         for _id in ("netHostSelect", "netSettingsNotice",
                     "obs_enabled", "obs_bind", "obs_api_poll_s", "obsSettingsError",
                     "appadv_no_browser", "appAdvError"):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
     def test_preserve_interpolated_ids(self):
-        html = _html()
+        # OBS_LISTENERS / renderObsSettings / saveObsSettings moved to
+        # static/js/observability.js.
+        html = frontend_source()
         # obs_<listener>_enabled / obs_<listener>_port for all four listeners.
         self.assertIn('id="obs_${l}_enabled"', html)
         self.assertIn('id="obs_${l}_port"', html)
@@ -1453,7 +1458,9 @@ class TestSettingsTabRestyle(unittest.TestCase):
             self.assertIn(f"key: '{key}'", html, f"lost APP_ADV_FIELDS entry {key}")
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadObsSettings/saveObsSettings (and the /api/observability/config
+        # call they make) moved to static/js/observability.js.
+        html = frontend_source()
         # GET + POST for each of the brief's three contract endpoints.
         self.assertIn("apiFetch('/api/settings/network')", html)
         self.assertIn("apiFetch('/api/settings/network', {", html)
@@ -1465,7 +1472,8 @@ class TestSettingsTabRestyle(unittest.TestCase):
         self.assertIn("apiFetch('/api/observability/config')", html)
 
     def test_hooks_preserved(self):
-        html = _html()
+        # saveObsSettings() moved to static/js/observability.js.
+        html = frontend_source()
         for hook in ("loadAppSettings()", "saveAppSettings()",
                      "saveCliBlacklistSetting()", "saveObsSettings()",
                      "saveAppAdvSettings()"):
@@ -1545,7 +1553,9 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         return html[start:html.index('<div id="flowDetailPanel"', start)]
 
     def test_preserve_ids(self):
-        html = _html()
+        # flowsSelectAll is emitted only by renderFlowsTable(), which moved to
+        # static/js/observability.js.
+        html = frontend_source()
         for _id in ('flowsTableHead', 'flowsTableBody', 'anomTableBody',
                     'flowsWindow', 'flowsMetric', 'flowsTenantBtn',
                     'flowsTenantDropdown', 'flowsTenantAll', 'flowsTenantList',
@@ -1572,7 +1582,9 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
                       'padding:3px 8px;" onclick="anomTransition(', html)
 
     def test_source_filter_chips_and_column_toggle_survive(self):
-        html = _html()
+        # FLOWS_SOURCES/renderFlowsSourceChips/renderSyslogTable moved to
+        # static/js/observability.js.
+        html = frontend_source()
         # Source chips (incl. the syslog view) are data-driven; the array is
         # what actually determines the chips, so assert the array itself.
         self.assertIn("const FLOWS_SOURCES = ['all', 'netflow', 'ipfix', 'sflow', 'syslog'];", html)
@@ -1588,7 +1600,9 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn("localStorage.setItem('sentinelnet_flows_hidden_cols'", html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadTopTalkers/loadAnomalies/checkObsStatusBanner (and the
+        # apiFetch calls they make) moved to static/js/observability.js.
+        html = frontend_source()
         for ep in ('/api/observability/top?window=',
                    '/api/observability/syslog?window=',
                    '/api/observability/anomalies?status=',
@@ -1611,15 +1625,19 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Flussi Live\',', src)
 
     def test_no_hardcoded_italian_left_in_tab(self):
+        # openFlowDetailPanel() (the `const hlTitle = ...` line) moved to
+        # static/js/observability.js -- use the concatenated frontend source
+        # for the whole-document checks below.
+        src = frontend_source()
         tab = self._tab(_html())
         # Strings that previously shipped without a data-i18n key.
-        self.assertNotIn('>Dettaglio flusso<', _html())
-        self.assertNotIn('title="Chiudi"', _html())
-        self.assertNotIn('title="Evidenzia nella topologia"', _html())
+        self.assertNotIn('>Dettaglio flusso<', src)
+        self.assertNotIn('title="Chiudi"', src)
+        self.assertNotIn('title="Evidenzia nella topologia"', src)
         # ...now routed through keys / the file's existing `const L` pattern.
-        self.assertIn('data-i18n="titleFlowDetail"', _html())
-        self.assertIn('data-i18n-title="titleClose"', _html())
-        self.assertIn("const hlTitle = escapeHtml(L.titleHighlightTopology", _html())
+        self.assertIn('data-i18n="titleFlowDetail"', src)
+        self.assertIn('data-i18n-title="titleClose"', src)
+        self.assertIn("const hlTitle = escapeHtml(L.titleHighlightTopology", src)
         # Every remaining user-visible string in the tab body carries a key.
         self.assertNotIn('Anomalie correlate', tab)
 
@@ -1635,7 +1653,9 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn('class="filterbar"', tab)
         self.assertIn('id="anomIpFilterChip" class="chip"', tab)
         # Severity/status badges use the component status/chip classes.
-        html = _html()
+        # sevBadge/statusBadge live inside loadAnomalies(), which moved to
+        # static/js/observability.js.
+        html = frontend_source()
         # Severity buckets mirror sevColor() in the syslog table: 0-3 bad,
         # 4 warn, 5+ neutral .chip. 5+ is "medio" (_SEVERITY_KIND in
         # observability/correlator.py), so it must NOT render as .status ok --
@@ -1663,7 +1683,8 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         source order. The restyle promotes that heading to <h3> inside a .panel,
         which would have silently made the selector match nothing (`?.` swallows
         it) and killed the flow-detail -> anomalies jump. Anchor it to an id."""
-        html = _html()
+        # jumpToAnomaliesForFlow() moved to static/js/observability.js.
+        html = frontend_source()
         self.assertIn('id="anomSectionTitle"', html)
         self.assertIn("document.getElementById('anomSectionTitle')?.scrollIntoView(", html)
         self.assertNotIn("querySelector('#tab-flows h4')", html)
