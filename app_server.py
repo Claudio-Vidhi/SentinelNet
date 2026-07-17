@@ -9,6 +9,7 @@ import webbrowser
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 from contextlib import asynccontextmanager
 
@@ -174,6 +175,9 @@ def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
+
+# Monta gli asset statici (JS/CSS) estratti dal dashboard.html
+app.mount("/static", StaticFiles(directory=get_resource_path("static")), name="static")
 
 @app.get("/")
 def read_index():
