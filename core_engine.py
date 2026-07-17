@@ -223,13 +223,17 @@ def _fortigate_backup_and_triage(device):
     try:
         status = fortigate_service.get_system_status(device)
         data = status.get("data")
+        raw = None
         if isinstance(data, dict):
             results = data.get("results") if isinstance(data.get("results"), dict) else {}
-            version = data.get("version") or results.get("version") or "Non Rilevata"
+            raw = data.get("version") or results.get("version")
         elif isinstance(data, str):
             m = re.search(r'^Version:\s*(.+)$', data, re.MULTILINE)
             if m:
-                version = m.group(1).strip()
+                raw = m.group(1).strip()
+        if raw:
+            # "FortiGate-VM64 v7.4.12,build2902,..." / "v7.4.12" -> "7.4.12"
+            version = extract_version(raw) or raw
     except Exception:
         pass
     update_version_inventory(ip, vendor, version, "online")
