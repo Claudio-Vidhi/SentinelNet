@@ -644,7 +644,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         self.assertIn("querySelectorAll('#arpDeviceList .arp-dev-cb:checked')", html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        html = frontend_source()  # MAC tracker/Client Map JS moved to static/js/client-map.js
         # runMacScan() -> apiFetch('/api/mac/scan', {method:'POST', ...})
         self.assertIn('/api/mac/scan', html)
         # macSearch() -> apiFetch('/api/mac/search?' + ...)
