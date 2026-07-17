@@ -1641,16 +1641,12 @@
               <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
               <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
             </label>
-            <!-- Filtro per categoria dei dispositivi scoperti; popolato dinamicamente in startThreatScan() -->
-            <select id="tiDiscCatFilter" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
-              <option value="all" data-i18n="tiCatFilterAll">Tutte le categorie</option>
-            </select>
           </div>
         </div>
 
         <div class="panel">
           <div id="securityTriageContainer" style="display: flex; flex-direction: column; gap: 15px;">
-            <!-- Popolato in dinamico con i match delle vulnerabilità, raggruppati per tenant/categoria -->
+            <!-- Popolato in dinamico con i match delle vulnerabilità -->
           </div>
         </div>
       </div>
@@ -11678,66 +11674,6 @@
 
     // Costruisce la lista di dispositivi da analizzare; le query EUVD reali partono
     // solo al clic del pulsante "Analizza" su ogni singolo dispositivo.
-    // Sostituisce i caratteri non alfanumerici per ottenere id/selettori DOM sicuri.
-    function cssSafe(s) {
-        return String(s).replace(/[^a-zA-Z0-9]/g, '-');
-    }
-
-    // Markup di UNA card dispositivo (inventariato o scoperto). Riusa i pulsanti
-    // e i container esistenti (btn-mgd-/btn-disc-, results-/disc-results-) così
-    // runManagedVulnCheck/runDiscoveredVulnCheck restano invariati.
-    function tiRenderManagedCard(d, scan) {
-        const safeIpId = d.IP.replace(/\./g, '-');
-        return `<div class="vuln-card" style="margin-bottom:12px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-                <div>
-                    <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
-                    <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
-                    <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
-                </div>
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
-                    <button id="btn-mgd-${safeIpId}"
-                        data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
-                        onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
-                        style="padding:8px 14px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
-                        ${i18n[currentLang].btnAnalyzeVuln}
-                    </button>
-                </div>
-            </div>
-            <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;"></div>
-        </div>`;
-    }
-
-    function tiRenderDiscoveredCard(n) {
-        const safeId = n.id.replace(/[^a-zA-Z0-9]/g, '-');
-        const versionShort = extractReadableVersion(n.version);
-        return `<div id="disc-card-${safeId}" style="background:var(--surface-2); border:2px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; user-select:none;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                <div>
-                    <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
-                    <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
-                </div>
-                <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
-            </div>
-            <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
-                <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
-            </div>
-            <button
-                id="btn-disc-${safeId}"
-                data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
-                data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
-                data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
-                onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
-                style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer;">
-                ${i18n[currentLang].btnAnalyzeVuln}
-            </button>
-            <div id="disc-results-${safeId}" style="margin-top:10px;"></div>
-        </div>`;
-    }
-
-    // Raggruppa i dispositivi online (inventariati + scoperti) per tenant → categoria
-    // e disegna i blocchi con pulsante "Analizza tutti" per tenant.
     async function startThreatScan() {
         if (window._threatScanBusy) return;
         window._threatScanBusy = true;
@@ -11746,25 +11682,13 @@
         if (!container) return;
         const selGroup = document.getElementById("threatGroupSelect")?.value || 'all';
         const includeDiscovered = document.getElementById("threatIncludeDiscovered")?.checked || false;
-        const discCatFilterEl = document.getElementById("tiDiscCatFilter");
-        // Il filtro categoria si applica solo agli scoperti: leggilo prima di ricostruire le opzioni.
-        const curDiscCatFilter = discCatFilterEl ? discCatFilterEl.value : 'all';
 
-        // Non interroga ancora EUVD qui: sta solo caricando i dispositivi locali.
-        const loadingText = i18n[currentLang].tiLoadingDevices.replace(/<[^>]*>/g, '');
-        container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${loadingText}</div>`;
+        const queryingText = i18n[currentLang].queryingEnisa.replace(/<[^>]*>/g, '');
+        container.innerHTML = `<div style="text-align:center; padding: 40px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br><br>${queryingText}</div>`;
 
-        const [res, classRes] = await Promise.all([
-            apiFetch('/api/local-devices'),
-            apiFetch('/api/device-classification')
-        ]);
+        const res = await apiFetch('/api/local-devices');
         if (!res) return;
         const data = await res.json();
-        const classData = classRes && classRes.ok ? await classRes.json() : { categories: {}, nodes: [] };
-        const catLabels = classData.categories || {};
-        // Mappa id nodo (IP per inventariati, id sintetico per scoperti) -> categoria (device_type).
-        const catByNodeId = {};
-        (classData.nodes || []).forEach(n => { catByNodeId[n.id] = n.device_type || ''; });
 
         let onlineDevices = data.devices.filter(d => {
             const scan = data.detected_versions[d.IP];
@@ -11772,152 +11696,128 @@
         });
         if (selGroup !== 'all') onlineDevices = onlineDevices.filter(d => d.Group === selGroup);
 
-        // Struttura: { [tenant]: { managed: { [categoriaLabel]: [htmlCard, ...] }, discovered: { [categoriaLabel]: [htmlCard, ...] } } }
-        const tenants = {};
-        const catLabel = (key) => (catLabels[key] && catLabels[key].label) || key || i18n[currentLang].tiCatUncategorized;
-        const uncategorized = i18n[currentLang].tiCatUncategorized;
-        const tenantSlot = (tenant) => {
-            tenants[tenant] = tenants[tenant] || { managed: {}, discovered: {} };
-            return tenants[tenant];
-        };
+        container.innerHTML = "";
 
-        onlineDevices.forEach(d => {
-            const scan = data.detected_versions[d.IP];
-            const tenant = d.Group || 'Generale';
-            const catKey = catByNodeId[d.IP];
-            const cat = catKey ? catLabel(catKey) : uncategorized;
-            const slot = tenantSlot(tenant);
-            slot.managed[cat] = slot.managed[cat] || [];
-            slot.managed[cat].push(tiRenderManagedCard(d, scan));
-        });
-
-        let discoveredWithVersion = [];
-        if (includeDiscovered) {
-            const mapRes = await apiFetch('/api/network-map?group=' + encodeURIComponent(selGroup));
-            if (mapRes && mapRes.ok) {
-                const mapData = await mapRes.json();
-                discoveredWithVersion = (mapData.nodes || []).filter(n =>
-                    n.status === 'discovered' && n.version && n.version.trim() !== ''
-                );
-                if (selGroup !== 'all') discoveredWithVersion = discoveredWithVersion.filter(n => n.group === selGroup);
-            }
-        }
-        // Categoria reale del nodo scoperto (stessa mappa usata per gli inventariati),
-        // non più l'etichetta generica "Scoperti".
-        discoveredWithVersion.forEach(n => {
-            const catKey = catByNodeId[n.id];
-            n._catLabel = catKey ? catLabel(catKey) : uncategorized;
-        });
-
-        // Popola il filtro categoria con le categorie realmente presenti tra gli
-        // scoperti di questa scansione, preservando la selezione corrente se ancora valida.
-        if (discCatFilterEl) {
-            const discCats = Array.from(new Set(discoveredWithVersion.map(n => n._catLabel))).sort();
-            const allLabel = i18n[currentLang].tiCatFilterAll;
-            discCatFilterEl.innerHTML = `<option value="all">${escapeHtml(allLabel)}</option>` +
-                discCats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-            discCatFilterEl.value = discCats.includes(curDiscCatFilter) ? curDiscCatFilter : 'all';
-            discCatFilterEl.disabled = !includeDiscovered;
-            discCatFilterEl.style.display = includeDiscovered ? '' : 'none';
-        }
-        const activeDiscCatFilter = discCatFilterEl ? discCatFilterEl.value : 'all';
-        const filteredDiscovered = activeDiscCatFilter === 'all'
-            ? discoveredWithVersion
-            : discoveredWithVersion.filter(n => n._catLabel === activeDiscCatFilter);
-
-        filteredDiscovered.forEach(n => {
-            const tenant = n.group || 'Generale';
-            const slot = tenantSlot(tenant);
-            slot.discovered[n._catLabel] = slot.discovered[n._catLabel] || [];
-            slot.discovered[n._catLabel].push(tiRenderDiscoveredCard(n));
-        });
-
-        const tenantNames = Object.keys(tenants);
-        if (tenantNames.length === 0) {
-            container.innerHTML = `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
+        // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
+        if (onlineDevices.length === 0) {
+            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
                 ${i18n[currentLang].noDevicesText}
             </div>`;
-            return;
+        } else {
+            // Card SELEZIONABILI: la query EUVD parte SOLO quando l'utente sceglie
+            // un singolo dispositivo (pulsante Analizza), non su tutti insieme.
+            onlineDevices.forEach(d => {
+                const scan = data.detected_versions[d.IP];
+                const safeIpId = d.IP.replace(/\./g, '-');
+
+                const devCard = document.createElement("div");
+                devCard.className = "vuln-card";
+                devCard.style.marginBottom = "12px";
+                devCard.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
+                            <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
+                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
+                            <button id="btn-mgd-${safeIpId}"
+                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
+                                onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
+                                style="padding:8px 14px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
+                                ${i18n[currentLang].btnAnalyzeVuln}
+                            </button>
+                        </div>
+                    </div>
+                    <div id="results-${safeIpId}" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;"></div>
+                `;
+                container.appendChild(devCard);
+            });
         }
 
-        container.innerHTML = tenantNames.map(tenant => {
-            const slot = tenants[tenant];
-            const managedHtml = Object.keys(slot.managed).map(cat => `
-                <h4 style="font-size:13px; color:var(--text-muted); margin:14px 0 8px;">${escapeHtml(cat)}</h4>
-                ${slot.managed[cat].join('')}
-            `).join('');
-            const discoveredCats = Object.keys(slot.discovered);
-            // Sezione scoperti separata e chiaramente marcata, raggruppata per categoria.
-            const discoveredHtml = discoveredCats.length === 0 ? '' : `
-                <h4 style="font-size:13px; color:var(--warning); margin:20px 0 8px; padding-top:10px; border-top:1px dashed var(--border); text-transform:uppercase; letter-spacing:.04em;">
-                    <i class="fa-solid fa-satellite-dish"></i> ${escapeHtml(i18n[currentLang].tiCatDiscovered)}
-                </h4>
-                ${discoveredCats.map(cat => `
-                    <h4 style="font-size:13px; color:var(--text-muted); margin:14px 0 8px;">${escapeHtml(cat)}</h4>
-                    ${slot.discovered[cat].join('')}
-                `).join('')}
+        // ── SEZIONE 2: Vicini Scoperti (CDP/LLDP) – solo se richiesto ──────────
+        if (!includeDiscovered) return;
+        const mapRes = await apiFetch('/api/network-map?group=' + encodeURIComponent(selGroup));
+        if (!mapRes || !mapRes.ok) return;
+        const mapData = await mapRes.json();
+
+        let discoveredWithVersion = (mapData.nodes || []).filter(n =>
+            n.status === 'discovered' && n.version && n.version.trim() !== ''
+        );
+        if (selGroup !== 'all') discoveredWithVersion = discoveredWithVersion.filter(n => n.group === selGroup);
+
+        if (discoveredWithVersion.length === 0) return;
+
+        // Header sezione
+        const sectionHeader = document.createElement("div");
+        sectionHeader.innerHTML = `
+            <div style="border-top: 1px solid var(--border); margin: 25px 0 15px 0; padding-top: 20px;">
+                <h3 style="font-size:16px; margin-bottom:6px;">
+                    ${i18n[currentLang].discoveredNeighborsTitle}
+                </h3>
+                <p style="font-size:13px; color:var(--text-muted);">
+                    ${i18n[currentLang].discoveredNeighborsDesc}
+                </p>
+            </div>
+        `;
+        container.appendChild(sectionHeader);
+
+        // Griglia di card selezionabili
+        const grid = document.createElement("div");
+        grid.style.cssText = "display:grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap:12px; margin-bottom:18px;";
+        container.appendChild(grid);
+
+        discoveredWithVersion.forEach(n => {
+            const safeId = n.id.replace(/[^a-zA-Z0-9]/g, '-');
+            const versionShort = extractReadableVersion(n.version);
+
+            const card = document.createElement("div");
+            card.id = `disc-card-${safeId}`;
+            card.style.cssText = `
+                background: var(--surface-2);
+                border: 2px solid var(--border);
+                border-radius: 10px;
+                padding: 14px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                user-select: none;
             `;
-            return `<div id="tenant-block-${cssSafe(tenant)}" style="border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:16px;">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
-                    <h3 style="margin:0; font-size:15px;"><i class="fa-solid fa-building" style="color:var(--primary);"></i> ${escapeHtml(tenant)}</h3>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span id="rollup-${cssSafe(tenant)}" style="font-size:12px; color:var(--text-muted);"></span>
-                        <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="analyzeTenant('${escapeHtml(jsStr(tenant))}')" data-i18n="btnAnalyzeTenant">${i18n[currentLang].btnAnalyzeTenant}</button>
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                    <div>
+                        <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
+                        <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
                     </div>
+                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
                 </div>
-                ${managedHtml}
-                ${discoveredHtml}
-            </div>`;
-        }).join('');
+                <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
+                    <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
+                </div>
+                <button
+                    id="btn-disc-${safeId}"
+                    data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
+                    data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
+                    data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
+                    onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
+                    style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                    ${i18n[currentLang].btnAnalyzeVuln}
+                </button>
+            `;
+            card.onmouseenter = () => card.style.borderColor = 'var(--warning)';
+            card.onmouseleave = () => {
+                if (!card.dataset.checked) card.style.borderColor = 'var(--border)';
+            };
+            grid.appendChild(card);
+
+            const resultArea = document.createElement("div");
+            resultArea.id = `disc-results-${safeId}`;
+            resultArea.style.cssText = "display:none; grid-column:1/-1;";
+            grid.appendChild(resultArea);
+        });
         } finally {
             window._threatScanBusy = false;
         }
-    }
-
-    // Attende che l'analisi avviata dal click su un pulsante (Analizza) sia
-    // terminata: runManagedVulnCheck/runDiscoveredVulnCheck riabilitano il
-    // pulsante e ne cambiano il testo in "Riscansiona" a fine query.
-    function waitForResult(btn) {
-        return new Promise(resolve => {
-            const started = Date.now();
-            const timeoutMs = 60000;
-            (function poll() {
-                if (!btn.disabled || (Date.now() - started) > timeoutMs) {
-                    resolve();
-                    return;
-                }
-                setTimeout(poll, 500);
-            })();
-        });
-    }
-
-    // Analizza in sequenza (max 4 worker concorrenti) tutti i dispositivi online
-    // di un tenant, riusando i pulsanti "Analizza" già renderizzati nel blocco.
-    async function analyzeTenant(tenant) {
-        const safe = cssSafe(tenant);
-        const block = document.getElementById('tenant-block-' + safe);
-        if (!block) return;
-        const btns = Array.from(block.querySelectorAll('button[id^="btn-mgd-"], button[id^="btn-disc-"]'));
-        const queue = btns.slice();
-        let done = 0;
-        const rollup = document.getElementById('rollup-' + safe);
-
-        async function worker() {
-            while (queue.length) {
-                const b = queue.shift();
-                if (b.disabled) continue;
-                b.click();
-                await waitForResult(b);
-                done++;
-                if (rollup) rollup.textContent = `${done}/${btns.length}`;
-            }
-        }
-        await Promise.all([worker(), worker(), worker(), worker()]);
-
-        const critical = block.querySelectorAll('[data-sev="critical"]').length;
-        const high = block.querySelectorAll('[data-sev="high"]').length;
-        const exploited = block.querySelectorAll('[data-exploited="1"]').length;
-        if (rollup) rollup.innerHTML = `<span style="color:var(--danger);">${critical} critical</span> · ${high} high · ${exploited} exploited`;
     }
 
     function extractReadableVersion(sysDesc) {
