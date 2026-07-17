@@ -3581,6 +3581,7 @@
         vwStatusLoading: "Caricamento dati EUVD...",
         vwStatusRows: "risultati mostrati",
         vwStatusError: "Impossibile caricare i dati EUVD: ",
+        vwStatusIdle: "Scegli un vendor o premi aggiorna per interrogare EUVD.",
         btnAnalyzeTenant: '<i class="fa-solid fa-bolt"></i> Analizza tutti',
         tiCatUncategorized: "Senza categoria",
         tiCatDiscovered: "Scoperti",
@@ -4286,6 +4287,7 @@
         vwStatusLoading: "Loading EUVD data...",
         vwStatusRows: "rows shown",
         vwStatusError: "Unable to load EUVD data: ",
+        vwStatusIdle: "Pick a vendor or press refresh to query EUVD.",
         btnAnalyzeTenant: '<i class="fa-solid fa-bolt"></i> Analyze all',
         tiCatUncategorized: "Uncategorized",
         tiCatDiscovered: "Discovered",
@@ -11541,8 +11543,11 @@
                 `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" onclick="vwSelectVendor('${escapeHtml(jsStr(v.euvd_term))}', this)" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
             ).join('');
             if (entries.length) {
+                // Nessuna query EUVD automatica all'apertura: il fetch parte solo
+                // quando l'utente sceglie un vendor o preme aggiorna.
                 vwState.vendor = entries[0][1].euvd_term;
-                vwFetch();
+                const statusEl = document.getElementById('vwStatus');
+                if (statusEl) statusEl.textContent = i18n[currentLang].vwStatusIdle;
             } else {
                 const statusEl = document.getElementById('vwStatus');
                 if (statusEl) statusEl.textContent = i18n[currentLang].noDevicesText.replace(/<[^>]*>/g, '');
