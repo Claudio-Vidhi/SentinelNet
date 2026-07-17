@@ -821,7 +821,9 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         self.assertIn('requires-admin', html[details_tag:panel_idx])
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # sendAiChat()/refreshAiModels() moved to static/js/ai.js -- frontend_source()
+        # concatenates dashboard.html + all static js/css.
+        html = frontend_source()
         # sendAiChat() -> apiFetch('/api/ai/chat', {method:'POST', ...})
         self.assertIn('/api/ai/chat', html)
         # refreshAiModels() -> apiFetch('/api/ai/models?' + ...)
@@ -854,7 +856,9 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
             html)
 
     def test_device_multiselect_preserved(self):
-        html = _html()
+        # populateAiAttachDevices()/getAiAttachDeviceIps() moved to
+        # static/js/ai.js -- frontend_source() concatenates it.
+        html = frontend_source()
         # The AI device multi-select dropdown (prior feature) keeps its ids and
         # per-item checkbox class + onchange used by getAiAttachDeviceIps().
         self.assertIn('id="aiAttachDeviceDropdown"', html)
