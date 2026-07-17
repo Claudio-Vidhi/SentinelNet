@@ -282,6 +282,21 @@ class TestAiFlowKeys(_Base):
         self.assertIn("Top flussi di rete", sent)
 
 
+class TestObsSettingsNestedKeys(unittest.TestCase):
+    """renderObsSettings deve leggere le chiavi annidate restituite da
+    obs_config() (d[l].enabled / d[l].port), non le chiavi piatte."""
+
+    def test_render_reads_nested_listener_keys(self):
+        html = open(os.path.join(os.path.dirname(__file__),
+                                 "templates", "dashboard.html"),
+                    encoding="utf-8").read()
+        block = html[html.index("function renderObsSettings"):
+                     html.index("async function saveObsSettings")]
+        self.assertNotIn("d[`${l}_enabled`]", block)
+        self.assertNotIn("d[`${l}_port`]", block)
+        self.assertIn("d[l]", block)
+
+
 class TestFrontendGates(_Base):
     HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "templates", "dashboard.html"), encoding="utf-8").read()
