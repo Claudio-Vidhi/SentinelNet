@@ -9,6 +9,7 @@ import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP
 import app_server  # noqa: E402
 import routers.inventory, routers.topology, routers.catalog, routers.mac, routers.analyzer, routers.backup, routers.sites, routers.mcp
+from test_helpers_frontend import frontend_source  # noqa: E402
 
 
 def _html():
@@ -222,7 +223,9 @@ class TestTabNestingBalance(unittest.TestCase):
 
 class TestComponentLayer(unittest.TestCase):
     def test_component_classes_present(self):
-        html = _html()
+        # Task 2: CSS selectors live in static/css/dashboard.css now, not
+        # inline in dashboard.html -- frontend_source() concatenates both.
+        html = frontend_source()
         for cls in (".hero-card", ".kpi-grid", ".filterbar",
                     ".status", ".led-success", ".split-footer",
                     ".nav-group", ".preview-badge"):
@@ -909,7 +912,10 @@ class TestProvisionerTabRestyle(unittest.TestCase):
                         'token section must sit BELOW the Device Type control')
 
     def test_token_section_hidden_by_default(self):
-        html = _html()
+        # Task 2: CSS moved to static/css/dashboard.css; frontend_source()
+        # concatenates dashboard.html + all static/*.js|css so both the CSS
+        # and JS assertions below still resolve against one string.
+        html = frontend_source()
         # Hidden via CSS class, never inline style: the requires-admin gate uses
         # display:none!important and must be able to win over the shown state.
         self.assertIn('#provFgtTokenSection{display:none}', html)
@@ -980,7 +986,9 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         self.assertIn('provSyncVendorChips();', html)  # called from provInitVendorChips()
         # Visible focus indicator reuses design tokens (var(--primary)), not a
         # new invented color.
-        self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}', html)
+        # Task 2: this selector lives in static/css/dashboard.css now.
+        self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}',
+                      frontend_source())
 
     def test_token_input_credential_hygiene(self):
         html = _html()
@@ -1049,7 +1057,8 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         self.assertGreaterEqual(tab.count('class="panel'), 2)
         # Device type chips reuse the existing .chip component.
         self.assertEqual(tab.count('class="chip chip-choice"'), 2)
-        self.assertIn('.chip-choice[aria-pressed="true"]', html)
+        # Task 2: CSS estratto in static/css/dashboard.css, non piu' inline.
+        self.assertIn('.chip-choice[aria-pressed="true"]', frontend_source())
 
     def test_i18n_keys_both_langs(self):
         html = _html()
@@ -2022,9 +2031,14 @@ class TestTransportsCollapsible(unittest.TestCase):
         # (meant to clear the .input-wrapper icon) stretches every checkbox
         # row in #devTransports (and any other checkbox living inside a
         # .form-group, e.g. #aiAllowUnredacted) across the full row width.
+        # CSS estratto in static/css/dashboard.css (Task 2): niente piu'
+        # inline in dashboard.html, quindi si cerca nel file statico.
+        css_path = os.path.join(os.path.dirname(__file__), "static", "css",
+                                 "dashboard.css")
+        css = open(css_path, encoding="utf-8").read()
         m = re.search(
             r'\.form-group\s+input([^,{]*),\s*\.form-group\s+select\s*\{([^}]*)\}',
-            self.html)
+            css)
         self.assertIsNotNone(m, "could not find the .form-group input/select CSS rule")
         selector_suffix, body = m.group(1), m.group(2)
         self.assertIn('[type="checkbox"]', selector_suffix)
@@ -2095,10 +2109,12 @@ class TestSidebarRail(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        # CSS estratto in static/css/dashboard.css (Task 2): non piu' inline
+        # in dashboard.html, quindi si legge direttamente il file statico.
         cls.html = _html()
-        m = re.search(r'<style>(.*?)</style>', cls.html, re.S)
-        assert m, "no <style> block found"
-        cls.css = m.group(1)
+        css_path = os.path.join(os.path.dirname(__file__), "static", "css",
+                                 "dashboard.css")
+        cls.css = open(css_path, encoding="utf-8").read()
         # The template is served with CRLF line endings, so whitespace is
         # normalised via \s+ (not a bare '\n' strip) before shape assertions;
         # the optional trailing `;` before `}` is dropped too, so assertions
