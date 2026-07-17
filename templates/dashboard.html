@@ -2366,21 +2366,6 @@
         } else { hint.style.display = 'none'; }
     });
 
-    // Carica le identita' del tenant selezionato nella select devProfile,
-    // preservando default/custom. Chiamata al load della tab e al cambio tenant.
-    async function refreshIdentityOptions(preserve) {
-        const tenant = document.getElementById('devGroupSelect').value;
-        const sel = document.getElementById('devProfile');
-        const keep = preserve || sel.value;
-        const res = await apiFetch('/api/identities?tenant=' + encodeURIComponent(tenant));
-        const idents = res && res.ok ? (await res.json()).identities : [];
-        sel.innerHTML = `<option value="default">${i18n[currentLang].optProfileDefault.replace(/<[^>]*>/g,'')}</option>` +
-            idents.map(i => `<option value="identity:${i.id}">${escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('') +
-            `<option value="custom">${i18n[currentLang].optProfileCustom.replace(/<[^>]*>/g,'')}</option>`;
-        sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : 'default';
-        document.getElementById('customCredsForm').style.display = sel.value === 'custom' ? 'block' : 'none';
-        window._tenantIdentities = idents;
-    }
     // devGroupSelect change listener + IDENTITIES CRUD (renderIdentitiesPanel/
     // editIdentity/deleteIdentity/btnNewIdentity/btnCancelIdentity/btnSaveIdentity):
     // MOVED to static/js/provisioning.js.
