@@ -19,6 +19,19 @@
         loadPortchannelReport(selectedGroup);
     }
 
+    // Abbrevia un nome di interfaccia per le etichette compatte sui link
+    // (es. "Ethernet0/1" → "Et0/1", "GigabitEthernet1/0/1" → "Gi1/0/1").
+    function shortIface(name) {
+        if (!name) return '';
+        return String(name)
+            .replace(/^TenGigabitEthernet/i, 'Te')
+            .replace(/^FortyGigabitEthernet/i, 'Fo')
+            .replace(/^GigabitEthernet/i, 'Gi')
+            .replace(/^FastEthernet/i, 'Fa')
+            .replace(/^Ethernet/i, 'Et')
+            .replace(/^Port-channel/i, 'Po');
+    }
+
     // Riquadro Port-Channel per switch: aggregati + interfacce membro e interfacce
     // fisiche singole non aggregate (stile elenco).
     async function loadPortchannelReport(selectedGroup) {
