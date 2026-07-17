@@ -504,3 +504,71 @@ function showToast(msg, kind) {
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 4000);
 }
+
+// --- Shared across tabs (promoted from templates/dashboard.html during
+// static/js/provisioning.js extraction): renderVendorTable/buildVendorOptions
+// are used by the Provisioning tab (populateProvisioningFormSelects) AND by
+// the still-inline Groups tab (loadVendors) AND by changeLanguage() in
+// static/js/i18n.js. refreshIdentityOptions/renderIdentitiesPanel are used by
+// the Provisioning tab AND by the still-inline Devices tab's editDevice() AND
+// by the still-inline Groups tab's btnCreateGroup handler. ---
+
+function buildVendorOptions(selected) {
+    const builtins = ["cisco","hpe"];
+    const all = [...new Set([...builtins, ...Object.keys(globalVendors)])];
+    return all.map(v =>
+        `<option value="${escapeHtml(v)}" ${v===selected?"selected":""}>${escapeHtml(v.toUpperCase())}</option>`
+    ).join("");
+}
+
+function renderVendorTable() {
+    const body = document.getElementById('vendorTableBody');
+    if (!body) return;
+    body.innerHTML = '';
+    Object.entries(globalVendors).forEach(([name, meta]) => {
+        const isSystem = name === 'cisco' || name === 'hpe';
+        const systemText = currentLang === 'en' ? 'System' : 'Sistema';
+        const deleteText = currentLang === 'en' ? 'Delete' : 'Elimina';
+        body.innerHTML += `<tr>
+            <td><strong>${escapeHtml(name)}</strong></td>
+            <td><span style="font-family:var(--font-code); font-size:12px; color:var(--primary);">${escapeHtml(meta.euvd_term) || '—'}</span></td>
+            <td><span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(meta.driver) || '—'}</span></td>
+            <td>${currentRole === 'viewer'
+                ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
+                : (isSystem
+                    ? `<span style="color:var(--text-muted); font-size:12px;">${systemText}</span>`
+                    : `<button onclick="deleteVendor(this.dataset.v)" data-v="${escapeHtml(name)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`)
+            }</td>
+        </tr>`;
+    });
+}
+
+// Carica le identita' del tenant selezionato nella select devProfile,
+// preservando default/custom. Chiamata al load della tab e al cambio tenant.
+async function refreshIdentityOptions(preserve) {
+    const tenant = document.getElementById('devGroupSelect').value;
+    const sel = document.getElementById('devProfile');
+    const keep = preserve || sel.value;
+    const res = await apiFetch('/api/identities?tenant=' + encodeURIComponent(tenant));
+    const idents = res && res.ok ? (await res.json()).identities : [];
+    sel.innerHTML = `<option value="default">${i18n[currentLang].optProfileDefault.replace(/<[^>]*>/g,'')}</option>` +
+        idents.map(i => `<option value="identity:${i.id}">${escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('') +
+        `<option value="custom">${i18n[currentLang].optProfileCustom.replace(/<[^>]*>/g,'')}</option>`;
+    sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : 'default';
+    document.getElementById('customCredsForm').style.display = sel.value === 'custom' ? 'block' : 'none';
+    window._tenantIdentities = idents;
+}
+
+function renderIdentitiesPanel() {
+    const body = document.getElementById('identitiesTableBody');
+    const idents = window._tenantIdentities || [];
+    body.innerHTML = idents.length ? idents.map(i => `<tr>
+        <td>${escapeHtml(i.name)}</td>
+        <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.username)}</td>
+        <td>${i.devices_using}</td>
+        <td>
+          <button class="btn-icon" onclick="editIdentity('${i.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn-icon" onclick="deleteIdentity('${i.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        </td></tr>`).join('')
+      : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
+}

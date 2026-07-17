@@ -906,7 +906,9 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         self.assertIn('id="provFgtTokenSection"', tab)
         self.assertIn('class="table-wrap"', tab)
         self.assertIn('id="fgtTokensTable"', tab)
-        self.assertIn('function initFgtTokenPanel()', html)
+        # initFgtTokenPanel: moved to static/js/provisioning.js -- frontend_source()
+        # concatenates dashboard.html + all static/*.js|css.
+        self.assertIn('function initFgtTokenPanel()', frontend_source())
         # Inline == rendered inside the Device & parameters panel, below the
         # Device Type control rather than above it.
         self.assertLess(tab.index('id="provVendorChips"'),
@@ -931,21 +933,25 @@ class TestProvisionerTabRestyle(unittest.TestCase):
     def test_vendor_select_remains_source_of_truth(self):
         html = _html()
         tab = self._tab(html)
+        # provVendorIsFgt/provSyncVendorChips/provInitVendorChips: moved to
+        # static/js/provisioning.js -- frontend_source() concatenates
+        # dashboard.html + all static/*.js|css.
+        src = frontend_source()
         # The select is hidden, NOT removed: provVendorIsFgt() still reads it.
         self.assertIn(
             '<select id="provVendor" class="visually-hidden" aria-hidden="true" tabindex="-1">',
             tab,
         )
-        self.assertIn("document.getElementById('provVendor')?.value === 'fortigate'", html)
+        self.assertIn("document.getElementById('provVendor')?.value === 'fortigate'", src)
         for value in ('value="cisco"', 'value="fortigate"'):
             self.assertIn(value, tab)
         # Chips drive the select and re-fire the real change event rather than
         # duplicating the vendor wiring.
-        self.assertIn("sel.value = chip.dataset.vendor", html)
-        self.assertIn("sel.dispatchEvent(new Event('change'))", html)
+        self.assertIn("sel.value = chip.dataset.vendor", src)
+        self.assertIn("sel.dispatchEvent(new Event('change'))", src)
         # ...and reflect the select's value back (two-way sync).
-        self.assertIn("chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value))", html)
-        self.assertIn('provSyncVendorChips();', html)
+        self.assertIn("chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value))", src)
+        self.assertIn('provSyncVendorChips();', src)
 
     def test_vendor_select_out_of_tab_order(self):
         """W2 a11y fix: the hidden select is no longer a keyboard trap. Chips
@@ -980,33 +986,40 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         # aria-pressed on every chip from the live select value, both on
         # click and on init, so a re-sync (e.g. programmatic vendor change)
         # keeps the exposed state correct.
+        # provSyncVendorChips/provInitVendorChips: moved to static/js/provisioning.js.
+        src = frontend_source()
         self.assertIn(
             "chip.setAttribute('aria-pressed', String(chip.dataset.vendor === sel.value))",
-            html,
+            src,
         )
-        self.assertIn('function provSyncVendorChips()', html)
-        self.assertIn('provSyncVendorChips();', html)  # called from provInitVendorChips()
+        self.assertIn('function provSyncVendorChips()', src)
+        self.assertIn('provSyncVendorChips();', src)  # called from provInitVendorChips()
         # Visible focus indicator reuses design tokens (var(--primary)), not a
         # new invented color.
         # Task 2: this selector lives in static/css/dashboard.css now.
         self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}',
-                      frontend_source())
+                      src)
 
     def test_token_input_credential_hygiene(self):
         html = _html()
         tab = self._tab(html)
+        # toggleFgtTokenReveal and provInitToggles' token-hygiene branch:
+        # moved to static/js/provisioning.js.
+        src = frontend_source()
         # Stays a password field and must not be autofilled with a credential
         # saved for a different device.
         self.assertIn('<input id="fgtTokenValue" type="password" autocomplete="new-password"', tab)
         # Switching away from FortiGate clears the typed token and re-masks it.
-        self.assertIn("if (tokenInput) { tokenInput.value = ''; tokenInput.type = 'password'; }", html)
+        self.assertIn("if (tokenInput) { tokenInput.value = ''; tokenInput.type = 'password'; }", src)
         # Reveal toggle flips the input type both ways.
-        self.assertIn('function toggleFgtTokenReveal()', html)
-        self.assertIn("inp.type = show ? 'text' : 'password'", html)
-        self.assertIn('fa-eye-slash', html)
+        self.assertIn('function toggleFgtTokenReveal()', src)
+        self.assertIn("inp.type = show ? 'text' : 'password'", src)
+        self.assertIn('fa-eye-slash', src)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # provCollectPayload/fgtCollectPayload/provInitToggles' fetch call
+        # sites: moved to static/js/provisioning.js.
+        html = frontend_source()
         # Both vendor bases are chosen by provPayloadAndBase(); the four verbs
         # are then reached as `${base}/<verb>` template literals, so assert the
         # bases and the suffixes rather than concatenated literals that never
@@ -1022,7 +1035,8 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         self.assertIn("apiFetch('/api/fortigate/token'", html)
 
     def test_vendor_toggle_intact(self):
-        html = _html()
+        # provVendorIsFgt/provInitToggles: moved to static/js/provisioning.js.
+        html = frontend_source()
         # Restyling must not break which vendor section is visible.
         self.assertIn("function provVendorIsFgt()", html)
         self.assertIn("getElementById('provCiscoSection').style.display = fgt ? 'none' : ''", html)
