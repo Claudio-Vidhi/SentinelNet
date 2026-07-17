@@ -2086,6 +2086,9 @@
             <button class="ca-pill" data-view="convert" onclick="caSwitchView('convert')" data-i18n="pillCaConvert">Converti</button>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input id="caSearch" type="text" oninput="caApplySearch()"
+                   data-i18n-placeholder="phCaSearch" placeholder="Cerca..."
+                   style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; outline:none; width:180px;">
             <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
@@ -3128,6 +3131,7 @@
         configEyebrow: '<i class="fa-solid fa-file-code"></i> Configurazioni',
         titleConfigAnalyzer: "Config Analyzer",
         descConfigAnalyzer: "Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.",
+        phCaSearch: "Cerca nelle tabelle...",
         tabAiAssistant: '<i class="fa-solid fa-robot"></i> AI Assistant',
         aiEyebrow: '<i class="fa-solid fa-robot"></i> Intelligenza',
         titleAiContext: "Contesto & Conversazione",
@@ -3877,6 +3881,7 @@
         configEyebrow: '<i class="fa-solid fa-file-code"></i> Configurations',
         titleConfigAnalyzer: "Config Analyzer",
         descConfigAnalyzer: "Structured analysis of configurations: VLAN, routing, ACL and interfaces per device, with cross-object validation checks.",
+        phCaSearch: "Search tables...",
         btnCaRefresh: '<i class="fa-solid fa-rotate"></i> Refresh',
         pillVlans: "VLAN",
         pillRouting: "Routing",
@@ -10645,7 +10650,28 @@
         return 0;
     }
 
-    function renderCaResults() {
+    // Applica il filtro di ricerca alle righe della tabella nel #caResults
+    function caApplySearch() {
+        const inp = document.getElementById('caSearch');
+        if (!inp) return;
+        // Home e Converti non hanno tabelle dati: input nascosto e filtro no-op.
+        const searchable = !['home', 'convert'].includes(caView);
+        inp.style.display = searchable ? '' : 'none';
+        if (!searchable) return;
+        const q = inp.value.trim().toLowerCase();
+        document.querySelectorAll('#caResults tbody tr').forEach(tr => {
+            tr.style.display = (!q || tr.textContent.toLowerCase().includes(q)) ? '' : 'none';
+        });
+        document.querySelectorAll('#caResults details.mac-switch').forEach(det => {
+            const rows = det.querySelectorAll('tbody tr');
+            const anyVisible = !q || !rows.length ||
+                Array.from(rows).some(r => r.style.display !== 'none');
+            det.style.display = anyVisible ? '' : 'none';
+            if (q && anyVisible && rows.length) det.open = true;
+        });
+    }
+
+    function caRenderResultsInner() {
         const box = document.getElementById('caResults');
         if (!box) return;
         const L = i18n[currentLang];
@@ -10693,6 +10719,11 @@
             </details>`;
         }).join('');
         caApplyFocus();
+    }
+
+    function renderCaResults() {
+        caRenderResultsInner();
+        caApplySearch();
     }
 
     // Deep-link dal modale "Config porta": apre il device e evidenzia l'interfaccia.
