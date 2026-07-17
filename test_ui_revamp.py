@@ -400,7 +400,10 @@ class TestMapTabRestyle(unittest.TestCase):
             self.assertIn(hook, html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadPortchannelReport/loadInteractiveMap/resetTopology moved to
+        # static/js/topology.js -- frontend_source() concatenates dashboard.html
+        # + all static js/css so the assertions still hold.
+        html = frontend_source()
         # /api/portchannels (Port-Channel report) and /api/network-map (interactive
         # map) are both reached verbatim via apiFetch(...) calls.
         for endpoint in ('/api/portchannels', '/api/network-map'):
@@ -449,7 +452,9 @@ class TestTopologyTabRestyle(unittest.TestCase):
             self.assertIn(f'id="{_id}"', html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # resetTopology/exportVisioMap moved to static/js/topology.js --
+        # frontend_source() concatenates dashboard.html + all static js/css.
+        html = frontend_source()
         # /api/topology/reset (POST) is called verbatim by resetTopology().
         self.assertIn('/api/topology/reset', html)
         # /api/topology (bare GET, get_topology_adjacency) has no frontend
@@ -498,7 +503,10 @@ class TestCategoriesTabRestyle(unittest.TestCase):
         self.assertIn('requires-write', html[save_tag:save_start])
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # loadCategoriesData/saveCategoryEdits/createCategory/deleteCategory/
+        # deleteSubcategory/confirmConflict moved to static/js/topology.js --
+        # frontend_source() concatenates dashboard.html + all static js/css.
+        html = frontend_source()
         # GET /api/device-classification -- loadCategoriesData()
         self.assertIn('/api/device-classification', html)
         # POST /api/device-categories/assign -- saveCategoryEdits()/confirmConflict()
