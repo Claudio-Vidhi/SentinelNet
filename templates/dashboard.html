@@ -9285,19 +9285,22 @@
         const box = document.getElementById('obsSettingsBody');
         if (!box) return;
         const L = i18n[currentLang];
-        const listenerRows = OBS_LISTENERS.map(l => `
+        const listenerRows = OBS_LISTENERS.map(l => {
+            const lc = d[l] || {};
+            return `
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
                 <label style="display:flex; align-items:center; gap:8px; min-width:120px; cursor:pointer;">
-                    <input type="checkbox" id="obs_${l}_enabled" ${d[`${l}_enabled`] ? 'checked' : ''}>
+                    <input type="checkbox" id="obs_${l}_enabled" ${lc.enabled ? 'checked' : ''}>
                     <span style="font-size:13px; text-transform:uppercase;">${l}</span>
                 </label>
                 <input id="obs_${l}_port" type="number" min="1" max="65535"
-                       value="${d[`${l}_port`] != null ? d[`${l}_port`] : ''}"
+                       value="${lc.port != null ? lc.port : ''}"
                        placeholder="${OBS_DEFAULT_PORTS[l]}"
                        style="width:100px; padding:6px 10px; border-radius:8px; border:1px solid var(--border);
                               background:var(--surface-3); color:var(--text); font-family:var(--font-code); font-size:12px;">
                 <span style="font-size:11px; color:var(--text-muted);">UDP · ${L.hintObsDefaultPort || 'porta predefinita'} ${OBS_DEFAULT_PORTS[l]}</span>
-            </div>`).join('');
+            </div>`;
+        }).join('');
         box.innerHTML = `
             <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:14px;">
                 <input type="checkbox" id="obs_enabled" ${d.enabled ? 'checked' : ''}>
