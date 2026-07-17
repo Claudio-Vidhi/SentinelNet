@@ -36,6 +36,7 @@ INTERVAL_S = 300          # un ciclo ogni 5 minuti
 LOOKBACK_S = 900          # eventi syslog degli ultimi 15 minuti
 MATCH_DELTA_S = 120       # ±120s fra evento e bucket di flusso (Decisione #9)
 MAX_EVENTS_PER_CYCLE = 500
+HIGH_SEVERITY_MAX = 3     # sev syslog 0-3 (emerg..error): emerge anche senza flusso
 
 _SECURITY_ACTIONS = ("deny", "denied", "blocked", "block", "drop",
                      "reset-both", "reset-client", "reset-server", "sinkhole")
@@ -91,49 +92,66 @@ def correlate_once(now: int = None) -> int:
     conn = db.get_observability_connection()
     try:
         placeholders = ",".join("?" * len(_SECURITY_ACTIONS))
+        # Candidati: azioni di sicurezza (regola precision-over-recall con
+        # evidenza di flusso) OPPURE alta severità (<= HIGH_SEVERITY_MAX), che
+        # emerge comunque, anche senza flusso e senza endpoint nel messaggio.
         events = conn.execute(
             f"""SELECT id, ts, tenant, severity, action, message
                 FROM syslog_events
-                WHERE ts >= ? AND lower(coalesce(action,'')) IN ({placeholders})
+                WHERE ts >= ? AND (lower(coalesce(action,'')) IN ({placeholders})
+                                   OR severity <= ?)
                 ORDER BY ts DESC LIMIT ?""",
-            (now - LOOKBACK_S, *_SECURITY_ACTIONS, MAX_EVENTS_PER_CYCLE)).fetchall()
+            (now - LOOKBACK_S, *_SECURITY_ACTIONS, HIGH_SEVERITY_MAX,
+             MAX_EVENTS_PER_CYCLE)).fetchall()
 
         emitted = 0
         for ev in events:
+            severity = ev["severity"] if ev["severity"] is not None else 4
             src, dst, dport = _extract_endpoints(ev["message"])
-            if not src or not dst:
-                continue
-            # Evidenza di flusso corroborante: STESSO tenant, stessi endpoint,
-            # bucket entro ±MATCH_DELTA_S (bucket = 60s, quindi il confronto
-            # è sull'inizio finestra).
-            flow = conn.execute(
-                """SELECT window_start, protocol, dst_port, total_bytes,
-                          total_packets
-                   FROM flow_aggregates
-                   WHERE tenant = ? AND src_ip = ? AND dst_ip = ?
-                     AND window_start BETWEEN ? AND ?
-                   ORDER BY window_start DESC LIMIT 1""",
-                (ev["tenant"], src, dst,
-                 ev["ts"] - MATCH_DELTA_S - 60, ev["ts"] + MATCH_DELTA_S)).fetchone()
-            if flow is None:
+            flow = None
+            if src and dst:
+                # Evidenza di flusso corroborante: STESSO tenant, stessi endpoint,
+                # bucket entro ±MATCH_DELTA_S (bucket = 60s, quindi il confronto
+                # è sull'inizio finestra).
+                flow = conn.execute(
+                    """SELECT window_start, protocol, dst_port, total_bytes,
+                              total_packets
+                       FROM flow_aggregates
+                       WHERE tenant = ? AND src_ip = ? AND dst_ip = ?
+                         AND window_start BETWEEN ? AND ?
+                       ORDER BY window_start DESC LIMIT 1""",
+                    (ev["tenant"], src, dst,
+                     ev["ts"] - MATCH_DELTA_S - 60, ev["ts"] + MATCH_DELTA_S)).fetchone()
+
+            if flow is not None:
+                kind = f"traffico_bloccato_{_SEVERITY_KIND.get(severity, 'medio')}"
+                flow_tuple = (flow["window_start"], flow["protocol"], flow["dst_port"])
+                dedup_key = hashlib.sha256(
+                    f"{ev['tenant']}|{kind}|{ev['id']}|{src}|{dst}|{flow_tuple}"
+                    .encode()).hexdigest()
+                evidence = json.dumps({
+                    "syslog_id": ev["id"], "syslog_ts": ev["ts"],
+                    "action": ev["action"],
+                    "flow": {"window_start": flow["window_start"],
+                             "protocol": flow["protocol"],
+                             "dst_port": flow["dst_port"],
+                             "bytes": flow["total_bytes"],
+                             "packets": flow["total_packets"]},
+                }, ensure_ascii=False)
+            elif severity <= HIGH_SEVERITY_MAX:
+                # Alta severità senza flusso corroborante: evento standalone,
+                # dedup sul solo id syslog (un evento per riga).
+                kind = f"syslog_{_SEVERITY_KIND.get(severity, 'alto')}"
+                dedup_key = hashlib.sha256(
+                    f"{ev['tenant']}|{kind}|{ev['id']}".encode()).hexdigest()
+                evidence = json.dumps({
+                    "syslog_id": ev["id"], "syslog_ts": ev["ts"],
+                    "action": ev["action"], "message": ev["message"],
+                }, ensure_ascii=False)
+            else:
                 continue  # precision over recall: niente flusso, niente evento
 
-            severity = ev["severity"] if ev["severity"] is not None else 4
-            kind = f"traffico_bloccato_{_SEVERITY_KIND.get(severity, 'medio')}"
-            flow_tuple = (flow["window_start"], flow["protocol"], flow["dst_port"])
-            dedup_key = hashlib.sha256(
-                f"{ev['tenant']}|{kind}|{ev['id']}|{src}|{dst}|{flow_tuple}"
-                .encode()).hexdigest()
-            evidence = json.dumps({
-                "syslog_id": ev["id"], "syslog_ts": ev["ts"],
-                "action": ev["action"],
-                "flow": {"window_start": flow["window_start"],
-                         "protocol": flow["protocol"],
-                         "dst_port": flow["dst_port"],
-                         "bytes": flow["total_bytes"],
-                         "packets": flow["total_packets"]},
-            }, ensure_ascii=False)
-            switch_port = _switch_port_for(src, ev["tenant"])
+            switch_port = _switch_port_for(src, ev["tenant"]) if src else None
             db.enqueue_write(_INSERT_SQL, (
                 now, ev["tenant"], kind, src, dst, switch_port,
                 severity, dedup_key, evidence))

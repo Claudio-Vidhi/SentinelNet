@@ -1995,6 +1995,18 @@
             </tbody>
           </table>
         </div>
+        <!-- Eventi syslog nel modo "Tutte le origini" (tabella separata: schema diverso dai flussi) -->
+        <div id="flowsSyslogAllSection" style="display:none; margin-top:16px;">
+          <h4 style="font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 8px;">
+            <i class="fa-solid fa-file-lines"></i> Syslog <span id="flowsSyslogAllCount" style="color:var(--text);"></span>
+          </h4>
+          <div class="table-wrap" style="max-height:300px;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead id="flowsSyslogAllHead" style="position:sticky; top:0; background:var(--surface-2);"></thead>
+              <tbody id="flowsSyslogAllBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div class="panel">
@@ -2811,6 +2823,17 @@
   </div>
 
   <!-- Selettore sede per il Triage -->
+  <!-- Dettaglio evento syslog: campi FortiOS key=value in tabella + messaggio raw -->
+  <div class="modal-overlay" id="syslogDetailModal" onclick="if(event.target===this)closeSyslogDetail()">
+    <div class="modal" style="width: 760px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-file-lines" style="color:var(--primary);"></i> <span data-i18n="titleSyslogDetail">Dettaglio evento syslog</span></h3>
+        <span class="modal-close" onclick="closeSyslogDetail()"><i class="fa-solid fa-xmark"></i></span>
+      </div>
+      <div id="syslogDetailBody" style="max-height:60vh; overflow:auto; font-size:13px;"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="triageScopeModal">
     <div class="modal" style="width: 460px; max-width: 95%;">
       <div class="modal-header">
@@ -3516,6 +3539,8 @@
         thSlAction: "Azione",
         thSlMsg: "Messaggio",
         msgNoSyslog: "Nessun evento syslog nel periodo selezionato.",
+        titleSyslogDetail: "Dettaglio evento syslog",
+        titleSyslogRowHint: "Clicca per il dettaglio",
         titleAppAdvanced: "Applicazione (avanzate)",
         appAdvGrpServer: "Server HTTP, TLS e CORS",
         appAdvGrpRetention: "Retention dati observability",
@@ -4227,6 +4252,8 @@
         thSlAction: "Action",
         thSlMsg: "Message",
         msgNoSyslog: "No syslog events in the selected period.",
+        titleSyslogDetail: "Syslog event detail",
+        titleSyslogRowHint: "Click for details",
         titleAppAdvanced: "Application (advanced)",
         appAdvGrpServer: "HTTP server, TLS and CORS",
         appAdvGrpRetention: "Observability data retention",
@@ -12916,25 +12943,69 @@
             ${flowsColHidden('flows') ? '' : th(L.thFlFlows || 'Flussi')}</tr>`;
     }
 
-    function renderSyslogTable() {
-        const tbody = document.getElementById('flowsTableBody');
+    let _syslogVisibleRows = [];   // righe attualmente renderizzate, per il modale dettaglio
+
+    function syslogTheadHtml() {
+        const L = i18n[currentLang];
+        const th = (txt, style = '') => `<th ${style ? `style="${style}"` : ''}>${txt}</th>`;
+        return `<tr style="font-size:12px; text-align:left;">
+            ${th(L.thSlWhen || 'Quando', 'padding:8px;')}${th(L.thFlTenant || 'Sede')}
+            ${th(L.thSlDevice || 'Dispositivo')}${th(L.thSlSev || 'Sev')}
+            ${th(L.thSlAction || 'Azione')}${th(L.thSlMsg || 'Messaggio')}</tr>`;
+    }
+
+    function renderSyslogTable(tbodyId = 'flowsTableBody') {
+        const tbody = document.getElementById(tbodyId);
         const L = i18n[currentLang];
         const rows = _flowsSyslogData.filter(e =>
             _flowsSelectedTenants.size > 0 && _flowsSelectedTenants.has(e.tenant));
+        _syslogVisibleRows = rows;
         if (rows.length === 0) {
             tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${L.msgNoSyslog || 'Nessun evento syslog nel periodo selezionato.'}</td></tr>`;
             return;
         }
         const sevColor = s => s == null ? 'var(--text-muted)' : s <= 3 ? 'var(--danger)' : s <= 4 ? 'var(--warning)' : 'var(--text-muted)';
-        tbody.innerHTML = rows.map(e => `
-            <tr style="font-size:12px; border-top:1px solid var(--border);">
+        tbody.innerHTML = rows.map((e, i) => `
+            <tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" onclick="showSyslogDetail(${i})" data-i18n-title="titleSyslogRowHint" title="${escapeHtml(L.titleSyslogRowHint || 'Clicca per il dettaglio')}">
                 <td style="padding:6px 8px; white-space:nowrap;">${new Date(e.ts * 1000).toLocaleString()}</td>
                 <td>${escapeHtml(e.tenant)}</td>
                 <td>${escapeHtml(e.device_ip || e.exporter_ip || '—')}</td>
                 <td style="color:${sevColor(e.severity)}; font-weight:700;">${e.severity ?? '—'}</td>
                 <td>${escapeHtml(e.action || '—')}</td>
-                <td style="max-width:520px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(e.message || '')}">${escapeHtml(e.message || '')}</td>
+                <td style="max-width:520px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(e.message || '')}</td>
             </tr>`).join('');
+    }
+
+    // Modale dettaglio: campi key=value del messaggio FortiOS in tabella + raw.
+    function showSyslogDetail(idx) {
+        const e = _syslogVisibleRows[idx];
+        if (!e) return;
+        const L = i18n[currentLang];
+        const meta = [
+            [L.thSlWhen || 'Quando', new Date(e.ts * 1000).toLocaleString()],
+            [L.thFlTenant || 'Sede', e.tenant],
+            [L.thSlDevice || 'Dispositivo', e.device_ip || e.exporter_ip || '—'],
+            [L.thSlSev || 'Sev', e.severity ?? '—'],
+            [L.thSlAction || 'Azione', e.action || '—'],
+        ];
+        const msg = e.message || '';
+        // key=value / key="valore con spazi" (formato syslog FortiOS)
+        const pairs = [...msg.matchAll(/([A-Za-z0-9_-]+)=("([^"]*)"|\S+)/g)]
+            .map(m => [m[1], m[3] !== undefined ? m[3] : m[2]]);
+        const kvRow = ([k, v]) => `<tr style="border-top:1px solid var(--border);">
+            <td style="padding:4px 10px 4px 0; color:var(--text-muted); white-space:nowrap; vertical-align:top;">${escapeHtml(String(k))}</td>
+            <td style="padding:4px 0; word-break:break-all;"><code style="font-family:var(--font-code); font-size:12px;">${escapeHtml(String(v))}</code></td></tr>`;
+        document.getElementById('syslogDetailBody').innerHTML = `
+            <table style="width:100%; border-collapse:collapse; margin-bottom:14px;">${meta.map(kvRow).join('')}</table>
+            ${pairs.length ? `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">${currentLang === 'en' ? 'Parsed fields' : 'Campi'}</h4>
+            <table style="width:100%; border-collapse:collapse; margin-bottom:14px;">${pairs.map(kvRow).join('')}</table>` : ''}
+            <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">Raw</h4>
+            <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; white-space:pre-wrap; word-break:break-all; font-family:var(--font-code); font-size:12px;">${escapeHtml(msg)}</pre>`;
+        document.getElementById('syslogDetailModal').style.display = 'flex';
+    }
+
+    function closeSyslogDetail() {
+        document.getElementById('syslogDetailModal').style.display = 'none';
     }
 
     function flowsTabShown() {
@@ -13019,6 +13090,7 @@
                 rebuildFlowsTenantList(_flowsSyslogData);
                 renderFlowsThead();
                 renderSyslogTable();
+                renderSyslogAllSection();
                 return;
             }
             const srcParam = _flowsSource === 'all' ? '' : `&source=${_flowsSource}`;
@@ -13032,8 +13104,16 @@
             document.getElementById('flowsLastUpdate').textContent =
                 (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
 
+            // "Tutte le origini": il syslog non è un flusso, va caricato a parte
+            // e mostrato nella sezione dedicata sotto la tabella flussi.
+            if (_flowsSource === 'all') {
+                const sres = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
+                _flowsSyslogData = (sres && sres.ok) ? ((await sres.json()).events || []) : [];
+            }
+
             // Rebuild tenant checkbox list from distinct tenants in fetched data
-            rebuildFlowsTenantList(flows);
+            // (in modo "all" include anche i tenant presenti solo nel syslog)
+            rebuildFlowsTenantList(_flowsSource === 'all' ? flows.concat(_flowsSyslogData) : flows);
 
             // Render filtered table
             renderFlowsTable();
@@ -13168,9 +13248,24 @@
         if (all) all.checked = rowBoxes.length > 0 && rowBoxes.every(b => b.checked);
     }
 
+    // Sezione syslog sotto la tabella flussi, visibile solo in modo "Tutte le origini".
+    function renderSyslogAllSection() {
+        const sec = document.getElementById('flowsSyslogAllSection');
+        if (!sec) return;
+        if (_flowsSource !== 'all' || _flowsSyslogData.length === 0) {
+            sec.style.display = 'none';
+            return;
+        }
+        sec.style.display = 'block';
+        document.getElementById('flowsSyslogAllHead').innerHTML = syslogTheadHtml();
+        renderSyslogTable('flowsSyslogAllBody');
+        document.getElementById('flowsSyslogAllCount').textContent = `(${_syslogVisibleRows.length})`;
+    }
+
     function renderFlowsTable() {
         renderFlowsThead();
-        if (_flowsSource === 'syslog') { renderSyslogTable(); return; }
+        if (_flowsSource === 'syslog') { renderSyslogTable(); renderSyslogAllSection(); return; }
+        renderSyslogAllSection();
         const tbody = document.getElementById('flowsTableBody');
         const m = document.getElementById('flowsMetric').value;
         const L = i18n[currentLang];
