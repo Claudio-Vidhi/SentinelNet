@@ -6414,7 +6414,7 @@
     },
     "/api/observability/config": {
       "get": {
-        "description": "Config effettiva dei listener (settings + eventuali override da env).\nI listener partono all'avvio: le modifiche richiedono riavvio.",
+        "description": "Config effettiva dei listener (settings + eventuali override da env).\nLe modifiche via POST vengono applicate a caldo, senza riavvio.",
         "operationId": "obs_get_config_api_observability_config_get",
         "responses": {
           "200": {
@@ -6437,7 +6437,7 @@
         ]
       },
       "post": {
-        "description": "Salva la sezione 'observability' in app_settings.json (§9.5).\nChiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},\napi_poll_s. Richiede riavvio per avere effetto.",
+        "description": "Salva la sezione 'observability' in app_settings.json (§9.5) e applica\nsubito la nuova config ai listener UDP e ai task di background (nessun\nriavvio del processo necessario).\nChiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},\napi_poll_s.",
         "operationId": "obs_set_config_api_observability_config_post",
         "requestBody": {
           "content": {
