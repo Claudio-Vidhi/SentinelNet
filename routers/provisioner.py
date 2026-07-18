@@ -4,11 +4,11 @@
 import json
 import uuid
 import os
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from security_manager import log_audit
 from routers.deps import require_operator
@@ -17,6 +17,13 @@ import fortigate_provisioner
 import provisioning_secrets
 
 router = APIRouter(tags=["Provisioner"])
+
+class AaaServerSchema(BaseModel):
+    """Voce di server AAA (RADIUS/TACACS+) per il wizard 'Switch da Zero'."""
+    ip: str
+    key: str = ""
+    auth_port: Optional[int] = None
+    acct_port: Optional[int] = None
 
 class SwitchProvisionSchema(BaseModel):
     """Parametri del wizard 'Switch da Zero'. Vedi switch_provisioner.build_config
@@ -57,8 +64,8 @@ class SwitchProvisionSchema(BaseModel):
     svis: List[dict] = []
     enable_routing: bool = True
     default_route_gw: str = ""
-    aaa_protocol: str = "none"     # none | radius | tacacs
-    aaa_servers: List[dict] = []   # [{ip, key, auth_port?, acct_port?}, ...]
+    aaa_protocol: Literal["none", "radius", "tacacs"] = "none"
+    aaa_servers: List[AaaServerSchema] = Field(default_factory=list, max_length=3)
 
 class SwitchProvisionSSHSchema(SwitchProvisionSchema):
     ssh_host: str
@@ -111,7 +118,7 @@ class FortiGateProvisionSchema(BaseModel):
     netflow_collector: str = ""
     rest_api_logging: bool = True
     ha: dict = {}                  # {group_name, mode, password, hbdev, priority, mgmt_interface, mgmt_ip, mgmt_mask}
-    aaa_protocol: str = "none"     # none | radius | tacacs
+    aaa_protocol: Literal["none", "radius", "tacacs"] = "none"
     aaa_server_ip: str = ""
     aaa_key: str = ""
 
