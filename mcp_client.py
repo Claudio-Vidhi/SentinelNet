@@ -16,6 +16,36 @@ import requests
 _TIMEOUT = 30
 # Versione del protocollo MCP richiesta in initialize.
 _PROTOCOL_VERSION = "2025-06-18"
+# Limite dimensione risposta da server MCP esterni (non fidati): evita di
+# caricare in memoria body arbitrariamente grandi.
+_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+
+
+def _read_capped(resp: "requests.Response", max_bytes: int = _MAX_RESPONSE_BYTES) -> str:
+    """Legge il body di `resp` (richiesta con stream=True) fino a `max_bytes`.
+
+    Solleva McpClientError se il body supera il limite, senza caricare oltre
+    il cap in memoria.
+    """
+    chunks = []
+    total = 0
+    try:
+        for chunk in resp.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > max_bytes:
+                raise McpClientError(
+                    f"Risposta del server MCP troppo grande (> {max_bytes} byte)."
+                )
+            chunks.append(chunk)
+    except requests.RequestException as e:
+        raise McpClientError(f"Errore di rete verso il server MCP: {e}")
+    encoding = resp.encoding or resp.apparent_encoding or "utf-8"
+    try:
+        return b"".join(chunks).decode(encoding, errors="replace")
+    except (LookupError, TypeError):
+        return b"".join(chunks).decode("utf-8", errors="replace")
 
 
 class McpClientError(Exception):
@@ -50,8 +80,9 @@ def parse_sse_last_data(text: str) -> str:
 
 def _parse_response(resp: "requests.Response") -> dict:
     ctype = (resp.headers.get("Content-Type") or "").lower()
+    text = _read_capped(resp)
     if "text/event-stream" in ctype:
-        payload = parse_sse_last_data(resp.text)
+        payload = parse_sse_last_data(text)
         if not payload:
             raise McpClientError("Risposta SSE senza righe 'data:'.")
         try:
@@ -59,7 +90,7 @@ def _parse_response(resp: "requests.Response") -> dict:
         except ValueError as e:
             raise McpClientError(f"Evento SSE non e' JSON valido: {e}")
     try:
-        return resp.json()
+        return json.loads(text)
     except ValueError as e:
         raise McpClientError(f"Risposta non e' JSON valido: {e}")
 
@@ -78,11 +109,11 @@ def _rpc(url, headers, method, params, req_id):
     """POST JSON-RPC; ritorna (data, response). Solleva McpClientError su errore."""
     body = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params or {}}
     try:
-        resp = requests.post(url, json=body, headers=headers, timeout=_TIMEOUT)
+        resp = requests.post(url, json=body, headers=headers, timeout=_TIMEOUT, stream=True)
     except requests.RequestException as e:
         raise McpClientError(f"Errore di rete verso il server MCP: {e}")
     if resp.status_code >= 400:
-        raise McpClientError(f"HTTP {resp.status_code}: {(resp.text or '')[:300]}")
+        raise McpClientError(f"HTTP {resp.status_code}: {(_read_capped(resp) or '')[:300]}")
     data = _parse_response(resp)
     if isinstance(data, dict) and data.get("error"):
         err = data["error"] or {}
