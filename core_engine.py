@@ -6,7 +6,7 @@ from netmiko import ConnectHandler
 from inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,
-    parse_transports,
+    parse_transports, CATEGORIES_FILE,
 )
 from drivers.cisco_ios import CiscoIosDriver
 from drivers.cisco_cbs import CiscoCbsDriver
@@ -1236,7 +1236,54 @@ def get_portchannel_report(group_filter=None) -> list:
     return report
 
 
+# Cache di generate_network_map: la scansione ricorsiva di BACKUP_FOLDER con
+# parse regex di ogni file .txt è costosa e viene invocata ad ogni richiesta
+# da più endpoint (device-classification, topology, network-map, mac uplinks).
+# La cache è invalidata da una "firma" economica (conteggio + mtime massima dei
+# backup, mtime del file assegnazioni-categoria) calcolata con un solo
+# os.walk/stat pass, molto più leggero della scansione completa che sostituisce.
+_netmap_cache: dict = {"sig": None, "by_filter": {}}
+
+def _netmap_signature():
+    count = 0
+    max_mtime = 0.0
+    if os.path.exists(BACKUP_FOLDER):
+        for root, _dirs, files in os.walk(BACKUP_FOLDER):
+            for f in files:
+                if not f.endswith('.txt'):
+                    continue
+                count += 1
+                try:
+                    mtime = os.path.getmtime(os.path.join(root, f))
+                except OSError:
+                    continue
+                if mtime > max_mtime:
+                    max_mtime = mtime
+    try:
+        cat_mtime = os.path.getmtime(CATEGORIES_FILE)
+    except OSError:
+        cat_mtime = 0.0
+    return (count, max_mtime, cat_mtime)
+
+
 def generate_network_map(group_filter=None) -> dict:
+    """Wrapper con cache: vedi _generate_network_map per la logica reale.
+    I chiamanti (routers/catalog.py, topology.py, mac.py) leggono soltanto il
+    risultato senza mutarlo, quindi è sicuro condividere l'oggetto cache."""
+    sig = _netmap_signature()
+    if _netmap_cache["sig"] != sig:
+        _netmap_cache["sig"] = sig
+        _netmap_cache["by_filter"] = {}
+    key = group_filter or "all"
+    cached = _netmap_cache["by_filter"].get(key)
+    if cached is not None:
+        return cached
+    result = _generate_network_map(group_filter)
+    _netmap_cache["by_filter"][key] = result
+    return result
+
+
+def _generate_network_map(group_filter=None) -> dict:
     """Scansiona backup-config e genera nodi + link per la mappa topologica."""
     devices      = get_all_devices()
     ip_to_device = {d['IP']: d for d in devices}
