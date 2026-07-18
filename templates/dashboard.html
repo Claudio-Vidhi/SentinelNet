@@ -1606,7 +1606,17 @@
           <div class="form-group"><label>SNMPv3 auth pass</label><input id="fgtSnmpAuth" type="password" style="padding-left:12px;"></div>
           <div class="form-group"><label>SNMPv3 priv pass</label><input id="fgtSnmpPriv" type="password" style="padding-left:12px;"></div>
           <div class="form-group"><label>Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" style="padding-left:12px;"></div>
+          <div class="form-group"><label data-i18n="lblAaaProtocol">Protocollo AAA</label>
+            <select id="fgtAaaProtocol" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+              <option value="none" data-i18n="optAaaNone">Nessuno</option>
+              <option value="radius">RADIUS</option>
+              <option value="tacacs">TACACS+</option>
+            </select>
+          </div>
+          <div class="form-group" id="fgtAaaServerGroup" style="display:none;"><label data-i18n="lblAaaServer">Server AAA (IP)</label><input id="fgtAaaServerIp" type="text" placeholder="10.0.0.100" style="padding-left:12px;"></div>
+          <div class="form-group" id="fgtAaaKeyGroup" style="display:none;"><label data-i18n="lblAaaKey">Chiave condivisa</label><input id="fgtAaaKey" type="password" style="padding-left:12px;"></div>
         </div>
+        <div id="fgtAaaHint" style="display:none; margin-top:6px; font-size:12px; color:var(--text-muted);" data-i18n="hintAaaFallback">Il local fallback resta sempre attivo in caso di mancata risposta del server AAA.</div>
         <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:16px;">
           <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtDhcpServer"> <span data-i18n="lblFgtDhcpServer">DHCP server su LAN</span></label>
           <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="fgtLanToWan" checked> <span data-i18n="lblFgtLanToWan">Policy LAN→WAN con NAT</span></label>
@@ -1647,7 +1657,17 @@
         <div class="form-group"><label>Uplink Port-Channel ID (LACP)</label><input id="provUplinkPc" type="number" placeholder="1 (vuoto = nessun EtherChannel)" style="padding-left:12px;"></div>
         <div class="form-group" id="provSvisGroup" style="display:none;"><label>SVI distribution (vlan:ip:mask, comma)</label><input id="provSvis" type="text" placeholder="10:10.1.10.1:255.255.255.0" style="padding-left:12px;"></div>
         <div class="form-group" id="provDefRouteGroup" style="display:none;"><label>Default route gateway</label><input id="provDefRouteGw" type="text" placeholder="10.1.0.1" style="padding-left:12px;"></div>
+        <div class="form-group"><label data-i18n="lblAaaProtocol">Protocollo AAA</label>
+          <select id="provAaaProtocol" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+            <option value="none" data-i18n="optAaaNone">Nessuno</option>
+            <option value="radius">RADIUS</option>
+            <option value="tacacs">TACACS+</option>
+          </select>
+        </div>
+        <div class="form-group" id="provAaaServerGroup" style="display:none;"><label data-i18n="lblAaaServer">Server AAA (IP)</label><input id="provAaaServerIp" type="text" placeholder="10.0.0.100" style="padding-left:12px;"></div>
+        <div class="form-group" id="provAaaKeyGroup" style="display:none;"><label data-i18n="lblAaaKey">Chiave condivisa</label><input id="provAaaKey" type="password" style="padding-left:12px;"></div>
       </div>
+      <div id="provAaaHint" style="display:none; margin-top:6px; font-size:12px; color:var(--text-muted);" data-i18n="hintAaaFallback">Il local fallback resta sempre attivo in caso di mancata risposta del server AAA.</div>
 
       <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:16px;">
         <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="provSshOnly" checked> SSH-only (transport input ssh)</label>

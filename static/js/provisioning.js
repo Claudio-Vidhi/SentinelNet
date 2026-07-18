@@ -90,7 +90,8 @@ function provParseRanges(text) {
 }
 
 function provCollectPayload() {
-    return {
+    const aaaProtocol = document.getElementById('provAaaProtocol')?.value || 'none';
+    const payload = {
         hostname: document.getElementById('provHostname').value.trim() || 'Switch',
         role: document.getElementById('provRole').value,
         domain: document.getElementById('provDomain').value.trim(),
@@ -131,13 +132,21 @@ function provCollectPayload() {
         svis: provParseSvis(document.getElementById('provSvis').value),
         enable_routing: true,
         default_route_gw: document.getElementById('provDefRouteGw').value.trim(),
+        aaa_protocol: aaaProtocol,
     };
+    if (aaaProtocol !== 'none') {
+        const ip = document.getElementById('provAaaServerIp').value.trim();
+        const key = document.getElementById('provAaaKey').value;
+        if (ip) payload.aaa_servers = [{ ip, key }];
+    }
+    return payload;
 }
 
 // Raccolta parametri del wizard ZTP FortiGate (vedi fortigate_provisioner.py).
 function fgtCollectPayload() {
     const v = id => (document.getElementById(id)?.value || '').trim();
-    return {
+    const aaaProtocol = document.getElementById('fgtAaaProtocol')?.value || 'none';
+    const payload = {
         hostname: v('fgtHostname') || 'FortiGate',
         timezone: v('fgtTimezone') || 'Europe/Rome',
         admin_user: v('fgtAdminUser'),
@@ -170,7 +179,13 @@ function fgtCollectPayload() {
         lan_to_wan_policy: document.getElementById('fgtLanToWan').checked,
         disable_wan_admin: document.getElementById('fgtNoWanAdmin').checked,
         banner: v('fgtBanner'),
+        aaa_protocol: aaaProtocol,
     };
+    if (aaaProtocol !== 'none') {
+        payload.aaa_server_ip = v('fgtAaaServerIp');
+        payload.aaa_key = document.getElementById('fgtAaaKey').value;
+    }
+    return payload;
 }
 function provVendorIsFgt() { return document.getElementById('provVendor')?.value === 'fortigate'; }
 function provPayloadAndBase() {
@@ -244,6 +259,27 @@ function provInitToggles() {
         provSyncVendorChips();
     });
     provInitVendorChips();
+
+    // Toggle AAA server/key fields quando il protocollo AAA non è "none",
+    // sia per il wizard switch (Cisco) sia per quello FortiGate.
+    function wireAaaToggle(selectId, serverGroupId, keyGroupId, hintId) {
+        const sel = document.getElementById(selectId);
+        if (!sel) return;
+        const sync = () => {
+            const show = sel.value !== 'none';
+            const serverGroup = document.getElementById(serverGroupId);
+            const keyGroup = document.getElementById(keyGroupId);
+            const hint = document.getElementById(hintId);
+            if (serverGroup) serverGroup.style.display = show ? '' : 'none';
+            if (keyGroup) keyGroup.style.display = show ? '' : 'none';
+            if (hint) hint.style.display = show ? '' : 'none';
+        };
+        sel.addEventListener('change', sync);
+        sync();
+    }
+    wireAaaToggle('provAaaProtocol', 'provAaaServerGroup', 'provAaaKeyGroup', 'provAaaHint');
+    wireAaaToggle('fgtAaaProtocol', 'fgtAaaServerGroup', 'fgtAaaKeyGroup', 'fgtAaaHint');
+
     roleSel.addEventListener('change', () => {
         const isDist = roleSel.value === 'distribution';
         document.getElementById('provSvisGroup').style.display = isDist ? 'block' : 'none';
