@@ -57,6 +57,8 @@ class SwitchProvisionSchema(BaseModel):
     svis: List[dict] = []
     enable_routing: bool = True
     default_route_gw: str = ""
+    aaa_protocol: str = "none"     # none | radius | tacacs
+    aaa_servers: List[dict] = []   # [{ip, key, auth_port?, acct_port?}, ...]
 
 class SwitchProvisionSSHSchema(SwitchProvisionSchema):
     ssh_host: str
@@ -109,6 +111,9 @@ class FortiGateProvisionSchema(BaseModel):
     netflow_collector: str = ""
     rest_api_logging: bool = True
     ha: dict = {}                  # {group_name, mode, password, hbdev, priority, mgmt_interface, mgmt_ip, mgmt_mask}
+    aaa_protocol: str = "none"     # none | radius | tacacs
+    aaa_server_ip: str = ""
+    aaa_key: str = ""
 
 class FortiGateProvisionSSHSchema(FortiGateProvisionSchema):
     ssh_host: str

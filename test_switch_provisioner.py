@@ -107,6 +107,59 @@ def test_hardening_can_be_disabled():
     assert "channel-group" not in config      # nessun uplink_pc_id
 
 
+def test_aaa_default_none_matches_local_only():
+    cfg = _sample_cfg()
+    config = sp.build_config(cfg)
+
+    assert "aaa new-model" in config
+    assert "aaa authentication login default local" in config
+    assert "aaa authorization exec default local" in config
+    assert "radius server" not in config
+    assert "tacacs server" not in config
+    assert "SENTINEL-AAA" not in config
+
+
+def test_aaa_radius_adds_server_and_group():
+    cfg = _sample_cfg()
+    cfg["aaa_protocol"] = "radius"
+    cfg["aaa_servers"] = [
+        {"ip": "10.0.0.20", "key": "R@diusKey1", "auth_port": 1812, "acct_port": 1813},
+        {"ip": "10.0.0.21", "key": "R@diusKey2"},
+    ]
+
+    config = sp.build_config(cfg)
+
+    assert "radius server RADIUS-1" in config
+    assert " address ipv4 10.0.0.20 auth-port 1812 acct-port 1813" in config
+    assert " key R@diusKey1" in config
+    assert "radius server RADIUS-2" in config
+    assert " address ipv4 10.0.0.21 auth-port 1812 acct-port 1813" in config
+    assert "aaa group server radius SENTINEL-AAA" in config
+    assert " server name RADIUS-1" in config
+    assert " server name RADIUS-2" in config
+    assert "aaa authentication login default group SENTINEL-AAA local" in config
+    assert "aaa authorization exec default group SENTINEL-AAA local" in config
+    # username locale resta come fallback
+    assert "username netadmin privilege 15 secret" in config
+
+
+def test_aaa_tacacs_adds_server_and_group():
+    cfg = _sample_cfg()
+    cfg["aaa_protocol"] = "tacacs"
+    cfg["aaa_servers"] = [{"ip": "10.0.0.30", "key": "TacKey1"}]
+
+    config = sp.build_config(cfg)
+
+    assert "tacacs server TACACS-1" in config
+    assert " address ipv4 10.0.0.30" in config
+    assert " key TacKey1" in config
+    assert "aaa group server tacacs+ SENTINEL-AAA" in config
+    assert " server name TACACS-1" in config
+    assert "aaa authentication login default group SENTINEL-AAA local" in config
+    assert "aaa authorization exec default group SENTINEL-AAA local" in config
+    assert "username netadmin privilege 15 secret" in config
+
+
 def test_distribution_role_adds_routing_and_svis():
     cfg = _sample_cfg()
     cfg["role"] = "distribution"
@@ -125,5 +178,8 @@ if __name__ == "__main__":
     test_access_config_contains_expected_sections()
     test_hardening_defaults_and_uplink_lag()
     test_hardening_can_be_disabled()
+    test_aaa_default_none_matches_local_only()
+    test_aaa_radius_adds_server_and_group()
+    test_aaa_tacacs_adds_server_and_group()
     test_distribution_role_adds_routing_and_svis()
     print("OK")

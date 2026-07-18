@@ -14,7 +14,7 @@ con flag esplicito (``materialized=true``) e produce una voce di audit.
 # Sottostringhe di chiave che identificano un valore segreto nel payload del
 # wizard (enable_secret, admin_password, snmpv3.auth_pass/priv_pass,
 # ha.password, psksecret, ...).
-_SECRET_KEY_HINTS = ("password", "secret", "pass", "psk")
+_SECRET_KEY_HINTS = ("password", "secret", "pass", "psk", "key")
 
 
 def is_secret_key(key: str) -> bool:
