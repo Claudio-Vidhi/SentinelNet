@@ -3,7 +3,7 @@
     // vista ri-renderizzano senza richiamare l'API (come richiesto).
     let caData = null;
     let caView = 'home';
-    let caFwView = 'policy'; // sub-menu del pill "Firewall": policy | iface | nat | objects
+    let caFwView = null; // sub-menu del pill "Firewall": id sezione vendor-driven (fw_analyzers envelope), auto-inizializzato al primo render
     let caRouteGroupMode = 'flat'; // 'flat' | 'byhop' — ricordato per la sessione
     let caNetworks = {};   // ip -> vis.Network istanza mappa route (lazy, per device aperto)
 
@@ -756,102 +756,55 @@
         renderCaResults();
     }
 
-    function caRenderFwPolicies(dev, L) {
-        const rows = (dev.firewall.policies || []).map(p => {
-            const act = (p.action || '').toLowerCase();
-            const actColor = act === 'accept' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
-            const disabled = (p.status || '').toLowerCase() === 'disable';
-            return `<tr${disabled ? ' style="opacity:0.5;"' : ''}>
-                <td>${escapeHtml(p.id != null ? String(p.id) : '—')}</td>
-                <td>${escapeHtml(p.name || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcintf || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstintf || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcaddr || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstaddr || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.service || []).join(', ') || '—')}</td>
-                <td style="color:${actColor}; font-weight:700;">${escapeHtml(p.action || '—')}</td>
-                <td>${escapeHtml(p.nat || '—')}</td>
-            </tr>`;
+    // Renderer generico di una sezione firewall (envelope vendor-driven: {id, label_key, columns, rows}).
+    function caRenderFwSection(sec, L) {
+        const cols = sec.columns || [];
+        const rows = sec.rows || [];
+        if (!rows.length) return caMvEmpty();
+        const thead = cols.map(c => `<th>${escapeHtml(L[c.label_key] || c.label_key)}</th>`).join('');
+        const trs = rows.map(r => {
+            const tds = cols.map(c => {
+                let v = r[c.key];
+                if (Array.isArray(v)) v = v.join(', ');
+                if (v === null || v === undefined || v === '') v = '—';
+                return `<td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(v))}</td>`;
+            }).join('');
+            return `<tr>${tds}</tr>`;
         }).join('');
-        if (!rows) return caMvEmpty();
-        return `<div class="table-container"><table><thead><tr>
-            <th>ID</th><th>${L.lblCaName}</th><th>${L.thCaFgSrcIntf}</th><th>${L.thCaFgDstIntf}</th><th>${L.thCaFgSrcAddr}</th><th>${L.thCaFgDstAddr}</th><th>${L.thCaFgService}</th><th>${L.thCaFgAction}</th><th>NAT</th>
-            </tr></thead><tbody>${rows}</tbody></table></div>`;
-    }
-
-    function caRenderFwIfaces(dev, L) {
-        const rows = (dev.firewall.interfaces_zones || []).map(i => {
-            const st = (i.status || '').toLowerCase();
-            const state = st === 'down' || st === 'disable'
-                ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(i.status)}</span>`
-                : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(i.status || L.lblCaActive)}</span>`;
-            return `<tr>
-                <td>${escapeHtml(i.name)}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
-                <td>${escapeHtml(i.vdom || '—')}</td>
-                <td>${escapeHtml(i.zone || '—')}</td>
-                <td>${state}</td>
-            </tr>`;
-        }).join('');
-        if (!rows) return caMvEmpty();
-        return `<div class="table-container"><table><thead><tr>
-            <th>${L.thCaIface}</th><th>${L.thCaIp}</th><th>${L.thCaFgVdom}</th><th>${L.thCaFgZone}</th><th>${L.thCaState}</th>
-            </tr></thead><tbody>${rows}</tbody></table></div>`;
-    }
-
-    function caRenderFwNat(dev, L) {
-        const rows = (dev.firewall.vips_nat || []).map(v => `<tr>
-            <td>${escapeHtml(v.name || '—')}</td>
-            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(v.extip || '—')}</td>
-            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(v.mappedip || '—')}</td>
-            <td>${escapeHtml(v.extintf || '—')}</td>
-            <td>${escapeHtml(v.extport || '—')}</td>
-            <td>${escapeHtml(v.mappedport || '—')}</td>
-        </tr>`).join('');
-        if (!rows) return caMvEmpty();
-        return `<div class="table-container"><table><thead><tr>
-            <th>${L.lblCaName}</th><th>${L.thCaFgExtIp}</th><th>${L.thCaFgMappedIp}</th><th>${L.thCaFgExtIntf}</th><th>${L.thCaFgExtPort}</th><th>${L.thCaFgMappedPort}</th>
-            </tr></thead><tbody>${rows}</tbody></table></div>`;
-    }
-
-    function caRenderFwObjects(dev, L) {
-        const rows = (dev.firewall.addresses_services || []).map(o => `<tr>
-            <td><span class="badge" style="font-size:10px;">${escapeHtml(o.kind || '—')}</span></td>
-            <td>${escapeHtml(o.name || '—')}</td>
-            <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(o.subnet || o.tcp_portrange || o.udp_portrange || '—')}</td>
-            <td>${escapeHtml(o.type || o.protocol || '—')}</td>
-        </tr>`).join('');
-        if (!rows) return caMvEmpty();
-        return `<div class="table-container"><table><thead><tr>
-            <th>${L.thCaFgKind}</th><th>${L.lblCaName}</th><th>${L.thCaFgValue}</th><th>${L.thCaFgType}</th>
-            </tr></thead><tbody>${rows}</tbody></table></div>`;
+        return `<div class="table-container"><table><thead><tr>${thead}</tr></thead><tbody>${trs}</tbody></table></div>`;
     }
 
     function caRenderFirewallView(L, en) {
         const fwDevices = (caData || []).filter(d => d.is_firewall);
-        const subPills = [
-            ['policy', L.pillCaFwPolicy], ['iface', L.pillCaFwIfaces],
-            ['nat', L.pillCaFwNat], ['objects', L.pillCaFwObjects],
-        ].map(([v, lbl]) => `<button class="ca-pill${caFwView === v ? ' active' : ''}" onclick="caSwitchFwView('${v}')">${escapeHtml(lbl)}</button>`).join('');
+        // Unione delle sezioni (per id, prima occorrenza vince) su tutti i device firewall mostrati:
+        // i pill sono comuni, ma ogni device renderizza solo le proprie sezioni (vendor-driven).
+        const sectionMap = {};
+        fwDevices.forEach(dev => {
+            ((dev.firewall && dev.firewall.sections) || []).forEach(s => {
+                if (!(s.id in sectionMap)) sectionMap[s.id] = s.label_key;
+            });
+        });
+        const sectionIds = Object.keys(sectionMap);
+        if (!sectionIds.length) {
+            return `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
+        }
+        if (!sectionIds.includes(caFwView)) caFwView = sectionIds[0];
+        const subPills = sectionIds.map(id => {
+            const lbl = L[sectionMap[id]] || sectionMap[id];
+            return `<button class="ca-pill${caFwView === id ? ' active' : ''}" onclick="caSwitchFwView('${jsStr(id)}')">${escapeHtml(lbl)}</button>`;
+        }).join('');
         const subBar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">${subPills}</div>`;
 
-        if (!fwDevices.length) {
-            return subBar + `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
-        }
         const openAll = fwDevices.length === 1;
-        const body = fwDevices.map((dev, idx) => {
+        const body = fwDevices.map(dev => {
             const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
             let inner;
-            if (!dev.firewall) {
+            const sections = (dev.firewall && dev.firewall.sections) || [];
+            if (!dev.firewall || !sections.length) {
                 inner = `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(L.msgCaFwUnsupportedVendor)}</div>`;
-            } else if (caFwView === 'iface') {
-                inner = caRenderFwIfaces(dev, L);
-            } else if (caFwView === 'nat') {
-                inner = caRenderFwNat(dev, L);
-            } else if (caFwView === 'objects') {
-                inner = caRenderFwObjects(dev, L);
             } else {
-                inner = caRenderFwPolicies(dev, L);
+                const sec = sections.find(s => s.id === caFwView);
+                inner = sec ? caRenderFwSection(sec, L) : caMvEmpty();
             }
             return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
