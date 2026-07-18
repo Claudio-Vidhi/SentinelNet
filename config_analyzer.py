@@ -12,44 +12,18 @@ lettura del backup piu' recente e lo scoping per sede/tenant.
 import os
 import re
 
+# Primitive di parsing firewall e utility IP: ora vivono nel package
+# fw_analyzers (analizzatori per-vendor). Reimportate qui per i converter e
+# per analyze_fortios_config, senza duplicazione.
+from fw_analyzers._ip import _mask_to_prefix, _ip_addr_to_cidr
+from fw_analyzers.fortios import (
+    _forti_tokens, _forti_tree, _forti_get, _forti_set1, _forti_ip_cidr,
+)
+from fw_analyzers.panos import (
+    _panos_tokens, _panos_lines, _panos_collect, _panos_attr, _panos_attr_all,
+)
+
 # --- Utility di basso livello ----------------------------------------------
-
-def _mask_to_prefix(mask):
-    """Converte una subnet mask dotted (255.255.255.0) in lunghezza /nn.
-    Ritorna None se non e' una mask valida (es. gia' in forma /nn o wildcard)."""
-    try:
-        parts = mask.split('.')
-        if len(parts) != 4:
-            return None
-        bits = 0
-        for p in parts:
-            v = int(p)
-            if v < 0 or v > 255:
-                return None
-            bits += bin(v).count('1')
-        return bits
-    except Exception:
-        return None
-
-
-def _ip_addr_to_cidr(tokens):
-    """Da una lista di token tipo ['10.1.10.1', '255.255.255.0'] ricava
-    'a.b.c.d/nn'. Ritorna '' se non interpretabile."""
-    try:
-        if len(tokens) >= 2:
-            ip = tokens[0]
-            pfx = _mask_to_prefix(tokens[1])
-            if pfx is not None:
-                return f"{ip}/{pfx}"
-            # eventuale forma gia' /nn
-            if tokens[1].startswith('/'):
-                return f"{ip}{tokens[1]}"
-        if len(tokens) == 1 and '/' in tokens[0]:
-            return tokens[0]
-    except Exception:
-        pass
-    return ''
-
 
 def _expand_vlan_list(spec):
     """Espande '10,20,30-35' in ['10','20','30','31',...]. Tollerante."""
@@ -561,6 +535,7 @@ def analyze_config(content):
 
 _FORTIOS_VENDORS = {'fortinet', 'fortigate', 'fortios'}
 _WLC_AIREOS_VENDORS = {'cisco_wlc'}
+_PANOS_VENDORS = {'palo_alto', 'paloalto', 'panos', 'pan-os', 'palo alto'}
 
 
 def detect_config_type(content, device=None):
@@ -574,6 +549,8 @@ def detect_config_type(content, device=None):
                 return 'fortios'
             if vendor in _WLC_AIREOS_VENDORS:
                 return 'wlc-aireos'
+            if vendor in _PANOS_VENDORS:
+                return 'panos'
             if vendor:
                 # cisco_9800 (IOS-XE) e altri: formato IOS
                 return 'ios'
@@ -584,6 +561,10 @@ def detect_config_type(content, device=None):
             return 'fortios'
         if re.search(r'^config system (global|interface)\b', text, re.MULTILINE):
             return 'fortios'
+        # PAN-OS (set-CLI): righe 'set deviceconfig ...' / 'set mgt-config ...'.
+        # NB: XML PAN-OS non e' supportato (v1) — solo formato 'set'.
+        if re.search(r'^set (deviceconfig|mgt-config) ', text, re.MULTILINE):
+            return 'panos'
         # AireOS 'show run-config commands': righe 'config sysname/wlan/interface ...'
         if re.search(r'^config (sysname|wlan|interface|radius|mobility|network)\b',
                      text, re.MULTILINE):
@@ -597,66 +578,8 @@ def detect_config_type(content, device=None):
 
 
 # --- FortiOS ------------------------------------------------------------------
-
-_FORTI_TOKEN = re.compile(r'"[^"]*"|\S+')
-
-
-def _forti_tokens(s):
-    """Tokenizza una riga FortiOS rispettando le stringhe tra doppi apici."""
-    return [t[1:-1] if t.startswith('"') and t.endswith('"') and len(t) >= 2 else t
-            for t in _FORTI_TOKEN.findall(s)]
-
-
-def _forti_tree(content):
-    """Parsa la struttura a blocchi config/edit/next/end di FortiOS in un albero:
-    nodo = {"sets": {chiave: [valori]}, "children": {nome: nodo}}. Tollerante a
-    blocchi non chiusi o annidamenti anomali."""
-    root = {"sets": {}, "children": {}}
-    stack = [root]
-    for raw in (content or '').splitlines():
-        s = raw.strip()
-        if not s or s.startswith('#'):
-            continue
-        low = s.lower()
-        try:
-            if low.startswith('config '):
-                name = s[7:].strip().strip('"')
-                node = stack[-1]["children"].setdefault(
-                    name, {"sets": {}, "children": {}})
-                stack.append(node)
-            elif low.startswith('edit '):
-                key = s[5:].strip().strip('"')
-                node = stack[-1]["children"].setdefault(
-                    key, {"sets": {}, "children": {}})
-                stack.append(node)
-            elif low in ('next', 'end'):
-                if len(stack) > 1:
-                    stack.pop()
-            elif low.startswith('set '):
-                toks = _forti_tokens(s)
-                if len(toks) >= 2:
-                    stack[-1]["sets"][toks[1].lower()] = toks[2:]
-        except Exception:
-            continue
-    return root
-
-
-def _forti_get(root, path):
-    """Naviga l'albero FortiOS per nome sezione (es. 'firewall policy').
-    Ritorna il nodo o None."""
-    return root["children"].get(path)
-
-
-def _forti_set1(node, key, default=''):
-    """Primo valore di un 'set' (stringa), oppure default."""
-    vals = node["sets"].get(key)
-    return vals[0] if vals else default
-
-
-def _forti_ip_cidr(node):
-    """'set ip A.B.C.D MASK' -> 'A.B.C.D/nn'."""
-    vals = node["sets"].get('ip') or []
-    return _ip_addr_to_cidr(vals) if vals else ''
+# Le primitive _forti_tokens/_forti_tree/_forti_get/_forti_set1/_forti_ip_cidr
+# sono definite in fw_analyzers.fortios e reimportate in testa al modulo.
 
 
 def analyze_fortios_config(content):
@@ -843,99 +766,6 @@ def analyze_fortios_config(content):
             "logging_disabled": not logging_enabled,
         },
     }
-
-
-def parse_fortigate_config(text):
-    """Parser dedicato al sub-tab Firewall del Config Analyzer: estrae policy,
-    interfacce/zone, VIP/NAT e oggetti address/service da una config FortiOS
-    grezza. Sezione-based (config/edit/set/next/end), pura e tollerante —
-    non solleva mai eccezioni su input vuoto o non riconosciuto."""
-    try:
-        root = _forti_tree(text or '')
-
-        # --- Policy firewall ---
-        policies = []
-        pol = _forti_get(root, 'firewall policy')
-        if pol:
-            for pid, n in pol["children"].items():
-                policies.append({
-                    "id": pid,
-                    "name": _forti_set1(n, 'name'),
-                    "srcintf": n["sets"].get('srcintf', []),
-                    "dstintf": n["sets"].get('dstintf', []),
-                    "srcaddr": n["sets"].get('srcaddr', []),
-                    "dstaddr": n["sets"].get('dstaddr', []),
-                    "service": n["sets"].get('service', []),
-                    "action": _forti_set1(n, 'action', 'deny'),
-                    "nat": _forti_set1(n, 'nat', 'disable'),
-                    "status": _forti_set1(n, 'status', 'enable'),
-                })
-
-        # --- Zone: nome zona -> interfacce membro ---
-        zone_of_iface = {}
-        zones = _forti_get(root, 'system zone')
-        if zones:
-            for zname, n in zones["children"].items():
-                for member in n["sets"].get('interface', []):
-                    zone_of_iface[member] = zname
-
-        # --- Interfacce (+ zona) ---
-        interfaces_zones = []
-        ifs = _forti_get(root, 'system interface')
-        if ifs:
-            for name, n in ifs["children"].items():
-                interfaces_zones.append({
-                    "name": name,
-                    "ip": _forti_ip_cidr(n),
-                    "vdom": _forti_set1(n, 'vdom'),
-                    "zone": zone_of_iface.get(name, ''),
-                    "status": _forti_set1(n, 'status', 'up'),
-                })
-
-        # --- VIP / NAT ---
-        vips_nat = []
-        vip = _forti_get(root, 'firewall vip')
-        if vip:
-            for name, n in vip["children"].items():
-                vips_nat.append({
-                    "name": name,
-                    "extip": _forti_set1(n, 'extip'),
-                    "mappedip": _forti_set1(n, 'mappedip'),
-                    "extintf": _forti_set1(n, 'extintf'),
-                    "extport": _forti_set1(n, 'extport'),
-                    "mappedport": _forti_set1(n, 'mappedport'),
-                })
-
-        # --- Oggetti address/service ---
-        addresses_services = []
-        addr = _forti_get(root, 'firewall address')
-        if addr:
-            for name, n in addr["children"].items():
-                addresses_services.append({
-                    "kind": "address",
-                    "name": name,
-                    "subnet": _ip_addr_to_cidr(n["sets"].get('subnet', [])),
-                    "type": _forti_set1(n, 'type'),
-                })
-        svc = _forti_get(root, 'firewall service custom')
-        if svc:
-            for name, n in svc["children"].items():
-                addresses_services.append({
-                    "kind": "service",
-                    "name": name,
-                    "tcp_portrange": _forti_set1(n, 'tcp-portrange'),
-                    "udp_portrange": _forti_set1(n, 'udp-portrange'),
-                    "protocol": _forti_set1(n, 'protocol'),
-                })
-
-        return {
-            "policies": policies,
-            "interfaces_zones": interfaces_zones,
-            "vips_nat": vips_nat,
-            "addresses_services": addresses_services,
-        }
-    except Exception:
-        return {"policies": [], "interfaces_zones": [], "vips_nat": [], "addresses_services": []}
 
 
 # --- Cisco WLC (AireOS) -------------------------------------------------------
@@ -1139,57 +969,8 @@ def _forti_render_stanza(section, key, node):
     return '\n'.join(lines)
 
 
-_PANOS_TOKEN = re.compile(r'"[^"]*"|\S+')
-
-
-def _panos_tokens(s):
-    """Tokenizza una riga PAN-OS 'set' rispettando le stringhe tra apici."""
-    return [t[1:-1] if t.startswith('"') and t.endswith('"') and len(t) >= 2 else t
-            for t in _PANOS_TOKEN.findall(s)]
-
-
-def _panos_lines(text):
-    """Ritorna [(tokens-dopo-'set', riga-grezza), ...] per ogni riga PAN-OS
-    che inizia con 'set '. Tollerante a righe vuote/commenti."""
-    out = []
-    for raw in (text or '').splitlines():
-        s = raw.strip()
-        if not s or not s.lower().startswith('set '):
-            continue
-        out.append((_panos_tokens(s[4:]), s))
-    return out
-
-
-def _panos_collect(lines, prefix):
-    """Raggruppa le righe il cui path inizia con 'prefix' (tupla di token) e
-    ha un nome subito dopo (es. prefix=('address',) su 'set address NAME ip-netmask X').
-    Ritorna {name: {"parts": [[resto-token...], ...], "raw": [riga, ...]}}."""
-    out = {}
-    n = len(prefix)
-    for toks, raw in lines:
-        if len(toks) <= n or tuple(t.lower() for t in toks[:n]) != prefix:
-            continue
-        name = toks[n]
-        rest = toks[n + 1:]
-        entry = out.setdefault(name, {"parts": [], "raw": []})
-        if rest:
-            entry["parts"].append(rest)
-        entry["raw"].append(raw)
-    return out
-
-
-def _panos_attr(entry, attr):
-    """Primo valore associato all'attributo 'attr' tra le 'parts' raccolte
-    (es. parts=[['from','LAN'], ['action','allow']], attr='action' -> 'allow')."""
-    for p in entry["parts"]:
-        if p and p[0].lower() == attr and len(p) > 1:
-            return p[1]
-    return ''
-
-
-def _panos_attr_all(entry, attr):
-    """Tutti i valori associati all'attributo 'attr' (una riga per valore)."""
-    return [p[1] for p in entry["parts"] if p and p[0].lower() == attr and len(p) > 1]
+# Le primitive _panos_tokens/_panos_lines/_panos_collect/_panos_attr/
+# _panos_attr_all sono definite in fw_analyzers.panos e reimportate in testa.
 
 
 def _convert_fortios_to_panos(source_text):
@@ -1507,13 +1288,25 @@ def analyze_device(ip):
 
     config_type = detect_config_type(content, dev)
 
+    import fw_analyzers
+
     is_firewall = False
     firewall = None
     if config_type == 'fortios':
         result = analyze_fortios_config(content)
         hostname = result.pop("hostname", "")
         is_firewall = True
-        firewall = parse_fortigate_config(content)
+        firewall = fw_analyzers.fortios.analyze(content)
+    elif config_type == 'panos':
+        # PAN-OS: nessun analizzatore "generico" dedicato (le altre tab
+        # riusano il parser IOS in modo tollerante); il tab Firewall usa
+        # l'envelope a sezioni.
+        result = analyze_config(content)
+        m = re.search(r'^set deviceconfig system hostname (\S+)', content,
+                      re.MULTILINE)
+        hostname = m.group(1) if m else ""
+        is_firewall = True
+        firewall = fw_analyzers.panos.analyze(content)
     elif config_type == 'wlc-aireos':
         result = analyze_wlc_config(content)
         hostname = result.pop("hostname", "")
