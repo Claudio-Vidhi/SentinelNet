@@ -3,6 +3,8 @@
 config generata contenga le sezioni chiave attese per un input di esempio."""
 
 import switch_provisioner as sp
+from pydantic import ValidationError
+from routers.provisioner import SwitchProvisionSchema
 
 
 def _sample_cfg():
@@ -174,6 +176,25 @@ def test_distribution_role_adds_routing_and_svis():
     assert "ip route 0.0.0.0 0.0.0.0 10.1.0.1" in config
 
 
+def test_aaa_server_missing_ip_rejected_by_schema():
+    try:
+        SwitchProvisionSchema(hostname="SW-TEST-01", aaa_protocol="radius",
+                               aaa_servers=[{"key": "R@diusKey1"}])
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("expected ValidationError for aaa_servers entry missing 'ip'")
+
+
+def test_aaa_protocol_rejects_invalid_literal():
+    try:
+        SwitchProvisionSchema(hostname="SW-TEST-01", aaa_protocol="ldap")
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("expected ValidationError for invalid aaa_protocol")
+
+
 if __name__ == "__main__":
     test_access_config_contains_expected_sections()
     test_hardening_defaults_and_uplink_lag()
@@ -182,4 +203,6 @@ if __name__ == "__main__":
     test_aaa_radius_adds_server_and_group()
     test_aaa_tacacs_adds_server_and_group()
     test_distribution_role_adds_routing_and_svis()
+    test_aaa_server_missing_ip_rejected_by_schema()
+    test_aaa_protocol_rejects_invalid_literal()
     print("OK")
