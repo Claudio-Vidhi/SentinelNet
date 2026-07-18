@@ -1015,6 +1015,7 @@
             let label = `<b>${n.label}</b>`;
             if (modelLine) label += `\n${modelLine}`;
             if (mgmtLine)  label += `\n<i>${mgmtLine}</i>`;
+            if (showVtpDomain && n.vtp_domain) label += `\nVTP: ${n.vtp_domain}`;
 
             // Riempimento pastello per categoria; col toggle VTP il bordo assume il
             // colore del dominio VTP (il riempimento resta neutro e leggibile).
