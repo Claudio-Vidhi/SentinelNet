@@ -47,7 +47,7 @@
                 <input id="obs_api_poll_s" type="number" min="1" value="${d.api_poll_s != null ? d.api_poll_s : ''}" style="padding-left:12px;">
             </div>
             <div style="margin-top:10px; margin-bottom:2px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="lblObsListeners">Listener</div>
-            <div style="margin-bottom:8px; font-size:12px; color:var(--text-muted);">${L.hintObsListeners || "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche richiedono il riavvio dell'applicazione."}</div>
+            <div style="margin-bottom:8px; font-size:12px; color:var(--text-muted);">${L.hintObsListeners || "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche ai listener vengono applicate subito, senza riavviare l'applicazione."}</div>
             ${listenerRows}
             <div style="margin-top:12px;">
                 <button class="btn btn-primary btn-small" onclick="saveObsSettings()" data-i18n="btnSave">
@@ -80,9 +80,15 @@
             if (errEl) errEl.textContent = msg; else alert(msg);
             return;
         }
+        const data = await res.json();
         const banner = document.getElementById('obsRestartBanner');
-        if (banner) banner.style.display = 'block';
-        showToast(i18n[currentLang].msgObsRestartRequired || 'Riavvio richiesto per applicare le modifiche.', 'warning');
+        if (data && data.restart_required) {
+            if (banner) banner.style.display = 'block';
+            showToast(i18n[currentLang].msgObsRestartRequired || 'Riavvio richiesto per applicare le modifiche.', 'warning');
+        } else {
+            if (banner) banner.style.display = 'none';
+            showToast(i18n[currentLang].msgObsApplied || 'Modifiche applicate.', 'success');
+        }
     }
 
     // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------

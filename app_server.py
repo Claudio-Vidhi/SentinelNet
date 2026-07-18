@@ -30,63 +30,18 @@ async def lifespan(app: "FastAPI"):
         print(f"ERRORE: {e}", file=sys.stderr)
         raise
 
-    handles = []
-    retention_task = None
+    from observability import listener_manager
     cfg = data_config.obs_config()
+    await listener_manager.apply_obs_config(cfg)
     if cfg["enabled"]:
-        from observability import rollup
-        from observability.ingesters import ipfix, sflow, syslog as syslog_parser
-        from observability.ingesters.udp_server import start_udp_listener
-        from routers import observability as _obs_router_mod
-        listeners = (
-            ("ipfix", cfg["ipfix"], ipfix.parse, "flow"),
-            ("netflow", cfg["netflow"], ipfix.parse, "flow"),
-            ("sflow", cfg["sflow"], sflow.parse, "flow"),
-            ("syslog", cfg["syslog"], syslog_parser.parse, "syslog"),
-        )
-        for name, lcfg, parser, kind in listeners:
-            if not lcfg["enabled"]:
-                _obs_router_mod.listener_status[name] = {"active": False}
-                continue
-            try:
-                handles.append(await start_udp_listener(
-                    cfg["bind"], lcfg["port"], parser, kind, name))
-                _obs_router_mod.listener_status[name] = {
-                    "active": True, "bind": cfg["bind"], "port": lcfg["port"]}
-                print(f"Observability: listener {name} attivo su "
-                      f"{cfg['bind']}:{lcfg['port']} (UDP).")
-            except OSError as e:
-                from observability import metrics as _obs_metrics
-                _obs_metrics.inc("listener_bind_failed", listener=name)
-                _obs_router_mod.listener_status[name] = {
-                    "active": False, "error": str(e)}
-                print(f"ERRORE: bind del listener {name} su "
-                      f"{cfg['bind']}:{lcfg['port']} fallito ({e}). "
-                      "Listener saltato, l'applicazione resta attiva.",
-                      file=sys.stderr)
-        from observability import correlator
-        retention_task = asyncio.create_task(rollup.retention_loop(),
-                                             name="obs-retention")
-        app.state.obs_correlation_task = asyncio.create_task(
-            correlator.correlation_loop(), name="obs-correlation")
-        if cfg.get("api_poll_s", 0) > 0:
-            from observability.ingesters import api_poller
-            app.state.obs_api_poller_task = asyncio.create_task(
-                api_poller.poll_loop(cfg["api_poll_s"]), name="obs-api-poller")
+        print("Observability: listener/task avviati da config.")
     else:
         print("Observability: osservabilità disabilitata, nessun listener UDP "
               "in ascolto.")
 
     yield
 
-    if retention_task:
-        retention_task.cancel()
-        for attr in ("obs_correlation_task", "obs_api_poller_task"):
-            task = getattr(app.state, attr, None)
-            if task:
-                task.cancel()
-    for handle in handles:
-        await handle.stop()
+    await listener_manager.shutdown()
     db.stop_writer()
 
 app = FastAPI(title="SentinelNet API", version="0.2.0-beta.1", lifespan=lifespan)
