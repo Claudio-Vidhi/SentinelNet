@@ -65,6 +65,7 @@ from routers import analyzer as _analyzer_router
 from routers import ai as _ai_router
 from routers import provisioner as _provisioner_router
 from routers import mcp as _mcp_router
+from routers import mcp_client as _mcp_client_router
 from routers import scan as _scan_router
 from routers import sites as _sites_router
 from routers import agent as _agent_router
@@ -86,6 +87,7 @@ app.include_router(_analyzer_router.router)
 app.include_router(_ai_router.router)
 app.include_router(_provisioner_router.router)
 app.include_router(_mcp_router.router)
+app.include_router(_mcp_client_router.router)
 app.include_router(_scan_router.router)
 app.include_router(_sites_router.router)
 app.include_router(_agent_router.router)

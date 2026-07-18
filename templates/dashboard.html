@@ -221,6 +221,10 @@
         <button class="nav-item requires-admin" onclick="switchTab('tab-mcp', this)">
           <span class="nav-left" data-i18n="tabMcp"><i class="fa-solid fa-plug"></i> MCP Server</span>
         </button>
+        <button id="navMcpClient" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-mcp-client', this)">
+          <span class="nav-left" data-i18n="tabMcpClient"><i class="fa-solid fa-network-wired"></i> MCP Client</span>
+          <span class="preview-badge">preview</span>
+        </button>
         <button class="nav-item requires-admin" onclick="switchTab('tab-settings', this)">
           <span class="nav-left" data-i18n="tabSettings"><i class="fa-solid fa-gear"></i> Impostazioni</span>
         </button>
@@ -1884,6 +1888,53 @@
           <span id="mcpSettingsStatus" style="font-size:12px; color:var(--text-muted);"></span>
         </div>
       </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-flask" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientPreview">MCP Client (anteprima)</span></h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;" data-i18n="descMcpClientPreview">
+          Abilita la tab sperimentale "MCP Client": SentinelNet come client verso server MCP esterni (Jira, ServiceNow…) via Streamable HTTP. Funzionalita' in anteprima.
+        </p>
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="mcpPreviewToggle" onchange="setMcpPreview(this.checked)">
+          <span data-i18n="lblMcpClientPreviewToggle">Abilita la tab MCP Client (preview)</span>
+        </label>
+        <span id="mcpPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>
+    </div>
+
+    <div id="tab-mcp-client" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="mcpClientEyebrow"><i class="fa-solid fa-network-wired"></i> Integrazioni · <span class="preview-badge">preview</span></span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleMcpClient">MCP Client — server esterni</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descMcpClient">
+            SentinelNet come <strong>client</strong> MCP verso server esterni via Streamable HTTP (JSON-RPC 2.0). Aggiungi un server, elenca i tool esposti e invocali. Anteprima: solo trasporto HTTP (niente stdio). I token di autenticazione sono cifrati a riposo e mai restituiti al browser.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:10px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientAdd">Aggiungi server</span></h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="mcpClientPreset('jira')"><i class="fa-brands fa-jira"></i> Jira (MCP)</button>
+          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="mcpClientPreset('servicenow')"><i class="fa-solid fa-headset"></i> ServiceNow (MCP)</button>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:10px;">
+          <input id="mcpcName" class="input" placeholder="Nome" data-i18n-placeholder="phMcpClientName">
+          <input id="mcpcUrl" class="input" placeholder="https://server/mcp" data-i18n-placeholder="phMcpClientUrl">
+          <input id="mcpcAuth" class="input" type="password" placeholder="Bearer token (opzionale)" data-i18n-placeholder="phMcpClientAuth">
+        </div>
+        <p id="mcpcHint" style="color:var(--text-muted); font-size:11px; margin:8px 0 0;"></p>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:12px;">
+          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="saveMcpClientServer()"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span></button>
+          <span id="mcpcSaveStatus" style="font-size:12px; color:var(--text-muted);"></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="font-size:15px; margin-bottom:10px;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientServers">Server configurati</span></h3>
+        <div id="mcpClientServerList"></div>
+      </div>
     </div>
 
     <div id="tab-settings" class="tab-content">
@@ -2160,6 +2211,7 @@
   <script src="/static/js/client-map.js"></script>
   <script src="/static/js/ai.js"></script>
   <script src="/static/js/settings.js"></script>
+  <script src="/static/js/mcp-client.js"></script>
   <script>
     // --- SIDEBAR RAIL (collasso a icone) --- [MOVED to static/js/core.js: syncNavTooltips,
     // applySidebarCollapsed, toggleSidebar, escapeHtml, apiFetch, auth handlers, appInit,

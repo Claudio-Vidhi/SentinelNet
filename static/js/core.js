@@ -378,6 +378,11 @@ async function appInit() {
         }
     } catch (e) { /* non bloccante */ }
 
+    // Gating tab MCP Client (preview): visibile solo ad admin col flag attivo.
+    if (currentRole === 'admin' && typeof applyMcpClientGating === 'function') {
+        try { await applyMcpClientGating(); } catch (e) { /* non bloccante */ }
+    }
+
     try {
         const res = await apiFetch('/api/local-devices');
         if (!res) {
@@ -488,6 +493,7 @@ function switchTab(tabId, clickedBtn) {
     else if(tabId === 'tab-users') loadUsers();
     else if(tabId === 'tab-sites') loadSites();
     else if(tabId === 'tab-mcp') loadMcpTab();
+    else if(tabId === 'tab-mcp-client') loadMcpClientTab();
     else if(tabId === 'tab-provisioner') initFgtTokenPanel();
     else if(tabId === 'tab-settings') loadAppSettings();
 }
