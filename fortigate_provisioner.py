@@ -94,6 +94,42 @@ def build_config(cfg: dict) -> str:
         lines.append("    next")
         lines.append("end")
 
+    aaa_protocol = cfg.get("aaa_protocol") or "none"
+    aaa_server_ip = cfg.get("aaa_server_ip")
+    if aaa_protocol in ("radius", "tacacs") and aaa_server_ip:
+        server_name = "SENTINEL-RADIUS" if aaa_protocol == "radius" else "SENTINEL-TACACS"
+        group_name = "SENTINEL-AAA"
+        sec(f"AAA {'RADIUS' if aaa_protocol == 'radius' else 'TACACS+'}")
+        if aaa_protocol == "radius":
+            lines.append("config user radius")
+            lines.append(f"    edit {_q(server_name)}")
+            lines.append(f"        set server {aaa_server_ip}")
+            if cfg.get("aaa_key"):
+                lines.append(f"        set secret {_q(cfg['aaa_key'])}")
+            lines.append("    next")
+            lines.append("end")
+        else:
+            lines.append("config user tacacs+")
+            lines.append(f"    edit {_q(server_name)}")
+            lines.append(f"        set server {aaa_server_ip}")
+            if cfg.get("aaa_key"):
+                lines.append(f"        set key {_q(cfg['aaa_key'])}")
+            lines.append("    next")
+            lines.append("end")
+        lines.append("config user group")
+        lines.append(f"    edit {_q(group_name)}")
+        lines.append("        set member " + _q(server_name))
+        lines.append("    next")
+        lines.append("end")
+        lines.append("config system admin")
+        lines.append(f"    edit {_q('remote-' + server_name.lower())}")
+        lines.append("        set remote-auth enable")
+        lines.append("        set wildcard enable")
+        lines.append(f"        set remote-group {_q(group_name)}")
+        lines.append("        set accprofile \"super_admin\"")
+        lines.append("    next")
+        lines.append("end")
+
     central = cfg.get("central_mgmt") or {}
 
     sec("INTERFACCE")
