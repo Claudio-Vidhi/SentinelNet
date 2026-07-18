@@ -1279,7 +1279,12 @@ def generate_network_map(group_filter=None) -> dict:
     if cached is not None:
         return cached
     result = _generate_network_map(group_filter)
-    _netmap_cache["by_filter"][key] = result
+    # Compare-and-swap: only store if the signature hasn't advanced while we
+    # were computing (a slow in-flight computation must not clobber fresher
+    # data written by a concurrent request that started after a category
+    # save advanced the signature).
+    if _netmap_cache["sig"] == sig:
+        _netmap_cache["by_filter"][key] = result
     return result
 
 
