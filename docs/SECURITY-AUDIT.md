@@ -62,8 +62,8 @@ Keyed on username only; username spray from one IP not slowed; restart clears co
 Logout is client-side only; stolen token valid ≤ 60 min.
 **Plan:** in-memory JTI denylist until expiry (add `jti` to token claims), cleared on natural expiry; or short access token + refresh.
 
-### M-5 — FortiGate REST `verify_tls` default false · ✅ fixed
-Default flipped to `True` (`FgtTokenSchema`). Opt-out remains for self-signed certs; recommend importing the FortiGate CA. Same rule to apply to future WLC RESTCONF.
+### M-5 — FortiGate REST `verify_tls` default false · ⚠️ accepted risk (revert 2026-07-19)
+Default era stato portato a `True` (`FgtTokenSchema`), ma rendeva il REST inutilizzabile out-of-the-box con i certificati self-signed di fabbrica dei FortiGate (SSLCertVerificationError su ogni test). Riportato a `False` come tradeoff deliberato: opt-in per-device persistito, hint chiaro su `SSLError` in `fortigate_service.api_request`. Raccomandazione: abilitare `verify_tls` dopo aver installato un certificato attendibile sul FortiGate. Same rule to apply to future WLC RESTCONF.
 
 ### L-1 — JWT in `sessionStorage` · 📋 planned (with L-2)
 Readable by any XSS. **Plan:** add CSP header (below); consider httpOnly cookie + CSRF later.

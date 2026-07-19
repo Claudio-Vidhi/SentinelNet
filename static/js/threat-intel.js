@@ -184,7 +184,7 @@
             <div style="margin-bottom:10px;"><span class="severity-pill severity-${item.severity}">${item.severity}</span>
               <span style="margin-left:8px;">CVSS ${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</span>
               <span style="margin-left:8px;">EPSS ${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</span></div>
-            <div style="margin-bottom:10px; color:var(--text-muted);">${item.vendor} · ${item.product}</div>
+            <div style="margin-bottom:10px; color:var(--text-muted);">${escapeHtml(item.vendor)} · ${escapeHtml(item.product)}</div>
             <div style="margin-bottom:14px; line-height:1.5;">${escapeHtml(item.summary)}</div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">${item.date ? new Date(item.date).toLocaleDateString() : '—'}</div>
             <div style="font-size:12px; word-break:break-all;">${refsHtml}</div>

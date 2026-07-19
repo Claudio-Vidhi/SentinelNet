@@ -221,6 +221,27 @@ TOOLS = {
         _obj({"ip": _S}, ["ip"]),
         lambda a: api("GET", f"/api/fortigate/{a['ip']}/policies"),
     ),
+    "fortigate_firewall_addresses": (
+        "Get the firewall address book of a FortiGate (name, type, subnet/FQDN, "
+        "comment) — slim cmdb read, useful to resolve object names used in "
+        "policies.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/firewall/addresses"),
+    ),
+    "fortigate_firewall_policy_objects": (
+        "Get the firewall policy table of a FortiGate with only the fields "
+        "relevant to observability (policyid, name, src/dst interfaces and "
+        "addresses, service, action, status, logtraffic). Slimmer than "
+        "fortigate_policies.",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/firewall/policy-objects"),
+    ),
+    "fortigate_firewall_services": (
+        "Get the custom firewall services of a FortiGate (name, TCP/UDP port "
+        "ranges, comment).",
+        _obj({"ip": _S}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/firewall/services"),
+    ),
     "fortigate_policy_lookup": (
         "Ask the FortiGate which firewall policy WOULD match a given flow "
         "(source IP, destination IP/FQDN, protocol, port) without generating "

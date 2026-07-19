@@ -1604,7 +1604,7 @@
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-            <input type="checkbox" id="fgtTokenVerifyTls" checked style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+            <input type="checkbox" id="fgtTokenVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
             <label for="fgtTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1619,6 +1619,42 @@
             </button>
           </div>
           <div id="fgtTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- Oggetti Firewall FortiGate (live, sola lettura): usa il token API già
+           configurato sopra per interrogare address book / policy / servizi
+           custom del FortiGate selezionato. Non è admin-only (lettura via
+           get_current_user), quindi resta senza il gate RBAC admin-only. -->
+      <div id="provFgtObjectsSection" style="display:none; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-2); padding:14px; margin-bottom:16px;">
+        <h4 style="display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 12px;">
+          <i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i><span data-i18n="titleFgtObjects">Oggetti Firewall FortiGate (live)</span>
+        </h4>
+        <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtObjDevice" data-i18n="lblFgtObjDevice">Dispositivo FortiGate</label>
+            <select id="fgtObjDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" style="width:auto;" onclick="loadFgtObjects()" data-i18n="btnFgtObjLoad">
+            <i class="fa-solid fa-rotate"></i> Carica
+          </button>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <button type="button" class="ca-pill active" id="fgtObjTabAddresses" onclick="switchFgtObjView('addresses')" data-i18n="tabFgtObjAddresses">Indirizzi</button>
+          <button type="button" class="ca-pill" id="fgtObjTabPolicies" onclick="switchFgtObjView('policy-objects')" data-i18n="tabFgtObjPolicies">Policy</button>
+          <button type="button" class="ca-pill" id="fgtObjTabServices" onclick="switchFgtObjView('services')" data-i18n="tabFgtObjServices">Servizi</button>
+        </div>
+        <input id="fgtObjFilter" type="text" oninput="renderFgtObjTable()" placeholder="Filtra..." data-i18n-placeholder="phFgtObjFilter" style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+        <div class="table-wrap" id="fgtObjTableWrap" style="margin-top:0;">
+          <table id="fgtObjTable" style="width:100%; font-size:13px; border-collapse:collapse; display:none;">
+            <thead id="fgtObjTableHead"></thead>
+            <tbody id="fgtObjTableBody"></tbody>
+          </table>
+          <div id="fgtObjEmpty" style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="msgFgtObjEmpty">
+            Nessun dato. Seleziona un dispositivo e premi Carica.
+          </div>
         </div>
       </div>
 

@@ -95,6 +95,12 @@ def api_request(ip: str, method: str, path: str, params: dict = None,
                              headers={"Authorization": f"Bearer {token}"},
                              params=params or {}, json=json_body,
                              verify=verify, timeout=timeout)
+    except requests.exceptions.SSLError as e:
+        raise FortiGateError(
+            f"REST API {ip} non raggiungibile: certificato TLS non attendibile ({e}). "
+            "Il FortiGate usa probabilmente un certificato self-signed: disabilitare "
+            "'Verifica certificato TLS' nella configurazione del token oppure installare "
+            "un certificato attendibile sul FortiGate.")
     except requests.RequestException as e:
         raise FortiGateError(f"REST API {ip} non raggiungibile: {e}")
     if r.status_code == 401:
@@ -121,6 +127,20 @@ def api_post(ip: str, path: str, json_body=None, params: dict = None,
     """POST su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
     return api_request(ip, "POST", path, params=params, json_body=json_body,
                        timeout=timeout)
+
+
+def api_get_cmdb(ip: str, path: str, fmt: str = None, flt: str = None,
+                 timeout: int = 30):
+    """GET su un endpoint cmdb con proiezione dei campi (query `format`,
+    es. 'name|type|subnet') ed eventuale filtro (query `filter`, es.
+    'name=@X'), come da documentazione FortiOS "Using APIs". Riduce il
+    payload agli oggetti cmdb di sola lettura (address/policy/service)."""
+    params = {}
+    if fmt:
+        params["format"] = fmt
+    if flt:
+        params["filter"] = flt
+    return api_get(ip, path, params=params or None, timeout=timeout)
 
 
 # --- Trasporto SSH (fallback) ------------------------------------------------
@@ -243,6 +263,50 @@ def get_policy_stats(device):
     """Contatori runtime per policy (hit, byte, sessioni attive)."""
     return _api_or_ssh(device, "monitor/firewall/policy", None,
                        "diagnose firewall iprope show 100004")
+
+
+# --- Inventario cmdb "slim" (sola REST, campi proiettati via `format`) -------
+# A differenza di get_firewall_policies() (full config, usata anche dal
+# fallback SSH), queste tre funzioni restituiscono solo i campi utili
+# all'osservabilità, come da doc Fortinet "Using APIs": nessun fallback SSH,
+# in analogia a policy_lookup() (nessun equivalente CLI 1:1 affidabile).
+
+def get_firewall_addresses(device):
+    """Oggetti indirizzo firewall (address book): nome, tipo, subnet/FQDN,
+    commento. Query cmdb/firewall/address con format proiettato."""
+    ip = device["IP"]
+    try:
+        data = api_get_cmdb(ip, "cmdb/firewall/address",
+                            fmt="name|type|subnet|fqdn|comment")
+        return {"source": "api", "data": data.get("results", data)}
+    except FortiGateError as e:
+        raise FortiGateError(f"firewall/address disponibile solo via REST API: {e}")
+
+
+def get_firewall_policy_objects(device):
+    """Policy firewall (cmdb) con soli campi rilevanti per l'osservabilità
+    (policyid, nome, interfacce, indirizzi, servizi, azione, stato,
+    logtraffic). Complementare a get_firewall_policies() (full config)."""
+    ip = device["IP"]
+    try:
+        data = api_get_cmdb(ip, "cmdb/firewall/policy",
+                            fmt="policyid|name|srcintf|dstintf|srcaddr|dstaddr|"
+                                "service|action|status|logtraffic")
+        return {"source": "api", "data": data.get("results", data)}
+    except FortiGateError as e:
+        raise FortiGateError(f"firewall/policy (slim) disponibile solo via REST API: {e}")
+
+
+def get_firewall_custom_services(device):
+    """Servizi custom (firewall.service/custom): nome, range porte TCP/UDP,
+    commento."""
+    ip = device["IP"]
+    try:
+        data = api_get_cmdb(ip, "cmdb/firewall.service/custom",
+                            fmt="name|tcp-portrange|udp-portrange|comment")
+        return {"source": "api", "data": data.get("results", data)}
+    except FortiGateError as e:
+        raise FortiGateError(f"firewall.service/custom disponibile solo via REST API: {e}")
 
 
 def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
