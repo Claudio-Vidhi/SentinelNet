@@ -373,9 +373,18 @@
 
             // Render filtered table
             renderFlowsTable();
+            loadFlowGraph(w);
         } finally {
             flowsFetchInFlight = false;
         }
+    }
+
+    function fmtRate(bps) {
+        if (!bps) return '0 bps';
+        if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gbps';
+        if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps';
+        if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' Kbps';
+        return Math.round(bps) + ' bps';
     }
 
     function rebuildFlowsTenantList(flows) {
@@ -845,5 +854,290 @@
         } else if (res) {
             showToast(currentLang === 'en' ? 'Operation failed.' : 'Operazione non riuscita.', 'error');
         }
+    }
+
+    // --- FLOW GRAPH (Task 3: Live Flows — grafo, KPI, riepilogo, tabelle) ---
+
+    let _fgData = null;          // ultima risposta /flowgraph
+    let _fgSelectedNode = null;  // ip selezionato per filtrare le tabelle
+    let _fgFetchInFlight = false;
+
+    async function loadFlowGraph(window_) {
+        if (_fgFetchInFlight) return;
+        _fgFetchInFlight = true;
+        try {
+            const w = window_ || document.getElementById('flowsWindow')?.value || '15m';
+            const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}`);
+            if (!res || !res.ok) return;
+            _fgData = await res.json();
+            _fgSelectedNode = null;
+            renderFlowGraphKpis();
+            renderFlowGraphTenant();
+            renderFlowGraphProtocols();
+            renderFlowGraphTalkers();
+            fgStartSimulation();
+        } finally {
+            _fgFetchInFlight = false;
+        }
+    }
+
+    function renderFlowGraphKpis() {
+        const d = _fgData;
+        if (!d) return;
+        const L = i18n[currentLang];
+        document.getElementById('fgKpiThroughput').textContent = fmtRate(d.kpi.throughput_bps);
+        const tp = d.kpi.top_path;
+        document.getElementById('fgKpiTopPath').textContent = tp && tp.src
+            ? `${tp.src} → ${tp.dst} (${tp.pct}%)` : '—';
+        document.getElementById('fgKpiTalkers').textContent = d.kpi.talkers;
+        document.getElementById('fgKpiSpikes').textContent = d.kpi.spikes;
+    }
+
+    function renderFlowGraphTenant() {
+        const d = _fgData;
+        const box = document.getElementById('fgTenantSummary');
+        if (!box) return;
+        if (!d || !d.tenant || !d.tenant.name) { box.textContent = '—'; return; }
+        const L = i18n[currentLang];
+        const t = d.tenant;
+        const tt = t.top_talker;
+        box.innerHTML = `
+            <div><b>${escapeHtml(L.lblNoTenant ? (currentLang === 'en' ? 'Tenant' : 'Tenant') : 'Tenant')}</b>: ${escapeHtml(t.name)}</div>
+            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}</div>
+            <div><b>${escapeHtml(L.lblVisibleVlans || 'Visible VLANs')}</b>: ${(t.vlans || []).length}</div>
+            <div><b>${escapeHtml(L.lblFlowsShown || 'Flows shown')}</b>: ${t.flows_shown}</div>
+            <div><b>${escapeHtml(L.lblTopTalker || 'Top talker')}</b>: ${tt ? `${escapeHtml(tt.src)} → ${escapeHtml(tt.dst)} (${escapeHtml(fmtRate(tt.rate_bps))})` : '—'}</div>`;
+    }
+
+    function renderFlowGraphProtocols() {
+        const d = _fgData;
+        const tbody = document.getElementById('fgProtoTableBody');
+        if (!tbody) return;
+        const protocols = (d && d.protocols) || [];
+        if (!protocols.length) {
+            tbody.innerHTML = `<tr><td colspan="3" style="padding:10px; text-align:center; color:var(--text-muted);">—</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = protocols.map(p => `
+            <tr style="border-top:1px solid var(--border);">
+                <td style="padding:4px 6px;">${escapeHtml(String(p.proto).toUpperCase())}</td>
+                <td>${escapeHtml(p.port == null ? '—' : String(p.port))}</td>
+                <td>${escapeHtml(fmtRate(p.rate_bps))}</td>
+            </tr>`).join('');
+    }
+
+    function renderFlowGraphTalkers() {
+        const d = _fgData;
+        const tbody = document.getElementById('fgTalkersTableBody');
+        if (!tbody) return;
+        let edges = (d && d.edges) || [];
+        if (_fgSelectedNode) {
+            edges = edges.filter(e => e.src === _fgSelectedNode || e.dst === _fgSelectedNode);
+        }
+        if (!edges.length) {
+            const L = i18n[currentLang];
+            tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);">${escapeHtml(L.msgNoFlowGraphData || 'No data.')}</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = edges.map(e => `
+            <tr style="border-top:1px solid var(--border);">
+                <td style="padding:6px 8px;">${escapeHtml(e.src)}</td>
+                <td>${escapeHtml(e.dst)}</td>
+                <td>${escapeHtml(String(e.vlan))}</td>
+                <td>${escapeHtml(fmtRate(e.rate_bps))}</td>
+            </tr>`).join('');
+    }
+
+    function fgFilterByNode(ip) {
+        _fgSelectedNode = (_fgSelectedNode === ip) ? null : ip;
+        renderFlowGraphTalkers();
+        renderFlowGraphProtocolsFiltered();
+        fgDraw();
+    }
+
+    function renderFlowGraphProtocolsFiltered() {
+        // La tabella protocolli resta aggregata sull'intera finestra: solo i
+        // talker sono filtrati per nodo selezionato (coerente col brief).
+        renderFlowGraphProtocols();
+    }
+
+    // --- Canvas: grafo force-directed vanilla (nessuna libreria) ---
+
+    let _fgNodes = [];   // {id, x, y, vx, vy, r, bytes, vlan}
+    let _fgEdges = [];
+    let _fgTicks = 0;
+    const FG_MAX_TICKS = 100;
+    let _fgAnimating = false;
+    let _fgHover = null;
+
+    function fgVlanColor(vlan) {
+        let hash = 0;
+        const s = String(vlan);
+        for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) | 0;
+        const hue = Math.abs(hash) % 360;
+        return `hsl(${hue}, 65%, 55%)`;
+    }
+
+    function fgStartSimulation() {
+        const canvas = document.getElementById('flowGraphCanvas');
+        if (!canvas || !_fgData) return;
+        const w = canvas.clientWidth || canvas.width;
+        const h = canvas.clientHeight || canvas.height;
+        canvas.width = w; canvas.height = h;
+
+        const maxBytes = Math.max(1, ...(_fgData.nodes.map(n => n.bytes || 0)));
+        _fgNodes = _fgData.nodes.map(n => ({
+            id: n.id, bytes: n.bytes || 0, vlan: n.vlan,
+            r: 6 + 14 * Math.sqrt((n.bytes || 0) / maxBytes),
+            x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0,
+        }));
+        const byId = {};
+        _fgNodes.forEach(n => byId[n.id] = n);
+        const maxRate = Math.max(1, ...(_fgData.edges.map(e => e.rate_bps || 0)));
+        _fgEdges = _fgData.edges
+            .filter(e => byId[e.src] && byId[e.dst])
+            .map(e => ({
+                src: byId[e.src], dst: byId[e.dst], vlan: e.vlan, proto: e.proto,
+                rate_bps: e.rate_bps,
+                width: Math.max(1, Math.min(8, 1 + 7 * (e.rate_bps / maxRate))),
+            }));
+
+        _fgTicks = 0;
+        if (!_fgAnimating) {
+            _fgAnimating = true;
+            requestAnimationFrame(fgTick);
+        }
+        _fgCanvasBound = _fgCanvasBound || fgBindCanvasEvents();
+    }
+
+    let _fgCanvasBound = false;
+
+    function fgTick() {
+        const canvas = document.getElementById('flowGraphCanvas');
+        if (!canvas) { _fgAnimating = false; return; }
+        const w = canvas.width, h = canvas.height;
+        if (_fgTicks < FG_MAX_TICKS) {
+            const REPULSION = 2500, SPRING = 0.02, IDEAL_LEN = 90, DAMP = 0.85;
+            for (let i = 0; i < _fgNodes.length; i++) {
+                const a = _fgNodes[i];
+                let fx = 0, fy = 0;
+                for (let j = 0; j < _fgNodes.length; j++) {
+                    if (i === j) continue;
+                    const b = _fgNodes[j];
+                    let dx = a.x - b.x, dy = a.y - b.y;
+                    let d2 = dx * dx + dy * dy || 0.01;
+                    const d = Math.sqrt(d2);
+                    const f = REPULSION / d2;
+                    fx += (dx / d) * f; fy += (dy / d) * f;
+                }
+                // Attrazione al centro per evitare deriva
+                fx += (w / 2 - a.x) * 0.002; fy += (h / 2 - a.y) * 0.002;
+                a.vx = (a.vx + fx) * DAMP; a.vy = (a.vy + fy) * DAMP;
+            }
+            for (const e of _fgEdges) {
+                let dx = e.dst.x - e.src.x, dy = e.dst.y - e.src.y;
+                const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+                const f = SPRING * (d - IDEAL_LEN);
+                const fx = (dx / d) * f, fy = (dy / d) * f;
+                e.src.vx += fx; e.src.vy += fy;
+                e.dst.vx -= fx; e.dst.vy -= fy;
+            }
+            for (const n of _fgNodes) {
+                n.x = Math.min(w - n.r - 4, Math.max(n.r + 4, n.x + n.vx));
+                n.y = Math.min(h - n.r - 4, Math.max(n.r + 4, n.y + n.vy));
+            }
+            _fgTicks++;
+            fgDraw();
+            requestAnimationFrame(fgTick);
+        } else {
+            fgDraw();
+            _fgAnimating = false;
+        }
+    }
+
+    function fgDraw() {
+        const canvas = document.getElementById('flowGraphCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        if (!_fgNodes.length) {
+            ctx.fillStyle = '#888';
+            ctx.font = '13px sans-serif';
+            const L = i18n[currentLang];
+            ctx.fillText(L.msgNoFlowGraphData || 'No data.', 12, 20);
+            return;
+        }
+        for (const e of _fgEdges) {
+            const dim = _fgSelectedNode && e.src.id !== _fgSelectedNode && e.dst.id !== _fgSelectedNode;
+            ctx.strokeStyle = fgVlanColor(e.vlan);
+            ctx.globalAlpha = dim ? 0.15 : 0.75;
+            ctx.lineWidth = e.width;
+            ctx.beginPath();
+            ctx.moveTo(e.src.x, e.src.y);
+            ctx.lineTo(e.dst.x, e.dst.y);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        for (const n of _fgNodes) {
+            const dim = _fgSelectedNode && n.id !== _fgSelectedNode;
+            ctx.globalAlpha = dim ? 0.35 : 1;
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+            ctx.fillStyle = fgVlanColor(n.vlan);
+            ctx.fill();
+            if (n.id === _fgSelectedNode) {
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#fff';
+                ctx.stroke();
+            }
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#eee';
+            ctx.font = '10px sans-serif';
+            ctx.fillText(n.id, n.x + n.r + 3, n.y + 3);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    function fgNodeAt(canvas, evt) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+        for (const n of _fgNodes) {
+            const dx = x - n.x, dy = y - n.y;
+            if (dx * dx + dy * dy <= (n.r + 2) * (n.r + 2)) return n;
+        }
+        return null;
+    }
+
+    function fgBindCanvasEvents() {
+        const canvas = document.getElementById('flowGraphCanvas');
+        if (!canvas) return false;
+        canvas.addEventListener('click', evt => {
+            const n = fgNodeAt(canvas, evt);
+            if (n) fgFilterByNode(n.id);
+            else { _fgSelectedNode = null; renderFlowGraphTalkers(); fgDraw(); }
+        });
+        canvas.addEventListener('mousemove', evt => {
+            const n = fgNodeAt(canvas, evt);
+            const tip = document.getElementById('fgTooltip');
+            if (!tip) return;
+            if (n) {
+                const totalRate = _fgEdges.filter(e => e.src.id === n.id || e.dst.id === n.id)
+                    .reduce((s, e) => s + (e.rate_bps || 0), 0);
+                tip.textContent = `${n.id} — ${fmtRate(totalRate)}`;
+                tip.style.left = (evt.clientX + 12) + 'px';
+                tip.style.top = (evt.clientY + 12) + 'px';
+                tip.style.display = 'block';
+                canvas.style.cursor = 'pointer';
+            } else {
+                tip.style.display = 'none';
+                canvas.style.cursor = 'default';
+            }
+        });
+        canvas.addEventListener('mouseleave', () => {
+            const tip = document.getElementById('fgTooltip');
+            if (tip) tip.style.display = 'none';
+        });
+        return true;
     }
 

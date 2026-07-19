@@ -7959,6 +7959,53 @@
         ]
       }
     },
+    "/api/observability/flowgraph": {
+      "get": {
+        "description": "Grafo dei flussi aggregato (Task 3, Live Flows): nodi/archi con tassi,\nKPI di sintesi, riepilogo del tenant corrente e breakdown protocolli.\nRiusa le stesse query di ``obs_top_talkers``/``obs_anomalies``, scoped\nper tenant via ``_tenant_filter``. Nodi/archi limitati ai top 50 per rate.",
+        "operationId": "obs_flowgraph_api_observability_flowgraph_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "5m",
+              "title": "Window",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Obs Flowgraph",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
     "/api/observability/health": {
       "get": {
         "description": "Stato pipeline: listener attivi, metriche, dimensione DB, versione\nschema. Diagnostica operativa primaria dell'intero modulo (solo admin).",
