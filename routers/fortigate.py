@@ -30,6 +30,10 @@ class FgtTokenSchema(BaseModel):
     # con SSLCertVerificationError). Abilitare esplicitamente solo se sul
     # FortiGate è installato un certificato attendibile.
     verify_tls: bool = False
+    name: str = ""                  # nome descrittivo (multi-target manager)
+
+class FgtActiveTargetSchema(BaseModel):
+    ip: str
 
 class FgtPolicyLookupSchema(BaseModel):
     src_ip: str
@@ -87,10 +91,31 @@ def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)
     """Salva (cifrato) il token REST API di un FortiGate; token vuoto lo rimuove."""
     _fgt_device(payload.ip, current_user)
     fortigate_service.set_api_token(payload.ip, payload.token,
-                                    port=payload.port, verify_tls=payload.verify_tls)
+                                    port=payload.port, verify_tls=payload.verify_tls,
+                                    name=payload.name)
     action = "configurato" if payload.token else "rimosso"
     log_audit(f"Token API FortiGate {action} per '{payload.ip}' da '{current_user.get('sub')}'.")
     return {"status": "success"}
+
+@router.get("/api/fortigate/targets")
+def fgt_list_targets(current_user = Depends(require_admin)):
+    """Elenco dei target FortiGate configurati (nome, porta, TLS, attivo);
+    i token non vengono mai restituiti."""
+    return fortigate_service.list_targets()
+
+@router.post("/api/fortigate/targets/active")
+def fgt_set_active_target(payload: FgtActiveTargetSchema, current_user = Depends(require_admin)):
+    """Imposta il target FortiGate attivo per la tab LIVE."""
+    _fgt_device(payload.ip, current_user)
+    fortigate_service.set_active_target(payload.ip)
+    log_audit(f"Target FortiGate attivo impostato su '{payload.ip}' da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@router.post("/api/fortigate/targets/{ip}/test")
+def fgt_test_target(ip: str, current_user = Depends(require_admin)):
+    """Testa la connessione REST API verso un target FortiGate (timeout breve)."""
+    _fgt_device(ip, current_user)
+    return fortigate_service.test_connection(ip)
 
 @router.get("/api/fortigate/{ip}/status")
 def fgt_status(ip: str, current_user = Depends(get_current_user)):
