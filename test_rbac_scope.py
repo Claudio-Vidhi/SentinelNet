@@ -114,6 +114,18 @@ class TestRbacScope(unittest.TestCase):
         for path, _group in ROUTES:
             self.assertEqual(client.get(path).status_code, 401, path)
 
+    def test_mcp_client_routes_admin_only(self):
+        # La tab MCP Client (preview) rispecchia la RBAC admin-only della tab
+        # MCP Server: operator negato (403), admin ammesso, anonimo 401.
+        op = self._client("single")
+        self.assertEqual(op.get("/api/mcp-client/servers").status_code, 403)
+        self.assertEqual(op.get("/api/mcp-client/settings").status_code, 403)
+        adm = self._client("adm")
+        self.assertNotIn(adm.get("/api/mcp-client/servers").status_code, (401, 403))
+        self.assertNotIn(adm.get("/api/mcp-client/settings").status_code, (401, 403))
+        anon = TestClient(app_server.app)
+        self.assertEqual(anon.get("/api/mcp-client/servers").status_code, 401)
+
     def test_no_scalar_user_group_in_routers(self):
         # Gate permanente (CONTRIBUTING.md §4): mai `user.group`/`.get("group")`
         # scalare nei router.

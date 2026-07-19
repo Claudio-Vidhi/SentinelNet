@@ -1,0 +1,789 @@
+/* ===== templates/dashboard.html <head> main stylesheet ===== */
+    :root {
+      /* Design tokens — DESIGN-sentry.md (violet midnight, lime scarce, pink punctuation) */
+      --bg: #1f1633;                    /* surface-canvas-dark */
+      --surface: #150f23;               /* surface-night: pannelli/card */
+      --surface-2: #1f1633;             /* ink-deep: superfici annidate */
+      --surface-3: #2b2144;             /* superficie sollevata (hover) */
+      --border: #362d59;                /* hairline-violet */
+      --text: #ffffff;                  /* on-primary */
+      --text-muted: #bdb8c0;            /* on-dark-muted */
+      --text-soft: #918aa0;             /* on-dark-faint: label/icona attenuata */
+      --primary: #a99ff2;               /* accent-violet schiarito per leggibilità su canvas scuro */
+      --primary-glow: rgba(169, 159, 242, 0.35);
+      --ring: rgba(59, 130, 246, 0.5);  /* ring-focus: unico blu del sistema */
+      --success: #57d987;               /* semantico (LED online) — non brand */
+      --success-glow: rgba(87, 217, 135, 0.3);
+      --danger: #fa7faa;                /* accent-pink come semantico di errore */
+      --danger-glow: rgba(250, 127, 170, 0.35);
+      --warning: #ffb84d;               /* semantico (stati caution) — non brand */
+      --discovered: #79628c;            /* accent-violet-mid */
+      --lime: #c2ef4e;                  /* accent-lime: SOLO chip keyword, mai bottoni */
+      --violet-deep: #422082;           /* select/spotlight */
+      --violet-mid: #79628c;            /* tag chip */
+      --ghost: rgba(255, 255, 255, 0.18);  /* on-dark-faint: fill ghost */
+      --cta: #ffffff;                   /* button-inverted: CTA dominante su canvas scuro */
+      --cta-text: #1f1633;
+      --cta-press: #f0f0f0;
+      --radius: 12px;                   /* rounded.xl: card */
+      --radius-lg: 18px;                /* rounded.lg: pannelli revamp */
+      --radius-xxl: 18px;               /* rounded.xxl: card feature/login */
+      --font-main: 'Rubik', -apple-system, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
+      --font-display: 'Space Grotesk', 'Rubik', system-ui, sans-serif;
+      --font-code: Monaco, Menlo, 'Ubuntu Mono', monospace;
+      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      /* --sidebar-w è l'unico punto di verità della larghezza della sidebar:
+         la rail collassata la riscrive e la griglia (quindi <main>) si riadatta. */
+      --sidebar-w: 340px;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      gap: 20px;
+      padding: 20px;
+      overflow-x: hidden;
+      /* Solo la colonna: --transition è "all", che qui animerebbe anche
+         background/color/padding a ogni cambio di tema o stato. */
+      transition: grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Scrollbar: trattamento coerente col design language — binario trasparente,
+       pollice hairline (--border) che vira su --primary al passaggio del mouse.
+       Globale di proposito: tabelle e modali mantengono un affordance visibile.
+       La sidebar lo sovrascrive più sotto per farlo sparire a riposo. */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
+      /* bordo trasparente + background-clip: pollice sottile ma area di presa piena */
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary); background-clip: padding-box; }
+    /* Firefox: nessun pseudo-elemento, si usano le proprietà standard. */
+    html { scrollbar-color: var(--border) transparent; }
+
+    /* Login / Setup Glassmorphic Overlay */
+    #authOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background:
+        /* Starfield: puntini bianchi a bassissima opacità sul canvas violetto */
+        radial-gradient(1px 1px at 12% 22%, rgba(255,255,255,0.35) 50%, transparent 51%),
+        radial-gradient(1px 1px at 28% 68%, rgba(255,255,255,0.22) 50%, transparent 51%),
+        radial-gradient(1.5px 1.5px at 44% 15%, rgba(255,255,255,0.28) 50%, transparent 51%),
+        radial-gradient(1px 1px at 61% 47%, rgba(255,255,255,0.2) 50%, transparent 51%),
+        radial-gradient(1px 1px at 75% 80%, rgba(255,255,255,0.3) 50%, transparent 51%),
+        radial-gradient(1.5px 1.5px at 88% 30%, rgba(255,255,255,0.24) 50%, transparent 51%),
+        radial-gradient(1px 1px at 8% 88%, rgba(255,255,255,0.2) 50%, transparent 51%),
+        radial-gradient(1px 1px at 94% 64%, rgba(255,255,255,0.26) 50%, transparent 51%),
+        #150f23;
+      /* Sfondo SOLIDO: con alpha<1 + backdrop-filter il contenuto retrostante
+         diventava leggibile ad alcuni livelli di zoom del browser (Chromium
+         scarta il blur al cambio di zoom). */
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: var(--transition);
+    }
+
+    /* card-feature-dark: night solido, rounded.xxl, hairline violet */
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xxl);
+      padding: 40px;
+      width: 420px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      animation: fadeInUp 0.4s ease;
+    }
+
+    .login-card h2 {
+      font-family: var(--font-display);
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .login-card p {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-bottom: 25px;
+      line-height: 1.5;
+    }
+
+    /* Base Layout */
+    aside, main {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      /* Niente drop-shadow su canvas scuro: la profondità la danno le hairline */
+    }
+
+    aside {
+      gap: 20px;
+      position: sticky;
+      top: 20px;
+      height: calc(100vh - 40px);
+      overflow-y: auto; /* Abilita lo scorrimento autonomo del form sui monitor piccoli o elenchi lunghi */
+      scrollbar-width: thin;
+    }
+
+    /* Sidebar: il pollice resta invisibile a riposo così il bordo della sidebar
+       resta pulito, e compare solo mentre ci si passa sopra (lo scroll con la
+       rotella implica :hover) o quando la tastiera è dentro (:focus-within). */
+    aside::-webkit-scrollbar-thumb { background: transparent; }
+    aside:hover::-webkit-scrollbar-thumb,
+    aside:focus-within::-webkit-scrollbar-thumb { background: var(--border); }
+    aside:hover::-webkit-scrollbar-thumb:hover,
+    aside:focus-within::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    aside { scrollbar-color: transparent transparent; }
+    aside:hover, aside:focus-within { scrollbar-color: var(--border) transparent; }
+
+    h2, h3 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .aside-header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    /* chip-lime-keyword: l'evidenziatore firma — un solo elemento lime per viewport */
+    .brand-chip {
+      background: var(--lime);
+      color: var(--cta-text);
+      border-radius: 4px;
+      padding: 0 6px;
+      font-family: var(--font-display);
+      font-weight: 700;
+    }
+
+    .user-badge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Forms elements */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper i {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .form-group input:not([type="checkbox"]):not([type="radio"]), .form-group select {
+      width: 100%;
+      padding: 10px 12px 10px 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+
+    .form-group select {
+      cursor: pointer;
+    }
+
+    /* Input generico coerente con la UI (per form fuori da .form-group) */
+    .ui-input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+    .ui-input::placeholder { color: var(--text-muted); }
+    .ui-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--ring);
+    }
+
+    /* Buttons — button-cap: uppercase 14px/700, 0.2px tracking, rounded.md 8px */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      line-height: 1.14;
+      cursor: pointer;
+      font-family: var(--font-main);
+      transition: var(--transition);
+    }
+
+    /* button-inverted: CTA dominante su canvas scuro (bianco pieno, testo ink) */
+    .btn-primary {
+      background: var(--cta);
+      color: var(--cta-text);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .btn-primary:hover {
+      background: var(--cta-press);
+      color: #1a1a1a;
+      box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.18);
+    }
+
+    /* button-ghost-on-dark: fill traslucido, il canvas traspare */
+    .btn-secondary {
+      background: var(--ghost);
+      color: var(--text);
+      border-color: transparent;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.26);
+      border-color: transparent;
+    }
+
+    /* Danger: accent-pink con testo ink per contrasto */
+    .btn-danger {
+      background: var(--danger);
+      color: var(--cta-text);
+    }
+
+    .btn-danger:hover {
+      background: #fb96ba;
+      box-shadow: 0 0 15px var(--danger-glow);
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      width: auto;
+    }
+
+    .tab-content {
+      display: none;
+      flex-grow: 1;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Status led */
+    .led-container {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .led {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .led-online {
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+
+    .led-offline {
+      background: var(--danger);
+      box-shadow: 0 0 10px var(--danger);
+    }
+
+    .led-auth_failed {
+      background: var(--warning);
+      box-shadow: 0 0 10px var(--warning);
+    }
+
+    .led-discovered {
+      background: var(--discovered);
+      box-shadow: 0 0 10px var(--discovered);
+    }
+
+    /* Table Styles */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface-2);
+      text-align: left;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--surface-3);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.25px;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    /* button-violet-token: tag chip violet-mid con hairline più profonda */
+    .badge {
+      background: var(--violet-mid);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid var(--violet-deep);
+    }
+
+    .actions-cell {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Network Map Container */
+    #networkGraphContainer {
+      width: 100%;
+      height: 600px;
+      min-height: 300px;
+      background: #150f23;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      position: relative;
+      /* Ridimensionamento manuale dell'area mappa (trascina l'angolo in basso a destra) */
+      resize: vertical;
+      overflow: hidden;
+    }
+
+    /* Righe con modifiche non salvate nella tabella Dispositivi & Categorie */
+    tr.row-dirty { background: rgba(255, 184, 77, 0.07); }
+    tr.row-dirty td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+
+    /* Stile personalizzato per i Tooltip di Vis.js */
+    div.vis-tooltip {
+      background: rgba(21, 15, 35, 0.96) !important;
+      border: 1px solid var(--border) !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(106, 95, 193, 0.18) !important;
+      color: var(--text) !important;
+      font-family: var(--font-main) !important;
+      padding: 14px 18px !important;
+      border-radius: var(--radius) !important;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      z-index: 1000 !important;
+      border-color: rgba(106, 95, 193, 0.45) !important;
+      transition: opacity 0.2s ease-in-out;
+    }
+
+    .network-legend {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      background: rgba(21, 15, 35, 0.88);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      border-radius: var(--radius-lg, 18px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    /* Vulnerability check panel */
+    .vuln-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 15px;
+    }
+
+    .vuln-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+
+    .severity-pill {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .severity-CRITICAL { background: #3c0000; color: #ff5252; border: 1px solid #ff5252; }
+    .severity-HIGH { background: #3d1c00; color: #ffa726; border: 1px solid #ffa726; }
+    .severity-MEDIUM { background: #3b3a00; color: #ffee58; border: 1px solid #ffee58; }
+    .severity-LOW { background: #003604; color: #66bb6a; border: 1px solid #66bb6a; }
+
+    /* Modals */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(21, 15, 35, 0.8);
+      backdrop-filter: blur(10px);
+      z-index: 900;
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      width: 480px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
+      animation: zoomIn 0.3s ease;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+
+    .modal-close {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 18px;
+      transition: var(--transition);
+    }
+
+    .modal-close:hover {
+      color: var(--text);
+    }
+
+    /* Background Jobs Monitor Bar */
+    .progress-overlay {
+      position: fixed;
+      bottom: 25px;
+      right: 25px;
+      background: var(--surface-2);
+      border: 2px solid var(--primary);
+      box-shadow: 0 10px 30px var(--primary-glow);
+      padding: 20px;
+      border-radius: 12px;
+      width: 380px;
+      z-index: 800;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: var(--surface-3);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+      transition: width 0.3s ease;
+    }
+
+    /* Templates / Code Area */
+    .template-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-code);
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 15px;
+      overflow-x: auto;
+    }
+
+    /* Keyframes Animations */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes zoomIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Layout responsive: sotto i 1000px la sidebar si impila sopra il contenuto */
+    @media (max-width: 1000px) {
+      body {
+        grid-template-columns: 1fr;
+        padding: 12px;
+        gap: 12px;
+      }
+      aside {
+        position: static;
+        height: auto;
+        max-height: none;
+      }
+      .login-card {
+        width: 92vw;
+        padding: 28px;
+      }
+      .modal {
+        width: 92vw !important;
+      }
+    }
+
+    /* Controllo accessi lato UI: nasconde i controlli di scrittura ai viewer e
+       le funzioni da amministratore a chi non è admin. L'enforcement reale è
+       comunque lato server (RBAC sugli endpoint). */
+    body.role-viewer .requires-write { display: none !important; }
+    body:not(.role-admin) .requires-admin { display: none !important; }
+
+    .role-pill {
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .role-pill-admin    { background: rgba(250,127,170,0.15); color: var(--danger);  border: 1px solid rgba(250,127,170,0.35); }
+    .role-pill-operator { background: rgba(106,95,193,0.18);  color: #a99ff2;        border: 1px solid rgba(106,95,193,0.45); }
+    .role-pill-viewer   { background: rgba(189,184,192,0.12); color: var(--text-muted); border: 1px solid rgba(189,184,192,0.3); }
+
+    /* ===== Revamp component layer (design-language modules) ===== */
+    .hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:18px}
+    .hero-card{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01)),var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:22px}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:rgba(194,239,78,.1);color:var(--lime);border:1px solid rgba(194,239,78,.16);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px}
+    .panel{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01)),var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:18px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+    .kpi{padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px)}
+    .kpi h4{margin:0;font-family:var(--font-display);font-size:17px}.kpi strong{display:block;margin-top:14px;font-family:var(--font-display);font-size:34px;letter-spacing:-.05em}
+    .filterbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .search-wrap{position:relative;min-width:260px;flex:1}.search-wrap>i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-soft)}
+    .table-wrap{margin-top:14px;overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface-2)}
+    .status{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:1px solid transparent}
+    .status.ok{background:rgba(87,217,135,.1);color:var(--success);border-color:rgba(87,217,135,.18)}
+    .status.warn{background:rgba(255,184,77,.1);color:var(--warning);border-color:rgba(255,184,77,.18)}
+    .status.bad{background:rgba(250,127,170,.1);color:var(--danger);border-color:rgba(250,127,170,.18)}
+    .status .led{display:inline-block;margin-right:8px}
+    .led-success{background:var(--success);box-shadow:0 0 10px rgba(87,217,135,.45)}
+    .led-warning{background:var(--warning);box-shadow:0 0 10px rgba(255,184,77,.45)}
+    .led-danger{background:var(--danger);box-shadow:0 0 10px rgba(250,127,170,.45)}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(169,159,242,.12);color:var(--primary);border:1px solid rgba(169,159,242,.18);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    /* Variante interattiva di .chip: selettore a scelta singola (Tipo apparato ZTP).
+       Non selezionato = neutro; selezionato = accento primary (stessi canali di .chip). */
+    .chip-choice{cursor:pointer;font-family:inherit;font-size:12px;padding:8px 14px;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);transition:var(--transition)}
+    .chip-choice:hover{color:var(--text);border-color:rgba(169,159,242,.45)}
+    .chip-choice[aria-pressed="true"]{background:rgba(169,159,242,.12);color:var(--primary);border-color:rgba(169,159,242,.45)}
+    .chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+    /* Utility: nascosto visivamente ma vivo per screen reader, tastiera e JS.
+       !important perché `.form-group select` è più specifico su width/padding. */
+    .visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important}
+    /* Token API FortiGate inline: nascosto finché non si seleziona FortiGate.
+       Guidato dalla classe .is-visible (mai da style inline) così il gate
+       `body:not(.role-admin) .requires-admin{display:none!important}` vince sempre. */
+    #provFgtTokenSection{display:none}
+    #provFgtTokenSection.is-visible{display:block}
+    .fgt-token-reveal{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;padding:4px;cursor:pointer;color:var(--text-muted);font-size:13px;line-height:1;border-radius:6px;transition:var(--transition)}
+    .fgt-token-reveal:hover{color:var(--primary)}
+    .fgt-token-reveal:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+    .split-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .preview-badge{font-size:10px;font-weight:700;text-transform:uppercase;border-radius:999px;padding:3px 7px;letter-spacing:.05em;background:rgba(255,184,77,.16);color:var(--warning);border:1px solid rgba(255,184,77,.24)}
+    .count-badge{font-size:10px;font-weight:700;border-radius:999px;padding:3px 7px;background:rgba(169,159,242,.16);color:var(--primary);border:1px solid rgba(169,159,242,.24)}
+    .sidenav{display:flex;flex-direction:column;gap:4px}
+    .nav-group>h3{margin:14px 8px 8px;font-size:11px;color:var(--text-soft);text-transform:uppercase;letter-spacing:.08em}
+    .nav-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:11px 12px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--text-muted);text-align:left;font:inherit;font-size:14px;cursor:pointer;transition:all var(--transition,220ms)}
+    .nav-item:hover{color:var(--text);background:rgba(255,255,255,.05)}
+    .nav-item.active{color:var(--text);background:var(--surface-3);border-color:var(--border);box-shadow:inset 3px 0 0 var(--primary)}
+    .nav-item .nav-left{display:flex;align-items:center;gap:10px;min-width:0}
+    .nav-item .nav-left i{width:16px;text-align:center;color:var(--primary)}
+
+    /* --- Sidebar rail (collassabile) --- */
+    .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%}
+    .aside-actions{display:flex;align-items:center;gap:8px;flex:none}
+    .sidebar-toggle{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;padding:0;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-muted);cursor:pointer;transition:var(--transition)}
+    .sidebar-toggle:hover{color:var(--text);border-color:var(--primary)}
+    .sidebar-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+    .sidebar-toggle i{transition:var(--transition)}
+    body.sidebar-collapsed .sidebar-toggle i{transform:rotate(180deg)}
+
+    /* Stato collassato: solo da 1001px in su. Sotto i 1000px la sidebar si impila
+       già a piena larghezza sopra il contenuto, dove una rail di icone non ha senso
+       (e lascerebbe le etichette nascoste su tutta la riga). */
+    @media (min-width:1001px){
+      body.sidebar-collapsed{--sidebar-w:72px}
+      body.sidebar-collapsed aside{padding:24px 10px;align-items:center}
+      body.sidebar-collapsed .aside-header{width:100%;align-items:center}
+      body.sidebar-collapsed .brand-row{justify-content:center}
+      /* Le etichette sono nodi di testo nudi accanto alle <i>: font-size:0 le
+         azzera senza toccare il markup né i valori i18n (che contengono le <i>),
+         e a differenza di display:none il testo resta leggibile dagli screen reader. */
+      body.sidebar-collapsed .aside-header h2{font-size:0;gap:0}
+      body.sidebar-collapsed .aside-header h2 i{font-size:20px}
+      body.sidebar-collapsed .brand-chip,
+      body.sidebar-collapsed .aside-tagline,
+      body.sidebar-collapsed #langSelect,
+      body.sidebar-collapsed .nav-group>h3,
+      body.sidebar-collapsed .preview-badge,
+      body.sidebar-collapsed .count-badge{display:none}
+      body.sidebar-collapsed .user-badge{flex-direction:column;gap:12px;padding:10px 4px;font-size:0;width:100%}
+      body.sidebar-collapsed .user-badge i{font-size:14px}
+      /* .role-pill dichiara font-size:10px, quindi non eredita lo 0 di
+         .user-badge e traboccherebbe dalla rail da 72px. Va nascosta esplicitamente.
+         Scoped a .user-badge: le role-pill nelle tabelle non c'entrano. */
+      body.sidebar-collapsed .user-badge .role-pill{display:none}
+      body.sidebar-collapsed .sidenav{width:100%}
+      /* NB: nessuna regola qui tocca `display` di .nav-item — i gate RBAC
+         (body:not(.role-admin) .requires-admin{display:none!important}) restano
+         gli unici a deciderne la visibilità. */
+      body.sidebar-collapsed .nav-item{justify-content:center;padding:11px 0}
+      body.sidebar-collapsed .nav-item .nav-left{font-size:0;gap:0}
+      /* Solo font-size: la width:16px della regola base va conservata, è quella
+         che dà alle icone una cassetta di larghezza fissa (quindi allineata) —
+         con width:auto la cassetta collassa sulla glifo e la rail si disallinea. */
+      body.sidebar-collapsed .nav-item .nav-left i{font-size:15px}
+    }
+    @media (max-width:1000px){.sidebar-toggle{display:none}}
+    @media (max-width:1200px){.hero,.kpi-grid{grid-template-columns:1fr}}
+    @media (max-width: 1100px) { .prov-grid { grid-template-columns: 1fr !important; } }
+
+/* ===== templates/dashboard.html #tab-mac scoped style ===== */
+        #tab-mac details.mac-switch > summary::-webkit-details-marker { display:none; }
+        #tab-mac details.mac-switch > summary { list-style:none; }
+        #tab-mac details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
+        #tab-mac details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
+        #tab-mac details.mac-switch > summary:hover { background: var(--surface-3); }
+        #tab-mac #macDeviceMenu > summary::-webkit-details-marker { display:none; }
+        #tab-mac #macDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+        #tab-mac #macDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
+
+/* ===== templates/dashboard.html #tab-clientmap scoped style ===== */
+        #tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker { display:none; }
+        #tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+        #tab-clientmap #arpDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
+        #tab-clientmap #arpTenantMenu > summary::-webkit-details-marker { display:none; }
+        #tab-clientmap #arpTenantMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+        #tab-clientmap #arpTenantList label:hover { background: var(--surface-3); border-radius:6px; }
+
+/* ===== templates/dashboard.html #tab-config scoped style ===== */
+        #tab-config details.mac-switch > summary::-webkit-details-marker { display:none; }
+        #tab-config details.mac-switch > summary { list-style:none; }
+        #tab-config details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
+        #tab-config details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
+        #tab-config details.mac-switch > summary:hover { background: var(--surface-3); }
+        #tab-config .ca-pill { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; transition:var(--transition); }
+        #tab-config .ca-pill.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+        #tab-config .ca-pill:hover:not(.active) { background:var(--surface-3); }
+        .ti-subtab.active { border-color:var(--primary) !important; color:var(--primary) !important; }
+        #tab-config .ca-chip { display:inline-flex; align-items:center; gap:4px; font-size:10px; border-radius:5px; padding:1px 6px; border:1px solid var(--border); color:var(--text-muted); margin:2px 4px 2px 0; }
+        #tab-config .ca-route-map { height:220px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-top:8px; }

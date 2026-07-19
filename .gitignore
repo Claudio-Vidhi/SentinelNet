@@ -9,6 +9,7 @@ venv/
 ENV/
 
 # Sensitive data (Device credentials and inventories)
+fortigate_tokens.json
 network_hosts.csv
 detected_versions.json
 device_categories.json

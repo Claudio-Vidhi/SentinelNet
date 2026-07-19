@@ -102,8 +102,35 @@ def build_config(cfg: dict) -> str:
         pwd = cfg.get("admin_password") or "changeme"
         lines.append(f"username {cfg['admin_user']} privilege 15 secret {pwd}")
     lines.append("aaa new-model")
-    lines.append("aaa authentication login default local")
-    lines.append("aaa authorization exec default local")
+
+    aaa_protocol = cfg.get("aaa_protocol") or "none"
+    aaa_servers = cfg.get("aaa_servers") or []
+    if aaa_protocol in ("radius", "tacacs") and aaa_servers:
+        proto_label = "radius" if aaa_protocol == "radius" else "tacacs+"
+        server_type = "radius server" if aaa_protocol == "radius" else "tacacs server"
+        server_names = []
+        sec(f"AAA {'RADIUS' if aaa_protocol == 'radius' else 'TACACS+'}")
+        for i, srv in enumerate(aaa_servers, 1):
+            name = f"{'RADIUS' if aaa_protocol == 'radius' else 'TACACS'}-{i}"
+            server_names.append(name)
+            lines.append(f"{server_type} {name}")
+            if aaa_protocol == "radius":
+                auth_port = srv.get("auth_port") or 1812
+                acct_port = srv.get("acct_port") or 1813
+                lines.append(f" address ipv4 {srv['ip']} auth-port {auth_port} acct-port {acct_port}")
+            else:
+                lines.append(f" address ipv4 {srv['ip']}")
+            if srv.get("key"):
+                lines.append(f" key {srv['key']}")
+        lines.append(f"aaa group server {proto_label} SENTINEL-AAA")
+        for name in server_names:
+            lines.append(f" server name {name}")
+        lines.append("aaa authentication login default group SENTINEL-AAA local")
+        lines.append("aaa authorization exec default group SENTINEL-AAA local")
+    else:
+        lines.append("aaa authentication login default local")
+        lines.append("aaa authorization exec default local")
+
     if cfg.get("login_block", True):
         # Anti brute-force: dopo 5 tentativi falliti in 60s blocca i login per 120s.
         lines.append("login block-for 120 attempts 5 within 60")

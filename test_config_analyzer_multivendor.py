@@ -160,6 +160,11 @@ class DetectTest(unittest.TestCase):
     def test_sniff_aireos(self):
         self.assertEqual(ca.detect_config_type(AIREOS), 'wlc-aireos')
 
+    def test_sniff_panos(self):
+        panos_cfg = ('set deviceconfig system hostname PA\n'
+                     'set address A ip-netmask 10.0.0.1/32\n')
+        self.assertEqual(ca.detect_config_type(panos_cfg), 'panos')
+
     def test_sniff_ios_default(self):
         self.assertEqual(ca.detect_config_type(IOS), 'ios')
         self.assertEqual(ca.detect_config_type(''), 'ios')
@@ -168,6 +173,8 @@ class DetectTest(unittest.TestCase):
     def test_vendor_overrides_sniff(self):
         self.assertEqual(ca.detect_config_type(IOS, {"Vendor": "fortinet"}),
                          'fortios')
+        self.assertEqual(ca.detect_config_type(IOS, {"Vendor": "palo_alto"}),
+                         'panos')
         self.assertEqual(ca.detect_config_type(IOS, {"Vendor": "cisco_wlc"}),
                          'wlc-aireos')
         self.assertEqual(ca.detect_config_type(FORTIOS, {"Vendor": "cisco"}),

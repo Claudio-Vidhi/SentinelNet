@@ -25,6 +25,7 @@ import app_server  # noqa: E402
 import ai_assistant  # noqa: E402
 import db  # noqa: E402
 import user_manager  # noqa: E402
+from test_helpers_frontend import frontend_source  # noqa: E402
 
 PASS = "PasswordSicura1!"
 CSRF = {"X-Requested-With": "SentinelNet"}
@@ -139,7 +140,7 @@ class TestAiFlowContext(_Base):
 
         # Profilo AI fittizio + chiamata provider mockata: si verifica il
         # payload in uscita (choke-point redazione).
-        with patch.object(app_server, "_get_active_ai_profile", return_value={
+        with patch("routers.ai._get_active_ai_profile", return_value={
                 "provider": "anthropic", "api_key_enc": "x", "model": "m",
                 "name": "test"}), \
              patch.object(app_server.crypto_vault, "decrypt_password",
@@ -234,7 +235,7 @@ class TestAiFlowKeys(_Base):
         self.assertIn("77", ctx)
 
     def _chat_with(self, user, payload):
-        with patch.object(app_server, "_get_active_ai_profile", return_value={
+        with patch("routers.ai._get_active_ai_profile", return_value={
                 "provider": "anthropic", "api_key_enc": "x", "model": "m",
                 "name": "test"}), \
              patch.object(app_server.crypto_vault, "decrypt_password",
@@ -282,15 +283,34 @@ class TestAiFlowKeys(_Base):
         self.assertIn("Top flussi di rete", sent)
 
 
+class TestObsSettingsNestedKeys(unittest.TestCase):
+    """renderObsSettings deve leggere le chiavi annidate restituite da
+    obs_config() (d[l].enabled / d[l].port), non le chiavi piatte."""
+
+    def test_render_reads_nested_listener_keys(self):
+        html = frontend_source()
+        block = html[html.index("function renderObsSettings"):
+                     html.index("async function saveObsSettings")]
+        self.assertNotIn("d[`${l}_enabled`]", block)
+        self.assertNotIn("d[`${l}_port`]", block)
+        self.assertIn("d[l]", block)
+
+
 class TestFrontendGates(_Base):
-    HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "templates", "dashboard.html"), encoding="utf-8").read()
+    HTML = frontend_source()
 
     def test_no_sessionstorage_anywhere(self):
         self.assertEqual(len(re.findall(r"sessionStorage\.(get|set)Item", self.HTML)), 0)
 
     def test_flows_path_uses_apifetch_not_bearer(self):
-        block = self.HTML[self.HTML.index("FLUSSI LIVE"):self.HTML.index("window.onload")]
+        # FLUSSI LIVE block moved to static/js/observability.js (which runs
+        # entirely before window.onload, defined back in dashboard.html);
+        # slice within that file directly to keep the check scoped to the
+        # flows module rather than the whole concatenated frontend source.
+        obs_js = open(os.path.join(os.path.dirname(__file__),
+                                    "static", "js", "observability.js"),
+                       encoding="utf-8").read()
+        block = obs_js[obs_js.index("FLUSSI LIVE"):]
         self.assertNotIn("Authorization", block)
         self.assertNotIn("Bearer", block)
         self.assertIn("apiFetch('/api/observability/top", block.replace('`', "'"))

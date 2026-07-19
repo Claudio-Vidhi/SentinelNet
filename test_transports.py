@@ -17,7 +17,7 @@ os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentineln
 
 import inventory_manager  # noqa: E402
 import mac_collector      # noqa: E402
-import app_server         # noqa: E402
+from routers import inventory as inventory_router  # noqa: E402         # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
 ADMIN = {"sub": "tester", "role": "admin"}
@@ -61,6 +61,14 @@ class TestUpsertRoundTrip(unittest.TestCase):
         self.assertEqual(inventory_manager.parse_transports(dev), tr)
         # Colonna legacy 'SSH Port' rispecchia la porta ssh dichiarata.
         self.assertEqual(dev["SSH Port"], "22")
+
+    def test_roundtrip_tcp_udp_transports(self):
+        # tcp/udp: protocolli generici a porta libera, scelta dall'utente.
+        tr = {"ssh": 22, "tcp": 9000, "udp": 161}
+        inventory_manager.add_or_update_device(
+            "10.0.0.30", "cisco", "default", "u", "p", "s", "Generale", transports=tr)
+        dev = next(d for d in inventory_manager.get_all_devices() if d["IP"] == "10.0.0.30")
+        self.assertEqual(inventory_manager.parse_transports(dev), tr)
 
     def test_legacy_upsert_synthesizes_ssh(self):
         # Upsert senza transports (chiamante legacy) → ssh-only dalla ssh_port.
@@ -143,38 +151,38 @@ class TestAddDeviceEndpoint(unittest.TestCase):
         inventory_manager.HOSTS_CSV = self.csv_path
         inventory_manager.invalidate_device_ip_cache()
         self.audits = []
-        self._log = app_server.log_audit
-        app_server.log_audit = lambda msg: self.audits.append(msg)
+        self._log = inventory_router.log_audit
+        inventory_router.log_audit = lambda msg: self.audits.append(msg)
 
     def tearDown(self):
         inventory_manager.HOSTS_CSV = self._orig
-        app_server.log_audit = self._log
+        inventory_router.log_audit = self._log
         if os.path.exists(self.csv_path):
             os.remove(self.csv_path)
 
     def test_telnet_enable_is_audited(self):
-        dev = app_server.DeviceSchema(
+        dev = inventory_router.DeviceSchema(
             ip="10.0.0.20", vendor="cisco", profile="default",
             transports={"ssh": 22, "telnet": 23})
-        app_server.add_device(dev, current_user=ADMIN)
+        inventory_router.add_device(dev, current_user=ADMIN)
         self.assertTrue(any("Telnet" in a for a in self.audits),
                         f"nessun audit Telnet: {self.audits}")
 
     def test_invalid_protocol_returns_400_italian(self):
-        dev = app_server.DeviceSchema(
+        dev = inventory_router.DeviceSchema(
             ip="10.0.0.21", vendor="cisco", profile="default",
             transports={"gopher": 70})
         with self.assertRaises(HTTPException) as ctx:
-            app_server.add_device(dev, current_user=ADMIN)
+            inventory_router.add_device(dev, current_user=ADMIN)
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertIn("Protocollo", ctx.exception.detail)
 
     def test_invalid_port_returns_400_italian(self):
-        dev = app_server.DeviceSchema(
+        dev = inventory_router.DeviceSchema(
             ip="10.0.0.22", vendor="cisco", profile="default",
             transports={"ssh": 99999})
         with self.assertRaises(HTTPException) as ctx:
-            app_server.add_device(dev, current_user=ADMIN)
+            inventory_router.add_device(dev, current_user=ADMIN)
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertIn("Porta", ctx.exception.detail)
 
