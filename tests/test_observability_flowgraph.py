@@ -156,6 +156,70 @@ class TestFlowGraph(_Base):
         self.assertIn("flows_shown", t)
         self.assertIn("top_talker", t)
 
+    def test_synthetic_vlan_deterministic_across_calls(self):
+        # Fix reviewer #2: la VLAN sintetica di fallback deve essere stabile
+        # tra chiamate diverse (niente hash() builtin salato per processo).
+        r1 = self._client("adm").get("/api/observability/flowgraph?window=1h")
+        r2 = self._client("adm").get("/api/observability/flowgraph?window=1h")
+        vlans1 = {n["id"]: n["vlan"] for n in r1.json()["nodes"]}
+        vlans2 = {n["id"]: n["vlan"] for n in r2.json()["nodes"]}
+        self.assertEqual(vlans1, vlans2)
+        from routers.observability import _synthetic_vlan
+        self.assertEqual(_synthetic_vlan("sede-a"), _synthetic_vlan("sede-a"))
+
+    def test_synthetic_vlan_marked_not_real(self):
+        # Nessun binding ARP seedato in questo dataset: tutte le VLAN sono
+        # fallback sintetico e devono essere marcate vlan_real=False (fix #2:
+        # niente fake silenzioso).
+        r = self._client("adm").get("/api/observability/flowgraph?window=1h")
+        d = r.json()
+        self.assertTrue(all(n.get("vlan_real") is False for n in d["nodes"]))
+        self.assertTrue(all(e.get("vlan_real") is False for e in d["edges"]))
+
+    def test_dst_only_node_has_nonzero_bytes(self):
+        # Fix reviewer #4: un host visto solo come dst (mai src) deve avere
+        # bytes > 0, non restare a 0 e finire ingiustamente scartato dal
+        # cap top-50.
+        r = self._client("adm").get("/api/observability/flowgraph?window=1h")
+        nodes = {n["id"]: n["bytes"] for n in r.json()["nodes"]}
+        # "8.8.8.8" compare solo come dst nei flussi seedati di sede-a.
+        self.assertIn("8.8.8.8", nodes)
+        self.assertGreater(nodes["8.8.8.8"], 0)
+
+    def test_protocol_breakdown_filtered_by_node_click_is_client_side(self):
+        # Il filtro per nodo delle due tabelle è client-side (edges già
+        # portano 'proto'): verifichiamo solo che ogni arco esponga i campi
+        # necessari a ricostruire il breakdown protocolli filtrato in UI.
+        r = self._client("adm").get("/api/observability/flowgraph?window=1h")
+        for e in r.json()["edges"]:
+            self.assertIn("proto", e)
+            self.assertIn("rate_bps", e)
+
+
+class TestFlowGraphRealVlan(_Base):
+    """Fix reviewer #2 (product ruling): se esiste un binding ARP noto per
+    l'IP (tabella arp_entries di Client Map), usare quello invece del
+    fallback sintetico."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        conn = db.get_observability_connection()
+        _seed_flow(conn, "sede-a", "10.1.0.5", "10.1.0.9", nbytes=4000, dport=443)
+        conn.commit()
+        conn.close()
+        from collectors import mac_history
+        mac_history.record_arp_entries(
+            [{"mac": "aa:bb:cc:dd:ee:01", "ip": "10.1.0.5", "vlan": "210"}],
+            source_ip="10.1.0.254", tenant="sede-a")
+
+    def test_real_vlan_used_when_arp_binding_known(self):
+        r = self._client("adm").get("/api/observability/flowgraph?window=1h")
+        d = r.json()
+        node = next(n for n in d["nodes"] if n["id"] == "10.1.0.5")
+        self.assertEqual(node["vlan"], 210)
+        self.assertTrue(node["vlan_real"])
+
 
 @classmethod
 def _tearDownModule():

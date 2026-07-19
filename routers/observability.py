@@ -189,12 +189,15 @@ async def obs_anomaly_status(
     return {"status": "success", "id": event_id, "new_status": new_status}
 
 
-def _vlan_of(tenant: str) -> int:
-    """VLAN sintetico deterministico dal tenant: lo schema flow_aggregates non
-    porta il tag VLAN (nessun collector lo espone), quindi per la vista
-    Live Flows deriviamo un id stabile 100-999 dall'hash del tenant, solo
-    per raggruppare/colorare nel grafo — non è il VLAN reale del traffico."""
-    return 100 + (hash(tenant) % 900)
+def _synthetic_vlan(tenant: str) -> int:
+    """VLAN sintetico deterministico dal tenant, usato SOLO come fallback
+    quando non esiste un binding ARP noto per l'IP (vedi ``vlans_for_ips``
+    più sotto). Deterministico tra restart/worker: ``hash()`` di builtin è
+    salato per processo (PYTHONHASHSEED random di default), quindi qui si usa
+    sha1 troncato — stabile ovunque per lo stesso input."""
+    import hashlib
+    digest = hashlib.sha1(tenant.encode("utf-8")).digest()
+    return 100 + (int.from_bytes(digest[:2], "big") % 900)
 
 
 @router.get("/api/observability/flowgraph")
@@ -205,7 +208,13 @@ async def obs_flowgraph(
     """Grafo dei flussi aggregato (Task 3, Live Flows): nodi/archi con tassi,
     KPI di sintesi, riepilogo del tenant corrente e breakdown protocolli.
     Riusa le stesse query di ``obs_top_talkers``/``obs_anomalies``, scoped
-    per tenant via ``_tenant_filter``. Nodi/archi limitati ai top 50 per rate."""
+    per tenant via ``_tenant_filter``. Nodi/archi limitati ai top 50 per rate.
+
+    VLAN: quando esiste un binding ARP noto per l'IP (tabella ``arp_entries``
+    di Client Map, popolata dai gateway L3) si usa la VLAN reale 802.1Q;
+    altrimenti si ricade su ``_synthetic_vlan(tenant)`` e il nodo/arco viene
+    marcato ``vlan_real: false`` così la UI può segnalarlo (non è un fake
+    silenzioso)."""
     import time as _time
     seconds = _parse_window(window)
     cutoff = int(_time.time()) - seconds
@@ -230,28 +239,30 @@ async def obs_flowgraph(
 
     _PROTO_NAMES = {6: "tcp", 17: "udp", 1: "icmp"}
     edges = []
-    nodes = {}
+    node_bytes: dict = {}
+    node_tenant: dict = {}
     proto_totals: dict = {}
-    tenant_bytes: dict = {}
     tenants_seen: set = set()
-    total_bytes_all = 0
 
     for r in flow_rows:
         tenant = r["tenant"]
         src, dst = r["src_ip"], r["dst_ip"]
         nbytes = r["total_bytes"] or 0
         rate_bps = (nbytes * 8) / seconds if seconds else 0
-        vlan = _vlan_of(tenant)
         proto = _PROTO_NAMES.get(r["protocol"], str(r["protocol"] or "?"))
         tenants_seen.add(tenant)
-        total_bytes_all += nbytes
 
-        for ip in (src, dst):
-            node = nodes.setdefault(ip, {"id": ip, "bytes": 0, "vlan": vlan})
-            node["bytes"] += nbytes if ip == src else 0
+        # Bytes del nodo = somma del traffico in cui compare, sia come
+        # sorgente che come destinazione, così un host solo-destinazione
+        # (es. un server interno mai visto come src) non resta a 0 e non
+        # viene ingiustamente scartato dal cap top-50.
+        node_bytes[src] = node_bytes.get(src, 0) + nbytes
+        node_bytes[dst] = node_bytes.get(dst, 0) + nbytes
+        node_tenant.setdefault(src, tenant)
+        node_tenant.setdefault(dst, tenant)
 
         edges.append({"src": src, "dst": dst, "rate_bps": rate_bps,
-                      "vlan": vlan, "proto": proto, "tenant": tenant})
+                      "proto": proto, "tenant": tenant})
 
         proto_key = (proto, r["dst_port"])
         pt = proto_totals.setdefault(proto_key, {"proto": proto,
@@ -259,16 +270,37 @@ async def obs_flowgraph(
                                                   "rate_bps": 0.0})
         pt["rate_bps"] += rate_bps
 
-        tenant_bytes[tenant] = tenant_bytes.get(tenant, 0) + nbytes
+    # Top 50 nodi per bytes totali (src+dst).
+    top_ids = [ip for ip, _ in sorted(node_bytes.items(), key=lambda kv: kv[1],
+                                      reverse=True)[:50]]
+    kept_ids = set(top_ids)
 
-    # Assicura che ogni nodo con solo traffico in ingresso abbia bytes coerenti
-    # (i nodi 'dst puro' restano a 0 se non compaiono mai come src: va bene,
-    # il raggio nel grafo userà comunque sqrt(bytes) con minimo visivo lato UI).
-    node_list = sorted(nodes.values(), key=lambda n: n["bytes"], reverse=True)[:50]
-    kept_ids = {n["id"] for n in node_list}
+    # VLAN reale (arp_entries) se nota, altrimenti sintetica dal tenant.
+    import asyncio as _asyncio
+    from collectors import mac_history
+    real_vlans = await _asyncio.to_thread(mac_history.vlans_for_ips, top_ids)
+
+    def _vlan_for(ip):
+        raw = real_vlans.get(ip)
+        if raw:
+            try:
+                return int(raw), True
+            except (TypeError, ValueError):
+                pass
+        return _synthetic_vlan(node_tenant.get(ip, "")), False
+
+    node_vlan = {ip: _vlan_for(ip) for ip in top_ids}
+    node_list = [{"id": ip, "bytes": node_bytes[ip],
+                 "vlan": node_vlan[ip][0], "vlan_real": node_vlan[ip][1]}
+                for ip in top_ids]
+
     edges = [e for e in edges if e["src"] in kept_ids and e["dst"] in kept_ids]
     edges.sort(key=lambda e: e["rate_bps"], reverse=True)
     edges = edges[:50]
+    for e in edges:
+        vlan, vlan_real = node_vlan.get(e["src"], (None, False))
+        e["vlan"] = vlan
+        e["vlan_real"] = vlan_real
 
     throughput_bps = sum(e["rate_bps"] for e in edges)
     top_edge = max(edges, key=lambda e: e["rate_bps"], default=None)
@@ -291,10 +323,15 @@ async def obs_flowgraph(
         if tenant_name else edges
     top_talker_edge = max(tenant_edges, key=lambda e: e["rate_bps"],
                           default=None)
+    tenant_node_ids = [ip for ip in top_ids
+                       if node_tenant.get(ip) == tenant_name] \
+        if tenant_name else top_ids
+    tenant_vlans = sorted({node_vlan[ip][0] for ip in tenant_node_ids}) \
+        if tenant_node_ids else \
+        ([_synthetic_vlan(tenant_name)] if tenant_name else [])
     tenant_summary = {
         "name": tenant_name,
-        "vlans": sorted({_vlan_of(t) for t in
-                         ([tenant_name] if tenant_name else tenants_seen)}),
+        "vlans": tenant_vlans,
         "flows_shown": len(tenant_edges),
         "top_talker": ({"src": top_talker_edge["src"],
                         "dst": top_talker_edge["dst"],

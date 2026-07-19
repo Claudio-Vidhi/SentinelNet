@@ -383,6 +383,30 @@ def search_arp(mac: str = None, ip: str = None, source_ip: str = None,
     return [dict(r) for r in rows]
 
 
+def vlans_for_ips(ips) -> dict:
+    """Ritorna { ip: vlan } per gli IP richiesti, dal binding ARP più recente
+    con VLAN non vuota (match esatto, niente prefix-LIKE). Usato dal grafo dei
+    flussi (Task 3, osservabilità) per mostrare la VLAN reale quando nota,
+    invece di un valore sintetico. IP senza binding ARP noto sono assenti
+    dal dict ritornato (fallback lasciato al chiamante)."""
+    ips = [ip for ip in dict.fromkeys(ips) if ip]
+    if not ips:
+        return {}
+    init_db()
+    out = {}
+    with _lock, _connect() as c:
+        for i in range(0, len(ips), 500):        # chunk per il limite parametri SQLite
+            chunk = ips[i:i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            rows = c.execute(
+                f"""SELECT ip, vlan FROM arp_entries
+                    WHERE ip IN ({placeholders}) AND vlan != ''
+                    ORDER BY last_seen DESC""", chunk).fetchall()
+            for r in rows:
+                out.setdefault(r["ip"], r["vlan"])
+    return out
+
+
 def _access_positions_for(macs, tenants=None) -> dict:
     """Per un insieme di MAC ritorna { (mac, tenant): sighting_di_accesso_più_recente },
     escludendo gli uplink. La chiave include il tenant per evitare che la posizione
