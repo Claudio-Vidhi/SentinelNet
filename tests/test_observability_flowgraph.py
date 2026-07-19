@@ -188,12 +188,19 @@ class TestFlowGraph(_Base):
 
     def test_protocol_breakdown_filtered_by_node_click_is_client_side(self):
         # Il filtro per nodo delle due tabelle è client-side (edges già
-        # portano 'proto'): verifichiamo solo che ogni arco esponga i campi
-        # necessari a ricostruire il breakdown protocolli filtrato in UI.
+        # portano 'proto' e 'port'): verifichiamo che ogni arco esponga i
+        # campi necessari a ricostruire il breakdown protocolli filtrato in
+        # UI senza perdere la granularità della porta (fix reviewer round 2).
         r = self._client("adm").get("/api/observability/flowgraph?window=1h")
         for e in r.json()["edges"]:
             self.assertIn("proto", e)
+            self.assertIn("port", e)
             self.assertIn("rate_bps", e)
+        # I due flussi seedati su porte diverse (443 e 53) devono restare
+        # distinguibili via 'port' negli archi.
+        ports = {e["port"] for e in r.json()["edges"]}
+        self.assertIn(443, ports)
+        self.assertIn(53, ports)
 
 
 class TestFlowGraphRealVlan(_Base):
@@ -219,6 +226,48 @@ class TestFlowGraphRealVlan(_Base):
         node = next(n for n in d["nodes"] if n["id"] == "10.1.0.5")
         self.assertEqual(node["vlan"], 210)
         self.assertTrue(node["vlan_real"])
+
+
+class TestFlowGraphVlanTenantScope(_Base):
+    """Fix critico reviewer round 2: vlans_for_ips() deve filtrare per
+    tenant. Due sedi con lo stesso IP privato (RFC1918 dietro NAT
+    indipendenti) e VLAN ARP diverse non devono "trapelarsi" a vicenda."""
+
+    SHARED_IP = "10.9.9.9"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        try:
+            from security import user_manager as _um
+            _um.create_user("op_b", PASS, role="operator", groups=["sede-b"])
+        except Exception:
+            pass
+        conn = db.get_observability_connection()
+        _seed_flow(conn, "sede-a", cls.SHARED_IP, "8.8.8.8", nbytes=3000)
+        _seed_flow(conn, "sede-b", cls.SHARED_IP, "1.1.1.1", nbytes=3000)
+        conn.commit()
+        conn.close()
+        from collectors import mac_history
+        mac_history.record_arp_entries(
+            [{"mac": "aa:bb:cc:dd:ee:02", "ip": cls.SHARED_IP, "vlan": "310"}],
+            source_ip="10.1.0.254", tenant="sede-a")
+        mac_history.record_arp_entries(
+            [{"mac": "aa:bb:cc:dd:ee:03", "ip": cls.SHARED_IP, "vlan": "420"}],
+            source_ip="10.2.0.254", tenant="sede-b")
+
+    def test_each_tenant_sees_only_its_own_vlan_for_shared_ip(self):
+        node_a = next(n for n in self._client("op_a")
+                     .get("/api/observability/flowgraph?window=1h")
+                     .json()["nodes"] if n["id"] == self.SHARED_IP)
+        node_b = next(n for n in self._client("op_b")
+                     .get("/api/observability/flowgraph?window=1h")
+                     .json()["nodes"] if n["id"] == self.SHARED_IP)
+        self.assertEqual(node_a["vlan"], 310)
+        self.assertTrue(node_a["vlan_real"])
+        self.assertEqual(node_b["vlan"], 420)
+        self.assertTrue(node_b["vlan_real"])
+        self.assertNotEqual(node_a["vlan"], node_b["vlan"])
 
 
 @classmethod

@@ -262,7 +262,7 @@ async def obs_flowgraph(
         node_tenant.setdefault(dst, tenant)
 
         edges.append({"src": src, "dst": dst, "rate_bps": rate_bps,
-                      "proto": proto, "tenant": tenant})
+                      "proto": proto, "port": r["dst_port"], "tenant": tenant})
 
         proto_key = (proto, r["dst_port"])
         pt = proto_totals.setdefault(proto_key, {"proto": proto,
@@ -278,7 +278,8 @@ async def obs_flowgraph(
     # VLAN reale (arp_entries) se nota, altrimenti sintetica dal tenant.
     import asyncio as _asyncio
     from collectors import mac_history
-    real_vlans = await _asyncio.to_thread(mac_history.vlans_for_ips, top_ids)
+    ip_tenant_map = {ip: node_tenant.get(ip, "") for ip in top_ids}
+    real_vlans = await _asyncio.to_thread(mac_history.vlans_for_ips, ip_tenant_map)
 
     def _vlan_for(ip):
         raw = real_vlans.get(ip)
