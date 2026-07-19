@@ -113,6 +113,12 @@ config system admin
         set accprofile "super_admin"
         set trusthost1 10.0.0.0 255.255.255.0
     next
+    edit "unrestricted"
+        set accprofile "super_admin"
+        set trusthost1 0.0.0.0 0.0.0.0
+        set trusthost2 0.0.0.0 0.0.0.0
+        set ip6-trusthost1 ::/0
+    next
 end
 config user radius
     edit "corp-radius"
@@ -209,10 +215,20 @@ class TestFortiosEnvelope(unittest.TestCase):
         self.assertEqual(ssl["psksecret"], "***REDACTED***")
 
     def test_administrators(self):
-        adm = _rows(self.env, "administrators")[0]
-        self.assertEqual(adm["name"], "admin")
+        rows = {r["name"]: r for r in _rows(self.env, "administrators")}
+        adm = rows["admin"]
         self.assertEqual(adm["accprofile"], "super_admin")
         self.assertIn("10.0.0.0", adm["trusthost"])
+
+    def test_administrators_unrestricted_trusthost_filtered_out(self):
+        # trusthost1/2 = 0.0.0.0 0.0.0.0 and ip6-trusthost1 = ::/0 mean "any host"
+        # (unrestricted), not an actual configured trusthost, so they must not
+        # appear in the rendered trusthost list.
+        rows = {r["name"]: r for r in _rows(self.env, "administrators")}
+        unrestricted = rows["unrestricted"]
+        self.assertEqual(unrestricted["trusthost"], "")
+        self.assertNotIn("0.0.0.0", unrestricted["trusthost"])
+        self.assertNotIn("::/0", unrestricted["trusthost"])
 
     def test_authentication_flags_sso(self):
         rows = {r["name"]: r for r in _rows(self.env, "authentication")}

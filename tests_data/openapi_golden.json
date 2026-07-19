@@ -6389,7 +6389,7 @@
   },
   "/api/provisioner/fgt/push-ssh": {
    "post": {
-    "description": "Genera la config FortiOS e la applica via SSH (Netmiko 'fortinet').",
+    "description": "Genera la config FortiOS e la applica sul device: REST API prima (se un\ntoken e' salvato per l'host, stesso pattern dell'osservabilit\u00e0), con\nfallback SSH (Netmiko 'fortinet'). 'method' nel risultato indica il canale\nusato; 'api_error' spiega l'eventuale fallback.",
     "operationId": "fgt_provisioner_push_ssh_api_provisioner_fgt_push_ssh_post",
     "requestBody": {
      "content": {

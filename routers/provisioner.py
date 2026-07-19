@@ -14,6 +14,7 @@ from security_manager import log_audit
 from routers.deps import require_operator
 import switch_provisioner
 import fortigate_provisioner
+import fortigate_service
 import provisioning_secrets
 
 router = APIRouter(tags=["Provisioner"])
@@ -241,18 +242,36 @@ def fgt_provisioner_download(payload: FortiGateProvisionSchema, materialized: bo
 
 @router.post("/api/provisioner/fgt/push-ssh")
 def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user = Depends(require_operator)):
-    """Genera la config FortiOS e la applica via SSH (Netmiko 'fortinet')."""
+    """Genera la config FortiOS e la applica sul device: REST API prima (se un
+    token e' salvato per l'host, stesso pattern dell'osservabilità), con
+    fallback SSH (Netmiko 'fortinet'). 'method' nel risultato indica il canale
+    usato; 'api_error' spiega l'eventuale fallback."""
     config_text = fortigate_provisioner.build_config(payload.dict())
-    result = fortigate_provisioner.push_via_ssh(
-        host=payload.ssh_host,
-        username=payload.ssh_username,
-        password=payload.ssh_password,
-        config_text=config_text,
-        port=payload.ssh_port,
-    )
+    result = None
+    api_err = None
+    token, _, _ = fortigate_service.get_api_config(payload.ssh_host)
+    if token:
+        result = fortigate_provisioner.push_via_api(payload.ssh_host, config_text)
+        if result.get("status") == "success":
+            result["method"] = "api"
+        else:
+            api_err = result.get("message")
+            result = None
+    if result is None:
+        result = fortigate_provisioner.push_via_ssh(
+            host=payload.ssh_host,
+            username=payload.ssh_username,
+            password=payload.ssh_password,
+            config_text=config_text,
+            port=payload.ssh_port,
+        )
+        result["method"] = "ssh"
+        if api_err:
+            result["api_error"] = api_err
     log_audit(
-        f"Push SSH config FortiGate day-0 su '{payload.ssh_host}' (hostname target: "
-        f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
+        f"Push config FortiGate day-0 via {result.get('method')} su '{payload.ssh_host}' "
+        f"(hostname target: '{payload.hostname}') da '{current_user.get('sub')}': "
+        f"{result.get('status')}."
     )
     result["config"] = fortigate_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
     return result

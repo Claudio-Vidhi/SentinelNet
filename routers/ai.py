@@ -34,6 +34,7 @@ class AiProfileSchema(BaseModel):
     base_url: str = ""
     rate_limit_rpm: int = 0
     allow_unredacted: bool = False  # invio config NON redatte, solo LLM locali
+    context_budget_chars: int = 0   # budget contesto in caratteri (0 = auto per-modello)
 
 class AiProfileUpdateSchema(BaseModel):
     """Corpo per l'aggiornamento parziale di un profilo AI esistente
@@ -46,6 +47,7 @@ class AiProfileUpdateSchema(BaseModel):
     base_url: Optional[str] = None
     rate_limit_rpm: Optional[int] = None
     allow_unredacted: Optional[bool] = None
+    context_budget_chars: Optional[int] = None
 
 class AiChatMessage(BaseModel):
     role: str
@@ -83,6 +85,7 @@ def _mask_ai_profile(p: dict) -> dict:
         "api_key_set": bool(p.get("api_key_enc")),
         "rate_limit_rpm": p.get("rate_limit_rpm", 0),
         "allow_unredacted": bool(p.get("allow_unredacted", False)),
+        "context_budget_chars": p.get("context_budget_chars", 0),
     }
 
 def _get_ai_profiles_raw():
@@ -248,6 +251,7 @@ def create_ai_profile(payload: AiProfileSchema, current_user = Depends(require_a
         "api_key_enc": crypto_vault.encrypt_password(payload.api_key) if payload.api_key else "",
         "rate_limit_rpm": max(0, int(payload.rate_limit_rpm or 0)),
         "allow_unredacted": bool(payload.allow_unredacted),
+        "context_budget_chars": max(0, int(payload.context_budget_chars or 0)),
     }
     profiles = profiles + [new_profile]
     if active is None:
@@ -278,6 +282,8 @@ def update_ai_profile(profile_id: str, payload: AiProfileUpdateSchema, current_u
         profile["base_url"] = payload.base_url.strip()
     if payload.rate_limit_rpm is not None:
         profile["rate_limit_rpm"] = max(0, int(payload.rate_limit_rpm or 0))
+    if payload.context_budget_chars is not None:
+        profile["context_budget_chars"] = max(0, int(payload.context_budget_chars or 0))
     # api_key=None -> mantiene quella già salvata; stringa vuota -> la rimuove.
     if payload.api_key is not None:
         profile["api_key_enc"] = crypto_vault.encrypt_password(payload.api_key) if payload.api_key else ""
@@ -387,11 +393,13 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
                     detail="Troppi flussi selezionati: massimo 20 righe per analisi.")
             keys = [k.model_dump() for k in payload.attach_flow_keys]
         context_blocks.append(top_flows_context(user_group_scope(current_user), keys=keys))
+    instruction_blocks = []
     if payload.attach_device_ips and current_user.get("role") in ("admin", "operator"):
         # Contratto di proposta config (§10.2): il modello PROPONE, non esegue.
         # Il browser mostra la proposta e, solo dopo conferma esplicita
         # dell'utente, chiama /api/bulk-command (blacklist/RBAC/audit invariati).
-        context_blocks.append(
+        # Blocco di istruzioni tenuto FUORI dal budget: non va mai troncato.
+        instruction_blocks.append(
             "Se l'utente chiede una modifica di configurazione su uno dei "
             "dispositivi allegati, oltre alla spiegazione emetti UN blocco "
             "recintato cosi (JSON su una riga, device_ip tra quelli allegati):\n"
@@ -402,8 +410,16 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
             "Non usare il blocco per comandi show/diagnostici. Non proporre "
             "comandi distruttivi (reload, erase, write erase, format)."
         )
-    if context_blocks:
-        messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
+    if context_blocks or instruction_blocks:
+        # Budget di contesto (fix 429 RESOURCE_EXHAUSTED): il contesto totale
+        # viene adattato al limite in caratteri del modello (override
+        # per-profilo con 'context_budget_chars'), privilegiando le sezioni
+        # pertinenti all'ultima domanda dell'utente.
+        budget = ai_assistant.context_char_budget(
+            provider, profile.get("model"), profile.get("context_budget_chars", 0))
+        question = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+        context_blocks = ai_assistant.fit_context(context_blocks, budget, question=question)
+        messages = [{"role": "system", "content": "\n\n".join(context_blocks + instruction_blocks)}] + messages
 
     try:
         reply = ai_assistant.chat(
@@ -420,5 +436,153 @@ def ai_chat(payload: AiChatSchema, current_user = Depends(get_current_user)):
     except ai_assistant.AiAssistantError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"reply": reply, "provider": provider, "model": profile.get("model") or ai_assistant.get_default_model(provider),
+            "profile_name": profile.get("name", "")}
+
+
+# --- Generazione configurazione per un NUOVO switch (AI) ---------------------
+
+class AiGenerateConfigSchema(BaseModel):
+    """Corpo per la generazione AI della config di un nuovo switch: o da un
+    dispositivo template del tenant, o dai parametri comuni dell'ambiente."""
+    tenant: str
+    hostname: str
+    mgmt_ip: str = ""
+    template_ip: Optional[str] = None  # se valorizzato: usa la sua running-config come template
+    notes: str = ""                    # richieste aggiuntive libere dell'utente
+
+# Prefissi di comandi globali IOS considerati "parametri d'ambiente" comuni
+# (servizi condivisi a livello di tenant: NTP, syslog, AAA, VTP, DNS, SNMP...).
+_COMMON_GLOBAL_PREFIXES = (
+    "vtp ", "ntp ", "logging ", "snmp-server ", "aaa ", "ip domain", "ip name-server",
+    "ip default-gateway", "clock timezone", "clock summer-time", "spanning-tree ",
+    "ip ssh ", "service ", "radius ", "tacacs ",
+)
+
+def _tenant_common_parameters(tenant: str, current_user) -> str:
+    """Distilla i parametri COMUNI dell'ambiente di rete di un tenant dai
+    backup dei suoi dispositivi (VLAN, VTP, NTP, syslog, AAA, DNS, SNMP...):
+    una riga globale è 'comune' se presente su almeno metà dei dispositivi
+    analizzati. Blocco compatto, pensato per il budget di contesto AI."""
+    import re
+    devices = [d for d in inventory_manager.get_all_devices()
+               if d.get('Group', 'Generale') == tenant]
+    line_counts: Dict[str, int] = {}
+    vlans: Dict[str, str] = {}
+    mgmt_subnets = set()
+    analyzed = 0
+    for d in devices:
+        ip = d.get('IP')
+        if not ip:
+            continue
+        path, _t = config_analyzer._find_freshest_backup(ip)
+        if not path:
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as fh:
+                content = config_analyzer.running_config(fh.read())
+        except OSError:
+            continue
+        analyzed += 1
+        lines = content.splitlines()
+        for i, raw in enumerate(lines):
+            s = raw.strip()
+            low = s.lower()
+            if any(low.startswith(p) for p in _COMMON_GLOBAL_PREFIXES) and not raw.startswith(' '):
+                line_counts[s] = line_counts.get(s, 0) + 1
+            m = re.match(r'vlan (\d+)\s*$', low)
+            if m and not raw.startswith(' '):
+                name = ""
+                if i + 1 < len(lines) and lines[i + 1].strip().lower().startswith('name '):
+                    name = lines[i + 1].strip()[5:]
+                vlans.setdefault(m.group(1), name)
+        m = re.search(r'^interface vlan\s*(\d+)\n(?:\s+.*\n)*?\s+ip address (\S+) (\S+)',
+                      content, re.MULTILINE | re.IGNORECASE)
+        if m:
+            mgmt_subnets.add(f"VLAN {m.group(1)}: {m.group(2)} {m.group(3)}")
+        if analyzed >= 15:  # cap: bastano pochi device per distillare i comuni
+            break
+    if analyzed == 0:
+        raise HTTPException(status_code=404,
+            detail=f"Nessun backup di configurazione disponibile per il tenant '{tenant}'.")
+    threshold = max(1, (analyzed + 1) // 2)
+    common = sorted(l for l, c in line_counts.items() if c >= threshold)
+    out = [f"## Parametri comuni dell'ambiente tenant '{tenant}' (derivati da {analyzed} dispositivi)"]
+    if vlans:
+        out.append("VLAN in uso: " + ", ".join(
+            f"{vid}{' (' + name + ')' if name else ''}" for vid, name in sorted(vlans.items(), key=lambda kv: int(kv[0]))))
+    if mgmt_subnets:
+        out.append("Subnet di management osservate: " + "; ".join(sorted(mgmt_subnets)))
+    if common:
+        out.append("Comandi globali comuni (presenti su almeno metà dei dispositivi):")
+        out.extend(f"  {l}" for l in common[:120])
+    return "\n".join(out)
+
+@router.post("/api/ai/generate-config")
+def ai_generate_config(payload: AiGenerateConfigSchema, current_user = Depends(get_current_user)):
+    """Genera con l'AI la configurazione proposta per un NUOVO switch del
+    tenant: da un dispositivo template (running-config) oppure dai parametri
+    comuni dell'ambiente. Stessa autenticazione/profilo di /api/ai/chat; il
+    contesto rispetta il budget caratteri del modello."""
+    profile = _get_active_ai_profile()
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Nessun profilo AI configurato/attivo. Un amministratore deve crearne uno prima.")
+    provider = profile.get("provider", "")
+    api_key = crypto_vault.decrypt_password(profile.get("api_key_enc", "")) if profile.get("api_key_enc") else None
+    if provider != "ollama" and not api_key:
+        raise HTTPException(status_code=400, detail="API key non configurata per il profilo AI attivo.")
+
+    tenant = (payload.tenant or "").strip()
+    hostname = (payload.hostname or "").strip()
+    if not tenant or not hostname:
+        raise HTTPException(status_code=400, detail="Tenant e hostname sono obbligatori.")
+    assert_group_allowed(current_user, tenant)
+    if tenant not in inventory_manager.get_all_groups():
+        raise HTTPException(status_code=404, detail=f"Sede/tenant '{tenant}' non trovata.")
+
+    if payload.template_ip:
+        context = _device_running_config_context(payload.template_ip, current_user)
+        source = f"la running-config del dispositivo template {payload.template_ip}"
+    else:
+        context = _tenant_common_parameters(tenant, current_user)
+        source = "i parametri comuni dell'ambiente del tenant"
+
+    request_lines = [f"- hostname: {hostname}"]
+    if payload.mgmt_ip.strip():
+        request_lines.append(f"- IP di management: {payload.mgmt_ip.strip()}")
+    if payload.notes.strip():
+        request_lines.append(f"- note aggiuntive: {payload.notes.strip()[:1000]}")
+
+    question = (
+        f"Genera la configurazione completa proposta per un NUOVO switch del tenant '{tenant}', "
+        f"basandoti su {source}. Dati del nuovo switch:\n" + "\n".join(request_lines) + "\n"
+        "Riusa i parametri d'ambiente comuni (VLAN, VTP, NTP, syslog, AAA, DNS, SNMP, subnet di management) "
+        "adattandoli al nuovo dispositivo. Rispondi con UN solo blocco di codice contenente la configurazione "
+        "completa, seguito da brevi note sulle scelte fatte. Non inventare credenziali: usa segnaposto espliciti."
+    )
+
+    budget = ai_assistant.context_char_budget(
+        provider, profile.get("model"), profile.get("context_budget_chars", 0))
+    context_blocks = ai_assistant.fit_context([context], budget, question=question)
+    messages = [
+        {"role": "system", "content": "\n\n".join(context_blocks)},
+        {"role": "user", "content": question},
+    ]
+    try:
+        reply = ai_assistant.chat(
+            messages,
+            provider=provider,
+            model=profile.get("model") or None,
+            api_key=api_key,
+            base_url=profile.get("base_url") or None,
+            rate_limit_rpm=profile.get("rate_limit_rpm", 0),
+            allow_unredacted=bool(profile.get("allow_unredacted", False)),
+        )
+    except ai_assistant.RateLimitExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ai_assistant.AiAssistantError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    log_audit(f"Config nuovo switch '{hostname}' (tenant '{tenant}') generata via AI dall'utente '{current_user.get('sub')}'.")
+    return {"reply": reply, "provider": provider,
+            "model": profile.get("model") or ai_assistant.get_default_model(provider),
             "profile_name": profile.get("name", "")}
 

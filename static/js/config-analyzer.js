@@ -766,7 +766,8 @@
             const tds = cols.map(c => {
                 let v = r[c.key];
                 if (Array.isArray(v)) v = v.join(', ');
-                if (v === null || v === undefined || v === '') v = '—';
+                if (c.key === 'trusthost' && (v === null || v === undefined || v === '')) v = L.lblCaTrusthostAny;
+                else if (v === null || v === undefined || v === '') v = '—';
                 return `<td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(v))}</td>`;
             }).join('');
             return `<tr>${tds}</tr>`;

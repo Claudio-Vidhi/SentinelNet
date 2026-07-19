@@ -260,7 +260,8 @@ def _analyze(text):
     rows = []
     for name, n in _children(root, 'system admin'):
         trusthosts = [' '.join(v) for k, v in sorted(n["sets"].items())
-                      if k.startswith('trusthost')]
+                      if (k.startswith('trusthost') or k.startswith('ip6-trusthost'))
+                      and ' '.join(v) not in ('0.0.0.0 0.0.0.0', '::/0')]
         rows.append({
             "name": name,
             "accprofile": _forti_set1(n, 'accprofile'),
