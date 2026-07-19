@@ -225,6 +225,10 @@
           <span class="nav-left" data-i18n="tabMcpClient"><i class="fa-solid fa-network-wired"></i> MCP Client</span>
           <span class="preview-badge">preview</span>
         </button>
+        <button id="navFortigatePreview" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-fortigate-preview', this)">
+          <span class="nav-left" data-i18n="tabFgtPreview"><i class="fa-solid fa-shield-halved"></i> FortiGate LIVE</span>
+          <span class="preview-badge">preview</span>
+        </button>
         <button class="nav-item requires-admin" onclick="switchTab('tab-settings', this)">
           <span class="nav-left" data-i18n="tabSettings"><i class="fa-solid fa-gear"></i> Impostazioni</span>
         </button>
@@ -1549,115 +1553,6 @@
         <i class="fa-solid fa-circle-info" style="color:var(--primary);"></i><span data-i18n="msgProvCiscoNoToken">Nessun token API richiesto per gli switch Cisco: la consegna avviene via SSH o console/seriale.</span>
       </p>
 
-      <!-- Token API FortiGate: inline sotto il Tipo apparato, admin-only, mostrato
-           solo quando il vendor selezionato è FortiGate (classe .is-visible, vedi CSS). -->
-      <div class="requires-admin" id="provFgtTokenSection" style="border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-2); padding:14px; margin-bottom:16px;">
-        <h4 style="display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 12px;">
-          <i class="fa-solid fa-key" style="color:var(--primary);"></i><span data-i18n="titleFgtApiToken">Token API FortiGate</span>
-        </h4>
-
-        <!-- Status table showing configured tokens -->
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
-          <div class="table-wrap" style="margin-top:0;">
-            <table id="fgtTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
-              <thead>
-                <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenIp">IP</th>
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenPort">Porta</th>
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenTls">Verifica TLS</th>
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenStatus">Stato</th>
-                </tr>
-              </thead>
-              <tbody id="fgtTokensTableBody">
-              </tbody>
-            </table>
-          </div>
-          <div id="fgtTokensEmpty" style="text-align:center; padding:20px; color:var(--text-muted); display:none;" data-i18n="msgFgtTokensEmpty">
-            Nessun token configurato
-          </div>
-        </div>
-
-        <!-- Form to add/configure token -->
-        <div style="border-top:1px solid var(--border); padding-top:14px;">
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="fgtTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
-              <select id="fgtTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-                <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="fgtTokenValue" data-i18n="lblFgtTokenValue">Token API (password)</label>
-              <!-- autocomplete="new-password": impedisce al browser di autofillare
-                   una credenziale salvata per un altro apparato in questo campo. -->
-              <div style="position:relative; display:flex; align-items:center;">
-                <input id="fgtTokenValue" type="password" autocomplete="new-password" placeholder="••••••••" style="padding-left:12px; padding-right:38px; font-size:13px;">
-                <button type="button" id="fgtTokenReveal" class="fgt-token-reveal" onclick="toggleFgtTokenReveal()" title="Mostra/nascondi token" data-i18n-title="titleFgtTokenReveal">
-                  <i class="fa-solid fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="fgtTokenPort" data-i18n="lblFgtTokenPort">Porta</label>
-              <input id="fgtTokenPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
-            </div>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-            <input type="checkbox" id="fgtTokenVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-            <label for="fgtTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
-          </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn btn-primary" style="width:auto;" onclick="saveFgtToken()" data-i18n="btnFgtTokenSave">
-              <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
-            </button>
-            <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtToken()" data-i18n="btnFgtTokenRemove">
-              <i class="fa-solid fa-trash"></i> Rimuovi
-            </button>
-            <button class="btn btn-secondary" style="width:auto;" onclick="testFgtToken()" data-i18n="btnFgtTokenTest">
-              <i class="fa-solid fa-plug"></i> Test
-            </button>
-          </div>
-          <div id="fgtTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
-        </div>
-      </div>
-
-      <!-- Oggetti Firewall FortiGate (live, sola lettura): usa il token API già
-           configurato sopra per interrogare address book / policy / servizi
-           custom del FortiGate selezionato. Non è admin-only (lettura via
-           get_current_user), quindi resta senza il gate RBAC admin-only. -->
-      <div id="provFgtObjectsSection" style="display:none; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-2); padding:14px; margin-bottom:16px;">
-        <h4 style="display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 12px;">
-          <i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i><span data-i18n="titleFgtObjects">Oggetti Firewall FortiGate (live)</span>
-        </h4>
-        <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="fgtObjDevice" data-i18n="lblFgtObjDevice">Dispositivo FortiGate</label>
-            <select id="fgtObjDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-              <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
-            </select>
-          </div>
-          <button class="btn btn-secondary" style="width:auto;" onclick="loadFgtObjects()" data-i18n="btnFgtObjLoad">
-            <i class="fa-solid fa-rotate"></i> Carica
-          </button>
-        </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-          <button type="button" class="ca-pill active" id="fgtObjTabAddresses" onclick="switchFgtObjView('addresses')" data-i18n="tabFgtObjAddresses">Indirizzi</button>
-          <button type="button" class="ca-pill" id="fgtObjTabPolicies" onclick="switchFgtObjView('policy-objects')" data-i18n="tabFgtObjPolicies">Policy</button>
-          <button type="button" class="ca-pill" id="fgtObjTabServices" onclick="switchFgtObjView('services')" data-i18n="tabFgtObjServices">Servizi</button>
-        </div>
-        <input id="fgtObjFilter" type="text" oninput="renderFgtObjTable()" placeholder="Filtra..." data-i18n-placeholder="phFgtObjFilter" style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-        <div class="table-wrap" id="fgtObjTableWrap" style="margin-top:0;">
-          <table id="fgtObjTable" style="width:100%; font-size:13px; border-collapse:collapse; display:none;">
-            <thead id="fgtObjTableHead"></thead>
-            <tbody id="fgtObjTableBody"></tbody>
-          </table>
-          <div id="fgtObjEmpty" style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="msgFgtObjEmpty">
-            Nessun dato. Seleziona un dispositivo e premi Carica.
-          </div>
-        </div>
-      </div>
-
       <div id="provFgtSection" style="display:none;">
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
           <div class="form-group"><label>Hostname</label><input id="fgtHostname" type="text" value="FGT-NEW-01" style="padding-left:12px;"></div>
@@ -2004,6 +1899,18 @@
         </label>
         <span id="mcpPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-flask" style="color:var(--primary);"></i> <span data-i18n="titleFgtPreview">FortiGate LIVE (anteprima)</span></h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;" data-i18n="descFgtPreview">
+          Abilita la tab sperimentale "FortiGate LIVE": gestione token API e visualizzazione degli oggetti firewall (indirizzi, policy, servizi) in tempo reale. Funzionalita' in anteprima.
+        </p>
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="fgtPreviewToggle" onchange="setFgtPreview(this.checked)">
+          <span data-i18n="lblFgtPreviewToggle">Abilita la tab FortiGate LIVE (preview)</span>
+        </label>
+        <span id="fgtPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>
     </div>
 
     <div id="tab-mcp-client" class="tab-content">
@@ -2038,6 +1945,107 @@
       <div class="panel">
         <h3 style="font-size:15px; margin-bottom:10px;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientServers">Server configurati</span></h3>
         <div id="mcpClientServerList"></div>
+      </div>
+    </div>
+
+    <div id="tab-fortigate-preview" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow" data-i18n="fgtPreviewEyebrow"><i class="fa-solid fa-shield-halved"></i> Integrazioni · <span class="preview-badge">preview</span></span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleFgtPreviewTab">FortiGate LIVE — token e oggetti firewall</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descFgtPreviewTab">
+            Gestisci i token API dei FortiGate e consulta gli oggetti firewall (indirizzi, policy, servizi) in tempo reale. Anteprima: sola lettura, i token non vengono mai restituiti al browser.
+          </p>
+        </div>
+      </div>
+
+      <!-- Token API FortiGate (admin-only) -->
+      <div class="panel requires-admin" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-key" style="color:var(--primary);"></i> <span data-i18n="titleFgtApiToken">Token API FortiGate</span></h3>
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
+          <div class="table-wrap" style="margin-top:0;">
+            <table id="fgtPrevTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenIp">IP</th>
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenPort">Porta</th>
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenTls">Verifica TLS</th>
+                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenStatus">Stato</th>
+                </tr>
+              </thead>
+              <tbody id="fgtPrevTokensTableBody"></tbody>
+            </table>
+          </div>
+          <div id="fgtPrevTokensEmpty" style="text-align:center; padding:20px; color:var(--text-muted); display:none;" data-i18n="msgFgtTokensEmpty">
+            Nessun token configurato
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border); padding-top:14px;">
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="fgtPrevTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
+              <select id="fgtPrevTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="fgtPrevTokenValue" data-i18n="lblFgtTokenValue">Token API (password)</label>
+              <input id="fgtPrevTokenValue" type="password" autocomplete="new-password" placeholder="••••••••" style="padding-left:12px; font-size:13px;">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="fgtPrevTokenPort" data-i18n="lblFgtTokenPort">Porta</label>
+              <input id="fgtPrevTokenPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+            <input type="checkbox" id="fgtPrevTokenVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+            <label for="fgtPrevTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-primary" style="width:auto;" onclick="saveFgtPrevToken()" data-i18n="btnFgtTokenSave">
+              <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
+            </button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtPrevToken()" data-i18n="btnFgtTokenRemove">
+              <i class="fa-solid fa-trash"></i> Rimuovi
+            </button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="testFgtPrevToken()" data-i18n="btnFgtTokenTest">
+              <i class="fa-solid fa-plug"></i> Test
+            </button>
+          </div>
+          <div id="fgtPrevTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- Oggetti Firewall FortiGate (live, sola lettura) -->
+      <div class="panel">
+        <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> <span data-i18n="titleFgtObjects">Oggetti Firewall FortiGate (live)</span></h3>
+        <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtPrevObjDevice" data-i18n="lblFgtObjDevice">Dispositivo FortiGate</label>
+            <select id="fgtPrevObjDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" style="width:auto;" onclick="loadFgtPrevObjects()" data-i18n="btnFgtObjLoad">
+            <i class="fa-solid fa-rotate"></i> Carica
+          </button>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <button type="button" class="ca-pill active" id="fgtPrevObjTabAddresses" onclick="switchFgtPrevObjView('addresses')" data-i18n="tabFgtObjAddresses">Indirizzi</button>
+          <button type="button" class="ca-pill" id="fgtPrevObjTabPolicies" onclick="switchFgtPrevObjView('policy-objects')" data-i18n="tabFgtObjPolicies">Policy</button>
+          <button type="button" class="ca-pill" id="fgtPrevObjTabServices" onclick="switchFgtPrevObjView('services')" data-i18n="tabFgtObjServices">Servizi</button>
+        </div>
+        <input id="fgtPrevObjFilter" type="text" oninput="renderFgtPrevObjTable()" placeholder="Filtra..." data-i18n-placeholder="phFgtObjFilter" style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+        <div class="table-wrap" id="fgtPrevObjTableWrap" style="margin-top:0;">
+          <table id="fgtPrevObjTable" style="width:100%; font-size:13px; border-collapse:collapse; display:none;">
+            <thead id="fgtPrevObjTableHead"></thead>
+            <tbody id="fgtPrevObjTableBody"></tbody>
+          </table>
+          <div id="fgtPrevObjEmpty" style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="msgFgtObjEmpty">
+            Nessun dato. Seleziona un dispositivo e premi Carica.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2316,6 +2324,7 @@
   <script src="/static/js/ai.js"></script>
   <script src="/static/js/settings.js"></script>
   <script src="/static/js/mcp-client.js"></script>
+  <script src="/static/js/fortigate-preview.js"></script>
   <script>
     // --- SIDEBAR RAIL (collasso a icone) --- [MOVED to static/js/core.js: syncNavTooltips,
     // applySidebarCollapsed, toggleSidebar, escapeHtml, apiFetch, auth handlers, appInit,
