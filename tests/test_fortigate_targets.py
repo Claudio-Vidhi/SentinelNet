@@ -41,11 +41,49 @@ class MultiTargetTest(unittest.TestCase):
         self.assertNotIn("token", t)
         self.assertNotIn("token_enc", t)
 
-    def test_set_target_name_updates_existing_entry(self):
+    def test_update_target_name_only(self):
         fgs.set_api_token("192.0.2.1", "tok123")
-        fgs.set_target_name("192.0.2.1", "Filiale-Roma")
+        fgs.update_target("192.0.2.1", name="Filiale-Roma")
         targets = fgs.list_targets()
         self.assertEqual(targets[0]["name"], "Filiale-Roma")
+        # il token resta invariato
+        token, _, _ = fgs.get_api_config("192.0.2.1")
+        self.assertEqual(token, "tok123")
+
+    def test_update_target_port_and_verify_tls(self):
+        fgs.set_api_token("192.0.2.1", "tok123", port=443, verify_tls=False)
+        fgs.update_target("192.0.2.1", port=8443, verify_tls=True)
+        targets = fgs.list_targets()
+        self.assertEqual(targets[0]["port"], 8443)
+        self.assertTrue(targets[0]["verify_tls"])
+
+    def test_update_target_omitted_token_keeps_existing(self):
+        fgs.set_api_token("192.0.2.1", "tok-original")
+        fgs.update_target("192.0.2.1", name="renamed")
+        token, _, _ = fgs.get_api_config("192.0.2.1")
+        self.assertEqual(token, "tok-original")
+
+    def test_update_target_empty_string_token_keeps_existing(self):
+        fgs.set_api_token("192.0.2.1", "tok-original")
+        fgs.update_target("192.0.2.1", token="", name="renamed")
+        token, _, _ = fgs.get_api_config("192.0.2.1")
+        self.assertEqual(token, "tok-original")
+
+    def test_update_target_with_token_replaces_it(self):
+        fgs.set_api_token("192.0.2.1", "tok-original")
+        fgs.update_target("192.0.2.1", token="tok-new")
+        token, _, _ = fgs.get_api_config("192.0.2.1")
+        self.assertEqual(token, "tok-new")
+
+    def test_update_target_missing_ip_raises_keyerror(self):
+        with self.assertRaises(KeyError):
+            fgs.update_target("192.0.2.99", name="ghost")
+
+    def test_update_target_active_key_is_not_a_valid_target(self):
+        fgs.set_api_token("192.0.2.1", "tok123")
+        fgs.set_active_target("192.0.2.1")
+        with self.assertRaises(KeyError):
+            fgs.update_target("_active", name="nope")
 
     def test_set_and_get_active_target_persists(self):
         fgs.set_api_token("192.0.2.1", "tok1")
