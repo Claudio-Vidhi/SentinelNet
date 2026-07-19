@@ -10,7 +10,7 @@ raw) e passa comunque dal choke-point di redazione in ai_assistant.chat().
 
 import time
 
-import db
+from core import db
 
 
 def top_flows_context(scope, window_s: int = 900, limit: int = 20,

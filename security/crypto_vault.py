@@ -2,8 +2,8 @@ import os
 import base64
 import hashlib
 from cryptography.fernet import Fernet
-import data_config
-import secure_key_store
+from core import data_config
+from security import secure_key_store
 
 KEY_FILE = data_config.get_path("secret.key")
 

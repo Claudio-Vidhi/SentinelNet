@@ -12,9 +12,9 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-import db
-import data_config
-from app_settings import get_app_settings, save_app_settings
+from core import db
+from core import data_config
+from core.app_settings import get_app_settings, save_app_settings
 from observability import metrics
 from observability.ingesters import ipfix
 from routers.deps import (get_current_user, require_admin, require_operator,
@@ -183,10 +183,168 @@ async def obs_anomaly_status(
         raise HTTPException(
             status_code=409,
             detail="The event status changed in the meantime: reload the list.")
-    from security_manager import log_audit
+    from security.security_manager import log_audit
     log_audit(f"Anomalia observability #{event_id}: stato '{from_status}' → "
               f"'{new_status}' da '{current_user.get('sub')}'.")
     return {"status": "success", "id": event_id, "new_status": new_status}
+
+
+def _synthetic_vlan(tenant: str) -> int:
+    """VLAN sintetico deterministico dal tenant, usato SOLO come fallback
+    quando non esiste un binding ARP noto per l'IP (vedi ``vlans_for_ips``
+    più sotto). Deterministico tra restart/worker: ``hash()`` di builtin è
+    salato per processo (PYTHONHASHSEED random di default), quindi qui si usa
+    sha1 troncato — stabile ovunque per lo stesso input."""
+    import hashlib
+    digest = hashlib.sha1(tenant.encode("utf-8")).digest()
+    return 100 + (int.from_bytes(digest[:2], "big") % 900)
+
+
+@router.get("/api/observability/flowgraph")
+async def obs_flowgraph(
+    window: str = Query("5m"),
+    current_user = Depends(get_current_user),
+):
+    """Grafo dei flussi aggregato (Task 3, Live Flows): nodi/archi con tassi,
+    KPI di sintesi, riepilogo del tenant corrente e breakdown protocolli.
+    Riusa le stesse query di ``obs_top_talkers``/``obs_anomalies``, scoped
+    per tenant via ``_tenant_filter``. Nodi/archi limitati ai top 50 per rate.
+
+    VLAN: quando esiste un binding ARP noto per l'IP (tabella ``arp_entries``
+    di Client Map, popolata dai gateway L3) si usa la VLAN reale 802.1Q;
+    altrimenti si ricade su ``_synthetic_vlan(tenant)`` e il nodo/arco viene
+    marcato ``vlan_real: false`` così la UI può segnalarlo (non è un fake
+    silenzioso)."""
+    import time as _time
+    seconds = _parse_window(window)
+    cutoff = int(_time.time()) - seconds
+    clause, params = _tenant_filter(current_user)
+
+    flow_rows = await db.read(
+        f"""SELECT tenant, src_ip, dst_ip, protocol, dst_port,
+                   SUM(total_bytes) AS total_bytes,
+                   SUM(total_packets) AS total_packets
+            FROM flow_aggregates
+            WHERE window_start >= ?{clause}
+            GROUP BY tenant, src_ip, dst_ip, protocol, dst_port
+            ORDER BY SUM(total_bytes) DESC
+            LIMIT 50""",
+        (cutoff, *params))
+
+    spike_rows = await db.read(
+        f"""SELECT COUNT(*) AS n FROM correlated_events
+            WHERE created_ts >= ?{clause} AND status = 'new'""",
+        (cutoff, *params))
+    spikes = spike_rows[0]["n"] if spike_rows else 0
+
+    _PROTO_NAMES = {6: "tcp", 17: "udp", 1: "icmp"}
+    edges = []
+    node_bytes: dict = {}
+    node_tenant: dict = {}
+    proto_totals: dict = {}
+    tenants_seen: set = set()
+
+    for r in flow_rows:
+        tenant = r["tenant"]
+        src, dst = r["src_ip"], r["dst_ip"]
+        nbytes = r["total_bytes"] or 0
+        rate_bps = (nbytes * 8) / seconds if seconds else 0
+        proto = _PROTO_NAMES.get(r["protocol"], str(r["protocol"] or "?"))
+        tenants_seen.add(tenant)
+
+        # Bytes del nodo = somma del traffico in cui compare, sia come
+        # sorgente che come destinazione, così un host solo-destinazione
+        # (es. un server interno mai visto come src) non resta a 0 e non
+        # viene ingiustamente scartato dal cap top-50.
+        node_bytes[src] = node_bytes.get(src, 0) + nbytes
+        node_bytes[dst] = node_bytes.get(dst, 0) + nbytes
+        node_tenant.setdefault(src, tenant)
+        node_tenant.setdefault(dst, tenant)
+
+        edges.append({"src": src, "dst": dst, "rate_bps": rate_bps,
+                      "proto": proto, "port": r["dst_port"], "tenant": tenant})
+
+        proto_key = (proto, r["dst_port"])
+        pt = proto_totals.setdefault(proto_key, {"proto": proto,
+                                                  "port": r["dst_port"],
+                                                  "rate_bps": 0.0})
+        pt["rate_bps"] += rate_bps
+
+    # Top 50 nodi per bytes totali (src+dst).
+    top_ids = [ip for ip, _ in sorted(node_bytes.items(), key=lambda kv: kv[1],
+                                      reverse=True)[:50]]
+    kept_ids = set(top_ids)
+
+    # VLAN reale (arp_entries) se nota, altrimenti sintetica dal tenant.
+    import asyncio as _asyncio
+    from collectors import mac_history
+    ip_tenant_map = {ip: node_tenant.get(ip, "") for ip in top_ids}
+    real_vlans = await _asyncio.to_thread(mac_history.vlans_for_ips, ip_tenant_map)
+
+    def _vlan_for(ip):
+        raw = real_vlans.get(ip)
+        if raw:
+            try:
+                return int(raw), True
+            except (TypeError, ValueError):
+                pass
+        return _synthetic_vlan(node_tenant.get(ip, "")), False
+
+    node_vlan = {ip: _vlan_for(ip) for ip in top_ids}
+    node_list = [{"id": ip, "bytes": node_bytes[ip],
+                 "vlan": node_vlan[ip][0], "vlan_real": node_vlan[ip][1]}
+                for ip in top_ids]
+
+    edges = [e for e in edges if e["src"] in kept_ids and e["dst"] in kept_ids]
+    edges.sort(key=lambda e: e["rate_bps"], reverse=True)
+    edges = edges[:50]
+    for e in edges:
+        vlan, vlan_real = node_vlan.get(e["src"], (None, False))
+        e["vlan"] = vlan
+        e["vlan_real"] = vlan_real
+
+    throughput_bps = sum(e["rate_bps"] for e in edges)
+    top_edge = max(edges, key=lambda e: e["rate_bps"], default=None)
+    top_path = ({"src": top_edge["src"], "dst": top_edge["dst"],
+                "pct": round(100 * top_edge["rate_bps"] / throughput_bps, 1)
+                if throughput_bps else 0} if top_edge else
+               {"src": None, "dst": None, "pct": 0})
+    talkers = len({e["src"] for e in edges} | {e["dst"] for e in edges})
+
+    kpi = {"throughput_bps": throughput_bps, "top_path": top_path,
+          "talkers": talkers, "spikes": spikes}
+
+    protocols = sorted(proto_totals.values(), key=lambda p: p["rate_bps"],
+                       reverse=True)
+
+    scope = user_group_scope(current_user)
+    tenant_name = sorted(scope)[0] if scope else (
+        sorted(tenants_seen)[0] if tenants_seen else None)
+    tenant_edges = [e for e in edges if e.get("tenant") == tenant_name] \
+        if tenant_name else edges
+    top_talker_edge = max(tenant_edges, key=lambda e: e["rate_bps"],
+                          default=None)
+    tenant_node_ids = [ip for ip in top_ids
+                       if node_tenant.get(ip) == tenant_name] \
+        if tenant_name else top_ids
+    tenant_vlans = sorted({node_vlan[ip][0] for ip in tenant_node_ids}) \
+        if tenant_node_ids else \
+        ([_synthetic_vlan(tenant_name)] if tenant_name else [])
+    tenant_summary = {
+        "name": tenant_name,
+        "vlans": tenant_vlans,
+        "flows_shown": len(tenant_edges),
+        "top_talker": ({"src": top_talker_edge["src"],
+                        "dst": top_talker_edge["dst"],
+                        "rate_bps": top_talker_edge["rate_bps"]}
+                       if top_talker_edge else None),
+    }
+
+    for e in edges:
+        e.pop("tenant", None)
+
+    return {"window": window, "nodes": node_list, "edges": edges, "kpi": kpi,
+            "tenant": tenant_summary, "protocols": protocols}
 
 
 @router.get("/api/observability/config")
@@ -227,7 +385,7 @@ async def obs_set_config(payload: dict, current_user = Depends(require_admin)):
     effective = data_config.obs_config()
     from observability import listener_manager
     await listener_manager.apply_obs_config(effective)
-    from security_manager import log_audit
+    from security.security_manager import log_audit
     log_audit(f"Config observability aggiornata da '{current_user.get('sub')}': "
               f"{clean} (applicata a caldo, nessun riavvio).")
     return {"status": "success", "restart_required": False,

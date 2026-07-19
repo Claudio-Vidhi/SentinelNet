@@ -8,9 +8,9 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
-import inventory_manager
-import user_manager
-from security_manager import (
+from services import inventory_manager
+from security import user_manager
+from security.security_manager import (
     create_access_token, log_audit,
     is_locked_out, record_failed_attempt, reset_failed_attempts,
     ACCESS_TOKEN_EXPIRE_MINUTES,

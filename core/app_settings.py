@@ -16,7 +16,7 @@ import os
 import socket
 import threading
 
-import data_config
+from core import data_config
 
 PORT = 8765
 

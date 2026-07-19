@@ -7,9 +7,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-import inventory_manager
-import core_engine
-from security_manager import log_audit
+from services import inventory_manager
+from core import core_engine
+from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_operator, user_group_scope, filter_map_to_scope, assert_group_allowed
 )

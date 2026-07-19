@@ -1241,7 +1241,7 @@ def convert_config(source_text, source_vendor, target_vendor):
 def _find_freshest_backup(ip):
     """Trova il file di backup piu' recente per l'IP dato. Ritorna
     (path, tenant_folder) oppure (None, None)."""
-    import core_engine
+    from core import core_engine
     best = None
     best_mtime = -1
     best_tenant = None
@@ -1280,7 +1280,7 @@ def analyze_device(ip):
     dev = None
     tenant = tenant_folder or ""
     try:
-        import inventory_manager
+        from services import inventory_manager
         dev = next((d for d in inventory_manager.get_all_devices()
                     if d.get('IP') == ip), None)
     except Exception:
@@ -1339,7 +1339,7 @@ def analyze_device(ip):
 def analyze_all(group_filter=None, allowed_groups=None):
     """Analizza tutti i dispositivi in inventario che hanno un backup, applicando
     lo scoping per sede (allowed_groups) ed un eventuale filtro di gruppo."""
-    import inventory_manager
+    from services import inventory_manager
     devices = []
     for dev in inventory_manager.get_all_devices():
         ip = dev.get('IP')

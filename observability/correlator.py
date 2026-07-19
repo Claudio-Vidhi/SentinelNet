@@ -27,7 +27,7 @@ import logging
 import re
 import time
 
-import db
+from core import db
 from observability import metrics
 
 logger = logging.getLogger("sentinelnet.obs")
@@ -76,7 +76,7 @@ def _extract_endpoints(message: str):
 def _switch_port_for(src_ip: str, tenant: str):
     """Posizione fisica best-effort del client (switch/porta), stesso tenant."""
     try:
-        import mac_history
+        from collectors import mac_history
         entries = mac_history.client_map(ip=src_ip, tenants=[tenant], limit=1)
         if entries and entries[0].get("switch_port"):
             e = entries[0]

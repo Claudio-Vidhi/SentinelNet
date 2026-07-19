@@ -59,6 +59,7 @@ async function setFgtPreview(enabled) {
 function loadFgtPreviewTab() {
     populateFgtPrevDeviceSelects();
     loadFgtPrevTokens();
+    loadFgtTargets();
     fgtPrevObjRows = [];
     renderFgtPrevObjTable();
 }
@@ -286,4 +287,247 @@ function renderFgtPrevObjTable() {
         }).join('');
         return `<tr style="border-bottom:1px solid var(--border);">${tds}</tr>`;
     }).join('');
+}
+
+// --- Multi-target FortiGate: selettore + modale di gestione ---------------
+// Ogni FortiGate configurato (services/fortigate_service.py, JSON con
+// "_active" per il target corrente) può avere un nome descrittivo. Il
+// selettore in testa alla tab imposta il target attivo lato server; il
+// modale "Gestisci FortiGate" elenca/aggiunge/modifica/rimuove i target e
+// ne testa la connessione. Stringhe derivate dal FortiGate/inventario
+// passano sempre da escapeHtml(jsStr(x)).
+
+let fgtTargetsCache = [];
+
+async function loadFgtTargets() {
+    try {
+        const res = await apiFetch('/api/fortigate/targets');
+        fgtTargetsCache = (res && res.ok) ? await res.json() : [];
+    } catch (e) {
+        console.error('Errore caricamento target FortiGate:', e);
+        fgtTargetsCache = [];
+    }
+    renderFgtTargetSelect();
+}
+
+function renderFgtTargetSelect() {
+    const sel = document.getElementById('fgtTargetSelect');
+    if (!sel) return;
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    if (!fgtTargetsCache.length) {
+        sel.innerHTML = `<option value="">${escapeHtml(L.optFgtNoTargets || '-- nessun target configurato --')}</option>`;
+        return;
+    }
+    sel.innerHTML = fgtTargetsCache.map(t => {
+        const label = `${t.name ? jsStr(t.name) : jsStr(t.ip)} (${jsStr(t.ip)})`;
+        return `<option value="${escapeHtml(jsStr(t.ip))}" ${t.active ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+}
+
+async function onFgtTargetSelectChange() {
+    const ip = document.getElementById('fgtTargetSelect')?.value;
+    if (!ip) return;
+    const res = await apiFetch('/api/fortigate/targets/active', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip })
+    });
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    if (res && res.ok) {
+        showToast(L.msgFgtTargetActivated || 'Target FortiGate attivo aggiornato.', 'success');
+        await loadFgtTargets();
+        // Allinea i selettori "dispositivo" del pannello token/oggetti e ricarica gli oggetti live.
+        const objSel = document.getElementById('fgtPrevObjDevice');
+        if (objSel) { objSel.value = ip; loadFgtPrevObjects(); }
+    } else {
+        const err = res ? await res.json().catch(() => ({})) : {};
+        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
+    }
+}
+
+function openFgtManageModal() {
+    populateFgtMgrDeviceSelect();
+    resetFgtMgrForm();
+    renderFgtMgrTable();
+    document.getElementById('fgtManageModal').style.display = 'flex';
+}
+
+function closeFgtManageModal() {
+    document.getElementById('fgtManageModal').style.display = 'none';
+}
+
+function populateFgtMgrDeviceSelect() {
+    const fgtDevices = (typeof globalDevices !== 'undefined' ? globalDevices : []).filter(dev =>
+        (dev.Vendor || '').toLowerCase() === 'fortinet'
+    );
+    const sel = document.getElementById('fgtMgrIp');
+    if (!sel) return;
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    const current = sel.value;
+    sel.innerHTML = `<option value="">${escapeHtml(L.optFgtSelectDevice || '-- seleziona dispositivo --')}</option>` +
+        fgtDevices.map(dev =>
+            `<option value="${escapeHtml(dev.IP)}">${escapeHtml(dev.IP)} (${escapeHtml(dev.Hostname || 'unknown')})</option>`
+        ).join('');
+    if (current) sel.value = current;
+}
+
+function renderFgtMgrTable() {
+    const tbody = document.getElementById('fgtMgrTableBody');
+    const table = document.getElementById('fgtMgrTable');
+    const emptyMsg = document.getElementById('fgtMgrEmpty');
+    if (!tbody) return;
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+
+    if (!fgtTargetsCache.length) {
+        tbody.innerHTML = '';
+        table.style.display = 'none';
+        emptyMsg.style.display = '';
+        return;
+    }
+    table.style.display = '';
+    emptyMsg.style.display = 'none';
+
+    tbody.innerHTML = fgtTargetsCache.map(t => {
+        const ip = escapeHtml(jsStr(t.ip));
+        const name = escapeHtml(jsStr(t.name || ''));
+        const tlsBadge = t.verify_tls
+            ? `<span class="status ok">${escapeHtml(L.badgeFgtTestOk || 'OK')}</span>`
+            : `<span class="status warn">off</span>`;
+        return `<tr style="border-bottom:1px solid var(--border);" data-ip="${ip}">
+            <td style="padding:8px 12px;">${name || '—'}</td>
+            <td style="padding:8px 12px; font-family:var(--font-code);">${ip}</td>
+            <td style="padding:8px 12px;">${t.port}</td>
+            <td style="padding:8px 12px;">${tlsBadge}</td>
+            <td style="padding:8px 12px; text-align:center;">
+                <input type="radio" name="fgtMgrActiveRadio" ${t.active ? 'checked' : ''} onclick="activateFgtMgrTarget('${ip}')">
+            </td>
+            <td style="padding:8px 12px; text-align:center;">
+                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="testFgtMgrTarget('${ip}', this)">${L.btnFgtMgrTest || '<i class="fa-solid fa-plug"></i>'}</button>
+                <span class="fgt-mgr-test-result" style="margin-left:6px; font-size:11px;"></span>
+            </td>
+            <td style="padding:8px 12px; text-align:right; white-space:nowrap;">
+                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="editFgtMgrTarget('${ip}')" title="${currentLang === 'en' ? 'Edit' : 'Modifica'}"><i class="fa-solid fa-pen"></i></button>
+                <button type="button" class="btn btn-danger btn-small" style="width:auto; margin:0;" onclick="deleteFgtMgrTarget('${ip}')">${L.btnFgtMgrDelete || '<i class="fa-solid fa-trash"></i>'}</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function resetFgtMgrForm() {
+    document.getElementById('fgtMgrEditIp').value = '';
+    document.getElementById('fgtMgrName').value = '';
+    const ipSel = document.getElementById('fgtMgrIp');
+    if (ipSel) { ipSel.value = ''; ipSel.disabled = false; }
+    document.getElementById('fgtMgrPort').value = '443';
+    document.getElementById('fgtMgrVerifyTls').checked = false;
+    const tokenInput = document.getElementById('fgtMgrToken');
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    tokenInput.value = '';
+    tokenInput.placeholder = L.phFgtMgrTokenNew || 'token API';
+    const st = document.getElementById('fgtMgrStatus');
+    if (st) st.textContent = '';
+}
+
+function editFgtMgrTarget(ip) {
+    const t = fgtTargetsCache.find(x => x.ip === ip);
+    if (!t) return;
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    document.getElementById('fgtMgrEditIp').value = t.ip;
+    document.getElementById('fgtMgrName').value = t.name || '';
+    const ipSel = document.getElementById('fgtMgrIp');
+    if (ipSel) { ipSel.value = t.ip; ipSel.disabled = true; }
+    document.getElementById('fgtMgrPort').value = t.port || 443;
+    document.getElementById('fgtMgrVerifyTls').checked = !!t.verify_tls;
+    const tokenInput = document.getElementById('fgtMgrToken');
+    tokenInput.value = '';
+    tokenInput.placeholder = L.phFgtMgrTokenEdit || '•••• invariato';
+}
+
+async function saveFgtMgrTarget() {
+    const editIp = document.getElementById('fgtMgrEditIp').value.trim();
+    const ip = editIp || document.getElementById('fgtMgrIp').value.trim();
+    const name = document.getElementById('fgtMgrName').value.trim();
+    const port = parseInt(document.getElementById('fgtMgrPort').value) || 443;
+    const verifyTls = document.getElementById('fgtMgrVerifyTls').checked;
+    const token = document.getElementById('fgtMgrToken').value;
+    const st = document.getElementById('fgtMgrStatus');
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+
+    if (!ip) { showToast(currentLang === 'en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning'); return; }
+    if (port < 1 || port > 65535) { showToast(currentLang === 'en' ? 'Invalid port (1-65535)' : 'Porta non valida (1-65535)', 'error'); return; }
+
+    let res;
+    if (editIp) {
+        // Modifica: aggiornamento parziale via PUT, token omesso/vuoto = resta
+        // quello già salvato ("•••• invariato" è quindi veritiero).
+        res = await apiFetch(`/api/fortigate/targets/${encodeURIComponent(editIp)}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, port, verify_tls: verifyTls, token: token || null })
+        });
+    } else {
+        // Nuovo target: il token è obbligatorio (flusso esistente di creazione).
+        if (!token) { showToast(currentLang === 'en' ? 'Enter a token' : 'Inserire un token', 'warning'); return; }
+        res = await apiFetch('/api/fortigate/token', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip, token, port, verify_tls: verifyTls, name })
+        });
+    }
+    if (res && res.ok) {
+        showToast(L.msgFgtTargetSaved || 'Target FortiGate salvato.', 'success');
+        if (st) st.textContent = '';
+        resetFgtMgrForm();
+        await loadFgtTargets();
+        renderFgtMgrTable();
+        populateFgtPrevDeviceSelects();
+    } else {
+        const err = res ? await res.json().catch(() => ({})) : {};
+        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
+    }
+}
+
+async function activateFgtMgrTarget(ip) {
+    const res = await apiFetch('/api/fortigate/targets/active', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip })
+    });
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    if (res && res.ok) {
+        showToast(L.msgFgtTargetActivated || 'Target FortiGate attivo aggiornato.', 'success');
+        await loadFgtTargets();
+        renderFgtMgrTable();
+    }
+}
+
+async function testFgtMgrTarget(ip, btn) {
+    const row = btn.closest('tr');
+    const resultSpan = row ? row.querySelector('.fgt-mgr-test-result') : null;
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    if (resultSpan) resultSpan.textContent = currentLang === 'en' ? 'Testing...' : 'Test in corso...';
+    const res = await apiFetch(`/api/fortigate/targets/${encodeURIComponent(ip)}/test`, { method: 'POST' });
+    const data = res ? await res.json().catch(() => ({ ok: false })) : { ok: false };
+    if (resultSpan) {
+        if (data.ok) {
+            resultSpan.innerHTML = `<span class="status ok">${escapeHtml(L.badgeFgtTestOk || 'OK')}${data.version ? ' v' + escapeHtml(jsStr(data.version)) : ''}</span>`;
+        } else {
+            resultSpan.innerHTML = `<span class="status bad" title="${escapeHtml(jsStr(data.error || ''))}">${escapeHtml(L.badgeFgtTestFail || 'Fallito')}</span>`;
+        }
+    }
+}
+
+async function deleteFgtMgrTarget(ip) {
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    if (!confirm(L.confirmFgtTargetDelete || 'Rimuovere questo target FortiGate?')) return;
+    const res = await apiFetch('/api/fortigate/token', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, token: '', port: 443, verify_tls: false })
+    });
+    if (res && res.ok) {
+        showToast(L.msgFgtTargetDeleted || 'Target FortiGate rimosso.', 'success');
+        resetFgtMgrForm();
+        await loadFgtTargets();
+        renderFgtMgrTable();
+        populateFgtPrevDeviceSelects();
+    } else {
+        const err = res ? await res.json().catch(() => ({})) : {};
+        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
+    }
 }

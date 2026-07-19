@@ -15,9 +15,9 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-import inventory_manager
-import user_manager
-from security_manager import verify_access_token
+from services import inventory_manager
+from security import user_manager
+from security.security_manager import verify_access_token
 
 security_scheme = HTTPBearer(auto_error=False)
 

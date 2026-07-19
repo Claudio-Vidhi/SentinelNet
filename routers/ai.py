@@ -8,18 +8,18 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app_settings import get_app_settings, save_app_settings
-import crypto_vault
-from security_manager import log_audit
+from core.app_settings import get_app_settings, save_app_settings
+from security import crypto_vault
+from security.security_manager import log_audit
 from routers.deps import get_current_user, require_admin, user_group_scope, assert_device_allowed, assert_group_allowed
 from routers.fortigate import _fgt_device
-import inventory_manager
-import core_engine
-import fortigate_service
-import ai_assistant
-import config_analyzer
-import mac_history
-import site_manager
+from services import inventory_manager
+from core import core_engine
+from services import fortigate_service
+from ai import ai_assistant
+from ai import config_analyzer
+from collectors import mac_history
+from services import site_manager
 
 _AI_PROVIDERS = {"anthropic", "openai", "gemini", "ollama"}
 

@@ -21,10 +21,10 @@ import asyncio
 import logging
 import time
 
-import db
-import inventory_manager
+from core import db
+from services import inventory_manager
 from observability import metrics
-from security_manager import log_audit
+from security.security_manager import log_audit
 
 logger = logging.getLogger("sentinelnet.obs")
 

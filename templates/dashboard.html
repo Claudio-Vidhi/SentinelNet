@@ -1172,6 +1172,54 @@
 
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, #e0a800); border-radius:8px; color:var(--warning, #e0a800); font-size:13px;"></div>
 
+      <!-- KPI strip -->
+      <div class="hero" style="grid-template-columns:repeat(4, 1fr); margin-bottom:18px;" id="fgKpiStrip">
+        <div class="hero-card"><span class="eyebrow" data-i18n="kpiThroughput">Throughput</span><h3 id="fgKpiThroughput" style="margin:6px 0 0; font-size:22px;">—</h3></div>
+        <div class="hero-card"><span class="eyebrow" data-i18n="kpiTopPath">Top path</span><h3 id="fgKpiTopPath" style="margin:6px 0 0; font-size:16px;">—</h3></div>
+        <div class="hero-card"><span class="eyebrow" data-i18n="kpiTalkers">Active talkers</span><h3 id="fgKpiTalkers" style="margin:6px 0 0; font-size:22px;">—</h3></div>
+        <div class="hero-card"><span class="eyebrow" data-i18n="kpiSpikes">Spikes</span><h3 id="fgKpiSpikes" style="margin:6px 0 0; font-size:22px;">—</h3></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 6px; font-size:16px;"><i class="fa-solid fa-diagram-project"></i> <span data-i18n="titleFlowGraph">Grafo dei flussi</span></h3>
+        <p style="margin:0 0 10px; font-size:12px; color:var(--text-muted);" data-i18n="hintFlowGraphClick">Clicca un nodo per filtrare le tabelle, clicca lo sfondo per azzerare il filtro.</p>
+        <canvas id="flowGraphCanvas" width="900" height="360" style="width:100%; height:360px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); cursor:pointer;"></canvas>
+        <div id="fgTooltip" style="display:none; position:fixed; pointer-events:none; z-index:10020; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:12px; box-shadow:0 4px 10px rgba(0,0,0,0.3);"></div>
+      </div>
+
+      <div class="hero" style="grid-template-columns:repeat(2, 1fr); margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow"><i class="fa-solid fa-building"></i> <span data-i18n="lblTenantSummary">Riepilogo tenant</span></span>
+          <div id="fgTenantSummary" style="margin-top:8px; font-size:13px; line-height:1.8;">—</div>
+        </div>
+        <div class="hero-card">
+          <span class="eyebrow"><i class="fa-solid fa-layer-group"></i> <span data-i18n="titleProtocolBreakdown">Ripartizione protocolli</span></span>
+          <div class="table-wrap" style="max-height:180px; margin-top:8px;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+              <thead><tr><th style="text-align:left; padding:4px 6px;" data-i18n="thFgProtocol">Protocollo</th><th style="text-align:left;" data-i18n="thFgPort">Porta</th><th style="text-align:left;" data-i18n="thFgRate">Rate</th></tr></thead>
+              <tbody id="fgProtoTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 10px; font-size:16px;"><i class="fa-solid fa-ranking-star"></i> <span data-i18n="titleTopTalkersTable">Top talker</span></h3>
+        <div class="table-wrap" style="max-height:260px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr>
+              <th style="text-align:left; padding:6px 8px;" data-i18n="thFgSource">Sorgente</th>
+              <th style="text-align:left;" data-i18n="thFgTarget">Destinazione</th>
+              <th style="text-align:left;" data-i18n="thFgVlan">VLAN</th>
+              <th style="text-align:left;" data-i18n="thFgRate">Rate</th>
+            </tr></thead>
+            <tbody id="fgTalkersTableBody">
+              <tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlowGraphData">Nessun dato disponibile per il grafo dei flussi.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="panel" style="margin-bottom:18px;">
         <div class="filterbar" style="align-items:center; margin-top:0;">
         <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
@@ -1959,6 +2007,21 @@
         </div>
       </div>
 
+      <!-- Selettore target FortiGate attivo + gestione multi-target -->
+      <div class="panel requires-admin" style="margin-bottom:18px;">
+        <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
+          <div class="form-group" style="margin-bottom:0; min-width:260px;">
+            <label for="fgtTargetSelect" data-i18n="lblFgtTargetSelect">Target FortiGate attivo</label>
+            <select id="fgtTargetSelect" onchange="onFgtTargetSelectChange()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optFgtNoTargets">-- nessun target configurato --</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-secondary" style="width:auto;" onclick="openFgtManageModal()" data-i18n="btnFgtManageTargets">
+            <i class="fa-solid fa-gears"></i> Gestisci FortiGate
+          </button>
+        </div>
+      </div>
+
       <!-- Token API FortiGate (admin-only) -->
       <div class="panel requires-admin" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-key" style="color:var(--primary);"></i> <span data-i18n="titleFgtApiToken">Token API FortiGate</span></h3>
@@ -2195,6 +2258,73 @@
         <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border);
                     border-radius: 8px; background: var(--surface-2);"
              id="subnetScanResultsTable"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gestione multi-target FortiGate: elenco, test connessione, add/edit -->
+  <div class="modal-overlay" id="fgtManageModal" onclick="if(event.target===this)closeFgtManageModal()">
+    <div class="modal" style="width: 760px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleFgtManageTargets"><i class="fa-solid fa-gears" style="color: var(--primary);"></i> Gestione FortiGate</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="closeFgtManageModal()"></i>
+      </div>
+
+      <div class="table-wrap" style="margin-top:0; max-height:280px; overflow-y:auto;">
+        <table id="fgtMgrTable" style="width:100%; font-size:13px; border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrName">Nome</th>
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrIp">IP</th>
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrPort">Porta</th>
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrTls">TLS</th>
+              <th style="padding:8px 12px; text-align:center;" data-i18n="colFgtMgrActive">Attivo</th>
+              <th style="padding:8px 12px; text-align:center;" data-i18n="colFgtMgrTest">Test</th>
+              <th style="padding:8px 12px; text-align:right;" data-i18n="colFgtMgrActions">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="fgtMgrTableBody"></tbody>
+        </table>
+        <div id="fgtMgrEmpty" style="text-align:center; padding:16px; color:var(--text-muted); display:none;" data-i18n="msgFgtMgrEmpty">
+          Nessun target FortiGate configurato.
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border); margin-top:14px; padding-top:14px;">
+        <input type="hidden" id="fgtMgrEditIp" value="">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrName" data-i18n="lblFgtMgrName">Nome</label>
+            <input id="fgtMgrName" type="text" data-i18n-placeholder="phFgtMgrName" placeholder="es. HQ-FGT" style="padding-left:12px; font-size:13px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrIp" data-i18n="lblFgtMgrIp">IP dispositivo</label>
+            <select id="fgtMgrIp" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrPort" data-i18n="lblFgtTokenPort">Porta</label>
+            <input id="fgtMgrPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrToken" data-i18n="lblFgtMgrToken">Token API</label>
+            <input id="fgtMgrToken" type="password" autocomplete="new-password" data-i18n-placeholder="phFgtMgrTokenNew" placeholder="token API" style="padding-left:12px; font-size:13px;">
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+          <input type="checkbox" id="fgtMgrVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+          <label for="fgtMgrVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" style="width:auto;" onclick="saveFgtMgrTarget()" data-i18n="btnFgtMgrSave">
+            <i class="fa-solid fa-floppy-disk"></i> Salva
+          </button>
+          <button class="btn btn-secondary" style="width:auto;" onclick="resetFgtMgrForm()" data-i18n="btnFgtMgrReset">
+            <i class="fa-solid fa-eraser"></i> Nuovo target
+          </button>
+        </div>
+        <div id="fgtMgrStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
       </div>
     </div>
   </div>
