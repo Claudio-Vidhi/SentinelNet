@@ -1650,11 +1650,12 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         tab = self._tab(_html())
         self.assertIn('<div class="hero" style="grid-template-columns:1fr;', tab)
         self.assertIn('<span class="eyebrow" data-i18n="flowsEyebrow"', tab)
-        # Two cards: top talkers, then correlated anomalies.
-        self.assertEqual(tab.count('<div class="panel"'), 2)
-        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;">'), 1)
-        # All tables wrapped: flows, syslog-in-all-sources, correlated anomalies.
-        self.assertEqual(tab.count('class="table-wrap"'), 3)
+        # Cards: flow graph, tenant summary, protocol breakdown, top talkers, correlated anomalies.
+        self.assertEqual(tab.count('<div class="panel"'), 4)
+        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;">'), 3)
+        # All tables wrapped: flows, syslog-in-all-sources, protocol breakdown,
+        # top talkers, correlated anomalies.
+        self.assertEqual(tab.count('class="table-wrap"'), 5)
         self.assertIn('class="filterbar"', tab)
         self.assertIn('id="anomIpFilterChip" class="chip"', tab)
         # Severity/status badges use the component status/chip classes.
