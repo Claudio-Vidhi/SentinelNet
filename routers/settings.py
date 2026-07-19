@@ -36,6 +36,9 @@ class NetworkSettingsSchema(BaseModel):
 class CliBlacklistSchema(BaseModel):
     cli_blacklist_operators: bool
 
+class FortigatePreviewSchema(BaseModel):
+    enabled: bool
+
 
 # --- ROTTE ---
 
@@ -78,6 +81,19 @@ def set_cli_blacklist_settings(payload: CliBlacklistSchema, current_user = Depen
               f"{'attivata' if payload.cli_blacklist_operators else 'disattivata'} "
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "cli_blacklist_operators": payload.cli_blacklist_operators}
+
+@router.get("/api/settings/fortigate-preview")
+def get_fortigate_preview_settings(current_user = Depends(require_admin)):
+    """Stato del flag preview per la tab 'FortiGate LIVE' (default: disattivo)."""
+    return {"fortigate_preview": bool(get_app_settings().get("fortigate_preview_enabled", False))}
+
+@router.post("/api/settings/fortigate-preview")
+def set_fortigate_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
+    save_app_settings({"fortigate_preview_enabled": bool(payload.enabled)})
+    log_audit(f"Tab FortiGate LIVE (preview) "
+              f"{'attivata' if payload.enabled else 'disattivata'} "
+              f"dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success", "fortigate_preview": bool(payload.enabled)}
 
 @router.get("/api/settings/app")
 def get_app_advanced_settings(current_user = Depends(require_admin)):

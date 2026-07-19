@@ -894,16 +894,17 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
 class TestProvisionerTabRestyle(unittest.TestCase):
     """Task 14 + ZTP W2: #tab-provisioner (Zero-Touch Provisioner) guard.
 
-    The flagship form: two vendor sections toggled at runtime, an admin-gated
-    inline FortiGate token model, and dual endpoint families reached through a
-    computed base path.
+    The flagship form: two vendor sections toggled at runtime, and dual
+    endpoint families reached through a computed base path.
 
-    W2 restructure: the FortiGate token UI was deliberately moved OUT of the
-    top-level `<details id="fgtTokenPanel">` accordion and into an inline
-    section (`#provFgtTokenSection`) directly under the Device Type control,
-    shown only when FortiGate is the selected vendor. Device Type is now a chip
-    selector skinning the still-authoritative `<select id="provVendor">`.
-    Assertions below pin the NEW structure; `fgtTokenPanel` is gone by design.
+    W2 restructure: the FortiGate token UI was moved out of the top-level
+    `<details id="fgtTokenPanel">` accordion and into an inline section.
+    That inline section was later removed entirely (it duplicated the
+    dedicated "FortiGate LIVE (preview)" tab, static/js/fortigate-preview.js,
+    which is now the sole owner of the token/live-objects UI). Device Type
+    remains a chip selector skinning the still-authoritative
+    `<select id="provVendor">`. Assertions below pin the current structure;
+    `fgtTokenPanel` and the inline token/objects sections are gone by design.
     """
 
     def _tab(self, html):
@@ -913,49 +914,27 @@ class TestProvisionerTabRestyle(unittest.TestCase):
 
     def test_preserve_ids(self):
         html = _html()
-        for _id in ('fgtTokensTable', 'fgtTokensTableBody',
-                    'provFgtSection', 'provCiscoSection', 'provVendor', 'provRole',
+        for _id in ('provFgtSection', 'provCiscoSection', 'provVendor', 'provRole',
                     'btnProvGenerate', 'btnProvDownload', 'provDeliveryMode',
                     'provSshFields', 'provSerialFields', 'provOutput',
-                    # W2: the inline token section + chip selector.
-                    'provFgtTokenSection', 'provVendorChips', 'provCiscoTokenHint',
-                    'fgtTokenValue', 'fgtTokenReveal', 'fgtTokenStatus'):
+                    'provVendorChips', 'provCiscoTokenHint'):
             self.assertIn(f'id="{_id}"', html, f"lost preserve-ID {_id}")
 
-    def test_token_accordion_replaced_by_inline_section(self):
+    def test_token_ui_removed_duplicate(self):
+        """The inline FortiGate token/objects UI that used to live in
+        #tab-provisioner was a duplicate of the "FortiGate LIVE (preview)"
+        tab (static/js/fortigate-preview.js) and has been removed. Only the
+        preview tab owns that UI now."""
         html = _html()
         tab = self._tab(html)
-        # The old top-level accordion is intentionally gone: the token UI must
-        # not reappear as a tab-level panel above the Device Type control.
         self.assertNotIn('id="fgtTokenPanel"', html)
-        self.assertNotIn('<details', tab, 'token UI must no longer be an accordion')
-        # ...and the whole token model must have survived the move.
-        self.assertIn('id="provFgtTokenSection"', tab)
-        self.assertIn('class="table-wrap"', tab)
-        self.assertIn('id="fgtTokensTable"', tab)
-        # initFgtTokenPanel: moved to static/js/provisioning.js -- frontend_source()
-        # concatenates dashboard.html + all static/*.js|css.
-        self.assertIn('function initFgtTokenPanel()', frontend_source())
-        # Inline == rendered inside the Device & parameters panel, below the
-        # Device Type control rather than above it.
-        self.assertLess(tab.index('id="provVendorChips"'),
-                        tab.index('id="provFgtTokenSection"'),
-                        'token section must sit BELOW the Device Type control')
-
-    def test_token_section_hidden_by_default(self):
-        # Task 2: CSS moved to static/css/dashboard.css; frontend_source()
-        # concatenates dashboard.html + all static/*.js|css so both the CSS
-        # and JS assertions below still resolve against one string.
-        html = frontend_source()
-        # Hidden via CSS class, never inline style: the requires-admin gate uses
-        # display:none!important and must be able to win over the shown state.
-        self.assertIn('#provFgtTokenSection{display:none}', html)
-        self.assertIn('#provFgtTokenSection.is-visible{display:block}', html)
-        self.assertIn("body:not(.role-admin) .requires-admin { display: none !important; }", html)
-        # The show/hide must be a classList toggle driven by the vendor flag.
-        self.assertIn("tokenSec.classList.toggle('is-visible', fgt)", html)
-        self.assertNotIn("provFgtTokenSection').style.display", html,
-                         'inline display would fight the !important RBAC gate')
+        self.assertNotIn('id="provFgtTokenSection"', tab)
+        self.assertNotIn('id="provFgtObjectsSection"', tab)
+        self.assertNotIn('id="fgtTokensTable"', tab)
+        self.assertNotIn('id="fgtTokenValue"', tab)
+        src = frontend_source()
+        self.assertNotIn('function initFgtTokenPanel()', src)
+        self.assertNotIn('function toggleFgtTokenReveal()', src)
 
     def test_vendor_select_remains_source_of_truth(self):
         html = _html()
@@ -1027,22 +1006,6 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}',
                       src)
 
-    def test_token_input_credential_hygiene(self):
-        html = _html()
-        tab = self._tab(html)
-        # toggleFgtTokenReveal and provInitToggles' token-hygiene branch:
-        # moved to static/js/provisioning.js.
-        src = frontend_source()
-        # Stays a password field and must not be autofilled with a credential
-        # saved for a different device.
-        self.assertIn('<input id="fgtTokenValue" type="password" autocomplete="new-password"', tab)
-        # Switching away from FortiGate clears the typed token and re-masks it.
-        self.assertIn("if (tokenInput) { tokenInput.value = ''; tokenInput.type = 'password'; }", src)
-        # Reveal toggle flips the input type both ways.
-        self.assertIn('function toggleFgtTokenReveal()', src)
-        self.assertIn("inp.type = show ? 'text' : 'password'", src)
-        self.assertIn('fa-eye-slash', src)
-
     def test_endpoint_contract_present(self):
         # provCollectPayload/fgtCollectPayload/provInitToggles' fetch call
         # sites: moved to static/js/provisioning.js.
@@ -1057,7 +1020,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
             self.assertIn('apiFetch(`${base}/%s`' % suffix, html,
                           f"lost the {suffix} call site")
         self.assertIn("apiFetch('/api/provisioner/serial-ports')", html)
-        # FortiGate token model: list (plural) + create/delete (singular).
+        # FortiGate token model: now owned solely by static/js/fortigate-preview.js.
         self.assertIn("apiFetch('/api/fortigate/tokens')", html)
         self.assertIn("apiFetch('/api/fortigate/token'", html)
 
@@ -1069,34 +1032,14 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         self.assertIn("getElementById('provCiscoSection').style.display = fgt ? 'none' : ''", html)
         self.assertIn("getElementById('provFgtSection').style.display = fgt ? '' : 'none'", html)
 
-    def test_rbac_preserved(self):
-        html = _html()
-        tab = self._tab(html)
-        # The token UI stays admin-gated after the move inline; the tab itself is
-        # gated at the nav entry (requires-write), which is why the body carries
-        # no write gate. Still exactly one admin gate in the tab -- now on the
-        # inline section instead of the deleted accordion.
-        self.assertIn('class="requires-admin" id="provFgtTokenSection"', tab)
-        self.assertEqual(tab.count('requires-admin'), 1)
-        # Everything credential-bearing must live INSIDE the gated section, so a
-        # non-admin cannot reach it even with FortiGate selected.
-        start = tab.index('id="provFgtTokenSection"')
-        end = tab.index('id="provFgtSection"')
-        self.assertLess(start, end)
-        gated = tab[start:end]
-        for _id in ('fgtTokenValue', 'fgtTokenDevice', 'fgtTokenPort',
-                    'fgtTokenVerifyTls', 'fgtTokensTable', 'fgtTokenReveal'):
-            self.assertIn(f'id="{_id}"', gated,
-                          f'{_id} escaped the requires-admin section')
-
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
-                    'class="table-wrap"'):
+        # table-wrap left with the removed inline token/objects section -- that
+        # UI now lives solely in #tab-fortigate-preview.
+        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
             self.assertIn(cls, tab)
-        # device/params card + generate/deliver card. Was 3 before the token
-        # accordion (itself a .panel) became an inline block inside the first.
+        # device/params card + generate/deliver card.
         self.assertGreaterEqual(tab.count('class="panel'), 2)
         # Device type chips reuse the existing .chip component.
         self.assertEqual(tab.count('class="chip chip-choice"'), 2)
@@ -1109,7 +1052,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
                     'titleProvisioner:', 'descProvisioner:',
                     # W2 additions.
                     'chipVendorCisco:', 'chipVendorFortigate:',
-                    'msgProvCiscoNoToken:', 'titleFgtTokenReveal:'):
+                    'msgProvCiscoNoToken:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
 
@@ -1436,7 +1379,8 @@ class TestMcpTabRestyle(unittest.TestCase):
                     'class="panel"'):
             self.assertIn(cls, tab)
         # client-config panel + tool-list panel + MCP Client preview-toggle panel
-        self.assertEqual(tab.count('class="panel"'), 3)
+        # + FortiGate LIVE preview-toggle panel
+        self.assertEqual(tab.count('class="panel"'), 4)
 
     def test_status_chip_classes_present_in_render_fn(self):
         # loadMcpTab() moved to static/js/settings.js.
