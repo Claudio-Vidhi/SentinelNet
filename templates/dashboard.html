@@ -1959,6 +1959,21 @@
         </div>
       </div>
 
+      <!-- Selettore target FortiGate attivo + gestione multi-target -->
+      <div class="panel requires-admin" style="margin-bottom:18px;">
+        <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
+          <div class="form-group" style="margin-bottom:0; min-width:260px;">
+            <label for="fgtTargetSelect" data-i18n="lblFgtTargetSelect">Target FortiGate attivo</label>
+            <select id="fgtTargetSelect" onchange="onFgtTargetSelectChange()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optFgtNoTargets">-- nessun target configurato --</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-secondary" style="width:auto;" onclick="openFgtManageModal()" data-i18n="btnFgtManageTargets">
+            <i class="fa-solid fa-gears"></i> Gestisci FortiGate
+          </button>
+        </div>
+      </div>
+
       <!-- Token API FortiGate (admin-only) -->
       <div class="panel requires-admin" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-key" style="color:var(--primary);"></i> <span data-i18n="titleFgtApiToken">Token API FortiGate</span></h3>
@@ -2195,6 +2210,73 @@
         <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border);
                     border-radius: 8px; background: var(--surface-2);"
              id="subnetScanResultsTable"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gestione multi-target FortiGate: elenco, test connessione, add/edit -->
+  <div class="modal-overlay" id="fgtManageModal" onclick="if(event.target===this)closeFgtManageModal()">
+    <div class="modal" style="width: 760px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleFgtManageTargets"><i class="fa-solid fa-gears" style="color: var(--primary);"></i> Gestione FortiGate</h3>
+        <i class="fa-solid fa-xmark modal-close" onclick="closeFgtManageModal()"></i>
+      </div>
+
+      <div class="table-wrap" style="margin-top:0; max-height:280px; overflow-y:auto;">
+        <table id="fgtMgrTable" style="width:100%; font-size:13px; border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrName">Nome</th>
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrIp">IP</th>
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrPort">Porta</th>
+              <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtMgrTls">TLS</th>
+              <th style="padding:8px 12px; text-align:center;" data-i18n="colFgtMgrActive">Attivo</th>
+              <th style="padding:8px 12px; text-align:center;" data-i18n="colFgtMgrTest">Test</th>
+              <th style="padding:8px 12px; text-align:right;" data-i18n="colFgtMgrActions">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="fgtMgrTableBody"></tbody>
+        </table>
+        <div id="fgtMgrEmpty" style="text-align:center; padding:16px; color:var(--text-muted); display:none;" data-i18n="msgFgtMgrEmpty">
+          Nessun target FortiGate configurato.
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border); margin-top:14px; padding-top:14px;">
+        <input type="hidden" id="fgtMgrEditIp" value="">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrName" data-i18n="lblFgtMgrName">Nome</label>
+            <input id="fgtMgrName" type="text" data-i18n-placeholder="phFgtMgrName" placeholder="es. HQ-FGT" style="padding-left:12px; font-size:13px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrIp" data-i18n="lblFgtMgrIp">IP dispositivo</label>
+            <select id="fgtMgrIp" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrPort" data-i18n="lblFgtTokenPort">Porta</label>
+            <input id="fgtMgrPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="fgtMgrToken" data-i18n="lblFgtMgrToken">Token API</label>
+            <input id="fgtMgrToken" type="password" autocomplete="new-password" data-i18n-placeholder="phFgtMgrTokenNew" placeholder="token API" style="padding-left:12px; font-size:13px;">
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+          <input type="checkbox" id="fgtMgrVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+          <label for="fgtMgrVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-primary" style="width:auto;" onclick="saveFgtMgrTarget()" data-i18n="btnFgtMgrSave">
+            <i class="fa-solid fa-floppy-disk"></i> Salva
+          </button>
+          <button class="btn btn-secondary" style="width:auto;" onclick="resetFgtMgrForm()" data-i18n="btnFgtMgrReset">
+            <i class="fa-solid fa-eraser"></i> Nuovo target
+          </button>
+        </div>
+        <div id="fgtMgrStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
       </div>
     </div>
   </div>

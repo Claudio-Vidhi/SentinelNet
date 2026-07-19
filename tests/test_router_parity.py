@@ -41,7 +41,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/fortigate-preview", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/identities", "/api/config-analyzer/convert")
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/fortigate-preview", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -63,11 +63,18 @@ class TestRouterParity(unittest.TestCase):
                     f"contratto cambiato: {method.upper()} {path}",
                 )
 
+    # Schemi con estensioni volute dopo lo snapshot golden (nuovi campi opzionali,
+    # retrocompatibili): FgtTokenSchema ha guadagnato `name` per il multi-target
+    # manager (Task 2, FortiGate LIVE).
+    ALLOWED_CHANGED_SCHEMAS = ("FgtTokenSchema",)
+
     def test_migrated_schemas_identical(self):
         golden_schemas = self.golden.get("components", {}).get("schemas", {})
         cur_schemas = self.current.get("components", {}).get("schemas", {})
         for name, schema in golden_schemas.items():
             if not name.startswith(("Fgt",)):
+                continue
+            if name in self.ALLOWED_CHANGED_SCHEMAS:
                 continue
             self.assertIn(name, cur_schemas, f"schema {name} sparito")
             self.assertEqual(
