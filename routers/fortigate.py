@@ -35,6 +35,15 @@ class FgtTokenSchema(BaseModel):
 class FgtActiveTargetSchema(BaseModel):
     ip: str
 
+class FgtTargetUpdateSchema(BaseModel):
+    # Aggiornamento parziale: solo i campi forniti vengono modificati.
+    # token omesso/vuoto = il token cifrato esistente resta invariato
+    # ("•••• invariato" lato UI, ora veritiero).
+    name: Optional[str] = None
+    port: Optional[int] = None
+    verify_tls: Optional[bool] = None
+    token: Optional[str] = None
+
 class FgtPolicyLookupSchema(BaseModel):
     src_ip: str
     dest: str                      # IP o FQDN di destinazione
@@ -116,6 +125,22 @@ def fgt_test_target(ip: str, current_user = Depends(require_admin)):
     """Testa la connessione REST API verso un target FortiGate (timeout breve)."""
     _fgt_device(ip, current_user)
     return fortigate_service.test_connection(ip)
+
+@router.put("/api/fortigate/targets/{ip}")
+def fgt_update_target(ip: str, payload: FgtTargetUpdateSchema,
+                      current_user = Depends(require_admin)):
+    """Aggiornamento parziale di un target FortiGate esistente (nome, porta,
+    verifica TLS, token). Token omesso/vuoto = resta quello già salvato."""
+    _fgt_device(ip, current_user)
+    try:
+        fortigate_service.update_target(ip, name=payload.name, port=payload.port,
+                                        verify_tls=payload.verify_tls,
+                                        token=payload.token)
+    except KeyError:
+        raise HTTPException(status_code=404,
+                            detail=f"Nessun target FortiGate configurato per {ip}.")
+    log_audit(f"Target FortiGate '{ip}' aggiornato da '{current_user.get('sub')}'.")
+    return {"status": "success"}
 
 @router.get("/api/fortigate/{ip}/status")
 def fgt_status(ip: str, current_user = Depends(get_current_user)):

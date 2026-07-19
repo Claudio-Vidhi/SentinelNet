@@ -90,14 +90,26 @@ def token_status() -> dict:
 
 # --- Multi-target: nome, target attivo, elenco, test connessione ------------
 
-def set_target_name(ip: str, name: str) -> None:
-    """Rinomina un target FortiGate già configurato (nessun effetto se
-    l'IP non ha un token salvato)."""
+def update_target(ip: str, *, name: str = None, port: int = None,
+                  verify_tls: bool = None, token: str = None) -> None:
+    """Aggiorna solo i campi forniti di un target FortiGate già configurato
+    (usato dal manager multi-target per modifiche parziali: rinomina, cambio
+    porta/TLS senza dover reinserire il token). Token omesso o vuoto = il
+    token cifrato esistente resta invariato ("•••• invariato" lato UI).
+    Solleva KeyError se l'IP non ha ancora un target configurato."""
     tokens = _load_tokens()
     entry = tokens.get(ip)
     if not isinstance(entry, dict) or ip == "_active":
-        return
-    entry["name"] = name or ""
+        raise KeyError(f"Nessun target FortiGate configurato per {ip}.")
+    if name is not None:
+        entry["name"] = name
+    if port is not None:
+        entry["port"] = int(port or 443)
+    if verify_tls is not None:
+        entry["verify_tls"] = bool(verify_tls)
+    if token:
+        entry["token_enc"] = encrypt_password(token)
+    tokens[ip] = entry
     _save_tokens(tokens)
 
 

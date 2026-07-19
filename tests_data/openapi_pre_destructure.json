@@ -1004,6 +1004,56 @@
         "title": "FgtSessionQuerySchema",
         "type": "object"
       },
+      "FgtTargetUpdateSchema": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "verify_tls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify Tls"
+          }
+        },
+        "title": "FgtTargetUpdateSchema",
+        "type": "object"
+      },
       "FgtTokenSchema": {
         "properties": {
           "ip": {
@@ -5172,6 +5222,62 @@
           }
         ],
         "summary": "Fgt Set Active Target",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/targets/{ip}": {
+      "put": {
+        "description": "Aggiornamento parziale di un target FortiGate esistente (nome, porta,\nverifica TLS, token). Token omesso/vuoto = resta quello già salvato.",
+        "operationId": "fgt_update_target_api_fortigate_targets__ip__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FgtTargetUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Update Target",
         "tags": [
           "FortiGate"
         ]

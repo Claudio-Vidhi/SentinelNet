@@ -454,18 +454,23 @@ async function saveFgtMgrTarget() {
 
     if (!ip) { showToast(currentLang === 'en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning'); return; }
     if (port < 1 || port > 65535) { showToast(currentLang === 'en' ? 'Invalid port (1-65535)' : 'Porta non valida (1-65535)', 'error'); return; }
-    if (!token) {
-        // Come per le altre credenziali dell'app (v. devices.js), il backend
-        // non conserva il token "invariato se vuoto": va sempre reinserito,
-        // anche in modifica, per aggiornare porta/TLS/nome.
-        showToast(currentLang === 'en' ? 'Enter the API token to save (re-enter it even when only editing name/port/TLS)' : 'Inserire il token API per salvare (va reinserito anche modificando solo nome/porta/TLS)', 'warning');
-        return;
-    }
 
-    const res = await apiFetch('/api/fortigate/token', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip, token: token || '', port, verify_tls: verifyTls, name })
-    });
+    let res;
+    if (editIp) {
+        // Modifica: aggiornamento parziale via PUT, token omesso/vuoto = resta
+        // quello già salvato ("•••• invariato" è quindi veritiero).
+        res = await apiFetch(`/api/fortigate/targets/${encodeURIComponent(editIp)}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, port, verify_tls: verifyTls, token: token || null })
+        });
+    } else {
+        // Nuovo target: il token è obbligatorio (flusso esistente di creazione).
+        if (!token) { showToast(currentLang === 'en' ? 'Enter a token' : 'Inserire un token', 'warning'); return; }
+        res = await apiFetch('/api/fortigate/token', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip, token, port, verify_tls: verifyTls, name })
+        });
+    }
     if (res && res.ok) {
         showToast(L.msgFgtTargetSaved || 'Target FortiGate salvato.', 'success');
         if (st) st.textContent = '';
