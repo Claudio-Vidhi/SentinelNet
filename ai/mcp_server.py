@@ -30,7 +30,7 @@ import time
 
 import requests
 
-from redaction import redact
+from security.redaction import redact
 
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "sentinelnet", "version": "1.0.0"}

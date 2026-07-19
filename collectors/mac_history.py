@@ -16,7 +16,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone, timedelta
 
-import data_config
+from core import data_config
 
 DB_PATH = data_config.get_path("mac_history.db")
 RETENTION_DAYS_DEFAULT = 30
@@ -424,7 +424,7 @@ def client_map(mac: str = None, ip: str = None, tenants=None,
     # Tipo del client: certo SOLO se assegnato nella scheda "Dispositivi e
     # categorie" (assignments per IP); altrimenti generico "client". Mai
     # ereditare source_type, che descrive il gateway, non il client.
-    import inventory_manager
+    from services import inventory_manager
     assignments = inventory_manager.get_category_assignments()
     out = []
     for e in entries:

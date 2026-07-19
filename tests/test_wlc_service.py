@@ -3,7 +3,7 @@
 import unittest
 from unittest import mock
 
-import wlc_service as wlc
+from services import wlc_service as wlc
 
 AIREOS = {"IP": "192.0.2.10", "Vendor": "cisco_wlc", "Profile": "custom"}
 C9800 = {"IP": "192.0.2.11", "Vendor": "cisco_9800", "Profile": "custom"}

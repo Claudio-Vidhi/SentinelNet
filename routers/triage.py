@@ -9,9 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
-import inventory_manager
-import core_engine
-from security_manager import log_audit
+from services import inventory_manager
+from core import core_engine
+from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope, assert_device_allowed, assert_group_allowed
 
 router = APIRouter(tags=["Triage"])
@@ -132,7 +132,7 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     Verifica la raggiungibilità SSH (porta 22) di tutti i dispositivi
     nel gruppo selezionato, in parallelo con ThreadPoolExecutor.
     """
-    from core_engine import is_reachable
+    from core.core_engine import is_reachable
 
     scope = user_group_scope(current_user)
     if payload.group != "all":
@@ -176,7 +176,7 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
 
 @router.get("/api/ping/{ip}")
 def ping_single(ip: str, current_user = Depends(require_operator)):
-    from core_engine import is_reachable
+    from core.core_engine import is_reachable
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         raise HTTPException(status_code=400, detail="IP non valido.")

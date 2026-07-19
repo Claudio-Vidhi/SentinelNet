@@ -12,7 +12,7 @@ import unittest
 _TMP = tempfile.mkdtemp(prefix="sentinelnet_test_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
 
-import site_manager  # noqa: E402
+from services import site_manager  # noqa: E402
 
 
 class ResetMixin(unittest.TestCase):

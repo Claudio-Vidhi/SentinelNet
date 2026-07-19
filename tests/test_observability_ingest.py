@@ -17,11 +17,11 @@ from unittest.mock import patch
 _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_obs_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 
-import data_config  # noqa: E402
+from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
-import db  # noqa: E402
-import inventory_manager  # noqa: E402
+from core import db  # noqa: E402
+from services import inventory_manager  # noqa: E402
 from observability import metrics, rollup  # noqa: E402
 from observability.ingesters import ipfix, sflow, syslog  # noqa: E402
 from observability.ingesters import udp_server  # noqa: E402
@@ -227,7 +227,7 @@ class TestAttribution(unittest.TestCase):
         time.sleep(0.6)
 
     def test_known_exporter_lands_with_tenant(self):
-        with patch("inventory_manager.get_all_devices", return_value=DEVICES):
+        with patch("services.inventory_manager.get_all_devices", return_value=DEVICES):
             inventory_manager.invalidate_device_ip_cache()
             recs = ipfix.parse(make_v5(), EXPORTER)
             udp_server._handle_records(recs, "flow", time.time())
@@ -239,7 +239,7 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(rows[0]["tenant"], "sede-a")
 
     def test_unknown_exporter_dropped_and_quarantined(self):
-        with patch("inventory_manager.get_all_devices", return_value=[]):
+        with patch("services.inventory_manager.get_all_devices", return_value=[]):
             inventory_manager.invalidate_device_ip_cache()
             recs = ipfix.parse(make_v5(), "203.0.113.99")
             udp_server._handle_records(recs, "flow", time.time())
@@ -254,7 +254,7 @@ class TestAttribution(unittest.TestCase):
 
     def test_no_default_tenant_ever(self):
         # Gate permanente: dopo ogni fixture, nessuna riga con tenant 'default'.
-        with patch("inventory_manager.get_all_devices", return_value=DEVICES):
+        with patch("services.inventory_manager.get_all_devices", return_value=DEVICES):
             inventory_manager.invalidate_device_ip_cache()
             for pkt in (make_v5(), make_v9_template(), make_v9_data()):
                 udp_server._handle_records(ipfix.parse(pkt, EXPORTER), "flow", time.time())
@@ -266,10 +266,10 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(n, 0)
 
     def test_cache_invalidation_on_inventory_change(self):
-        with patch("inventory_manager.get_all_devices", return_value=[]):
+        with patch("services.inventory_manager.get_all_devices", return_value=[]):
             inventory_manager.invalidate_device_ip_cache()
             self.assertIsNone(inventory_manager.get_device_by_ip(EXPORTER))
-        with patch("inventory_manager.get_all_devices", return_value=DEVICES):
+        with patch("services.inventory_manager.get_all_devices", return_value=DEVICES):
             inventory_manager.invalidate_device_ip_cache()  # come da write path
             dev = inventory_manager.get_device_by_ip(EXPORTER)
         self.assertEqual(dev["tenant"], "sede-a")
@@ -277,7 +277,7 @@ class TestAttribution(unittest.TestCase):
     def test_ip_collision_refused(self):
         dup = DEVICES + [{"IP": EXPORTER, "Hostname": "altro", "Vendor": "cisco",
                           "Group": "sede-b"}]
-        with patch("inventory_manager.get_all_devices", return_value=dup):
+        with patch("services.inventory_manager.get_all_devices", return_value=dup):
             inventory_manager.invalidate_device_ip_cache()
             recs = ipfix.parse(make_v5(), EXPORTER)
             udp_server._handle_records(recs, "flow", time.time())
@@ -305,7 +305,7 @@ class TestUdpEndToEnd(unittest.TestCase):
 
     def test_listener_end_to_end(self):
         async def go():
-            with patch("inventory_manager.get_all_devices", return_value=[
+            with patch("services.inventory_manager.get_all_devices", return_value=[
                 {"IP": "127.0.0.1", "Hostname": "fgt", "Vendor": "fortinet",
                  "Group": "sede-a"}]):
                 inventory_manager.invalidate_device_ip_cache()
@@ -350,7 +350,7 @@ class TestUdpEndToEnd(unittest.TestCase):
         lat = []
 
         async def go():
-            with patch("inventory_manager.get_all_devices", return_value=[
+            with patch("services.inventory_manager.get_all_devices", return_value=[
                 {"IP": "127.0.0.1", "Hostname": "fgt", "Vendor": "fortinet",
                  "Group": "sede-a"}]):
                 inventory_manager.invalidate_device_ip_cache()
@@ -457,7 +457,7 @@ class TestRetention(unittest.TestCase):
 class TestHealthEndpoint(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import user_manager
+        from security import user_manager
         from fastapi.testclient import TestClient
         import app_server
         cls.TestClient = TestClient

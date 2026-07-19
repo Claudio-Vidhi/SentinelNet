@@ -15,8 +15,8 @@ import unittest
 
 os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentinelnet_transports_"))
 
-import inventory_manager  # noqa: E402
-import mac_collector      # noqa: E402
+from services import inventory_manager  # noqa: E402
+from collectors import mac_collector      # noqa: E402
 from routers import inventory as inventory_router  # noqa: E402         # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 

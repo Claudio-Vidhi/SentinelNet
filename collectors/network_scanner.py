@@ -3,9 +3,9 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import crypto_vault
-import inventory_manager
-from core_engine import is_reachable, run_backup_and_triage
+from security import crypto_vault
+from services import inventory_manager
+from core.core_engine import is_reachable, run_backup_and_triage
 
 
 def parse_network(address: str) -> list[str]:

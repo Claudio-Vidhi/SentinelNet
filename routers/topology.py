@@ -9,10 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-import inventory_manager
-import core_engine
-import visio_export
-from security_manager import log_audit
+from services import inventory_manager
+from core import core_engine
+from services import visio_export
+from security.security_manager import log_audit
 from routers.deps import get_current_user, require_admin, filter_map_to_scope, user_group_scope, require_operator
 
 router = APIRouter(tags=["Topology"])

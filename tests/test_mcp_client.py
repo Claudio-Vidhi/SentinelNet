@@ -4,7 +4,7 @@
 import json
 import unittest
 
-import mcp_client
+from ai import mcp_client
 
 
 class TestParseSseLastData(unittest.TestCase):

@@ -23,7 +23,7 @@ _MAX_SUMMARY = 20_000  # caratteri massimi per snapshot (cap contesto)
 
 def _poll_device(device: dict) -> list:
     """Sincrona: raccoglie gli snapshot per un device. Ritorna [(kind, json)]."""
-    import fortigate_service
+    from services import fortigate_service
     getters = {
         "system_status": fortigate_service.get_system_status,
         "interfaces": fortigate_service.get_interfaces,
@@ -47,9 +47,9 @@ def _poll_device(device: dict) -> list:
 def poll_once() -> int:
     """Sincrona: un giro di polling su tutti i FortiGate con token API.
     Ritorna il numero di snapshot accodati."""
-    import db
-    import fortigate_service
-    import inventory_manager
+    from core import db
+    from services import fortigate_service
+    from services import inventory_manager
 
     tokened = set(fortigate_service.token_status().keys())
     if not tokened:

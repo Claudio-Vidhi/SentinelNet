@@ -3,7 +3,7 @@ import re
 import logging
 import socket
 from netmiko import ConnectHandler
-from inventory_manager import (
+from services.inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,
     parse_transports, CATEGORIES_FILE,
@@ -16,9 +16,9 @@ from drivers.aruba_os import ArubaOsDriver
 from drivers.fortinet import FortinetDriver
 from drivers.cisco_wlc import CiscoWlcDriver
 from drivers.paloalto_panos import PaloAltoDriver
-from crypto_vault import decrypt_password
-from security_manager import log_audit
-import data_config
+from security.crypto_vault import decrypt_password
+from security.security_manager import log_audit
+from core import data_config
 
 BACKUP_FOLDER = data_config.get_path('backup-config')
 logging.basicConfig(filename=data_config.get_path('error_log.txt'), level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -81,7 +81,7 @@ def get_device_credentials(device):
     if profile.startswith('identity:'):
         # Identita' tenant (identity_manager): fallback ai default se
         # l'identita' non esiste piu' (non dovrebbe: delete bloccata se in uso).
-        import identity_manager
+        from security import identity_manager
         creds = identity_manager.get_identity_credentials(
             device.get('Profile', '')[len('identity:'):])
         if creds:
@@ -203,7 +203,7 @@ def _fortigate_backup_and_triage(device):
     fortigate_service.get_full_config), salvata in backup-config come per gli
     altri vendor; versione firmware da monitor/system/status."""
     import json
-    import fortigate_service  # import lazy per evitare ciclo con get_device_credentials
+    from services import fortigate_service  # import lazy per evitare ciclo con get_device_credentials
 
     ip     = device['IP']
     vendor = device['Vendor'].lower()

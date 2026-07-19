@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 
-import data_config
+from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
@@ -55,7 +55,10 @@ def get_db_path() -> str:
 
 def _schema_path() -> str:
     """Percorso di schema.sql, funzionante da sorgente, exe bundled e Docker."""
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    # In sorgente questo modulo vive in core/, quindi la root del repo e' un
+    # livello sopra; nell'exe bundled (_MEIPASS) invece resta la root stessa.
+    src_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base = getattr(sys, "_MEIPASS", src_root)
     return os.path.join(base, "observability", "storage", "schema.sql")
 
 

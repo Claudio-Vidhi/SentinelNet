@@ -3,8 +3,8 @@ import os
 import csv
 import re
 import threading
-import crypto_vault
-import data_config
+from security import crypto_vault
+from core import data_config
 
 HOSTS_CSV = data_config.get_path("network_hosts.csv")
 GROUPS_JSON = data_config.get_path("groups.json")

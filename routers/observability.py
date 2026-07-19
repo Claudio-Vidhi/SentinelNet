@@ -12,9 +12,9 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-import db
-import data_config
-from app_settings import get_app_settings, save_app_settings
+from core import db
+from core import data_config
+from core.app_settings import get_app_settings, save_app_settings
 from observability import metrics
 from observability.ingesters import ipfix
 from routers.deps import (get_current_user, require_admin, require_operator,
@@ -183,7 +183,7 @@ async def obs_anomaly_status(
         raise HTTPException(
             status_code=409,
             detail="The event status changed in the meantime: reload the list.")
-    from security_manager import log_audit
+    from security.security_manager import log_audit
     log_audit(f"Anomalia observability #{event_id}: stato '{from_status}' → "
               f"'{new_status}' da '{current_user.get('sub')}'.")
     return {"status": "success", "id": event_id, "new_status": new_status}
@@ -227,7 +227,7 @@ async def obs_set_config(payload: dict, current_user = Depends(require_admin)):
     effective = data_config.obs_config()
     from observability import listener_manager
     await listener_manager.apply_obs_config(effective)
-    from security_manager import log_audit
+    from security.security_manager import log_audit
     log_audit(f"Config observability aggiornata da '{current_user.get('sub')}': "
               f"{clean} (applicata a caldo, nessun riavvio).")
     return {"status": "success", "restart_required": False,

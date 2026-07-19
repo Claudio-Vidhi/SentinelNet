@@ -2,7 +2,7 @@
 """Unit test minimale per switch_provisioner.build_config: verifica che la
 config generata contenga le sezioni chiave attese per un input di esempio."""
 
-import switch_provisioner as sp
+from services import switch_provisioner as sp
 from pydantic import ValidationError
 from routers.provisioner import SwitchProvisionSchema
 

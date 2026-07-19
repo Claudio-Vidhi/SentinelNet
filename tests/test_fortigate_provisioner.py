@@ -3,7 +3,7 @@
 sezioni AAA (RADIUS/TACACS+) aggiunte in T3, oltre al caso di default
 (nessun AAA remoto) che deve restare invariato."""
 
-import fortigate_provisioner as fp
+from services import fortigate_provisioner as fp
 
 
 def _sample_cfg():

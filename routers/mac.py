@@ -9,11 +9,11 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from pydantic import BaseModel
 
-import inventory_manager
-import core_engine
-import mac_collector
-import mac_history
-from security_manager import log_audit
+from services import inventory_manager
+from core import core_engine
+from collectors import mac_collector
+from collectors import mac_history
+from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, require_admin, user_group_scope, assert_group_allowed, assert_device_allowed
 
 router = APIRouter(tags=["MAC"])

@@ -13,11 +13,11 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 from contextlib import asynccontextmanager
 
-import data_config
-import db
-import crypto_vault  # compat per test_observability_ui.py
+from core import data_config
+from core import db
+from security import crypto_vault  # compat per test_observability_ui.py
 
-from app_settings import (  # noqa: F401
+from core.app_settings import (  # noqa: F401
     PORT, _app_adv_setting, get_app_settings, save_app_settings,
     effective_port, list_local_ips, resolve_bind_host,
 )
@@ -164,7 +164,7 @@ def main():
     args, _ = parser.parse_known_args()
 
     if args.mcp:
-        import mcp_server
+        from ai import mcp_server
         mcp_server.main()
         return
 

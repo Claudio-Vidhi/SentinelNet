@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-import fortigate_service as fgs
+from services import fortigate_service as fgs
 
 DEVICE = {"IP": "192.0.2.1", "Vendor": "fortinet", "Profile": "custom",
           "Username": "admin", "Password": "", "Enable Secret": ""}

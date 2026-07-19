@@ -5,11 +5,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
-import arp_collector
-import inventory_manager
-import mac_history
+from collectors import arp_collector
+from services import inventory_manager
+from collectors import mac_history
 from routers.mac import MacScanSchema
-from security_manager import log_audit
+from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope
 
 router = APIRouter(tags=["ARP"])

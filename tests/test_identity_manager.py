@@ -11,7 +11,7 @@ class TestIdentityManager(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.json_path = os.path.join(self.tmp.name, "identities.json")
-        import identity_manager
+        from security import identity_manager
         self.im = identity_manager
         self._orig = self.im.IDENTITIES_JSON
         self.im.IDENTITIES_JSON = self.json_path
@@ -55,7 +55,7 @@ class TestIdentityManager(unittest.TestCase):
 
     def test_delete_blocked_when_in_use(self):
         ident = self.im.add_identity("x", "T", "u", "p", "s")
-        with mock.patch("inventory_manager.get_all_devices", return_value=[
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[
                 {"IP": "10.0.0.1", "Profile": f"identity:{ident['id']}"}]):
             ok, devices = self.im.delete_identity(ident["id"])
         self.assertFalse(ok)
@@ -64,7 +64,7 @@ class TestIdentityManager(unittest.TestCase):
 
     def test_delete_free(self):
         ident = self.im.add_identity("x", "T", "u", "p", "s")
-        with mock.patch("inventory_manager.get_all_devices", return_value=[]):
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[]):
             ok, devices = self.im.delete_identity(ident["id"])
         self.assertTrue(ok)
         self.assertEqual(self.im.get_identities(), [])
@@ -72,16 +72,16 @@ class TestIdentityManager(unittest.TestCase):
 
 class TestCoreEngineIdentityResolution(unittest.TestCase):
     def test_identity_profile_resolved(self):
-        import core_engine
-        with mock.patch("identity_manager.get_identity_credentials",
+        from core import core_engine
+        with mock.patch("security.identity_manager.get_identity_credentials",
                         return_value=("iu", "ip", "is")):
             u, p, s = core_engine.get_device_credentials(
                 {"Profile": "identity:abc123"})
         self.assertEqual((u, p, s), ("iu", "ip", "is"))
 
     def test_identity_missing_falls_back_to_default(self):
-        import core_engine
-        with mock.patch("identity_manager.get_identity_credentials",
+        from core import core_engine
+        with mock.patch("security.identity_manager.get_identity_credentials",
                         return_value=None):
             u, p, s = core_engine.get_device_credentials(
                 {"Profile": "identity:gone"})

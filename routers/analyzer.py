@@ -6,8 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-import config_analyzer
-import inventory_manager
+from ai import config_analyzer
+from services import inventory_manager
 from routers.deps import get_current_user, user_group_scope, assert_device_allowed
 
 router = APIRouter(tags=["Analyzer"])

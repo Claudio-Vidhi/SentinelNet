@@ -84,11 +84,11 @@ def collect_from_device(device: dict) -> dict:
     """Raccoglie la tabella ARP di UN apparato. Ritorna
     {"status", "source_type", "entries": [...]} — status 'error' se
     l'apparato non risponde (il chiamante decide se è un problema)."""
-    from core_engine import resolve_driver
+    from core.core_engine import resolve_driver
     vendor = (device.get("Vendor") or "").lower()
 
     if vendor == "fortinet":
-        import fortigate_service
+        from services import fortigate_service
         try:
             res = fortigate_service.get_arp_table(device)
         except fortigate_service.FortiGateError as e:
@@ -101,7 +101,7 @@ def collect_from_device(device: dict) -> dict:
     try:
         driver_name = None
         try:
-            from inventory_manager import get_all_vendors
+            from services.inventory_manager import get_all_vendors
             driver_name = (get_all_vendors().get(vendor) or {}).get("driver")
         except Exception:
             pass
@@ -113,7 +113,7 @@ def collect_from_device(device: dict) -> dict:
     source_type = "firewall" if driver_name == "paloalto_panos" else "switch"
 
     from netmiko import ConnectHandler
-    from core_engine import get_device_credentials
+    from core.core_engine import get_device_credentials
     username, password, secret = get_device_credentials(device)
     params = {"device_type": netmiko_type, "host": device["IP"],
               "username": username, "password": password, "secret": secret,
@@ -134,7 +134,7 @@ def collect_from_device(device: dict) -> dict:
 def collect_all(devices: list) -> dict:
     """Raccoglie le ARP da tutti gli apparati indicati e le registra nel DB.
     Ritorna il riepilogo per apparato + totali."""
-    import mac_history
+    from collectors import mac_history
     summary = {"devices": {}, "total_new": 0, "total_updated": 0}
     for device in devices:
         ip = device.get("IP")
