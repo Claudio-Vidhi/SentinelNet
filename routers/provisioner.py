@@ -10,12 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from security_manager import log_audit
+from security.security_manager import log_audit
 from routers.deps import require_operator
-import switch_provisioner
-import fortigate_provisioner
-import fortigate_service
-import provisioning_secrets
+from services import switch_provisioner
+from services import fortigate_provisioner
+from services import fortigate_service
+from security import provisioning_secrets
 
 router = APIRouter(tags=["Provisioner"])
 
@@ -295,7 +295,7 @@ def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current
     return result
 
 # ── Identita' tenant (profili credenziali riusabili) ────────────────────────
-import identity_manager
+from security import identity_manager
 
 class IdentitySchema(BaseModel):
     name: str

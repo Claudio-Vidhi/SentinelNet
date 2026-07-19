@@ -16,11 +16,11 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-import crypto_vault
-import mcp_client
-from app_settings import get_app_settings, save_app_settings
+from security import crypto_vault
+from ai import mcp_client
+from core.app_settings import get_app_settings, save_app_settings
 from routers.deps import require_admin
-from security_manager import log_audit
+from security.security_manager import log_audit
 
 router = APIRouter(tags=["MCP-Client"])
 

@@ -16,7 +16,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone, timedelta
 
-import data_config
+from core import data_config
 
 DB_PATH = data_config.get_path("mac_history.db")
 RETENTION_DAYS_DEFAULT = 30
@@ -383,6 +383,38 @@ def search_arp(mac: str = None, ip: str = None, source_ip: str = None,
     return [dict(r) for r in rows]
 
 
+def vlans_for_ips(ip_tenant_map: dict) -> dict:
+    """Ritorna { ip: vlan } per gli IP richiesti, dal binding ARP più recente
+    con VLAN non vuota (match esatto, niente prefix-LIKE), **vincolato al
+    tenant** di ciascun IP (``ip_tenant_map``: { ip: tenant }).
+
+    IMPORTANTE (scoping multi-tenant): IP privati possono ripetersi su sedi
+    diverse (RFC1918 dietro NAT indipendenti). Senza il filtro tenant, un
+    binding ARP della sede B potrebbe "trapelare" nel grafo flussi della
+    sede A solo perché condividono lo stesso IP. Ogni lookup è quindi
+    ``ip = ? AND tenant = ?`` — mai un IN(...) globale sugli ip.
+
+    Usato dal grafo dei flussi (Task 3, osservabilità) per mostrare la VLAN
+    reale quando nota, invece di un valore sintetico. IP senza binding ARP
+    noto (per quel tenant) sono assenti dal dict ritornato (fallback
+    lasciato al chiamante)."""
+    pairs = [(ip, tenant) for ip, tenant in ip_tenant_map.items() if ip]
+    if not pairs:
+        return {}
+    init_db()
+    out = {}
+    with _lock, _connect() as c:
+        for ip, tenant in pairs:
+            row = c.execute(
+                """SELECT vlan FROM arp_entries
+                   WHERE ip = ? AND tenant = ? AND vlan != ''
+                   ORDER BY last_seen DESC LIMIT 1""",
+                (ip, tenant or "")).fetchone()
+            if row:
+                out[ip] = row["vlan"]
+    return out
+
+
 def _access_positions_for(macs, tenants=None) -> dict:
     """Per un insieme di MAC ritorna { (mac, tenant): sighting_di_accesso_più_recente },
     escludendo gli uplink. La chiave include il tenant per evitare che la posizione
@@ -424,7 +456,7 @@ def client_map(mac: str = None, ip: str = None, tenants=None,
     # Tipo del client: certo SOLO se assegnato nella scheda "Dispositivi e
     # categorie" (assignments per IP); altrimenti generico "client". Mai
     # ereditare source_type, che descrive il gateway, non il client.
-    import inventory_manager
+    from services import inventory_manager
     assignments = inventory_manager.get_category_assignments()
     out = []
     for e in entries:

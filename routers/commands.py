@@ -14,13 +14,13 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 import paramiko
-import inventory_manager
-import user_manager
-import site_manager
-import core_engine
-import crypto_vault
-from security_manager import log_audit
-from app_settings import get_app_settings
+from services import inventory_manager
+from security import user_manager
+from services import site_manager
+from core import core_engine
+from security import crypto_vault
+from security.security_manager import log_audit
+from core.app_settings import get_app_settings
 from routers.deps import get_current_user, require_operator, assert_device_allowed, assert_group_allowed, user_group_scope
 
 router = APIRouter(tags=["Commands"])

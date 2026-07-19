@@ -16,7 +16,7 @@ import os
 import sys
 import ctypes
 
-import data_config
+from core import data_config
 
 _IS_WINDOWS = sys.platform == "win32"
 

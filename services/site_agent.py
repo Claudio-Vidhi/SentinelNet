@@ -86,9 +86,9 @@ class Agent:
         }
         # Import ritardato: dipende da SENTINELNET_DATA_DIR già impostata.
         global inventory_manager, core_engine, mac_collector
-        import inventory_manager
-        import core_engine
-        import mac_collector
+        from services import inventory_manager
+        from core import core_engine
+        from collectors import mac_collector
 
     # --- HTTP helper ---
     def _post(self, path, payload):

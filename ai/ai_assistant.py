@@ -26,7 +26,7 @@ import time
 
 import requests
 
-from redaction import redact
+from security.redaction import redact
 
 DEFAULT_TIMEOUT = 60
 

@@ -9,8 +9,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-import fortigate_service
-from security_manager import log_audit
+from services import fortigate_service
+from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_admin, require_operator, assert_device_allowed,
 )
@@ -30,6 +30,19 @@ class FgtTokenSchema(BaseModel):
     # con SSLCertVerificationError). Abilitare esplicitamente solo se sul
     # FortiGate è installato un certificato attendibile.
     verify_tls: bool = False
+    name: str = ""                  # nome descrittivo (multi-target manager)
+
+class FgtActiveTargetSchema(BaseModel):
+    ip: str
+
+class FgtTargetUpdateSchema(BaseModel):
+    # Aggiornamento parziale: solo i campi forniti vengono modificati.
+    # token omesso/vuoto = il token cifrato esistente resta invariato
+    # ("•••• invariato" lato UI, ora veritiero).
+    name: Optional[str] = None
+    port: Optional[int] = None
+    verify_tls: Optional[bool] = None
+    token: Optional[str] = None
 
 class FgtPolicyLookupSchema(BaseModel):
     src_ip: str
@@ -87,9 +100,46 @@ def fgt_set_token(payload: FgtTokenSchema, current_user = Depends(require_admin)
     """Salva (cifrato) il token REST API di un FortiGate; token vuoto lo rimuove."""
     _fgt_device(payload.ip, current_user)
     fortigate_service.set_api_token(payload.ip, payload.token,
-                                    port=payload.port, verify_tls=payload.verify_tls)
+                                    port=payload.port, verify_tls=payload.verify_tls,
+                                    name=payload.name)
     action = "configurato" if payload.token else "rimosso"
     log_audit(f"Token API FortiGate {action} per '{payload.ip}' da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@router.get("/api/fortigate/targets")
+def fgt_list_targets(current_user = Depends(require_admin)):
+    """Elenco dei target FortiGate configurati (nome, porta, TLS, attivo);
+    i token non vengono mai restituiti."""
+    return fortigate_service.list_targets()
+
+@router.post("/api/fortigate/targets/active")
+def fgt_set_active_target(payload: FgtActiveTargetSchema, current_user = Depends(require_admin)):
+    """Imposta il target FortiGate attivo per la tab LIVE."""
+    _fgt_device(payload.ip, current_user)
+    fortigate_service.set_active_target(payload.ip)
+    log_audit(f"Target FortiGate attivo impostato su '{payload.ip}' da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@router.post("/api/fortigate/targets/{ip}/test")
+def fgt_test_target(ip: str, current_user = Depends(require_admin)):
+    """Testa la connessione REST API verso un target FortiGate (timeout breve)."""
+    _fgt_device(ip, current_user)
+    return fortigate_service.test_connection(ip)
+
+@router.put("/api/fortigate/targets/{ip}")
+def fgt_update_target(ip: str, payload: FgtTargetUpdateSchema,
+                      current_user = Depends(require_admin)):
+    """Aggiornamento parziale di un target FortiGate esistente (nome, porta,
+    verifica TLS, token). Token omesso/vuoto = resta quello già salvato."""
+    _fgt_device(ip, current_user)
+    try:
+        fortigate_service.update_target(ip, name=payload.name, port=payload.port,
+                                        verify_tls=payload.verify_tls,
+                                        token=payload.token)
+    except KeyError:
+        raise HTTPException(status_code=404,
+                            detail=f"Nessun target FortiGate configurato per {ip}.")
+    log_audit(f"Target FortiGate '{ip}' aggiornato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
 @router.get("/api/fortigate/{ip}/status")

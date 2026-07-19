@@ -13,8 +13,8 @@ import uuid
 import threading
 import logging
 
-import data_config
-from crypto_vault import encrypt_password, decrypt_password
+from core import data_config
+from security.crypto_vault import encrypt_password, decrypt_password
 
 IDENTITIES_JSON = data_config.get_path("identities.json")
 _lock = threading.RLock()
@@ -33,12 +33,12 @@ def _load() -> list:
 
 
 def _save(identities: list):
-    from inventory_manager import safe_json_write
+    from services.inventory_manager import safe_json_write
     safe_json_write(IDENTITIES_JSON, {"identities": identities})
 
 
 def _devices_using(identity_id: str) -> list:
-    import inventory_manager
+    from services import inventory_manager
     key = f"identity:{identity_id}"
     return [d.get("IP") for d in inventory_manager.get_all_devices()
             if d.get("Profile") == key]

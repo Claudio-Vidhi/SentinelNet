@@ -355,7 +355,7 @@ def push_via_api(ip: str, config_text: str, filename: str = "sentinelnet-day0") 
     esegue lo stesso script CLI generato da build_config. Riusa il client
     REST dell'osservabilità (stesso pattern REST-primary/SSH-fallback)."""
     import base64
-    import fortigate_service
+    from services import fortigate_service
 
     body = {"filename": filename,
             "file_content": base64.b64encode(config_text.encode("utf-8")).decode("ascii")}
