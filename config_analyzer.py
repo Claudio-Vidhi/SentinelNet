@@ -12,44 +12,18 @@ lettura del backup piu' recente e lo scoping per sede/tenant.
 import os
 import re
 
+# Primitive di parsing firewall e utility IP: ora vivono nel package
+# fw_analyzers (analizzatori per-vendor). Reimportate qui per i converter e
+# per analyze_fortios_config, senza duplicazione.
+from fw_analyzers._ip import _mask_to_prefix, _ip_addr_to_cidr
+from fw_analyzers.fortios import (
+    _forti_tokens, _forti_tree, _forti_get, _forti_set1, _forti_ip_cidr,
+)
+from fw_analyzers.panos import (
+    _panos_tokens, _panos_lines, _panos_collect, _panos_attr, _panos_attr_all,
+)
+
 # --- Utility di basso livello ----------------------------------------------
-
-def _mask_to_prefix(mask):
-    """Converte una subnet mask dotted (255.255.255.0) in lunghezza /nn.
-    Ritorna None se non e' una mask valida (es. gia' in forma /nn o wildcard)."""
-    try:
-        parts = mask.split('.')
-        if len(parts) != 4:
-            return None
-        bits = 0
-        for p in parts:
-            v = int(p)
-            if v < 0 or v > 255:
-                return None
-            bits += bin(v).count('1')
-        return bits
-    except Exception:
-        return None
-
-
-def _ip_addr_to_cidr(tokens):
-    """Da una lista di token tipo ['10.1.10.1', '255.255.255.0'] ricava
-    'a.b.c.d/nn'. Ritorna '' se non interpretabile."""
-    try:
-        if len(tokens) >= 2:
-            ip = tokens[0]
-            pfx = _mask_to_prefix(tokens[1])
-            if pfx is not None:
-                return f"{ip}/{pfx}"
-            # eventuale forma gia' /nn
-            if tokens[1].startswith('/'):
-                return f"{ip}{tokens[1]}"
-        if len(tokens) == 1 and '/' in tokens[0]:
-            return tokens[0]
-    except Exception:
-        pass
-    return ''
-
 
 def _expand_vlan_list(spec):
     """Espande '10,20,30-35' in ['10','20','30','31',...]. Tollerante."""
@@ -561,6 +535,7 @@ def analyze_config(content):
 
 _FORTIOS_VENDORS = {'fortinet', 'fortigate', 'fortios'}
 _WLC_AIREOS_VENDORS = {'cisco_wlc'}
+_PANOS_VENDORS = {'palo_alto', 'paloalto', 'panos', 'pan-os', 'palo alto'}
 
 
 def detect_config_type(content, device=None):
@@ -574,6 +549,8 @@ def detect_config_type(content, device=None):
                 return 'fortios'
             if vendor in _WLC_AIREOS_VENDORS:
                 return 'wlc-aireos'
+            if vendor in _PANOS_VENDORS:
+                return 'panos'
             if vendor:
                 # cisco_9800 (IOS-XE) e altri: formato IOS
                 return 'ios'
@@ -584,6 +561,10 @@ def detect_config_type(content, device=None):
             return 'fortios'
         if re.search(r'^config system (global|interface)\b', text, re.MULTILINE):
             return 'fortios'
+        # PAN-OS (set-CLI): righe 'set deviceconfig ...' / 'set mgt-config ...'.
+        # NB: XML PAN-OS non e' supportato (v1) — solo formato 'set'.
+        if re.search(r'^set (deviceconfig|mgt-config) ', text, re.MULTILINE):
+            return 'panos'
         # AireOS 'show run-config commands': righe 'config sysname/wlan/interface ...'
         if re.search(r'^config (sysname|wlan|interface|radius|mobility|network)\b',
                      text, re.MULTILINE):
@@ -597,66 +578,8 @@ def detect_config_type(content, device=None):
 
 
 # --- FortiOS ------------------------------------------------------------------
-
-_FORTI_TOKEN = re.compile(r'"[^"]*"|\S+')
-
-
-def _forti_tokens(s):
-    """Tokenizza una riga FortiOS rispettando le stringhe tra doppi apici."""
-    return [t[1:-1] if t.startswith('"') and t.endswith('"') and len(t) >= 2 else t
-            for t in _FORTI_TOKEN.findall(s)]
-
-
-def _forti_tree(content):
-    """Parsa la struttura a blocchi config/edit/next/end di FortiOS in un albero:
-    nodo = {"sets": {chiave: [valori]}, "children": {nome: nodo}}. Tollerante a
-    blocchi non chiusi o annidamenti anomali."""
-    root = {"sets": {}, "children": {}}
-    stack = [root]
-    for raw in (content or '').splitlines():
-        s = raw.strip()
-        if not s or s.startswith('#'):
-            continue
-        low = s.lower()
-        try:
-            if low.startswith('config '):
-                name = s[7:].strip().strip('"')
-                node = stack[-1]["children"].setdefault(
-                    name, {"sets": {}, "children": {}})
-                stack.append(node)
-            elif low.startswith('edit '):
-                key = s[5:].strip().strip('"')
-                node = stack[-1]["children"].setdefault(
-                    key, {"sets": {}, "children": {}})
-                stack.append(node)
-            elif low in ('next', 'end'):
-                if len(stack) > 1:
-                    stack.pop()
-            elif low.startswith('set '):
-                toks = _forti_tokens(s)
-                if len(toks) >= 2:
-                    stack[-1]["sets"][toks[1].lower()] = toks[2:]
-        except Exception:
-            continue
-    return root
-
-
-def _forti_get(root, path):
-    """Naviga l'albero FortiOS per nome sezione (es. 'firewall policy').
-    Ritorna il nodo o None."""
-    return root["children"].get(path)
-
-
-def _forti_set1(node, key, default=''):
-    """Primo valore di un 'set' (stringa), oppure default."""
-    vals = node["sets"].get(key)
-    return vals[0] if vals else default
-
-
-def _forti_ip_cidr(node):
-    """'set ip A.B.C.D MASK' -> 'A.B.C.D/nn'."""
-    vals = node["sets"].get('ip') or []
-    return _ip_addr_to_cidr(vals) if vals else ''
+# Le primitive _forti_tokens/_forti_tree/_forti_get/_forti_set1/_forti_ip_cidr
+# sono definite in fw_analyzers.fortios e reimportate in testa al modulo.
 
 
 def analyze_fortios_config(content):
@@ -1008,6 +931,311 @@ def analyze_wlc_config(content):
     return result
 
 
+# --- Config Converter (deterministico, FortiOS <-> PAN-OS) -------------------
+# Solo vendor firewall: il converter non gestisce piu' switch/router (ios).
+
+FIREWALL_VENDORS = {'fortios', 'panos'}
+
+
+def _prefix_to_mask(pfx):
+    """Da lunghezza prefisso (int) a mask dotted. '' se non valida."""
+    try:
+        n = int(pfx)
+        if not 0 <= n <= 32:
+            return ''
+        v = (0xFFFFFFFF << (32 - n)) & 0xFFFFFFFF if n else 0
+        return '.'.join(str((v >> s) & 0xFF) for s in (24, 16, 8, 0))
+    except Exception:
+        return ''
+
+
+def _cidr_split(cidr):
+    """'a.b.c.d/nn' -> ('a.b.c.d', 'mask dotted') oppure (None, None)."""
+    if not cidr or '/' not in cidr:
+        return None, None
+    ip, _, pfx = cidr.partition('/')
+    mask = _prefix_to_mask(pfx)
+    return (ip, mask) if mask else (None, None)
+
+
+def _forti_render_stanza(section, key, node):
+    """Ricostruisce il testo di una stanza FortiOS (config/edit/set/next/end)
+    dal nodo dell'albero. Solo il livello 'sets' (sufficiente come stanza raw)."""
+    lines = [f'config {section}', f'    edit "{key}"']
+    for k, vals in node["sets"].items():
+        rendered = ' '.join(f'"{v}"' if (' ' in v or v == '') else v for v in vals)
+        lines.append(f'        set {k} {rendered}'.rstrip())
+    lines.extend(['    next', 'end'])
+    return '\n'.join(lines)
+
+
+# Le primitive _panos_tokens/_panos_lines/_panos_collect/_panos_attr/
+# _panos_attr_all sono definite in fw_analyzers.panos e reimportate in testa.
+
+
+def _convert_fortios_to_panos(source_text):
+    """FortiOS -> PAN-OS (set-CLI), anteprima best-effort."""
+    root = _forti_tree(source_text)
+    mapped = []
+    unmapped = []
+    handled = {'system interface', 'router static', 'firewall address',
+               'firewall service custom', 'firewall policy', 'system global'}
+
+    ifs = _forti_get(root, 'system interface')
+    if ifs:
+        for name, n in ifs["children"].items():
+            src = _forti_render_stanza('system interface', name, n)
+            cidr = _forti_ip_cidr(n)
+            if not cidr:
+                unmapped.append(src)
+                continue
+            lines = [f'set network interface ethernet {name} layer3 ip {cidr}']
+            note = ''
+            desc = _forti_set1(n, 'description') or _forti_set1(n, 'alias')
+            if desc:
+                lines.append(f'set address-object {name}-desc comment "{desc}"')
+                note = 'descrizione riportata come commento separato (PAN-OS non ha description sull\'interfaccia L3)'
+            if _forti_set1(n, 'status', 'up').lower() == 'down':
+                note = (note + '; ' if note else '') + 'interfaccia down: disabilitare manualmente in PAN-OS'
+            mapped.append({"source": src, "target": '\n'.join(lines), "note": note})
+
+    adr = _forti_get(root, 'firewall address')
+    if adr:
+        for name, n in adr["children"].items():
+            src = _forti_render_stanza('firewall address', name, n)
+            subnet = n["sets"].get('subnet') or []
+            atype = _forti_set1(n, 'type', 'ipmask')
+            if atype not in ('ipmask', '') or len(subnet) < 2:
+                unmapped.append(src)
+                continue
+            cidr = _ip_addr_to_cidr(subnet)
+            if not cidr:
+                unmapped.append(src)
+                continue
+            mapped.append({"source": src,
+                           "target": f'set address {name} ip-netmask {cidr}',
+                           "note": ''})
+
+    svc = _forti_get(root, 'firewall service custom')
+    if svc:
+        for name, n in svc["children"].items():
+            src = _forti_render_stanza('firewall service custom', name, n)
+            tcp = n["sets"].get('tcp-portrange')
+            udp = n["sets"].get('udp-portrange')
+            if tcp:
+                mapped.append({"source": src,
+                               "target": f'set service {name} protocol tcp port {tcp[0]}',
+                               "note": ''})
+            elif udp:
+                mapped.append({"source": src,
+                               "target": f'set service {name} protocol udp port {udp[0]}',
+                               "note": ''})
+            else:
+                unmapped.append(src)
+
+    rst = _forti_get(root, 'router static')
+    if rst:
+        for seq, n in rst["children"].items():
+            src = _forti_render_stanza('router static', seq, n)
+            dst = n["sets"].get('dst') or ['0.0.0.0', '0.0.0.0']
+            cidr = _ip_addr_to_cidr(dst) or f"{dst[0]}/0"
+            gw = _forti_set1(n, 'gateway')
+            dev = _forti_set1(n, 'device')
+            if not gw:
+                unmapped.append(src)
+                continue
+            rname = f"route-{seq}"
+            lines = [f'set network virtual-router default routing-table ip static-route {rname} destination {cidr}',
+                     f'set network virtual-router default routing-table ip static-route {rname} nexthop ip-address {gw}']
+            note = f"interfaccia in uscita FortiOS '{dev}' non riportata (PAN-OS usa il virtual-router)" if dev else ''
+            mapped.append({"source": src, "target": '\n'.join(lines), "note": note})
+
+    pol = _forti_get(root, 'firewall policy')
+    if pol:
+        for pid, n in pol["children"].items():
+            src = _forti_render_stanza('firewall policy', pid, n)
+            name = _forti_set1(n, 'name') or f'rule{pid}'
+            srcintf = n["sets"].get('srcintf', ['any'])
+            dstintf = n["sets"].get('dstintf', ['any'])
+            srcaddr = n["sets"].get('srcaddr', ['any'])
+            dstaddr = n["sets"].get('dstaddr', ['any'])
+            service = n["sets"].get('service', ['any'])
+            action = 'allow' if _forti_set1(n, 'action', 'deny') == 'accept' else 'deny'
+            lines = []
+            for z in srcintf:
+                lines.append(f'set rulebase security rules "{name}" from {z}')
+            for z in dstintf:
+                lines.append(f'set rulebase security rules "{name}" to {z}')
+            for a in srcaddr:
+                lines.append(f'set rulebase security rules "{name}" source {a}')
+            for a in dstaddr:
+                lines.append(f'set rulebase security rules "{name}" destination {a}')
+            for s in service:
+                lines.append(f'set rulebase security rules "{name}" service {s}')
+            lines.append(f'set rulebase security rules "{name}" action {action}')
+            note = ''
+            if _forti_set1(n, 'nat', 'disable') == 'enable':
+                lines.append(f'set rulebase nat rules "{name}" from {srcintf[0]}')
+                lines.append(f'set rulebase nat rules "{name}" to {dstintf[0]}')
+                note = 'NAT abilitato: regola NAT creata come anteprima separata, verificare source-translation'
+            mapped.append({"source": src, "target": '\n'.join(lines), "note": note})
+
+    # Ogni altra sezione non gestita -> unmapped (stanza raw)
+    for section, node in root["children"].items():
+        if section in handled:
+            continue
+        if node["children"]:
+            for key, child in node["children"].items():
+                unmapped.append(_forti_render_stanza(section, key, child))
+        elif node["sets"]:
+            unmapped.append(_forti_render_stanza(section, '', node)
+                            .replace('    edit ""\n', '').replace('    next\n', ''))
+    return mapped, unmapped
+
+
+def _convert_panos_to_fortios(source_text):
+    """PAN-OS (set-CLI) -> FortiOS, anteprima best-effort."""
+    lines = _panos_lines(source_text)
+    mapped = []
+    unmapped = []
+    consumed_raw = set()
+
+    # --- Interfacce L3 ---
+    iface_re = re.compile(r'^network\s+interface\s+ethernet\s+(\S+)\s+layer3\s+ip\s+(\S+)$', re.IGNORECASE)
+    for toks, raw in lines:
+        m = iface_re.match(' '.join(toks))
+        if not m:
+            continue
+        name, cidr = m.group(1), m.group(2)
+        ip, mask = _cidr_split(cidr)
+        if not ip:
+            unmapped.append(raw)
+            consumed_raw.add(raw)
+            continue
+        target = (f'config system interface\n    edit "{name}"\n'
+                  f'        set ip {ip} {mask}\n    next\nend')
+        mapped.append({"source": raw, "target": target, "note": ''})
+        consumed_raw.add(raw)
+
+    # --- Address objects ---
+    addr = _panos_collect(lines, ('address',))
+    for name, entry in addr.items():
+        cidr = _panos_attr(entry, 'ip-netmask')
+        if not cidr:
+            unmapped.extend(entry["raw"])
+            consumed_raw.update(entry["raw"])
+            continue
+        ip, mask = _cidr_split(cidr)
+        if not ip:
+            unmapped.extend(entry["raw"])
+            consumed_raw.update(entry["raw"])
+            continue
+        target = (f'config firewall address\n    edit "{name}"\n'
+                  f'        set subnet {ip} {mask}\n    next\nend')
+        mapped.append({"source": '\n'.join(entry["raw"]), "target": target, "note": ''})
+        consumed_raw.update(entry["raw"])
+
+    # --- Service objects ---
+    svc_re = re.compile(r'^service\s+(\S+)\s+protocol\s+(tcp|udp)\s+port\s+(\S+)$', re.IGNORECASE)
+    for toks, raw in lines:
+        m = svc_re.match(' '.join(toks))
+        if not m:
+            continue
+        name, proto, port = m.group(1), m.group(2).lower(), m.group(3)
+        target = (f'config firewall service custom\n    edit "{name}"\n'
+                  f'        set {proto}-portrange {port}\n    next\nend')
+        mapped.append({"source": raw, "target": target, "note": ''})
+        consumed_raw.add(raw)
+
+    # --- Rotte statiche ---
+    route = _panos_collect(lines, ('network', 'virtual-router'))
+    # struttura reale: network virtual-router <vr> routing-table ip static-route <name> ...
+    route_names = {}
+    route_re = re.compile(
+        r'^network\s+virtual-router\s+(\S+)\s+routing-table\s+ip\s+static-route\s+(\S+)\s+(destination|nexthop)\s+(?:ip-address\s+)?(\S+)$',
+        re.IGNORECASE)
+    for toks, raw in lines:
+        m = route_re.match(' '.join(toks))
+        if not m:
+            continue
+        rname = m.group(2)
+        entry = route_names.setdefault(rname, {"destination": '', "nexthop": '', "raw": []})
+        entry[m.group(3).lower()] = m.group(4)
+        entry["raw"].append(raw)
+    for seq, (rname, entry) in enumerate(route_names.items(), start=1):
+        consumed_raw.update(entry["raw"])
+        if not entry["destination"] or not entry["nexthop"]:
+            unmapped.extend(entry["raw"])
+            continue
+        net, mask = _cidr_split(entry["destination"])
+        if not net:
+            unmapped.extend(entry["raw"])
+            continue
+        target = (f'config router static\n    edit {seq}\n'
+                  f'        set dst {net} {mask}\n'
+                  f'        set gateway {entry["nexthop"]}\n    next\nend')
+        mapped.append({"source": '\n'.join(entry["raw"]), "target": target, "note": ''})
+
+    # --- Policy (security rules) ---
+    rules = _panos_collect(lines, ('rulebase', 'security', 'rules'))
+    nat_rules = _panos_collect(lines, ('rulebase', 'nat', 'rules'))
+    for seq, (name, entry) in enumerate(rules.items(), start=1):
+        consumed_raw.update(entry["raw"])
+        srcintf = _panos_attr_all(entry, 'from') or ['any']
+        dstintf = _panos_attr_all(entry, 'to') or ['any']
+        srcaddr = _panos_attr_all(entry, 'source') or ['any']
+        dstaddr = _panos_attr_all(entry, 'destination') or ['any']
+        service = _panos_attr_all(entry, 'service') or ['ALL']
+        action = 'accept' if _panos_attr(entry, 'action').lower() == 'allow' else 'deny'
+        lines_out = [
+            'config firewall policy', f'    edit {seq}',
+            f'        set name "{name}"',
+            '        set srcintf ' + ' '.join(f'"{z}"' for z in srcintf),
+            '        set dstintf ' + ' '.join(f'"{z}"' for z in dstintf),
+            '        set srcaddr ' + ' '.join(f'"{a}"' for a in srcaddr),
+            '        set dstaddr ' + ' '.join(f'"{a}"' for a in dstaddr),
+            '        set service ' + ' '.join(f'"{s}"' for s in service),
+            f'        set action {action}',
+        ]
+        note = ''
+        if name in nat_rules:
+            lines_out.append('        set nat enable')
+            consumed_raw.update(nat_rules[name]["raw"])
+            note = 'regola NAT associata rilevata: source-translation non riportata, verificare manualmente'
+        lines_out.extend(['    next', 'end'])
+        mapped.append({"source": '\n'.join(entry["raw"]), "target": '\n'.join(lines_out), "note": note})
+
+    # --- Righe non riconosciute -> unmapped ---
+    for _toks, raw in lines:
+        if raw not in consumed_raw:
+            unmapped.append(raw)
+    return mapped, unmapped
+
+
+def convert_config(source_text, source_vendor, target_vendor):
+    """Conversione deterministica (preview) tra vendor firewall
+    ('fortios', 'panos'). Ritorna {"mapped": [{source,target,note}],
+    "unmapped": [str], "preview_text": str}. Solleva ValueError su vendor non
+    validi o coincidenti."""
+    sv = (source_vendor or '').strip().lower()
+    tv = (target_vendor or '').strip().lower()
+    if sv not in FIREWALL_VENDORS or tv not in FIREWALL_VENDORS:
+        raise ValueError(f"Vendor non supportato: {source_vendor!r} -> {target_vendor!r} "
+                         f"(solo vendor firewall supportati: {sorted(FIREWALL_VENDORS)})")
+    if sv == tv:
+        raise ValueError("Vendor sorgente e destinazione coincidono.")
+    if sv == 'fortios':
+        mapped, unmapped = _convert_fortios_to_panos(source_text or '')
+    else:
+        mapped, unmapped = _convert_panos_to_fortios(source_text or '')
+    comment = '#' if tv == 'fortios' else '!'
+    header = (f"{comment} Anteprima conversione {sv} -> {tv} — SentinelNet Config Converter\n"
+              f"{comment} {len(mapped)} elementi mappati, {len(unmapped)} non mappati "
+              f"(vedi elenco 'unmapped').\n")
+    preview_text = header + '\n' + '\n\n'.join(m["target"] for m in mapped) + '\n'
+    return {"mapped": mapped, "unmapped": unmapped, "preview_text": preview_text}
+
+
 # --- I/O: lettura backup + scoping ------------------------------------------
 
 def _find_freshest_backup(ip):
@@ -1060,9 +1288,25 @@ def analyze_device(ip):
 
     config_type = detect_config_type(content, dev)
 
+    import fw_analyzers
+
+    is_firewall = False
+    firewall = None
     if config_type == 'fortios':
         result = analyze_fortios_config(content)
         hostname = result.pop("hostname", "")
+        is_firewall = True
+        firewall = fw_analyzers.fortios.analyze(content)
+    elif config_type == 'panos':
+        # PAN-OS: nessun analizzatore "generico" dedicato (le altre tab
+        # riusano il parser IOS in modo tollerante); il tab Firewall usa
+        # l'envelope a sezioni.
+        result = analyze_config(content)
+        m = re.search(r'^set deviceconfig system hostname (\S+)', content,
+                      re.MULTILINE)
+        hostname = m.group(1) if m else ""
+        is_firewall = True
+        firewall = fw_analyzers.panos.analyze(content)
     elif config_type == 'wlc-aireos':
         result = analyze_wlc_config(content)
         hostname = result.pop("hostname", "")
@@ -1078,11 +1322,17 @@ def analyze_device(ip):
         tenant = dev.get('Group', tenant) or tenant
         if not hostname:
             hostname = dev.get('Hostname', '') or ''
+        # Firewall non-FortiGate (es. rilevato dall'inventario/CDP): tab
+        # Firewall visibile ma senza il parsing dedicato (solo FortiGate).
+        if not is_firewall and (dev.get('Type') or '').strip().lower() == 'firewall':
+            is_firewall = True
 
     result["ip"] = ip
     result["hostname"] = hostname
     result["tenant"] = tenant
     result["config_type"] = config_type
+    result["is_firewall"] = is_firewall
+    result["firewall"] = firewall
     return result
 
 

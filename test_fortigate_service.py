@@ -43,6 +43,13 @@ class TokenStoreTest(unittest.TestCase):
         fgs.set_api_token("192.0.2.1", "")
         self.assertIsNone(fgs.get_api_config("192.0.2.1")[0])
 
+    def test_default_verify_tls_is_false(self):
+        # Senza indicazione esplicita, il default deve restare non-verificato:
+        # i FortiGate usano quasi sempre un certificato self-signed.
+        fgs.set_api_token("192.0.2.2", "tok")
+        _, _, verify = fgs.get_api_config("192.0.2.2")
+        self.assertFalse(verify)
+
     def test_api_get_without_token(self):
         with self.assertRaises(fgs.FortiGateError):
             fgs.api_get("192.0.2.9", "monitor/system/status")
@@ -61,7 +68,7 @@ class ApiOrSshTest(unittest.TestCase):
     def test_api_primary(self):
         fgs.set_api_token(DEVICE["IP"], "tok")
         payload = {"results": [{"ip": "10.0.0.5", "mac": "aa:bb:cc:dd:ee:ff"}]}
-        with mock.patch.object(fgs.requests, "get", return_value=_resp(200, payload)):
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)):
             out = fgs.get_arp_table(DEVICE)
         self.assertEqual(out["source"], "api")
         self.assertEqual(out["data"][0]["ip"], "10.0.0.5")
@@ -82,15 +89,82 @@ class ApiOrSshTest(unittest.TestCase):
         self.assertIn("API:", str(ctx.exception))
         self.assertIn("SSH:", str(ctx.exception))
 
+    def test_ssl_cert_error_gives_hint(self):
+        fgs.set_api_token(DEVICE["IP"], "tok")
+        err = fgs.requests.exceptions.SSLError(
+            "certificate verify failed: unable to get local issuer certificate")
+        with mock.patch.object(fgs.requests, "request", side_effect=err):
+            with self.assertRaises(fgs.FortiGateError) as ctx:
+                fgs.api_get(DEVICE["IP"], "monitor/system/status")
+        msg = str(ctx.exception)
+        self.assertIn("self-signed", msg)
+        self.assertIn("Verifica certificato TLS", msg)
+
     def test_policy_lookup_api_only(self):
         fgs.set_api_token(DEVICE["IP"], "tok")
         payload = {"results": {"policy_id": 7, "success": True}}
-        with mock.patch.object(fgs.requests, "get", return_value=_resp(200, payload)) as m:
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)) as m:
             out = fgs.policy_lookup(DEVICE, "10.0.0.5", "example.com", dest_port=443)
         self.assertEqual(out["data"]["policy_id"], 7)
         params = m.call_args.kwargs["params"]
         self.assertEqual(params["srcip"], "10.0.0.5")
         self.assertEqual(params["dest"], "example.com")
+
+
+class FirewallCmdbSlimTest(unittest.TestCase):
+    """Inventario cmdb 'slim' (address/policy/service) via api_get_cmdb: sola
+    REST, con format/filter proiettati come da doc Fortinet 'Using APIs'."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig = fgs.TOKENS_FILE
+        fgs.TOKENS_FILE = os.path.join(self._tmp.name, "t.json")
+        fgs.set_api_token(DEVICE["IP"], "tok")
+
+    def tearDown(self):
+        fgs.TOKENS_FILE = self._orig
+        self._tmp.cleanup()
+
+    def test_api_get_cmdb_builds_format_and_filter_params(self):
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, {"results": []})) as m:
+            fgs.api_get_cmdb(DEVICE["IP"], "cmdb/firewall/address",
+                             fmt="name|type|subnet", flt="name=@LAN")
+        params = m.call_args.kwargs["params"]
+        self.assertEqual(params["format"], "name|type|subnet")
+        self.assertEqual(params["filter"], "name=@LAN")
+
+    def test_get_firewall_addresses(self):
+        payload = {"results": [{"name": "LAN", "type": "ipmask",
+                                 "subnet": "10.0.0.0 255.255.255.0", "comment": "lan net"}]}
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)) as m:
+            out = fgs.get_firewall_addresses(DEVICE)
+        self.assertEqual(out["source"], "api")
+        self.assertEqual(out["data"][0]["name"], "LAN")
+        url = m.call_args.args[1] if m.call_args.args else m.call_args.kwargs.get("url")
+        self.assertIn("cmdb/firewall/address", url)
+        self.assertEqual(m.call_args.kwargs["params"]["format"],
+                         "name|type|subnet|fqdn|comment")
+
+    def test_get_firewall_policy_objects(self):
+        payload = {"results": [{"policyid": 1, "name": "allow-out", "action": "accept",
+                                 "status": "enable"}]}
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)) as m:
+            out = fgs.get_firewall_policy_objects(DEVICE)
+        self.assertEqual(out["data"][0]["policyid"], 1)
+        self.assertIn("policyid", m.call_args.kwargs["params"]["format"])
+
+    def test_get_firewall_custom_services(self):
+        payload = {"results": [{"name": "CUSTOM-8080", "tcp-portrange": "8080"}]}
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)) as m:
+            out = fgs.get_firewall_custom_services(DEVICE)
+        self.assertEqual(out["data"][0]["name"], "CUSTOM-8080")
+        url = m.call_args.args[1] if m.call_args.args else m.call_args.kwargs.get("url")
+        self.assertIn("cmdb/firewall.service/custom", url)
+
+    def test_firewall_addresses_raises_without_token(self):
+        fgs.set_api_token(DEVICE["IP"], "")
+        with self.assertRaises(fgs.FortiGateError):
+            fgs.get_firewall_addresses(DEVICE)
 
 
 class DiagnoseClientTest(unittest.TestCase):

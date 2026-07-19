@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import db
 import data_config
+from app_settings import get_app_settings, save_app_settings
 from observability import metrics
 from observability.ingesters import ipfix
 from routers.deps import (get_current_user, require_admin, require_operator,
@@ -191,15 +192,17 @@ async def obs_anomaly_status(
 @router.get("/api/observability/config")
 def obs_get_config(current_user = Depends(require_admin)):
     """Config effettiva dei listener (settings + eventuali override da env).
-    I listener partono all'avvio: le modifiche richiedono riavvio."""
+    Le modifiche via POST vengono applicate a caldo, senza riavvio."""
     return data_config.obs_config()
 
 
 @router.post("/api/observability/config")
-def obs_set_config(payload: dict, current_user = Depends(require_admin)):
-    """Salva la sezione 'observability' in app_settings.json (§9.5).
+async def obs_set_config(payload: dict, current_user = Depends(require_admin)):
+    """Salva la sezione 'observability' in app_settings.json (§9.5) e applica
+    subito la nuova config ai listener UDP e ai task di background (nessun
+    riavvio del processo necessario).
     Chiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},
-    api_poll_s. Richiede riavvio per avere effetto."""
+    api_poll_s."""
     allowed = {"enabled", "bind", "api_poll_s"} | {
         f"{l}_{k}" for l in ("ipfix", "sflow", "syslog", "netflow")
         for k in ("enabled", "port")}
@@ -218,15 +221,17 @@ def obs_set_config(payload: dict, current_user = Depends(require_admin)):
             if k.endswith("_port") and not (1 <= v <= 65535):
                 raise HTTPException(status_code=400, detail=f"Invalid port for '{k}'.")
         clean[k] = v
-    from app_server import get_app_settings, save_app_settings
     saved = dict(get_app_settings().get("observability", {}) or {})
     saved.update(clean)
     save_app_settings({"observability": saved})
+    effective = data_config.obs_config()
+    from observability import listener_manager
+    await listener_manager.apply_obs_config(effective)
     from security_manager import log_audit
-    log_audit(f"Config observability aggiornata da '{current_user.get('sub')}' "
-              f"(riavvio richiesto): {clean}.")
-    return {"status": "success", "restart_required": True,
-            "effective": data_config.obs_config()}
+    log_audit(f"Config observability aggiornata da '{current_user.get('sub')}': "
+              f"{clean} (applicata a caldo, nessun riavvio).")
+    return {"status": "success", "restart_required": False,
+            "effective": effective, "listeners": listener_status}
 
 
 @router.get("/api/observability/api-context")

@@ -201,8 +201,9 @@ class TestCorrelator(_Base):
         self.assertEqual(len(self._rows()), 1)
 
     def test_syslog_without_flow_no_event(self):
+        # Severità media (4): senza flusso corroborante non si emette nulla.
         conn = db.get_observability_connection()
-        _seed_syslog(conn, "sede-a", self.FGT_MSG)
+        _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=4)
         conn.commit()
         conn.close()
         with patch("mac_history.client_map", return_value=[]):
@@ -210,11 +211,54 @@ class TestCorrelator(_Base):
         self.assertEqual(emitted, 0)
         self.assertEqual(len(self._rows()), 0)
 
+    def test_high_severity_without_flow_emits_standalone(self):
+        # Severità alta (<=3): l'evento emerge anche senza flusso corroborante,
+        # anche senza action di sicurezza e senza endpoint nel messaggio.
+        conn = db.get_observability_connection()
+        _seed_syslog(conn, "sede-a", 'logdesc="FortiGate update failed"',
+                     action=None, severity=1)
+        conn.commit()
+        conn.close()
+        with patch("mac_history.client_map", return_value=[]):
+            emitted = correlator.correlate_once(NOW)
+        self.assertEqual(emitted, 1)
+        rows = self._rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["kind"], "syslog_critico")
+        self.assertEqual(rows[0]["severity"], 1)
+        self.assertIsNone(rows[0]["src_ip"])
+        evidence = json.loads(rows[0]["evidence_json"])
+        self.assertNotIn("flow", evidence)
+
+    def test_high_severity_with_flow_single_event(self):
+        # Alta severità + flusso: UN solo evento (quello corroborato), niente doppioni.
+        conn = db.get_observability_connection()
+        _seed_flow(conn, "sede-a", "10.1.0.5", "203.0.113.7")
+        _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=2)
+        conn.commit()
+        conn.close()
+        with patch("mac_history.client_map", return_value=[]):
+            emitted = correlator.correlate_once(NOW)
+        self.assertEqual(emitted, 1)
+        rows = self._rows()
+        self.assertEqual(len(rows), 1)
+        self.assertIn("flow", json.loads(rows[0]["evidence_json"]))
+
+    def test_high_severity_rerun_does_not_duplicate(self):
+        conn = db.get_observability_connection()
+        _seed_syslog(conn, "sede-a", "kernel panic", action=None, severity=0)
+        conn.commit()
+        conn.close()
+        with patch("mac_history.client_map", return_value=[]):
+            correlator.correlate_once(NOW)
+            correlator.correlate_once(NOW)
+        self.assertEqual(len(self._rows()), 1)
+
     def test_no_cross_tenant_correlation(self):
         conn = db.get_observability_connection()
         # flusso in sede-b, syslog in sede-a: stessi IP ma tenant diversi.
         _seed_flow(conn, "sede-b", "10.1.0.5", "203.0.113.7")
-        _seed_syslog(conn, "sede-a", self.FGT_MSG)
+        _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=4)
         conn.commit()
         conn.close()
         with patch("mac_history.client_map", return_value=[]):
@@ -237,7 +281,7 @@ class TestCorrelator(_Base):
         conn = db.get_observability_connection()
         _seed_flow(conn, "sede-a", "10.1.0.5", "203.0.113.7",
                    ts=NOW - correlator.MATCH_DELTA_S - 600)
-        _seed_syslog(conn, "sede-a", self.FGT_MSG)
+        _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=4)
         conn.commit()
         conn.close()
         with patch("mac_history.client_map", return_value=[]):

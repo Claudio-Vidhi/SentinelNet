@@ -6,7 +6,7 @@ from netmiko import ConnectHandler
 from inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,
-    parse_transports,
+    parse_transports, CATEGORIES_FILE,
 )
 from drivers.cisco_ios import CiscoIosDriver
 from drivers.cisco_cbs import CiscoCbsDriver
@@ -77,6 +77,15 @@ def remove_stale_backups(ip: str):
 def get_device_credentials(device):
     profile = device.get('Profile', 'custom').lower()
     if profile == 'default':
+        return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
+    if profile.startswith('identity:'):
+        # Identita' tenant (identity_manager): fallback ai default se
+        # l'identita' non esiste piu' (non dovrebbe: delete bloccata se in uso).
+        import identity_manager
+        creds = identity_manager.get_identity_credentials(
+            device.get('Profile', '')[len('identity:'):])
+        if creds:
+            return creds
         return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
     username = device.get('Username') or DEFAULT_USERNAME
     password = decrypt_password(device.get('Password')) or DEFAULT_PASSWORD
@@ -214,13 +223,17 @@ def _fortigate_backup_and_triage(device):
     try:
         status = fortigate_service.get_system_status(device)
         data = status.get("data")
+        raw = None
         if isinstance(data, dict):
             results = data.get("results") if isinstance(data.get("results"), dict) else {}
-            version = data.get("version") or results.get("version") or "Non Rilevata"
+            raw = data.get("version") or results.get("version")
         elif isinstance(data, str):
             m = re.search(r'^Version:\s*(.+)$', data, re.MULTILINE)
             if m:
-                version = m.group(1).strip()
+                raw = m.group(1).strip()
+        if raw:
+            # "FortiGate-VM64 v7.4.12,build2902,..." / "v7.4.12" -> "7.4.12"
+            version = extract_version(raw) or raw
     except Exception:
         pass
     update_version_inventory(ip, vendor, version, "online")
@@ -554,6 +567,10 @@ _TYPE_TOKENS = {
     "pc":       ("pc",),
 }
 _TYPE_ORDER = ("firewall", "wlc", "ap", "router", "phone", "server", "pc")
+# Keyword positivi per "switch", cercati SOLO in description/platform (mai
+# nell'hostname: un hostname come "sw-wifi-floor2" non deve confondersi con un
+# AP). Questa evidenza ha precedenza sulle keyword "ap" basate su hostname.
+_SWITCH_SUBSTRINGS = ("catalyst", "ws-c", "c9200", "c9300", "c9500", "switch")
 
 
 def _has_token(text: str, token: str) -> bool:
@@ -574,13 +591,40 @@ def classify_device_type(hostname: str = "", description: str = "",
     # (es. hostname con "wifi" o segmento "AP").
     if "switch" in caps and "access point" not in caps and "wlan" not in caps:
         return "switch"
+    # Le Capabilities hanno precedenza assoluta su hostname/description/platform:
+    # es. Capabilities "Router" non deve perdere contro un hostname con token
+    # debole tipo "srv-core-01" (convenzione di naming del sito), che altrimenti
+    # farebbe match "server" prima ancora di guardare le capabilities.
+    if caps.strip():
+        for t in _TYPE_ORDER:
+            if any(s in caps for s in _TYPE_SUBSTRINGS.get(t, ())):
+                return t
+    # Evidenza "switch" da description/platform (CDP/LLDP), MAI da hostname:
+    # batte le keyword "ap" basate solo sull'hostname (es. "sw-wifi-floor2"
+    # con platform "Cisco Catalyst 9300" -> switch, non ap).
+    desc_plat = " ".join(filter(None, [description, platform])).lower()
+    switch_evidence = any(s in desc_plat for s in _SWITCH_SUBSTRINGS)
+    # Platform+Description (CDP/LLDP) hanno precedenza sull'hostname, che è il
+    # segnale più debole: es. hostname "fw-edge1" con platform "Cisco ISR4321"
+    # è un router, non un firewall solo perché il nome contiene il token "fw".
+    # Valutati PRIMA e SEPARATAMENTE dall'hostname (mai fusi in un'unica
+    # stringa), altrimenti un token debole nel nome batterebbe evidenza reale.
     for t in _TYPE_ORDER:
-        if any(s in text for s in _TYPE_SUBSTRINGS.get(t, ())):
+        if t == "ap" and switch_evidence:
+            return "switch"
+        if any(s in desc_plat for s in _TYPE_SUBSTRINGS.get(t, ())):
             return t
-        if any(_has_token(text, tok) for tok in _TYPE_TOKENS.get(t, ())):
+        if any(_has_token(desc_plat, tok) for tok in _TYPE_TOKENS.get(t, ())):
             return t
-    if "router" in caps:
-        return "router"
+    if switch_evidence:
+        return "switch"
+    # Ultimo: l'hostname da solo, il segnale più debole.
+    hostname_l = (hostname or "").lower()
+    for t in _TYPE_ORDER:
+        if any(s in hostname_l for s in _TYPE_SUBSTRINGS.get(t, ())):
+            return t
+        if any(_has_token(hostname_l, tok) for tok in _TYPE_TOKENS.get(t, ())):
+            return t
     # Nessun indizio affidabile: tipo generico, mai indovinare "switch".
     return "client"
 
@@ -1192,7 +1236,59 @@ def get_portchannel_report(group_filter=None) -> list:
     return report
 
 
+# Cache di generate_network_map: la scansione ricorsiva di BACKUP_FOLDER con
+# parse regex di ogni file .txt è costosa e viene invocata ad ogni richiesta
+# da più endpoint (device-classification, topology, network-map, mac uplinks).
+# La cache è invalidata da una "firma" economica (conteggio + mtime massima dei
+# backup, mtime del file assegnazioni-categoria) calcolata con un solo
+# os.walk/stat pass, molto più leggero della scansione completa che sostituisce.
+_netmap_cache: dict = {"sig": None, "by_filter": {}}
+
+def _netmap_signature():
+    count = 0
+    max_mtime = 0.0
+    if os.path.exists(BACKUP_FOLDER):
+        for root, _dirs, files in os.walk(BACKUP_FOLDER):
+            for f in files:
+                if not f.endswith('.txt'):
+                    continue
+                count += 1
+                try:
+                    mtime = os.path.getmtime(os.path.join(root, f))
+                except OSError:
+                    continue
+                if mtime > max_mtime:
+                    max_mtime = mtime
+    try:
+        cat_mtime = os.path.getmtime(CATEGORIES_FILE)
+    except OSError:
+        cat_mtime = 0.0
+    return (count, max_mtime, cat_mtime)
+
+
 def generate_network_map(group_filter=None) -> dict:
+    """Wrapper con cache: vedi _generate_network_map per la logica reale.
+    I chiamanti (routers/catalog.py, topology.py, mac.py) leggono soltanto il
+    risultato senza mutarlo, quindi è sicuro condividere l'oggetto cache."""
+    sig = _netmap_signature()
+    if _netmap_cache["sig"] != sig:
+        _netmap_cache["sig"] = sig
+        _netmap_cache["by_filter"] = {}
+    key = group_filter or "all"
+    cached = _netmap_cache["by_filter"].get(key)
+    if cached is not None:
+        return cached
+    result = _generate_network_map(group_filter)
+    # Compare-and-swap: only store if the signature hasn't advanced while we
+    # were computing (a slow in-flight computation must not clobber fresher
+    # data written by a concurrent request that started after a category
+    # save advanced the signature).
+    if _netmap_cache["sig"] == sig:
+        _netmap_cache["by_filter"][key] = result
+    return result
+
+
+def _generate_network_map(group_filter=None) -> dict:
     """Scansiona backup-config e genera nodi + link per la mappa topologica."""
     devices      = get_all_devices()
     ip_to_device = {d['IP']: d for d in devices}
@@ -1248,6 +1344,26 @@ def generate_network_map(group_filter=None) -> dict:
         }
         hostname_to_ip[hostname.lower()] = ip
 
+    # Pre-scan degli annunci CDP/LLDP di tutti i backup per costruire un lookup
+    # hostname/ip -> {platform, capabilities, description}. Serve a passare
+    # platform/capabilities reali alla classificazione dei nodi inventariati:
+    # senza questo, uno switch annunciato come vicino da un altro apparato ma
+    # con "wifi"/"wlan" nell'hostname (es. "SW-WIFI-01") verrebbe classificato
+    # come AP per mancanza di segnali migliori (solo hostname+vendor).
+    neighbor_info: dict = {}
+    for _ip, _info in parsed_devices.items():
+        for _n in parse_cdp_lldp_neighbors(_info["content"]):
+            _nid  = _n["neighbor_id"]
+            _base = _nid.split('.')[0] if '.' in _nid else _nid
+            _entry = {
+                "platform":     _n.get("platform") or "",
+                "capabilities": _n.get("capabilities") or "",
+                "description":  _n.get("description") or "",
+            }
+            for _key in (_nid.lower(), _base.lower(), _n.get("neighbor_ip")):
+                if _key:
+                    neighbor_info.setdefault(_key, _entry)
+
     # Nodi inventariati
     versions = get_detected_versions()
     for ip, d in ip_to_device.items():
@@ -1256,8 +1372,19 @@ def generate_network_map(group_filter=None) -> dict:
         status = versions.get(ip, {}).get("status", "offline")
         vendor = d.get('Vendor', 'cisco')
         # Il vendor partecipa alla classificazione: un apparato Fortinet/Palo Alto
-        # è un firewall anche se l'hostname non lo dice.
-        auto_type = classify_device_type(label, description=vendor)
+        # è un firewall anche se l'hostname non lo dice. Se il nodo è stato
+        # annunciato come vicino CDP/LLDP da un altro apparato, usa anche
+        # platform/capabilities/System Description reali (vedi neighbor_info).
+        _ninfo = (neighbor_info.get(label.lower())
+                  or neighbor_info.get(label.split('.')[0].lower())
+                  or neighbor_info.get(ip)
+                  or {})
+        auto_type = classify_device_type(
+            label,
+            description=_ninfo.get("description") or vendor,
+            platform=_ninfo.get("platform", ""),
+            capabilities=_ninfo.get("capabilities", ""),
+        )
         nodes_map[ip] = {
             "id":          ip,
             "label":       label,

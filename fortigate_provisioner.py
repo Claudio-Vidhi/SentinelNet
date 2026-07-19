@@ -8,6 +8,7 @@ Come switch_provisioner: ``build_config`` e' una funzione pura che assembla la
 config come testo FortiOS a partire da un dict di parametri.
 """
 
+import json
 import time
 
 
@@ -90,6 +91,42 @@ def build_config(cfg: dict) -> str:
         lines.append("config system admin")
         lines.append(f"    edit {_q(cfg['admin_user'])}")
         lines.append(f"        set password {_q(cfg.get('admin_password') or 'changeme')}")
+        lines.append("        set accprofile \"super_admin\"")
+        lines.append("    next")
+        lines.append("end")
+
+    aaa_protocol = cfg.get("aaa_protocol") or "none"
+    aaa_server_ip = cfg.get("aaa_server_ip")
+    if aaa_protocol in ("radius", "tacacs") and aaa_server_ip:
+        server_name = "SENTINEL-RADIUS" if aaa_protocol == "radius" else "SENTINEL-TACACS"
+        group_name = "SENTINEL-AAA"
+        sec(f"AAA {'RADIUS' if aaa_protocol == 'radius' else 'TACACS+'}")
+        if aaa_protocol == "radius":
+            lines.append("config user radius")
+            lines.append(f"    edit {_q(server_name)}")
+            lines.append(f"        set server {aaa_server_ip}")
+            if cfg.get("aaa_key"):
+                lines.append(f"        set secret {_q(cfg['aaa_key'])}")
+            lines.append("    next")
+            lines.append("end")
+        else:
+            lines.append("config user tacacs+")
+            lines.append(f"    edit {_q(server_name)}")
+            lines.append(f"        set server {aaa_server_ip}")
+            if cfg.get("aaa_key"):
+                lines.append(f"        set key {_q(cfg['aaa_key'])}")
+            lines.append("    next")
+            lines.append("end")
+        lines.append("config user group")
+        lines.append(f"    edit {_q(group_name)}")
+        lines.append("        set member " + _q(server_name))
+        lines.append("    next")
+        lines.append("end")
+        lines.append("config system admin")
+        lines.append(f"    edit {_q('remote-' + server_name.lower())}")
+        lines.append("        set remote-auth enable")
+        lines.append("        set wildcard enable")
+        lines.append(f"        set remote-group {_q(group_name)}")
         lines.append("        set accprofile \"super_admin\"")
         lines.append("    next")
         lines.append("end")
@@ -309,8 +346,28 @@ def build_config(cfg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CONSEGNA: SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
+# CONSEGNA: REST API (token), SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
 # ---------------------------------------------------------------------------
+
+def push_via_api(ip: str, config_text: str, filename: str = "sentinelnet-day0") -> dict:
+    """Applica la config FortiOS via REST API usando il token salvato
+    (fortigate_service): POST /api/v2/monitor/system/config-script/upload
+    esegue lo stesso script CLI generato da build_config. Riusa il client
+    REST dell'osservabilità (stesso pattern REST-primary/SSH-fallback)."""
+    import base64
+    import fortigate_service
+
+    body = {"filename": filename,
+            "file_content": base64.b64encode(config_text.encode("utf-8")).decode("ascii")}
+    try:
+        data = fortigate_service.api_post(
+            ip, "monitor/system/config-script/upload", json_body=body)
+        status = (data or {}).get("status", "success")
+        if status != "success":
+            return {"status": "error", "message": f"config-script upload: {data}"}
+        return {"status": "success", "output": json.dumps(data, indent=1)}
+    except fortigate_service.FortiGateError as e:
+        return {"status": "error", "message": str(e)}
 
 def push_via_ssh(host: str, username: str, password: str, config_text: str,
                  port: int = 22) -> dict:
