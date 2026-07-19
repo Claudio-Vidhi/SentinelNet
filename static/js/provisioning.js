@@ -335,8 +335,12 @@ function provInitToggles() {
         });
         if (res) {
             const data = await res.json();
+            // 'method' (api|ssh) è valorizzato solo dal push FortiGate; 'api_error'
+            // spiega l'eventuale fallback da REST a SSH.
+            const method = data.method ? ` via ${data.method}` : '';
+            const apiErr = data.api_error ? `\n(REST API fallita: ${data.api_error})` : '';
             document.getElementById('provOutput').value =
-                `[${data.status}]\n${data.message || data.output || ''}`;
+                `[${data.status}${method}]${apiErr}\n${data.message || data.output || ''}`;
         }
     });
     document.getElementById('btnProvPushSerial').addEventListener('click', async () => {
@@ -548,7 +552,13 @@ async function testFgtToken() {
                 version = results.results.version || version;
             }
 
-            const msg = `Test OK (${source}): ${hostname} v${version}`;
+            let msg = `Test OK (${source}): ${hostname} v${version}`;
+            // Se il test è caduto sul fallback SSH, spiega perché la REST API è fallita.
+            if (source === 'ssh' && data.api_error) {
+                msg += currentLang==='en'
+                    ? ` — REST API failed: ${data.api_error}`
+                    : ` — REST API fallita: ${data.api_error}`;
+            }
             showToast(msg, 'success');
             statusDiv.textContent = msg;
             statusDiv.style.color = 'var(--success)';

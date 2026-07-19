@@ -45,6 +45,120 @@ def get_default_model(provider: str) -> str:
     return DEFAULT_MODELS.get((provider or "").strip().lower(), "")
 
 
+# --- Budget di contesto (fix 429 RESOURCE_EXHAUSTED) ------------------------
+# Limite in CARATTERI del contesto totale allegato a una richiesta AI
+# (stima grossolana: 4 caratteri ~ 1 token). Default per-modello prudenti:
+# i modelli free-tier (gemma: 16k token/min) richiedono budget molto piccoli,
+# i flash/pro reggono contesti ampi. Override per-profilo via
+# ``context_budget_chars`` (0 = automatico).
+_TRUNC_MARKER = "\n... [contesto troncato] ...\n"
+
+
+def context_char_budget(provider, model, override=0):
+    """Budget di contesto in caratteri per il modello indicato.
+
+    ``override`` > 0 (dal profilo AI) vince sempre; altrimenti si applica un
+    default prudente in base al nome del modello."""
+    try:
+        override = int(override or 0)
+    except (TypeError, ValueError):
+        override = 0
+    if override > 0:
+        return override
+    name = (model or get_default_model(provider) or "").strip().lower()
+    if "gemma" in name:
+        return 24_000       # free tier: ~16k token/min -> ~6k token per richiesta
+    if any(t in name for t in ("-lite", "-mini", "haiku", "nano")):  # NB: non "mini" nudo ("gemini")
+        return 100_000
+    if (provider or "").strip().lower() == "ollama":
+        return 48_000       # LLM locali: finestre tipicamente piccole
+    return 200_000          # flash/pro/sonnet/gpt-4o: ~50k token di contesto
+
+
+def _question_keywords(question):
+    """Parole significative (>3 caratteri, minuscole) della domanda utente."""
+    import re
+    return {w for w in re.findall(r"[\w.-]{3,}", (question or "").lower())}
+
+
+def _truncate_head_tail(text, limit):
+    """Tronca ``text`` a ~``limit`` caratteri tenendo testa e coda, con
+    marcatore esplicito nel punto di taglio."""
+    if len(text) <= limit:
+        return text
+    keep = max(0, limit - len(_TRUNC_MARKER))
+    head = int(keep * 0.7)
+    tail = keep - head
+    return text[:head] + _TRUNC_MARKER + (text[-tail:] if tail else "")
+
+
+def _filter_relevant_sections(text, keywords, limit):
+    """Riduce un blocco di configurazione al budget tenendo le SEZIONI più
+    pertinenti alla domanda (paragrafi separati da riga vuota o blocchi
+    ``config``/``interface``...). Se nessuna sezione è pertinente si ripiega
+    sul troncamento testa+coda."""
+    import re
+    if not keywords or len(text) <= limit:
+        return _truncate_head_tail(text, limit)
+    # Split in sezioni: righe di inizio blocco config tipiche (FortiOS/IOS)
+    # o paragrafi separati da righe vuote.
+    parts = re.split(r"\n(?=config |interface |router |vlan |policy|!\n)", text)
+    if len(parts) < 2:
+        parts = re.split(r"\n\s*\n", text)
+    scored = []
+    for idx, p in enumerate(parts):
+        low = p.lower()
+        score = sum(1 for k in keywords if k in low)
+        scored.append((score, idx, p))
+    # Quota equa tra le sezioni pertinenti: una singola sezione enorme non
+    # deve esaurire il budget escludendo le altre sezioni con match.
+    positives = [t for t in scored if t[0] > 0]
+    share = max(500, limit // max(1, len(positives))) if positives else limit
+    kept = {}
+    used = 0
+    for score, idx, p in sorted(scored, key=lambda t: (-t[0], t[1])):
+        if score <= 0 and kept:
+            break
+        cap = min(share, max(0, limit - used))
+        take = p if len(p) <= cap else _truncate_head_tail(p, cap)
+        if not take:
+            continue
+        kept[idx] = take
+        used += len(take) + 1
+        if used >= limit:
+            break
+    if not kept:
+        return _truncate_head_tail(text, limit)
+    out = "\n".join(kept[i] for i in sorted(kept))
+    if len(out) < len(text):
+        out += _TRUNC_MARKER
+    return out[:limit + len(_TRUNC_MARKER)]
+
+
+def fit_context(blocks, budget, question=""):
+    """Adatta la lista di blocchi di contesto al budget di caratteri.
+
+    Se il totale eccede il budget, ogni blocco viene ridotto in proporzione
+    alla sua dimensione: i blocchi grandi vengono prima filtrati per sezioni
+    pertinenti alla domanda, poi troncati testa+coda con marcatore."""
+    blocks = [b for b in (blocks or []) if b]
+    if budget is None or budget <= 0:
+        return blocks
+    total = sum(len(b) for b in blocks)
+    if total <= budget:
+        return blocks
+    keywords = _question_keywords(question)
+    fitted = []
+    for b in blocks:
+        # Quota proporzionale, con un minimo per non azzerare i blocchi piccoli.
+        share = max(400, int(budget * (len(b) / total)))
+        if len(b) <= share:
+            fitted.append(b)
+        else:
+            fitted.append(_filter_relevant_sections(b, keywords, share))
+    return fitted
+
+
 class AiAssistantError(Exception):
     """Errore di alto livello per problemi di configurazione o di rete verso il provider."""
     pass
@@ -170,6 +284,22 @@ def build_tenant_context(tenant: str, *, devices=None, group_info=None, site=Non
     return "\n".join(lines)
 
 
+def _raise_provider_http_error(provider_label, resp):
+    """Traduce un errore HTTP del provider in un'eccezione leggibile.
+
+    Un 429 (quota/rate limit lato provider, es. Gemini RESOURCE_EXHAUSTED sui
+    token in ingresso) diventa un ``RateLimitExceededError`` con messaggio
+    localizzato invece del JSON grezzo del provider."""
+    if resp.status_code == 429:
+        raise RateLimitExceededError(
+            f"Quota del provider {provider_label} superata (HTTP 429): limite di "
+            "richieste o di token/minuto raggiunto. Riduci il contesto allegato "
+            "(meno dispositivi/config, o abbassa il budget contesto nel profilo AI) "
+            "oppure riprova tra qualche minuto."
+        )
+    raise AiAssistantError(f"{provider_label} API error {resp.status_code}: {resp.text[:500]}")
+
+
 def _split_system(messages):
     """Separa gli eventuali messaggi 'system' (concatenati) dal resto della conversazione."""
     system_parts = [m["content"] for m in messages if m.get("role") == "system"]
@@ -199,7 +329,7 @@ def _chat_anthropic(messages, model, api_key, timeout):
         timeout=timeout,
     )
     if resp.status_code >= 400:
-        raise AiAssistantError(f"Anthropic API error {resp.status_code}: {resp.text[:500]}")
+        _raise_provider_http_error("Anthropic", resp)
     data = resp.json()
     parts = data.get("content") or []
     text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
@@ -221,7 +351,7 @@ def _chat_openai(messages, model, api_key, timeout, base_url=None):
         timeout=timeout,
     )
     if resp.status_code >= 400:
-        raise AiAssistantError(f"OpenAI API error {resp.status_code}: {resp.text[:500]}")
+        _raise_provider_http_error("OpenAI", resp)
     data = resp.json()
     choices = data.get("choices") or []
     if not choices:
@@ -263,7 +393,7 @@ def _chat_gemini(messages, model, api_key, timeout):
         payload["systemInstruction"] = {"parts": [{"text": system}]}
     resp = requests.post(url, json=payload, timeout=timeout)
     if resp.status_code >= 400:
-        raise AiAssistantError(f"Gemini API error {resp.status_code}: {resp.text[:500]}")
+        _raise_provider_http_error("Gemini", resp)
     data = resp.json()
     candidates = data.get("candidates") or []
     if not candidates:

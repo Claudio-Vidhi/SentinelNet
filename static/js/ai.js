@@ -72,6 +72,88 @@
         if (document.body.classList.contains('role-admin')) {
             loadAiProfiles();
         }
+        populateGenCfgTenants();
+    }
+
+    // ===== Generazione config nuovo switch (AI) =====
+    function populateGenCfgTenants() {
+        const sel = document.getElementById('genCfgTenant');
+        if (!sel) return;
+        const cur = sel.value;
+        sel.innerHTML = Object.keys(globalGroups || {}).map(g =>
+            `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
+        ).join('');
+        if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+        populateGenCfgTemplates();
+    }
+
+    function populateGenCfgTemplates() {
+        const sel = document.getElementById('genCfgTemplate');
+        if (!sel) return;
+        const tenant = document.getElementById('genCfgTenant')?.value || '';
+        const cur = sel.value;
+        const devices = (globalDevices || []).filter(d => (d.Group || 'Generale') === tenant);
+        sel.innerHTML = `<option value="">${i18n[currentLang].optGenCfgNoTemplate || '-- usa parametri comuni del tenant --'}</option>` +
+            devices.map(d =>
+                `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</option>`
+            ).join('');
+        if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+    }
+
+    async function generateSwitchConfig() {
+        const L = i18n[currentLang];
+        const statusEl = document.getElementById('genCfgStatus');
+        const btn = document.getElementById('btnGenCfg');
+        const tenant = document.getElementById('genCfgTenant')?.value || '';
+        const hostname = (document.getElementById('genCfgHostname')?.value || '').trim();
+        if (!tenant) { if (statusEl) statusEl.textContent = L.errGenCfgTenantRequired || 'Seleziona una sede/tenant.'; return; }
+        if (!hostname) { if (statusEl) statusEl.textContent = L.errGenCfgHostnameRequired || "Inserisci l'hostname del nuovo switch."; return; }
+        const body = {
+            tenant,
+            hostname,
+            mgmt_ip: (document.getElementById('genCfgMgmtIp')?.value || '').trim(),
+            template_ip: document.getElementById('genCfgTemplate')?.value || null,
+            notes: (document.getElementById('genCfgNotes')?.value || '').trim(),
+        };
+        if (btn) btn.disabled = true;
+        if (statusEl) statusEl.textContent = L.msgGenCfgWorking || 'Generazione in corso…';
+        try {
+            const res = await apiFetch('/api/ai/generate-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (res && res.ok) {
+                const data = await res.json();
+                const out = document.getElementById('genCfgOutput');
+                const box = document.getElementById('genCfgResult');
+                if (out) out.textContent = data.reply || '';
+                if (box) box.style.display = '';
+                if (statusEl) statusEl.textContent = [data.profile_name, data.model].filter(Boolean).join(' · ');
+            } else if (res && res.status === 429) {
+                const err = await res.json().catch(() => ({}));
+                if (statusEl) statusEl.textContent = '⏳ ' + (err.detail || L.errAiRateLimited || 'Quota AI superata, riprova più tardi.');
+            } else {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || res?.status || 'richiesta fallita.');
+            }
+        } catch (e) {
+            if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Network error: ' : 'Errore di rete: ') + e;
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    async function copyGenCfgOutput() {
+        const out = document.getElementById('genCfgOutput');
+        const statusEl = document.getElementById('genCfgStatus');
+        if (!out || !out.textContent) return;
+        try {
+            await navigator.clipboard.writeText(out.textContent);
+            if (statusEl) statusEl.textContent = i18n[currentLang].msgGenCfgCopied || 'Configurazione copiata negli appunti.';
+        } catch (e) {
+            if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Copy failed: ' : 'Copia fallita: ') + e;
+        }
     }
 
     // Ricarica la lista dei profili AI dal server e ripopola sia la select
@@ -147,6 +229,7 @@
             document.getElementById('aiModel').value = '';
             document.getElementById('aiBaseUrl').value = '';
             document.getElementById('aiRateLimitRpm').value = 0;
+            document.getElementById('aiContextBudget').value = 0;
             document.getElementById('aiAllowUnredacted').checked = false;
             apiKeyInput.value = '';
             apiKeyInput.placeholder = i18n[currentLang].phAiApiKeyEmpty || 'Inserisci una API key';
@@ -159,6 +242,7 @@
             document.getElementById('aiModel').value = p.model || '';
             document.getElementById('aiBaseUrl').value = p.base_url || '';
             document.getElementById('aiRateLimitRpm').value = p.rate_limit_rpm || 0;
+            document.getElementById('aiContextBudget').value = p.context_budget_chars || 0;
             document.getElementById('aiAllowUnredacted').checked = !!p.allow_unredacted;
             apiKeyInput.value = '';
             apiKeyInput.placeholder = p.api_key_set
@@ -238,6 +322,7 @@
             model: document.getElementById('aiModel').value.trim(),
             base_url: document.getElementById('aiBaseUrl').value.trim(),
             rate_limit_rpm: parseInt(document.getElementById('aiRateLimitRpm').value, 10) || 0,
+            context_budget_chars: parseInt(document.getElementById('aiContextBudget').value, 10) || 0,
             allow_unredacted: document.getElementById('aiAllowUnredacted').checked,
         };
         const key = document.getElementById('aiApiKey').value;

@@ -1393,6 +1393,10 @@
               <label data-i18n="lblAiRateLimit">Limite richieste/min</label>
               <input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" style="padding-left:12px;">
             </div>
+            <div class="form-group" style="min-width:170px;">
+              <label data-i18n="lblAiContextBudget">Budget contesto (caratteri)</label>
+              <input id="aiContextBudget" type="number" min="0" step="1000" placeholder="0 = auto per modello" style="padding-left:12px;">
+            </div>
             <div class="form-group" style="min-width:260px;">
               <label style="font-size:13px; display:flex; align-items:center; gap:6px; margin-top:22px;">
                 <input type="checkbox" id="aiAllowUnredacted">
@@ -1440,6 +1444,50 @@
           <button class="btn btn-secondary btn-small" style="width:auto; margin:0 0 0 auto;" onclick="clearAiChat()" data-i18n="btnAiClear">
             <i class="fa-solid fa-trash"></i> Nuova conversazione
           </button>
+        </div>
+      </div>
+
+      <!-- Panel: generazione config per un NUOVO switch (template o parametri comuni tenant) -->
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleAiGenConfig">Genera configurazione nuovo switch</h3>
+        <p style="margin:0 0 10px; color:var(--text-muted); font-size:13px;" data-i18n="descAiGenConfig">
+          Genera con l'AI una proposta di configurazione per un nuovo switch: da un dispositivo template oppure dai parametri comuni dell'ambiente del tenant (VLAN, VTP, NTP, syslog, AAA...).
+        </p>
+        <div class="filterbar" style="margin-top:0; align-items:flex-end; flex-wrap:wrap; gap:10px;">
+          <div class="form-group" style="min-width:170px; margin:0;">
+            <label data-i18n="lblGenCfgTenant">Sede/Tenant</label>
+            <select id="genCfgTenant" onchange="populateGenCfgTemplates()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
+          </div>
+          <div class="form-group" style="min-width:220px; margin:0;">
+            <label data-i18n="lblGenCfgTemplate">Switch template (opzionale)</label>
+            <select id="genCfgTemplate" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optGenCfgNoTemplate">-- usa parametri comuni del tenant --</option>
+            </select>
+          </div>
+          <div class="form-group" style="min-width:150px; margin:0;">
+            <label data-i18n="lblGenCfgHostname">Hostname</label>
+            <input id="genCfgHostname" type="text" placeholder="es. SW-ACC-05" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="min-width:150px; margin:0;">
+            <label data-i18n="lblGenCfgMgmtIp">IP di management</label>
+            <input id="genCfgMgmtIp" type="text" placeholder="es. 10.0.10.25" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="min-width:200px; flex:1; margin:0;">
+            <label data-i18n="lblGenCfgNotes">Note (opzionale)</label>
+            <input id="genCfgNotes" type="text" placeholder="" style="padding-left:12px;">
+          </div>
+          <button class="btn btn-primary" id="btnGenCfg" style="width:auto; margin:0;" onclick="generateSwitchConfig()" data-i18n="btnGenCfgGenerate">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Genera
+          </button>
+        </div>
+        <div id="genCfgStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+        <div id="genCfgResult" style="display:none; margin-top:10px;">
+          <div style="display:flex; justify-content:flex-end; margin-bottom:6px;">
+            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="copyGenCfgOutput()" data-i18n="btnGenCfgCopy">
+              <i class="fa-solid fa-copy"></i> Copia
+            </button>
+          </div>
+          <pre id="genCfgOutput" style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px; max-height:420px; overflow:auto; font-size:12px; white-space:pre-wrap; margin:0;"></pre>
         </div>
       </div>
 

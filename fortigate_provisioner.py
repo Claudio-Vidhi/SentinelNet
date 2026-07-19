@@ -8,6 +8,7 @@ Come switch_provisioner: ``build_config`` e' una funzione pura che assembla la
 config come testo FortiOS a partire da un dict di parametri.
 """
 
+import json
 import time
 
 
@@ -345,8 +346,28 @@ def build_config(cfg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CONSEGNA: SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
+# CONSEGNA: REST API (token), SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
 # ---------------------------------------------------------------------------
+
+def push_via_api(ip: str, config_text: str, filename: str = "sentinelnet-day0") -> dict:
+    """Applica la config FortiOS via REST API usando il token salvato
+    (fortigate_service): POST /api/v2/monitor/system/config-script/upload
+    esegue lo stesso script CLI generato da build_config. Riusa il client
+    REST dell'osservabilità (stesso pattern REST-primary/SSH-fallback)."""
+    import base64
+    import fortigate_service
+
+    body = {"filename": filename,
+            "file_content": base64.b64encode(config_text.encode("utf-8")).decode("ascii")}
+    try:
+        data = fortigate_service.api_post(
+            ip, "monitor/system/config-script/upload", json_body=body)
+        status = (data or {}).get("status", "success")
+        if status != "success":
+            return {"status": "error", "message": f"config-script upload: {data}"}
+        return {"status": "success", "output": json.dumps(data, indent=1)}
+    except fortigate_service.FortiGateError as e:
+        return {"status": "error", "message": str(e)}
 
 def push_via_ssh(host: str, username: str, password: str, config_text: str,
                  port: int = 22) -> dict:

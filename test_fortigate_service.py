@@ -61,7 +61,7 @@ class ApiOrSshTest(unittest.TestCase):
     def test_api_primary(self):
         fgs.set_api_token(DEVICE["IP"], "tok")
         payload = {"results": [{"ip": "10.0.0.5", "mac": "aa:bb:cc:dd:ee:ff"}]}
-        with mock.patch.object(fgs.requests, "get", return_value=_resp(200, payload)):
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)):
             out = fgs.get_arp_table(DEVICE)
         self.assertEqual(out["source"], "api")
         self.assertEqual(out["data"][0]["ip"], "10.0.0.5")
@@ -85,7 +85,7 @@ class ApiOrSshTest(unittest.TestCase):
     def test_policy_lookup_api_only(self):
         fgs.set_api_token(DEVICE["IP"], "tok")
         payload = {"results": {"policy_id": 7, "success": True}}
-        with mock.patch.object(fgs.requests, "get", return_value=_resp(200, payload)) as m:
+        with mock.patch.object(fgs.requests, "request", return_value=_resp(200, payload)) as m:
             out = fgs.policy_lookup(DEVICE, "10.0.0.5", "example.com", dest_port=443)
         self.assertEqual(out["data"]["policy_id"], 7)
         params = m.call_args.kwargs["params"]
