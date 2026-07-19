@@ -53,21 +53,30 @@ def _save_tokens(tokens: dict):
             json.dump(tokens, f, indent=1)
 
 
-def set_api_token(ip: str, token: str, port: int = 443, verify_tls: bool = False):
-    """Salva (cifrato) il token API di un FortiGate. Token vuoto = rimozione."""
+def set_api_token(ip: str, token: str, port: int = 443, verify_tls: bool = False,
+                  name: str = ""):
+    """Salva (cifrato) il token API di un FortiGate. Token vuoto = rimozione
+    (e, se era il target attivo, azzera anche `_active`)."""
     tokens = _load_tokens()
     if token:
-        tokens[ip] = {"token_enc": encrypt_password(token),
-                      "port": int(port or 443), "verify_tls": bool(verify_tls)}
+        entry = {"token_enc": encrypt_password(token),
+                 "port": int(port or 443), "verify_tls": bool(verify_tls)}
+        if name:
+            entry["name"] = name
+        elif isinstance(tokens.get(ip), dict) and tokens[ip].get("name"):
+            entry["name"] = tokens[ip]["name"]  # preserva il nome se non passato
+        tokens[ip] = entry
     else:
         tokens.pop(ip, None)
+        if tokens.get("_active") == ip:
+            tokens.pop("_active", None)
     _save_tokens(tokens)
 
 
 def get_api_config(ip: str):
     """Ritorna (token, port, verify_tls) oppure (None, ...) se non configurato."""
     entry = _load_tokens().get(ip)
-    if not entry:
+    if not entry or ip == "_active":
         return None, 443, False
     return (decrypt_password(entry.get("token_enc", "")) or None,
             int(entry.get("port") or 443), bool(entry.get("verify_tls")))
@@ -76,7 +85,68 @@ def get_api_config(ip: str):
 def token_status() -> dict:
     """Elenco IP con token configurato (senza esporre i token)."""
     return {ip: {"port": e.get("port", 443), "verify_tls": e.get("verify_tls", False)}
-            for ip, e in _load_tokens().items()}
+            for ip, e in _load_tokens().items() if ip != "_active"}
+
+
+# --- Multi-target: nome, target attivo, elenco, test connessione ------------
+
+def set_target_name(ip: str, name: str) -> None:
+    """Rinomina un target FortiGate già configurato (nessun effetto se
+    l'IP non ha un token salvato)."""
+    tokens = _load_tokens()
+    entry = tokens.get(ip)
+    if not isinstance(entry, dict) or ip == "_active":
+        return
+    entry["name"] = name or ""
+    _save_tokens(tokens)
+
+
+def list_targets() -> list:
+    """Elenco dei target FortiGate configurati (mai i token), con flag
+    'active' per il target correntemente selezionato."""
+    tokens = _load_tokens()
+    active = tokens.get("_active")
+    out = []
+    for ip, e in tokens.items():
+        if ip == "_active" or not isinstance(e, dict):
+            continue
+        out.append({
+            "ip": ip,
+            "name": e.get("name", ""),
+            "port": int(e.get("port") or 443),
+            "verify_tls": bool(e.get("verify_tls")),
+            "active": ip == active,
+        })
+    return out
+
+
+def set_active_target(ip: str) -> None:
+    """Imposta il target FortiGate attivo (persistito in `_active`)."""
+    tokens = _load_tokens()
+    tokens["_active"] = ip
+    _save_tokens(tokens)
+
+
+def get_active_target():
+    """IP del target FortiGate attivo, o None se non impostato."""
+    active = _load_tokens().get("_active")
+    return active if isinstance(active, str) and active else None
+
+
+def test_connection(ip: str) -> dict:
+    """Verifica la raggiungibilità del target chiamando
+    /api/v2/monitor/system/status con timeout breve. Non solleva mai."""
+    try:
+        data = api_get(ip, "monitor/system/status", timeout=5)
+        results = data.get("results") if isinstance(data, dict) else None
+        version = None
+        if isinstance(results, dict):
+            version = results.get("version")
+        if not version and isinstance(data, dict):
+            version = data.get("version")
+        return {"ok": True, "version": str(version).lstrip("v") if version else None}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # --- Trasporto REST ----------------------------------------------------------
