@@ -24,11 +24,12 @@ class FgtTokenSchema(BaseModel):
     ip: str
     token: str = ""                # vuoto = rimuove il token
     port: int = 443
-    # Verifica TLS del certificato del FortiGate: default SICURO (True). Il
-    # token API è una credenziale a lunga vita: senza verifica un MITM sul path
-    # di management potrebbe intercettarlo. Disabilitabile esplicitamente solo
-    # per apparati con certificato self-signed non ancora fidato.
-    verify_tls: bool = True
+    # Verifica TLS del certificato del FortiGate: default False, perché i
+    # FortiGate usano quasi sempre un certificato self-signed appena messi in
+    # produzione (con default True la connessione di test fallirebbe sempre
+    # con SSLCertVerificationError). Abilitare esplicitamente solo se sul
+    # FortiGate è installato un certificato attendibile.
+    verify_tls: bool = False
 
 class FgtPolicyLookupSchema(BaseModel):
     src_ip: str
@@ -119,6 +120,21 @@ def fgt_policies(ip: str, current_user = Depends(get_current_user)):
 @router.get("/api/fortigate/{ip}/policy-stats")
 def fgt_policy_stats(ip: str, current_user = Depends(get_current_user)):
     return _fgt_call(fortigate_service.get_policy_stats, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/addresses")
+def fgt_firewall_addresses(ip: str, current_user = Depends(get_current_user)):
+    """Oggetti indirizzo firewall (address book), sola lettura."""
+    return _fgt_call(fortigate_service.get_firewall_addresses, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/policy-objects")
+def fgt_firewall_policy_objects(ip: str, current_user = Depends(get_current_user)):
+    """Policy firewall (cmdb) con soli campi rilevanti per l'osservabilità."""
+    return _fgt_call(fortigate_service.get_firewall_policy_objects, _fgt_device(ip, current_user))
+
+@router.get("/api/fortigate/{ip}/firewall/services")
+def fgt_firewall_services(ip: str, current_user = Depends(get_current_user)):
+    """Servizi custom (firewall.service/custom), sola lettura."""
+    return _fgt_call(fortigate_service.get_firewall_custom_services, _fgt_device(ip, current_user))
 
 @router.post("/api/fortigate/{ip}/policy-lookup")
 def fgt_policy_lookup(ip: str, payload: FgtPolicyLookupSchema,

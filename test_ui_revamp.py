@@ -618,15 +618,18 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         self.assertIn('requires-write', html[details_tag:adhoc_idx])
 
     def test_preserve_ids_clientmap_arp_multiselect(self):
-        html = _html()
+        # Tenant filter for the Client Map search is itself a multi-select
+        # (arpTenantList / arpTenantSummary, checkbox-driven via onArpTenantToggle
+        # in static/js/client-map.js), not the single arpFilterTenant <select> --
+        # same pattern as the MAC-tracker device multiselect.
+        html = frontend_source()
         for _id in ('arpScanGroup', 'arpDeviceMenu', 'arpDeviceSummary', 'arpDeviceList',
-                    'btnArpScan', 'arpSearchMac', 'arpSearchIp', 'arpFilterTenant',
-                    'arpFilterGateway', 'arpStats', 'arpScanSummary', 'arpResults',
-                    'kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'):
+                    'btnArpScan', 'arpSearchMac', 'arpSearchIp', 'arpTenantList',
+                    'arpTenantSummary', 'arpFilterGateway', 'arpStats', 'arpScanSummary',
+                    'arpResults', 'kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'):
             self.assertIn(f'id="{_id}"', html)
         for hook in ('runArpScan()', 'arpClientSearch()', 'arpSearchReset()',
-                     'populateArpScanDevices()',
-                     'populateArpGatewayFilter(); arpClientSearch();'):
+                     'populateArpScanDevices()', 'onArpTenantToggle(this)'):
             self.assertIn(hook, html)
         # RBAC: the scan action stays write-gated
         self.assertIn('id="btnArpScan"', html)
@@ -734,7 +737,10 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
             self.assertIn(f'data-view="{view}"', html)
 
     def test_endpoint_contract_present(self):
-        html = _html()
+        # These endpoint calls now live in static/js/config-analyzer.js (extracted
+        # out of dashboard.html) -- use the combined frontend source, not the bare
+        # rendered template, so the check still exercises the real wiring.
+        html = frontend_source()
         # fetchConfigAnalyzer() -> apiFetch('/api/config-analyzer?group='+...)
         self.assertIn('/api/config-analyzer', html)
         self.assertIn("apiFetch('/api/config-analyzer?group=", html)
@@ -745,12 +751,10 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
         self.assertIn('/api/download-backup/', html)
         self.assertIn('apiFetch(`/api/download-backup/${ip}`)', html)
         # GET /api/config-analyzer/{ip} (per-device) is a real server route
-        # (config_analyzer_device) but has NO frontend caller in dashboard.html
-        # -- traced: the only frontend call is the group-scoped
-        # /api/config-analyzer?group=... ; the per-device path is consumed by
-        # mcp_server.py instead. Per Task 6-11 precedent, relax to asserting the
-        # server-side handler exists rather than fabricating a UI wiring.
-        self.assertNotIn('/api/config-analyzer/', html)
+        # (config_analyzer_device); it IS called from static/js/core.js
+        # (showPortConfig -> apiFetch('/api/config-analyzer/' + switchIp)) for the
+        # port-config deep-link, in addition to being consumed by mcp_server.py.
+        self.assertIn("apiFetch('/api/config-analyzer/' + encodeURIComponent(switchIp))", html)
         import app_server as _app_server
         self.assertTrue(hasattr(routers.analyzer, 'config_analyzer_device'))
         self.assertTrue(hasattr(routers.analyzer, 'config_analyzer_all'))
@@ -1366,7 +1370,7 @@ class TestSitesTabRestyle(unittest.TestCase):
 class TestMcpTabRestyle(unittest.TestCase):
     """Task 18: #tab-mcp (MCP Server) restyle + wiring guard.
 
-    Two panels: a client-config snippet (copy-to-clipboard) and a per-tool
+    Three panels: a client-config snippet (copy-to-clipboard), a per-tool
     enable/disable list rendered by loadMcpTab() -> GET /api/mcp/settings,
     saved via saveMcpSettings() -> POST /api/mcp/settings. The brief also
     lists GET/POST /api/mcp/tool-config: traced app_server.py -- only a GET
@@ -1379,7 +1383,10 @@ class TestMcpTabRestyle(unittest.TestCase):
 
     def _tab(self, html):
         start = html.index('<div id="tab-mcp"')
-        end = html.index('<div id="tab-settings"')
+        # NOT '<div id="tab-settings"': the MCP client preview tab
+        # (#tab-mcp-client) sits between #tab-mcp and #tab-settings, so that
+        # boundary would leak its panels into this tab's slice.
+        end = html.index('<div id="tab-mcp-client"')
         return html[start:end]
 
     def test_preserve_ids(self):
@@ -1428,8 +1435,8 @@ class TestMcpTabRestyle(unittest.TestCase):
         for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
                     'class="panel"'):
             self.assertIn(cls, tab)
-        # client-config panel + tool-list panel
-        self.assertEqual(tab.count('class="panel"'), 2)
+        # client-config panel + tool-list panel + MCP Client preview-toggle panel
+        self.assertEqual(tab.count('class="panel"'), 3)
 
     def test_status_chip_classes_present_in_render_fn(self):
         # loadMcpTab() moved to static/js/settings.js.
@@ -1748,14 +1755,20 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         said to update the grouped results but not the row details.
 
         IT DOES NOT REPRODUCE -- the structure makes it impossible, and this
-        test pins that structure so a future refactor cannot reintroduce it:
+        test pins that structure so a future refactor cannot reintroduce it.
 
-          #arpFilterTenant onchange -> populateArpGatewayFilter(); arpClientSearch();
-          arpClientSearch()  -> ONE server-filtered GET /api/arp/client-map
-                             -> renderArpResults(d.results)
-          renderArpResults() -> derives BOTH the per-tenant grouping (byTenant)
-                                and the detail rows (rowHtml) from the SAME rows
-                                array, in the SAME `box.innerHTML =` write.
+        The tenant filter is now a checkbox multiselect (arpTenantList, same
+        pattern as the MAC-tracker device picker): toggling a tenant runs
+        onArpTenantToggle() -> populateArpGatewayFilter(); arpClientSearch();
+
+          arpClientSearch() -> for each selected tenant, ONE server-filtered GET
+                             /api/arp/client-map?...&tenant=<t>, collected into a
+                             single `byTenant` map keyed by tenant
+                             -> renderArpResults(tenants, byTenant)
+                             -> updateArpKpisFromResults(tenants, byTenant)
+          renderArpResults() -> derives BOTH the per-tenant table headers and the
+                                detail rows (rowHtml) from the SAME byTenant map,
+                                in the SAME `box.innerHTML =` write.
 
         There is exactly one Client Map results container (#arpResults) and no
         separate row-details element, so grouping and rows cannot diverge.
@@ -1765,21 +1778,29 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         makes the reported bug unrepresentable; it cannot prove the rendered
         DOM is correct. Runtime confirmation is the manual gate's job.
         """
-        html = _html()
-        # One filter-application path: the tenant filter reconciles the gateway
+        html = frontend_source()  # tenant multiselect logic lives in client-map.js
+        # One filter-application path: toggling a tenant reconciles the gateway
         # list and then re-runs the single search.
-        self.assertIn('onchange="populateArpGatewayFilter(); arpClientSearch();"', html)
-        # The tenant is applied SERVER-side, on the one fetch the renderer feeds on.
+        self.assertIn('onArpTenantToggle(this)', html)
+        toggle = html[html.index('function onArpTenantToggle(cb)'):
+                      html.index('function updateArpTenantSummary()')]
+        self.assertIn('populateArpGatewayFilter();', toggle)
+        self.assertIn('arpClientSearch();', toggle)
+        # The tenant is applied SERVER-side, once per selected tenant, into ONE
+        # byTenant map that both the renderer and the KPI calc consume.
         search = html[html.index('async function arpClientSearch()'):
                       html.index('function arpSearchReset()')]
-        self.assertIn("params.set('tenant', tenant)", search)
+        self.assertIn("params.set('tenant', t)", search)
         self.assertEqual(search.count("apiFetch('/api/arp/client-map?"), 1)
         self.assertEqual(search.count('renderArpResults('), 1)
-        # The renderer derives grouping AND rows from the same `rows` argument.
-        render = html[html.index('function renderArpResults(rows)'):
+        self.assertIn('renderArpResults(tenants, byTenant)', search)
+        self.assertIn('updateArpKpisFromResults(tenants, byTenant)', search)
+        # The renderer derives grouping (per-tenant sections) AND rows from the
+        # same `byTenant` argument.
+        render = html[html.index('function renderArpResults(tenants, byTenant)'):
                       html.index('function renderMacResults(rows)')]
-        self.assertIn('rows.forEach(r => {', render)      # byTenant grouping
-        self.assertIn('byTenant[t].map(rowHtml)', render)  # rows, same source
+        self.assertIn('tenants.map(t => {', render)          # per-tenant grouping
+        self.assertIn('const rows = byTenant[t] || [];', render)  # rows, same source
         self.assertIn("table(rows.map(rowHtml).join(''))", render)
         # Exactly one results sink; no second detail container to fall stale.
         self.assertEqual(html.count('id="arpResults"'), 1)
@@ -1859,9 +1880,14 @@ def _extract_object_keys(sub):
             i = sub.index("\n", i) if "\n" in sub[i:] else n
             continue
         m = re.match(r"[A-Za-z_$][A-Za-z0-9_$]*", sub[i:])
-        assert m, f"expected an object key at offset {i}: {sub[i:i+40]!r}"
-        key = m.group(0)
-        i += m.end()
+        qm = re.match(r'"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\'', sub[i:])
+        assert m or qm, f"expected an object key at offset {i}: {sub[i:i+40]!r}"
+        if m:
+            key = m.group(0)
+            i += m.end()
+        else:
+            key = qm.group(1) if qm.group(1) is not None else qm.group(2)
+            i += qm.end()
         while sub[i] in " \t\r\n":
             i += 1
         assert sub[i] == ":", f"expected ':' after key {key!r} at offset {i}"

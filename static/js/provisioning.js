@@ -236,6 +236,8 @@ function provInitToggles() {
         const fgt = provVendorIsFgt();
         document.getElementById('provCiscoSection').style.display = fgt ? 'none' : '';
         document.getElementById('provFgtSection').style.display = fgt ? '' : 'none';
+        const objSec = document.getElementById('provFgtObjectsSection');
+        if (objSec) objSec.style.display = fgt ? '' : 'none';
         // Campi login console: servono solo al push seriale FortiGate.
         document.getElementById('fgtConsoleUserGroup').style.display = fgt ? 'block' : 'none';
         document.getElementById('fgtConsolePassGroup').style.display = fgt ? 'block' : 'none';
@@ -480,7 +482,7 @@ async function saveFgtToken() {
             showToast(currentLang==='en' ? 'Token saved successfully (encrypted)' : 'Token salvato con successo (cifrato)', 'success');
             document.getElementById('fgtTokenValue').value = '';
             document.getElementById('fgtTokenPort').value = '443';
-            document.getElementById('fgtTokenVerifyTls').checked = true;
+            document.getElementById('fgtTokenVerifyTls').checked = false;
             document.getElementById('fgtTokenDevice').value = '';
             await loadFgtTokens();
         } else {
@@ -506,7 +508,7 @@ async function removeFgtToken() {
         const res = await apiFetch('/api/fortigate/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip, token: "", port: 443, verify_tls: true })
+            body: JSON.stringify({ ip, token: "", port: 443, verify_tls: false })
         });
 
         if (res && res.ok) {
@@ -582,6 +584,129 @@ async function testFgtToken() {
 function initFgtTokenPanel() {
     populateFgtDeviceSelect();
     loadFgtTokens();
+    populateFgtObjDeviceSelect();
+}
+
+// --- Oggetti Firewall FortiGate (live, sola lettura) ---
+// Riusa il token API configurato sopra (fgtTokensCache non serve qui: la
+// chiamata REST-primary/SSH-fallback è lato server) per interrogare
+// address book / policy / servizi custom del FortiGate selezionato.
+
+let fgtObjView = 'addresses';   // 'addresses' | 'policy-objects' | 'services'
+let fgtObjRows = [];            // righe grezze dell'ultima risposta caricata
+
+const FGT_OBJ_COLUMNS = {
+    'addresses': [
+        ['name', 'colFgtAddrName'], ['type', 'colFgtAddrType'],
+        ['subnet', 'colFgtAddrSubnet'], ['fqdn', 'colFgtAddrFqdn'],
+        ['comment', 'colFgtAddrComment'],
+    ],
+    'policy-objects': [
+        ['policyid', 'colFgtPolId'], ['name', 'colFgtPolName'],
+        ['srcintf', 'colFgtPolSrcIntf'], ['dstintf', 'colFgtPolDstIntf'],
+        ['srcaddr', 'colFgtPolSrcAddr'], ['dstaddr', 'colFgtPolDstAddr'],
+        ['service', 'colFgtPolService'], ['action', 'colFgtPolAction'],
+        ['status', 'colFgtPolStatus'], ['logtraffic', 'colFgtPolLog'],
+    ],
+    'services': [
+        ['name', 'colFgtSvcName'], ['tcp-portrange', 'colFgtSvcTcp'],
+        ['udp-portrange', 'colFgtSvcUdp'], ['comment', 'colFgtSvcComment'],
+    ],
+};
+const FGT_OBJ_ENDPOINT = {
+    'addresses': 'addresses', 'policy-objects': 'policy-objects', 'services': 'services',
+};
+
+function populateFgtObjDeviceSelect() {
+    const select = document.getElementById('fgtObjDevice');
+    if (!select) return;
+    const fgtDevices = (typeof globalDevices !== 'undefined' ? globalDevices : []).filter(dev =>
+        (dev.Vendor || '').toLowerCase() === 'fortinet'
+    );
+    const currentValue = select.value;
+    select.innerHTML = '<option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>' +
+        fgtDevices.map(dev =>
+            `<option value="${escapeHtml(dev.IP)}" title="${escapeHtml(dev.Hostname || dev.IP)}">${escapeHtml(dev.IP)} (${escapeHtml(dev.Hostname || 'unknown')})</option>`
+        ).join('');
+    if (currentValue) select.value = currentValue;
+}
+
+function switchFgtObjView(view) {
+    fgtObjView = view;
+    ['addresses', 'policy-objects', 'services'].forEach(v => {
+        const id = v === 'addresses' ? 'fgtObjTabAddresses' : v === 'policy-objects' ? 'fgtObjTabPolicies' : 'fgtObjTabServices';
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('active', v === view);
+    });
+    loadFgtObjects();
+}
+
+async function loadFgtObjects() {
+    const ip = document.getElementById('fgtObjDevice')?.value.trim();
+    if (!ip) {
+        showToast(currentLang==='en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning');
+        return;
+    }
+    try {
+        const res = await apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/firewall/${FGT_OBJ_ENDPOINT[fgtObjView]}`);
+        if (res && res.ok) {
+            const body = await res.json();
+            const data = body && body.data;
+            fgtObjRows = Array.isArray(data) ? data : (data ? [data] : []);
+        } else {
+            const err = res ? await res.json() : {};
+            showToast(`${currentLang==='en' ? 'Error: ' : 'Errore: '}${err.detail || (currentLang==='en' ? 'Load failed' : 'Caricamento fallito')}`, 'error');
+            fgtObjRows = [];
+        }
+    } catch(e) {
+        console.error('Errore loadFgtObjects:', e);
+        showToast(currentLang==='en' ? 'Network error' : 'Errore di rete', 'error');
+        fgtObjRows = [];
+    }
+    renderFgtObjTable();
+}
+
+function renderFgtObjTable() {
+    const table = document.getElementById('fgtObjTable');
+    const thead = document.getElementById('fgtObjTableHead');
+    const tbody = document.getElementById('fgtObjTableBody');
+    const emptyMsg = document.getElementById('fgtObjEmpty');
+    if (!table || !thead || !tbody) return;
+
+    const cols = FGT_OBJ_COLUMNS[fgtObjView] || [];
+    const filterVal = (document.getElementById('fgtObjFilter')?.value || '').trim().toLowerCase();
+    const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+    const rowText = row => cols.map(([key]) => {
+        const v = row ? row[key] : undefined;
+        return Array.isArray(v) ? v.map(x => (x && x.name) || x).join(' ') : (v == null ? '' : String(v));
+    }).join(' ').toLowerCase();
+
+    const rows = filterVal ? fgtObjRows.filter(r => rowText(r).includes(filterVal)) : fgtObjRows;
+
+    if (!rows.length) {
+        table.style.display = 'none';
+        emptyMsg.style.display = '';
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+        return;
+    }
+
+    table.style.display = '';
+    emptyMsg.style.display = 'none';
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    thead.innerHTML = '<tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">' +
+        cols.map(([, labelKey]) => `<th style="padding:8px 12px; text-align:left;">${escapeHtml(L[labelKey] || labelKey)}</th>`).join('') +
+        '</tr>';
+    tbody.innerHTML = rows.map(row => {
+        const tds = cols.map(([key]) => {
+            let v = row ? row[key] : undefined;
+            if (Array.isArray(v)) v = v.map(x => (x && x.name) || x).join(', ');
+            if (v === null || v === undefined || v === '') v = '—';
+            return `<td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(v))}</td>`;
+        }).join('');
+        return `<tr style="border-bottom:1px solid var(--border);">${tds}</tr>`;
+    }).join('');
 }
 
 // Popola le select del form di Provisioning Apparato (devVendor, scanVendorSelect,

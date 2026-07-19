@@ -780,7 +780,7 @@
       "type": "string"
      },
      "verify_tls": {
-      "default": true,
+      "default": false,
       "title": "Verify Tls",
       "type": "boolean"
      }
