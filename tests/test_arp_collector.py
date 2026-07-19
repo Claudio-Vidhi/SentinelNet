@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-import arp_collector as ac
+from collectors import arp_collector as ac
 
 CISCO_ARP = """\
 Protocol  Address          Age (min)  Hardware Addr   Type   Interface
@@ -52,7 +52,7 @@ class ParserTest(unittest.TestCase):
 
 class DbTest(unittest.TestCase):
     def setUp(self):
-        import mac_history
+        from collectors import mac_history
         self.mh = mac_history
         # ignore_cleanup_errors: su Windows il WAL di SQLite tiene un handle
         # aperto e la rimozione della tempdir fallirebbe.
@@ -112,7 +112,7 @@ class DbTest(unittest.TestCase):
             [{"mac": "aa:bb:cc:00:09:11", "ip": "192.168.31.111"},
              {"mac": "aa:bb:cc:00:09:12", "ip": "192.168.31.6"}],
             source_ip="192.168.31.1", source_type="switch")
-        with mock.patch("inventory_manager.get_category_assignments",
+        with mock.patch("services.inventory_manager.get_category_assignments",
                         return_value={"192.168.31.6": {"category": "switch"}}):
             rows = {r["ip"]: r for r in self.mh.client_map()}
         self.assertEqual(rows["192.168.31.111"]["client_type"], "client")
@@ -158,7 +158,7 @@ class DbTest(unittest.TestCase):
 
 class CollectTest(unittest.TestCase):
     def test_collect_all_mixed(self):
-        import mac_history
+        from collectors import mac_history
         devices = [
             {"IP": "10.0.0.1", "Vendor": "cisco", "Hostname": "core", "Group": "Generale"},
             {"IP": "10.0.0.2", "Vendor": "cisco", "Hostname": "acc", "Group": "Generale"},

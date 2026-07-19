@@ -15,7 +15,7 @@ os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app_server  # noqa: E402
-import user_manager  # noqa: E402
+from security import user_manager  # noqa: E402
 
 USER, PASS = "testadmin", "PasswordSicura1!"
 

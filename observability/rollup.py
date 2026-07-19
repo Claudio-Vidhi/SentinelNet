@@ -15,8 +15,8 @@ import asyncio
 import logging
 import time
 
-import data_config
-import db
+from core import data_config
+from core import db
 from observability import metrics
 
 logger = logging.getLogger("sentinelnet.obs")

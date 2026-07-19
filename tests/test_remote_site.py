@@ -28,7 +28,7 @@ os.environ.setdefault("SENTINELNET_JWT_SECRET", "test-secret-remote-site")
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app_server  # noqa: E402
-import mac_history  # noqa: E402
+from collectors import mac_history  # noqa: E402
 
 ADMIN = "admin"
 ADMIN_PW = "adminpw12345"          # >= MIN_PASSWORD_LENGTH
@@ -94,7 +94,7 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["updated"], 2)
         # I device compaiono nel centrale, taggati con la sede.
-        import inventory_manager
+        from services import inventory_manager
         devs = {d["IP"]: d for d in inventory_manager.get_all_devices()}
         self.assertIn("10.9.0.2", devs)
         self.assertEqual(devs["10.9.0.2"].get("Site"), sid)

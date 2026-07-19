@@ -24,8 +24,8 @@ import threading
 import requests
 import urllib3
 
-import data_config
-from crypto_vault import encrypt_password, decrypt_password
+from core import data_config
+from security.crypto_vault import encrypt_password, decrypt_password
 
 TOKENS_FILE = data_config.get_path("fortigate_tokens.json")
 
@@ -148,7 +148,7 @@ def api_get_cmdb(ip: str, path: str, fmt: str = None, flt: str = None,
 def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
     """Esegue un comando CLI FortiOS via Netmiko e ritorna l'output testuale."""
     from netmiko import ConnectHandler
-    from core_engine import get_device_credentials, get_device_port
+    from core.core_engine import get_device_credentials, get_device_port
     username, password, _secret = get_device_credentials(device)
     params = {"device_type": "fortinet", "host": device["IP"],
               "port": get_device_port(device),

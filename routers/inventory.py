@@ -9,8 +9,8 @@ from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-import inventory_manager
-from security_manager import log_audit
+from services import inventory_manager
+from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_operator, user_group_scope,
     assert_group_allowed, assert_device_allowed,

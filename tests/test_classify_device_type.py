@@ -9,7 +9,7 @@ evidence still classifies as "ap".
 """
 import unittest
 
-from core_engine import classify_device_type
+from core.core_engine import classify_device_type
 
 
 class TestClassifyDeviceType(unittest.TestCase):

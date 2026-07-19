@@ -5,7 +5,7 @@ chiamate HTTP (requests.post) mockate: nessuna rete reale coinvolta."""
 import unittest
 from unittest.mock import patch, MagicMock
 
-import ai_assistant
+from ai import ai_assistant
 
 
 def _fake_response(json_data, status_code=200):
@@ -23,7 +23,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
             {"role": "user", "content": "Ciao"},
         ]
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_anthropic(self, mock_post):
         mock_post.return_value = _fake_response(
             {"content": [{"type": "text", "text": "Ciao a te"}]}
@@ -36,7 +36,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         self.assertEqual(kwargs["headers"]["x-api-key"], "sk-ant-x")
         self.assertEqual(kwargs["json"]["system"], "Sei un assistente di rete.")
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_openai(self, mock_post):
         mock_post.return_value = _fake_response(
             {"choices": [{"message": {"content": "Ciao dall'AI"}}]}
@@ -48,7 +48,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         self.assertIn("api.openai.com", args[0])
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer sk-oa-x")
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_gemini(self, mock_post):
         mock_post.return_value = _fake_response(
             {"candidates": [{"content": {"parts": [{"text": "Ciao Gemini"}]}}]}
@@ -61,7 +61,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         self.assertIn("AIza-x", args[0])
         self.assertIn("/models/gemini-3-flash:generateContent", args[0])
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_gemini_default_model(self, mock_post):
         mock_post.return_value = _fake_response(
             {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
@@ -70,7 +70,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         args, _kwargs = mock_post.call_args
         self.assertIn("/models/gemini-3-flash:generateContent", args[0])
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_gemini_model_strips_models_prefix(self, mock_post):
         """Regressione: un nome modello già prefissato con 'models/' (come
         ritornato da ListModels, o incollato dall'utente) non deve produrre
@@ -90,7 +90,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         self.assertEqual(ai_assistant._normalize_gemini_model(None), "gemini-3-flash")
         self.assertEqual(ai_assistant._normalize_gemini_model(""), "gemini-3-flash")
 
-    @patch("ai_assistant.requests.get")
+    @patch("ai.ai_assistant.requests.get")
     def test_list_models_gemini(self, mock_get):
         mock_get.return_value = _fake_response({
             "models": [
@@ -108,7 +108,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         with self.assertRaises(ai_assistant.AiAssistantError):
             ai_assistant.list_models("does-not-exist", api_key=None)
 
-    @patch("ai_assistant.requests.get")
+    @patch("ai.ai_assistant.requests.get")
     def test_list_models_openai(self, mock_get):
         mock_get.return_value = _fake_response({
             "data": [
@@ -131,7 +131,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         with self.assertRaises(ai_assistant.AiAssistantError):
             ai_assistant.list_models("openai", api_key=None)
 
-    @patch("ai_assistant.requests.get")
+    @patch("ai.ai_assistant.requests.get")
     def test_list_models_anthropic(self, mock_get):
         mock_get.return_value = _fake_response({
             "data": [{"id": "claude-3-5-sonnet-latest"}, {"id": "claude-3-opus-latest"}]
@@ -142,7 +142,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         self.assertIn("api.anthropic.com/v1/models", args[0])
         self.assertEqual(kwargs["headers"]["x-api-key"], "sk-ant-x")
 
-    @patch("ai_assistant.requests.get")
+    @patch("ai.ai_assistant.requests.get")
     def test_list_models_ollama(self, mock_get):
         mock_get.return_value = _fake_response({
             "models": [{"name": "llama3"}, {"name": "mistral"}]
@@ -159,7 +159,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         self.assertEqual(ai_assistant.get_default_model("ollama"), "llama3")
         self.assertEqual(ai_assistant.get_default_model("nope"), "")
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_ollama(self, mock_post):
         mock_post.return_value = _fake_response(
             {"message": {"content": "Ciao locale"}}
@@ -179,7 +179,7 @@ class TestAiAssistantDispatch(unittest.TestCase):
         with self.assertRaises(ai_assistant.AiAssistantError):
             ai_assistant.chat(self._messages(), provider="anthropic", api_key=None)
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_http_error_raises_ai_error(self, mock_post):
         mock_post.return_value = _fake_response({"error": "bad"}, status_code=401)
         with self.assertRaises(ai_assistant.AiAssistantError):
@@ -210,7 +210,7 @@ class TestRateLimiter(unittest.TestCase):
         limiter.configure(5)
         self.assertTrue(limiter.allow()[0])
 
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_chat_raises_when_rate_limit_exceeded(self, mock_post):
         mock_post.return_value = _fake_response(
             {"message": {"content": "ok"}}

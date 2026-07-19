@@ -13,10 +13,10 @@ import unittest
 _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_db_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 
-import data_config  # noqa: E402
+from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
-import db  # noqa: E402
+from core import db  # noqa: E402
 
 
 class TestDb(unittest.TestCase):

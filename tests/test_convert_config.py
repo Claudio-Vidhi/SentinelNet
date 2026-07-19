@@ -4,7 +4,7 @@ solo vendor firewall: FortiOS <-> PAN-OS). Esecuzione: python test_convert_confi
 
 import unittest
 
-import config_analyzer
+from ai import config_analyzer
 
 FORTI_SAMPLE = """#config-version=FGT60F-7.0.5
 config system global

@@ -9,9 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-import data_config
-import inventory_manager
-from security_manager import log_audit
+from core import data_config
+from services import inventory_manager
+from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, assert_device_allowed, user_group_scope
 
 router = APIRouter(tags=["Backup"])

@@ -9,8 +9,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-import fortigate_service
-from security_manager import log_audit
+from services import fortigate_service
+from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_admin, require_operator, assert_device_allowed,
 )

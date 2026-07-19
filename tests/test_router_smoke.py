@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 import routers
 import app_server
-import user_manager
+from security import user_manager
 
 ROUTER_MODULES = [
     f"routers.{m.name}"

@@ -5,8 +5,8 @@ monolite. La logica resta in wlc_service.py."""
 
 from fastapi import APIRouter, Depends, HTTPException
 
-import wlc_service
-from security_manager import log_audit
+from services import wlc_service
+from security.security_manager import log_audit
 from routers.deps import get_current_user, assert_device_allowed
 
 router = APIRouter(tags=["Wireless"])

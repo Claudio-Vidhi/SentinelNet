@@ -17,12 +17,12 @@ os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-import data_config  # noqa: E402
+from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 import app_server  # noqa: E402
-import db  # noqa: E402
-import user_manager  # noqa: E402
+from core import db  # noqa: E402
+from security import user_manager  # noqa: E402
 from observability import correlator  # noqa: E402
 
 PASS = "PasswordSicura1!"
@@ -175,7 +175,7 @@ class TestCorrelator(_Base):
         sid = _seed_syslog(conn, "sede-a", self.FGT_MSG)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[
+        with patch("collectors.mac_history.client_map", return_value=[
                 {"switch_ip": "10.1.0.10", "switch_name": "SW-A1",
                  "switch_port": "Gi1/0/7"}]):
             emitted = correlator.correlate_once(NOW)
@@ -195,7 +195,7 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", self.FGT_MSG)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             correlator.correlate_once(NOW)
             correlator.correlate_once(NOW)
         self.assertEqual(len(self._rows()), 1)
@@ -206,7 +206,7 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=4)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             emitted = correlator.correlate_once(NOW)
         self.assertEqual(emitted, 0)
         self.assertEqual(len(self._rows()), 0)
@@ -219,7 +219,7 @@ class TestCorrelator(_Base):
                      action=None, severity=1)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             emitted = correlator.correlate_once(NOW)
         self.assertEqual(emitted, 1)
         rows = self._rows()
@@ -237,7 +237,7 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=2)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             emitted = correlator.correlate_once(NOW)
         self.assertEqual(emitted, 1)
         rows = self._rows()
@@ -249,7 +249,7 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", "kernel panic", action=None, severity=0)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             correlator.correlate_once(NOW)
             correlator.correlate_once(NOW)
         self.assertEqual(len(self._rows()), 1)
@@ -261,7 +261,7 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=4)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             emitted = correlator.correlate_once(NOW)
         self.assertEqual(emitted, 0)
 
@@ -271,7 +271,7 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", self.FGT_MSG)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             correlator.correlate_once(NOW)
         rows = self._rows()
         self.assertEqual(len(rows), 1)
@@ -284,7 +284,7 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=4)
         conn.commit()
         conn.close()
-        with patch("mac_history.client_map", return_value=[]):
+        with patch("collectors.mac_history.client_map", return_value=[]):
             emitted = correlator.correlate_once(NOW)
         self.assertEqual(emitted, 0)
 
@@ -364,7 +364,7 @@ class TestMcpDefaultOff(_Base):
         self.assertEqual(disabled, [])
 
     def test_obs_tools_registered(self):
-        import mcp_server
+        from ai import mcp_server
         self.assertIn("get_top_talkers", mcp_server.TOOLS)
         self.assertIn("get_anomalies", mcp_server.TOOLS)
 

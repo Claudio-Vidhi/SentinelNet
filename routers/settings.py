@@ -7,11 +7,11 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
-import core_engine
-from security_manager import log_audit
+from core.app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
+from core import core_engine
+from security.security_manager import log_audit
 from routers.deps import require_admin
-import data_config
+from core import data_config
 
 _APP_ADV_ENV = {
     "port": "SENTINELNET_PORT",

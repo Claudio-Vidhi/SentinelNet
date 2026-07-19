@@ -10,11 +10,11 @@ autenticazione. Limitazione nota: XML PAN-OS non supportato (v1).
 import os
 import unittest
 
-import config_analyzer as ca
+from ai import config_analyzer as ca
 from fw_analyzers import panos
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(_HERE, "tests_data", "panos_sample.conf"),
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+with open(os.path.join(_REPO_ROOT, "tests_data", "panos_sample.conf"),
           encoding="utf-8") as _fh:
     SAMPLE_CONFIG = _fh.read()
 

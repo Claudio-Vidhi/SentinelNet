@@ -5,9 +5,9 @@ non sensibili sopravvivono."""
 
 import unittest
 
-import fortigate_provisioner
-import switch_provisioner
-from provisioning_secrets import mask_secrets
+from services import fortigate_provisioner
+from services import switch_provisioner
+from security.provisioning_secrets import mask_secrets
 
 SWITCH_CFG = {
     "hostname": "SW-TEST-01",

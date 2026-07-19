@@ -4,8 +4,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
 import jwt
-import data_config
-import secure_key_store
+from core import data_config
+from security import secure_key_store
 
 JWT_KEY_FILE = data_config.get_path("jwt_secret.key")
 

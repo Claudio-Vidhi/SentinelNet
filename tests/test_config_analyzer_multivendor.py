@@ -3,7 +3,7 @@
 Eseguibile direttamente: python test_config_analyzer_multivendor.py"""
 import unittest
 
-import config_analyzer as ca
+from ai import config_analyzer as ca
 
 FORTIOS = '''#config-version=FGT60F-7.4.1-FW-build2463-230830:opmode=0:vdom=0
 config system global

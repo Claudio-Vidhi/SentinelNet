@@ -6,8 +6,8 @@ LLM (ai_assistant.chat) applichino la redazione."""
 import unittest
 from unittest.mock import patch, MagicMock
 
-import ai_assistant
-from redaction import redact, MASK
+from ai import ai_assistant
+from security.redaction import redact, MASK
 
 PEM_BLOCK = (
     "-----BEGIN RSA PRIVATE KEY-----\n"
@@ -97,7 +97,7 @@ class TestRedaction(unittest.TestCase):
 
 
 class TestChatChokePoint(unittest.TestCase):
-    @patch("ai_assistant.requests.post")
+    @patch("ai.ai_assistant.requests.post")
     def test_chat_redacts_before_send(self, mock_post):
         resp = MagicMock()
         resp.status_code = 200

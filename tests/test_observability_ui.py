@@ -18,14 +18,14 @@ os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-import data_config  # noqa: E402
+from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 import app_server  # noqa: E402
-import ai_assistant  # noqa: E402
-import db  # noqa: E402
-import user_manager  # noqa: E402
-from test_helpers_frontend import frontend_source  # noqa: E402
+from ai import ai_assistant  # noqa: E402
+from core import db  # noqa: E402
+from security import user_manager  # noqa: E402
+from tests.test_helpers_frontend import frontend_source  # noqa: E402
 
 PASS = "PasswordSicura1!"
 CSRF = {"X-Requested-With": "SentinelNet"}
@@ -119,7 +119,7 @@ class TestAnomalyTransitions(_Base):
         c = self._client("op_a")
         with patch("routers.observability.__builtins__", create=True):
             pass
-        with patch("security_manager.log_audit") as mock_audit:
+        with patch("security.security_manager.log_audit") as mock_audit:
             r = c.post(f"/api/observability/anomalies/{eid}/status", headers=CSRF,
                        json={"from_status": "new", "status": "ack"})
         self.assertEqual(r.status_code, 200)
@@ -145,7 +145,7 @@ class TestAiFlowContext(_Base):
                 "name": "test"}), \
              patch.object(app_server.crypto_vault, "decrypt_password",
                           return_value="k"), \
-             patch("ai_assistant.requests.post") as mock_post:
+             patch("ai.ai_assistant.requests.post") as mock_post:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"content": [{"type": "text", "text": "ok"}]}
@@ -240,7 +240,7 @@ class TestAiFlowKeys(_Base):
                 "name": "test"}), \
              patch.object(app_server.crypto_vault, "decrypt_password",
                           return_value="k"), \
-             patch("ai_assistant.requests.post") as mock_post:
+             patch("ai.ai_assistant.requests.post") as mock_post:
             resp = MagicMock()
             resp.status_code = 200
             resp.json.return_value = {"content": [{"type": "text", "text": "ok"}]}
@@ -307,7 +307,7 @@ class TestFrontendGates(_Base):
         # entirely before window.onload, defined back in dashboard.html);
         # slice within that file directly to keep the check scoped to the
         # flows module rather than the whole concatenated frontend source.
-        obs_js = open(os.path.join(os.path.dirname(__file__),
+        obs_js = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                     "static", "js", "observability.js"),
                        encoding="utf-8").read()
         block = obs_js[obs_js.index("FLUSSI LIVE"):]

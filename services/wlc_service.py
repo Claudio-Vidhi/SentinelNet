@@ -11,7 +11,7 @@ essere interpretato da un LLM (MCP / AI assistant).
 
 import re
 
-from core_engine import resolve_driver, get_device_credentials
+from core.core_engine import resolve_driver, get_device_credentials
 
 
 class WlcError(Exception):

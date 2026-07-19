@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-import core_engine
-import ai_assistant
+from core import core_engine
+from ai import ai_assistant
 
 
 class TestGetDevicePort(unittest.TestCase):
@@ -28,7 +28,7 @@ class TestGetDevicePort(unittest.TestCase):
 
 class TestInventorySshPortRoundTrip(unittest.TestCase):
     def test_round_trip_and_legacy_default(self):
-        import inventory_manager
+        from services import inventory_manager
         with tempfile.TemporaryDirectory() as td:
             csv_path = os.path.join(td, 'hosts.csv')
             with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
@@ -44,7 +44,7 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
                 self.assertEqual(dev['SSH Port'], '2222')
 
     def test_invalid_port_rejected(self):
-        import inventory_manager
+        from services import inventory_manager
         with self.assertRaises(ValueError):
             inventory_manager.add_or_update_device(
                 '10.9.9.8', 'cisco', 'custom', 'u', 'p', 's', 'Generale',

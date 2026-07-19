@@ -23,7 +23,7 @@ os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app_server  # noqa: E402
-import user_manager  # noqa: E402
+from security import user_manager  # noqa: E402
 
 PASS = "PasswordSicura1!"
 
@@ -129,7 +129,8 @@ class TestRbacScope(unittest.TestCase):
     def test_no_scalar_user_group_in_routers(self):
         # Gate permanente (CONTRIBUTING.md §4): mai `user.group`/`.get("group")`
         # scalare nei router.
-        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "routers")
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        root = os.path.join(repo_root, "routers")
         offenders = []
         for name in os.listdir(root):
             if not name.endswith(".py"):

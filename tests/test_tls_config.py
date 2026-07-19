@@ -8,8 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import data_config
-from data_config import resolve_tls_config, TlsConfigError
+from core import data_config
+from core.data_config import resolve_tls_config, TlsConfigError
 
 
 class TestTlsConfig(unittest.TestCase):

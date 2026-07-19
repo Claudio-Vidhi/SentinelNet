@@ -24,7 +24,7 @@ import secrets
 import sqlite3
 import threading
 
-import data_config
+from core import data_config
 
 SITES_JSON = data_config.get_path("sites.json")
 JOBS_DB = data_config.get_path("agent_jobs.db")

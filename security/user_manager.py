@@ -1,7 +1,7 @@
 import json
 import os
 import bcrypt
-import data_config
+from core import data_config
 
 USERS_JSON = data_config.get_path("users.json")
 

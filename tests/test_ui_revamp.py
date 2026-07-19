@@ -5,11 +5,11 @@ os.environ["SENTINELNET_DATA_DIR"] = _TMP
 import unittest
 from html.parser import HTMLParser  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-import data_config  # noqa: E402
+from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP
 import app_server  # noqa: E402
 import routers.inventory, routers.topology, routers.catalog, routers.mac, routers.analyzer, routers.backup, routers.sites, routers.mcp
-from test_helpers_frontend import frontend_source  # noqa: E402
+from tests.test_helpers_frontend import frontend_source  # noqa: E402
 
 
 def _html():
@@ -2089,8 +2089,8 @@ class TestTransportsCollapsible(unittest.TestCase):
         # .form-group, e.g. #aiAllowUnredacted) across the full row width.
         # CSS estratto in static/css/dashboard.css (Task 2): niente piu'
         # inline in dashboard.html, quindi si cerca nel file statico.
-        css_path = os.path.join(os.path.dirname(__file__), "static", "css",
-                                 "dashboard.css")
+        css_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "static", "css", "dashboard.css")
         css = open(css_path, encoding="utf-8").read()
         m = re.search(
             r'\.form-group\s+input([^,{]*),\s*\.form-group\s+select\s*\{([^}]*)\}',
@@ -2170,8 +2170,8 @@ class TestSidebarRail(unittest.TestCase):
         # CSS estratto in static/css/dashboard.css (Task 2): non piu' inline
         # in dashboard.html, quindi si legge direttamente il file statico.
         cls.html = _html()
-        css_path = os.path.join(os.path.dirname(__file__), "static", "css",
-                                 "dashboard.css")
+        css_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "static", "css", "dashboard.css")
         cls.css = open(css_path, encoding="utf-8").read()
         # The template is served with CRLF line endings, so whitespace is
         # normalised via \s+ (not a bare '\n' strip) before shape assertions;

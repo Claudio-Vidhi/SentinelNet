@@ -7,10 +7,10 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-import site_manager
-import inventory_manager
-import mac_history
-from security_manager import log_audit
+from services import site_manager
+from services import inventory_manager
+from collectors import mac_history
+from security.security_manager import log_audit
 
 router = APIRouter(tags=["Agent"])
 
