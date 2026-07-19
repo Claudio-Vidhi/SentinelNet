@@ -871,6 +871,14 @@
             if (!res || !res.ok) return;
             _fgData = await res.json();
             _fgSelectedNode = null;
+            // Disclosure: qualunque nodo/arco con VLAN non reale (fallback
+            // sintetico, nessun binding ARP noto per l'IP) attiva l'avviso
+            // in UI — mai spacciare un valore inventato per un tag 802.1Q reale.
+            if (_fgData.tenant) {
+                _fgData.tenant.vlan_disclosure =
+                    (_fgData.nodes || []).some(n => n.vlan_real === false) ||
+                    (_fgData.edges || []).some(e => e.vlan_real === false);
+            }
             renderFlowGraphKpis();
             renderFlowGraphTenant();
             renderFlowGraphProtocols();
@@ -902,23 +910,52 @@
         const t = d.tenant;
         const tt = t.top_talker;
         box.innerHTML = `
-            <div><b>${escapeHtml(L.lblNoTenant ? (currentLang === 'en' ? 'Tenant' : 'Tenant') : 'Tenant')}</b>: ${escapeHtml(t.name)}</div>
-            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}</div>
+            <div><b>${escapeHtml(L.thFlTenant || 'Tenant')}</b>: ${escapeHtml(t.name)}</div>
+            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}${t.vlan_disclosure ? ` <span title="${escapeHtml(L.hintVlanSynthetic || '')}" style="cursor:help; color:var(--text-muted);">*</span>` : ''}</div>
             <div><b>${escapeHtml(L.lblVisibleVlans || 'Visible VLANs')}</b>: ${(t.vlans || []).length}</div>
             <div><b>${escapeHtml(L.lblFlowsShown || 'Flows shown')}</b>: ${t.flows_shown}</div>
             <div><b>${escapeHtml(L.lblTopTalker || 'Top talker')}</b>: ${tt ? `${escapeHtml(tt.src)} → ${escapeHtml(tt.dst)} (${escapeHtml(fmtRate(tt.rate_bps))})` : '—'}</div>`;
     }
 
+    function _fgVisibleEdges() {
+        // Archi visibili nelle due tabelle: filtrati sul nodo selezionato
+        // (click sul grafo), altrimenti l'intera finestra.
+        let edges = (_fgData && _fgData.edges) || [];
+        if (_fgSelectedNode) {
+            edges = edges.filter(e => e.src === _fgSelectedNode || e.dst === _fgSelectedNode);
+        }
+        return edges;
+    }
+
+    function _fgVlanMark(realFlag) {
+        if (realFlag !== false) return '';
+        const L = i18n[currentLang];
+        return ` <span title="${escapeHtml(L.hintVlanSynthetic || '')}" style="cursor:help; color:var(--text-muted);">*</span>`;
+    }
+
     function renderFlowGraphProtocols() {
-        const d = _fgData;
         const tbody = document.getElementById('fgProtoTableBody');
         if (!tbody) return;
-        const protocols = (d && d.protocols) || [];
-        if (!protocols.length) {
+        // Non filtrato: intera finestra dei protocolli precalcolata dal backend.
+        // Filtrato (nodo selezionato): riaggregata client-side dagli archi
+        // visibili (il brief chiede di filtrare "le due tabelle" al click).
+        let rows;
+        if (_fgSelectedNode) {
+            const totals = {};
+            for (const e of _fgVisibleEdges()) {
+                const key = e.proto;
+                const t = totals[key] || (totals[key] = { proto: e.proto, port: null, rate_bps: 0 });
+                t.rate_bps += e.rate_bps || 0;
+            }
+            rows = Object.values(totals).sort((a, b) => b.rate_bps - a.rate_bps);
+        } else {
+            rows = (_fgData && _fgData.protocols) || [];
+        }
+        if (!rows.length) {
             tbody.innerHTML = `<tr><td colspan="3" style="padding:10px; text-align:center; color:var(--text-muted);">—</td></tr>`;
             return;
         }
-        tbody.innerHTML = protocols.map(p => `
+        tbody.innerHTML = rows.map(p => `
             <tr style="border-top:1px solid var(--border);">
                 <td style="padding:4px 6px;">${escapeHtml(String(p.proto).toUpperCase())}</td>
                 <td>${escapeHtml(p.port == null ? '—' : String(p.port))}</td>
@@ -927,13 +964,9 @@
     }
 
     function renderFlowGraphTalkers() {
-        const d = _fgData;
         const tbody = document.getElementById('fgTalkersTableBody');
         if (!tbody) return;
-        let edges = (d && d.edges) || [];
-        if (_fgSelectedNode) {
-            edges = edges.filter(e => e.src === _fgSelectedNode || e.dst === _fgSelectedNode);
-        }
+        const edges = _fgVisibleEdges();
         if (!edges.length) {
             const L = i18n[currentLang];
             tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);">${escapeHtml(L.msgNoFlowGraphData || 'No data.')}</td></tr>`;
@@ -943,7 +976,7 @@
             <tr style="border-top:1px solid var(--border);">
                 <td style="padding:6px 8px;">${escapeHtml(e.src)}</td>
                 <td>${escapeHtml(e.dst)}</td>
-                <td>${escapeHtml(String(e.vlan))}</td>
+                <td>${escapeHtml(String(e.vlan))}${_fgVlanMark(e.vlan_real)}</td>
                 <td>${escapeHtml(fmtRate(e.rate_bps))}</td>
             </tr>`).join('');
     }
@@ -951,14 +984,8 @@
     function fgFilterByNode(ip) {
         _fgSelectedNode = (_fgSelectedNode === ip) ? null : ip;
         renderFlowGraphTalkers();
-        renderFlowGraphProtocolsFiltered();
-        fgDraw();
-    }
-
-    function renderFlowGraphProtocolsFiltered() {
-        // La tabella protocolli resta aggregata sull'intera finestra: solo i
-        // talker sono filtrati per nodo selezionato (coerente col brief).
         renderFlowGraphProtocols();
+        fgDraw();
     }
 
     // --- Canvas: grafo force-directed vanilla (nessuna libreria) ---
@@ -1115,7 +1142,7 @@
         canvas.addEventListener('click', evt => {
             const n = fgNodeAt(canvas, evt);
             if (n) fgFilterByNode(n.id);
-            else { _fgSelectedNode = null; renderFlowGraphTalkers(); fgDraw(); }
+            else { _fgSelectedNode = null; renderFlowGraphTalkers(); renderFlowGraphProtocols(); fgDraw(); }
         });
         canvas.addEventListener('mousemove', evt => {
             const n = fgNodeAt(canvas, evt);

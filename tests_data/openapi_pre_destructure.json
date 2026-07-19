@@ -7961,7 +7961,7 @@
     },
     "/api/observability/flowgraph": {
       "get": {
-        "description": "Grafo dei flussi aggregato (Task 3, Live Flows): nodi/archi con tassi,\nKPI di sintesi, riepilogo del tenant corrente e breakdown protocolli.\nRiusa le stesse query di ``obs_top_talkers``/``obs_anomalies``, scoped\nper tenant via ``_tenant_filter``. Nodi/archi limitati ai top 50 per rate.",
+        "description": "Grafo dei flussi aggregato (Task 3, Live Flows): nodi/archi con tassi,\nKPI di sintesi, riepilogo del tenant corrente e breakdown protocolli.\nRiusa le stesse query di ``obs_top_talkers``/``obs_anomalies``, scoped\nper tenant via ``_tenant_filter``. Nodi/archi limitati ai top 50 per rate.\n\nVLAN: quando esiste un binding ARP noto per l'IP (tabella ``arp_entries``\ndi Client Map, popolata dai gateway L3) si usa la VLAN reale 802.1Q;\naltrimenti si ricade su ``_synthetic_vlan(tenant)`` e il nodo/arco viene\nmarcato ``vlan_real: false`` così la UI può segnalarlo (non è un fake\nsilenzioso).",
         "operationId": "obs_flowgraph_api_observability_flowgraph_get",
         "parameters": [
           {
