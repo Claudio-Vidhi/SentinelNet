@@ -825,6 +825,19 @@
         "title": "DeviceSchema",
         "type": "object"
       },
+      "FgtActiveTargetSchema": {
+        "properties": {
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "title": "FgtActiveTargetSchema",
+        "type": "object"
+      },
       "FgtDiagnoseClientSchema": {
         "properties": {
           "client": {
@@ -995,6 +1008,11 @@
         "properties": {
           "ip": {
             "title": "Ip",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
             "type": "string"
           },
           "port": {
@@ -5086,6 +5104,122 @@
         "summary": "Export Devices Csv",
         "tags": [
           "Inventory"
+        ]
+      }
+    },
+    "/api/fortigate/targets": {
+      "get": {
+        "description": "Elenco dei target FortiGate configurati (nome, porta, TLS, attivo);\ni token non vengono mai restituiti.",
+        "operationId": "fgt_list_targets_api_fortigate_targets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt List Targets",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/targets/active": {
+      "post": {
+        "description": "Imposta il target FortiGate attivo per la tab LIVE.",
+        "operationId": "fgt_set_active_target_api_fortigate_targets_active_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FgtActiveTargetSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Set Active Target",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/targets/{ip}/test": {
+      "post": {
+        "description": "Testa la connessione REST API verso un target FortiGate (timeout breve).",
+        "operationId": "fgt_test_target_api_fortigate_targets__ip__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Test Target",
+        "tags": [
+          "FortiGate"
         ]
       }
     },
