@@ -689,14 +689,6 @@
     /* Utility: nascosto visivamente ma vivo per screen reader, tastiera e JS.
        !important perché `.form-group select` è più specifico su width/padding. */
     .visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important}
-    /* Token API FortiGate inline: nascosto finché non si seleziona FortiGate.
-       Guidato dalla classe .is-visible (mai da style inline) così il gate
-       `body:not(.role-admin) .requires-admin{display:none!important}` vince sempre. */
-    #provFgtTokenSection{display:none}
-    #provFgtTokenSection.is-visible{display:block}
-    .fgt-token-reveal{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;padding:4px;cursor:pointer;color:var(--text-muted);font-size:13px;line-height:1;border-radius:6px;transition:var(--transition)}
-    .fgt-token-reveal:hover{color:var(--primary)}
-    .fgt-token-reveal:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
     .split-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
     .preview-badge{font-size:10px;font-weight:700;text-transform:uppercase;border-radius:999px;padding:3px 7px;letter-spacing:.05em;background:rgba(255,184,77,.16);color:var(--warning);border:1px solid rgba(255,184,77,.24)}
     .count-badge{font-size:10px;font-weight:700;border-radius:999px;padding:3px 7px;background:rgba(169,159,242,.16);color:var(--primary);border:1px solid rgba(169,159,242,.24)}
