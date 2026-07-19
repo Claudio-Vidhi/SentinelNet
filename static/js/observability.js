@@ -943,8 +943,8 @@
         if (_fgSelectedNode) {
             const totals = {};
             for (const e of _fgVisibleEdges()) {
-                const key = e.proto;
-                const t = totals[key] || (totals[key] = { proto: e.proto, port: null, rate_bps: 0 });
+                const key = e.proto + '|' + (e.port == null ? '' : e.port);
+                const t = totals[key] || (totals[key] = { proto: e.proto, port: e.port, rate_bps: 0 });
                 t.rate_bps += e.rate_bps || 0;
             }
             rows = Object.values(totals).sort((a, b) => b.rate_bps - a.rate_bps);

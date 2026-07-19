@@ -383,27 +383,35 @@ def search_arp(mac: str = None, ip: str = None, source_ip: str = None,
     return [dict(r) for r in rows]
 
 
-def vlans_for_ips(ips) -> dict:
+def vlans_for_ips(ip_tenant_map: dict) -> dict:
     """Ritorna { ip: vlan } per gli IP richiesti, dal binding ARP più recente
-    con VLAN non vuota (match esatto, niente prefix-LIKE). Usato dal grafo dei
-    flussi (Task 3, osservabilità) per mostrare la VLAN reale quando nota,
-    invece di un valore sintetico. IP senza binding ARP noto sono assenti
-    dal dict ritornato (fallback lasciato al chiamante)."""
-    ips = [ip for ip in dict.fromkeys(ips) if ip]
-    if not ips:
+    con VLAN non vuota (match esatto, niente prefix-LIKE), **vincolato al
+    tenant** di ciascun IP (``ip_tenant_map``: { ip: tenant }).
+
+    IMPORTANTE (scoping multi-tenant): IP privati possono ripetersi su sedi
+    diverse (RFC1918 dietro NAT indipendenti). Senza il filtro tenant, un
+    binding ARP della sede B potrebbe "trapelare" nel grafo flussi della
+    sede A solo perché condividono lo stesso IP. Ogni lookup è quindi
+    ``ip = ? AND tenant = ?`` — mai un IN(...) globale sugli ip.
+
+    Usato dal grafo dei flussi (Task 3, osservabilità) per mostrare la VLAN
+    reale quando nota, invece di un valore sintetico. IP senza binding ARP
+    noto (per quel tenant) sono assenti dal dict ritornato (fallback
+    lasciato al chiamante)."""
+    pairs = [(ip, tenant) for ip, tenant in ip_tenant_map.items() if ip]
+    if not pairs:
         return {}
     init_db()
     out = {}
     with _lock, _connect() as c:
-        for i in range(0, len(ips), 500):        # chunk per il limite parametri SQLite
-            chunk = ips[i:i + 500]
-            placeholders = ",".join("?" * len(chunk))
-            rows = c.execute(
-                f"""SELECT ip, vlan FROM arp_entries
-                    WHERE ip IN ({placeholders}) AND vlan != ''
-                    ORDER BY last_seen DESC""", chunk).fetchall()
-            for r in rows:
-                out.setdefault(r["ip"], r["vlan"])
+        for ip, tenant in pairs:
+            row = c.execute(
+                """SELECT vlan FROM arp_entries
+                   WHERE ip = ? AND tenant = ? AND vlan != ''
+                   ORDER BY last_seen DESC LIMIT 1""",
+                (ip, tenant or "")).fetchone()
+            if row:
+                out[ip] = row["vlan"]
     return out
 
 
