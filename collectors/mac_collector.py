@@ -43,7 +43,7 @@ def expand_iface(name: str) -> str:
         (r'^Gi(?=\d)', 'GigabitEthernet'), (r'^Te(?=\d)', 'TenGigabitEthernet'),
         (r'^Fo(?=\d)', 'FortyGigE'), (r'^Twe(?=\d)', 'TwentyFiveGigE'),
         (r'^Hu(?=\d)', 'HundredGigE'), (r'^Fa(?=\d)', 'FastEthernet'),
-        (r'^Eth(?=\d)', 'Ethernet'), (r'^Po(?=\d)', 'Port-channel'),
+        (r'^Eth(?=\d)', 'Ethernet'), (r'^Et(?=\d)', 'Ethernet'), (r'^Po(?=\d)', 'Port-channel'),
     ]
     for pat, full in abbr:
         if re.match(pat, name):
