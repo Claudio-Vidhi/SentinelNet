@@ -943,8 +943,8 @@
           <h4 data-i18n="macKpiSightingsLabel">Avvistamenti</h4>
           <strong id="kpiMacSightings">&mdash;</strong>
         </div>
-        <div class="kpi">
-          <h4 data-i18n="macKpiUniqueLabel">MAC Univoci</h4>
+        <div class="kpi kpi-clickable" onclick="focusMacResults()" title="" data-i18n-title="macKpiUniqueHint" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusMacResults();}">
+          <h4 data-i18n="macKpiUniqueLabel">MAC Univoci <i class="fa-solid fa-arrow-down-long" style="font-size:11px; color:var(--primary); margin-left:4px;"></i></h4>
           <strong id="kpiMacUniqueMacs">&mdash;</strong>
         </div>
         <div class="kpi">
@@ -1042,7 +1042,7 @@
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label>
-            <input id="macSearchSwitch" class="ui-input" type="text" placeholder="10.0.0.1" style="width:130px;">
+            <select id="macSearchSwitch" class="ui-input" onchange="macSearch()" style="width:200px;"></select>
           </div>
           <button class="btn btn-primary btn-small" onclick="macSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
             <i class="fa-solid fa-magnifying-glass"></i> Cerca
