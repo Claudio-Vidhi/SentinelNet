@@ -11,7 +11,7 @@
 // dalla tab Devices (editDevice) e dalla tab Groups (btnCreateGroup,
 // loadVendors), ancora inline in dashboard.html.
 
-document.getElementById('devGroupSelect').addEventListener('change', () => { refreshIdentityOptions(); renderIdentitiesPanel(); });
+document.getElementById('devGroupSelect').addEventListener('change', async () => { await refreshIdentityOptions(); renderIdentitiesPanel(); });
 
 // --- IDENTITIES CRUD (pannello destro della tab Provisioning) ---
 
@@ -376,8 +376,8 @@ function populateProvisioningFormSelects() {
     }
 }
 
-function loadProvisioningTab() {
+async function loadProvisioningTab() {
     populateProvisioningFormSelects();
-    refreshIdentityOptions();
+    await refreshIdentityOptions();
     renderIdentitiesPanel();
 }
