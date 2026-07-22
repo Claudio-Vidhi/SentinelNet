@@ -64,6 +64,19 @@
     a { color: var(--primary); text-decoration: none; transition: color 0.15s ease; }
     a:hover { color: #d7d0ff; text-decoration: underline; }
 
+    /* Icon action button (edit/delete nelle tabelle, es. Identità tenant):
+       hairline-violet coerente col design language, accent all'hover. */
+    .btn-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; padding: 0; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--surface-2);
+      color: var(--text-muted); cursor: pointer; font-size: 12px;
+      transition: var(--transition);
+    }
+    .btn-icon:hover { color: var(--primary); border-color: var(--primary); background: var(--surface-3); }
+    .btn-icon.danger:hover { color: var(--danger); border-color: var(--danger); }
+    .btn-icon + .btn-icon { margin-left: 6px; }
+
     /* Scrollbar: trattamento coerente col design language — binario trasparente,
        pollice hairline (--border) che vira su --primary al passaggio del mouse.
        Globale di proposito: tabelle e modali mantengono un affordance visibile.
@@ -674,6 +687,9 @@
     .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
     .kpi{padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px)}
     .kpi h4{margin:0;font-family:var(--font-display);font-size:17px}.kpi strong{display:block;margin-top:14px;font-family:var(--font-display);font-size:34px;letter-spacing:-.05em}
+    .kpi-clickable{cursor:pointer;transition:var(--transition)}
+    .kpi-clickable:hover{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
+    .kpi-clickable:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
     .filterbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
     .search-wrap{position:relative;min-width:260px;flex:1}.search-wrap>i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-soft)}
     .table-wrap{margin-top:14px;overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface-2)}

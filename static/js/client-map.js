@@ -97,6 +97,29 @@
         if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
     }
 
+    // Popola il filtro "Switch" della ricerca con i soli switch del tenant scelto
+    // (dropdown al posto del vecchio campo IP libero). Voce vuota = tutti gli switch.
+    function fillMacSwitchFilter() {
+        const sel = document.getElementById('macSearchSwitch');
+        if (!sel || sel.tagName !== 'SELECT') return;
+        const cur = sel.value;
+        const allLabel = currentLang==='en' ? 'All switches' : 'Tutti gli switch';
+        sel.innerHTML = `<option value="">${allLabel}</option>` +
+            macFilteredDevices().map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
+            }).join('');
+        sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+    }
+
+    // Porta l'utente alla tabella dei MAC (clic sul KPI "MAC Univoci"), applicando
+    // i filtri correnti e scorrendo la vista fino ai risultati.
+    function focusMacResults() {
+        macSearch();
+        const el = document.getElementById('macResults');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     // Popola i selettori dispositivo (scan e ad-hoc) in base al tenant scelto:
     // così scegliendo un tenant si vedono SOLO i suoi switch, non tutti.
     // Lo scan usa una multi-selezione a checkbox (più device in un'unica scansione).
@@ -119,6 +142,7 @@
         }
         updateMacDeviceSummary();
         fillMacDeviceSelect(document.getElementById('macOvDevice'), false);
+        fillMacSwitchFilter();
     }
 
     function selectedMacDevices() {
