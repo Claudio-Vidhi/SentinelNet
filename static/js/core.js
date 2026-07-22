@@ -595,7 +595,7 @@ function renderIdentitiesPanel() {
             [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
             [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
             [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
-            [/^Eth(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
+            [/^Eth(?=\d)/, 'Ethernet'], [/^Et(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
         ];
         for (const [pat, full] of abbr) {
             if (pat.test(name)) return name.replace(pat, full);

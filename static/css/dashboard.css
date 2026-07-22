@@ -58,6 +58,12 @@
       transition: grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    /* Link di contenuto (es. IP sorgente/destinazione nelle tabelle flussi):
+       il blu di default del browser è poco leggibile sul canvas viola scuro.
+       Usiamo l'accent-violet del sistema, sottolineatura solo all'hover. */
+    a { color: var(--primary); text-decoration: none; transition: color 0.15s ease; }
+    a:hover { color: #d7d0ff; text-decoration: underline; }
+
     /* Scrollbar: trattamento coerente col design language — binario trasparente,
        pollice hairline (--border) che vira su --primary al passaggio del mouse.
        Globale di proposito: tabelle e modali mantengono un affordance visibile.
