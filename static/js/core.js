@@ -579,7 +579,7 @@ function renderIdentitiesPanel() {
         <td>${i.devices_using}</td>
         <td>
           <button class="btn-icon" onclick="editIdentity('${i.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn-icon" onclick="deleteIdentity('${i.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button>
+          <button class="btn-icon danger" onclick="deleteIdentity('${i.id}')" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
         </td></tr>`).join('')
       : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
 }
