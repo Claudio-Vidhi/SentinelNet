@@ -38,14 +38,12 @@ class RemoteSiteE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app_server.app)
-        r = cls.client.post("/api/auth/register",
-                            json={"username": ADMIN, "password": ADMIN_PW})
-        if r.status_code != 200:
-            from security import user_manager
-            try:
-                user_manager.create_user(ADMIN, ADMIN_PW, role="admin")
-            except Exception:
-                pass
+        from security import user_manager
+        import bcrypt
+        users = user_manager.get_users()
+        pw_hash = bcrypt.hashpw(ADMIN_PW.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        users[ADMIN] = {"hashed_password": pw_hash, "role": "admin", "disabled": False}
+        user_manager._save_users(users)
         r = cls.client.post("/api/auth/login",
                             json={"username": ADMIN, "password": ADMIN_PW})
         assert r.status_code == 200, r.text
