@@ -136,6 +136,11 @@ class TestRedundancyApiAndTopology(unittest.TestCase):
         self.client = TestClient(app_server.app)
 
         try:
+            user_manager.create_user("admin", "Pass123!", role="admin")
+        except Exception:
+            pass
+
+        try:
             user_manager.create_user("user_roma", "Pass123!", role="operator", groups=["Roma"])
         except Exception:
             pass

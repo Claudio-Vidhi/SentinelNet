@@ -41,7 +41,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/fortigate-preview", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert")
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/fortigate-preview", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -93,6 +93,9 @@ class TestFullParity(unittest.TestCase):
     schema deve restare identico allo snapshot catturato prima dell'estrazione.
     Unica differenza ammessa: i ``tags`` aggiunti dai router."""
 
+    NEW_PREFIXES = ("/api/redundancy",)
+    NEW_SCHEMAS = ("GroupWrite", "MemberWrite")
+
     @classmethod
     def setUpClass(cls):
         with open(PRE_DESTRUCTURE, encoding="utf-8") as f:
@@ -100,7 +103,8 @@ class TestFullParity(unittest.TestCase):
         cls.current = app_server.app.openapi()
 
     def test_path_set_identical(self):
-        self.assertEqual(sorted(self.snap["paths"]), sorted(self.current["paths"]),
+        cur_paths = [p for p in self.current["paths"] if not p.startswith(self.NEW_PREFIXES)]
+        self.assertEqual(sorted(self.snap["paths"]), sorted(cur_paths),
                          "l'insieme dei percorsi è cambiato")
 
     def test_every_operation_identical(self):
@@ -116,7 +120,7 @@ class TestFullParity(unittest.TestCase):
 
     def test_every_schema_identical(self):
         snap_schemas = self.snap.get("components", {}).get("schemas", {})
-        cur_schemas = self.current.get("components", {}).get("schemas", {})
+        cur_schemas = {k: v for k, v in self.current.get("components", {}).get("schemas", {}).items() if k not in self.NEW_SCHEMAS}
         self.assertEqual(sorted(snap_schemas), sorted(cur_schemas),
                          "l'insieme degli schemi componenti è cambiato")
         for name, schema in snap_schemas.items():
