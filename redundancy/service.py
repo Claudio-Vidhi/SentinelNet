@@ -151,6 +151,43 @@ def upsert_fgcp(group_name: str, group: GroupInfo, managed_devices: list[dict]) 
     return gid
 
 
+def discover_fgcp(device: dict) -> Optional[int]:
+    from services import fortigate_service, inventory_manager
+    from redundancy.parsers.fortios import parse_ha_status
+    from security.security_manager import log_audit
+
+    group_name = device.get("Group", "Generale")
+    try:
+        ha_status = fortigate_service.get_ha_status(device)
+    except Exception:
+        res = ha_status_cluster_name(device)
+        if res:
+            mark_fgcp_unknown(group_name, res)
+        return None
+
+    try:
+        ha_checksums = fortigate_service.get_ha_checksums(device)
+    except Exception:
+        ha_checksums = None
+
+    group_info = parse_ha_status(ha_status, ha_checksums)
+    if group_info.health == GroupHealth.SPLIT_BRAIN:
+        log_audit(f"Split brain detected in HA pair '{group_info.name}' for group '{group_name}'")
+
+    managed_devices = inventory_manager.get_all_devices()
+    return upsert_fgcp(group_name, group_info, managed_devices)
+
+
+def ha_status_cluster_name(device: dict) -> Optional[str]:
+    all_groups = store.list_groups()
+    device_ip = device.get("IP")
+    for g in all_groups:
+        for m in g.get("members", []):
+            if m.get("device_ip") == device_ip:
+                return g.get("name")
+    return None
+
+
 def mark_fgcp_unknown(group_name: str, cluster_name: str):
     existing = store.find_group_by_name(group_name, GroupType.HA_PAIR.value, cluster_name)
     if existing:

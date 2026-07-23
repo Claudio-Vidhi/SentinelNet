@@ -195,6 +195,54 @@ class TestRedundancyApiAndTopology(unittest.TestCase):
             self.assertEqual([link["kind"] for link in data["links"]].count("redundancy_heartbeat"), 1)
 
 
+class TestRedundancyDiscovery(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from unittest import mock
+        import redundancy.store as store
+        import redundancy.service as service
+
+        self.temp_db = tempfile.NamedTemporaryFile(delete=False)
+        self.temp_db.close()
+        store.set_db_path(self.temp_db.name)
+        store.init_db()
+        self.store = store
+        self.service = service
+        self.mock = mock
+
+    def tearDown(self):
+        import os
+        try:
+            os.unlink(self.temp_db.name)
+        except OSError:
+            pass
+
+    def test_discovery_preserves_members_when_ha_status_returns_401(self):
+        dev = {"IP": "10.0.0.1", "Group": "Roma"}
+        gid = self.service.save_manual_group({
+            "group_type": "ha_pair", "group_name": "Roma", "name": "Cluster-1", "virtual_ip": "10.0.0.254",
+            "members": [{"role": "active", "device_ip": "10.0.0.1", "serial": "SN1"}]
+        })["id"]
+        before = self.service.get_group(gid)
+        with self.mock.patch("services.fortigate_service.get_ha_status", side_effect=Exception("401 Unauthorized")):
+            self.assertIsNone(self.service.discover_fgcp(dev))
+        after = self.service.get_group(gid)
+        self.assertEqual(after["members"][0]["device_ip"], before["members"][0]["device_ip"])
+        self.assertEqual(after["members"][0]["serial"], before["members"][0]["serial"])
+        self.assertEqual(after["health"], "unknown")
+
+    def test_single_checksum_member_is_degraded_not_out_of_sync(self):
+        dev = {"IP": "10.0.0.1", "Group": "Roma"}
+        ha_status = load_fixture("fortios_ha_status.json")
+        ha_checksums = {"results": [{"checksum": "a"}]}
+        with self.mock.patch("services.fortigate_service.get_ha_status", return_value=ha_status), \
+             self.mock.patch("services.fortigate_service.get_ha_checksums", return_value=ha_checksums), \
+             self.mock.patch("services.inventory_manager.get_all_devices", return_value=[dev]):
+            gid = self.service.discover_fgcp(dev)
+            group = self.service.get_group(gid)
+            self.assertEqual(group["health"], "degraded")
+
+
 if __name__ == "__main__":
     unittest.main()
 
