@@ -1,0 +1,31 @@
+{
+  "results": {
+    "group_name": "fgcp-cluster",
+    "cluster_id": 1,
+    "member": [
+      {
+        "serial_no": "FGT60E1234567890",
+        "is_root_master": true,
+        "model": "FortiGate-60E",
+        "version": "v7.0.5",
+        "mgmt_ip": "192.168.1.99",
+        "priority": 200,
+        "hostname": "FGT-PRIMARY",
+        "sync_status": "synced",
+        "uptime": 123456
+      },
+      {
+        "serial_no": "FGT60E0987654321",
+        "is_root_master": false,
+        "model": "FortiGate-60E",
+        "version": "v7.0.5",
+        "mgmt_ip": "192.168.1.100",
+        "priority": 100,
+        "hostname": "FGT-SECONDARY",
+        "sync_status": "synced",
+        "uptime": 123400
+      }
+    ],
+    "cluster_virtual_ip": "192.168.1.1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "results": [
+    {
+      "serial": "FGT60E1234567890",
+      "checksum": "a1b2c3d4e5f67890"
+    },
+    {
+      "serial": "FGT60E0987654321",
+      "checksum": "ffffffffffffffff"
+    }
+  ]
+}
