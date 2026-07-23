@@ -17,6 +17,7 @@ import threading
 from datetime import datetime, timezone, timedelta
 
 from core import data_config
+from collectors.mac_collector import expand_iface
 
 DB_PATH = data_config.get_path("mac_history.db")
 RETENTION_DAYS_DEFAULT = 30
@@ -137,7 +138,28 @@ def init_db():
                          ON arp_entries(mac, ip, source_ip)""")
             c.execute("CREATE INDEX IF NOT EXISTS ix_arp_mac ON arp_entries(mac)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_arp_ip  ON arp_entries(ip)")
+            _migrate_unexpanded_interfaces(c)
         _init_done = True
+
+
+def _migrate_unexpanded_interfaces(c):
+    rows = c.execute("SELECT id, mac, vlan, switch_ip, interface, port_channel, seen_count, last_seen FROM mac_sightings").fetchall()
+    for r in rows:
+        exp_if = expand_iface(r["interface"])
+        exp_pc = expand_iface(r["port_channel"])
+        if exp_if != r["interface"] or exp_pc != r["port_channel"]:
+            dup = c.execute(
+                "SELECT id, seen_count, last_seen FROM mac_sightings WHERE mac=? AND switch_ip=? AND interface=? AND vlan=? AND id!=?",
+                (r["mac"], r["switch_ip"], exp_if, r["vlan"], r["id"])).fetchone()
+            if dup:
+                max_last = max(r["last_seen"], dup["last_seen"])
+                tot_count = r["seen_count"] + dup["seen_count"]
+                c.execute("UPDATE mac_sightings SET seen_count=?, last_seen=?, interface=?, port_channel=? WHERE id=?",
+                          (tot_count, max_last, exp_if, exp_pc, dup["id"]))
+                c.execute("DELETE FROM mac_sightings WHERE id=?", (r["id"],))
+            else:
+                c.execute("UPDATE mac_sightings SET interface=?, port_channel=? WHERE id=?",
+                          (exp_if, exp_pc, r["id"]))
 
 
 # --- Retention (smart, configurabile) ---
@@ -233,8 +255,8 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
                 n_skip += 1
                 continue
             vlan = str(r.get("vlan") or "")
-            iface = (r.get("interface") or "").strip()
-            pc = (r.get("port_channel") or "").strip()
+            iface = expand_iface((r.get("interface") or "").strip())
+            pc = expand_iface((r.get("port_channel") or "").strip())
             up = 1 if r.get("is_uplink") else 0
             uplink_to = (r.get("uplink_to") or "").strip()
             oui = (r.get("oui_vendor") or "").strip()
@@ -272,7 +294,7 @@ def record_switch_if_macs(rows, switch_ip: str, switch_name: str = "") -> dict:
     with _lock, _connect() as c:
         for r in rows:
             mac = normalize_mac(r.get("mac"))
-            iface = (r.get("interface") or "").strip()
+            iface = expand_iface((r.get("interface") or "").strip())
             if not mac or not iface:
                 n_skip += 1
                 continue
@@ -326,7 +348,7 @@ def record_arp_entries(rows, source_ip: str, source_name: str = "",
                 n_skip += 1
                 continue
             vlan = str(r.get("vlan") or "")
-            iface = (r.get("interface") or "").strip()
+            iface = expand_iface((r.get("interface") or "").strip())
             existing = c.execute(
                 "SELECT id FROM arp_entries WHERE mac=? AND ip=? AND source_ip=?",
                 (mac, ip, source_ip)).fetchone()

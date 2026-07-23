@@ -107,6 +107,27 @@
         vwFetch();
     }
 
+    function vwParseTimestamp(dateStr) {
+        if (!dateStr) return 0;
+        if (typeof dateStr === 'number') return dateStr;
+        const s = String(dateStr).trim();
+        if (!s) return 0;
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+            const t = Date.parse(s);
+            return isNaN(t) ? 0 : t;
+        }
+        const dmY = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+        if (dmY) {
+            const d = parseInt(dmY[1], 10);
+            const m = parseInt(dmY[2], 10) - 1;
+            const y = parseInt(dmY[3], 10);
+            const t = new Date(y, m, d).getTime();
+            return isNaN(t) ? 0 : t;
+        }
+        const t = Date.parse(s);
+        return isNaN(t) ? 0 : t;
+    }
+
     // Interroga /api/search (proxy EUVD autenticato) con i filtri correnti.
     async function vwFetch() {
         const statusEl = document.getElementById('vwStatus');
@@ -130,7 +151,7 @@
             if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
             const payload = await res.json();
             const records = Array.isArray(payload) ? payload : Array.isArray(payload.items) ? payload.items : Array.isArray(payload.content) ? payload.content : [];
-            vwState.data = records.map(vwNormalize).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+            vwState.data = records.map(vwNormalize).sort((a, b) => vwParseTimestamp(b.date) - vwParseTimestamp(a.date));
             vwApplyTextFilter();
         } catch (err) {
             vwState.data = [];
@@ -162,7 +183,7 @@
                 <td>${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
                 <td>${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</td>
                 <td>${item.exploited ? '<span class="badge exploited">Exploited</span>' : '<span class="badge">—</span>'}</td>
-                <td>${item.date ? new Date(item.date).toLocaleDateString() : '—'}</td>
+                <td data-sort-value="${vwParseTimestamp(item.date)}">${item.date ? new Date(vwParseTimestamp(item.date) || item.date).toLocaleDateString() : '—'}</td>
             </tr>`).join('');
     }
 
