@@ -41,7 +41,7 @@ class RemoteSiteE2E(unittest.TestCase):
         r = cls.client.post("/api/auth/register",
                             json={"username": ADMIN, "password": ADMIN_PW})
         if r.status_code != 200:
-            from core.user_manager import user_manager
+            from security import user_manager
             try:
                 user_manager.create_user(ADMIN, ADMIN_PW, role="admin")
             except Exception:
