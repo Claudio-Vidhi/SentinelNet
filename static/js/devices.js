@@ -919,8 +919,7 @@
     let pingInProgress = false;
 
     async function pingSingleDevice(ip, btnEl) {
-        const safeIp = ip.replace(/\./g, "_");
-        const row = document.querySelector(`#grpsel_${safeIp}`)?.closest("tr");
+        const row = btnEl?.closest("tr");
         const led = row?.cells[0]?.querySelector(".led");
         const ledContainer = row?.cells[0]?.querySelector(".led-container");
 
@@ -962,12 +961,11 @@
     }
 
     async function triageSingleDevice(ip, btnEl) {
-        const safeIp = ip.replace(/\./g, "_");
-        const row = document.querySelector(`#grpsel_${safeIp}`)?.closest("tr");
+        const row = btnEl?.closest("tr");
         const led          = row?.cells[0]?.querySelector(".led");
         const ledContainer = row?.cells[0]?.querySelector(".led-container");
-        const hostnameCell = row?.cells[2];                    // Hostname column
-        const verCell      = row?.cells[5]?.querySelector("code"); // Firmware column (was cells[4] — off by one after Hostname added)
+        const hostnameCell = row?.cells[3];                    // Hostname column (was cells[2])
+        const verCell      = row?.cells[6]?.querySelector("code"); // Firmware column (was cells[5] — off by one after Hostname added)
 
         btnEl.disabled = true;
         btnEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
@@ -1073,9 +1071,7 @@
     function applyPingResultsToTable(results) {
         const rows = document.querySelectorAll("#deviceTableBody tr");
         rows.forEach(row => {
-            const ipCell = row.cells[3]; // IP is at index 3 — Hostname column shifted it right
-            if (!ipCell) return;
-            const ip = ipCell.querySelector("strong")?.textContent?.trim();
+            const ip = row.querySelector("strong")?.textContent?.trim();
             if (!ip || !(ip in results)) return;
 
             const ledContainer = row.cells[0].querySelector(".led-container");
