@@ -11,7 +11,8 @@ DATA_DIR = os.getenv("SENTINELNET_DATA_DIR") or os.path.join(os.getcwd(), "data"
 _STATE_FILES = [
     "app_settings.json", "audit.log", "error_log.txt", "groups.json",
     "jwt_secret.key", "mac_history.db", "mac_history.db-shm",
-    "mac_history.db-wal", "secret.key", "sites.json", "users.json",
+    "mac_history.db-wal", "redundancy.db", "redundancy.db-shm",
+    "redundancy.db-wal", "secret.key", "sites.json", "users.json",
     "vendors.json", "detected_versions.json", "device_models.json",
     "device_categories.json", "network_hosts.csv",
 ]

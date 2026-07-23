@@ -70,5 +70,53 @@ class TestRedundancyModelsAndParser(unittest.TestCase):
         self.assertEqual(group.health, GroupHealth.SPLIT_BRAIN)
 
 
+class TestRedundancyStoreAndService(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        import redundancy.store as store
+        import redundancy.service as service
+        self.temp_db = tempfile.NamedTemporaryFile(delete=False)
+        self.temp_db.close()
+        store.set_db_path(self.temp_db.name)
+        store.init_db()
+        self.store = store
+        self.service = service
+
+    def tearDown(self):
+        import os
+        try:
+            os.unlink(self.temp_db.name)
+        except OSError:
+            pass
+
+    def test_manual_ha_pair_without_virtual_ip_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.service.save_manual_group({"group_type": "ha_pair", "group_name": "Roma", "name": "FGCP"})
+
+    def test_logical_stack_device_cannot_belong_to_two_groups(self):
+        stack_payload = {
+            "group_type": "stack",
+            "group_name": "Roma",
+            "name": "Stack-1",
+            "logical_device_ip": "10.0.0.1",
+            "members": [{"role": "master", "device_ip": "10.0.0.1"}]
+        }
+        self.service.save_manual_group(stack_payload)
+        with self.assertRaises(self.service.ConflictError):
+            self.service.save_manual_group({**stack_payload, "name": "Stack-2"})
+
+    def test_fgcp_upsert_matches_member_by_normalized_serial(self):
+        parsed_fgcp = parse_ha_status(
+            load_fixture("fortios_ha_status.json"),
+            load_fixture("fortios_ha_checksums.json"),
+        )
+        group_id = self.service.upsert_fgcp("Roma", parsed_fgcp, managed_devices=[
+            {"IP": "10.0.0.2", "Group": "Roma", "Serial": "FGT60E1234567890"},
+        ])
+        group = self.store.get_group(group_id)
+        self.assertEqual(group["members"][0]["device_ip"], "10.0.0.2")
+
+
 if __name__ == "__main__":
     unittest.main()
+
