@@ -40,14 +40,18 @@ def expand_iface(name: str) -> str:
         return ""
     name = name.strip()
     abbr = [
-        (r'^Gi(?=\d)', 'GigabitEthernet'), (r'^Te(?=\d)', 'TenGigabitEthernet'),
-        (r'^Fo(?=\d)', 'FortyGigE'), (r'^Twe(?=\d)', 'TwentyFiveGigE'),
-        (r'^Hu(?=\d)', 'HundredGigE'), (r'^Fa(?=\d)', 'FastEthernet'),
-        (r'^Eth(?=\d)', 'Ethernet'), (r'^Et(?=\d)', 'Ethernet'), (r'^Po(?=\d)', 'Port-channel'),
+        (r'^(?:GigabitEthernet|Gi)(?=\d)', 'GigabitEthernet'),
+        (r'^(?:TenGigabitEthernet|TenGigE|Te|XGi|10Ge)(?=\d)', 'TenGigabitEthernet'),
+        (r'^(?:TwentyFiveGigE|Twe|25Ge)(?=\d)', 'TwentyFiveGigE'),
+        (r'^(?:FortyGigabitEthernet|FortyGigE|Fo|40Ge)(?=\d)', 'FortyGigE'),
+        (r'^(?:HundredGigE|Hu|100Ge)(?=\d)', 'HundredGigE'),
+        (r'^(?:FastEthernet|Fa|fe)(?=\d)', 'FastEthernet'),
+        (r'^(?:Ethernet|Eth|Et|e)(?=\d)', 'Ethernet'),
+        (r'^(?:Port-channel|Port-Channel|Po)(?=\d)', 'Port-channel'),
     ]
     for pat, full in abbr:
-        if re.match(pat, name):
-            return re.sub(pat, full, name)
+        if re.match(pat, name, re.I):
+            return re.sub(pat, full, name, flags=re.I)
     return name
 
 

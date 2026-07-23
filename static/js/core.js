@@ -49,9 +49,11 @@ function escapeHtml(s) {
 
 // ===== Ordinamento generico colonne per TUTTE le tabelle =====
 // Click sull'intestazione: ordina crescente/decrescente. Le celle editabili
-// (input/select) ordinano per valore del campo.
+// (input/select) ordinano per valore del campo
 function _cellSortValue(td) {
     if (!td) return '';
+    const sv = td.getAttribute('data-sort-value');
+    if (sv !== null && sv !== undefined) return String(sv).trim();
     const f = td.querySelector('input, select');
     return f ? String(f.value || '').trim() : td.textContent.trim();
 }
@@ -103,16 +105,43 @@ function initSortableTables() {
     const obs = new MutationObserver(muts => {
         for (const m of muts) {
             for (const node of m.addedNodes) {
-                if (node.nodeType !== 1) continue;
-                if (node.tagName === 'TABLE') makeTableSortable(node);
-                else if (node.querySelectorAll) node.querySelectorAll('table').forEach(makeTableSortable);
+                if (node.nodeType === 1) {
+                    if (node.tagName === 'TABLE') makeTableSortable(node);
+                    enhanceAllTables(node);
+                }
             }
         }
     });
     obs.observe(document.body, { childList: true, subtree: true });
 }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSortableTables);
-else initSortableTables();
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSortableTables);
+} else {
+    initSortableTables();
+}
+
+// ===== Port Config Modal (promosso da static/js/topology.js: usato anche
+// dal tab MAC-tracker/ARP inline e da static/js/config-analyzer.js) =====
+// Espande le abbreviazioni comuni delle interfacce ('Gi1/0/5' -> 'GigabitEthernet1/0/5').
+// Speculare a expand_iface() di mac_collector.py: tenerli allineati.
+function expandIface(name) {
+    if (!name) return '';
+    name = String(name).trim();
+    const abbr = [
+        [/^(?:GigabitEthernet|Gi)(?=\d)/i, 'GigabitEthernet'],
+        [/^(?:TenGigabitEthernet|TenGigE|Te|XGi|10Ge)(?=\d)/i, 'TenGigabitEthernet'],
+        [/^(?:TwentyFiveGigE|Twe|25Ge)(?=\d)/i, 'TwentyFiveGigE'],
+        [/^(?:FortyGigabitEthernet|FortyGigE|Fo|40Ge)(?=\d)/i, 'FortyGigE'],
+        [/^(?:HundredGigE|Hu|100Ge)(?=\d)/i, 'HundredGigE'],
+        [/^(?:FastEthernet|Fa|fe)(?=\d)/i, 'FastEthernet'],
+        [/^(?:Ethernet|Eth|Et|e)(?=\d)/i, 'Ethernet'],
+        [/^(?:Port-channel|Port-Channel|Po)(?=\d)/i, 'Port-channel'],
+    ];
+    for (const [pat, full] of abbr) {
+        if (pat.test(name)) return name.replace(pat, full);
+    }
+    return name;
+}
 
 function getAuthHeaders() {
     // Autenticazione via cookie HttpOnly (impostato dal server al login).
