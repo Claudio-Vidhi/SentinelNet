@@ -2479,5 +2479,18 @@ class TestCaSearch(unittest.TestCase):
         self.assertIn("caApplySearch()", block[:200])
 
 
+class TestRedundancyUi(unittest.TestCase):
+    def test_redundancy_ui_uses_existing_payload_and_never_creates_vip_node(self):
+        source = frontend_source()
+        self.assertIn("function decorateRedundancyNode", source)
+        self.assertIn("/api/redundancy/groups", source)
+        self.assertNotIn("vip-node", source)
+
+    def test_topology_ui_has_one_ha_heartbeat_style(self):
+        source = frontend_source()
+        self.assertIn("redundancy_heartbeat", source)
+        self.assertIn("dashes: true", source)
+
+
 if __name__ == "__main__":
     unittest.main()

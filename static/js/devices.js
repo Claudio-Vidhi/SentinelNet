@@ -1102,3 +1102,15 @@
             updateTopologyMapNodeStatus(ip, alive ? "online" : "offline");
         });
     }
+
+    async function loadRedundancyGroups() {
+        try {
+            const res = await apiFetch('/api/redundancy/groups');
+            if (!res || !res.ok) return [];
+            const data = await res.json();
+            return data.results || [];
+        } catch (e) {
+            return [];
+        }
+    }
+    window.loadRedundancyGroups = loadRedundancyGroups;

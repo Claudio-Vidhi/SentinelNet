@@ -505,8 +505,41 @@
             };
         });
 
+function decorateRedundancyNode(node, r) {
+  if (!r) return node;
+  const colors = {active:'#2e7d32', standby:'#1565c0', out_of_sync:'#f9a825',
+                  split_brain:'#c62828', degraded:'#f9a825', ok:'#455a64'};
+  if (r.type === 'ha_pair') {
+    const key = ['split_brain', 'out_of_sync'].includes(r.health) ? r.health : (r.role || 'ok');
+    node.color = {border: colors[key] || colors.ok, background: node.color?.background || '#fff'};
+    node.borderWidth = 3;
+    node.label = `${node.label}\n[${key.replaceAll('_', '-')}]`;
+  } else if (r.type === 'stack') {
+    node.label = `${node.label}\n(stack ×${r.member_count ?? '?'})`;
+    node.color = {border: r.health === 'degraded' ? colors.degraded : colors.ok};
+    node.borderWidth = r.health === 'degraded' ? 3 : 1;
+  } else if (r.type === 'sso') {
+    node.label = `${node.label}\n[HA-SSO]`;
+    node.color = {border: r.health === 'degraded' ? '#c62828' : colors.ok};
+    node.borderWidth = r.health === 'degraded' ? 3 : 1;
+  }
+  return node;
+}
+
         // Trasforma archi filtrati per Vis.js con indicazioni di porta super leggibili ed eleganti
         const edges = filteredLinksData.map(l => {
+            if (l.kind === 'redundancy_heartbeat') {
+                return {
+                    from: l.source,
+                    to: l.target,
+                    label: 'HA',
+                    dashes: true,
+                    physics: false,
+                    color: { color: '#f9a825', highlight: '#f9a825' },
+                    width: 2,
+                    kind: 'redundancy_heartbeat'
+                };
+            }
             // Link aggregato (Port-Channel/LAG): evidenziato solo se il toggle è attivo
             const isPC      = !!l.is_portchannel;
             const emphasize = isPC && highlightPC;
