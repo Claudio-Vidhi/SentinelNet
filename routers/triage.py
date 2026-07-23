@@ -148,15 +148,7 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
 
     def _ping(d):
         from collectors.network_scanner import _ping as icmp_ping
-        ip = d['IP']
-        ssh_port = int(d.get('SSH Port', 22)) if str(d.get('SSH Port', '')).isdigit() else 22
-        alive = icmp_ping(ip)
-        if not alive:
-            for p in (ssh_port, 443, 80, 8443, 23):
-                if is_reachable(ip, port=p, timeout=2):
-                    alive = True
-                    break
-        results[ip] = alive
+        results[d['IP']] = icmp_ping(d['IP'])
 
     max_workers = min(20, len(devices)) if devices else 1
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -185,7 +177,6 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
 
 @router.get("/api/ping/{ip}")
 def ping_single(ip: str, current_user = Depends(require_operator)):
-    from core.core_engine import is_reachable
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
@@ -194,13 +185,7 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     if _dev is not None:
         assert_group_allowed(current_user, _dev.get('Group', 'Generale'))
     from collectors.network_scanner import _ping as icmp_ping
-    ssh_port = int(_dev.get('SSH Port', 22)) if (_dev and str(_dev.get('SSH Port', '')).isdigit()) else 22
     alive = icmp_ping(ip)
-    if not alive:
-        for p in (ssh_port, 443, 80, 8443, 23):
-            if is_reachable(ip, port=p, timeout=2):
-                alive = True
-                break
 
     # Aggiorna lo stato nel file detected_versions.json
     try:
