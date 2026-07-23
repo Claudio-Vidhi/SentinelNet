@@ -18,6 +18,14 @@ class ConflictError(Exception):
     pass
 
 
+def _invalidate_cache():
+    try:
+        from core import core_engine
+        core_engine.invalidate_netmap_cache()
+    except Exception:
+        pass
+
+
 def save_manual_group(payload: dict) -> dict:
     group_type = payload.get("group_type")
     if group_type not in (GroupType.HA_PAIR.value, GroupType.STACK.value, GroupType.SSO.value):
@@ -91,6 +99,7 @@ def save_manual_group(payload: dict) -> dict:
     }
 
     group_id = store.save_group(group_dict)
+    _invalidate_cache()
     return store.get_group(group_id)
 
 
@@ -137,7 +146,9 @@ def upsert_fgcp(group_name: str, group: GroupInfo, managed_devices: list[dict]) 
         "members": formatted_members,
     }
 
-    return store.save_group(payload)
+    gid = store.save_group(payload)
+    _invalidate_cache()
+    return gid
 
 
 def mark_fgcp_unknown(group_name: str, cluster_name: str):
@@ -146,10 +157,14 @@ def mark_fgcp_unknown(group_name: str, cluster_name: str):
         existing["health"] = GroupHealth.UNKNOWN.value
         existing["last_verified"] = datetime.now(timezone.utc).isoformat()
         store.save_group(existing)
+        _invalidate_cache()
 
 
 def delete_group(group_id: int) -> bool:
-    return store.delete_group(group_id)
+    res = store.delete_group(group_id)
+    if res:
+        _invalidate_cache()
+    return res
 
 
 def list_groups(group_scope=None) -> list[dict]:

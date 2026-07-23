@@ -114,9 +114,88 @@ class TestRedundancyStoreAndService(unittest.TestCase):
             {"IP": "10.0.0.2", "Group": "Roma", "Serial": "FGT60E1234567890"},
         ])
         group = self.store.get_group(group_id)
+        group = self.store.get_group(group_id)
         self.assertEqual(group["members"][0]["device_ip"], "10.0.0.2")
+
+
+class TestRedundancyApiAndTopology(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from fastapi.testclient import TestClient
+        import app_server
+        import redundancy.store as store
+        import redundancy.service as service
+        from security.security_manager import create_access_token
+        from security import user_manager
+
+        self.temp_db = tempfile.NamedTemporaryFile(delete=False)
+        self.temp_db.close()
+        store.set_db_path(self.temp_db.name)
+        store.init_db()
+
+        self.client = TestClient(app_server.app)
+
+        try:
+            user_manager.create_user("user_roma", "Pass123!", role="operator", groups=["Roma"])
+        except Exception:
+            pass
+
+        token_admin = create_access_token({"sub": "admin", "role": "admin"})
+        token_roma = create_access_token({"sub": "user_roma", "role": "operator"})
+
+        self.headers_admin = {"Authorization": f"Bearer {token_admin}", "X-Requested-With": "SentinelNet"}
+        self.headers_roma = {"Authorization": f"Bearer {token_roma}", "X-Requested-With": "SentinelNet"}
+
+        self.g1_id = service.save_manual_group({
+            "group_type": "ha_pair", "group_name": "Roma", "name": "HA-Roma", "virtual_ip": "10.1.1.1",
+            "members": [
+                {"role": "active", "device_ip": "10.1.1.2", "serial": "SN1"},
+                {"role": "standby", "device_ip": "10.1.1.3", "serial": "SN2"},
+            ]
+        })["id"]
+
+        self.g2_id = service.save_manual_group({
+            "group_type": "ha_pair", "group_name": "Milano", "name": "HA-Milano", "virtual_ip": "10.2.2.1",
+            "members": [
+                {"role": "active", "device_ip": "10.2.2.2", "serial": "SN3"},
+                {"role": "standby", "device_ip": "10.2.2.3", "serial": "SN4"},
+            ]
+        })["id"]
+
+    def tearDown(self):
+        import os
+        try:
+            os.unlink(self.temp_db.name)
+        except OSError:
+            pass
+
+    def test_scoped_user_cannot_read_other_group(self):
+        response = self.client.get(f"/api/redundancy/groups/{self.g2_id}", headers=self.headers_roma)
+        self.assertEqual(response.status_code, 403)
+
+    def test_scoped_user_list_filters_by_group(self):
+        response = self.client.get("/api/redundancy/groups", headers=self.headers_roma)
+        self.assertEqual(response.status_code, 200)
+        group_names = [g["group_name"] for g in response.json()["results"]]
+        self.assertIn("Roma", group_names)
+        self.assertNotIn("Milano", group_names)
+
+    def test_network_map_marks_members_and_adds_ha_edge(self):
+        from unittest import mock
+        mock_nodes = [
+            {"id": "10.1.1.2", "label": "Device A", "group": "Roma"},
+            {"id": "10.1.1.3", "label": "Device B", "group": "Roma"},
+        ]
+        with mock.patch("core.core_engine._generate_network_map", return_value={"nodes": mock_nodes, "links": []}):
+            response = self.client.get("/api/network-map", headers=self.headers_admin)
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIsNotNone(data["nodes"][0]["redundancy"])
+            self.assertEqual(data["nodes"][0]["redundancy"]["type"], "ha_pair")
+            self.assertEqual([link["kind"] for link in data["links"]].count("redundancy_heartbeat"), 1)
 
 
 if __name__ == "__main__":
     unittest.main()
+
 

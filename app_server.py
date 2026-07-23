@@ -69,6 +69,7 @@ from routers import mcp_client as _mcp_client_router
 from routers import scan as _scan_router
 from routers import sites as _sites_router
 from routers import agent as _agent_router
+from redundancy import router as _redundancy_router
 
 app.include_router(_fortigate_router.router)
 app.include_router(_wlc_router.router)
@@ -91,6 +92,7 @@ app.include_router(_mcp_client_router.router)
 app.include_router(_scan_router.router)
 app.include_router(_sites_router.router)
 app.include_router(_agent_router.router)
+app.include_router(_redundancy_router.router)
 
 _default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
 ALLOWED_ORIGINS = [

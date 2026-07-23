@@ -61,6 +61,7 @@ class PromoteDeviceSchema(BaseModel):
 
 @router.get("/api/local-devices")
 def get_devices_and_versions(current_user = Depends(get_current_user)):
+    from redundancy import service as redundancy_service
     scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
     versions = inventory_manager.get_detected_versions()
@@ -70,8 +71,13 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         allowed_ips = {d['IP'] for d in devices}
         versions = {ip: v for ip, v in versions.items() if ip in allowed_ips}
         groups = {g: v for g, v in groups.items() if g in scope}
+    devices_enriched = []
+    for d in devices:
+        dev_copy = dict(d)
+        dev_copy["redundancy"] = redundancy_service.device_redundancy_badge(d["IP"])
+        devices_enriched.append(dev_copy)
     return {
-        "devices": devices,
+        "devices": devices_enriched,
         "detected_versions": versions,
         "groups": groups
     }
