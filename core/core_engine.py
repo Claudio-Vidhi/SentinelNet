@@ -1266,6 +1266,35 @@ def _netmap_signature():
     return (count, max_mtime, cat_mtime)
 
 
+def _enrich_map_with_redundancy(data: dict) -> dict:
+    from redundancy import service as redundancy_service
+    nodes = data.get("nodes", [])
+    links = list(data.get("links", []))
+    nodes_decorated = []
+    for n in nodes:
+        node_copy = dict(n)
+        node_copy["redundancy"] = redundancy_service.device_redundancy_badge(n["id"])
+        nodes_decorated.append(node_copy)
+
+    node_ids = {n["id"] for n in nodes_decorated}
+    all_groups = redundancy_service.list_groups()
+    for g in all_groups:
+        if g.get("group_type") == "ha_pair":
+            members = g.get("members", [])
+            ips = [m.get("device_ip") for m in members if m.get("device_ip") and m.get("device_ip") in node_ids]
+            if len(ips) == 2:
+                links.append({
+                    "source": ips[0],
+                    "target": ips[1],
+                    "kind": "redundancy_heartbeat",
+                    "local_port": "HA",
+                    "remote_port": "HA",
+                    "is_portchannel": False,
+                    "member_count": 1,
+                })
+    return {"nodes": nodes_decorated, "links": links}
+
+
 def generate_network_map(group_filter=None) -> dict:
     """Wrapper con cache: vedi _generate_network_map per la logica reale.
     I chiamanti (routers/catalog.py, topology.py, mac.py) leggono soltanto il
@@ -1276,16 +1305,11 @@ def generate_network_map(group_filter=None) -> dict:
         _netmap_cache["by_filter"] = {}
     key = group_filter or "all"
     cached = _netmap_cache["by_filter"].get(key)
-    if cached is not None:
-        return cached
-    result = _generate_network_map(group_filter)
-    # Compare-and-swap: only store if the signature hasn't advanced while we
-    # were computing (a slow in-flight computation must not clobber fresher
-    # data written by a concurrent request that started after a category
-    # save advanced the signature).
-    if _netmap_cache["sig"] == sig:
-        _netmap_cache["by_filter"][key] = result
-    return result
+    if cached is None:
+        cached = _generate_network_map(group_filter)
+        if _netmap_cache["sig"] == sig:
+            _netmap_cache["by_filter"][key] = cached
+    return _enrich_map_with_redundancy(cached)
 
 
 def _generate_network_map(group_filter=None) -> dict:
@@ -1641,3 +1665,8 @@ def _generate_network_map(group_filter=None) -> dict:
                  if l["source"] in valid_node_ids and l["target"] in valid_node_ids]
 
     return {"nodes": nodes, "links": links}
+
+
+def invalidate_netmap_cache():
+    _netmap_cache["by_filter"] = {}
+

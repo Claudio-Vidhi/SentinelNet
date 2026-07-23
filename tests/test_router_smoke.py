@@ -26,6 +26,7 @@ SMOKE_ENDPOINTS = [
     ("delete", "/api/catalog/group/nope", None),
     ("get", "/api/ai/profiles", None),
     ("get", "/api/settings/app", None),
+    ("get", "/api/redundancy/groups", None),
 ]
 
 class TestRouterSmoke(unittest.TestCase):
