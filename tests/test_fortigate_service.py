@@ -55,6 +55,17 @@ class TokenStoreTest(unittest.TestCase):
             fgs.api_get("192.0.2.9", "monitor/system/status")
 
 
+class TestHaGetters(unittest.TestCase):
+    @mock.patch("services.fortigate_service.api_get")
+    def test_get_ha_status_and_checksums_call_api_get(self, mock_api_get):
+        mock_api_get.return_value = {"results": {}}
+        dev = {"IP": "10.0.0.1"}
+        fgs.get_ha_status(dev)
+        mock_api_get.assert_called_with("10.0.0.1", "monitor/system/ha-status")
+        fgs.get_ha_checksums(dev)
+        mock_api_get.assert_called_with("10.0.0.1", "monitor/system/ha-checksums")
+
+
 class ApiOrSshTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

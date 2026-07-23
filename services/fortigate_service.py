@@ -204,6 +204,14 @@ def api_get(ip: str, path: str, params: dict = None, timeout: int = 30):
     return api_request(ip, "GET", path, params=params, timeout=timeout)
 
 
+def get_ha_status(device: dict) -> dict:
+    return api_get(device["IP"], "monitor/system/ha-status")
+
+
+def get_ha_checksums(device: dict) -> dict:
+    return api_get(device["IP"], "monitor/system/ha-checksums")
+
+
 def api_post(ip: str, path: str, json_body=None, params: dict = None,
              timeout: int = 60):
     """POST su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
