@@ -147,7 +147,16 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     results: dict[str, bool] = {}
 
     def _ping(d):
-        results[d['IP']] = is_reachable(d['IP'], timeout=3)
+        from collectors.network_scanner import _ping as icmp_ping
+        ip = d['IP']
+        ssh_port = int(d.get('SSH Port', 22)) if str(d.get('SSH Port', '')).isdigit() else 22
+        alive = icmp_ping(ip)
+        if not alive:
+            for p in (ssh_port, 443, 80, 8443, 23):
+                if is_reachable(ip, port=p, timeout=2):
+                    alive = True
+                    break
+        results[ip] = alive
 
     max_workers = min(20, len(devices)) if devices else 1
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -184,7 +193,14 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     _dev = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
     if _dev is not None:
         assert_group_allowed(current_user, _dev.get('Group', 'Generale'))
-    alive = is_reachable(ip, timeout=3)
+    from collectors.network_scanner import _ping as icmp_ping
+    ssh_port = int(_dev.get('SSH Port', 22)) if (_dev and str(_dev.get('SSH Port', '')).isdigit()) else 22
+    alive = icmp_ping(ip)
+    if not alive:
+        for p in (ssh_port, 443, 80, 8443, 23):
+            if is_reachable(ip, port=p, timeout=2):
+                alive = True
+                break
 
     # Aggiorna lo stato nel file detected_versions.json
     try:
