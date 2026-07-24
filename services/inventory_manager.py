@@ -6,15 +6,35 @@ import threading
 from security import crypto_vault
 from core import data_config
 
-def get_hosts_csv() -> str: return data_config.get_path("network_hosts.csv")
-def get_groups_json() -> str: return data_config.get_path("groups.json")
-def get_version_data_file() -> str: return data_config.get_path("detected_versions.json")
-def get_vendors_file() -> str: return data_config.get_path("vendors.json")
+_DEFAULT_HOSTS_CSV = data_config.get_path("network_hosts.csv")
+_DEFAULT_GROUPS_JSON = data_config.get_path("groups.json")
+_DEFAULT_VERSION_DATA_FILE = data_config.get_path("detected_versions.json")
+_DEFAULT_VENDORS_FILE = data_config.get_path("vendors.json")
 
-HOSTS_CSV = get_hosts_csv()
-GROUPS_JSON = get_groups_json()
-VERSION_DATA_FILE = get_version_data_file()
-VENDORS_FILE = get_vendors_file()
+HOSTS_CSV = _DEFAULT_HOSTS_CSV
+GROUPS_JSON = _DEFAULT_GROUPS_JSON
+VERSION_DATA_FILE = _DEFAULT_VERSION_DATA_FILE
+VENDORS_FILE = _DEFAULT_VENDORS_FILE
+
+def get_hosts_csv() -> str:
+    if HOSTS_CSV != _DEFAULT_HOSTS_CSV:
+        return HOSTS_CSV
+    return data_config.get_path("network_hosts.csv")
+
+def get_groups_json() -> str:
+    if GROUPS_JSON != _DEFAULT_GROUPS_JSON:
+        return GROUPS_JSON
+    return data_config.get_path("groups.json")
+
+def get_version_data_file() -> str:
+    if VERSION_DATA_FILE != _DEFAULT_VERSION_DATA_FILE:
+        return VERSION_DATA_FILE
+    return data_config.get_path("detected_versions.json")
+
+def get_vendors_file() -> str:
+    if VENDORS_FILE != _DEFAULT_VENDORS_FILE:
+        return VENDORS_FILE
+    return data_config.get_path("vendors.json")
 
 IP_PATTERN = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 

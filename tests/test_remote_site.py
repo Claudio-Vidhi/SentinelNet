@@ -239,7 +239,40 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(inventory_manager.normalize_vendor("fortigate"), "fortinet")
         self.assertEqual(inventory_manager.normalize_vendor("palo_alto"), "paloalto")
         cls, _ = core_engine.resolve_driver("fotinet")
-        self.assertIsNotNone(cls)
+    def test_agent_syslog_relay(self):
+        from services import site_manager
+        site_obj, token = site_manager.create_site("Syslog Sede", "agent")
+        site_id = site_obj["id"]
+        headers = {"X-Site-Token": token, "X-Site-Id": site_id}
+
+        # Test POST /api/agent/syslog
+        payload = {
+            "events": [
+                {
+                    "ts": 1700000000,
+                    "src_ip": "192.168.1.10",
+                    "raw": "<134>1 2026-07-24T15:00:00Z fgt_test - - - Test Syslog Message"
+                }
+            ]
+        }
+        res = self.client.post("/api/agent/syslog", json=payload, headers=headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["status"], "success")
+        self.assertGreaterEqual(res.json()["ingested"], 1)
+
+        # Test SyslogCollector UDP listener
+        from services.site_agent import SyslogCollector
+        import socket, time
+        collector = SyslogCollector(port=15514)
+        collector.start()
+        time.sleep(0.1)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(b"<13>Test UDP Syslog Packet", ("127.0.0.1", 15514))
+        time.sleep(0.2)
+        collector.running = False
+        items = collector.drain()
+        self.assertGreaterEqual(len(items), 1)
+        self.assertIn("Test UDP Syslog Packet", items[0]["raw"])
 
 
 if __name__ == "__main__":

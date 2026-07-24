@@ -28,6 +28,9 @@ import os
 import sys
 import json
 import time
+import socket
+import threading
+import collections
 import argparse
 
 import requests
@@ -36,6 +39,49 @@ import requests
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
+
+
+class SyslogCollector:
+    """Listener UDP leggero per raccogliere eventi syslog dai dispositivi locali."""
+    def __init__(self, host="0.0.0.0", port=5514, maxlen=2000):
+        self.host = host
+        self.port = port
+        self.queue = collections.deque(maxlen=maxlen)
+        self.running = False
+        self.sock = None
+        self.thread = None
+
+    def start(self):
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.bind((self.host, self.port))
+            self.running = True
+            self.thread = threading.Thread(target=self._listen_loop, daemon=True)
+            self.thread.start()
+            print(f"[syslog] collector avviato su UDP {self.host}:{self.port}")
+        except Exception as e:
+            print(f"[syslog] impossibile avviare listener UDP su porta {self.port}: {e}")
+
+    def _listen_loop(self):
+        while self.running:
+            try:
+                data, addr = self.sock.recvfrom(8192)
+                if data:
+                    raw_str = data.decode("utf-8", errors="replace")
+                    self.queue.append({
+                        "ts": int(time.time()),
+                        "src_ip": addr[0],
+                        "raw": raw_str
+                    })
+            except Exception:
+                if not self.running:
+                    break
+
+    def drain(self, limit=500):
+        items = []
+        while self.queue and len(items) < limit:
+            items.append(self.queue.popleft())
+        return items
 
 
 def load_config():
@@ -48,6 +94,8 @@ def load_config():
     p.add_argument("--data-dir", help="Directory dati locale (inventario)")
     p.add_argument("--no-verify-tls", action="store_true",
                    help="Non verificare il certificato TLS del centrale")
+    p.add_argument("--syslog-port", type=int, help="Porta UDP listener syslog locale (default 5514)")
+    p.add_argument("--no-syslog", action="store_true", help="Disattiva il listener syslog locale")
     args = p.parse_args()
 
     cfg = {}
@@ -66,6 +114,10 @@ def load_config():
         cfg["interval"] = args.interval
     if args.no_verify_tls:
         cfg["verify_tls"] = False
+    if args.syslog_port:
+        cfg["syslog_port"] = args.syslog_port
+    if args.no_syslog:
+        cfg["syslog_enabled"] = False
 
     for key in ("central_url", "site_id", "token"):
         if not cfg.get(key):
@@ -74,6 +126,8 @@ def load_config():
     cfg.setdefault("interval", 60)
     cfg.setdefault("verify_tls", True)
     cfg.setdefault("data_dir", "./agent-data")
+    cfg.setdefault("syslog_enabled", True)
+    cfg.setdefault("syslog_port", 5514)
     if cfg.get("data_dir"):
         os.environ["SENTINELNET_DATA_DIR"] = cfg["data_dir"]
     return cfg
@@ -89,6 +143,11 @@ class Agent:
             "X-Site-Token": cfg["token"],
             "Content-Type": "application/json",
         }
+        self.syslog_collector = None
+        if cfg.get("syslog_enabled", True):
+            syslog_port = int(cfg.get("syslog_port", 5514))
+            self.syslog_collector = SyslogCollector(port=syslog_port)
+            self.syslog_collector.start()
         # Import ritardato: dipende da SENTINELNET_DATA_DIR già impostata.
         global inventory_manager, core_engine, mac_collector
         from services import inventory_manager
@@ -174,6 +233,18 @@ class Agent:
             except Exception as e:
                 print(f"[job] {job['id']}: invio risultato fallito: {e}")
 
+    def push_syslog(self):
+        if not self.syslog_collector:
+            return {"ingested": 0}
+        events = self.syslog_collector.drain()
+        if not events:
+            return {"ingested": 0}
+        r = self._post("/api/agent/syslog", {"events": events})
+        r.raise_for_status()
+        res = r.json()
+        print(f"[syslog] {res.get('ingested', 0)} eventi inviati al centrale")
+        return res
+
     def cycle(self):
         devices = inventory_manager.get_all_devices()
         info = self.heartbeat()
@@ -186,6 +257,10 @@ class Agent:
             self.push_mac(devices)
         except Exception as e:
             print(f"[mac] errore: {e}")
+        try:
+            self.push_syslog()
+        except Exception as e:
+            print(f"[syslog] errore: {e}")
         try:
             self.run_jobs(devices)
         except Exception as e:
