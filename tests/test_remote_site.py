@@ -193,6 +193,45 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("agent", r.json()["detail"].lower())
 
+    def test_vm_agent_test_helper_cli(self):
+        from scripts import vm_agent_test_helper
+        temp_dir = tempfile.mkdtemp(prefix="vm_helper_test_")
+        cfg_path = os.path.join(temp_dir, "agent.json")
+        data_dir = os.path.join(temp_dir, "agent-data")
+
+        # Test setup subcommand logic
+        args_setup = type("Args", (), {
+            "central_url": "http://127.0.0.1:8765",
+            "site_id": "vm-test-site",
+            "token": "dummy-token-123",
+            "interval": 10,
+            "no_verify_tls": True,
+            "data_dir": data_dir,
+            "config_output": cfg_path,
+        })()
+
+        vm_agent_test_helper.setup_agent(args_setup)
+        self.assertTrue(os.path.exists(cfg_path))
+        self.assertTrue(os.path.exists(os.path.join(data_dir, "network_hosts.csv")))
+
+        # Test add-device subcommand logic
+        args_add = type("Args", (), {
+            "ip": "192.168.56.50",
+            "hostname": "sw-vm-test",
+            "vendor": "cisco",
+            "username": "admin",
+            "password": "pw",
+            "secret": "sec",
+            "site_id": "vm-test-site",
+            "data_dir": data_dir,
+        })()
+
+        vm_agent_test_helper.add_device(args_add)
+        with open(os.path.join(data_dir, "network_hosts.csv"), "r", encoding="utf-8") as f:
+            csv_content = f.read()
+        self.assertIn("192.168.56.50", csv_content)
+        self.assertIn("sw-vm-test", csv_content)
+
 
 if __name__ == "__main__":
     unittest.main()
