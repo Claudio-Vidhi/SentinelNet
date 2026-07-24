@@ -1,111 +1,164 @@
-# Gestione Sedi Remote (multi-sito)
+# Gestione Sedi Remote & Remote Site Agent (Multi-Sito)
 
-SentinelNet gestisce più sedi collegate via VPN da un unico server centrale.
-Ogni sede ha una **modalità** che determina come il centrale raggiunge gli
-apparati:
+SentinelNet gestisce più sedi remote (collegate via VPN o Internet) da un unico server centrale.
+Ogni sede ha una **modalità di collegamento** che determina come il centrale interagisce con gli apparati di quella sede:
 
 | Modalità | Come funziona | Quando usarla |
 |----------|---------------|---------------|
-| **Central poll** | Il centrale apre SSH direttamente verso i dispositivi remoti attraverso il routing VPN. Nessun processo remoto. | VPN site-to-site stabile, subnet remote raggiungibili dal centrale. |
-| **Site agent** | Un processo leggero (`site_agent.py`) gira nella sede e si connette **in uscita** al centrale (HTTPS): spinge inventario, MAC-table e stato; i comandi CLI arrivano tramite una coda di job. | NAT/firewall che impedisce connessioni entranti verso la sede, VPN instabile, o per non esporre credenziali degli apparati fuori sede. |
+| **Central poll** (Mode A) | Il centrale apre connessioni SSH direttamente verso i dispositivi remoti attraverso il routing VPN site-to-site. Nessun processo aggiuntivo. | VPN site-to-site stabile, subnet remote direttamente raggiungibili dal centrale. |
+| **Site agent** (Mode B) | Un processo leggero (`site_agent.py`) gira in un server/VM nella sede e si connette **in uscita** al centrale (HTTPS). Spinge inventario, MAC-table e stato; i comandi CLI passano via coda di job. | NAT/firewall che impedisce connessioni entranti verso la sede, VPN instabile, o per isolare le credenziali dentro la sede. |
 
-La sede predefinita `central` esiste sempre e non è eliminabile.
-
----
-
-## 1. Creare una sede
-
-Dalla dashboard (account **admin**): tab **Sedi multi-sito** → *Nuova sede*.
-
-1. **Nome** — es. `Milano` (l'id è derivato: `milano`).
-2. **Modalità** — `Central poll` o `Site agent`.
-3. **Subnet** — le reti della sede, es. `10.10.0.0/24, 10.10.1.0/24`
-   (documentazione/riferimento per la scansione).
-
-Per le sedi **agent** al momento della creazione viene mostrato **una sola
-volta** il token di autenticazione dell'agente: copialo subito. Sul server
-resta solo l'hash SHA-256; se lo perdi usa *Rigenera token* (il vecchio smette
-di funzionare).
-
-Equivalente via API:
-
-```bash
-curl -X POST https://central:8765/api/sites \
-  -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
-  -d '{"name": "Milano", "mode": "agent", "subnets": ["10.10.0.0/24"]}'
-```
+La sede predefinita `central` esiste sempre nel sistema e non è eliminabile.
 
 ---
 
-## 2. Sede in modalità Central poll
+## Architecture: How Site Agent (Mode B) Works
 
-Non serve nulla nella sede remota. Sul centrale:
+```
+┌─────────────────────────────────────────┐               ┌───────────────────────────────────────────────┐
+│         CENTRAL SENTINELNET             │               │            REMOTE SITE (VM / AGENT)          │
+│                                         │  HTTPS (443)  │                                               │
+│  - Web Dashboard & API                  │ ◄───────────  │  - site_agent.py                              │
+│  - Site Registry & Token Hash           │  Outbound     │  - Local inventory (network_hosts.csv)        │
+│  - Job Queue (SQLite)                   │  Polling      │  - Credentials stored locally                 │
+│  - Consolidated Inventory & MAC Tracker │               │  - Direct local SSH to switches/firewalls     │
+└─────────────────────────────────────────┘               └───────────────────────┬───────────────────────┘
+                                                                                  │ Local SSH
+                                                                                  ▼
+                                                                  ┌───────────────────────────────┐
+                                                                  │ Local Remote Switch/Firewall  │
+                                                                  └───────────────────────────────┘
+```
 
-1. Verifica che il routing VPN raggiunga le subnet della sede (`ping`/SSH).
-2. Aggiungi i dispositivi all'inventario (tab *Provisioning Apparato* o
-   *Scansione Subnet* selezionando il Gruppo/Sede corretto).
-3. Triage, backup, MAC tracker e terminale funzionano come per la sede locale:
-   il traffico SSH parte dal centrale e attraversa la VPN.
+### Principi chiave dell'agente remoto:
+1. **Connessione Outbound-Only**: L'agente si connette dal basso verso l'alto (da remoto verso il centrale). Nessuna porta aperta in ingresso nella sede remota.
+2. **Isolamento delle credenziali**: Le password SSH/enable degli apparati remoti risiedono esclusivamente nella directory dati locale dell'agente (`network_hosts.csv`). Al centrale vengono inviati solo metadata (IP, Hostname, Vendor, MAC table).
+3. **Relay dei Comandi CLI**: Quando un amministratore invia un comando CLI dalla dashboard verso un apparato della sede agent, il centrale accoda un job. L'agente preleva il job durante il polling, lo esegue localmente via SSH e restituisce l'output.
 
 ---
 
-## 3. Sede in modalità Site agent
+## 1. Creazione di una Sede sul Centrale
 
-### Installazione dell'agente
+Dalla Dashboard (account **admin**): tab **Sedi multi-sito** → *Nuova sede*.
 
-Nella sede remota (una VM/mini-PC Linux o Windows con Python 3.11+ e accesso
-SSH agli apparati locali):
+1. **Nome** — es. `Milano-VM` (l'id alfanumerico derivato sarà `milano-vm`).
+2. **Modalità** — Seleziona `Site agent`.
+3. **Subnet** — Reti della sede, es. `192.168.56.0/24` (per riferimento/documentazione).
 
-```bash
-git clone <repo> SentinelNet && cd SentinelNet
-pip install -r requirements.txt        # oppure: uv sync
-```
+> [!IMPORTANT]
+> Per le sedi **agent**, al momento della creazione viene mostrato **una sola volta** il Token di Autenticazione dell'agente (es. `agent_tok_...`). Copialo subito.
+> Sul centrale viene salvato soltanto l'hash SHA-256 del token.
 
-Crea `agent.json`:
-
-```json
-{
-  "central_url": "https://central:8765",
-  "site_id": "milano",
-  "token": "<TOKEN mostrato alla creazione della sede>",
-  "interval": 60,
-  "verify_tls": true,
-  "data_dir": "./agent-data"
-}
-```
-
-Avvio:
+### Creazione via API / cURL:
 
 ```bash
-python site_agent.py --config agent.json
+# 1. Autenticazione admin per ottenere il JWT
+TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"<ADMIN_PASSWORD>"}' | jq -r .access_token)
+
+# 2. Creazione della sede agent
+curl -X POST http://<CENTRAL_IP>:8765/api/sites \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Milano-VM", "mode": "agent", "subnets": ["192.168.56.0/24"]}'
 ```
 
-L'agente mantiene un **proprio inventario locale** (`network_hosts.csv` nella
-`data_dir`) con le credenziali degli apparati della sede: popolalo con gli
-stessi strumenti del centrale (CSV import o `inventory_manager`). Le
-credenziali **non lasciano mai la sede**: al centrale arrivano solo IP,
-hostname e vendor.
+---
 
-### Cosa fa ad ogni ciclo (default 60s)
+## 2. Guida Passo-Passo per Test in Ambiente VM
 
-1. **Heartbeat** — aggiorna *Ultimo contatto* nella tabella sedi.
-2. **Push inventario** — i dispositivi compaiono sul centrale taggati con la sede.
-3. **Push MAC-table** — alimenta il MAC tracker centrale.
-4. **Esecuzione job** — preleva i comandi CLI accodati, li esegue via SSH in
-   locale e ne posta l'esito.
+Questa guida mostra come testare l'agente remoto su una Virtual Machine (Ubuntu/Debian o Windows VM in VirtualBox/VMware/Proxmox/Hyper-V).
 
-### Esecuzione come servizio
+### Passo 1: Preparazione della VM Remota
+Sulla VM che rappresenterà la sede remota:
 
-Linux (systemd, `/etc/systemd/system/sentinelnet-agent.service`):
+```bash
+# Clona il repository o copia il codice
+git clone https://github.com/Claudio-Vidhi/SentinelNet.git && cd SentinelNet
+
+# Crea l'ambiente virtuale Python
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Passo 2: Configurazione Automatica con Helper Script
+Usa lo script di supporto [scripts/vm_agent_test_helper.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/scripts/vm_agent_test_helper.py) per generare la configurazione `agent.json` e l'inventario locale:
+
+```bash
+python scripts/vm_agent_test_helper.py setup \
+  --central-url http://<CENTRAL_IP>:8765 \
+  --site-id milano-vm \
+  --token <IL_TOKEN_MOSTRATO_ALLA_CREAZIONE> \
+  --interval 15 \
+  --no-verify-tls
+```
+
+Questo comando crea:
+- `agent.json`
+- `agent-data/network_hosts.csv` (inventario locale apparati)
+
+### Passo 3: Aggiunta Apparati all'Inventario Locale della VM
+Aggiungi un apparato reale o di lab presente nella rete della VM:
+
+```bash
+python scripts/vm_agent_test_helper.py add-device \
+  --ip 192.168.56.10 \
+  --hostname sw-milano-01 \
+  --vendor cisco \
+  --username admin \
+  --password adminpw \
+  --site-id milano-vm
+```
+
+*(In alternativa, puoi editare direttamente il file `agent-data/network_hosts.csv` con le credenziali dei tuoi apparati).*
+
+### Passo 4: Verifica Connessione e Autenticazione (Diagnostica)
+Prima di avviare l'agente, esegui un test di diagnosi:
+
+```bash
+python scripts/vm_agent_test_helper.py check --config agent.json
+```
+
+Se l'output mostra `[OK] Heartbeat riuscito!`, il centrale ha validato con successo `X-Site-Id` e `X-Site-Token`.
+
+### Passo 5: Avvio dell'Agente in Primo Piano
+```bash
+python services/site_agent.py --config agent.json
+```
+
+Output atteso:
+```text
+[agent] avviato: centrale=http://192.168.1.100:8765 sede=milano-vm intervallo=15s
+[heartbeat] sede 'milano-vm' ok, 1 dispositivi locali
+```
+
+### Passo 6: Verifica Risultati sul Centrale
+1. **Stato Sede**: Nella dashboard centrale, tab **Sedi multi-sito**, la riga `Milano-VM` mostra **Ultimo contatto** aggiornato in tempo reale.
+2. **Inventario Rispecchiato**: Nella tab **Inventario Apparati**, il dispositivo `192.168.56.10` compaia automaticamente taggato con la sede `milano-vm`.
+3. **Esecuzione Comandi CLI Relay**:
+   - Dalla dashboard, seleziona l'apparato `192.168.56.10` e invia un comando CLI (es. `show version` o `show ip int brief`).
+   - Il centrale accoda il job e l'agente sulla VM lo preleva, lo esegue via SSH locale e restituisce il risultato alla dashboard in pochissimi secondi.
+
+---
+
+## 3. Installazione dell'Agente come Servizio di Sistema
+
+### Linux (Systemd)
+Crea il file `/etc/systemd/system/sentinelnet-agent.service`:
 
 ```ini
 [Unit]
 Description=SentinelNet Site Agent
 After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=simple
+User=root
 WorkingDirectory=/opt/SentinelNet
-ExecStart=/usr/bin/python3 site_agent.py --config agent.json
+ExecStart=/opt/SentinelNet/.venv/bin/python services/site_agent.py --config /opt/SentinelNet/agent.json
 Restart=always
 RestartSec=10
 
@@ -113,35 +166,42 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-Windows: `nssm install SentinelNetAgent python C:\SentinelNet\site_agent.py
---config C:\SentinelNet\agent.json`.
+Abilita e avvia:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now sentinelnet-agent
+sudo systemctl status sentinelnet-agent
+```
+
+### Windows (NSSM - Non-Sucking Service Manager)
+```cmd
+nssm install SentinelNetAgent C:\SentinelNet\.venv\Scripts\python.exe C:\SentinelNet\services\site_agent.py --config C:\SentinelNet\agent.json
+nssm set SentinelNetAgent AppDirectory C:\SentinelNet
+nssm start SentinelNetAgent
+```
 
 ---
 
-## 4. Comandi CLI verso una sede agent (relay)
+## 4. Esecuzione Comandi CLI e API Job Queue (Relay)
 
-Il centrale non apre SSH verso le sedi agent: i comandi passano da una coda
-persistente (SQLite) e vengono eseguiti dall'agente.
-
-- `POST /api/send-command` (ruolo *operator*) rileva da solo che il
-  dispositivo appartiene a una sede agent: accoda il job e attende l'esito
-  fino a ~90 secondi, restituendo l'output come per un dispositivo locale.
-  Se l'agente non risponde in tempo, la risposta è `{"status": "queued",
-  "job_id": ...}`: recupera l'esito con `GET /api/command-jobs/{job_id}`.
-- In alternativa `POST /api/sites/{site_id}/command` accoda senza attendere.
-- La blacklist dei comandi distruttivi si applica anche al relay.
+- `POST /api/send-command` (ruolo operator/admin): Rileva automaticamente se il dispositivo appartiene a una sede agent. Accoda il job e attende la risposta dell'agente fino a ~90 secondi.
+- Se l'agente impiega più tempo, la risposta HTTP ritorna:
+  ```json
+  {"status": "queued", "job_id": "job_1234567890_abc"}
+  ```
+- L'esito può essere consultato in qualsiasi momento con:
+  ```bash
+  curl -H "Authorization: Bearer $JWT" http://<CENTRAL_IP>:8765/api/command-jobs/job_1234567890_abc
+  ```
+- I comandi distruttivi presenti nella blacklist di sicurezza vengono bloccati anche durante il relay.
 
 ---
 
-## 5. Manutenzione e sicurezza
+## 5. Risoluzione Problemi (Troubleshooting)
 
-- **Ultimo contatto** nella tabella sedi: se resta fermo, l'agente è giù o il
-  token non è più valido (controlla i log dell'agente).
-- **Rotazione token**: *Rigenera token* → aggiorna `agent.json` → riavvia
-  l'agente. Fai ruotare i token periodicamente e dopo ogni cambio di personale.
-- **TLS**: esponi il centrale in HTTPS (reverse proxy) e lascia
-  `verify_tls: true`. `--no-verify-tls` solo per test.
-- **Eliminare una sede** rimuove la definizione e invalida il token; i
-  dispositivi già rispecchiati restano in inventario finché non li elimini.
-- I job restano nello storico (`GET /api/sites/{site_id}/command-jobs`) con
-  utente richiedente, esito e timestamp — utile per audit.
+| Sintomo | Causa Probabile | Soluzione |
+|---------|-----------------|-----------|
+| **HTTP 401 (Heartbeat fallito)** | Token o Site ID non corretti | Verifica `agent.json`. Se il token è andato perso, usa **Rigenera token** dalla Dashboard e aggiorna `agent.json`. |
+| **Apparati non compaiono sul centrale** | `network_hosts.csv` vuoto o errato sulla VM | Verifica che `data_dir` in `agent.json` punti alla cartella contenente `network_hosts.csv`. Esegui `python scripts/vm_agent_test_helper.py add-device ...`. |
+| **Comando CLI in stato `queued` permanente** | L'agente VM non è in esecuzione o l'IP dell'apparato non corrisponde all'inventario locale dell'agente | Assicurati che `python services/site_agent.py` sia attivo sulla VM e che l'IP richiesto sia presente nell'inventario locale della VM. |
+| **SSL / TLS Certificate Error** | Certificato self-signed sul server centrale | Imposta `"verify_tls": false` in `agent.json` (solo per ambienti di test/lab) oppure importa la CA nel sistema della VM. |
