@@ -102,6 +102,7 @@ def load_config():
     if args.config:
         with open(args.config, encoding="utf-8") as f:
             cfg = json.load(f)
+        cfg["config_file"] = os.path.abspath(args.config)
     if args.central_url:
         cfg["central_url"] = args.central_url
     if args.site_id:
@@ -135,6 +136,7 @@ def load_config():
 
 class Agent:
     def __init__(self, cfg):
+        self._start_ts = time.time()
         self.cfg = cfg
         self.base = cfg["central_url"].rstrip("/")
         self.verify = cfg.get("verify_tls", True)
@@ -199,7 +201,7 @@ class Agent:
             {"ip": d["IP"], "vendor": d.get("Vendor", "cisco"),
              "hostname": d.get("Hostname", ""),
              "group": d.get("Group") or d.get("Tenant", "")}
-            for d in devices]}
+            for d in devices if isinstance(d, dict) and d.get("IP")]}
         r = self._post("/api/agent/inventory", payload)
         r.raise_for_status()
         return r.json()
@@ -207,6 +209,8 @@ class Agent:
     def push_mac(self, devices):
         collections = []
         for d in devices:
+            if not isinstance(d, dict) or not d.get("IP"):
+                continue
             ip = d["IP"]
             vendor = (d.get("Vendor") or "cisco").lower()
             username, password, secret = core_engine.get_device_credentials(d)
@@ -315,7 +319,7 @@ class Agent:
         r = self._get("/api/agent/jobs")
         r.raise_for_status()
         jobs = r.json().get("jobs", [])
-        by_ip = {d["IP"]: d for d in devices}
+        by_ip = {d["IP"]: d for d in devices if isinstance(d, dict) and d.get("IP")}
         for job in jobs:
             ip = job.get("device_ip")
             cmd = job.get("command", "")
