@@ -260,13 +260,52 @@ class Agent:
             threading.Thread(target=_deferred_restart, daemon=True).start()
             return {"status": "done", "result": "Riavvio agente programmato tra 1.5 secondi (systemd auto-restart)."}
 
+        elif action == "_agent_get_inventory":
+            try:
+                from services import inventory_manager
+                hosts_csv = inventory_manager.get_hosts_csv()
+                if os.path.exists(hosts_csv):
+                    with open(hosts_csv, "r", encoding="utf-8") as f:
+                        content = f.read()
+                else:
+                    content = "IP,Vendor,Hostname,Tenant\n"
+                return {"status": "done", "result": content}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore lettura inventario locale: {e}"}
+
+        elif action == "_agent_save_inventory":
+            try:
+                from services import inventory_manager
+                hosts_csv = inventory_manager.get_hosts_csv()
+                os.makedirs(os.path.dirname(hosts_csv), exist_ok=True)
+                with open(hosts_csv, "w", encoding="utf-8") as f:
+                    f.write(arg)
+                return {"status": "done", "result": "Inventario locale salvato con successo."}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore salvataggio inventario: {e}"}
+
         elif action == "_agent_config":
             try:
                 new_cfg = json.loads(arg)
+                self.cfg.update(new_cfg)
                 if self.cfg.get("config_file"):
                     with open(self.cfg["config_file"], "w", encoding="utf-8") as f:
-                        json.dump(new_cfg, f, indent=2)
-                return {"status": "done", "result": f"Configurazione aggiornata: {new_cfg}"}
+                        json.dump(self.cfg, f, indent=2)
+
+                # Rebind syslog listener if port changed
+                if "syslog_port" in new_cfg and self.syslog_collector:
+                    new_port = int(new_cfg["syslog_port"])
+                    if self.syslog_collector.port != new_port:
+                        self.syslog_collector.running = False
+                        if self.syslog_collector.sock:
+                            try:
+                                self.syslog_collector.sock.close()
+                            except Exception:
+                                pass
+                        self.syslog_collector = SyslogCollector(port=new_port)
+                        self.syslog_collector.start()
+
+                return {"status": "done", "result": f"Configurazione agent aggiornata: {new_cfg}"}
             except Exception as e:
                 return {"status": "error", "result": f"Errore aggiornamento config: {e}"}
 

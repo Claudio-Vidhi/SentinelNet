@@ -94,7 +94,7 @@ class TestFullParity(unittest.TestCase):
     Unica differenza ammessa: i ``tags`` aggiunti dai router."""
 
     NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent")
-    NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema")
+    NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema")
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")
 
     @classmethod
