@@ -79,17 +79,23 @@
         });
     }
 
+    function isFirewallDevice(dev) {
+        if (!dev) return false;
+        const ct = (dev.config_type || '').toLowerCase();
+        const vendor = (dev.vendor || '').toLowerCase();
+        const cat = (dev.category || '').toLowerCase();
+        return !!(dev.is_firewall || ct === 'fortios' || ct === 'panos' || vendor === 'fortigate' || vendor === 'paloalto' || vendor === 'fortinet' || cat === 'firewall');
+    }
+
     function caRenderResultsInner() {
         const box = document.getElementById('caResults');
         if (!box) return;
         const L = i18n[currentLang];
         const en = currentLang === 'en';
         if (caView === 'home') {
-            // Il deep-link (caApplyFocus) deve poter scavalcare la home:
-            // se c'è un focus pendente si passa subito alla vista interfacce.
             if (caFocusIp && caData && caData.length) {
                 caApplyFocus();
-                if (caView !== 'home') return; // ha commutato su 'iface'
+                if (caView !== 'home') return;
             }
             box.innerHTML = caRenderHome(L);
             return;
@@ -100,18 +106,24 @@
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
             return;
         }
+        let list = caData;
+        if (['vlan', 'routing', 'acl', 'iface'].includes(caView)) {
+            list = caData.filter(dev => !isFirewallDevice(dev));
+        }
+        if (!list.length) {
+            box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
+            return;
+        }
         if (caView === 'validation') {
-            box.innerHTML = caData.map(dev => caRenderValidation(dev, L, en)).join('');
+            box.innerHTML = list.map(dev => caRenderValidation(dev, L, en)).join('');
             caApplyFocus();
             return;
         }
-        const openAll = caData.length === 1;
-        box.innerHTML = caData.map((dev, idx) => {
+        const openAll = list.length === 1;
+        box.innerHTML = list.map((dev, idx) => {
             const count = caDeviceCount(dev);
             const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
-            const body = dev.config_type === 'fortios' ? caRenderFortios(dev, L, en)
-                       : dev.config_type === 'wlc-aireos' ? caRenderWlc(dev, L, en)
-                       : caView === 'vlan' ? caRenderVlans(dev, L, en)
+            const body = caView === 'vlan' ? caRenderVlans(dev, L, en)
                        : caView === 'routing' ? caRenderRouting(dev, L, en, idx)
                        : caView === 'acl' ? caRenderAcls(dev, L, en)
                        : caRenderIfaces(dev, L, en);
@@ -776,7 +788,7 @@
     }
 
     function caRenderFirewallView(L, en) {
-        const fwDevices = (caData || []).filter(d => d.is_firewall);
+        const fwDevices = (caData || []).filter(isFirewallDevice);
         // Unione delle sezioni (per id, prima occorrenza vince) su tutti i device firewall mostrati:
         // i pill sono comuni, ma ogni device renderizza solo le proprie sezioni (vendor-driven).
         const sectionMap = {};
