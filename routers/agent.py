@@ -2,6 +2,7 @@
 """Router Agent. Estratto da app_server.py (fase 6.6)."""
 
 import re
+import time
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -34,6 +35,14 @@ class AgentMacSchema(BaseModel):
 class AgentJobResultSchema(BaseModel):
     status: str = "done"           # "done" | "error"
     result: str = ""
+
+class AgentSyslogItemSchema(BaseModel):
+    ts: int = 0
+    src_ip: str
+    raw: str
+
+class AgentSyslogBatchSchema(BaseModel):
+    events: List[AgentSyslogItemSchema] = []
 
 def get_agent_site(request: Request):
     """Autentica un agente tramite header X-Site-Token (+ opzionale X-Site-Id).
@@ -105,3 +114,24 @@ def agent_post_job_result(job_id: str, payload: AgentJobResultSchema,
         raise HTTPException(status_code=404, detail="Job non trovato per questa sede.")
     return {"status": "success"}
 
+@router.post("/api/agent/syslog")
+def agent_push_syslog(payload: AgentSyslogBatchSchema, site = Depends(get_agent_site)):
+    """L'agente spinge un batch di eventi syslog raccolti localmente nella sede remota."""
+    site_id = site["id"]
+    groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
+    count = 0
+    from observability.ingesters import syslog as syslog_parser
+    from core import db
+    for item in payload.events:
+        raw_bytes = item.raw.encode("utf-8", errors="replace")
+        parsed_list = syslog_parser.parse(raw_bytes, item.src_ip)
+        for ev in parsed_list:
+            tenant = groups_by_ip.get(item.src_ip) or "Generale"
+            ts_val = item.ts if item.ts > 0 else int(time.time())
+            db.enqueue_write(
+                "INSERT INTO syslog_events (ts, tenant, device_ip, severity, action, message, exporter_ip) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (ts_val, tenant, item.src_ip, ev.get("severity", "info"), ev.get("action", ""), ev.get("message", ""), item.src_ip)
+            )
+            count += 1
+    log_audit(f"Agente sede '{site_id}': {count} eventi syslog ingeriti.")
+    return {"status": "success", "ingested": count}

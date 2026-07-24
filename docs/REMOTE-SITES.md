@@ -34,6 +34,7 @@ La sede predefinita `central` esiste sempre nel sistema e non è eliminabile.
 1. **Connessione Outbound-Only**: L'agente si connette dal basso verso l'alto (da remoto verso il centrale). Nessuna porta aperta in ingresso nella sede remota.
 2. **Isolamento delle credenziali**: Le password SSH/enable degli apparati remoti risiedono esclusivamente nella directory dati locale dell'agente (`network_hosts.csv`). Al centrale vengono inviati solo metadata (IP, Hostname, Vendor, MAC table).
 3. **Relay dei Comandi CLI**: Quando un amministratore invia un comando CLI dalla dashboard verso un apparato della sede agent, il centrale accoda un job. L'agente preleva il job durante il polling, lo esegue localmente via SSH e restituisce l'output.
+4. **Relay Syslog UDP**: L'agente ascolta i log Syslog in locale sulla porta UDP `5514` (o `--syslog-port`), li raggruppa e li trasmette cifrati al centrale via HTTPS (`POST /api/agent/syslog`), che li archivia nell'osservabilità centrale taggati per sede e tenant.
 
 ---
 
