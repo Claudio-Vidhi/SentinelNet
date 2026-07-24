@@ -40,6 +40,11 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+from services import inventory_manager
+from core import core_engine
+from collectors import mac_collector
+
+
 
 class SyslogCollector:
     """Listener UDP leggero per raccogliere eventi syslog dai dispositivi locali."""
@@ -152,11 +157,6 @@ class Agent:
             self.syslog_collector = SyslogCollector(port=syslog_port)
             self.syslog_collector.start()
             self._start_syslog_worker()
-        # Import ritardato: dipende da SENTINELNET_DATA_DIR già impostata.
-        global inventory_manager, core_engine, mac_collector
-        from services import inventory_manager
-        from core import core_engine
-        from collectors import mac_collector
 
     def _start_syslog_worker(self):
         """Worker thread in background che trasmette in tempo reale (ogni 2s)
