@@ -374,16 +374,30 @@ class Agent:
         except Exception as e:
             print(f"[jobs] errore: {e}")
 
+    def stop(self):
+        self.syslog_worker_running = False
+        if self.syslog_collector:
+            self.syslog_collector.running = False
+            if self.syslog_collector.sock:
+                try:
+                    self.syslog_collector.sock.close()
+                except Exception:
+                    pass
+        print("[agent] arrestato con successo.")
+
     def run(self):
         interval = int(self.cfg.get("interval", 60))
         print(f"[agent] avviato: centrale={self.base} sede={self.cfg['site_id']} "
               f"intervallo={interval}s")
-        while True:
-            try:
-                self.cycle()
-            except Exception as e:
-                print(f"[agent] ciclo fallito: {e}")
-            time.sleep(interval)
+        try:
+            while True:
+                try:
+                    self.cycle()
+                except Exception as e:
+                    print(f"[agent] ciclo fallito: {e}")
+                time.sleep(interval)
+        except (KeyboardInterrupt, SystemExit):
+            self.stop()
 
 
 def main():
