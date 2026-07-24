@@ -87,7 +87,7 @@
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
                 </button>
             </div>
-        </div>`;>
+        </div>
 
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
