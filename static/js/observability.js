@@ -1513,18 +1513,22 @@
 
             let actHtml = '';
             let totalAct = Object.values(actions).reduce((a, b) => a + b, 0);
-            Object.keys(actions).forEach(act => {
-                const cnt = actions[act];
-                const pct = totalAct > 0 ? Math.round((cnt / totalAct) * 100) : 0;
-                actHtml += `<span class="badge" style="background:var(--surface-3); border:1px solid var(--border); font-size:12px; padding:4px 8px; margin:2px;">${escapeHtml(act)}: <strong>${cnt}</strong> (${pct}%)</span> `;
-            });
+            Object.keys(actions)
+                .sort((a, b) => (actions[b] || 0) - (actions[a] || 0))
+                .forEach(act => {
+                    const cnt = actions[act];
+                    const pct = totalAct > 0 ? Math.round((cnt / totalAct) * 100) : 0;
+                    actHtml += `<span class="badge" style="background:var(--surface-3); border:1px solid var(--border); font-size:11px; padding:3px 8px; border-radius:4px; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;">${escapeHtml(act)}: <strong>${cnt}</strong> <span style="color:var(--text-muted); font-size:10px;">(${pct}%)</span></span>`;
+                });
 
             let devHtml = '';
-            Object.keys(devices).forEach(dev => {
-                const cnt = devices[dev];
-                const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
-                devHtml += `<li style="margin-bottom:4px;"><code>${escapeHtml(dev)}</code> — ${cnt} log (${pct}%)</li>`;
-            });
+            Object.keys(devices)
+                .sort((a, b) => (devices[b] || 0) - (devices[a] || 0))
+                .forEach(dev => {
+                    const cnt = devices[dev];
+                    const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
+                    devHtml += `<li style="margin-bottom:4px;"><code>${escapeHtml(dev)}</code> — ${cnt} log (${pct}%)</li>`;
+                });
 
             html += `
             <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
@@ -1538,9 +1542,11 @@
                     </div>
                     <div>
                         <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">AZIONI REGISTRATE (ACCEPT/DENY)</div>
-                        ${actHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessuna azione</div>'}
+                        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow-y:auto; padding:8px; background:var(--surface-1); border:1px solid var(--border); border-radius:6px; margin-bottom:10px;">
+                            ${actHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessuna azione</div>'}
+                        </div>
                         <div style="font-size:12px; font-weight:700; margin:12px 0 6px; color:var(--text-muted);">TOP SORGENTI DISPOSITIVI</div>
-                        <ul style="margin:0; padding-left:16px; font-size:12px;">${devHtml || '<li>—</li>'}</ul>
+                        <ul style="margin:0; padding-left:16px; font-size:12px; max-height:100px; overflow-y:auto;">${devHtml || '<li>—</li>'}</ul>
                     </div>
                 </div>
             </div>`;
