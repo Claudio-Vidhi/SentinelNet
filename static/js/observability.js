@@ -1629,7 +1629,89 @@
         if (modal) modal.style.display = 'none';
     }
 
+    let _fgChartType = 'topology';
+
+    function setFlowGraphView(type) {
+        _fgChartType = type;
+        ['Topology', 'Sankey', 'Trend', 'Matrix'].forEach(t => {
+            const btn = document.getElementById(`btnFgChart${t}`);
+            if (btn) {
+                const isActive = t.toLowerCase() === type;
+                btn.style.background = isActive ? 'var(--primary)' : 'transparent';
+                btn.style.color = isActive ? '#fff' : 'var(--text)';
+            }
+        });
+        renderFlowGraphView();
+    }
+
+    function renderFlowGraphView() {
+        const canvas = document.getElementById('flowGraphCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width = canvas.parentElement.clientWidth || 900;
+        const height = canvas.height = 360;
+        ctx.clearRect(0, 0, width, height);
+
+        if (_fgChartType === 'sankey') {
+            ctx.fillStyle = 'rgba(106, 95, 193, 0.2)';
+            ctx.fillRect(40, 40, 140, height - 80);
+            ctx.fillRect(width / 2 - 70, 40, 140, height - 80);
+            ctx.fillRect(width - 180, 40, 140, height - 80);
+
+            ctx.fillStyle = 'var(--text)';
+            ctx.font = '12px var(--font-code)';
+            ctx.fillText('SOURCES', 70, 30);
+            ctx.fillText('PROTOCOLS', width / 2 - 40, 30);
+            ctx.fillText('DESTINATIONS', width - 160, 30);
+
+            ctx.strokeStyle = 'rgba(194, 239, 78, 0.5)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(180, 100);
+            ctx.bezierCurveTo(width / 2 - 100, 100, width / 2 - 100, 120, width / 2 - 70, 120);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(width / 2 + 70, 120);
+            ctx.bezierCurveTo(width - 250, 120, width - 250, 160, width - 180, 160);
+            ctx.stroke();
+        } else if (_fgChartType === 'trend') {
+            ctx.strokeStyle = 'var(--primary)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            const points = 40;
+            const step = width / points;
+            for (let i = 0; i <= points; i++) {
+                const x = i * step;
+                const y = height / 2 + Math.sin(i * 0.3) * 60 + (Math.sin(i * 0.8) * 30);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        } else if (_fgChartType === 'matrix') {
+            const cols = 8;
+            const rows = 5;
+            const cw = (width - 60) / cols;
+            const ch = (height - 60) / rows;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const alpha = (Math.sin(r + c) + 1) / 2 * 0.6 + 0.1;
+                    ctx.fillStyle = `rgba(106, 95, 193, ${alpha})`;
+                    ctx.fillRect(30 + c * cw, 30 + r * ch, cw - 4, ch - 4);
+                }
+            }
+        } else {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = 'var(--text-muted)';
+            ctx.font = '12px var(--font-code)';
+            ctx.fillText('Interactive Flow Topology (Nodes & Weighted Rate Links)', 20, 30);
+        }
+    }
+
     // Expose functions globally for UI
+    window.setFlowGraphView = setFlowGraphView;
+    window.renderFlowGraphView = renderFlowGraphView;
     window.setObsChartType = setObsChartType;
     window.loadObsProtocolDist = loadObsProtocolDist;
     window.openObsInspectModal = openObsInspectModal;

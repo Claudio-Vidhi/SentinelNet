@@ -436,6 +436,14 @@ async function appInit() {
         try { await applyFgtPreviewGating(); } catch (e) { /* non bloccante */ }
     }
 
+    if (currentRole === 'admin' && typeof applyFlowSiemPreviewGating === 'function') {
+        try { await applyFlowSiemPreviewGating(); } catch (e) { /* non bloccante */ }
+    }
+
+    if (currentRole === 'admin' && typeof applyNetSecAuditGating === 'function') {
+        try { await applyNetSecAuditGating(); } catch (e) { /* non bloccante */ }
+    }
+
     try {
         const res = await apiFetch('/api/local-devices');
         if (!res) {

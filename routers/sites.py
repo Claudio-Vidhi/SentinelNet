@@ -186,3 +186,24 @@ def agent_save_inventory_ep(site_id: str, payload: AgentInventorySaveSchema, cur
     log_audit(f"Salvataggio inventario agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
     return {"status": "queued", "job_id": job["id"]}
 
+
+class FlowControlSchema(BaseModel):
+    active: bool
+
+
+@router.post("/api/sites/{site_id}/agent/flow-control")
+def agent_flow_control_ep(site_id: str, payload: FlowControlSchema, current_user = Depends(require_admin)):
+    """Mette in pausa o riprende l'ingestione / streaming dati per la sede agent."""
+    site = site_manager.get_site(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Sede non trovata.")
+    if site.get("mode") != "agent":
+        raise HTTPException(status_code=400, detail="Gestione flusso disponibile solo per sedi in modalità agent.")
+    site_manager.set_site_flow_status(site_id, payload.active)
+    cmd = "_agent_flow_start" if payload.active else "_agent_flow_stop"
+    job = site_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
+    status_str = "riavviato" if payload.active else "interrotto (pausa)"
+    log_audit(f"Flusso dati agente {status_str} per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    return {"status": "success", "flow_active": payload.active, "job_id": job["id"]}
+
+
