@@ -276,7 +276,26 @@ def delete_device(ip):
         devices = [d for d in devices if d['IP'] != ip]
         safe_write_hosts_csv(devices)
 
-# --- VENDORS REGISTRY ---
+VENDOR_ALIASES = {
+    "fotinet": "fortinet",
+    "forti": "fortinet",
+    "fortigate": "fortinet",
+    "fortios": "fortinet",
+    "palo-alto": "paloalto",
+    "palo_alto": "paloalto",
+    "palo": "paloalto",
+    "panos": "paloalto",
+    "hp": "hpe",
+    "procurve": "hpe",
+    "junos": "juniper",
+    "juniper_junos": "juniper",
+    "cisco_ios": "cisco",
+}
+
+def normalize_vendor(raw_vendor: str) -> str:
+    """Canonicalizza un nome vendor traducendo alias e refusi comuni."""
+    v = (raw_vendor or "").lower().strip()
+    return VENDOR_ALIASES.get(v, v)
 
 def get_all_vendors() -> dict:
     """Returns {display_name: {euvd_term: str, driver: str|None}}"""

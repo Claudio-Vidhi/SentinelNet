@@ -131,7 +131,8 @@ def resolve_driver(vendor):
       2. fallback nome-vendor → driver (VENDOR_DRIVER_DEFAULTS)
     Solleva ValueError se nessun driver è associato al vendor.
     """
-    vendor = (vendor or '').lower().strip()
+    from services import inventory_manager
+    vendor = inventory_manager.normalize_vendor(vendor)
 
     driver_name = None
     try:
