@@ -73,6 +73,13 @@ function sortTableByColumn(table, colIdx, th) {
     rows.sort((a, b) => {
         const x = _cellSortValue(a.cells[colIdx]);
         const y = _cellSortValue(b.cells[colIdx]);
+        const numX = Number(x);
+        const numY = Number(y);
+        if (x !== '' && y !== '' && !isNaN(numX) && !isNaN(numY)) {
+            if (numX === 0 && numY !== 0) return 1;
+            if (numY === 0 && numX !== 0) return -1;
+            return asc ? numX - numY : numY - numX;
+        }
         const c = x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' });
         return asc ? c : -c;
     });
