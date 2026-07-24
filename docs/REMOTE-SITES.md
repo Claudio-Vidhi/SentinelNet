@@ -83,11 +83,41 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Passo 2: Configurazione Automatica con Helper Script
-Usa lo script di supporto [scripts/vm_agent_test_helper.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/scripts/vm_agent_test_helper.py) per generare la configurazione `agent.json` e l'inventario locale:
+### Passo 2: Configurazione dell'Agente sulla VM
+
+Puoi configurare l'agente in due modi:
+
+#### Metodo A: Diretto / Standalone (Consigliato — nessuna dipendenza dallo script helper)
+Crea il file `agent.json` nella root della cartella `SentinelNet`:
 
 ```bash
-python scripts/vm_agent_test_helper.py setup \
+cat << 'EOF' > agent.json
+{
+  "central_url": "http://<CENTRAL_IP>:8765",
+  "site_id": "milano-vm",
+  "token": "<IL_TOKEN_MOSTRATO_ALLA_CREAZIONE>",
+  "interval": 15,
+  "verify_tls": false,
+  "data_dir": "./agent-data"
+}
+EOF
+```
+*(Sostituisci `<CENTRAL_IP>` con l'IP del tuo server SentinelNet centrale e `<IL_TOKEN_MOSTRATO_ALLA_CREAZIONE>` con il token della sede).*
+
+In alternativa, puoi anche avviarlo direttamente senza file `agent.json` usando i parametri CLI:
+```bash
+python3 services/site_agent.py --central-url http://<CENTRAL_IP>:8765 \
+                               --site-id milano-vm \
+                               --token <TOKEN> \
+                               --no-verify-tls \
+                               --data-dir ./agent-data
+```
+
+#### Metodo B: Configurazione tramite Helper Script (Se hai il repo completo con `scripts/`)
+Se hai fatto `git pull` dell'intero repository comprensivo della cartella `scripts/`:
+
+```bash
+python3 scripts/vm_agent_test_helper.py setup \
   --central-url http://<CENTRAL_IP>:8765 \
   --site-id milano-vm \
   --token <IL_TOKEN_MOSTRATO_ALLA_CREAZIONE> \
@@ -95,33 +125,39 @@ python scripts/vm_agent_test_helper.py setup \
   --no-verify-tls
 ```
 
-Questo comando crea:
-- `agent.json`
-- `agent-data/network_hosts.csv` (inventario locale apparati)
+---
 
-### Passo 3: Aggiunta Apparati all'Inventario Locale della VM
-Aggiungi un apparato reale o di lab presente nella rete della VM:
+### Passo 3: Creazione dell'Inventario Apparati Locale sulla VM
 
-```bash
-python scripts/vm_agent_test_helper.py add-device \
-  --ip 192.168.56.10 \
-  --hostname sw-milano-01 \
-  --vendor cisco \
-  --username admin \
-  --password adminpw \
-  --site-id milano-vm
-```
-
-*(In alternativa, puoi editare direttamente il file `agent-data/network_hosts.csv` con le credenziali dei tuoi apparati).*
-
-### Passo 4: Verifica Connessione e Autenticazione (Diagnostica)
-Prima di avviare l'agente, esegui un test di diagnosi:
+Crea la cartella dati `agent-data` e il file `agent-data/network_hosts.csv`:
 
 ```bash
-python scripts/vm_agent_test_helper.py check --config agent.json
+mkdir -p agent-data
+
+cat << 'EOF' > agent-data/network_hosts.csv
+IP,Hostname,Vendor,Model,Driver,Transport,Port,AuthGroup,Username,Password,Secret,SNMP_Community,SNMP_Version,Tenant,Group,Site,Category,Status,Notes
+192.168.56.10,sw-milano-01,cisco,C2960,cisco_ios,ssh,22,,admin,adminpw,,public,2c,Milano,Milano,milano-vm,Switch,active,VM Lab Device
+EOF
 ```
 
-Se l'output mostra `[OK] Heartbeat riuscito!`, il centrale ha validato con successo `X-Site-Id` e `X-Site-Token`.
+*(Se stai usando l'helper script e la cartella `scripts/` è presente, puoi anche usare `python3 scripts/vm_agent_test_helper.py add-device --ip 192.168.56.10 ...`).*
+
+---
+
+### Passo 4: Verifica Connessione (Diagnostica)
+Per verificare che l'agente riesca a parlare con il centrale prima di avviarlo:
+
+```bash
+curl -i -X POST http://<CENTRAL_IP>:8765/api/agent/heartbeat \
+  -H "X-Site-Id: milano-vm" \
+  -H "X-Site-Token: <IL_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Se l'output restituisce `HTTP/1.1 200 OK` e `{"ok":true,"site_id":"milano-vm",...}`, l'autenticazione è corretta.
+
+*(In alternativa, se hai `scripts/`, puoi eseguire: `python3 scripts/vm_agent_test_helper.py check --config agent.json`).*
 
 ### Passo 5: Avvio dell'Agente in Primo Piano
 ```bash

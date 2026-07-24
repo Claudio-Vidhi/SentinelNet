@@ -311,7 +311,7 @@
         // ma solo per il profilo 'custom': con un profilo 'default'/'identity:<id>'
         // le credenziali vivono altrove (rete standard o identità salvata) e non
         // vanno reinserite qui.
-        if (editingDeviceIp && payload.profile === 'custom' && (!payload.password || !payload.enable_secret)) {
+        if (editingDeviceIp && payload.profile === 'custom' && !payload.password) {
             alert(i18n[currentLang].alertCredsRequiredOnEdit);
             return;
         }

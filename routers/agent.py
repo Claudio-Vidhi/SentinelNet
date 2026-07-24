@@ -18,6 +18,7 @@ class AgentDeviceSchema(BaseModel):
     ip: str
     vendor: str = "cisco"
     hostname: str = ""
+    group: Optional[str] = None
 
 class AgentInventorySchema(BaseModel):
     devices: List[AgentDeviceSchema] = []
@@ -61,8 +62,9 @@ def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent
     for d in payload.devices:
         if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", d.ip):
             continue
-        # Preserva il Group esistente: non declassare a 'Generale' ad ogni push.
-        group = existing_groups.get(d.ip) or "Generale"
+        # Se l'agente passa un group/tenant lo usa; altrimenti preserva il Group o usa 'Generale'.
+        req_group = (d.group or "").strip()
+        group = req_group or existing_groups.get(d.ip) or "Generale"
         inventory_manager.add_or_update_device(
             d.ip, d.vendor, "custom", "", "", "", group, site=site_id)
         if d.hostname:
