@@ -163,13 +163,18 @@ def set_site_flow_status(site_id: str, active: bool) -> bool:
         return True
 
 
-def update_site(site_id: str, name=None, mode=None, subnets=None) -> bool:
+def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> bool:
     with _lock:
         data = _load()
         site = data.get(site_id)
         if not site:
             return False
-        if name is not None and name.strip():
+        if isinstance(name, dict):
+            kwargs.update(name)
+            name = kwargs.pop("name", None)
+            mode = kwargs.pop("mode", mode)
+            subnets = kwargs.pop("subnets", subnets)
+        if name is not None and isinstance(name, str) and name.strip():
             site["name"] = name.strip()
         if mode is not None:
             if mode not in VALID_MODES:
@@ -179,7 +184,9 @@ def update_site(site_id: str, name=None, mode=None, subnets=None) -> bool:
             if mode == "central":
                 site["token_hash"] = None
         if subnets is not None:
-            site["subnets"] = [s.strip() for s in subnets if s and s.strip()]
+            site["subnets"] = [s.strip() for s in subnets if isinstance(s, str) and s.strip()]
+        for k, v in kwargs.items():
+            site[k] = v
         _save(data)
         return True
 

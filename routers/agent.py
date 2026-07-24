@@ -66,7 +66,7 @@ def agent_heartbeat(payload: dict = None, site = Depends(get_agent_site)):
         if "interval" in payload:
             updates["interval"] = payload["interval"]
         if updates:
-            site_manager.update_site(site_id, updates)
+            site_manager.update_site(site_id, **updates)
     return {"ok": True, "site_id": site["id"], "name": site["name"], "subnets": site.get("subnets", [])}
 
 @router.post("/api/agent/inventory")
