@@ -65,8 +65,9 @@ def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent
         # Se l'agente passa un group/tenant lo usa; altrimenti preserva il Group o usa 'Generale'.
         req_group = (d.group or "").strip()
         group = req_group or existing_groups.get(d.ip) or "Generale"
+        vendor = inventory_manager.normalize_vendor(d.vendor)
         inventory_manager.add_or_update_device(
-            d.ip, d.vendor, "custom", "", "", "", group, site=site_id)
+            d.ip, vendor, "custom", "", "", "", group, site=site_id)
         if d.hostname:
             inventory_manager.update_device_hostname(d.ip, d.hostname)
         n += 1

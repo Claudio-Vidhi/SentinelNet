@@ -232,6 +232,15 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertIn("192.168.56.50", csv_content)
         self.assertIn("sw-vm-test", csv_content)
 
+    def test_vendor_typo_normalization(self):
+        from services import inventory_manager
+        from core import core_engine
+        self.assertEqual(inventory_manager.normalize_vendor("fotinet"), "fortinet")
+        self.assertEqual(inventory_manager.normalize_vendor("fortigate"), "fortinet")
+        self.assertEqual(inventory_manager.normalize_vendor("palo_alto"), "paloalto")
+        cls, _ = core_engine.resolve_driver("fotinet")
+        self.assertIsNotNone(cls)
+
 
 if __name__ == "__main__":
     unittest.main()
