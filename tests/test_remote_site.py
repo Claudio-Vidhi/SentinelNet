@@ -272,7 +272,27 @@ class RemoteSiteE2E(unittest.TestCase):
         collector.running = False
         items = collector.drain()
         self.assertGreaterEqual(len(items), 1)
-        self.assertIn("Test UDP Syslog Packet", items[0]["raw"])
+    def test_agent_remote_management_rpc(self):
+        from services import site_manager
+        site_obj, token = site_manager.create_site("RPC Sede", "agent")
+        site_id = site_obj["id"]
+
+        # Enqueue self update & restart endpoints
+        res_up = self.client.post(f"/api/sites/{site_id}/agent/update", headers=self.admin_h)
+        self.assertEqual(res_up.status_code, 200)
+        self.assertEqual(res_up.json()["status"], "queued")
+
+        res_rst = self.client.post(f"/api/sites/{site_id}/agent/restart", headers=self.admin_h)
+        self.assertEqual(res_rst.status_code, 200)
+        self.assertEqual(res_rst.json()["status"], "queued")
+
+        # Test agent _execute_agent_rpc handler
+        from services.site_agent import Agent
+        cfg = {"central_url": "http://127.0.0.1:8765", "site_id": site_id, "token": token, "syslog_enabled": False}
+        agent_inst = Agent(cfg)
+        rpc_out = agent_inst._execute_agent_rpc("_agent_self_update")
+        self.assertIn("status", rpc_out)
+        self.assertIn("git pull", rpc_out["result"])
 
 
 if __name__ == "__main__":

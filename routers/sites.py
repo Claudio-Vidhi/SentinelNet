@@ -108,3 +108,50 @@ def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
 def list_site_command_jobs_ep(site_id: str, current_user = Depends(require_operator)):
     return {"jobs": site_manager.list_jobs(site_id)}
 
+
+class AgentConfigUpdateSchema(BaseModel):
+    syslog_port: Optional[int] = None
+    interval: Optional[int] = None
+    syslog_enabled: Optional[bool] = None
+
+
+@router.post("/api/sites/{site_id}/agent/update")
+def agent_self_update_ep(site_id: str, current_user = Depends(require_admin)):
+    """Accoda un comando RPC di self-update (git pull) per l'agente remoto."""
+    site = site_manager.get_site(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Sede non trovata.")
+    if site.get("mode") != "agent":
+        raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
+    job = site_manager.enqueue_job(site_id, "127.0.0.1", "_agent_self_update", requested_by=current_user.get("sub"))
+    log_audit(f"Self-update agent (git pull) accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    return {"status": "queued", "job_id": job["id"]}
+
+
+@router.post("/api/sites/{site_id}/agent/restart")
+def agent_restart_ep(site_id: str, current_user = Depends(require_admin)):
+    """Accoda un comando RPC di restart per l'agente remoto (systemctl auto-restart)."""
+    site = site_manager.get_site(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Sede non trovata.")
+    if site.get("mode") != "agent":
+        raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
+    job = site_manager.enqueue_job(site_id, "127.0.0.1", "_agent_restart", requested_by=current_user.get("sub"))
+    log_audit(f"Restart agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    return {"status": "queued", "job_id": job["id"]}
+
+
+@router.post("/api/sites/{site_id}/agent/config")
+def agent_config_update_ep(site_id: str, payload: AgentConfigUpdateSchema, current_user = Depends(require_admin)):
+    """Accoda un comando RPC per aggiornare i parametri di configurazione dell'agente remoto."""
+    site = site_manager.get_site(site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Sede non trovata.")
+    if site.get("mode") != "agent":
+        raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
+    cfg_json = payload.model_dump_json(exclude_none=True)
+    cmd = f"_agent_config {cfg_json}"
+    job = site_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
+    log_audit(f"Aggiornamento config agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")
+    return {"status": "queued", "job_id": job["id"]}
+
