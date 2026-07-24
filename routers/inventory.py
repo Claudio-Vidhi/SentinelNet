@@ -25,7 +25,7 @@ class DeviceSchema(BaseModel):
     profile: str
     username: str = "Admin"
     password: str = "admin"
-    enable_secret: str = "admin"
+    enable_secret: str = ""
     group: str = "Generale"
     ssh_port: int = Field(22, ge=1, le=65535)
     # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy

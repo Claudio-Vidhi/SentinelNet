@@ -89,3 +89,6 @@ data/identities.json
 data/redundancy.db
 data/redundancy.db-shm
 data/redundancy.db-wal
+data/agent_jobs.db
+data/agent_jobs.db-shm
+data/agent_jobs.db-wal

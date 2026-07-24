@@ -32,6 +32,11 @@ import argparse
 
 import requests
 
+# Ensure project root is in sys.path so 'services', 'core', 'collectors' modules import cleanly
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 
 def load_config():
     p = argparse.ArgumentParser(description="SentinelNet - Agente di sede")
@@ -108,7 +113,8 @@ class Agent:
     def push_inventory(self, devices):
         payload = {"devices": [
             {"ip": d["IP"], "vendor": d.get("Vendor", "cisco"),
-             "hostname": d.get("Hostname", "")}
+             "hostname": d.get("Hostname", ""),
+             "group": d.get("Group") or d.get("Tenant", "")}
             for d in devices]}
         r = self._post("/api/agent/inventory", payload)
         r.raise_for_status()
