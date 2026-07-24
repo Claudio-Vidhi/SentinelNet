@@ -1342,58 +1342,285 @@
                 ctx.fillStyle = '#888';
                 ctx.font = '13px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('Nessun trend temporale disponibile', width / 2, height / 2);
+                ctx.fillText('Nessun trend temporale disponibile nel periodo', width / 2, height / 2);
                 return;
             }
 
-            const padding = { top: 20, right: 30, bottom: 30, left: 50 };
+            const padding = { top: 38, right: 55, bottom: 35, left: 60 };
             const graphW = width - padding.left - padding.right;
             const graphH = height - padding.top - padding.bottom;
 
-            let maxVal = 1;
-            trend.forEach(pt => {
-                ['netflow', 'ipfix', 'sflow'].forEach(k => {
-                    if ((pt[k] || 0) > maxVal) maxVal = pt[k];
-                });
+            // Render Top Legend
+            let legX = padding.left;
+            const legY = 12;
+            const protoKeys = ['netflow', 'ipfix', 'sflow', 'syslog'];
+            protoKeys.forEach(k => {
+                ctx.fillStyle = PROTO_COLORS[k];
+                ctx.fillRect(legX, legY, 10, 10);
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                const label = k === 'syslog' ? 'Syslog (Eventi)' : PROTO_LABELS[k] + ' (Bytes)';
+                ctx.fillText(label, legX + 14, legY - 1);
+                legX += ctx.measureText(label).width + 30;
             });
 
-            ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--border') || '#444';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(padding.left, padding.top);
-            ctx.lineTo(padding.left, height - padding.bottom);
-            ctx.lineTo(width - padding.right, height - padding.bottom);
-            ctx.stroke();
+            // Find Max Values
+            let maxBytes = 1;
+            let maxSyslog = 1;
+            trend.forEach(pt => {
+                ['netflow', 'ipfix', 'sflow'].forEach(k => {
+                    if ((pt[k] || 0) > maxBytes) maxBytes = pt[k];
+                });
+                if ((pt.syslog || 0) > maxSyslog) maxSyslog = pt.syslog;
+            });
 
-            ['netflow', 'ipfix', 'sflow'].forEach(k => {
+            // Draw Background Gridlines & Y-Axis Ticks
+            const textColor = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#888';
+            const borderColor = getComputedStyle(document.body).getPropertyValue('--border') || '#444';
+
+            ctx.lineWidth = 1;
+            ctx.font = '10px sans-serif';
+
+            [0, 0.5, 1.0].forEach(factor => {
+                const y = height - padding.bottom - (factor * graphH);
+                ctx.strokeStyle = factor === 0 ? borderColor : 'rgba(255,255,255,0.06)';
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+
+                // Left Y-Axis (Bytes)
+                ctx.fillStyle = textColor;
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                const bytesVal = Math.round(maxBytes * factor);
+                const bytesStr = typeof fmtBytes === 'function' ? fmtBytes(bytesVal) : `${bytesVal} B`;
+                ctx.fillText(bytesStr, padding.left - 8, y);
+
+                // Right Y-Axis (Syslog Events)
+                ctx.textAlign = 'left';
+                const evtVal = Math.round(maxSyslog * factor);
+                ctx.fillText(`${evtVal} evt`, width - padding.right + 8, y);
+            });
+
+            // Draw X-Axis Time Labels
+            const labelStep = Math.max(1, Math.floor(trend.length / 5));
+            trend.forEach((pt, i) => {
+                if (i % labelStep === 0 || i === trend.length - 1) {
+                    const x = padding.left + (i / Math.max(1, trend.length - 1)) * graphW;
+                    const dateObj = new Date(pt.ts * 1000);
+                    const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    ctx.fillStyle = textColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(timeStr, x, height - padding.bottom + 8);
+                }
+            });
+
+            // Draw Lines and Points for each protocol
+            protoKeys.forEach(k => {
                 const col = PROTO_COLORS[k];
+                const isSyslog = k === 'syslog';
+                const curMax = isSyslog ? maxSyslog : maxBytes;
+
                 ctx.strokeStyle = col;
+                ctx.fillStyle = col;
                 ctx.lineWidth = 2;
                 ctx.beginPath();
+
+                const points = [];
                 trend.forEach((pt, i) => {
                     const x = padding.left + (i / Math.max(1, trend.length - 1)) * graphW;
                     const val = pt[k] || 0;
-                    const y = height - padding.bottom - (val / maxVal) * graphH;
+                    const y = height - padding.bottom - ((val / curMax) * graphH);
+                    points.push({ x, y, val });
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 });
                 ctx.stroke();
-            });
 
-            ctx.fillStyle = '#888';
-            ctx.font = '10px sans-serif';
-            ctx.textAlign = 'right';
-            ctx.fillText(typeof fmtBytes === 'function' ? fmtBytes(maxVal) : `${maxVal} B`, padding.left - 6, padding.top + 4);
-            ctx.fillText('0', padding.left - 6, height - padding.bottom);
+                // Draw Dots
+                points.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            });
         }
     }
 
-    // Expose functions globally for UI buttons
+    // --- INSPECTION MODAL & CLICK DRILL-DOWN ---
+    function openObsInspectModal(protoKey = 'all') {
+        const modal = document.getElementById('obsInspectModal');
+        const title = document.getElementById('obsInspectTitle');
+        const body = document.getElementById('obsInspectBody');
+        if (!modal || !body || !_obsProtocolData) return;
+
+        const bd = _obsProtocolData.breakdown || {};
+        const totals = _obsProtocolData.totals || {};
+        const windowStr = _obsProtocolData.window || '24h';
+
+        const PROTO_LABELS = {
+            netflow: 'NetFlow',
+            ipfix: 'IPFIX',
+            sflow: 'sFlow',
+            syslog: 'Syslog'
+        };
+
+        if (title) {
+            title.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i> Ispezione Dettagliata Telemetria — ${protoKey === 'all' ? 'Tutti i Protocolli' : (PROTO_LABELS[protoKey] || protoKey)}`;
+        }
+
+        let html = '';
+
+        if (protoKey === 'syslog' || protoKey === 'all') {
+            const slData = bd.syslog || {};
+            const sevs = slData.severity || {};
+            const actions = slData.actions || {};
+            const devices = slData.devices || {};
+            const totalSyslogEvts = totals.syslog ? (totals.syslog.events || 0) : 0;
+
+            const SEV_LABELS = {
+                '0': 'Emerg (0)', '1': 'Alert (1)', '2': 'Crit (2)', '3': 'Err (3)',
+                '4': 'Warn (4)', '5': 'Notice (5)', '6': 'Info (6)', '7': 'Debug (7)'
+            };
+            const SEV_COLORS = {
+                '0': 'var(--danger)', '1': 'var(--danger)', '2': 'var(--danger)', '3': 'var(--danger)',
+                '4': 'var(--warning)', '5': 'var(--info)', '6': 'var(--primary)', '7': 'var(--text-muted)'
+            };
+
+            let sevHtml = '';
+            Object.keys(sevs).sort().forEach(sev => {
+                const cnt = sevs[sev] || 0;
+                const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
+                sevHtml += `
+                <div style="margin-bottom:8px;">
+                    <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
+                        <span style="color:${SEV_COLORS[sev] || 'var(--text)'}; font-weight:700;">${SEV_LABELS[sev] || ('Sev ' + sev)}</span>
+                        <span>${cnt} eventi (${pct}%)</span>
+                    </div>
+                    <div style="width:100%; height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden;">
+                        <div style="width:${pct}%; height:100%; background:${SEV_COLORS[sev] || 'var(--primary)'};"></div>
+                    </div>
+                </div>`;
+            });
+
+            let actHtml = '';
+            let totalAct = Object.values(actions).reduce((a, b) => a + b, 0);
+            Object.keys(actions).forEach(act => {
+                const cnt = actions[act];
+                const pct = totalAct > 0 ? Math.round((cnt / totalAct) * 100) : 0;
+                actHtml += `<span class="badge" style="background:var(--surface-3); border:1px solid var(--border); font-size:12px; padding:4px 8px; margin:2px;">${escapeHtml(act)}: <strong>${cnt}</strong> (${pct}%)</span> `;
+            });
+
+            let devHtml = '';
+            Object.keys(devices).forEach(dev => {
+                const cnt = devices[dev];
+                const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
+                devHtml += `<li style="margin-bottom:4px;"><code>${escapeHtml(dev)}</code> — ${cnt} log (${pct}%)</li>`;
+            });
+
+            html += `
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
+                <h4 style="margin:0 0 10px; font-size:14px; color:var(--warning); display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-list-check"></i> Syslog Event Breakdown (Finestra ${windowStr})
+                </h4>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">DISTRIBUZIONE SEVERITÀ (%)</div>
+                        ${sevHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessun evento</div>'}
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">AZIONI REGISTRATE (ACCEPT/DENY)</div>
+                        ${actHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessuna azione</div>'}
+                        <div style="font-size:12px; font-weight:700; margin:12px 0 6px; color:var(--text-muted);">TOP SORGENTI DISPOSITIVI</div>
+                        <ul style="margin:0; padding-left:16px; font-size:12px;">${devHtml || '<li>—</li>'}</ul>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        ['netflow', 'ipfix', 'sflow'].forEach(p => {
+            if (protoKey === p || protoKey === 'all') {
+                const pData = bd[p] || {};
+                const l4Map = pData.l4 || {};
+                const portsMap = pData.ports || {};
+                const pTot = totals[p] || {};
+                const totalBytes = pTot.bytes || 0;
+
+                let l4Html = '';
+                Object.keys(l4Map).forEach(proto => {
+                    const b = l4Map[proto];
+                    const pct = totalBytes > 0 ? Math.round((b / totalBytes) * 100) : 0;
+                    l4Html += `
+                    <div style="margin-bottom:6px;">
+                        <div style="display:flex; justify-content:space-between; font-size:12px;">
+                            <span style="font-weight:700;">${proto}</span>
+                            <span>${typeof fmtBytes === 'function' ? fmtBytes(b) : b + ' B'} (${pct}%)</span>
+                        </div>
+                        <div style="width:100%; height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden;">
+                            <div style="width:${pct}%; height:100%; background:var(--primary);"></div>
+                        </div>
+                    </div>`;
+                });
+
+                let portsHtml = '';
+                Object.keys(portsMap).slice(0, 5).forEach(port => {
+                    const b = portsMap[port];
+                    const pct = totalBytes > 0 ? Math.round((b / totalBytes) * 100) : 0;
+                    portsHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0; border-bottom:1px dashed var(--border);">
+                        <span>${escapeHtml(port)}</span>
+                        <span><strong>${typeof fmtBytes === 'function' ? fmtBytes(b) : b + ' B'}</strong> (${pct}%)</span>
+                    </div>`;
+                });
+
+                html += `
+                <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
+                    <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary); display:flex; align-items:center; gap:6px;">
+                        <i class="fa-solid fa-network-wired"></i> Telemetria ${PROTO_LABELS[p]} (Flussi: ${pTot.flows || 0}, Pacchetti: ${pTot.packets || 0})
+                    </h4>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                        <div>
+                            <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">PROTOCOLLI L4 (PERCENTUALE BYTE)</div>
+                            ${l4Html || '<div style="color:var(--text-muted); font-size:12px;">Nessun dato di flusso</div>'}
+                        </div>
+                        <div>
+                            <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">TOP PORTE DI DESTINAZIONE</div>
+                            ${portsHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessun dato</div>'}
+                        </div>
+                    </div>
+                </div>`;
+            }
+        });
+
+        body.innerHTML = html || '<div style="padding:20px; text-align:center; color:var(--text-muted);">Nessun dettaglio disponibile per la finestra selezionata.</div>';
+        modal.style.display = 'flex';
+    }
+
+    function closeObsInspectModal() {
+        const modal = document.getElementById('obsInspectModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    // Expose functions globally for UI
     window.setObsChartType = setObsChartType;
     window.loadObsProtocolDist = loadObsProtocolDist;
+    window.openObsInspectModal = openObsInspectModal;
+    window.closeObsInspectModal = closeObsInspectModal;
 
-    // Auto-load protocol distribution on document load
+    // Attach click listener on canvas
     document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(loadObsProtocolDist, 800);
+        setTimeout(() => {
+            loadObsProtocolDist();
+            const canvas = document.getElementById('obsProtocolCanvas');
+            if (canvas) {
+                canvas.style.cursor = 'pointer';
+                canvas.addEventListener('click', () => {
+                    openObsInspectModal('all');
+                });
+            }
+        }, 800);
     });
 

@@ -176,32 +176,44 @@ async function apiFetch(url, options = {}) {
 }
 
 async function checkAuthRequirements() {
-    // Interroga lo stato del setup/utenti nel sistema
-    const res = await fetch('/api/auth/status');
-    const data = await res.json();
-
     const overlay = document.getElementById('authOverlay');
-    // Il pannello di cambio password è transitorio: lo nascondiamo sempre qui.
-    document.getElementById('changePwSection').style.display = 'none';
+    const changePw = document.getElementById('changePwSection');
+    const wiz = document.getElementById('wizardSection');
+    const login = document.getElementById('loginSection');
 
-    if (!data.has_users) {
-        // Nessun utente su disco: mostriamo la procedura guidata di primo setup
-        document.getElementById('wizardSection').style.display = 'block';
-        document.getElementById('loginSection').style.display = 'none';
-        overlay.style.display = 'flex';
-        return false;
-    } else {
-        // Esiste già un amministratore: mostriamo la maschera di login standard
-        document.getElementById('wizardSection').style.display = 'none';
-        document.getElementById('loginSection').style.display = 'block';
-        // La sessione vive nel cookie HttpOnly: la verifichiamo lato server.
-        const me = await fetch('/api/auth/me');
-        if (!me.ok) {
-            overlay.style.display = 'flex';
+    if (changePw) changePw.style.display = 'none';
+
+    try {
+        // Interroga lo stato del setup/utenti nel sistema
+        const res = await fetch('/api/auth/status');
+        if (!res.ok) throw new Error('Status endpoint HTTP ' + res.status);
+        const data = await res.json();
+
+        if (!data.has_users) {
+            // Nessun utente su disco: mostriamo la procedura guidata di primo setup
+            if (wiz) wiz.style.display = 'block';
+            if (login) login.style.display = 'none';
+            if (overlay) overlay.style.display = 'flex';
             return false;
+        } else {
+            // Esiste già un amministratore: mostriamo la maschera di login standard
+            if (wiz) wiz.style.display = 'none';
+            if (login) login.style.display = 'block';
+            // La sessione vive nel cookie HttpOnly: la verifichiamo lato server.
+            const me = await fetch('/api/auth/me');
+            if (!me.ok) {
+                if (overlay) overlay.style.display = 'flex';
+                return false;
+            }
+            if (overlay) overlay.style.display = 'none';
+            return true;
         }
-        overlay.style.display = 'none';
-        return true;
+    } catch (err) {
+        console.warn('[auth] Error checking auth requirements, displaying login fallback:', err);
+        if (wiz) wiz.style.display = 'none';
+        if (login) login.style.display = 'block';
+        if (overlay) overlay.style.display = 'flex';
+        return false;
     }
 }
 
