@@ -512,5 +512,26 @@ class TestListenerDefaults(unittest.TestCase):
             self.assertTrue(cfg["sflow"]["enabled"])
 
 
+class TestProtocolDistributionEndpoint(unittest.TestCase):
+    def test_protocol_distribution_endpoint(self):
+        from fastapi.testclient import TestClient
+        from app_server import app
+        from routers.deps import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "admin", "role": "admin"}
+        client = TestClient(app)
+        try:
+            res = client.get("/api/observability/protocol-distribution?window=15m")
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertIn("totals", data)
+            self.assertIn("trend", data)
+            self.assertIn("netflow", data["totals"])
+            self.assertIn("ipfix", data["totals"])
+            self.assertIn("sflow", data["totals"])
+            self.assertIn("syslog", data["totals"])
+        finally:
+            app.dependency_overrides.clear()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -93,7 +93,7 @@ class TestFullParity(unittest.TestCase):
     schema deve restare identico allo snapshot catturato prima dell'estrazione.
     Unica differenza ammessa: i ``tags`` aggiunti dai router."""
 
-    NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog")
+    NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution")
     NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema")
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")
 

@@ -1168,3 +1168,232 @@
         return true;
     }
 
+
+    // --- PROTOCOL DISTRIBUTION CHART (DONUT, BAR, TREND) ---
+    let _obsChartType = 'donut';
+    let _obsProtocolData = null;
+
+    function setObsChartType(type) {
+        _obsChartType = type;
+        ['donut', 'bar', 'trend'].forEach(t => {
+            const btn = document.getElementById('btnChartType' + t.charAt(0).toUpperCase() + t.slice(1));
+            if (!btn) return;
+            if (t === type) {
+                btn.style.background = 'var(--primary)';
+                btn.style.color = '#fff';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text)';
+            }
+        });
+        renderObsProtocolChart();
+    }
+
+    async function loadObsProtocolDist() {
+        const card = document.getElementById('obsProtocolCard');
+        if (!card) return;
+        const winSelect = document.getElementById('obsChartWindow');
+        const win = winSelect ? winSelect.value : '24h';
+        const res = await apiFetch(`/api/observability/protocol-distribution?window=${win}`);
+        if (!res || !res.ok) return;
+        _obsProtocolData = await res.json();
+        renderObsProtocolChart();
+    }
+
+    function renderObsProtocolChart() {
+        if (!_obsProtocolData) return;
+        const canvas = document.getElementById('obsProtocolCanvas');
+        const statsBox = document.getElementById('obsProtocolStats');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const d = _obsProtocolData;
+        const totals = d.totals || {};
+
+        const PROTO_COLORS = {
+            netflow: '#3b82f6',
+            ipfix: '#8b5cf6',
+            sflow: '#06b6d4',
+            syslog: '#f59e0b'
+        };
+        const PROTO_LABELS = {
+            netflow: 'NetFlow',
+            ipfix: 'IPFIX',
+            sflow: 'sFlow',
+            syslog: 'Syslog'
+        };
+
+        if (_obsChartType === 'bar') {
+            canvas.style.display = 'none';
+            if (statsBox) {
+                statsBox.style.display = 'flex';
+                let totalBytes = 0;
+                let totalEvents = totals.syslog ? (totals.syslog.events || 0) : 0;
+                Object.keys(totals).forEach(k => {
+                    if (k !== 'syslog') totalBytes += (totals[k].bytes || 0);
+                });
+                
+                const protoKeys = ['netflow', 'ipfix', 'sflow', 'syslog'];
+                statsBox.innerHTML = protoKeys.map(k => {
+                    const col = PROTO_COLORS[k];
+                    const label = PROTO_LABELS[k];
+                    const item = totals[k] || {};
+                    let valStr = '0 B';
+                    let pct = 0;
+                    if (k === 'syslog') {
+                        valStr = `${item.events || 0} eventi`;
+                        pct = totalEvents > 0 ? Math.min(100, Math.round(((item.events || 0) / totalEvents) * 100)) : 0;
+                    } else {
+                        valStr = typeof fmtBytes === 'function' ? fmtBytes(item.bytes || 0) : `${item.bytes || 0} B`;
+                        pct = totalBytes > 0 ? Math.min(100, Math.round(((item.bytes || 0) / totalBytes) * 100)) : 0;
+                    }
+                    return `
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px;">
+                            <span style="font-weight:700; color:${col}; flex:1;">${label}</span>
+                            <span style="font-family:var(--font-code); color:var(--text); font-weight:600;">${valStr}</span>
+                            <span style="color:var(--text-muted); width:45px; text-align:right;">${pct}%</span>
+                        </div>
+                        <div style="width:100%; height:8px; background:var(--surface-3); border-radius:4px; overflow:hidden;">
+                            <div style="width:${pct}%; height:100%; background:${col}; border-radius:4px; transition:width .3s;"></div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            return;
+        }
+
+        canvas.style.display = 'block';
+        if (statsBox) statsBox.style.display = 'none';
+
+        // Resize canvas to pixel ratio
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = (rect.width || 600) * (window.devicePixelRatio || 1);
+        canvas.height = (rect.height || 230) * (window.devicePixelRatio || 1);
+        ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+        const width = rect.width || 600;
+        const height = rect.height || 230;
+
+        ctx.clearRect(0, 0, width, height);
+
+        if (_obsChartType === 'donut') {
+            let totalVal = 0;
+            const items = [];
+            Object.keys(totals).forEach(k => {
+                const v = k === 'syslog' ? (totals[k].events || 0) : (totals[k].bytes || 0);
+                if (v > 0) {
+                    items.push({ key: k, val: v, color: PROTO_COLORS[k], label: PROTO_LABELS[k] });
+                    totalVal += v;
+                }
+            });
+
+            const cx = width / 3;
+            const cy = height / 2;
+            const radius = Math.min(cx, cy) - 15;
+            const innerRadius = radius * 0.6;
+
+            if (items.length === 0 || totalVal === 0) {
+                ctx.fillStyle = '#888';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Nessun dato di telemetria nel periodo', width / 2, height / 2);
+                return;
+            }
+
+            let startAngle = -Math.PI / 2;
+            items.forEach(item => {
+                const sliceAngle = (item.val / totalVal) * (Math.PI * 2);
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle);
+                ctx.arc(cx, cy, innerRadius, startAngle + sliceAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = item.color;
+                ctx.fill();
+                startAngle += sliceAngle;
+            });
+
+            // Center total text
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Protocolli', cx, cy - 8);
+            ctx.font = '11px sans-serif';
+            ctx.fillStyle = '#888';
+            ctx.fillText(`${items.length} attivi`, cx, cy + 10);
+
+            // Render Legend on the right side
+            let lx = (width / 3) * 1.6;
+            let ly = 30;
+            items.forEach(item => {
+                ctx.fillStyle = item.color;
+                ctx.fillRect(lx, ly, 12, 12);
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                const pct = Math.round((item.val / totalVal) * 100);
+                const valStr = item.key === 'syslog' ? `${item.val} evt` : (typeof fmtBytes === 'function' ? fmtBytes(item.val) : `${item.val} B`);
+                ctx.fillText(`${item.label}: ${valStr} (${pct}%)`, lx + 20, ly - 1);
+                ly += 26;
+            });
+        } else if (_obsChartType === 'trend') {
+            const trend = d.trend || [];
+            if (trend.length === 0) {
+                ctx.fillStyle = '#888';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Nessun trend temporale disponibile', width / 2, height / 2);
+                return;
+            }
+
+            const padding = { top: 20, right: 30, bottom: 30, left: 50 };
+            const graphW = width - padding.left - padding.right;
+            const graphH = height - padding.top - padding.bottom;
+
+            let maxVal = 1;
+            trend.forEach(pt => {
+                ['netflow', 'ipfix', 'sflow'].forEach(k => {
+                    if ((pt[k] || 0) > maxVal) maxVal = pt[k];
+                });
+            });
+
+            ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--border') || '#444';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, padding.top);
+            ctx.lineTo(padding.left, height - padding.bottom);
+            ctx.lineTo(width - padding.right, height - padding.bottom);
+            ctx.stroke();
+
+            ['netflow', 'ipfix', 'sflow'].forEach(k => {
+                const col = PROTO_COLORS[k];
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                trend.forEach((pt, i) => {
+                    const x = padding.left + (i / Math.max(1, trend.length - 1)) * graphW;
+                    const val = pt[k] || 0;
+                    const y = height - padding.bottom - (val / maxVal) * graphH;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            });
+
+            ctx.fillStyle = '#888';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(typeof fmtBytes === 'function' ? fmtBytes(maxVal) : `${maxVal} B`, padding.left - 6, padding.top + 4);
+            ctx.fillText('0', padding.left - 6, height - padding.bottom);
+        }
+    }
+
+    // Expose functions globally for UI buttons
+    window.setObsChartType = setObsChartType;
+    window.loadObsProtocolDist = loadObsProtocolDist;
+
+    // Auto-load protocol distribution on document load
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(loadObsProtocolDist, 800);
+    });
+
