@@ -386,11 +386,10 @@ class Agent:
         print("[agent] arrestato con successo.")
 
     def run(self):
-        interval = int(self.cfg.get("interval", 60))
-        print(f"[agent] avviato: centrale={self.base} sede={self.cfg['site_id']} "
-              f"intervallo={interval}s")
+        print(f"[agent] avviato: centrale={self.base} sede={self.cfg['site_id']}")
         try:
             while True:
+                interval = int(self.cfg.get("interval", 60))
                 try:
                     self.cycle()
                 except Exception as e:
