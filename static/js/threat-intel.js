@@ -31,7 +31,7 @@
         const score = Number(vwPick(item, ['baseScore', 'cvssBaseScore', 'score', 'cvssScore', 'maxBaseScore']));
         const epssRaw = Number(vwPick(item, ['epss', 'epssScore', 'epssPercent']));
         const epss = (Number.isFinite(epssRaw) && epssRaw <= 1) ? epssRaw * 100 : epssRaw;
-        const date = vwPick(item, ['datePublished', 'published', 'publishedDate', 'date', 'created']);
+        const date = vwPick(item, ['datePublished', 'published', 'publishedDate', 'publicationDate', 'date_published', 'published_at', 'date', 'created']);
         const summary = vwPick(item, ['description', 'summary', 'title', 'details']);
 
         const nestedVendor = (Array.isArray(item.enisaIdVendor) && item.enisaIdVendor[0] && item.enisaIdVendor[0].vendor && item.enisaIdVendor[0].vendor.name) ? item.enisaIdVendor[0].vendor.name : '';
@@ -109,23 +109,37 @@
 
     function vwParseTimestamp(dateStr) {
         if (!dateStr) return 0;
-        if (typeof dateStr === 'number') return dateStr;
+        if (typeof dateStr === 'number') {
+            return dateStr < 1e11 ? dateStr * 1000 : dateStr;
+        }
         const s = String(dateStr).trim();
         if (!s) return 0;
-        if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-            const t = Date.parse(s);
-            return isNaN(t) ? 0 : t;
+        if (/^\d+$/.test(s)) {
+            const n = parseInt(s, 10);
+            return n < 1e11 ? n * 1000 : n;
         }
+        let t = Date.parse(s);
+        if (!isNaN(t)) return t;
+
         const dmY = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
         if (dmY) {
             const d = parseInt(dmY[1], 10);
             const m = parseInt(dmY[2], 10) - 1;
             const y = parseInt(dmY[3], 10);
-            const t = new Date(y, m, d).getTime();
+            t = new Date(y, m, d).getTime();
             return isNaN(t) ? 0 : t;
         }
-        const t = Date.parse(s);
-        return isNaN(t) ? 0 : t;
+
+        const yMd = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+        if (yMd) {
+            const y = parseInt(yMd[1], 10);
+            const m = parseInt(yMd[2], 10) - 1;
+            const d = parseInt(yMd[3], 10);
+            t = new Date(y, m, d).getTime();
+            return isNaN(t) ? 0 : t;
+        }
+
+        return 0;
     }
 
     // Interroga /api/search (proxy EUVD autenticato) con i filtri correnti.
@@ -175,7 +189,10 @@
     function vwRenderTable() {
         const bodyEl = document.getElementById('vwBody');
         if (!bodyEl) return;
-        bodyEl.innerHTML = vwState.filtered.map((item, idx) => `
+        bodyEl.innerHTML = vwState.filtered.map((item, idx) => {
+            const ts = vwParseTimestamp(item.date);
+            const displayDate = ts > 0 ? new Date(ts).toLocaleDateString() : (item.date || '—');
+            return `
             <tr data-idx="${idx}" style="cursor:pointer;" onclick="vwOpenDrawer(${idx})">
                 <td><div>${escapeHtml(item.cve)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.euvd)}</div></td>
                 <td><div>${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.vendor)}</div></td>
@@ -183,8 +200,9 @@
                 <td>${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
                 <td>${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</td>
                 <td>${item.exploited ? '<span class="badge exploited">Exploited</span>' : '<span class="badge">—</span>'}</td>
-                <td data-sort-value="${vwParseTimestamp(item.date)}">${item.date ? new Date(vwParseTimestamp(item.date) || item.date).toLocaleDateString() : '—'}</td>
-            </tr>`).join('');
+                <td data-sort-value="${ts}">${escapeHtml(displayDate)}</td>
+            </tr>`;
+        }).join('');
     }
 
     // Apre il drawer laterale con i dettagli completi del record selezionato.
