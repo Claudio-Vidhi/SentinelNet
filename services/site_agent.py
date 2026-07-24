@@ -73,7 +73,7 @@ def load_config():
 
     cfg.setdefault("interval", 60)
     cfg.setdefault("verify_tls", True)
-    # La data dir determina dove i moduli riusati cercano network_hosts.csv ecc.
+    cfg.setdefault("data_dir", "./agent-data")
     if cfg.get("data_dir"):
         os.environ["SENTINELNET_DATA_DIR"] = cfg["data_dir"]
     return cfg
