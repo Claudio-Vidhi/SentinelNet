@@ -86,3 +86,6 @@ c_api_key.txt
 #others
 Semgrep_Code_Combined_Findings_2026_07_19.csv
 data/identities.json
+data/redundancy.db
+data/redundancy.db-shm
+data/redundancy.db-wal
