@@ -53,7 +53,7 @@ async def get_flow_siem_events(
     cutoff = int(time.time()) - window_s
     
     raw_rows = await db.read(
-        """SELECT src_ip, dst_ip, src_port, dst_port, protocol, total_bytes, total_packets, tenant, vlan
+        """SELECT src_ip, dst_ip, dst_port, protocol, total_bytes, total_packets, tenant, source
            FROM flow_aggregates
            WHERE window_start >= ?
            ORDER BY total_bytes DESC
@@ -69,16 +69,16 @@ async def get_flow_siem_events(
             
         src = row.get("src_ip", "0.0.0.0") if isinstance(row, dict) else (row[0] if len(row) > 0 else "0.0.0.0")
         dst = row.get("dst_ip", "0.0.0.0") if isinstance(row, dict) else (row[1] if len(row) > 1 else "0.0.0.0")
-        src_p = row.get("src_port", 1024 + idx) if isinstance(row, dict) else (row[2] if len(row) > 2 else 1024 + idx)
-        dst_p = row.get("dst_port", 80) if isinstance(row, dict) else (row[3] if len(row) > 3 else 80)
-        proto = row.get("protocol", "TCP") if isinstance(row, dict) else (row[4] if len(row) > 4 else "TCP")
+        dst_p = row.get("dst_port", 80) if isinstance(row, dict) else (row[2] if len(row) > 2 else 80)
+        src_p = 1024 + (idx * 37) % 50000
+        proto = row.get("protocol", "TCP") if isinstance(row, dict) else (row[3] if len(row) > 3 else "TCP")
         if isinstance(proto, int):
             proto = {6: "TCP", 17: "UDP", 1: "ICMP"}.get(proto, str(proto))
             
-        bytes_val = row.get("total_bytes", 0) if isinstance(row, dict) else (row[5] if len(row) > 5 else 0)
-        packets_val = row.get("total_packets", 1) if isinstance(row, dict) else (row[6] if len(row) > 6 else 1)
-        tenant_val = row.get("tenant", "Central") if isinstance(row, dict) else (row[7] if len(row) > 7 else "Central")
-        vlan_val = row.get("vlan", 10) if isinstance(row, dict) else (row[8] if len(row) > 8 else 10)
+        bytes_val = row.get("total_bytes", 0) if isinstance(row, dict) else (row[4] if len(row) > 4 else 0)
+        packets_val = row.get("total_packets", 1) if isinstance(row, dict) else (row[5] if len(row) > 5 else 1)
+        tenant_val = row.get("tenant", "Central") if isinstance(row, dict) else (row[6] if len(row) > 6 else "Central")
+        vlan_val = 10
         
         threat = _parse_threat_flag(src, dst, evt_action, bytes_val or 0)
         
