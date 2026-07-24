@@ -61,6 +61,38 @@
         </div>
 
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+            <h4 style="margin:0 0 10px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-sliders"></i> Configurazione Porta Syslog & Timing Polling</h4>
+            <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;">
+                <div>
+                    <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Porta Syslog UDP Listener</label>
+                    <input id="agentCfgSyslogPort" type="number" value="514" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
+                </div>
+                <div>
+                    <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Intervallo Polling Inventario (sec)</label>
+                    <input id="agentCfgInterval" type="number" value="60" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
+                </div>
+                <button class="btn btn-sm" onclick="triggerAgentConfigSave('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--primary); color:#fff;">
+                    <i class="fa-solid fa-floppy-disk"></i> Salva Config
+                </button>
+            </div>
+        </div>
+
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                <h4 style="margin:0; font-size:13px; color:var(--warning);"><i class="fa-solid fa-file-csv"></i> Editor Inventario Locale Sede (network_hosts.csv)</h4>
+                <button class="btn btn-sm btn-secondary" onclick="fetchAgentInventory('${escapeHtml(siteId)}')" style="padding:4px 10px; font-size:11px;">
+                    <i class="fa-solid fa-download"></i> Leggi da Agente
+                </button>
+            </div>
+            <textarea id="agentInventoryTextarea" placeholder="IP,Vendor,Hostname,Tenant&#10;10.0.1.1,fortigate,fw-site1,Milan&#10;10.0.1.2,cisco,sw-core,Milan" style="width:100%; height:100px; font-family:var(--font-code); font-size:11px; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); resize:vertical;"></textarea>
+            <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+                <button class="btn btn-sm" onclick="saveAgentInventory('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--warning); color:#000; font-weight:700;">
+                    <i class="fa-solid fa-upload"></i> Salva Inventario Remoto
+                </button>
+            </div>
+        </div>
+
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
             <h4 style="margin:0 0 10px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-screwdriver-wrench"></i> Azioni di Gestione Remota (Checkmk Style)</h4>
             <div style="display:flex; flex-wrap:wrap; gap:10px;">
                 <button class="btn btn-sm" onclick="triggerAgentSelfUpdate('${escapeHtml(siteId)}')" style="background:var(--primary); color:#fff; padding:8px 14px;">
@@ -78,6 +110,13 @@
                 ${jobsHtml || '<div style="padding:10px; color:var(--text-muted); font-size:12px;">Nessun comando in cronologia.</div>'}
             </div>
         </div>`;
+
+        // Check if last job was an inventory fetch result to auto-populate textarea
+        const lastInvJob = jobs.slice().reverse().find(j => j.command === '_agent_get_inventory' && j.status === 'done');
+        if (lastInvJob && lastInvJob.result) {
+            const ta = document.getElementById('agentInventoryTextarea');
+            if (ta) ta.value = lastInvJob.result;
+        }
     }
 
     async function triggerAgentSelfUpdate(siteId) {
@@ -104,6 +143,51 @@
         }
     }
 
+    async function triggerAgentConfigSave(siteId) {
+        const port = parseInt(document.getElementById('agentCfgSyslogPort').value, 10) || 514;
+        const interval = parseInt(document.getElementById('agentCfgInterval').value, 10) || 60;
+        const res = await apiFetch(`/api/sites/${siteId}/agent/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ syslog_port: port, interval: interval })
+        });
+        if (res && res.ok) {
+            alert(`Configurazione accodata per la sede '${siteId}' (Syslog Port: ${port}, Interval: ${interval}s).`);
+            openAgentControlModal(siteId);
+        } else {
+            const err = res ? await res.json() : null;
+            alert(`Errore salvataggio config: ${err ? err.detail : 'Errore sconosciuto'}`);
+        }
+    }
+
+    async function fetchAgentInventory(siteId) {
+        const res = await apiFetch(`/api/sites/${siteId}/agent/inventory/get`, { method: 'POST' });
+        if (res && res.ok) {
+            alert(`Comando di lettura inventario network_hosts.csv accodato per '${siteId}'. Aggiorna il modale tra qualche secondo per vedere il contenuto.`);
+            openAgentControlModal(siteId);
+        } else {
+            const err = res ? await res.json() : null;
+            alert(`Errore lettura inventario: ${err ? err.detail : 'Errore sconosciuto'}`);
+        }
+    }
+
+    async function saveAgentInventory(siteId) {
+        const content = document.getElementById('agentInventoryTextarea').value;
+        if (!content.trim()) { alert('Inserisci il contenuto CSV dell\'inventario.'); return; }
+        const res = await apiFetch(`/api/sites/${siteId}/agent/inventory/save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: content })
+        });
+        if (res && res.ok) {
+            alert(`Salvataggio inventario locale accodato per la sede '${siteId}'. L'agente applicherà le modifiche al prossimo ciclo.`);
+            openAgentControlModal(siteId);
+        } else {
+            const err = res ? await res.json() : null;
+            alert(`Errore salvataggio inventario: ${err ? err.detail : 'Errore sconosciuto'}`);
+        }
+    }
+
     function closeAgentControlModal() {
         const modal = document.getElementById('agentControlModal');
         if (modal) modal.style.display = 'none';
@@ -114,4 +198,7 @@
     window.closeAgentControlModal = closeAgentControlModal;
     window.triggerAgentSelfUpdate = triggerAgentSelfUpdate;
     window.triggerAgentRestart = triggerAgentRestart;
+    window.triggerAgentConfigSave = triggerAgentConfigSave;
+    window.fetchAgentInventory = fetchAgentInventory;
+    window.saveAgentInventory = saveAgentInventory;
 })();

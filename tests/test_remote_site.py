@@ -294,6 +294,20 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertIn("status", rpc_out)
         self.assertIn("git pull", rpc_out["result"])
 
+        # Enqueue inventory get & save endpoints
+        res_inv_get = self.client.post(f"/api/sites/{site_id}/agent/inventory/get", headers=self.admin_h)
+        self.assertEqual(res_inv_get.status_code, 200)
+
+        res_inv_save = self.client.post(f"/api/sites/{site_id}/agent/inventory/save", json={"content": "IP,Vendor\n10.0.1.1,cisco"}, headers=self.admin_h)
+        self.assertEqual(res_inv_save.status_code, 200)
+
+        # Test agent _agent_get_inventory and _agent_save_inventory RPC handlers
+        rpc_inv_get = agent_inst._execute_agent_rpc("_agent_get_inventory")
+        self.assertEqual(rpc_inv_get["status"], "done")
+
+        rpc_inv_save = agent_inst._execute_agent_rpc("_agent_save_inventory IP,Vendor\n10.0.1.1,cisco")
+        self.assertEqual(rpc_inv_save["status"], "done")
+
 
 if __name__ == "__main__":
     unittest.main()
