@@ -144,15 +144,32 @@ class Agent:
             "Content-Type": "application/json",
         }
         self.syslog_collector = None
+        self.syslog_worker_running = False
         if cfg.get("syslog_enabled", True):
             syslog_port = int(cfg.get("syslog_port", 5514))
             self.syslog_collector = SyslogCollector(port=syslog_port)
             self.syslog_collector.start()
+            self._start_syslog_worker()
         # Import ritardato: dipende da SENTINELNET_DATA_DIR già impostata.
         global inventory_manager, core_engine, mac_collector
         from services import inventory_manager
         from core import core_engine
         from collectors import mac_collector
+
+    def _start_syslog_worker(self):
+        """Worker thread in background che trasmette in tempo reale (ogni 2s)
+        gli eventi syslog al centrale, stile Checkmk / streaming."""
+        self.syslog_worker_running = True
+        t = threading.Thread(target=self._syslog_flush_loop, daemon=True)
+        t.start()
+
+    def _syslog_flush_loop(self):
+        while self.syslog_worker_running:
+            try:
+                self.push_syslog()
+            except Exception:
+                pass
+            time.sleep(2)
 
     # --- HTTP helper ---
     def _post(self, path, payload):
