@@ -37,6 +37,18 @@
         const lastSeen = site && site.last_seen ? new Date(site.last_seen * 1000).toLocaleString() : 'Mai / Offline';
         const isOnline = site && site.last_seen && (Date.now() / 1000 - site.last_seen < 120);
 
+        let curPort = (site && site.syslog_port) || 5514;
+        let curInterval = (site && site.interval) || 60;
+        const lastCfgJob = jobs.slice().reverse().find(j => j.command && j.command.startsWith('_agent_config'));
+        if (lastCfgJob && lastCfgJob.command) {
+            try {
+                const argStr = lastCfgJob.command.replace('_agent_config', '').trim();
+                const p = JSON.parse(argStr);
+                if (p.syslog_port) curPort = p.syslog_port;
+                if (p.interval) curInterval = p.interval;
+            } catch (err) {}
+        }
+
         let jobsHtml = jobs.slice(-5).reverse().map(j => {
             const statusCol = j.status === 'done' ? 'var(--success)' : j.status === 'error' ? 'var(--danger)' : 'var(--warning)';
             return `<div style="padding:6px 8px; border-bottom:1px solid var(--border); font-size:12px; display:flex; justify-content:space-between;">
@@ -55,8 +67,8 @@
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
                 <div><strong>Ultimo contatto:</strong> ${lastSeen}</div>
                 <div><strong>Modalità:</strong> Site Agent (Outbound HTTPS)</div>
-                <div><strong>Syslog UDP Listener:</strong> Attivo su porta 514</div>
-                <div><strong>Intervallo Sync:</strong> 60s (Syslog streaming 2s)</div>
+                <div><strong>Syslog UDP Listener:</strong> Attivo su porta ${curPort}</div>
+                <div><strong>Intervallo Sync:</strong> ${curInterval}s (Syslog streaming 2s)</div>
             </div>
         </div>
 
@@ -65,17 +77,17 @@
             <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;">
                 <div>
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Porta Syslog UDP Listener</label>
-                    <input id="agentCfgSyslogPort" type="number" value="514" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
+                    <input id="agentCfgSyslogPort" type="number" value="${curPort}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
                 </div>
                 <div>
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Intervallo Polling Inventario (sec)</label>
-                    <input id="agentCfgInterval" type="number" value="60" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
+                    <input id="agentCfgInterval" type="number" value="${curInterval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
                 </div>
                 <button class="btn btn-sm" onclick="triggerAgentConfigSave('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--primary); color:#fff;">
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
                 </button>
             </div>
-        </div>
+        </div>`;>
 
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">

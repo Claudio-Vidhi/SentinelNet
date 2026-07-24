@@ -57,7 +57,16 @@ def get_agent_site(request: Request):
     return site_manager.get_site(site_id)
 
 @router.post("/api/agent/heartbeat")
-def agent_heartbeat(site = Depends(get_agent_site)):
+def agent_heartbeat(payload: dict = None, site = Depends(get_agent_site)):
+    if payload and isinstance(payload, dict):
+        site_id = site["id"]
+        updates = {}
+        if "syslog_port" in payload:
+            updates["syslog_port"] = payload["syslog_port"]
+        if "interval" in payload:
+            updates["interval"] = payload["interval"]
+        if updates:
+            site_manager.update_site(site_id, updates)
     return {"ok": True, "site_id": site["id"], "name": site["name"], "subnets": site.get("subnets", [])}
 
 @router.post("/api/agent/inventory")
@@ -71,7 +80,6 @@ def agent_push_inventory(payload: AgentInventorySchema, site = Depends(get_agent
     for d in payload.devices:
         if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", d.ip):
             continue
-        # Se l'agente passa un group/tenant lo usa; altrimenti preserva il Group o usa 'Generale'.
         req_group = (d.group or "").strip()
         group = req_group or existing_groups.get(d.ip) or "Generale"
         vendor = inventory_manager.normalize_vendor(d.vendor)
@@ -89,8 +97,6 @@ def agent_push_mac(payload: AgentMacSchema, site = Depends(get_agent_site)):
     attribuzione alla sede (site) per il MAC tracker centrale."""
     site_id = site["id"]
     total = 0
-    # Tenant = Group del device in inventario (coerente con la raccolta centrale),
-    # non l'id sede: lo scoping utenti filtra per Group.
     groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
     for col in payload.collections:
         summ = mac_history.record_sightings(
@@ -130,8 +136,7 @@ def agent_push_syslog(payload: AgentSyslogBatchSchema, site = Depends(get_agent_
             ts_val = item.ts if item.ts > 0 else int(time.time())
             db.enqueue_write(
                 "INSERT INTO syslog_events (ts, tenant, device_ip, severity, action, message, exporter_ip) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (ts_val, tenant, item.src_ip, ev.get("severity", "info"), ev.get("action", ""), ev.get("message", ""), item.src_ip)
+                (ts_val, tenant, ev.get("device_ip", item.src_ip), ev.get("severity"), ev.get("action"), ev.get("message"), item.src_ip)
             )
             count += 1
-    log_audit(f"Agente sede '{site_id}': {count} eventi syslog ingeriti.")
     return {"status": "success", "ingested": count}
