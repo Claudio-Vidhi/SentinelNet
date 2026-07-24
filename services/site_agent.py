@@ -182,7 +182,15 @@ class Agent:
 
     # --- Cicli di lavoro ---
     def heartbeat(self):
-        r = self._post("/api/agent/heartbeat", {})
+        payload = {
+            "version": "2.6.0",
+            "python_version": sys.version.split()[0],
+            "syslog_enabled": self.cfg.get("syslog_enabled", True),
+            "syslog_port": int(self.cfg.get("syslog_port", 5514)),
+            "interval": int(self.cfg.get("interval", 60)),
+            "uptime_s": int(time.time() - self._start_ts) if hasattr(self, "_start_ts") else 0,
+        }
+        r = self._post("/api/agent/heartbeat", payload)
         r.raise_for_status()
         return r.json()
 
@@ -227,26 +235,66 @@ class Agent:
         r.raise_for_status()
         return r.json()
 
+    def _execute_agent_rpc(self, cmd: str) -> dict:
+        """Esegue comandi di gestione remota dell'agente (_agent_self_update, _agent_restart, _agent_config)."""
+        import subprocess
+        parts = cmd.split(maxsplit=1)
+        action = parts[0]
+        arg = parts[1] if len(parts) > 1 else ""
+
+        if action == "_agent_self_update":
+            try:
+                proc = subprocess.run(
+                    ["git", "pull"], cwd=_ROOT, capture_output=True, text=True, timeout=60
+                )
+                output = proc.stdout + proc.stderr
+                status = "done" if proc.returncode == 0 else "error"
+                return {"status": status, "result": f"[git pull] code={proc.returncode}\n{output}"}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore git pull: {e}"}
+
+        elif action == "_agent_restart":
+            def _deferred_restart():
+                time.sleep(1.5)
+                os._exit(0)  # Exit process so systemd auto-restarts service cleanly
+            threading.Thread(target=_deferred_restart, daemon=True).start()
+            return {"status": "done", "result": "Riavvio agente programmato tra 1.5 secondi (systemd auto-restart)."}
+
+        elif action == "_agent_config":
+            try:
+                new_cfg = json.loads(arg)
+                if self.cfg.get("config_file"):
+                    with open(self.cfg["config_file"], "w", encoding="utf-8") as f:
+                        json.dump(new_cfg, f, indent=2)
+                return {"status": "done", "result": f"Configurazione aggiornata: {new_cfg}"}
+            except Exception as e:
+                return {"status": "error", "result": f"Errore aggiornamento config: {e}"}
+
+        return {"status": "error", "result": f"Comando RPC sconosciuto: {action}"}
+
     def run_jobs(self, devices):
         r = self._get("/api/agent/jobs")
         r.raise_for_status()
         jobs = r.json().get("jobs", [])
         by_ip = {d["IP"]: d for d in devices}
         for job in jobs:
-            ip = job["device_ip"]
-            cmd = job["command"]
-            device = by_ip.get(ip)
-            if not device:
-                out = {"status": "error", "result": f"Dispositivo {ip} non in inventario locale."}
+            ip = job.get("device_ip")
+            cmd = job.get("command", "")
+            if cmd.startswith("_agent_"):
+                out = self._execute_agent_rpc(cmd)
             else:
-                res = core_engine.send_custom_command(device, cmd)
-                if res.get("status") == "success":
-                    out = {"status": "done", "result": res.get("output", "")}
+                device = by_ip.get(ip)
+                if not device:
+                    out = {"status": "error", "result": f"Dispositivo {ip} non in inventario locale."}
                 else:
-                    out = {"status": "error", "result": res.get("message", "errore")}
+                    res = core_engine.send_custom_command(device, cmd)
+                    if res.get("status") == "success":
+                        out = {"status": "done", "result": res.get("output", "")}
+                    else:
+                        out = {"status": "error", "result": res.get("message", "errore")}
             try:
                 self._post(f"/api/agent/jobs/{job['id']}/result", out).raise_for_status()
-                print(f"[job] {job['id']} su {ip}: {out['status']}")
+                print(f"[job] {job['id']} '{cmd}': {out['status']}")
             except Exception as e:
                 print(f"[job] {job['id']}: invio risultato fallito: {e}")
 
