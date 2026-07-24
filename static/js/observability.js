@@ -1265,13 +1265,28 @@
         canvas.style.display = 'block';
         if (statsBox) statsBox.style.display = 'none';
 
-        // Resize canvas to pixel ratio
+        // ResizeObserver to automatically adjust canvas resolution when tab becomes visible or resizes
+        if (typeof ResizeObserver !== 'undefined' && canvas && !canvas._hasObsResizeObserver) {
+            canvas._hasObsResizeObserver = true;
+            const ro = new ResizeObserver(() => {
+                if (canvas.offsetWidth > 0) {
+                    renderObsProtocolChart();
+                }
+            });
+            ro.observe(canvas.parentElement || canvas);
+        }
+
+        // Resize canvas to pixel ratio accurately
+        const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
-        canvas.width = (rect.width || 600) * (window.devicePixelRatio || 1);
-        canvas.height = (rect.height || 230) * (window.devicePixelRatio || 1);
-        ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
-        const width = rect.width || 600;
-        const height = rect.height || 230;
+        const parentRect = canvas.parentElement ? canvas.parentElement.getBoundingClientRect() : rect;
+        const width = Math.max(300, Math.round(rect.width || parentRect.width || 600));
+        const height = Math.max(180, Math.round(rect.height || parentRect.height || 230));
+
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
 
         ctx.clearRect(0, 0, width, height);
 
