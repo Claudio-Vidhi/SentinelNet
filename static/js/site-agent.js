@@ -49,20 +49,39 @@
             } catch (err) {}
         }
 
-        let jobsHtml = jobs.slice(-5).reverse().map(j => {
+        const isFlowActive = site && site.flow_active !== false;
+
+        let jobsHtml = jobs.slice(-10).reverse().map(j => {
             const statusCol = j.status === 'done' ? 'var(--success)' : j.status === 'error' ? 'var(--danger)' : 'var(--warning)';
-            return `<div style="padding:6px 8px; border-bottom:1px solid var(--border); font-size:12px; display:flex; justify-content:space-between;">
-                <span><code>${escapeHtml(j.command)}</code> (Richiesto da: ${escapeHtml(j.requested_by || 'admin')})</span>
-                <span style="color:${statusCol}; font-weight:700;">${escapeHtml(j.status)}</span>
+            const jobTime = j.created ? new Date(j.created * 1000).toLocaleString() : 'N/D';
+            return `<div style="padding:6px 8px; border-bottom:1px solid var(--border); font-size:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                <span>
+                    <code>${escapeHtml(j.command)}</code>
+                    <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">
+                        <i class="fa-regular fa-clock"></i> ${jobTime} — (${escapeHtml(j.requested_by || 'admin')})
+                    </span>
+                </span>
+                <span style="color:${statusCol}; font-weight:700; font-size:11px; text-transform:uppercase;">${escapeHtml(j.status)}</span>
             </div>
             ${j.result ? `<pre style="margin:2px 0 8px; padding:6px; background:var(--surface); font-size:11px; max-height:100px; overflow:auto;">${escapeHtml(j.result)}</pre>` : ''}`;
         }).join('');
 
         body.innerHTML = `
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-                <span style="font-weight:700; font-size:14px;">Stato Agente Remoto</span>
-                <span class="status ${isOnline ? 'ok' : 'err'}"><span class="led ${isOnline ? 'led-success' : 'led-danger'}"></span>${isOnline ? 'ONLINE' : 'OFFLINE / UNREACHABLE'}</span>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-weight:700; font-size:14px;">Stato Agente Remoto</span>
+                    <span class="status ${isOnline ? 'ok' : 'err'}"><span class="led ${isOnline ? 'led-success' : 'led-danger'}"></span>${isOnline ? 'ONLINE' : 'OFFLINE / UNREACHABLE'}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span class="status ${isFlowActive ? 'ok' : 'warn'}" style="font-size:11px;">
+                        <span class="led ${isFlowActive ? 'led-success' : 'led-warning'}"></span>
+                        ${isFlowActive ? 'FLUSSO ATTIVO' : 'FLUSSO PAUSATO'}
+                    </span>
+                    <button class="btn btn-sm ${isFlowActive ? 'btn-secondary' : 'btn-primary'}" onclick="toggleAgentDataFlow('${escapeHtml(siteId)}', ${!isFlowActive})" style="padding:4px 10px; font-size:11px;">
+                        <i class="fa-solid ${isFlowActive ? 'fa-pause' : 'fa-play'}"></i> ${isFlowActive ? 'Interrompi Flusso Dati' : 'Riavvia Flusso Dati'}
+                    </button>
+                </div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px;">
                 <div><strong>Ultimo contatto:</strong> ${lastSeen}</div>
@@ -205,6 +224,22 @@
         if (modal) modal.style.display = 'none';
     }
 
+    async function toggleAgentDataFlow(siteId, newActiveState) {
+        const actionName = newActiveState ? 'riavviare' : 'interrompere';
+        if (!confirm(`Confermi di voler ${actionName} il flusso dati per la sede '${siteId}'?`)) return;
+        const res = await apiFetch(`/api/sites/${siteId}/agent/flow-control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: newActiveState })
+        });
+        if (res && res.ok) {
+            openAgentControlModal(siteId);
+        } else {
+            const err = res ? await res.json() : null;
+            alert(`Errore gestione flusso: ${err ? err.detail : 'Errore sconosciuto'}`);
+        }
+    }
+
     // Expose functions globally for UI buttons
     window.openAgentControlModal = openAgentControlModal;
     window.closeAgentControlModal = closeAgentControlModal;
@@ -213,4 +248,5 @@
     window.triggerAgentConfigSave = triggerAgentConfigSave;
     window.fetchAgentInventory = fetchAgentInventory;
     window.saveAgentInventory = saveAgentInventory;
+    window.toggleAgentDataFlow = toggleAgentDataFlow;
 })();

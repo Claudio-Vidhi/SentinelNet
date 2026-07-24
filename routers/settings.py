@@ -95,6 +95,33 @@ def set_fortigate_preview_settings(payload: FortigatePreviewSchema, current_user
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "fortigate_preview": bool(payload.enabled)}
 
+@router.get("/api/settings/netsec-audit")
+def get_netsec_audit_settings(current_user = Depends(require_admin)):
+    """Stato del flag preview per la tab 'NetSec Audit' (default: disattivo)."""
+    return {"netsec_audit_preview": bool(get_app_settings().get("netsec_audit_preview_enabled", False))}
+
+@router.post("/api/settings/netsec-audit")
+def set_netsec_audit_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
+    save_app_settings({"netsec_audit_preview_enabled": bool(payload.enabled)})
+    log_audit(f"Tab NetSec Audit (preview) "
+              f"{'attivata' if payload.enabled else 'disattivata'} "
+              f"dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success", "netsec_audit_preview": bool(payload.enabled)}
+
+@router.get("/api/settings/flow-siem-preview")
+def get_flow_siem_preview_settings(current_user = Depends(require_admin)):
+    """Stato del flag preview per la tab 'Flow SIEM' (default: disattivo)."""
+    return {"flow_siem_preview": bool(get_app_settings().get("flow_siem_preview_enabled", False))}
+
+@router.post("/api/settings/flow-siem-preview")
+def set_flow_siem_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
+    save_app_settings({"flow_siem_preview_enabled": bool(payload.enabled)})
+    log_audit(f"Tab Flow SIEM (preview) "
+              f"{'attivata' if payload.enabled else 'disattivata'} "
+              f"dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success", "flow_siem_preview": bool(payload.enabled)}
+
+
 @router.get("/api/settings/app")
 def get_app_advanced_settings(current_user = Depends(require_admin)):
     saved = get_app_settings().get("app", {}) or {}

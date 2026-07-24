@@ -152,6 +152,17 @@ def create_site(name: str, mode: str, subnets=None):
         return _public(data[site_id]), token_plain
 
 
+def set_site_flow_status(site_id: str, active: bool) -> bool:
+    with _lock:
+        data = _load()
+        site = data.get(site_id)
+        if not site:
+            return False
+        site["flow_active"] = bool(active)
+        _save(data)
+        return True
+
+
 def update_site(site_id: str, name=None, mode=None, subnets=None) -> bool:
     with _lock:
         data = _load()
