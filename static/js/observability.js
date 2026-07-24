@@ -1286,10 +1286,10 @@
                 }
             });
 
-            const cx = width / 3;
+            const cx = width > 500 ? width * 0.32 : width * 0.3;
             const cy = height / 2;
-            const radius = Math.min(cx, cy) - 15;
-            const innerRadius = radius * 0.6;
+            const radius = Math.min(width * 0.22, height * 0.38);
+            const innerRadius = radius * 0.58;
 
             if (items.length === 0 || totalVal === 0) {
                 ctx.fillStyle = '#888';
@@ -1322,8 +1322,8 @@
             ctx.fillText(`${items.length} attivi`, cx, cy + 10);
 
             // Render Legend on the right side
-            let lx = (width / 3) * 1.6;
-            let ly = 30;
+            let lx = Math.max(220, width * 0.52);
+            let ly = Math.max(20, (height - (items.length * 28)) / 2);
             items.forEach(item => {
                 ctx.fillStyle = item.color;
                 ctx.fillRect(lx, ly, 12, 12);
@@ -1334,7 +1334,7 @@
                 const pct = Math.round((item.val / totalVal) * 100);
                 const valStr = item.key === 'syslog' ? `${item.val} evt` : (typeof fmtBytes === 'function' ? fmtBytes(item.val) : `${item.val} B`);
                 ctx.fillText(`${item.label}: ${valStr} (${pct}%)`, lx + 20, ly - 1);
-                ly += 26;
+                ly += 28;
             });
         } else if (_obsChartType === 'trend') {
             const trend = d.trend || [];
@@ -1452,15 +1452,19 @@
     }
 
     // --- INSPECTION MODAL & CLICK DRILL-DOWN ---
-    function openObsInspectModal(protoKey = 'all') {
+    async function openObsInspectModal(protoKey = 'all') {
         const modal = document.getElementById('obsInspectModal');
         const title = document.getElementById('obsInspectTitle');
         const body = document.getElementById('obsInspectBody');
-        if (!modal || !body || !_obsProtocolData) return;
+        if (!modal || !body) return;
 
-        const bd = _obsProtocolData.breakdown || {};
-        const totals = _obsProtocolData.totals || {};
-        const windowStr = _obsProtocolData.window || '24h';
+        if (!_obsProtocolData) {
+            await loadObsProtocolDist();
+        }
+
+        const bd = (_obsProtocolData && _obsProtocolData.breakdown) || {};
+        const totals = (_obsProtocolData && _obsProtocolData.totals) || {};
+        const windowStr = (_obsProtocolData && _obsProtocolData.window) || '24h';
 
         const PROTO_LABELS = {
             netflow: 'NetFlow',

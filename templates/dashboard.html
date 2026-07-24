@@ -1197,16 +1197,16 @@
             </h3>
             <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="descObsProtocolDist">Visualizza il volume di dati ed eventi ricevuti suddiviso per protocollo di telemetria.</p>
           </div>
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
             <!-- 3-Way Graph Type Selector Buttons -->
             <div class="btn-group" style="display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface-3);">
-              <button id="btnChartTypeDonut" class="btn btn-sm" onclick="setObsChartType('donut')" style="padding:6px 12px; border:none; background:var(--primary); color:#fff;" title="Grafico a Ciambella (Donut)"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="lblChartDonut">Ciambella</span></button>
-              <button id="btnChartTypeBar" class="btn btn-sm" onclick="setObsChartType('bar')" style="padding:6px 12px; border:none; background:transparent; color:var(--text);" title="Grafico a Barre (Bar)"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
-              <button id="btnChartTypeTrend" class="btn btn-sm" onclick="setObsChartType('trend')" style="padding:6px 12px; border:none; background:transparent; color:var(--text);" title="Grafico Trend Temporale (Trend)"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
+              <button id="btnChartTypeDonut" class="btn btn-sm" onclick="setObsChartType('donut')" style="padding:5px 10px; border:none; background:var(--primary); color:#fff; font-size:12px;" title="Grafico a Ciambella (Donut)"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="lblChartDonut">Ciambella</span></button>
+              <button id="btnChartTypeBar" class="btn btn-sm" onclick="setObsChartType('bar')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
+              <button id="btnChartTypeTrend" class="btn btn-sm" onclick="setObsChartType('trend')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
             </div>
             <!-- Window Selector & Inspect Button -->
-            <button class="btn btn-sm btn-secondary" onclick="openObsInspectModal('all')" style="padding:6px 10px; font-size:12px;" title="Ispeziona Dettagli Telemetria"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
-            <select id="obsChartWindow" onchange="loadObsProtocolDist()" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <button class="btn btn-sm btn-secondary" onclick="openObsInspectModal('all')" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
+            <select id="obsChartWindow" onchange="loadObsProtocolDist()" style="padding:5px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
               <option value="15m">15m</option>
               <option value="1h">1h</option>
               <option value="24h" selected>24h</option>
@@ -1214,8 +1214,8 @@
             </select>
           </div>
         </div>
-        <div style="position:relative; width:100%; height:260px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; display:flex; align-items:center; justify-content:center;">
-          <canvas id="obsProtocolCanvas" style="max-width:100%; max-height:230px;"></canvas>
+        <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; overflow:hidden;">
+          <canvas id="obsProtocolCanvas" onclick="openObsInspectModal('all')" style="width:100%; height:100%; display:block; cursor:pointer;" title="Clicca per aprire l'ispezione dettagliata telemetria"></canvas>
           <div id="obsProtocolStats" style="display:none; width:100%; height:100%; flex-direction:column; justify-content:center; gap:10px; padding:10px 20px;"></div>
         </div>
       </div>
