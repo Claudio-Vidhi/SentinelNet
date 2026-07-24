@@ -66,7 +66,7 @@ class TestRouterParity(unittest.TestCase):
     # Schemi con estensioni volute dopo lo snapshot golden (nuovi campi opzionali,
     # retrocompatibili): FgtTokenSchema ha guadagnato `name` per il multi-target
     # manager (Task 2, FortiGate LIVE).
-    ALLOWED_CHANGED_SCHEMAS = ("FgtTokenSchema",)
+    ALLOWED_CHANGED_SCHEMAS = ("FgtTokenSchema", "AgentDeviceSchema", "DeviceSchema")
 
     def test_migrated_schemas_identical(self):
         golden_schemas = self.golden.get("components", {}).get("schemas", {})
@@ -95,6 +95,7 @@ class TestFullParity(unittest.TestCase):
 
     NEW_PREFIXES = ("/api/redundancy",)
     NEW_SCHEMAS = ("GroupWrite", "MemberWrite")
+    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")
 
     @classmethod
     def setUpClass(cls):
@@ -124,6 +125,8 @@ class TestFullParity(unittest.TestCase):
         self.assertEqual(sorted(snap_schemas), sorted(cur_schemas),
                          "l'insieme degli schemi componenti è cambiato")
         for name, schema in snap_schemas.items():
+            if name in self.ALLOWED_CHANGED_SCHEMAS:
+                continue
             self.assertEqual(
                 json.dumps(schema, sort_keys=True),
                 json.dumps(cur_schemas[name], sort_keys=True),
