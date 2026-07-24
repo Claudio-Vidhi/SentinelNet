@@ -178,11 +178,68 @@ async def obs_protocol_distribution(
 
     trend_series = [timeline[k] for k in sorted(timeline.keys())]
 
+    # 4. Detailed Drill-down Breakdown for Inspection Modal
+    syslog_sev_rows = await db.read(
+        f"""SELECT severity, COUNT(*) AS count
+            FROM syslog_events
+            WHERE ts >= ?{clause}
+            GROUP BY severity""",
+        (cutoff, *params))
+
+    syslog_act_rows = await db.read(
+        f"""SELECT COALESCE(action, 'unknown') AS action, COUNT(*) AS count
+            FROM syslog_events
+            WHERE ts >= ?{clause}
+            GROUP BY action""",
+        (cutoff, *params))
+
+    syslog_dev_rows = await db.read(
+        f"""SELECT COALESCE(device_ip, exporter_ip, 'unknown') AS device_ip, COUNT(*) AS count
+            FROM syslog_events
+            WHERE ts >= ?{clause}
+            GROUP BY device_ip
+            ORDER BY count DESC LIMIT 5""",
+        (cutoff, *params))
+
+    flow_l4_rows = await db.read(
+        f"""SELECT COALESCE(source, 'netflow') AS source,
+                   protocol,
+                   dst_port,
+                   SUM(total_bytes) AS total_bytes
+            FROM flow_aggregates
+            WHERE window_start >= ?{clause}
+            GROUP BY COALESCE(source, 'netflow'), protocol, dst_port
+            ORDER BY SUM(total_bytes) DESC""",
+        (cutoff, *params))
+
+    breakdown = {
+        "syslog": {
+            "severity": {str(r["severity"] if r["severity"] is not None else 6): r["count"] for r in syslog_sev_rows},
+            "actions": {r["action"]: r["count"] for r in syslog_act_rows},
+            "devices": {r["device_ip"]: r["count"] for r in syslog_dev_rows},
+        },
+        "netflow": {"l4": {}, "ports": {}},
+        "ipfix":   {"l4": {}, "ports": {}},
+        "sflow":   {"l4": {}, "ports": {}},
+    }
+
+    _PROTO_MAP = {6: "TCP", 17: "UDP", 1: "ICMP"}
+    for r in flow_l4_rows:
+        src = (r["source"] or "netflow").lower()
+        if src not in breakdown:
+            breakdown[src] = {"l4": {}, "ports": {}}
+        l4_name = _PROTO_MAP.get(r["protocol"], f"Proto {r['protocol']}")
+        port_name = f"Port {r['dst_port']}" if r["dst_port"] else "—"
+        b = r["total_bytes"] or 0
+        breakdown[src]["l4"][l4_name] = breakdown[src]["l4"].get(l4_name, 0) + b
+        breakdown[src]["ports"][port_name] = breakdown[src]["ports"].get(port_name, 0) + b
+
     return {
         "window": window,
         "bucket_size": bucket_size,
         "totals": totals,
         "trend": trend_series,
+        "breakdown": breakdown,
     }
 
 

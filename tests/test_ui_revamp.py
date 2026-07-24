@@ -1650,9 +1650,9 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         tab = self._tab(_html())
         self.assertIn('<div class="hero" style="grid-template-columns:1fr;', tab)
         self.assertIn('<span class="eyebrow" data-i18n="flowsEyebrow"', tab)
-        # Cards: flow graph, tenant summary, protocol breakdown, top talkers, correlated anomalies.
-        self.assertEqual(tab.count('<div class="panel"'), 4)
-        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;">'), 3)
+        # Cards: flow graph, obs protocol dist, tenant summary, protocol breakdown, top talkers, correlated anomalies.
+        self.assertEqual(tab.count('<div class="panel"'), 5)
+        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 4)
         # All tables wrapped: flows, syslog-in-all-sources, protocol breakdown,
         # top talkers, correlated anomalies.
         self.assertEqual(tab.count('class="table-wrap"'), 5)
