@@ -39,14 +39,15 @@ def restrict_permissions(path: str):
 def get_path(filename: str) -> str:
     """
     Risolve il percorso assoluto di un file di configurazione o database
-    all'interno di DATA_DIR, creando la cartella se necessario.
+    all'interno di SENTINELNET_DATA_DIR / DATA_DIR, creando la cartella se necessario.
     """
-    if DATA_DIR:
+    active_dir = os.getenv("SENTINELNET_DATA_DIR") or DATA_DIR
+    if active_dir:
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
+            os.makedirs(active_dir, exist_ok=True)
         except Exception:
             pass
-        return os.path.join(DATA_DIR, filename)
+        return os.path.join(active_dir, filename)
     return filename
 
 

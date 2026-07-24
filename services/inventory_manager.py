@@ -6,10 +6,15 @@ import threading
 from security import crypto_vault
 from core import data_config
 
-HOSTS_CSV = data_config.get_path("network_hosts.csv")
-GROUPS_JSON = data_config.get_path("groups.json")
-VERSION_DATA_FILE = data_config.get_path("detected_versions.json")
-VENDORS_FILE = data_config.get_path("vendors.json")
+def get_hosts_csv() -> str: return data_config.get_path("network_hosts.csv")
+def get_groups_json() -> str: return data_config.get_path("groups.json")
+def get_version_data_file() -> str: return data_config.get_path("detected_versions.json")
+def get_vendors_file() -> str: return data_config.get_path("vendors.json")
+
+HOSTS_CSV = get_hosts_csv()
+GROUPS_JSON = get_groups_json()
+VERSION_DATA_FILE = get_version_data_file()
+VENDORS_FILE = get_vendors_file()
 
 IP_PATTERN = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 
@@ -104,11 +109,12 @@ def safe_json_write(filepath: str, data: dict):
         raise e
 
 def get_all_groups():
-    if not os.path.exists(GROUPS_JSON):
+    groups_json = get_groups_json()
+    if not os.path.exists(groups_json):
         default_groups = {"Generale": {"description": "Sede Principale predefinita"}}
         save_groups(default_groups)
         return default_groups
-    with open(GROUPS_JSON, "r", encoding="utf-8") as f:
+    with open(groups_json, "r", encoding="utf-8") as f:
         try:
             data = json.load(f)
             if isinstance(data, list):
@@ -125,11 +131,12 @@ def get_all_groups():
             return default_groups
 
 def save_groups(groups_dict):
-    safe_json_write(GROUPS_JSON, groups_dict)
+    safe_json_write(get_groups_json(), groups_dict)
 
 def safe_write_hosts_csv(devices):
     invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
-    temp_filename = HOSTS_CSV + ".tmp"
+    hosts_csv = get_hosts_csv()
+    temp_filename = hosts_csv + ".tmp"
     # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
     _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port', 'Transports']
@@ -140,10 +147,10 @@ def safe_write_hosts_csv(devices):
             for d in devices:
                 writer.writerow(d)
         try:
-            os.replace(temp_filename, HOSTS_CSV)
+            os.replace(temp_filename, hosts_csv)
         except PermissionError:
             # Fallback per sistemi Windows
-            with open(HOSTS_CSV, mode='w', newline='', encoding='utf-8') as f:
+            with open(hosts_csv, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 for d in devices:
@@ -163,9 +170,10 @@ def safe_write_hosts_csv(devices):
 
 def get_all_devices():
     devices = []
-    if not os.path.exists(HOSTS_CSV):
+    hosts_csv = get_hosts_csv()
+    if not os.path.exists(hosts_csv):
         return devices
-    with open(HOSTS_CSV, mode='r', encoding='utf-8') as f:
+    with open(hosts_csv, mode='r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             # Inventari legacy senza colonna 'Site': default alla sede centrale.
@@ -310,11 +318,12 @@ def get_all_vendors() -> dict:
         "cisco_wlc":{"euvd_term": "cisco",                    "driver": "cisco_wlc"},
         "cisco_9800":{"euvd_term": "cisco",                   "driver": "cisco_9800"},
     }
-    if not os.path.exists(VENDORS_FILE):
-        safe_json_write(VENDORS_FILE, defaults)
+    vendors_file = get_vendors_file()
+    if not os.path.exists(vendors_file):
+        safe_json_write(vendors_file, defaults)
         return defaults
     try:
-        with open(VENDORS_FILE, "r") as f:
+        with open(vendors_file, "r") as f:
             stored = json.load(f)
         # I vendor di sistema sono sempre disponibili (lo stored ha la precedenza),
         # così driver come 'cisco_s300' (CBS) restano selezionabili.
@@ -323,7 +332,7 @@ def get_all_vendors() -> dict:
         return defaults
 
 def save_vendors(vendors: dict):
-    safe_json_write(VENDORS_FILE, vendors)
+    safe_json_write(get_vendors_file(), vendors)
 
 # --- CATEGORIE DISPOSITIVI (classificazione manuale + categorie custom) ---
 
