@@ -88,6 +88,104 @@ async def obs_top_talkers(
             "flows": [dict(r) for r in rows]}
 
 
+@router.get("/api/observability/protocol-distribution")
+async def obs_protocol_distribution(
+    window: str = Query("15m"),
+    current_user = Depends(get_current_user),
+):
+    """Ripartizione traffico e volumi per protocollo (NetFlow, IPFIX, sFlow, Syslog)
+    sulla finestra temporale, scoped per tenant."""
+    import time as _time
+    seconds = _parse_window(window)
+    now = int(_time.time())
+    cutoff = now - seconds
+    clause, params = _tenant_filter(current_user)
+
+    # 1. Flow aggregates per source (netflow, ipfix, sflow)
+    flow_rows = await db.read(
+        f"""SELECT COALESCE(source, 'netflow') AS source,
+                   SUM(total_bytes) AS total_bytes,
+                   SUM(total_packets) AS total_packets,
+                   SUM(flow_count) AS flow_count
+            FROM flow_aggregates
+            WHERE window_start >= ?{clause}
+            GROUP BY COALESCE(source, 'netflow')""",
+        (cutoff, *params))
+
+    # 2. Syslog events count
+    syslog_rows = await db.read(
+        f"""SELECT COUNT(*) AS total_events
+            FROM syslog_events
+            WHERE ts >= ?{clause}""",
+        (cutoff, *params))
+
+    # 3. Time-series buckets for trend chart (bucket size dynamically scaled)
+    bucket_size = 60 if seconds <= 900 else (300 if seconds <= 3600 else (3600 if seconds <= 86400 else 86400))
+
+    trend_flow_rows = await db.read(
+        f"""SELECT (window_start / ?) * ? AS bucket_ts,
+                   COALESCE(source, 'netflow') AS source,
+                   SUM(total_bytes) AS total_bytes,
+                   SUM(total_packets) AS total_packets,
+                   SUM(flow_count) AS flow_count
+            FROM flow_aggregates
+            WHERE window_start >= ?{clause}
+            GROUP BY bucket_ts, COALESCE(source, 'netflow')
+            ORDER BY bucket_ts ASC""",
+        (bucket_size, bucket_size, cutoff, *params))
+
+    trend_syslog_rows = await db.read(
+        f"""SELECT (ts / ?) * ? AS bucket_ts,
+                   COUNT(*) AS total_events
+            FROM syslog_events
+            WHERE ts >= ?{clause}
+            GROUP BY bucket_ts
+            ORDER BY bucket_ts ASC""",
+        (bucket_size, bucket_size, cutoff, *params))
+
+    totals = {
+        "netflow": {"bytes": 0, "packets": 0, "flows": 0, "events": 0},
+        "ipfix":   {"bytes": 0, "packets": 0, "flows": 0, "events": 0},
+        "sflow":   {"bytes": 0, "packets": 0, "flows": 0, "events": 0},
+        "syslog":  {"bytes": 0, "packets": 0, "flows": 0, "events": 0},
+    }
+
+    for r in flow_rows:
+        src = (r["source"] or "netflow").lower()
+        if src not in totals:
+            totals[src] = {"bytes": 0, "packets": 0, "flows": 0, "events": 0}
+        totals[src]["bytes"] = r["total_bytes"] or 0
+        totals[src]["packets"] = r["total_packets"] or 0
+        totals[src]["flows"] = r["flow_count"] or 0
+
+    if syslog_rows:
+        totals["syslog"]["events"] = syslog_rows[0]["total_events"] or 0
+
+    # Build trend timeline
+    timeline = {}
+    for r in trend_flow_rows:
+        bts = r["bucket_ts"]
+        src = (r["source"] or "netflow").lower()
+        if bts not in timeline:
+            timeline[bts] = {"ts": bts, "netflow": 0, "ipfix": 0, "sflow": 0, "syslog": 0}
+        timeline[bts][src] = r["total_bytes"] or 0
+
+    for r in trend_syslog_rows:
+        bts = r["bucket_ts"]
+        if bts not in timeline:
+            timeline[bts] = {"ts": bts, "netflow": 0, "ipfix": 0, "sflow": 0, "syslog": 0}
+        timeline[bts]["syslog"] = r["total_events"] or 0
+
+    trend_series = [timeline[k] for k in sorted(timeline.keys())]
+
+    return {
+        "window": window,
+        "bucket_size": bucket_size,
+        "totals": totals,
+        "trend": trend_series,
+    }
+
+
 @router.get("/api/observability/syslog")
 async def obs_syslog(
     window: str = Query("15m"),
