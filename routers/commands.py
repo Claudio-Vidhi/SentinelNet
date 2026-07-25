@@ -366,7 +366,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
                             _ws_user = {"role": _role, "sub": username_from_otp}
                             if _cmd and not command_allowed(_cmd, _ws_user):
                                 # Annulla la riga sullo switch (kill-line) e avvisa
-                                chan.send("\x15")
+                                chan.send(b"\x15")
                                 await websocket.send_text(
                                     "\r\n[Comando bloccato] Operazione non consentita "
                                     "per motivi di sicurezza (in blacklist).\r\n"
@@ -385,16 +385,16 @@ async def ws_terminal(websocket: WebSocket, ip: str):
                                     f"'{username_from_otp}' {_bypass_note(_ws_user)}."
                                 )
                             line_buf = ""
-                            chan.send(ch)
+                            chan.send(ch.encode("utf-8"))
                         elif ch in ("\x7f", "\x08"):  # backspace
                             line_buf = line_buf[:-1]
-                            chan.send(ch)
+                            chan.send(ch.encode("utf-8"))
                         elif ch == "\x03":  # Ctrl-C annulla la riga corrente
                             line_buf = ""
-                            chan.send(ch)
+                            chan.send(ch.encode("utf-8"))
                         else:
                             line_buf += ch
-                            chan.send(ch)
+                            chan.send(ch.encode("utf-8"))
             except WebSocketDisconnect:
                 pass
             except Exception:
