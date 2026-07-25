@@ -29,6 +29,7 @@ import json
 import time
 
 import requests
+from typing import Any, Dict, List, Optional
 
 from security.redaction import redact
 
@@ -56,7 +57,7 @@ def _login() -> str:
     return _token
 
 
-def api(method: str, path: str, params: dict = None, body: dict = None):
+def api(method: str, path: str, params: Optional[dict] = None, body: Optional[dict] = None):
     """Chiama l'API REST con JWT; su 401 riprova una volta dopo re-login."""
     global _token
     if _token is None:
@@ -87,8 +88,8 @@ def api(method: str, path: str, params: dict = None, body: dict = None):
 # --- Definizione dei tool MCP ----------------------------------------------
 # Ogni voce: (descrizione, inputSchema, funzione(args) -> oggetto/testo)
 
-def _obj(props: dict = None, required: list = None) -> dict:
-    schema = {"type": "object", "properties": props or {}}
+def _obj(props: Optional[dict] = None, required: Optional[list] = None) -> dict:
+    schema: Dict[str, Any] = {"type": "object", "properties": props or {}}
     if required:
         schema["required"] = required
     return schema
