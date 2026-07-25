@@ -219,6 +219,20 @@ reaches the route, which already handles it.
 
 ## Part B — Flussi Live flow graph
 
+> **SUPERSEDED 2026-07-25.** The owner elected to delete the flow graph rather
+> than repair it, after a further bug appeared: selecting Sankey / Trend Rate /
+> Matrice leaves the topology graph on screen, because the force-directed
+> animation loop keeps running and overdraws whatever the other renderers paint.
+>
+> The replacement work is: remove the `Grafo dei flussi` panel and all four
+> renderers, and use the freed space for an always-visible flow telemetry detail
+> panel carrying the content previously reachable only through the "Dettagli"
+> modal. The separate `Ripartizione Protocolli Ingest` card and its modal remain.
+>
+> The diagnosis below is retained because it documents why each view was
+> broken, and because the `ctx.font` finding applies to any future canvas work
+> in this codebase. Nothing in this section is being implemented.
+
 ### Current state
 
 `static/js/observability.js` renders four views onto one canvas:
