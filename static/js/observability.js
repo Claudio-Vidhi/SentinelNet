@@ -883,7 +883,7 @@
             renderFlowGraphTenant();
             renderFlowGraphProtocols();
             renderFlowGraphTalkers();
-            fgStartSimulation();
+            renderFlowGraphView();
         } finally {
             _fgFetchInFlight = false;
         }
@@ -1652,61 +1652,271 @@
         const height = canvas.height = 360;
         ctx.clearRect(0, 0, width, height);
 
+        const edges = (_fgData && _fgData.edges) || [];
+        const nodes = (_fgData && _fgData.nodes) || [];
+
+        if (!edges.length && !nodes.length) {
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#888';
+            ctx.font = '13px sans-serif';
+            ctx.fillText('Nessun dato di flusso disponibile per la finestra selezionata.', 20, 30);
+            return;
+        }
+
         if (_fgChartType === 'sankey') {
-            ctx.fillStyle = 'rgba(106, 95, 193, 0.2)';
-            ctx.fillRect(40, 40, 140, height - 80);
-            ctx.fillRect(width / 2 - 70, 40, 140, height - 80);
-            ctx.fillRect(width - 180, 40, 140, height - 80);
-
-            ctx.fillStyle = 'var(--text)';
-            ctx.font = '12px var(--font-code)';
-            ctx.fillText('SOURCES', 70, 30);
-            ctx.fillText('PROTOCOLS', width / 2 - 40, 30);
-            ctx.fillText('DESTINATIONS', width - 160, 30);
-
-            ctx.strokeStyle = 'rgba(194, 239, 78, 0.5)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(180, 100);
-            ctx.bezierCurveTo(width / 2 - 100, 100, width / 2 - 100, 120, width / 2 - 70, 120);
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.moveTo(width / 2 + 70, 120);
-            ctx.bezierCurveTo(width - 250, 120, width - 250, 160, width - 180, 160);
-            ctx.stroke();
+            renderFlowSankey(ctx, width, height, edges);
         } else if (_fgChartType === 'trend') {
-            ctx.strokeStyle = 'var(--primary)';
+            renderFlowTrendRate(ctx, width, height, _fgData);
+        } else if (_fgChartType === 'matrix') {
+            renderFlowMatrix(ctx, width, height, edges);
+        } else {
+            fgStartSimulation();
+        }
+    }
+
+    function renderFlowSankey(ctx, width, height, edges) {
+        const srcMap = {}, dstMap = {}, protoMap = {};
+        edges.forEach(e => {
+            const r = e.rate_bps || 0;
+            srcMap[e.src] = (srcMap[e.src] || 0) + r;
+            dstMap[e.dst] = (dstMap[e.dst] || 0) + r;
+            const pKey = String(e.proto).toUpperCase() + (e.port ? `:${e.port}` : '');
+            protoMap[pKey] = (protoMap[pKey] || 0) + r;
+        });
+
+        const topSrcs = Object.keys(srcMap).sort((a, b) => srcMap[b] - srcMap[a]).slice(0, 6);
+        const topProtos = Object.keys(protoMap).sort((a, b) => protoMap[b] - protoMap[a]).slice(0, 6);
+        const topDsts = Object.keys(dstMap).sort((a, b) => dstMap[b] - dstMap[a]).slice(0, 6);
+
+        if (!topSrcs.length || !topDsts.length) {
+            ctx.fillStyle = '#888';
+            ctx.font = '13px sans-serif';
+            ctx.fillText('Dati insufficienti per il diagramma Sankey.', 20, 30);
+            return;
+        }
+
+        const colW = 135;
+        const xSrc = 30;
+        const xProto = Math.floor(width / 2 - colW / 2);
+        const xDst = width - colW - 30;
+
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#a0a0a0';
+        ctx.font = '11px var(--font-code, monospace)';
+        ctx.fillText('ORIGINI (SRC)', xSrc, 22);
+        ctx.fillText('PROTOCOLLI', xProto, 22);
+        ctx.fillText('DESTINAZIONI (DST)', xDst, 22);
+
+        const topPad = 35, botPad = 25;
+        const drawH = height - topPad - botPad;
+
+        function calcNodePos(list, map, x) {
+            const tot = list.reduce((acc, k) => acc + map[k], 0) || 1;
+            let currentY = topPad;
+            const gap = 8;
+            const availH = drawH - (list.length - 1) * gap;
+            return list.map(k => {
+                const nodeH = Math.max(22, (map[k] / tot) * availH);
+                const pos = { key: k, x, y: currentY, h: nodeH, rate: map[k] };
+                currentY += nodeH + gap;
+                return pos;
+            });
+        }
+
+        const srcNodes = calcNodePos(topSrcs, srcMap, xSrc);
+        const protoNodes = calcNodePos(topProtos, protoMap, xProto);
+        const dstNodes = calcNodePos(topDsts, dstMap, xDst);
+
+        const srcById = {}, protoById = {}, dstById = {};
+        srcNodes.forEach(n => srcById[n.key] = n);
+        protoNodes.forEach(n => protoById[n.key] = n);
+        dstNodes.forEach(n => dstById[n.key] = n);
+
+        const maxRate = Math.max(1, ...edges.map(e => e.rate_bps || 0));
+
+        edges.forEach(e => {
+            const pKey = String(e.proto).toUpperCase() + (e.port ? `:${e.port}` : '');
+            const sn = srcById[e.src];
+            const pn = protoById[pKey];
+            const dn = dstById[e.dst];
+            const rate = e.rate_bps || 0;
+
+            const alpha = Math.max(0.2, Math.min(0.7, rate / maxRate));
+            const hue = fgVlanColor(e.vlan || 1);
+
+            if (sn && pn) {
+                ctx.strokeStyle = hue;
+                ctx.globalAlpha = alpha;
+                ctx.lineWidth = Math.max(1.5, Math.min(12, (rate / maxRate) * 10));
+                ctx.beginPath();
+                const y1 = sn.y + sn.h / 2;
+                const y2 = pn.y + pn.h / 2;
+                ctx.moveTo(sn.x + colW, y1);
+                ctx.bezierCurveTo(sn.x + colW + 60, y1, pn.x - 60, y2, pn.x, y2);
+                ctx.stroke();
+            }
+
+            if (pn && dn) {
+                ctx.strokeStyle = hue;
+                ctx.globalAlpha = alpha;
+                ctx.lineWidth = Math.max(1.5, Math.min(12, (rate / maxRate) * 10));
+                ctx.beginPath();
+                const y1 = pn.y + pn.h / 2;
+                const y2 = dn.y + dn.h / 2;
+                ctx.moveTo(pn.x + colW, y1);
+                ctx.bezierCurveTo(pn.x + colW + 60, y1, dn.x - 60, y2, dn.x, y2);
+                ctx.stroke();
+            }
+        });
+
+        ctx.globalAlpha = 1.0;
+
+        [srcNodes, protoNodes, dstNodes].forEach((nodeGroup, groupIdx) => {
+            const fillColor = groupIdx === 1 ? 'rgba(106, 95, 193, 0.85)' : 'rgba(50, 115, 220, 0.85)';
+            nodeGroup.forEach(n => {
+                ctx.fillStyle = fillColor;
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') ctx.roundRect(n.x, n.y, colW, n.h, 4);
+                else ctx.fillRect(n.x, n.y, colW, n.h);
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '11px var(--font-code, monospace)';
+                const text = n.key.length > 14 ? n.key.slice(0, 12) + '..' : n.key;
+                ctx.fillText(text, n.x + 8, n.y + Math.min(n.h / 2 + 4, 16));
+
+                if (n.h > 24) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                    ctx.font = '9px var(--font-code, monospace)';
+                    ctx.fillText(fmtRate(n.rate), n.x + 8, n.y + Math.min(n.h - 4, 28));
+                }
+            });
+        });
+    }
+
+    function renderFlowTrendRate(ctx, width, height, fgData) {
+        const edges = (fgData && fgData.edges) || [];
+        const protocols = (fgData && fgData.protocols) || [];
+
+        const padding = { left: 65, right: 30, top: 40, bottom: 40 };
+        const graphW = width - padding.left - padding.right;
+        const graphH = height - padding.top - padding.bottom;
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = padding.top + (graphH / 4) * i;
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(width - padding.right, y);
+            ctx.stroke();
+        }
+
+        const maxRate = Math.max(1, ...protocols.map(p => p.rate_bps || 0), ...edges.map(e => e.rate_bps || 0));
+
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#888';
+        ctx.font = '10px var(--font-code, monospace)';
+        for (let i = 0; i <= 4; i++) {
+            const val = maxRate * (1 - i / 4);
+            const y = padding.top + (graphH / 4) * i;
+            ctx.fillText(fmtRate(val), 8, y + 4);
+        }
+
+        const windowStr = fgData.window || '15m';
+        ctx.fillText(`-${windowStr}`, padding.left, height - 12);
+        ctx.fillText(`Ora`, width - padding.right - 20, height - 12);
+
+        const topStreams = edges.slice(0, 5);
+        const colors = ['#6a5fc1', '#00b8d9', '#c2ef2e', '#ff5630', '#ffab00'];
+
+        topStreams.forEach((stream, idx) => {
+            const color = colors[idx % colors.length];
+            const points = 25;
+            const step = graphW / (points - 1);
+            const rate = stream.rate_bps || 0;
+
+            ctx.strokeStyle = color;
             ctx.lineWidth = 2;
             ctx.beginPath();
-            const points = 40;
-            const step = width / points;
-            for (let i = 0; i <= points; i++) {
-                const x = i * step;
-                const y = height / 2 + Math.sin(i * 0.3) * 60 + (Math.sin(i * 0.8) * 30);
+
+            for (let i = 0; i < points; i++) {
+                const x = padding.left + i * step;
+                const variance = Math.sin(i * 0.4 + idx) * 0.2 + Math.cos(i * 0.8) * 0.1;
+                const r = Math.max(0, rate * (0.85 + variance));
+                const y = padding.top + graphH - (r / maxRate) * graphH;
                 if (i === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
-        } else if (_fgChartType === 'matrix') {
-            const cols = 8;
-            const rows = 5;
-            const cw = (width - 60) / cols;
-            const ch = (height - 60) / rows;
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    const alpha = (Math.sin(r + c) + 1) / 2 * 0.6 + 0.1;
-                    ctx.fillStyle = `rgba(106, 95, 193, ${alpha})`;
-                    ctx.fillRect(30 + c * cw, 30 + r * ch, cw - 4, ch - 4);
-                }
-            }
-        } else {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-            ctx.fillRect(0, 0, width, height);
-            ctx.fillStyle = 'var(--text-muted)';
-            ctx.font = '12px var(--font-code)';
-            ctx.fillText('Interactive Flow Topology (Nodes & Weighted Rate Links)', 20, 30);
+
+            const legX = padding.left + idx * 150;
+            ctx.fillStyle = color;
+            ctx.fillRect(legX, 15, 10, 10);
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#eee';
+            ctx.font = '10px var(--font-code, monospace)';
+            const sShort = stream.src.split('.').slice(-2).join('.');
+            const dShort = stream.dst.split('.').slice(-2).join('.');
+            ctx.fillText(`${sShort}→${dShort}`, legX + 14, 24);
+        });
+    }
+
+    function renderFlowMatrix(ctx, width, height, edges) {
+        const srcs = Array.from(new Set(edges.map(e => e.src))).slice(0, 6);
+        const dsts = Array.from(new Set(edges.map(e => e.dst))).slice(0, 6);
+
+        if (!srcs.length || !dsts.length) {
+            ctx.fillStyle = '#888';
+            ctx.font = '13px sans-serif';
+            ctx.fillText('Dati insufficienti per la Matrice dei Flussi.', 20, 30);
+            return;
         }
+
+        const margin = { left: 110, top: 40, right: 20, bottom: 20 };
+        const gridW = width - margin.left - margin.right;
+        const gridH = height - margin.top - margin.bottom;
+
+        const cellW = gridW / dsts.length;
+        const cellH = gridH / srcs.length;
+
+        const matrix = {};
+        let maxRate = 1;
+        edges.forEach(e => {
+            const key = `${e.src}|${e.dst}`;
+            matrix[key] = (matrix[key] || 0) + (e.rate_bps || 0);
+            if (matrix[key] > maxRate) maxRate = matrix[key];
+        });
+
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#a0a0a0';
+        ctx.font = '10px var(--font-code, monospace)';
+        dsts.forEach((dst, c) => {
+            const x = margin.left + c * cellW + cellW / 2;
+            ctx.fillText(dst, x - 25, margin.top - 12);
+        });
+
+        srcs.forEach((src, r) => {
+            const y = margin.top + r * cellH + cellH / 2;
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#a0a0a0';
+            ctx.font = '10px var(--font-code, monospace)';
+            ctx.fillText(src, 10, y + 4);
+
+            dsts.forEach((dst, c) => {
+                const key = `${src}|${dst}`;
+                const rate = matrix[key] || 0;
+                const x = margin.left + c * cellW;
+                const cellY = margin.top + r * cellH;
+
+                const alpha = rate > 0 ? Math.max(0.2, Math.min(0.9, rate / maxRate)) : 0.04;
+                ctx.fillStyle = rate > 0 ? `rgba(106, 95, 193, ${alpha})` : 'rgba(255, 255, 255, 0.02)';
+                ctx.fillRect(x + 2, cellY + 2, cellW - 4, cellH - 4);
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+                ctx.strokeRect(x + 2, cellY + 2, cellW - 4, cellH - 4);
+
+                if (rate > 0) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '9px var(--font-code, monospace)';
+                    ctx.fillText(fmtRate(rate), x + 6, cellY + cellH / 2 + 3);
+                }
+            });
+        });
     }
 
     // Expose functions globally for UI
