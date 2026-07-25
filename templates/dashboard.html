@@ -2346,16 +2346,15 @@
             <div>
               <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Apparato Target dall'Inventario</label>
               <select id="auditDeviceSelect" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-                <option value="all">Tutti i Firewall &amp; Router Gestiti</option>
-                <option value="fw-core-01">fw-core-01 (FortiGate 100F)</option>
-                <option value="sw-dist-02">sw-dist-02 (Cisco Catalyst 9300)</option>
-                <option value="rt-edge-01">rt-edge-01 (Palo Alto PA-440)</option>
+                <!-- La scansione multi-dispositivo non e' implementata: questa
+                     voce e' un segnaposto, non una promessa di funzionalita'. -->
+                <option value="all">— Seleziona un dispositivo —</option>
               </select>
             </div>
             <div>
               <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Benchmark / Standard di Security</label>
               <select id="auditBenchmarkSelect" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-                <option value="cis">CIS Benchmark v4.0 (Consensus Security)</option>
+                <option value="cis">CIS Benchmark (Fortinet FortiGate)</option>
                 <option value="nist">NIST SP 800-53 (High Security)</option>
                 <option value="pci">PCI-DSS v4.0 Network Requirement</option>
               </select>

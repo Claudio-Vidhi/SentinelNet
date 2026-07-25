@@ -2,14 +2,10 @@
 // ===== NetSec Audit (PREVIEW) — Firewall & Router Security Compliance Audit =====
 
 (function () {
-    let _auditRules = [
-        { id: "AUD-FW-01", title: "Unrestricted Telnet / Insecure Management", severity: "CRITICAL", category: "Hardening", status: "FAIL", device: "fw-core-01 (10.0.1.1)", detail: "service telnet enabled on WAN interface", remediation: "set allowaccess ssh https (disable telnet/http)" },
-        { id: "AUD-FW-02", title: "Overly Permissive Any-to-Any Rule", severity: "CRITICAL", category: "Access Rules", status: "FAIL", device: "fw-core-01 (10.0.1.1)", detail: "Policy #14 allows src:any dst:any service:ALL action:accept", remediation: "Restrict source/destination subnets and specify explicit TCP/UDP ports." },
-        { id: "AUD-FW-03", title: "Deprecated SSL/TLS Cipher Suites (TLS 1.0/1.1)", severity: "HIGH", category: "Encryption", status: "FAIL", device: "sw-dist-02 (10.0.2.1)", detail: "ssl-min-proto-version set to TLSv1.0", remediation: "set ssl-min-proto-version TLSv1.2" },
-        { id: "AUD-FW-04", title: "Default Admin Credentials / Weak Passwords", severity: "CRITICAL", category: "Hardening", status: "PASS", device: "fw-core-01 (10.0.1.1)", detail: "All admin accounts use strong hashed passwords and MFA", remediation: "Maintain password rotation policy." },
-        { id: "AUD-FW-05", title: "Syslog Remote Logging Unconfigured", severity: "MEDIUM", category: "Logging", status: "WARN", device: "rt-edge-01 (10.0.5.1)", detail: "No remote syslog server configured on UDP 514/5514", remediation: "set syslog server 10.0.1.100 port 5514" },
-        { id: "AUD-FW-06", title: "BGP / OSPF Router Authentication Missing", severity: "HIGH", category: "Routing", status: "FAIL", device: "rt-edge-01 (10.0.5.1)", detail: "BGP neighbor 192.168.1.1 lacks MD5 password authentication", remediation: "neighbor 192.168.1.1 password <secret-md5>" }
-    ];
+    // Nessun dato fittizio: la lista viene popolata solo da una vera scansione
+    // (POST /api/netsec-audit/scan). Vedi renderAuditOverview/renderAuditRulesTable
+    // per lo stato vuoto mostrato prima della prima scansione.
+    let _auditRules = [];
 
     async function applyNetSecAuditGating() {
         try {
@@ -41,9 +37,49 @@
     }
 
     function loadNetSecAuditTab() {
+        populateAuditDeviceSelect();
         renderAuditOverview();
         renderAuditRulesTable();
         setupConfigDropzone();
+    }
+
+    // Popola #auditDeviceSelect con l'inventario reale (già filtrato per sede
+    // lato server). Non aggiunge MAI dispositivi inventati: se il fetch fallisce
+    // o l'inventario è vuoto, resta solo l'opzione "Tutti".
+    async function populateAuditDeviceSelect() {
+        const sel = document.getElementById('auditDeviceSelect');
+        if (!sel) return;
+        // Segnaposto, non una funzionalita': la scansione multi-dispositivo non
+        // esiste e il backend rifiuta 'all' con un messaggio esplicito.
+        const allOption = '<option value="all">— Seleziona un dispositivo —</option>';
+        try {
+            const res = await apiFetch('/api/local-devices');
+            if (!res || !res.ok) { sel.innerHTML = allOption; return; }
+            const data = await res.json();
+            const devices = (data && data.devices) || [];
+
+            if (!devices.length) {
+                sel.innerHTML = allOption
+                    + `<option value="all" disabled>${currentLang === 'en' ? 'Inventory is empty — no devices found' : 'Inventario vuoto — nessun dispositivo presente'}</option>`;
+                return;
+            }
+
+            const opts = devices.map(d => {
+                const ip = d.IP || '';
+                if (!ip) return '';
+                const hostname = (d.Hostname || '').trim();
+                const vendor = (d.Vendor || '').trim();
+                const label = hostname
+                    ? `${hostname} (${ip})${vendor ? ' — ' + vendor : ''}`
+                    : `${ip}${vendor ? ' — ' + vendor : ''}`;
+                return `<option value="${escapeHtml(ip)}">${escapeHtml(label)}</option>`;
+            }).join('');
+
+            sel.innerHTML = allOption + opts;
+        } catch (e) {
+            console.error('populateAuditDeviceSelect error:', e);
+            sel.innerHTML = allOption;
+        }
     }
 
     function renderAuditOverview() {
@@ -51,15 +87,20 @@
         const failed = _auditRules.filter(r => r.status === 'FAIL').length;
         const passed = _auditRules.filter(r => r.status === 'PASS').length;
         const warned = _auditRules.filter(r => r.status === 'WARN').length;
-        const score = Math.round((passed / total) * 100);
+        const score = total ? Math.round((passed / total) * 100) : null;
 
         const scoreEl = document.getElementById('auditScoreValue');
-        if (scoreEl) scoreEl.textContent = `${score}%`;
+        if (scoreEl) scoreEl.textContent = score === null ? '—' : `${score}%`;
 
         const gradeEl = document.getElementById('auditGradeBadge');
         if (gradeEl) {
-            gradeEl.textContent = score >= 80 ? 'GRADE A' : score >= 60 ? 'GRADE B' : 'GRADE C - RISK DETECTED';
-            gradeEl.style.color = score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : 'var(--danger)';
+            if (score === null) {
+                gradeEl.textContent = currentLang === 'en' ? 'NO SCAN RUN YET' : 'NESSUNA SCANSIONE ESEGUITA';
+                gradeEl.style.color = 'var(--text-muted)';
+            } else {
+                gradeEl.textContent = score >= 80 ? 'GRADE A' : score >= 60 ? 'GRADE B' : 'GRADE C - RISK DETECTED';
+                gradeEl.style.color = score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--warning)' : 'var(--danger)';
+            }
         }
 
         const countFailed = document.getElementById('auditStatFailed');
@@ -73,6 +114,11 @@
     function renderAuditRulesTable() {
         const tbody = document.getElementById('auditRulesTableBody');
         if (!tbody) return;
+
+        if (!_auditRules.length) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${currentLang==='en'?'No audit results yet. Select a device and run a scan.':'Nessun risultato di audit disponibile. Seleziona un dispositivo ed esegui una scansione.'}</td></tr>`;
+            return;
+        }
 
         const sevFilter = document.getElementById('auditSevFilter') ? document.getElementById('auditSevFilter').value : 'all';
         const catFilter = document.getElementById('auditCatFilter') ? document.getElementById('auditCatFilter').value : 'all';
@@ -143,9 +189,19 @@
                 if (data.rules && data.rules.length) _auditRules = data.rules;
                 renderAuditOverview();
                 renderAuditRulesTable();
+            } else if (res) {
+                // Es. 404 "Nessun backup trovato per <ip>." — dettaglio già in
+                // italiano lato backend, mostrato all'utente invece di essere
+                // ignorato silenziosamente.
+                let detail = '';
+                try { const errData = await res.json(); detail = errData && errData.detail; } catch (e) {}
+                showToast(detail || (currentLang === 'en' ? 'Audit scan failed.' : 'Scansione audit non riuscita.'), 'error');
+            } else {
+                showToast(currentLang === 'en' ? 'Audit scan failed.' : 'Scansione audit non riuscita.', 'error');
             }
         } catch (e) {
             console.error('Audit scan error:', e);
+            showToast(currentLang === 'en' ? 'Audit scan failed.' : 'Scansione audit non riuscita.', 'error');
         } finally {
             if (btn) {
                 btn.disabled = false;
