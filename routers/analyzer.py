@@ -95,11 +95,24 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
     text = payload.config_text
     dev_name = payload.device_name
     if not text and payload.device_ip and payload.device_ip != "all":
-        try:
-            text = _load_backup_text(payload.device_ip, current_user)
-            dev_name = payload.device_ip
-        except Exception:
-            pass
+        # Non ingoiare l'errore: se il dispositivo non esiste o non ha backup,
+        # _load_backup_text solleva 404 con dettaglio in italiano. Prima questo
+        # veniva catturato e ignorato, producendo un audit su config vuota
+        # (risultato privo di significato) senza avvisare l'utente.
+        text = _load_backup_text(payload.device_ip, current_user)
+        dev_name = payload.device_ip
+    if not text or not text.strip():
+        # Senza configurazione non c'e' nulla da valutare. Il motore, ricevendo
+        # una stringa vuota, non trova alcuna violazione e restituisce un
+        # punteggio alto (80% / GRADE A su CIS): un esito inventato e
+        # pericolosamente rassicurante. Meglio un errore esplicito.
+        # Ricade qui anche device_ip == "all", che non seleziona alcun backup:
+        # la scansione multi-dispositivo non e' ancora implementata.
+        raise HTTPException(
+            status_code=400,
+            detail="Nessuna configurazione da analizzare: seleziona un dispositivo "
+                   "specifico con un backup disponibile, oppure carica un file di "
+                   "configurazione.")
     return netsec_audit.run_netsec_audit(
         config_text=text,
         device_name=dev_name,
