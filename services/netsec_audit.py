@@ -257,4 +257,4 @@ def run_netsec_audit(
 
 
 def Math_round(val: float) -> int:
-    return int(round(val))
+    return round(val)
