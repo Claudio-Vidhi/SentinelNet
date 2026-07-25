@@ -37,21 +37,58 @@
         const lastSeen = site && site.last_seen ? new Date(site.last_seen * 1000).toLocaleString() : 'Mai / Offline';
         const isOnline = site && site.last_seen && (Date.now() / 1000 - site.last_seen < 120);
 
+        // Valori APPLICATI: sempre e solo da site.* (autoritativo, riportato
+        // dall'agente ad ogni heartbeat — vedi routers/agent.py). NON vanno
+        // sovrascritti con quanto richiesto via job, perché un job può essere
+        // ancora in coda, fallito, o mai eseguito: mostrare il richiesto come
+        // se fosse applicato inganna l'admin facendogli credere che la modifica
+        // abbia già avuto effetto.
         let curPort = (site && site.syslog_port) || 5514;
         let curInterval = (site && site.interval) || 60;
-        const lastCfgJob = jobs.slice().reverse().find(j => j.command && j.command.startsWith('_agent_config'));
-        if (lastCfgJob && lastCfgJob.command) {
+
+        // jobs arriva già ordinato dal più recente al più vecchio (site_manager.list_jobs
+        // usa ORDER BY created DESC), quindi il primo match è già l'ultimo richiesto.
+        const lastCfgJob = jobs.find(j => j.command && j.command.startsWith('_agent_config'));
+        let pendingCfg = null;
+        if (lastCfgJob && lastCfgJob.status !== 'done') {
+            let reqPort = null, reqInterval = null;
             try {
                 const argStr = lastCfgJob.command.replace('_agent_config', '').trim();
                 const p = JSON.parse(argStr);
-                if (p.syslog_port) curPort = p.syslog_port;
-                if (p.interval) curInterval = p.interval;
+                if (p.syslog_port != null) reqPort = p.syslog_port;
+                if (p.interval != null) reqInterval = p.interval;
             } catch (err) {}
+            pendingCfg = { job: lastCfgJob, reqPort: reqPort, reqInterval: reqInterval };
+        }
+
+        let pendingCfgHtml = '';
+        if (pendingCfg) {
+            const j = pendingCfg.job;
+            const reqBits = [
+                pendingCfg.reqPort != null ? `Porta: ${escapeHtml(String(pendingCfg.reqPort))}` : null,
+                pendingCfg.reqInterval != null ? `Intervallo: ${escapeHtml(String(pendingCfg.reqInterval))}s` : null
+            ].filter(Boolean).join(', ');
+            if (j.status === 'error') {
+                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:6px; background:rgba(220,53,69,0.12); border:1px solid var(--danger); font-size:11px; color:var(--danger);">
+                    <i class="fa-solid fa-triangle-exclamation"></i> <strong>Ultima richiesta di configurazione FALLITA</strong>${reqBits ? ` (${reqBits})` : ''}.
+                    <div style="margin-top:4px; font-family:var(--font-code); white-space:pre-wrap;">${escapeHtml(j.result || 'Errore sconosciuto')}</div>
+                </div>`;
+            } else {
+                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:6px; background:rgba(255,193,7,0.12); border:1px solid var(--warning); font-size:11px; color:var(--warning);">
+                    <i class="fa-solid fa-hourglass-half"></i> <strong>Modifica in attesa di applicazione dall'agente</strong>${reqBits ? ` (${reqBits})` : ''}.
+                    Verrà applicata al prossimo ciclo di polling dell'agente (ritardo massimo atteso: ~${escapeHtml(String(curInterval))}s, in base all'intervallo attualmente applicato).
+                </div>`;
+            }
         }
 
         const isFlowActive = site && site.flow_active !== false;
 
-        let jobsHtml = jobs.slice(-10).reverse().map(j => {
+        // jobs arriva ORDER BY created DESC (piu' recente per primo): i 10 job
+        // da mostrare sono quindi i PRIMI 10, gia' nell'ordine giusto. Il
+        // precedente slice(-10).reverse() prendeva gli ULTIMI 10 dell'array,
+        // cioe' i 10 piu' VECCHI: un job appena accodato non compariva mai
+        // nello storico, facendo sembrare che la richiesta non fosse partita.
+        let jobsHtml = jobs.slice(0, 10).map(j => {
             const statusCol = j.status === 'done' ? 'var(--success)' : j.status === 'error' ? 'var(--danger)' : 'var(--warning)';
             const jobTime = j.created ? new Date(j.created * 1000).toLocaleString() : 'N/D';
             return `<div style="padding:6px 8px; border-bottom:1px solid var(--border); font-size:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
@@ -106,6 +143,7 @@
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
                 </button>
             </div>
+            ${pendingCfgHtml}
         </div>
 
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
@@ -142,8 +180,12 @@
             </div>
         </div>`;
 
-        // Check if last job was an inventory fetch result to auto-populate textarea
-        const lastInvJob = jobs.slice().reverse().find(j => j.command === '_agent_get_inventory' && j.status === 'done');
+        // Check if last job was an inventory fetch result to auto-populate textarea.
+        // jobs e' DESC (piu' recente per primo), quindi il primo match e' gia'
+        // il fetch piu' recente. Il precedente .reverse().find() restituiva il
+        // piu' VECCHIO: la textarea veniva precompilata con un inventario
+        // obsoleto e un salvataggio avrebbe sovrascritto quello corrente.
+        const lastInvJob = jobs.find(j => j.command === '_agent_get_inventory' && j.status === 'done');
         if (lastInvJob && lastInvJob.result) {
             const ta = document.getElementById('agentInventoryTextarea');
             if (ta) ta.value = lastInvJob.result;
