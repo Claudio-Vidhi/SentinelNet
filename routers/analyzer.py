@@ -80,3 +80,29 @@ def config_analyzer_convert(payload: ConvertSchema, current_user = Depends(get_c
         result["source_text"] = text
     return result
 
+
+class NetSecAuditSchema(BaseModel):
+    config_text: Optional[str] = None
+    device_ip: Optional[str] = None
+    device_name: Optional[str] = None
+    benchmark: str = "cis"  # 'cis' | 'nist' | 'pci'
+
+
+@router.post("/api/netsec-audit/scan")
+def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_current_user)):
+    """Valutazione di compliance di sicurezza (CIS, NIST, PCI-DSS) su testo o dispositivo."""
+    from services import netsec_audit
+    text = payload.config_text
+    dev_name = payload.device_name
+    if not text and payload.device_ip and payload.device_ip != "all":
+        try:
+            text = _load_backup_text(payload.device_ip, current_user)
+            dev_name = payload.device_ip
+        except Exception:
+            pass
+    return netsec_audit.run_netsec_audit(
+        config_text=text,
+        device_name=dev_name,
+        benchmark=payload.benchmark
+    )
+
