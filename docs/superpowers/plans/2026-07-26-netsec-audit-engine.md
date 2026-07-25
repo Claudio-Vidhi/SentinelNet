@@ -122,7 +122,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(set(ifaces), {"port1", "port2"})
         port1 = [r for r in ifaces["port1"] if r.key == "allowaccess"][0]
         self.assertEqual(port1.values, ["ping", "https", "telnet"])
-        self.assertEqual(port1.line, 7)
+        self.assertEqual(port1.line, 8)
 
     def test_empty_section_is_still_reported_present(self):
         """Un blocco senza 'set' non produce record ma esiste: serve a
