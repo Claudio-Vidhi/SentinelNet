@@ -267,8 +267,9 @@ To resolve at seeding time rather than silently:
   to 1.7 rather than a second independent item.
 - **`8.4` is annotated "Forse duplicato"** — overlaps `4.1`. Kept, cross-linked.
 - **`2.1`** contains "umidità non ricordo" — the humidity range is missing from
-  the source. Seeded with the item but no humidity threshold, flagged for the
-  owner to supply. Do not invent a number.
+  the source. **Resolved: humidity is dropped from the item entirely** (owner's
+  decision, 2026-07-26). Item 2.1 keeps its other thresholds. Do not reintroduce
+  a humidity figure without a sourced value.
 
 ## Tab structure
 
