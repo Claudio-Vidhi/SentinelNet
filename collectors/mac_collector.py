@@ -330,17 +330,19 @@ def collect_via_netconf(host, username, password, port=830, timeout=30):
          % NS_OPENCONFIG_NI, parse_openconfig_fdb_xml),
     ]
     try:
-        with manager.connect(host=host, port=port, username=username, password=password,
-                             hostkey_verify=False, allow_agent=False, look_for_keys=False,
-                             timeout=timeout, device_params={'name': 'iosxe'}) as m:
-            for flt, parser in attempts:
-                try:
-                    rows = parser(m.get(('subtree', flt)).data_xml)
-                    if rows:
-                        return rows
-                except Exception as e:
-                    log.info("NETCONF get fallito su %s: %s", host, e)
-            return None
+        conn = manager.connect(host=host, port=port, username=username, password=password,
+                               hostkey_verify=False, allow_agent=False, look_for_keys=False,
+                               timeout=timeout, device_params={'name': 'iosxe'})
+        if conn is not None:
+            with conn as m:
+                for flt, parser in attempts:
+                    try:
+                        rows = parser(m.get(('subtree', flt)).data_xml)
+                        if rows:
+                            return rows
+                    except Exception as e:
+                        log.info("NETCONF get fallito su %s: %s", host, e)
+        return None
     except Exception as e:
         log.info("NETCONF connessione fallita su %s: %s", host, e)
         return None
@@ -413,7 +415,8 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
             except Exception:
                 pass
             out = conn.send_command(cmd, read_timeout=30)
-            return parser(out)
+            out_str = out if isinstance(out, str) else str(out or "")
+            return parser(out_str)
     except Exception as e:
         log.info("CLI mac-table fallito su %s: %s", host, e)
         return None
@@ -511,17 +514,19 @@ def collect_if_macs_via_netconf(host, username, password, port=830, timeout=30):
         '<interfaces xmlns="%s"/>' % NS_IETF_IF,
     ]
     try:
-        with manager.connect(host=host, port=port, username=username, password=password,
-                             hostkey_verify=False, allow_agent=False, look_for_keys=False,
-                             timeout=timeout, device_params={'name': 'iosxe'}) as m:
-            for flt in attempts:
-                try:
-                    rows = parse_ietf_if_macs_xml(m.get(('subtree', flt)).data_xml)
-                    if rows:
-                        return rows
-                except Exception as e:
-                    log.info("NETCONF if-macs get fallito su %s: %s", host, e)
-            return None
+        conn = manager.connect(host=host, port=port, username=username, password=password,
+                               hostkey_verify=False, allow_agent=False, look_for_keys=False,
+                               timeout=timeout, device_params={'name': 'iosxe'})
+        if conn is not None:
+            with conn as m:
+                for flt in attempts:
+                    try:
+                        rows = parse_ietf_if_macs_xml(m.get(('subtree', flt)).data_xml)
+                        if rows:
+                            return rows
+                    except Exception as e:
+                        log.info("NETCONF if-macs get fallito su %s: %s", host, e)
+        return None
     except Exception as e:
         log.info("NETCONF if-macs connessione fallita su %s: %s", host, e)
         return None
@@ -576,7 +581,8 @@ def collect_if_macs_via_cli(host, username, password, secret="", device_type="ci
             except Exception:
                 pass
             out = conn.send_command("show interfaces", read_timeout=30)
-            return parse_cli_if_macs(out)
+            out_str = out if isinstance(out, str) else str(out or "")
+            return parse_cli_if_macs(out_str)
     except Exception as e:
         log.info("CLI if-macs fallito su %s: %s", host, e)
         return None
