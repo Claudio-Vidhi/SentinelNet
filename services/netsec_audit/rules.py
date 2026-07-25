@@ -121,3 +121,164 @@ def check_strong_crypto(cfg: ParsedConfig) -> RuleOutcome:
     return RuleOutcome(
         WARN, "'strong-crypto' disabilitato: cifrari deboli ammessi.",
         [Evidence(rec.line, rec.raw.strip(), _ctx("system global"))])
+
+
+# --- Regole di accesso -------------------------------------------------------
+
+_ANY_ADDR = {"all", "any"}
+_ANY_SERVICE = {"all", "any"}
+_ADMIN_PORTS = (22, 3389)
+_BUILTIN_ADMIN_SERVICES = {"ssh", "rdp"}
+
+
+def _policy_values(recs):
+    """Mappa chiave -> valori minuscoli per una singola voce di policy."""
+    out = {}
+    for r in recs:
+        out.setdefault(r.key, []).extend(v.lower() for v in r.values)
+    return out
+
+
+def _policy_line(recs, prefer="action"):
+    for r in recs:
+        if r.key == prefer:
+            return r.line, r.raw.strip()
+    return (recs[0].line, recs[0].raw.strip()) if recs else (0, "")
+
+
+def wan_interfaces(cfg: ParsedConfig) -> Set[str]:
+    """Interfacce con ruolo WAN.
+
+    Preferisce 'set role wan'. Se nessuna interfaccia dichiara un ruolo
+    (comune sulle configurazioni piu' vecchie) ricade sui nomi convenzionali.
+    """
+    ifaces = section_entries(cfg, "system interface")
+    named = set()
+    for name, recs in ifaces.items():
+        for r in recs:
+            if r.key == "role" and r.values and r.values[0].lower() == "wan":
+                named.add(name)
+    if named:
+        return named
+    return {n for n in ifaces
+            if n.lower().startswith("wan") or n.lower() == "port1"}
+
+
+def check_any_any_policy(cfg: ParsedConfig) -> RuleOutcome:
+    """Policy che accetta qualunque sorgente verso qualunque destinazione."""
+    policies = section_entries(cfg, "firewall policy")
+    if not policies:
+        return RuleOutcome(
+            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
+                     "valutare le regole di accesso.")
+    ev: List[Evidence] = []
+    for pid in sorted(policies, key=lambda k: (len(k), k)):
+        vals = _policy_values(policies[pid])
+        if "accept" not in vals.get("action", []):
+            continue
+        if (set(vals.get("srcaddr", [])) & _ANY_ADDR
+                and set(vals.get("dstaddr", [])) & _ANY_ADDR
+                and set(vals.get("service", [])) & _ANY_SERVICE):
+            line, raw = _policy_line(policies[pid])
+            ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
+    if ev:
+        return RuleOutcome(
+            FAIL,
+            "Trovate %d policy che accettano traffico any-to-any su qualunque "
+            "servizio." % len(ev), ev)
+    return RuleOutcome(
+        PASS, "Nessuna policy any-to-any: sorgente, destinazione e servizio "
+              "sono sempre specificati.")
+
+
+def check_boundary_protection(cfg: ParsedConfig) -> RuleOutcome:
+    """Traffico in INGRESSO da un'interfaccia WAN verso qualunque destinazione."""
+    policies = section_entries(cfg, "firewall policy")
+    if not policies:
+        return RuleOutcome(
+            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
+                     "valutare la protezione del perimetro.")
+    wan = wan_interfaces(cfg)
+    if not wan:
+        return RuleOutcome(
+            UNKNOWN, "Nessuna interfaccia WAN identificabile: impossibile "
+                     "valutare il confine di rete.")
+    ev: List[Evidence] = []
+    for pid in sorted(policies, key=lambda k: (len(k), k)):
+        vals = _policy_values(policies[pid])
+        if "accept" not in vals.get("action", []):
+            continue
+        srcintf = set(vals.get("srcintf", []))
+        if not srcintf & {w.lower() for w in wan}:
+            continue
+        if set(vals.get("dstaddr", [])) & _ANY_ADDR:
+            line, raw = _policy_line(policies[pid])
+            ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
+    if ev:
+        return RuleOutcome(
+            FAIL,
+            "Trovate %d policy in ingresso da WAN verso qualunque "
+            "destinazione interna." % len(ev), ev)
+    return RuleOutcome(
+        PASS, "Nessuna policy in ingresso da WAN verso destinazioni generiche.")
+
+
+def _range_hits_admin_port(token: str) -> bool:
+    """True se un token 'tcp-portrange' copre la 22 o la 3389."""
+    token = token.split(":")[0]           # scarta la parte source-port
+    for part in token.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            if "-" in part:
+                lo, hi = part.split("-", 1)
+                lo_i, hi_i = int(lo), int(hi)
+            else:
+                lo_i = hi_i = int(part)
+        except ValueError:
+            continue
+        if any(lo_i <= p <= hi_i for p in _ADMIN_PORTS):
+            return True
+    return False
+
+
+def _admin_service_names(cfg: ParsedConfig) -> Set[str]:
+    """Servizi che risolvono a TCP 22/3389, inclusi i custom."""
+    names = set(_BUILTIN_ADMIN_SERVICES)
+    for name, recs in section_entries(cfg, "firewall service custom").items():
+        for r in recs:
+            if r.key == "tcp-portrange" and any(
+                    _range_hits_admin_port(v) for v in r.values):
+                names.add(name.lower())
+    return names
+
+
+def check_inbound_admin_ports(cfg: ParsedConfig) -> RuleOutcome:
+    """SSH/RDP esposti da WAN verso sorgenti generiche (PCI-DSS 1.2)."""
+    policies = section_entries(cfg, "firewall policy")
+    if not policies:
+        return RuleOutcome(
+            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
+                     "valutare l'esposizione delle porte amministrative.")
+    wan = {w.lower() for w in wan_interfaces(cfg)}
+    admin_services = _admin_service_names(cfg)
+    ev: List[Evidence] = []
+    for pid in sorted(policies, key=lambda k: (len(k), k)):
+        vals = _policy_values(policies[pid])
+        if "accept" not in vals.get("action", []):
+            continue
+        if not set(vals.get("srcintf", [])) & wan:
+            continue
+        if not set(vals.get("srcaddr", [])) & _ANY_ADDR:
+            continue
+        if set(vals.get("service", [])) & admin_services:
+            line, raw = _policy_line(policies[pid], prefer="service")
+            ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
+    if ev:
+        return RuleOutcome(
+            FAIL,
+            "Porte amministrative (SSH 22 / RDP 3389) raggiungibili da "
+            "Internet in %d policy." % len(ev), ev)
+    return RuleOutcome(
+        PASS, "Nessuna esposizione diretta di SSH/RDP verso reti pubbliche.")

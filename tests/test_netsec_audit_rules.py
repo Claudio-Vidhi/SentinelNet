@@ -181,5 +181,57 @@ class TestHardeningRules(_RuleBase):
         self.assertEqual(rules.check_strong_crypto(self.good).status, PASS)
 
 
+class TestAccessRules(_RuleBase):
+    def test_any_any_policy_fails(self):
+        o = rules.check_any_any_policy(self.bad)
+        self.assertEqual(o.status, FAIL)
+        self.assertIn("firewall policy / 1",
+                      " ".join(e.context for e in o.evidence))
+
+    def test_any_any_policy_passes_when_scoped(self):
+        self.assertEqual(rules.check_any_any_policy(self.good).status, PASS)
+
+    def test_any_any_policy_unknown_without_policies(self):
+        self.assertEqual(
+            rules.check_any_any_policy(self.partial).status, UNKNOWN)
+
+    def test_wan_interfaces_resolved_by_role(self):
+        self.assertEqual(rules.wan_interfaces(self.bad), {"port1"})
+
+    def test_wan_interfaces_fallback_by_name(self):
+        cfg = parse_with_lines(
+            'config system interface\n'
+            '    edit "wan1"\n'
+            '        set allowaccess ping\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(rules.wan_interfaces(cfg), {"wan1"})
+
+    def test_boundary_protection_fails_on_wan_to_all(self):
+        o = rules.check_boundary_protection(self.bad)
+        self.assertEqual(o.status, FAIL)
+        self.assertTrue(o.evidence)
+
+    def test_boundary_protection_passes_when_egress_only(self):
+        """La policy pulita esce DA lan VERSO wan: non e' un ingresso."""
+        self.assertEqual(
+            rules.check_boundary_protection(self.good).status, PASS)
+
+    def test_inbound_admin_ports_detects_custom_service(self):
+        """GESTIONE-REMOTA risolve a TCP 3389 via firewall service custom."""
+        o = rules.check_inbound_admin_ports(self.bad)
+        self.assertEqual(o.status, FAIL)
+        self.assertIn("firewall policy / 2",
+                      " ".join(e.context for e in o.evidence))
+
+    def test_inbound_admin_ports_passes_when_absent(self):
+        self.assertEqual(
+            rules.check_inbound_admin_ports(self.good).status, PASS)
+
+    def test_inbound_admin_ports_unknown_without_policies(self):
+        self.assertEqual(
+            rules.check_inbound_admin_ports(self.partial).status, UNKNOWN)
+
+
 if __name__ == "__main__":
     unittest.main()
