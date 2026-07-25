@@ -20,7 +20,7 @@ import json
 import os
 import re
 import threading
-from typing import Optional
+from typing import Optional, Any, Dict
 
 import requests
 import urllib3
@@ -164,7 +164,7 @@ def test_connection(ip: str) -> dict:
 
 # --- Trasporto REST ----------------------------------------------------------
 
-def api_request(ip: str, method: str, path: str, params: dict = None,
+def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
                 json_body=None, timeout: int = 30):
     """Richiesta su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
     token, port, verify = get_api_config(ip)
@@ -200,7 +200,7 @@ def api_request(ip: str, method: str, path: str, params: dict = None,
         return {"raw": r.text}
 
 
-def api_get(ip: str, path: str, params: dict = None, timeout: int = 30):
+def api_get(ip: str, path: str, params: Optional[dict] = None, timeout: int = 30):
     """GET su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
     return api_request(ip, "GET", path, params=params, timeout=timeout)
 
@@ -213,14 +213,14 @@ def get_ha_checksums(device: dict) -> dict:
     return api_get(device["IP"], "monitor/system/ha-checksums")
 
 
-def api_post(ip: str, path: str, json_body=None, params: dict = None,
+def api_post(ip: str, path: str, json_body=None, params: Optional[dict] = None,
              timeout: int = 60):
     """POST su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
     return api_request(ip, "POST", path, params=params, json_body=json_body,
                        timeout=timeout)
 
 
-def api_get_cmdb(ip: str, path: str, fmt: str = None, flt: str = None,
+def api_get_cmdb(ip: str, path: str, fmt: Optional[str] = None, flt: Optional[str] = None,
                  timeout: int = 30):
     """GET su un endpoint cmdb con proiezione dei campi (query `format`,
     es. 'name|type|subnet') ed eventuale filtro (query `filter`, es.
@@ -247,7 +247,8 @@ def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
               "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15}
     try:
         with ConnectHandler(**params) as conn:
-            return conn.send_command(command, read_timeout=timeout)
+            res = conn.send_command(command, read_timeout=timeout)
+            return res if isinstance(res, str) else str(res or "")
     except Exception as e:
         raise FortiGateError(f"SSH {device.get('IP')}: {e}")
 
@@ -401,7 +402,7 @@ def get_firewall_custom_services(device):
 
 
 def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
-                  dest_port: int = 443, srcintf: str = None):
+                  dest_port: int = 443, srcintf: Optional[str] = None):
     """Chiede al FortiGate QUALE policy matcherebbe un flusso (senza generare
     traffico): fondamentale per 'perché il client X non raggiunge il sito Y'.
     `dest` può essere IP o FQDN."""
@@ -418,10 +419,10 @@ def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
         raise FortiGateError(f"policy-lookup disponibile solo via REST API: {e}")
 
 
-def get_sessions(device, src_ip: str = None, dst_ip: str = None,
-                 dst_port: int = None, count: int = 100):
+def get_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
+                 dst_port: Optional[int] = None, count: int = 100):
     """Sessioni attive (session table), filtrabili per src/dst/porta."""
-    params = {"count": int(count)}
+    params: Dict[str, Any] = {"count": int(count)}
     if src_ip:
         params["srcaddr"] = src_ip
     if dst_ip:
@@ -445,12 +446,12 @@ def get_routes(device):
                        "get router info routing-table all")
 
 
-def get_traffic_logs(device, src_ip: str = None, dst_ip: str = None,
-                     action: str = None, count: int = 100,
+def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
+                     action: Optional[str] = None, count: int = 100,
                      log_device: str = "disk"):
     """Log di traffico forward (disk o memory), filtrabili. Risponde a
     'cosa dicono i log del firewall per questo client?'."""
-    params = {"rows": int(count)}
+    params: Dict[str, Any] = {"rows": int(count)}
     filters = []
     if src_ip:
         filters.append(f"srcip=={src_ip}")
