@@ -86,6 +86,43 @@ class TestHardeningRules(_RuleBase):
         self.assertEqual(
             rules.check_management_protocols(self.partial).status, UNKNOWN)
 
+    def test_management_protocols_ignores_telnet_outside_allowaccess(self):
+        """Le parole 'telnet'/'http' fuori da 'allowaccess' non devono generare
+        un falso FAIL: il vecchio motore a substring cercava questi termini
+        nell'intero testo (commenti compresi) e ci cascava."""
+        cfg = parse_with_lines(
+            '# telnet era abilitato prima di questo audit, ora disattivato\n'
+            'config system interface\n'
+            '    edit "port1"\n'
+            '        set role wan\n'
+            '        set allowaccess ping https\n'
+            '        set comment "fallback raggiungibile su http://10.0.0.1/status"\n'
+            '    next\n'
+            'end\n'
+            'config firewall service custom\n'
+            '    edit "TELNET-LEGACY-BLOCK"\n'
+            '        set tcp-portrange 23\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(
+            rules.check_management_protocols(cfg).status, PASS)
+
+    def test_management_protocols_evidence_points_at_the_allowaccess_line(self):
+        """L'evidenza deve citare esattamente la riga 'allowaccess', non una
+        riga qualunque del blocco 'edit'."""
+        text = (
+            'config system interface\n'            # riga 1
+            '    edit "port1"\n'                    # riga 2
+            '        set role wan\n'                 # riga 3
+            '        set allowaccess ping telnet\n'  # riga 4
+            '    next\n'                             # riga 5
+            'end\n')                                 # riga 6
+        o = rules.check_management_protocols(parse_with_lines(text))
+        self.assertEqual(o.status, FAIL)
+        self.assertEqual(len(o.evidence), 1)
+        self.assertEqual(o.evidence[0].line, 4)
+        self.assertIn("telnet", o.evidence[0].text)
+
     def test_tls_fails_on_deprecated_version(self):
         o = rules.check_tls_version(self.bad)
         self.assertEqual(o.status, FAIL)
@@ -101,6 +138,22 @@ class TestHardeningRules(_RuleBase):
     def test_tls_unknown_without_global_block(self):
         self.assertEqual(rules.check_tls_version(parse_with_lines("")).status,
                          UNKNOWN)
+
+    def test_tls_ignores_weak_version_mentioned_outside_the_setting(self):
+        """'sslv3'/'tlsv1.1' citate in un commento o in un campo 'comment' non
+        devono generare un falso FAIL: la regola legge solo la direttiva
+        'ssl-min-proto-version', non l'intero testo della configurazione."""
+        cfg = parse_with_lines(
+            '# ricordo: sslv3 e tlsv1.1 sono bandite dalla policy aziendale\n'
+            'config system global\n'
+            '    set ssl-min-proto-version TLSv1-2\n'
+            'end\n'
+            'config system admin\n'
+            '    edit "admin"\n'
+            '        set comment "non usare sslv3"\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(rules.check_tls_version(cfg).status, PASS)
 
     def test_idle_timeout_fails_on_zero(self):
         o = rules.check_idle_timeout(self.bad)
