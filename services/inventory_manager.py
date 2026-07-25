@@ -3,6 +3,7 @@ import os
 import csv
 import re
 import threading
+from typing import Any, Dict
 from security import crypto_vault
 from core import data_config
 
@@ -226,7 +227,7 @@ def get_device_by_ip(ip: str):
     global _device_ip_cache
     with _device_ip_cache_lock:
         if _device_ip_cache is None:
-            cache = {}
+            cache: Dict[str, Dict[str, Any]] = {}
             for d in get_all_devices():
                 key = d.get('IP')
                 if not key:

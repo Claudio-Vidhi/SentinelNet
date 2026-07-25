@@ -12,6 +12,7 @@ import json
 import uuid
 import threading
 import logging
+from typing import Optional
 
 from core import data_config
 from security.crypto_vault import encrypt_password, decrypt_password
@@ -44,7 +45,7 @@ def _devices_using(identity_id: str) -> list:
             if d.get("Profile") == key]
 
 
-def get_identities(tenant: str = None) -> list:
+def get_identities(tenant: Optional[str] = None) -> list:
     """Lista identita' SENZA segreti; opzionale filtro per tenant."""
     with _lock:
         rows = _load()
