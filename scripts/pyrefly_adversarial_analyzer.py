@@ -39,26 +39,44 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
-def analyze_and_group(report):
+DEFAULT_EXCLUDES = ["tests/", "scripts/", "tests_data/", ".venv/", ".agents/", "build/", "dist/"]
+
+def analyze_and_group(report, exclude_patterns=None, app_only=False):
     if not report or "errors" not in report:
         return {}
 
+    excludes = [p.replace("\\", "/").strip().lower() for p in (exclude_patterns or [])]
+    if app_only:
+        excludes.extend(["tests/", "scripts/", "tests_data/"])
+
     by_file = {}
     for err in report["errors"]:
-        path = err.get("path", "unknown")
-        by_file.setdefault(path, []).append(err)
+        path = err.get("path", "unknown").replace("\\", "/")
+        path_lower = path.lower()
+        
+        # Check if path starts with or contains any exclude pattern
+        should_exclude = False
+        for ex in excludes:
+            if ex and (path_lower.startswith(ex) or f"/{ex}" in path_lower or path_lower.endswith(ex)):
+                should_exclude = True
+                break
+        
+        if not should_exclude:
+            by_file.setdefault(path, []).append(err)
 
     # Sort files by issue count ascending (smallest first)
     sorted_files = dict(sorted(by_file.items(), key=lambda x: len(x[1])))
     return sorted_files
 
-def print_summary(grouped_files, state):
+def print_summary(grouped_files, state, filter_info=""):
     total_issues = sum(len(errs) for errs in grouped_files.values())
     resolved = set(state.get("resolved", []))
     
     print("=" * 60)
     print("      PYREFLY ADVERSARIAL AUTONOMOUS & INTERACTIVE AUDITOR")
     print("=" * 60)
+    if filter_info:
+        print(f"Filter Mode           : {filter_info}")
     print(f"Total Current Issues  : {total_issues}")
     print(f"Files With Issues     : {len(grouped_files)}")
     print(f"Previously Resolved   : {len(resolved)} files\n")
@@ -89,6 +107,8 @@ def generate_file_prompt(path, errors):
 
 def main():
     parser = argparse.ArgumentParser(description="Pyrefly Adversarial Autonomous & Interactive Auditor")
+    parser.add_argument("--app-only", action="store_true", help="Audit application code only (excludes tests, scripts, etc.)")
+    parser.add_argument("--exclude", type=str, help="Comma-separated folder/file patterns to exclude (e.g. 'tests,scripts')")
     parser.add_argument("--next", action="store_true", help="Fetch next smallest file needing fix")
     parser.add_argument("--file", type=str, help="Audit specific file")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive step-by-step audit mode")
@@ -107,11 +127,17 @@ def main():
         print("Failed to run Pyrefly or no output received.")
         return
 
-    grouped = analyze_and_group(report)
+    excludes = []
+    if args.exclude:
+        excludes = [x.strip() for x in args.exclude.split(",") if x.strip()]
+
+    grouped = analyze_and_group(report, exclude_patterns=excludes, app_only=args.app_only)
 
     if not grouped:
-        print("[SUCCESS] Zero Pyrefly errors found across codebase!")
+        print("[SUCCESS] Zero matching Pyrefly errors found for this scope!")
         return
+
+    filter_info = "APP CODE ONLY (Tests & Scripts Excluded)" if args.app_only else ("Custom Excludes" if excludes else "All Files")
 
     if args.file:
         target_path = args.file.replace("\\", "/")
@@ -139,8 +165,9 @@ def main():
         return
 
     # Default: summary overview
-    print_summary(grouped, state)
+    print_summary(grouped, state, filter_info=filter_info)
 
 if __name__ == "__main__":
     main()
+
 
