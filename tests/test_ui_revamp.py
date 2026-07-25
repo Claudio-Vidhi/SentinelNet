@@ -967,7 +967,9 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         focus the invisible control."""
         html = _html()
         tab = self._tab(html)
-        select_tag = re.search(r'<select id="provVendor" class="visually-hidden"[^>]*>', tab).group(0)
+        m_sel = re.search(r'<select id="provVendor" class="visually-hidden"[^>]*>', tab)
+        self.assertIsNotNone(m_sel)
+        select_tag = m_sel.group(0) if m_sel else ""
         self.assertIn('aria-hidden="true"', select_tag)
         self.assertIn('tabindex="-1"', select_tag)
         # The visible label must no longer point `for=` at the hidden select --
@@ -1158,7 +1160,7 @@ class TestUsersTabRestyle(unittest.TestCase):
         # shared per-tab rules, relaxed to asserting the real POST routes
         # exist server-side rather than fabricating a GET call that isn't made.
         import app_server as _app_server
-        routes = {(r.path, m) for r in _app_server.app.routes
+        routes = {(getattr(r, "path", ""), m) for r in _app_server.app.routes
                   for m in getattr(r, 'methods', set()) or set()}
         self.assertIn(('/api/users/groups', 'POST'), routes)
         self.assertIn(('/api/users/tabs', 'POST'), routes)
@@ -1422,7 +1424,10 @@ class TestSettingsTabRestyle(unittest.TestCase):
 
     def _tab(self, html):
         start = html.index('<div id="tab-settings"')
-        return html[start:html.index("</main>", start)]
+        end = html.find('<div id="tab-flow-siem"', start)
+        if end == -1:
+            end = html.index("</main>", start)
+        return html[start:end]
 
     def test_preserve_ids_static(self):
         html = _html()
@@ -1830,9 +1835,11 @@ def _extract_object_keys(sub):
         if m:
             key = m.group(0)
             i += m.end()
-        else:
-            key = qm.group(1) if qm.group(1) is not None else qm.group(2)
+        elif qm:
+            key = qm.group(1) if qm.group(1) is not None else (qm.group(2) or "")
             i += qm.end()
+        else:
+            key = ""
         while sub[i] in " \t\r\n":
             i += 1
         assert sub[i] == ":", f"expected ':' after key {key!r} at offset {i}"
@@ -2219,7 +2226,9 @@ class TestSidebarRail(unittest.TestCase):
         self.assertRegex(tag, r'(?<![-\w])aria-label="[^"]+"')
 
     def test_toggle_accessible_name_is_i18n_in_both_maps(self):
-        tag = re.search(r'<button[^>]*id="sidebarToggle"[^>]*>', self.html).group(0)
+        m_btn = re.search(r'<button[^>]*id="sidebarToggle"[^>]*>', self.html)
+        self.assertIsNotNone(m_btn)
+        tag = m_btn.group(0) if m_btn else ""
         for attr in ('data-i18n-title', 'data-i18n-aria-label'):
             m = re.search(attr + r'="([^"]+)"', tag)
             self.assertIsNotNone(m, f"toggle must carry {attr}")
@@ -2331,8 +2340,11 @@ class TestSidebarRail(unittest.TestCase):
         # -- measured width went 16px -> 0px -- and the rail loses its
         # alignment. The collapsed rule must not touch width at all.
         self.assertNotIn('width:auto', icon_rule)
-        self.assertIn('width:16px', self._rule('.nav-item .nav-left i'),
-                      "base rule must keep the fixed icon box the rail relies on")
+        rule_val = self._rule('.nav-item .nav-left i')
+        self.assertIsNotNone(rule_val)
+        if rule_val:
+            self.assertIn('width:16px', rule_val,
+                          "base rule must keep the fixed icon box the rail relies on")
 
     # --- RBAC must survive the rail ----------------------------------------
 
@@ -2463,7 +2475,9 @@ class TestSidebarRail(unittest.TestCase):
         # `::-webkit-scrollbar-thumb{background:transparent}` would make every
         # table and modal scrollbar invisible too.
         thumb = self._rule('::-webkit-scrollbar-thumb')
-        self.assertNotIn('background: transparent', thumb)
+        self.assertIsNotNone(thumb)
+        if thumb:
+            self.assertNotIn('background: transparent', thumb)
 
 
 class TestCaSearch(unittest.TestCase):
