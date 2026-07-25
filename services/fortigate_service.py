@@ -20,6 +20,7 @@ import json
 import os
 import re
 import threading
+from typing import Optional
 
 import requests
 import urllib3
@@ -90,8 +91,8 @@ def token_status() -> dict:
 
 # --- Multi-target: nome, target attivo, elenco, test connessione ------------
 
-def update_target(ip: str, *, name: str = None, port: int = None,
-                  verify_tls: bool = None, token: str = None) -> None:
+def update_target(ip: str, *, name: Optional[str] = None, port: Optional[int] = None,
+                  verify_tls: Optional[bool] = None, token: Optional[str] = None) -> None:
     """Aggiorna solo i campi forniti di un target FortiGate già configurato
     (usato dal manager multi-target per modifiche parziali: rinomina, cambio
     porta/TLS senza dover reinserire il token). Token omesso o vuoto = il
@@ -528,8 +529,8 @@ def get_full_config(device):
 
 # --- Diagnosi aggregata client ------------------------------------------------
 
-def diagnose_client(device, client: str, dest: str = None,
-                    dest_port: int = 443, protocol: str = "TCP") -> dict:
+def diagnose_client(device, client: str, dest: Optional[str] = None,
+                    dest_port: Optional[int] = 443, protocol: str = "TCP") -> dict:
     """Raccoglie in un colpo solo tutto ciò che il FortiGate sa di un client
     (IP o MAC) ed eventualmente del flusso verso `dest`: inventario device,
     ARP/DHCP, sessioni, policy match e ultimi log. Pensato per l'AI assistant

@@ -17,12 +17,14 @@ con flag esplicito (``materialized=true``) e produce una voce di audit.
 _SECRET_KEY_HINTS = ("password", "secret", "pass", "psk", "key")
 
 
+from typing import Any
+
 def is_secret_key(key: str) -> bool:
     k = (key or "").lower()
     return any(h in k for h in _SECRET_KEY_HINTS)
 
 
-def mask_secrets(cfg, _path=""):
+def mask_secrets(cfg: Any, _path: str = "") -> Any:
     """Ritorna una copia di ``cfg`` (dict annidato) con ogni valore segreto
     sostituito dal placeholder ``{{VAULT:<percorso.chiave>}}``. I valori vuoti
     o None restano invariati (non generano righe di config)."""
