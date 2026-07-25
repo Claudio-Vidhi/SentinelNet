@@ -282,8 +282,9 @@ def enqueue_job(site_id: str, device_ip: str, command: str, requested_by: str = 
         c.execute("""INSERT INTO command_jobs
                      (id, site_id, device_ip, command, status, result, requested_by, created, updated)
                      VALUES (?,?,?,?, 'pending', '', ?, ?, ?)""",
-                  (job_id, site_id, device_ip, command, requested_by, now, now))
-    return get_job(job_id)
+                   (job_id, site_id, device_ip, command, requested_by, now, now))
+    res = get_job(job_id)
+    return res if res is not None else {}
 
 
 def get_job(job_id: str):
@@ -324,7 +325,7 @@ def complete_job(job_id: str, site_id: str, status: str, result: str) -> bool:
         return cur.rowcount > 0
 
 
-def list_jobs(site_id: str = None, limit: int = 100) -> list:
+def list_jobs(site_id: Optional[str] = None, limit: int = 100) -> list:
     _init_jobs()
     with _jobs_lock, _connect() as c:
         if site_id:

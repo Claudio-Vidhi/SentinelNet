@@ -3,6 +3,7 @@ import hashlib
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 import jwt
 from core import data_config
 from security import secure_key_store
@@ -59,7 +60,7 @@ def log_audit(message: str):
 
 # --- JWT AUTHENTICATION ---
 
-def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Genera un token JWT di accesso."""
     to_encode = data.copy()
     if expires_delta:
@@ -70,7 +71,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
     return encoded_jwt
 
-def verify_access_token(token: str) -> dict:
+def verify_access_token(token: str) -> Optional[dict]:
     """Valida un token JWT. Ritorna il payload se valido, altrimenti None."""
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
