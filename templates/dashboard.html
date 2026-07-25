@@ -1190,21 +1190,11 @@
       <div class="panel" style="margin-bottom:18px;">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
           <div>
-            <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-diagram-project"></i> <span data-i18n="titleFlowGraph">Grafo dei flussi</span></h3>
-            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="hintFlowGraphClick">Seleziona la modalità di visualizzazione del grafo e clicca un nodo per filtrare le tabelle.</p>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <div class="btn-group" style="display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface-3);">
-              <button id="btnFgChartTopology" class="btn btn-sm" onclick="setFlowGraphView('topology')" style="padding:5px 10px; border:none; background:var(--primary); color:#fff; font-size:12px;"><i class="fa-solid fa-diagram-project"></i> Topologia</button>
-              <button id="btnFgChartSankey" class="btn btn-sm" onclick="setFlowGraphView('sankey')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;"><i class="fa-solid fa-code-fork"></i> Sankey</button>
-              <button id="btnFgChartTrend" class="btn btn-sm" onclick="setFlowGraphView('trend')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;"><i class="fa-solid fa-chart-line"></i> Trend Rate</button>
-              <button id="btnFgChartMatrix" class="btn btn-sm" onclick="setFlowGraphView('matrix')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;"><i class="fa-solid fa-grip"></i> Matrice</button>
-            </div>
-            <button class="btn btn-sm btn-secondary" onclick="openObsInspectModal('all')" style="padding:5px 10px; font-size:12px;"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
+            <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="titleFlowDetailInline">Dettaglio Flussi</span></h3>
+            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="hintFlowDetailInline">Ripartizione della telemetria per protocollo nella finestra selezionata.</p>
           </div>
         </div>
-        <canvas id="flowGraphCanvas" width="900" height="360" style="width:100%; height:360px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); cursor:pointer;"></canvas>
-        <div id="fgTooltip" style="display:none; position:fixed; pointer-events:none; z-index:10020; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:12px; box-shadow:0 4px 10px rgba(0,0,0,0.3);"></div>
+        <div id="flowDetailInline" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:14px;"></div>
       </div>
 
       <!-- Panel: Ingest Protocol Distribution Graph (3 Graph Types: Donut, Bar, Trend) -->
