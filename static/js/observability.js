@@ -859,7 +859,6 @@
     // --- FLOW GRAPH (Task 3: Live Flows — grafo, KPI, riepilogo, tabelle) ---
 
     let _fgData = null;          // ultima risposta /flowgraph
-    let _fgSelectedNode = null;  // ip selezionato per filtrare le tabelle
     let _fgFetchInFlight = false;
 
     async function loadFlowGraph(window_) {
@@ -870,7 +869,6 @@
             const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}`);
             if (!res || !res.ok) return;
             _fgData = await res.json();
-            _fgSelectedNode = null;
             // Disclosure: qualunque nodo/arco con VLAN non reale (fallback
             // sintetico, nessun binding ARP noto per l'IP) attiva l'avviso
             // in UI — mai spacciare un valore inventato per un tag 802.1Q reale.
@@ -883,7 +881,7 @@
             renderFlowGraphTenant();
             renderFlowGraphProtocols();
             renderFlowGraphTalkers();
-            renderFlowGraphView();
+            renderFlowDetailInline();
         } finally {
             _fgFetchInFlight = false;
         }
@@ -918,13 +916,9 @@
     }
 
     function _fgVisibleEdges() {
-        // Archi visibili nelle due tabelle: filtrati sul nodo selezionato
-        // (click sul grafo), altrimenti l'intera finestra.
-        let edges = (_fgData && _fgData.edges) || [];
-        if (_fgSelectedNode) {
-            edges = edges.filter(e => e.src === _fgSelectedNode || e.dst === _fgSelectedNode);
-        }
-        return edges;
+        // Archi visibili nelle due tabelle: l'intera finestra (il grafo
+        // click-to-filter è stato rimosso insieme al canvas force-directed).
+        return (_fgData && _fgData.edges) || [];
     }
 
     function _fgVlanMark(realFlag) {
@@ -936,21 +930,8 @@
     function renderFlowGraphProtocols() {
         const tbody = document.getElementById('fgProtoTableBody');
         if (!tbody) return;
-        // Non filtrato: intera finestra dei protocolli precalcolata dal backend.
-        // Filtrato (nodo selezionato): riaggregata client-side dagli archi
-        // visibili (il brief chiede di filtrare "le due tabelle" al click).
-        let rows;
-        if (_fgSelectedNode) {
-            const totals = {};
-            for (const e of _fgVisibleEdges()) {
-                const key = e.proto + '|' + (e.port == null ? '' : e.port);
-                const t = totals[key] || (totals[key] = { proto: e.proto, port: e.port, rate_bps: 0 });
-                t.rate_bps += e.rate_bps || 0;
-            }
-            rows = Object.values(totals).sort((a, b) => b.rate_bps - a.rate_bps);
-        } else {
-            rows = (_fgData && _fgData.protocols) || [];
-        }
+        // Intera finestra dei protocolli precalcolata dal backend.
+        const rows = (_fgData && _fgData.protocols) || [];
         if (!rows.length) {
             tbody.innerHTML = `<tr><td colspan="3" style="padding:10px; text-align:center; color:var(--text-muted);">—</td></tr>`;
             return;
@@ -981,194 +962,6 @@
             </tr>`).join('');
     }
 
-    function fgFilterByNode(ip) {
-        _fgSelectedNode = (_fgSelectedNode === ip) ? null : ip;
-        renderFlowGraphTalkers();
-        renderFlowGraphProtocols();
-        fgDraw();
-    }
-
-    // --- Canvas: grafo force-directed vanilla (nessuna libreria) ---
-
-    let _fgNodes = [];   // {id, x, y, vx, vy, r, bytes, vlan}
-    let _fgEdges = [];
-    let _fgTicks = 0;
-    const FG_MAX_TICKS = 100;
-    let _fgAnimating = false;
-    let _fgHover = null;
-
-    function fgVlanColor(vlan) {
-        let hash = 0;
-        const s = String(vlan);
-        for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) | 0;
-        const hue = Math.abs(hash) % 360;
-        return `hsl(${hue}, 65%, 55%)`;
-    }
-
-    function fgStartSimulation() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas || !_fgData) return;
-        const w = canvas.clientWidth || canvas.width;
-        const h = canvas.clientHeight || canvas.height;
-        canvas.width = w; canvas.height = h;
-
-        const maxBytes = Math.max(1, ...(_fgData.nodes.map(n => n.bytes || 0)));
-        _fgNodes = _fgData.nodes.map(n => ({
-            id: n.id, bytes: n.bytes || 0, vlan: n.vlan,
-            r: 6 + 14 * Math.sqrt((n.bytes || 0) / maxBytes),
-            x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0,
-        }));
-        const byId = {};
-        _fgNodes.forEach(n => byId[n.id] = n);
-        const maxRate = Math.max(1, ...(_fgData.edges.map(e => e.rate_bps || 0)));
-        _fgEdges = _fgData.edges
-            .filter(e => byId[e.src] && byId[e.dst])
-            .map(e => ({
-                src: byId[e.src], dst: byId[e.dst], vlan: e.vlan, proto: e.proto,
-                rate_bps: e.rate_bps,
-                width: Math.max(1, Math.min(8, 1 + 7 * (e.rate_bps / maxRate))),
-            }));
-
-        _fgTicks = 0;
-        if (!_fgAnimating) {
-            _fgAnimating = true;
-            requestAnimationFrame(fgTick);
-        }
-        _fgCanvasBound = _fgCanvasBound || fgBindCanvasEvents();
-    }
-
-    let _fgCanvasBound = false;
-
-    function fgTick() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas) { _fgAnimating = false; return; }
-        const w = canvas.width, h = canvas.height;
-        if (_fgTicks < FG_MAX_TICKS) {
-            const REPULSION = 2500, SPRING = 0.02, IDEAL_LEN = 90, DAMP = 0.85;
-            for (let i = 0; i < _fgNodes.length; i++) {
-                const a = _fgNodes[i];
-                let fx = 0, fy = 0;
-                for (let j = 0; j < _fgNodes.length; j++) {
-                    if (i === j) continue;
-                    const b = _fgNodes[j];
-                    let dx = a.x - b.x, dy = a.y - b.y;
-                    let d2 = dx * dx + dy * dy || 0.01;
-                    const d = Math.sqrt(d2);
-                    const f = REPULSION / d2;
-                    fx += (dx / d) * f; fy += (dy / d) * f;
-                }
-                // Attrazione al centro per evitare deriva
-                fx += (w / 2 - a.x) * 0.002; fy += (h / 2 - a.y) * 0.002;
-                a.vx = (a.vx + fx) * DAMP; a.vy = (a.vy + fy) * DAMP;
-            }
-            for (const e of _fgEdges) {
-                let dx = e.dst.x - e.src.x, dy = e.dst.y - e.src.y;
-                const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
-                const f = SPRING * (d - IDEAL_LEN);
-                const fx = (dx / d) * f, fy = (dy / d) * f;
-                e.src.vx += fx; e.src.vy += fy;
-                e.dst.vx -= fx; e.dst.vy -= fy;
-            }
-            for (const n of _fgNodes) {
-                n.x = Math.min(w - n.r - 4, Math.max(n.r + 4, n.x + n.vx));
-                n.y = Math.min(h - n.r - 4, Math.max(n.r + 4, n.y + n.vy));
-            }
-            _fgTicks++;
-            fgDraw();
-            requestAnimationFrame(fgTick);
-        } else {
-            fgDraw();
-            _fgAnimating = false;
-        }
-    }
-
-    function fgDraw() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width, h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-        if (!_fgNodes.length) {
-            ctx.fillStyle = '#888';
-            ctx.font = '13px sans-serif';
-            const L = i18n[currentLang];
-            ctx.fillText(L.msgNoFlowGraphData || 'No data.', 12, 20);
-            return;
-        }
-        for (const e of _fgEdges) {
-            const dim = _fgSelectedNode && e.src.id !== _fgSelectedNode && e.dst.id !== _fgSelectedNode;
-            ctx.strokeStyle = fgVlanColor(e.vlan);
-            ctx.globalAlpha = dim ? 0.15 : 0.75;
-            ctx.lineWidth = e.width;
-            ctx.beginPath();
-            ctx.moveTo(e.src.x, e.src.y);
-            ctx.lineTo(e.dst.x, e.dst.y);
-            ctx.stroke();
-        }
-        ctx.globalAlpha = 1;
-        for (const n of _fgNodes) {
-            const dim = _fgSelectedNode && n.id !== _fgSelectedNode;
-            ctx.globalAlpha = dim ? 0.35 : 1;
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-            ctx.fillStyle = fgVlanColor(n.vlan);
-            ctx.fill();
-            if (n.id === _fgSelectedNode) {
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = '#fff';
-                ctx.stroke();
-            }
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#eee';
-            ctx.font = '10px sans-serif';
-            ctx.fillText(n.id, n.x + n.r + 3, n.y + 3);
-        }
-        ctx.globalAlpha = 1;
-    }
-
-    function fgNodeAt(canvas, evt) {
-        const rect = canvas.getBoundingClientRect();
-        const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
-        const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
-        for (const n of _fgNodes) {
-            const dx = x - n.x, dy = y - n.y;
-            if (dx * dx + dy * dy <= (n.r + 2) * (n.r + 2)) return n;
-        }
-        return null;
-    }
-
-    function fgBindCanvasEvents() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas) return false;
-        canvas.addEventListener('click', evt => {
-            const n = fgNodeAt(canvas, evt);
-            if (n) fgFilterByNode(n.id);
-            else { _fgSelectedNode = null; renderFlowGraphTalkers(); renderFlowGraphProtocols(); fgDraw(); }
-        });
-        canvas.addEventListener('mousemove', evt => {
-            const n = fgNodeAt(canvas, evt);
-            const tip = document.getElementById('fgTooltip');
-            if (!tip) return;
-            if (n) {
-                const totalRate = _fgEdges.filter(e => e.src.id === n.id || e.dst.id === n.id)
-                    .reduce((s, e) => s + (e.rate_bps || 0), 0);
-                tip.textContent = `${n.id} — ${fmtRate(totalRate)}`;
-                tip.style.left = (evt.clientX + 12) + 'px';
-                tip.style.top = (evt.clientY + 12) + 'px';
-                tip.style.display = 'block';
-                canvas.style.cursor = 'pointer';
-            } else {
-                tip.style.display = 'none';
-                canvas.style.cursor = 'default';
-            }
-        });
-        canvas.addEventListener('mouseleave', () => {
-            const tip = document.getElementById('fgTooltip');
-            if (tip) tip.style.display = 'none';
-        });
-        return true;
-    }
-
-
     // --- PROTOCOL DISTRIBUTION CHART (DONUT, BAR, TREND) ---
     let _obsChartType = 'donut';
     let _obsProtocolData = null;
@@ -1198,6 +991,7 @@
         if (!res || !res.ok) return;
         _obsProtocolData = await res.json();
         renderObsProtocolChart();
+        renderFlowDetailInline();
     }
 
     function renderObsProtocolChart() {
@@ -1467,90 +1261,19 @@
     }
 
     // --- INSPECTION MODAL & CLICK DRILL-DOWN ---
-    async function openObsInspectModal(protoKey = 'all') {
-        const modal = document.getElementById('obsInspectModal');
-        const title = document.getElementById('obsInspectTitle');
-        const body = document.getElementById('obsInspectBody');
-        if (!modal || !body) return;
+    // Markup per la ripartizione telemetria (severità syslog, azioni, top
+    // device, breakdown L4 e top porte per protocollo). Riusata sia dal
+    // pannello inline "Dettaglio Flussi" sia dal modale di ispezione, così
+    // le due viste non divergono.
+    const OBS_PROTO_LABELS = { netflow: 'NetFlow', ipfix: 'IPFIX', sflow: 'sFlow', syslog: 'Syslog' };
 
-        if (!_obsProtocolData) {
-            await loadObsProtocolDist();
-        }
-
+    function buildFlowTelemetryDetailHtml(protoKey = 'all') {
         const bd = (_obsProtocolData && _obsProtocolData.breakdown) || {};
         const totals = (_obsProtocolData && _obsProtocolData.totals) || {};
         const windowStr = (_obsProtocolData && _obsProtocolData.window) || '24h';
-
-        const PROTO_LABELS = {
-            netflow: 'NetFlow',
-            ipfix: 'IPFIX',
-            sflow: 'sFlow',
-            syslog: 'Syslog'
-        };
-
-        if (title) {
-            title.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i> Ispezione Dettagliata Telemetria — ${protoKey === 'all' ? 'Tutti i Protocolli' : (PROTO_LABELS[protoKey] || protoKey)}`;
-        }
+        const PROTO_LABELS = OBS_PROTO_LABELS;
 
         let html = '';
-
-        if (_fgData && _fgData.edges && _fgData.edges.length) {
-            const chartTitle = _fgChartType === 'sankey' ? 'Diagramma Sankey'
-                : _fgChartType === 'trend' ? 'Trend Rate Flussi'
-                : _fgChartType === 'matrix' ? 'Matrice dei Flussi'
-                : 'Topologia dei Flussi';
-
-            let fgRowsHtml = '';
-            if (_fgChartType === 'sankey') {
-                fgRowsHtml = _fgData.edges.slice(0, 15).map(e => `
-                    <tr style="border-top:1px solid var(--border);">
-                        <td style="padding:6px; font-family:var(--font-code); font-weight:700;">${escapeHtml(e.src)}</td>
-                        <td style="padding:6px;"><span class="badge" style="background:var(--primary); color:#fff;">${escapeHtml(String(e.proto).toUpperCase())}${e.port ? ':'+e.port : ''}</span></td>
-                        <td style="padding:6px; font-family:var(--font-code); font-weight:700;">${escapeHtml(e.dst)}</td>
-                        <td style="padding:6px; font-weight:700; color:var(--primary);">${escapeHtml(fmtRate(e.rate_bps))}</td>
-                        <td style="padding:6px;">VLAN ${escapeHtml(String(e.vlan))}</td>
-                    </tr>`).join('');
-            } else if (_fgChartType === 'trend') {
-                fgRowsHtml = (_fgData.protocols || []).slice(0, 10).map(p => `
-                    <tr style="border-top:1px solid var(--border);">
-                        <td style="padding:6px; font-family:var(--font-code); font-weight:700;">${escapeHtml(String(p.proto).toUpperCase())}</td>
-                        <td style="padding:6px;">Porta ${escapeHtml(p.port == null ? 'Tutte' : String(p.port))}</td>
-                        <td style="padding:6px; font-family:var(--font-code);">Global Stream</td>
-                        <td style="padding:6px; font-weight:700; color:var(--primary);">${escapeHtml(fmtRate(p.rate_bps))}</td>
-                        <td style="padding:6px;">Top Throughput</td>
-                    </tr>`).join('');
-            } else {
-                fgRowsHtml = _fgData.edges.slice(0, 15).map(e => `
-                    <tr style="border-top:1px solid var(--border);">
-                        <td style="padding:6px; font-family:var(--font-code);">${escapeHtml(e.src)}</td>
-                        <td style="padding:6px;">${escapeHtml(String(e.proto).toUpperCase())}:${escapeHtml(String(e.port||''))}</td>
-                        <td style="padding:6px; font-family:var(--font-code);">${escapeHtml(e.dst)}</td>
-                        <td style="padding:6px; font-weight:700; color:var(--primary);">${escapeHtml(fmtRate(e.rate_bps))}</td>
-                        <td style="padding:6px;">Flow Pair</td>
-                    </tr>`).join('');
-            }
-
-            html += `
-            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
-                <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary); display:flex; align-items:center; gap:6px;">
-                    <i class="fa-solid fa-diagram-project"></i> Dettagli Telemetria (${chartTitle} — Finestra: ${escapeHtml(_fgData.window || '15m')})
-                </h4>
-                <div style="max-height:200px; overflow-y:auto;">
-                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                        <thead>
-                            <tr style="text-align:left; color:var(--text-muted); font-size:11px; border-bottom:1px solid var(--border);">
-                                <th style="padding:4px 6px;">SORGENTE</th>
-                                <th style="padding:4px 6px;">PROTOCOLLO</th>
-                                <th style="padding:4px 6px;">DESTINAZIONE</th>
-                                <th style="padding:4px 6px;">THROUGHPUT RATE</th>
-                                <th style="padding:4px 6px;">METRICA</th>
-                            </tr>
-                        </thead>
-                        <tbody>${fgRowsHtml}</tbody>
-                    </table>
-                </div>
-            </div>`;
-        }
 
         if (protoKey === 'syslog' || protoKey === 'all') {
             const slData = bd.syslog || {};
@@ -1678,6 +1401,33 @@
             }
         });
 
+        return html;
+    }
+
+    // Pannello "Dettaglio Flussi" inline, sempre visibile nel tab Flussi Live:
+    // stessa ripartizione telemetria del modale, riaggregata alla larghezza intera.
+    function renderFlowDetailInline() {
+        const box = document.getElementById('flowDetailInline');
+        if (!box) return;
+        const html = buildFlowTelemetryDetailHtml('all');
+        box.innerHTML = html || '<div style="grid-column:1 / -1; padding:20px; text-align:center; color:var(--text-muted);">Nessun dettaglio disponibile per la finestra selezionata.</div>';
+    }
+
+    async function openObsInspectModal(protoKey = 'all') {
+        const modal = document.getElementById('obsInspectModal');
+        const title = document.getElementById('obsInspectTitle');
+        const body = document.getElementById('obsInspectBody');
+        if (!modal || !body) return;
+
+        if (!_obsProtocolData) {
+            await loadObsProtocolDist();
+        }
+
+        if (title) {
+            title.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i> Ispezione Dettagliata Telemetria — ${protoKey === 'all' ? 'Tutti i Protocolli' : (OBS_PROTO_LABELS[protoKey] || protoKey)}`;
+        }
+
+        const html = buildFlowTelemetryDetailHtml(protoKey);
         body.innerHTML = html || '<div style="padding:20px; text-align:center; color:var(--text-muted);">Nessun dettaglio disponibile per la finestra selezionata.</div>';
         modal.style.display = 'flex';
     }
@@ -1687,299 +1437,7 @@
         if (modal) modal.style.display = 'none';
     }
 
-    let _fgChartType = 'topology';
-
-    function setFlowGraphView(type) {
-        _fgChartType = type;
-        ['Topology', 'Sankey', 'Trend', 'Matrix'].forEach(t => {
-            const btn = document.getElementById(`btnFgChart${t}`);
-            if (btn) {
-                const isActive = t.toLowerCase() === type;
-                btn.style.background = isActive ? 'var(--primary)' : 'transparent';
-                btn.style.color = isActive ? '#fff' : 'var(--text)';
-            }
-        });
-        renderFlowGraphView();
-    }
-
-    function renderFlowGraphView() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width = canvas.parentElement.clientWidth || 900;
-        const height = canvas.height = 360;
-        ctx.clearRect(0, 0, width, height);
-
-        const edges = (_fgData && _fgData.edges) || [];
-        const nodes = (_fgData && _fgData.nodes) || [];
-
-        if (!edges.length && !nodes.length) {
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#888';
-            ctx.font = '13px sans-serif';
-            ctx.fillText('Nessun dato di flusso disponibile per la finestra selezionata.', 20, 30);
-            return;
-        }
-
-        if (_fgChartType === 'sankey') {
-            renderFlowSankey(ctx, width, height, edges);
-        } else if (_fgChartType === 'trend') {
-            renderFlowTrendRate(ctx, width, height, _fgData);
-        } else if (_fgChartType === 'matrix') {
-            renderFlowMatrix(ctx, width, height, edges);
-        } else {
-            fgStartSimulation();
-        }
-    }
-
-    function renderFlowSankey(ctx, width, height, edges) {
-        const srcMap = {}, dstMap = {}, protoMap = {};
-        edges.forEach(e => {
-            const r = e.rate_bps || 0;
-            srcMap[e.src] = (srcMap[e.src] || 0) + r;
-            dstMap[e.dst] = (dstMap[e.dst] || 0) + r;
-            const pKey = String(e.proto).toUpperCase() + (e.port ? `:${e.port}` : '');
-            protoMap[pKey] = (protoMap[pKey] || 0) + r;
-        });
-
-        const topSrcs = Object.keys(srcMap).sort((a, b) => srcMap[b] - srcMap[a]).slice(0, 6);
-        const topProtos = Object.keys(protoMap).sort((a, b) => protoMap[b] - protoMap[a]).slice(0, 6);
-        const topDsts = Object.keys(dstMap).sort((a, b) => dstMap[b] - dstMap[a]).slice(0, 6);
-
-        if (!topSrcs.length || !topDsts.length) {
-            ctx.fillStyle = '#888';
-            ctx.font = '13px sans-serif';
-            ctx.fillText('Dati insufficienti per il diagramma Sankey.', 20, 30);
-            return;
-        }
-
-        const colW = 135;
-        const xSrc = 30;
-        const xProto = Math.floor(width / 2 - colW / 2);
-        const xDst = width - colW - 30;
-
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#a0a0a0';
-        ctx.font = '11px var(--font-code, monospace)';
-        ctx.fillText('ORIGINI (SRC)', xSrc, 18);
-        ctx.fillText('PROTOCOLLI', xProto, 18);
-        ctx.fillText('DESTINAZIONI (DST)', xDst, 18);
-
-        const topPad = 42, botPad = 20;
-        const drawH = height - topPad - botPad;
-
-        function calcNodePos(list, map, x) {
-            const tot = list.reduce((acc, k) => acc + map[k], 0) || 1;
-            let currentY = topPad;
-            const gap = 6;
-            const availH = drawH - (list.length - 1) * gap;
-            return list.map(k => {
-                const nodeH = Math.max(24, (map[k] / tot) * availH);
-                const pos = { key: k, x, y: currentY, h: nodeH, rate: map[k] };
-                currentY += nodeH + gap;
-                return pos;
-            });
-        }
-
-        const srcNodes = calcNodePos(topSrcs, srcMap, xSrc);
-        const protoNodes = calcNodePos(topProtos, protoMap, xProto);
-        const dstNodes = calcNodePos(topDsts, dstMap, xDst);
-
-        const srcById = {}, protoById = {}, dstById = {};
-        srcNodes.forEach(n => srcById[n.key] = n);
-        protoNodes.forEach(n => protoById[n.key] = n);
-        dstNodes.forEach(n => dstById[n.key] = n);
-
-        const maxRate = Math.max(1, ...edges.map(e => e.rate_bps || 0));
-
-        edges.forEach(e => {
-            const pKey = String(e.proto).toUpperCase() + (e.port ? `:${e.port}` : '');
-            const sn = srcById[e.src];
-            const pn = protoById[pKey];
-            const dn = dstById[e.dst];
-            const rate = e.rate_bps || 0;
-
-            const alpha = Math.max(0.2, Math.min(0.7, rate / maxRate));
-            const hue = fgVlanColor(e.vlan || 1);
-
-            if (sn && pn) {
-                ctx.strokeStyle = hue;
-                ctx.globalAlpha = alpha;
-                ctx.lineWidth = Math.max(1.5, Math.min(12, (rate / maxRate) * 10));
-                ctx.beginPath();
-                const y1 = sn.y + sn.h / 2;
-                const y2 = pn.y + pn.h / 2;
-                ctx.moveTo(sn.x + colW, y1);
-                ctx.bezierCurveTo(sn.x + colW + 60, y1, pn.x - 60, y2, pn.x, y2);
-                ctx.stroke();
-            }
-
-            if (pn && dn) {
-                ctx.strokeStyle = hue;
-                ctx.globalAlpha = alpha;
-                ctx.lineWidth = Math.max(1.5, Math.min(12, (rate / maxRate) * 10));
-                ctx.beginPath();
-                const y1 = pn.y + pn.h / 2;
-                const y2 = dn.y + dn.h / 2;
-                ctx.moveTo(pn.x + colW, y1);
-                ctx.bezierCurveTo(pn.x + colW + 60, y1, dn.x - 60, y2, dn.x, y2);
-                ctx.stroke();
-            }
-        });
-
-        ctx.globalAlpha = 1.0;
-
-        [srcNodes, protoNodes, dstNodes].forEach((nodeGroup, groupIdx) => {
-            const fillColor = groupIdx === 1 ? 'rgba(106, 95, 193, 0.85)' : 'rgba(50, 115, 220, 0.85)';
-            nodeGroup.forEach(n => {
-                ctx.fillStyle = fillColor;
-                ctx.beginPath();
-                if (typeof ctx.roundRect === 'function') ctx.roundRect(n.x, n.y, colW, n.h, 4);
-                else ctx.fillRect(n.x, n.y, colW, n.h);
-                ctx.fill();
-
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '11px var(--font-code, monospace)';
-                const text = n.key.length > 15 ? n.key.slice(0, 13) + '..' : n.key;
-                ctx.fillText(text, n.x + 8, n.y + (n.h >= 34 ? 14 : Math.min(n.h / 2 + 4, 16)));
-
-                if (n.h >= 34) {
-                    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-                    ctx.font = '9px var(--font-code, monospace)';
-                    ctx.fillText(fmtRate(n.rate), n.x + 8, n.y + 26);
-                }
-            });
-        });
-    }
-
-    function renderFlowTrendRate(ctx, width, height, fgData) {
-        const edges = (fgData && fgData.edges) || [];
-        const protocols = (fgData && fgData.protocols) || [];
-
-        const padding = { left: 65, right: 30, top: 40, bottom: 40 };
-        const graphW = width - padding.left - padding.right;
-        const graphH = height - padding.top - padding.bottom;
-
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= 4; i++) {
-            const y = padding.top + (graphH / 4) * i;
-            ctx.beginPath();
-            ctx.moveTo(padding.left, y);
-            ctx.lineTo(width - padding.right, y);
-            ctx.stroke();
-        }
-
-        const maxRate = Math.max(1, ...protocols.map(p => p.rate_bps || 0), ...edges.map(e => e.rate_bps || 0));
-
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#888';
-        ctx.font = '10px var(--font-code, monospace)';
-        for (let i = 0; i <= 4; i++) {
-            const val = maxRate * (1 - i / 4);
-            const y = padding.top + (graphH / 4) * i;
-            ctx.fillText(fmtRate(val), 8, y + 4);
-        }
-
-        const windowStr = fgData.window || '15m';
-        ctx.fillText(`-${windowStr}`, padding.left, height - 12);
-        ctx.fillText(`Ora`, width - padding.right - 20, height - 12);
-
-        const topStreams = edges.slice(0, 5);
-        const colors = ['#6a5fc1', '#00b8d9', '#c2ef2e', '#ff5630', '#ffab00'];
-
-        topStreams.forEach((stream, idx) => {
-            const color = colors[idx % colors.length];
-            const points = 25;
-            const step = graphW / (points - 1);
-            const rate = stream.rate_bps || 0;
-
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-
-            for (let i = 0; i < points; i++) {
-                const x = padding.left + i * step;
-                const variance = Math.sin(i * 0.4 + idx) * 0.2 + Math.cos(i * 0.8) * 0.1;
-                const r = Math.max(0, rate * (0.85 + variance));
-                const y = padding.top + graphH - (r / maxRate) * graphH;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-
-            const legX = padding.left + idx * 150;
-            ctx.fillStyle = color;
-            ctx.fillRect(legX, 15, 10, 10);
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#eee';
-            ctx.font = '10px var(--font-code, monospace)';
-            const sShort = stream.src.split('.').slice(-2).join('.');
-            const dShort = stream.dst.split('.').slice(-2).join('.');
-            ctx.fillText(`${sShort}→${dShort}`, legX + 14, 24);
-        });
-    }
-
-    function renderFlowMatrix(ctx, width, height, edges) {
-        const srcs = Array.from(new Set(edges.map(e => e.src))).slice(0, 6);
-        const dsts = Array.from(new Set(edges.map(e => e.dst))).slice(0, 6);
-
-        if (!srcs.length || !dsts.length) {
-            ctx.fillStyle = '#888';
-            ctx.font = '13px sans-serif';
-            ctx.fillText('Dati insufficienti per la Matrice dei Flussi.', 20, 30);
-            return;
-        }
-
-        const margin = { left: 110, top: 40, right: 20, bottom: 20 };
-        const gridW = width - margin.left - margin.right;
-        const gridH = height - margin.top - margin.bottom;
-
-        const cellW = gridW / dsts.length;
-        const cellH = gridH / srcs.length;
-
-        const matrix = {};
-        let maxRate = 1;
-        edges.forEach(e => {
-            const key = `${e.src}|${e.dst}`;
-            matrix[key] = (matrix[key] || 0) + (e.rate_bps || 0);
-            if (matrix[key] > maxRate) maxRate = matrix[key];
-        });
-
-        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#a0a0a0';
-        ctx.font = '10px var(--font-code, monospace)';
-        dsts.forEach((dst, c) => {
-            const x = margin.left + c * cellW + cellW / 2;
-            ctx.fillText(dst, x - 25, margin.top - 12);
-        });
-
-        srcs.forEach((src, r) => {
-            const y = margin.top + r * cellH + cellH / 2;
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#a0a0a0';
-            ctx.font = '10px var(--font-code, monospace)';
-            ctx.fillText(src, 10, y + 4);
-
-            dsts.forEach((dst, c) => {
-                const key = `${src}|${dst}`;
-                const rate = matrix[key] || 0;
-                const x = margin.left + c * cellW;
-                const cellY = margin.top + r * cellH;
-
-                const alpha = rate > 0 ? Math.max(0.2, Math.min(0.9, rate / maxRate)) : 0.04;
-                ctx.fillStyle = rate > 0 ? `rgba(106, 95, 193, ${alpha})` : 'rgba(255, 255, 255, 0.02)';
-                ctx.fillRect(x + 2, cellY + 2, cellW - 4, cellH - 4);
-
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-                ctx.strokeRect(x + 2, cellY + 2, cellW - 4, cellH - 4);
-
-                if (rate > 0) {
-                    ctx.fillStyle = '#ffffff';
-                    ctx.font = '9px var(--font-code, monospace)';
-                    ctx.fillText(fmtRate(rate), x + 6, cellY + cellH / 2 + 3);
-                }
-            });
-        });
-    }
-
     // Expose functions globally for UI
-    window.setFlowGraphView = setFlowGraphView;
-    window.renderFlowGraphView = renderFlowGraphView;
     window.setObsChartType = setObsChartType;
     window.loadObsProtocolDist = loadObsProtocolDist;
     window.openObsInspectModal = openObsInspectModal;
