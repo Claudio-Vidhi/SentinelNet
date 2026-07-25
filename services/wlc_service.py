@@ -10,6 +10,7 @@ essere interpretato da un LLM (MCP / AI assistant).
 """
 
 import re
+from typing import Optional
 
 from core.core_engine import resolve_driver, get_device_credentials
 
@@ -97,7 +98,7 @@ def ssh_run(device: dict, command: str, timeout: int = 30) -> str:
         raise WlcError(f"SSH {device.get('IP')}: {e}")
 
 
-def query(device: dict, service: str, mac: str = None) -> dict:
+def query(device: dict, service: str, mac: Optional[str] = None) -> dict:
     """Esegue il servizio richiesto sul WLC e ritorna
     {"platform", "command", "data"}."""
     if service not in COMMANDS:
