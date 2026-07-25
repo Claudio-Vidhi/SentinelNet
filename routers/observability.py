@@ -458,10 +458,10 @@ async def obs_flowgraph(
         e["vlan"] = vlan
         e["vlan_real"] = vlan_real
 
-    throughput_bps = sum(e["rate_bps"] for e in edges)
+    throughput_bps = sum(float(e.get("rate_bps", 0) or 0) for e in edges)
     top_edge = max(edges, key=lambda e: e["rate_bps"], default=None)
     top_path = ({"src": top_edge["src"], "dst": top_edge["dst"],
-                "pct": round(100 * top_edge["rate_bps"] / throughput_bps, 1)
+                "pct": round(100 * float(top_edge.get("rate_bps", 0) or 0) / throughput_bps, 1)
                 if throughput_bps else 0} if top_edge else
                {"src": None, "dst": None, "pct": 0})
     talkers = len({e["src"] for e in edges} | {e["dst"] for e in edges})
