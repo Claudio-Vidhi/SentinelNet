@@ -23,6 +23,7 @@ via il writer batch di db.py.
 import asyncio
 import hashlib
 import json
+from typing import Optional
 import logging
 import re
 import time
@@ -86,7 +87,7 @@ def _switch_port_for(src_ip: str, tenant: str):
     return None
 
 
-def correlate_once(now: int = None) -> int:
+def correlate_once(now: Optional[int] = None) -> int:
     """Un ciclo di correlazione. Ritorna il numero di eventi emessi (accodati)."""
     now = now or int(time.time())
     conn = db.get_observability_connection()

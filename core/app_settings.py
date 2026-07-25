@@ -89,7 +89,7 @@ def list_local_ips() -> list:
             s.close()
     except OSError:
         pass
-    ips = {ip for ip in ips if not ip.startswith("169.254.")}
+    ips = {str(ip) for ip in ips if isinstance(ip, str) and not ip.startswith("169.254.")}
     ips.discard("0.0.0.0")
     ips.discard("127.0.0.1")
     return ["0.0.0.0", "127.0.0.1"] + sorted(ips)

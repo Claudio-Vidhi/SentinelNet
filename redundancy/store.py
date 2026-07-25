@@ -200,7 +200,7 @@ def save_group(payload: dict) -> int:
                 ),
             )
         conn.commit()
-        return group_id
+        return int(group_id) if group_id is not None else 0
 
 
 def delete_group(group_id: int) -> bool:

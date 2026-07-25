@@ -89,7 +89,8 @@ def obs_config() -> dict:
         env = os.environ.get(name)
         if env is not None:
             return int(env)
-        return int(_saved.get(key, default))
+        val = _saved.get(key)
+        return int(val) if val is not None else int(default)
 
     enabled = _flag("SENTINELNET_OBS_ENABLE", "enabled")
     return {
