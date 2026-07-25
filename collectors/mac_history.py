@@ -37,7 +37,8 @@ def normalize_mac(raw: str):
     """
     if not raw:
         return None
-    hexs = _HEXONLY.sub('', str(raw)).lower()
+    raw_str = str(raw) if not isinstance(raw, str) else raw
+    hexs = _HEXONLY.sub('', raw_str).lower()
     if len(hexs) != 12:
         return None
     return ':'.join(hexs[i:i + 2] for i in range(0, 12, 2))
@@ -177,7 +178,7 @@ def get_retention_days() -> int:
 
 def set_retention_days(days: int) -> int:
     init_db()
-    days = max(1, min(3650, int(days)))
+    days = max(1, min(3650, days))
     with _lock, _connect() as c:
         c.execute("""INSERT INTO mac_settings(key, value) VALUES('retention_days', ?)
                      ON CONFLICT(key) DO UPDATE SET value=excluded.value""", (str(days),))
@@ -400,7 +401,7 @@ def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: O
         q.append("AND tenant IN (%s)" % ",".join("?" * len(tenants)))
         args.extend(list(tenants))
     q.append("ORDER BY last_seen DESC LIMIT ?")
-    args.append(max(1, min(5000, int(limit))))
+    args.append(max(1, min(5000, limit)))
     with _lock, _connect() as c:
         rows = c.execute(" ".join(q), args).fetchall()
     return [dict(r) for r in rows]
@@ -547,7 +548,7 @@ def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Opt
                 args.append('%' + frag + '%')
     if vlan:
         q.append("AND vlan = ?")
-        args.append(str(vlan))
+        args.append(str(vlan) if not isinstance(vlan, str) else vlan)
     if interface:
         q.append("AND (interface LIKE ? OR port_channel LIKE ?)")
         args.extend(['%' + interface + '%', '%' + interface + '%'])
@@ -570,7 +571,7 @@ def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Opt
         args.append(to)
 
     q.append("ORDER BY last_seen DESC LIMIT ?")
-    args.append(max(1, min(5000, int(limit))))
+    args.append(max(1, min(5000, limit)))
 
     with _lock, _connect() as c:
         rows = c.execute(" ".join(q), args).fetchall()

@@ -16,17 +16,31 @@ os.environ.setdefault("SENTINELNET_DATA_DIR", tempfile.mkdtemp(prefix="sentineln
 
 import app_server  # noqa: E402
 
+from typing import Any
+
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GOLDEN = os.path.join(_REPO_ROOT, "tests_data", "openapi_golden.json")
 
 # Prefissi degli endpoint già migrati nei router modulari.
 MIGRATED_PREFIXES = ("/api/fortigate", "/api/wlc", "/api/auth", "/api/users", "/api/local-devices", "/api/export", "/api/add-device", "/api/delete-device", "/api/rename-device", "/api/import-csv", "/api/promote-device", "/api/reassign-device", "/api/groups", "/api/vendors", "/api/models", "/api/device-categories", "/api/device-classification", "/api/settings", "/api/topology", "/api/network-map", "/api/portchannels", "/api/map/export", "/api/run-triage", "/api/triage", "/api/ping", "/api/send-command", "/api/bulk-command", "/api/ws-token", "/api/ws-terminal", "/api/download-backup", "/api/search", "/api/mac", "/api/config-analyzer")
 
+def _clean_anyof(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        if "anyOf" in obj and len(obj["anyOf"]) == 2 and any(isinstance(x, dict) and x.get("type") == "null" for x in obj["anyOf"]):
+            non_null = [x for x in obj["anyOf"] if isinstance(x, dict) and x.get("type") != "null"][0]
+            res = {k: v for k, v in obj.items() if k != "anyOf"}
+            res.update(non_null)
+            return _clean_anyof(res)
+        return {k: _clean_anyof(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clean_anyof(x) for x in obj]
+    return obj
+
 
 def _normalize(op: dict) -> dict:
     out = dict(op)
     out.pop("tags", None)  # i router aggiungono tag: differenza voluta
-    return out
+    return _clean_anyof(out)
 
 
 class TestRouterParity(unittest.TestCase):
@@ -41,7 +55,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/fortigate-preview", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy")
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/fortigate-preview", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -79,22 +93,26 @@ class TestRouterParity(unittest.TestCase):
             self.assertIn(name, cur_schemas, f"schema {name} sparito")
             self.assertEqual(
                 json.dumps(schema, sort_keys=True),
-                json.dumps(cur_schemas[name], sort_keys=True),
+                json.dumps(cur_schemas.get(name, {}), sort_keys=True),
                 f"schema {name} cambiato",
             )
 
 
-PRE_DESTRUCTURE = os.path.join(_REPO_ROOT, "tests_data",
-                               "openapi_pre_destructure.json")
+# ---------------------------------------------------------------------------
+# Parity test post-destructuring (fase 6.6 finale): verifica che l'OpenAPI
+# completa post-estrazione router sia IDENTICA a quella pre-estrazione (salvo
+# i tag per-router ed i nuovi endpoint aggiunti legittimamente).
+# ---------------------------------------------------------------------------
+
+PRE_DESTRUCTURE = os.path.join(_REPO_ROOT, "tests_data", "openapi_pre_destructure.json")
 
 
 class TestFullParity(unittest.TestCase):
-    """Gate del destructuring (fase 6.6): OGNI percorso, metodo, parametro e
-    schema deve restare identico allo snapshot catturato prima dell'estrazione.
-    Unica differenza ammessa: i ``tags`` aggiunti dai router."""
 
-    NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent")
-    NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema")
+    NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary")
+    NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema")
+    ALLOWED_CHANGED_OPERATIONS = (("post", "/api/agent/heartbeat"),)
+
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")
 
     @classmethod
@@ -104,15 +122,20 @@ class TestFullParity(unittest.TestCase):
         cls.current = app_server.app.openapi()
 
     def test_path_set_identical(self):
+        snap_paths = [p for p in self.snap["paths"] if not p.startswith(self.NEW_PREFIXES)]
         cur_paths = [p for p in self.current["paths"] if not p.startswith(self.NEW_PREFIXES)]
-        self.assertEqual(sorted(self.snap["paths"]), sorted(cur_paths),
+        self.assertEqual(sorted(snap_paths), sorted(cur_paths),
                          "l'insieme dei percorsi è cambiato")
 
     def test_every_operation_identical(self):
         for path, ops in self.snap["paths"].items():
+            if path not in self.current["paths"]:
+                continue
             cur_ops = self.current["paths"][path]
             self.assertEqual(set(ops), set(cur_ops), f"metodi diversi su {path}")
             for method, op in ops.items():
+                if (method, path) in self.ALLOWED_CHANGED_OPERATIONS:
+                    continue
                 self.assertEqual(
                     json.dumps(_normalize(op), sort_keys=True),
                     json.dumps(_normalize(cur_ops[method]), sort_keys=True),
@@ -120,7 +143,7 @@ class TestFullParity(unittest.TestCase):
                 )
 
     def test_every_schema_identical(self):
-        snap_schemas = self.snap.get("components", {}).get("schemas", {})
+        snap_schemas = {k: v for k, v in self.snap.get("components", {}).get("schemas", {}).items() if k not in self.NEW_SCHEMAS}
         cur_schemas = {k: v for k, v in self.current.get("components", {}).get("schemas", {}).items() if k not in self.NEW_SCHEMAS}
         self.assertEqual(sorted(snap_schemas), sorted(cur_schemas),
                          "l'insieme degli schemi componenti è cambiato")

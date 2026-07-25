@@ -26,4 +26,6 @@ project-excludes = [
     "build/**",
     "dist/**",
     "**/*.ipynb",
+    "C:/__pyrefly_virtual__/**",
+    "**/__pyrefly_virtual__/**",
 ]
