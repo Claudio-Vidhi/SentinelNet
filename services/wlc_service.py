@@ -93,7 +93,8 @@ def ssh_run(device: dict, command: str, timeout: int = 30) -> str:
                     conn.enable()
                 except Exception:
                     pass
-            return conn.send_command(command, read_timeout=timeout)
+            res = conn.send_command(command, read_timeout=timeout)
+            return res if isinstance(res, str) else str(res or "")
     except Exception as e:
         raise WlcError(f"SSH {device.get('IP')}: {e}")
 

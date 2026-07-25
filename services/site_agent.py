@@ -68,7 +68,7 @@ class SyslogCollector:
             print(f"[syslog] impossibile avviare listener UDP su porta {self.port}: {e}")
 
     def _listen_loop(self):
-        while self.running:
+        while self.running and self.sock is not None:
             try:
                 data, addr = self.sock.recvfrom(8192)
                 if data:
