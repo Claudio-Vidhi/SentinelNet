@@ -57,7 +57,7 @@ def get_agent_site(request: Request):
     return site_manager.get_site(site_id)
 
 @router.post("/api/agent/heartbeat")
-def agent_heartbeat(payload: dict = None, site = Depends(get_agent_site)):
+def agent_heartbeat(payload: Optional[dict] = None, site = Depends(get_agent_site)):
     if payload and isinstance(payload, dict):
         site_id = site["id"]
         updates = {}

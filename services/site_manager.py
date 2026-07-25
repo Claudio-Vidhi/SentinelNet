@@ -23,6 +23,7 @@ import hashlib
 import secrets
 import sqlite3
 import threading
+from typing import Optional
 
 from core import data_config
 
@@ -227,7 +228,7 @@ def touch_last_seen(site_id: str) -> None:
 
 # --- Autenticazione agente (token per-sede, separata dal JWT utente) ---
 
-def authenticate(token: str):
+def authenticate(token: Optional[str] = None) -> Optional[str]:
     """Ritorna l'id del sito agent il cui token corrisponde, altrimenti None."""
     if not token:
         return None
