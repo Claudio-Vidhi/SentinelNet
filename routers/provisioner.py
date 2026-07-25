@@ -140,7 +140,8 @@ def _provision_cfg(payload_dict: dict, materialized: bool, current_user, vendor:
     di default i segreti sono sostituiti da placeholder {{VAULT:...}}; la
     materializzazione completa richiede flag esplicito e viene auditata."""
     if not materialized:
-        return provisioning_secrets.mask_secrets(payload_dict)
+        res = provisioning_secrets.mask_secrets(payload_dict)
+        return res if isinstance(res, dict) else payload_dict
     log_audit(
         f"ATTENZIONE: config day-0 {vendor} generata MATERIALIZZATA (segreti in chiaro) "
         f"per '{payload_dict.get('hostname')}' da '{current_user.get('sub')}'."
