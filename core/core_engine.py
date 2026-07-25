@@ -2,6 +2,7 @@ import os
 import re
 import logging
 import socket
+from typing import Optional, Any, Dict, List, Tuple
 from netmiko import ConnectHandler
 from services.inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
@@ -40,7 +41,7 @@ def sanitize_filename(filename: str) -> str:
     )
     return sanitized or "device_unknown"
 
-def group_backup_dir(group: str, vendor: str = None) -> str:
+def group_backup_dir(group: str, vendor: Optional[str] = None) -> str:
     """Cartella di backup dedicata a un gruppo/sede, con sottocartella per
     vendor (backup-config/<gruppo>/<vendor>/), creata se assente."""
     path = os.path.join(BACKUP_FOLDER, sanitize_filename(group or "Generale"))
@@ -298,7 +299,8 @@ def run_backup_and_triage(device):
 
             update_version_inventory(ip, vendor, version, "online")
 
-            config_out = net_connect.send_command(backup_cmd)
+            raw_out = net_connect.send_command(backup_cmd)
+            config_out = raw_out if isinstance(raw_out, str) else str(raw_out or "")
 
             config_out += "\n\n=== NEIGHBOR DISCOVERY ===\n"
             if vendor == 'cisco':
@@ -310,7 +312,8 @@ def run_backup_and_triage(device):
                 ]:
                     try:
                         out = net_connect.send_command(cmd)
-                        config_out += f"\n{tag}\n{out}"
+                        out_str = out if isinstance(out, str) else str(out or "")
+                        config_out += f"\n{tag}\n{out_str}"
                     except Exception:
                         pass
             elif vendor == 'hpe':
@@ -320,29 +323,22 @@ def run_backup_and_triage(device):
                 ]:
                     try:
                         out = net_connect.send_command(cmd)
-                        config_out += f"\n{tag}\n{out}"
+                        out_str = out if isinstance(out, str) else str(out or "")
+                        config_out += f"\n{tag}\n{out_str}"
                     except Exception:
                         pass
-
-            # Comandi diagnostici/inventario aggiuntivi (solo Cisco): salvati nel
-            # backup per avere una fotografia completa dell'apparato.
-            if vendor == 'cisco':
-                config_out += "\n\n=== DEVICE DIAGNOSTICS ===\n"
+            elif vendor in ('fortinet', 'cisco_wlc', 'paloalto'):
                 for cmd, tag in [
-                    ("show vlan",                  "--- SHOW VLAN ---"),
-                    ("show spanning-tree summary", "--- SHOW SPANNING-TREE SUMMARY ---"),
-                    ("show vtp status",            "--- SHOW VTP STATUS ---"),
-                    ("show mac address-table",     "--- SHOW MAC ADDRESS-TABLE ---"),
-                    ("show etherchannel summary",  "--- SHOW ETHERCHANNEL SUMMARY ---"),
-                    ("show version",               "--- SHOW VERSION ---"),
-                    ("show switch",                "--- SHOW SWITCH ---"),
+                    ("get system status",          "--- SYSTEM STATUS ---"),
+                    ("show system info",           "--- SYSTEM INFO ---"),
                     ("show inventory",             "--- SHOW INVENTORY ---"),
                     ("show environment all",       "--- SHOW ENVIRONMENT ALL ---"),
                     ("show license all",           "--- SHOW LICENSE ALL ---"),
                 ]:
                     try:
                         out = net_connect.send_command(cmd, read_timeout=30)
-                        config_out += f"\n{tag}\n{out}"
+                        out_str = out if isinstance(out, str) else str(out or "")
+                        config_out += f"\n{tag}\n{out_str}"
                     except Exception:
                         pass
 
@@ -450,7 +446,9 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
             else:
                 parts = []
                 for cmd in commands:
-                    parts.append(f"=== {cmd} ===\n" + net_connect.send_command(cmd))
+                    res = net_connect.send_command(cmd)
+                    res_str = res if isinstance(res, str) else str(res or "")
+                    parts.append(f"=== {cmd} ===\n" + res_str)
                 output = "\n\n".join(parts)
                 log_audit(
                     f"Comandi operativi massivi ({len(commands)}) eseguiti con successo su '{ip}'."
@@ -465,7 +463,7 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
 # NETWORK MAPPING ENGINE
 # ---------------------------------------------------------------------------
 
-def extract_hostname_from_config(content: str) -> str:
+def extract_hostname_from_config(content: str) -> Optional[str]:
     """Estrae l'hostname dalle righe di configurazione (Cisco e HPE)."""
     match = re.search(r'^\s*hostname\s+(\S+)', content, re.MULTILINE | re.IGNORECASE)
     if match:
@@ -933,7 +931,7 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
                 "neighbor_ip": ip_m.group(1).strip() if ip_m else None,
                 "local_port":  local_port_m.group(1).strip() if local_port_m else "Unknown",
                 "remote_port": remote_port,
-                "version":     extract_version(version_str) or version_str,
+                "version":     extract_version(version_str or "") or version_str,
                 "description": version_str,
             })
 
@@ -943,9 +941,10 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
     # ------------------------------------------------------------------
     merged: dict = {}
     for n in neighbors:
-        neigh_id = n["neighbor_id"]
+        neigh_id = str(n.get("neighbor_id") or "")
+        local_port = str(n.get("local_port") or "")
         base_id  = neigh_id.split('.')[0] if '.' in neigh_id else neigh_id
-        key      = (n["local_port"].lower(), base_id.lower())
+        key      = (local_port.lower(), base_id.lower())
 
         if key not in merged:
             merged[key] = dict(n)
@@ -1446,7 +1445,7 @@ def _generate_network_map(group_filter=None) -> dict:
     # collegamento logico: CDP/LLDP annuncia le interfacce membro (Et0/1, Et0/2),
     # non l'interfaccia Port-channel, quindi l'aggregato si riconosce solo
     # incrociando la config (channel-group) e/o la presenza di più link fisici.
-    link_acc: dict = {}   # link_key -> {source, target, members{key:{ports,is_pc_name}}, pc_names}
+    link_acc: Dict[Tuple[str, str], Any] = {}
     for ip, info in parsed_devices.items():
         iface_pc_local = info.get("iface_pc", {})
 
@@ -1539,9 +1538,10 @@ def _generate_network_map(group_filter=None) -> dict:
             local_pc  = iface_pc_local.get(ln)
             remote_pc = parsed_devices.get(target_ip, {}).get("iface_pc", {}).get(rn)
 
-            link_key = tuple(sorted([ip, target_ip]))
-            acc = link_acc.get(link_key)
-            if not acc:
+            link_key: Tuple[str, str] = (min(ip, target_ip), max(ip, target_ip))
+            existing_acc = link_acc.get(link_key)
+            acc: Dict[str, Any]
+            if existing_acc is None:
                 acc = {
                     "source": ip, "target": target_ip,
                     "src_ports": {}, "tgt_ports": {},      # iface locali affidabili per lato
@@ -1550,6 +1550,8 @@ def _generate_network_map(group_filter=None) -> dict:
                     "pc_names": set(), "name_pc": False,
                 }
                 link_acc[link_key] = acc
+            else:
+                acc = existing_acc
 
             if _is_portchannel_port(local_port) or _is_portchannel_port(remote_port):
                 acc["name_pc"] = True
