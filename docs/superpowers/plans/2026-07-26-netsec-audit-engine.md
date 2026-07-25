@@ -1192,7 +1192,9 @@ Append to `services/netsec_audit/rules.py`:
 # --- Identita' e logging -----------------------------------------------------
 
 _DEFAULT_COMMUNITIES = {"public", "private"}
-_UNRESTRICTED_TRUSTHOST = ({"0.0.0.0", "0.0.0.0"}, {"0.0.0.0/0"}, {"0.0.0.0"})
+# I valori di un trusthost sono confrontati come INSIEME, quindi
+# 'set trusthost1 0.0.0.0 0.0.0.0' si riduce a {"0.0.0.0"}.
+_UNRESTRICTED_TRUSTHOST = ({"0.0.0.0"}, {"0.0.0.0/0"})
 
 
 def check_admin_trusthost(cfg: ParsedConfig) -> RuleOutcome:
@@ -1238,9 +1240,10 @@ def check_snmp_community(cfg: ParsedConfig) -> RuleOutcome:
         return RuleOutcome(
             UNKNOWN, "Sezione 'config system snmp community' assente: "
                      "impossibile valutare le community SNMP.")
+    communities = section_entries(cfg, "system snmp community")
     ev: List[Evidence] = []
-    for name in sorted(section_entries(cfg, "system snmp community")):
-        for r in section_entries(cfg, "system snmp community")[name]:
+    for name in sorted(communities):
+        for r in communities[name]:
             if (r.key == "name" and r.values
                     and r.values[0].lower() in _DEFAULT_COMMUNITIES):
                 ev.append(Evidence(r.line, r.raw.strip(),
