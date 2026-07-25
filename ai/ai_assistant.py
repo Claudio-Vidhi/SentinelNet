@@ -23,6 +23,7 @@ solo scambio sincrono di messaggi.
 import collections
 import threading
 import time
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -388,7 +389,7 @@ def _chat_gemini(messages, model, api_key, timeout):
         {"role": role_map.get(m["role"], "user"), "parts": [{"text": m["content"]}]}
         for m in convo
     ]
-    payload = {"contents": contents}
+    payload: Dict[str, Any] = {"contents": contents}
     if system:
         payload["systemInstruction"] = {"parts": [{"text": system}]}
     resp = requests.post(url, json=payload, timeout=timeout)

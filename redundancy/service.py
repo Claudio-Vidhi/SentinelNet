@@ -100,7 +100,8 @@ def save_manual_group(payload: dict) -> dict:
 
     group_id = store.save_group(group_dict)
     _invalidate_cache()
-    return store.get_group(group_id)
+    saved = store.get_group(group_id)
+    return saved if saved is not None else group_dict
 
 
 def upsert_fgcp(group_name: str, group: GroupInfo, managed_devices: list[dict]) -> int:

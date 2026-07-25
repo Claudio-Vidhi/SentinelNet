@@ -125,10 +125,11 @@ def collect_from_device(device: dict) -> dict:
             except Exception:
                 pass
             output = conn.send_command(command, read_timeout=30)
+            output_str = output if isinstance(output, str) else str(output or "")
     except Exception as e:
         return {"status": "error", "source_type": source_type, "message": str(e)}
     return {"status": "success", "source_type": source_type,
-            "entries": parse_arp_output(output)}
+            "entries": parse_arp_output(output_str)}
 
 
 def collect_all(devices: list) -> dict:
