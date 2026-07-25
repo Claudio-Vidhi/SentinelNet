@@ -1494,6 +1494,64 @@
 
         let html = '';
 
+        if (_fgData && _fgData.edges && _fgData.edges.length) {
+            const chartTitle = _fgChartType === 'sankey' ? 'Diagramma Sankey'
+                : _fgChartType === 'trend' ? 'Trend Rate Flussi'
+                : _fgChartType === 'matrix' ? 'Matrice dei Flussi'
+                : 'Topologia dei Flussi';
+
+            let fgRowsHtml = '';
+            if (_fgChartType === 'sankey') {
+                fgRowsHtml = _fgData.edges.slice(0, 15).map(e => `
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:6px; font-family:var(--font-code); font-weight:700;">${escapeHtml(e.src)}</td>
+                        <td style="padding:6px;"><span class="badge" style="background:var(--primary); color:#fff;">${escapeHtml(String(e.proto).toUpperCase())}${e.port ? ':'+e.port : ''}</span></td>
+                        <td style="padding:6px; font-family:var(--font-code); font-weight:700;">${escapeHtml(e.dst)}</td>
+                        <td style="padding:6px; font-weight:700; color:var(--primary);">${escapeHtml(fmtRate(e.rate_bps))}</td>
+                        <td style="padding:6px;">VLAN ${escapeHtml(String(e.vlan))}</td>
+                    </tr>`).join('');
+            } else if (_fgChartType === 'trend') {
+                fgRowsHtml = (_fgData.protocols || []).slice(0, 10).map(p => `
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:6px; font-family:var(--font-code); font-weight:700;">${escapeHtml(String(p.proto).toUpperCase())}</td>
+                        <td style="padding:6px;">Porta ${escapeHtml(p.port == null ? 'Tutte' : String(p.port))}</td>
+                        <td style="padding:6px; font-family:var(--font-code);">Global Stream</td>
+                        <td style="padding:6px; font-weight:700; color:var(--primary);">${escapeHtml(fmtRate(p.rate_bps))}</td>
+                        <td style="padding:6px;">Top Throughput</td>
+                    </tr>`).join('');
+            } else {
+                fgRowsHtml = _fgData.edges.slice(0, 15).map(e => `
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:6px; font-family:var(--font-code);">${escapeHtml(e.src)}</td>
+                        <td style="padding:6px;">${escapeHtml(String(e.proto).toUpperCase())}:${escapeHtml(String(e.port||''))}</td>
+                        <td style="padding:6px; font-family:var(--font-code);">${escapeHtml(e.dst)}</td>
+                        <td style="padding:6px; font-weight:700; color:var(--primary);">${escapeHtml(fmtRate(e.rate_bps))}</td>
+                        <td style="padding:6px;">Flow Pair</td>
+                    </tr>`).join('');
+            }
+
+            html += `
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+                <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary); display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-diagram-project"></i> Dettagli Telemetria (${chartTitle} — Finestra: ${escapeHtml(_fgData.window || '15m')})
+                </h4>
+                <div style="max-height:200px; overflow-y:auto;">
+                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <thead>
+                            <tr style="text-align:left; color:var(--text-muted); font-size:11px; border-bottom:1px solid var(--border);">
+                                <th style="padding:4px 6px;">SORGENTE</th>
+                                <th style="padding:4px 6px;">PROTOCOLLO</th>
+                                <th style="padding:4px 6px;">DESTINAZIONE</th>
+                                <th style="padding:4px 6px;">THROUGHPUT RATE</th>
+                                <th style="padding:4px 6px;">METRICA</th>
+                            </tr>
+                        </thead>
+                        <tbody>${fgRowsHtml}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
         if (protoKey === 'syslog' || protoKey === 'all') {
             const slData = bd.syslog || {};
             const sevs = slData.severity || {};
@@ -1701,20 +1759,20 @@
 
         ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#a0a0a0';
         ctx.font = '11px var(--font-code, monospace)';
-        ctx.fillText('ORIGINI (SRC)', xSrc, 22);
-        ctx.fillText('PROTOCOLLI', xProto, 22);
-        ctx.fillText('DESTINAZIONI (DST)', xDst, 22);
+        ctx.fillText('ORIGINI (SRC)', xSrc, 18);
+        ctx.fillText('PROTOCOLLI', xProto, 18);
+        ctx.fillText('DESTINAZIONI (DST)', xDst, 18);
 
-        const topPad = 35, botPad = 25;
+        const topPad = 42, botPad = 20;
         const drawH = height - topPad - botPad;
 
         function calcNodePos(list, map, x) {
             const tot = list.reduce((acc, k) => acc + map[k], 0) || 1;
             let currentY = topPad;
-            const gap = 8;
+            const gap = 6;
             const availH = drawH - (list.length - 1) * gap;
             return list.map(k => {
-                const nodeH = Math.max(22, (map[k] / tot) * availH);
+                const nodeH = Math.max(24, (map[k] / tot) * availH);
                 const pos = { key: k, x, y: currentY, h: nodeH, rate: map[k] };
                 currentY += nodeH + gap;
                 return pos;
@@ -1780,13 +1838,13 @@
 
                 ctx.fillStyle = '#ffffff';
                 ctx.font = '11px var(--font-code, monospace)';
-                const text = n.key.length > 14 ? n.key.slice(0, 12) + '..' : n.key;
-                ctx.fillText(text, n.x + 8, n.y + Math.min(n.h / 2 + 4, 16));
+                const text = n.key.length > 15 ? n.key.slice(0, 13) + '..' : n.key;
+                ctx.fillText(text, n.x + 8, n.y + (n.h >= 34 ? 14 : Math.min(n.h / 2 + 4, 16)));
 
-                if (n.h > 24) {
-                    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                if (n.h >= 34) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.75)';
                     ctx.font = '9px var(--font-code, monospace)';
-                    ctx.fillText(fmtRate(n.rate), n.x + 8, n.y + Math.min(n.h - 4, 28));
+                    ctx.fillText(fmtRate(n.rate), n.x + 8, n.y + 26);
                 }
             });
         });

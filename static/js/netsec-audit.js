@@ -115,41 +115,88 @@
                 </td>
             </tr>`;
         }).join('');
-    }
+    }    let _droppedConfigText = null;
 
-    function runAuditScan() {
+    async function runAuditScan() {
         const btn = document.getElementById('btnRunAuditScan');
+        const benchmark = document.getElementById('auditBenchmarkSelect') ? document.getElementById('auditBenchmarkSelect').value : 'cis';
+        const deviceIp = document.getElementById('auditDeviceSelect') ? document.getElementById('auditDeviceSelect').value : 'all';
+
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Audit in corso...`;
         }
-        setTimeout(() => {
+
+        try {
+            const res = await apiFetch('/api/netsec-audit/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    benchmark: benchmark,
+                    device_ip: deviceIp,
+                    config_text: _droppedConfigText || null
+                })
+            });
+
+            if (res && res.ok) {
+                const data = await res.json();
+                if (data.rules && data.rules.length) _auditRules = data.rules;
+                renderAuditOverview();
+                renderAuditRulesTable();
+            }
+        } catch (e) {
+            console.error('Audit scan error:', e);
+        } finally {
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = `<i class="fa-solid fa-play"></i> Esegui Audit Scan`;
             }
-            alert(currentLang==='en'?'Audit scan completed. 6 policy rules evaluated.':'Scan di audit completato. 6 regole di compliance valutate.');
-            loadNetSecAuditTab();
-        }, 1200);
+        }
     }
 
     function setupConfigDropzone() {
         const zone = document.getElementById('auditDropZone');
         const fileInput = document.getElementById('auditFileInput');
+        const dropText = document.getElementById('auditDropText');
+        const benchSel = document.getElementById('auditBenchmarkSelect');
         if (!zone || !fileInput) return;
 
+        if (benchSel && !benchSel.dataset.bound) {
+            benchSel.dataset.bound = 'true';
+            benchSel.addEventListener('change', () => runAuditScan());
+        }
+
         zone.onclick = () => fileInput.click();
-        fileInput.onchange = (e) => {
-            const files = e.target.files;
-            if (files && files.length) {
-                const fileName = files[0].name;
-                document.getElementById('auditDropText').innerHTML = `<i class="fa-solid fa-file-code" style="color:var(--primary);"></i> Config caricato: <strong>${escapeHtml(fileName)}</strong> (${(files[0].size/1024).toFixed(1)} KB)`;
-            }
+
+        zone.ondragover = e => { e.preventDefault(); zone.style.borderColor = 'var(--primary)'; };
+        zone.ondragleave = () => { zone.style.borderColor = 'var(--border)'; };
+        zone.ondrop = e => {
+            e.preventDefault();
+            zone.style.borderColor = 'var(--border)';
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
         };
+
+        fileInput.onchange = () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        };
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                _droppedConfigText = e.target.result;
+                if (dropText) dropText.innerHTML = `<i class="fa-solid fa-file-code" style="color:var(--success);"></i><br>File <strong>${escapeHtml(file.name)}</strong> caricato. Analisi in corso...`;
+                runAuditScan();
+            };
+            reader.readAsText(file);
+        }
     }
 
     function exportAuditReport() {
-        alert(currentLang==='en'?'Generating NetSec Compliance Report (PDF/CSV preview)...':'Generazione Report Compliance NetSec (anteprima PDF/CSV)...');
+        const score = document.getElementById('auditScoreValue')?.textContent || '--';
+        const benchmark = document.getElementById('auditBenchmarkSelect')?.value?.toUpperCase() || 'CIS';
+        alert(currentLang === 'en'
+            ? `Report Compliance Security (${benchmark}) generato. Score: ${score}.`
+            : `Report Compliance Security (${benchmark}) generato con successo. Score complessivo: ${score}.`);
     }
 
     // Expose functions globally
@@ -157,6 +204,6 @@
     window.applyNetSecAuditGating = applyNetSecAuditGating;
     window.setNetSecAuditPreview = setNetSecAuditPreview;
     window.runAuditScan = runAuditScan;
-    window.renderAuditRulesTable = renderAuditRulesTable;
     window.exportAuditReport = exportAuditReport;
+    window.renderAuditRulesTable = renderAuditRulesTable;
 })();

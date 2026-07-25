@@ -214,8 +214,12 @@
             </tr>
             ${isSelected ? `<tr style="background:var(--surface-2);"><td colspan="7" style="padding:12px;">
                 <div style="font-family:var(--font-code); font-size:11px; background:var(--surface); padding:10px; border-radius:6px; border:1px solid var(--border); margin-bottom:8px;">
-                    <strong>Wazuh/Splunk Raw Event Payload (JSON):</strong>
+                    <strong>Raw SIEM Flow Event Payload (JSON):</strong>
                     <pre style="margin:4px 0 0; white-space:pre-wrap;">${escapeHtml(JSON.stringify(e, null, 2))}</pre>
+                    ${isDeny ? `<div style="margin-top:8px; padding:8px 12px; border-radius:6px; background:rgba(59, 130, 246, 0.1); border:1px solid rgba(59, 130, 246, 0.25); color:var(--text); font-size:11px; font-family:var(--font-main, sans-serif);">
+                        <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:4px;"></i>
+                        <strong>Nota sull'Azione DENY / BLOCKED:</strong> SentinelNet è una piattaforma di osservabilità passiva (raccoglie telemetria). L'azione <code>DENY</code> indica che il <strong>firewall/router apparato di rete</strong> di origine ha bloccato il pacchetto ed emesso il relativo log.
+                    </div>` : ''}
                 </div>
                 <div style="display:flex; justify-content:flex-end;">
                     <button class="btn btn-sm btn-secondary" onclick="suppressSiemAlert('${escapeHtml(e.id)}', event)"><i class="fa-solid fa-bell-slash"></i> Sopprimi Allerta Threat</button>
