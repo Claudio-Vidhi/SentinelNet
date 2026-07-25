@@ -16,3 +16,14 @@ dependencies = [
     "uvicorn>=0.28.0",
     "websockets>=12.0",
 ]
+
+[tool.pyrefly]
+project-includes = [
+    "**/*.py",
+]
+project-excludes = [
+    ".venv/**",
+    "build/**",
+    "dist/**",
+    "**/*.ipynb",
+]
