@@ -11,6 +11,7 @@ MCP e' per-richiesta: si esegue `initialize` (catturando l'header
 """
 
 import json
+from typing import Optional
 import requests
 
 _TIMEOUT = 30
@@ -95,7 +96,7 @@ def _parse_response(resp: "requests.Response") -> dict:
         raise McpClientError(f"Risposta non e' JSON valido: {e}")
 
 
-def _base_headers(auth_token: str = None) -> dict:
+def _base_headers(auth_token: Optional[str] = None) -> dict:
     h = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
@@ -121,7 +122,7 @@ def _rpc(url, headers, method, params, req_id):
     return data, resp
 
 
-def _open_session(url, auth_token=None) -> dict:
+def _open_session(url: str, auth_token: Optional[str] = None) -> dict:
     """Esegue initialize + notifications/initialized; ritorna gli header (con
     l'eventuale Mcp-Session-Id) da riusare per la chiamata successiva."""
     headers = _base_headers(auth_token)
