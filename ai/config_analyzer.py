@@ -11,6 +11,7 @@ lettura del backup piu' recente e lo scoping per sede/tenant.
 
 import os
 import re
+from typing import Any, Dict, List, Optional
 
 # Primitive di parsing firewall e utility IP: ora vivono nel package
 # fw_analyzers (analizzatori per-vendor). Reimportate qui per i converter e
@@ -810,7 +811,7 @@ def analyze_wlc_config(content):
                         w["ssid"] = toks[5] if len(toks) > 5 else w["profile"]
                 elif re.match(r'config wlan (enable|disable) (\S+)', low):
                     m = re.match(r'config wlan (enable|disable) (\S+)', low)
-                    if m.group(2) != 'all':
+                    if m and m.group(2) != 'all':
                         _wlan(m.group(2))["enabled"] = (m.group(1) == 'enable')
                 elif low.startswith('config wlan interface '):
                     toks = s.split()
@@ -1292,8 +1293,9 @@ def analyze_device(ip):
 
     is_firewall = False
     firewall = None
+    result: Dict[str, Any]
     if config_type == 'fortios':
-        result = analyze_fortios_config(content)
+        result = dict(analyze_fortios_config(content))
         hostname = result.pop("hostname", "")
         is_firewall = True
         firewall = fw_analyzers.fortios.analyze(content)
@@ -1301,17 +1303,17 @@ def analyze_device(ip):
         # PAN-OS: nessun analizzatore "generico" dedicato (le altre tab
         # riusano il parser IOS in modo tollerante); il tab Firewall usa
         # l'envelope a sezioni.
-        result = analyze_config(content)
+        result = dict(analyze_config(content))
         m = re.search(r'^set deviceconfig system hostname (\S+)', content,
                       re.MULTILINE)
         hostname = m.group(1) if m else ""
         is_firewall = True
         firewall = fw_analyzers.panos.analyze(content)
     elif config_type == 'wlc-aireos':
-        result = analyze_wlc_config(content)
+        result = dict(analyze_wlc_config(content))
         hostname = result.pop("hostname", "")
     else:
-        result = analyze_config(content)
+        result = dict(analyze_config(content))
         hostname = ""
         m = re.search(r'^hostname (\S+)', content, re.MULTILINE)
         if m:
