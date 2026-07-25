@@ -479,11 +479,11 @@ def _tenant_common_parameters(tenant: str, current_user) -> str:
             continue
         try:
             with open(path, encoding="utf-8", errors="ignore") as fh:
-                content = config_analyzer.running_config(fh.read())
+                lines = config_analyzer.running_config(fh.read())
+                content_str = "\n".join(lines)
         except OSError:
             continue
         analyzed += 1
-        lines = content.splitlines()
         for i, raw in enumerate(lines):
             s = raw.strip()
             low = s.lower()
@@ -496,7 +496,7 @@ def _tenant_common_parameters(tenant: str, current_user) -> str:
                     name = lines[i + 1].strip()[5:]
                 vlans.setdefault(m.group(1), name)
         m = re.search(r'^interface vlan\s*(\d+)\n(?:\s+.*\n)*?\s+ip address (\S+) (\S+)',
-                      content, re.MULTILINE | re.IGNORECASE)
+                      content_str, re.MULTILINE | re.IGNORECASE)
         if m:
             mgmt_subnets.add(f"VLAN {m.group(1)}: {m.group(2)} {m.group(3)}")
         if analyzed >= 15:  # cap: bastano pochi device per distillare i comuni

@@ -54,6 +54,8 @@ def get_current_user(request: Request,
             detail="Invalid or expired token."
         )
     sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject.")
     # L'utente deve esistere ancora (gestisce account eliminati con token valido)
     role = user_manager.get_role(sub)
     if role is None:
