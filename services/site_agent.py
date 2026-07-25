@@ -292,9 +292,17 @@ class Agent:
             try:
                 new_cfg = json.loads(arg)
                 self.cfg.update(new_cfg)
+
+                # Persiste su disco solo se l'agente e' stato avviato con
+                # --config (load_config imposta config_file solo in quel caso).
+                # Se avviato da flag CLI, la modifica resta solo in memoria e
+                # va persa al riavvio: il risultato del job deve dirlo
+                # onestamente, non limitarsi a "done".
+                persisted = False
                 if self.cfg.get("config_file"):
                     with open(self.cfg["config_file"], "w", encoding="utf-8") as f:
                         json.dump(self.cfg, f, indent=2)
+                    persisted = True
 
                 # Rebind syslog listener if port changed
                 if "syslog_port" in new_cfg and self.syslog_collector:
@@ -309,7 +317,12 @@ class Agent:
                         self.syslog_collector = SyslogCollector(port=new_port)
                         self.syslog_collector.start()
 
-                return {"status": "done", "result": f"Configurazione agent aggiornata: {new_cfg}"}
+                if persisted:
+                    note = "applicata in memoria e salvata su disco (config_file)"
+                else:
+                    note = ("applicata SOLO in memoria: nessun config_file attivo "
+                            "(agente avviato da flag CLI), verra' persa al riavvio")
+                return {"status": "done", "result": f"Configurazione agent aggiornata ({note}): {new_cfg}"}
             except Exception as e:
                 return {"status": "error", "result": f"Errore aggiornamento config: {e}"}
 
@@ -389,11 +402,17 @@ class Agent:
         print(f"[agent] avviato: centrale={self.base} sede={self.cfg['site_id']}")
         try:
             while True:
-                interval = int(self.cfg.get("interval", 60))
                 try:
                     self.cycle()
                 except Exception as e:
                     print(f"[agent] ciclo fallito: {e}")
+                # L'intervallo va riletto DOPO cycle(): run_jobs() (chiamato da
+                # cycle()) puo' applicare un _agent_config che aggiorna
+                # self.cfg["interval"]. Leggendolo prima del ciclo, come in
+                # precedenza, il nuovo valore veniva usato solo al giro
+                # successivo, ritardando di un ciclo intero l'effetto della
+                # modifica.
+                interval = int(self.cfg.get("interval", 60))
                 time.sleep(interval)
         except (KeyboardInterrupt, SystemExit):
             self.stop()
