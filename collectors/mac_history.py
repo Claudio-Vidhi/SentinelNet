@@ -15,7 +15,7 @@ import re
 import sqlite3
 import threading
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Any, List
 
 from core import data_config
 from collectors.mac_collector import expand_iface
@@ -222,7 +222,7 @@ def list_overrides() -> list:
     return [dict(r) for r in rows]
 
 
-def prune(retention_days: int = None) -> int:
+def prune(retention_days: Optional[int] = None) -> int:
     """Elimina gli avvistamenti non aggiornati da più di 'retention_days'.
     Ritorna il numero di righe rimosse."""
     init_db()
@@ -377,7 +377,7 @@ def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: O
     """Ricerca i binding MAC<->IP. mac accetta anche frammenti (come search)."""
     init_db()
     q = ["SELECT * FROM arp_entries WHERE 1=1"]
-    args = []
+    args: List[Any] = []
     if mac:
         norm = normalize_mac(mac)
         if norm:
@@ -521,9 +521,9 @@ def _row_to_dict(row) -> dict:
     return d
 
 
-def search(mac: str = None, vlan: str = None, interface: str = None,
-           switch_ip: str = None, tenants=None, frm: str = None, to: str = None,
-           limit: int = 500, site: str = None) -> list:
+def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Optional[str] = None,
+           switch_ip: Optional[str] = None, tenants=None, frm: Optional[str] = None, to: Optional[str] = None,
+           limit: int = 500, site: Optional[str] = None) -> list:
     """Ricerca avvistamenti con filtri combinabili.
 
     - mac: MAC completo (match esatto) oppure frammento/OUI (ricerca parziale,
@@ -532,7 +532,7 @@ def search(mac: str = None, vlan: str = None, interface: str = None,
     """
     init_db()
     q = ["SELECT * FROM mac_sightings WHERE 1=1"]
-    args = []
+    args: List[Any] = []
 
     if mac:
         norm = normalize_mac(mac)

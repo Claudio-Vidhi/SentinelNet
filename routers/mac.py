@@ -274,9 +274,9 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     return {"scanned": len(targets), "results": results, "pruned": pruned}
 
 @router.get("/api/mac/search")
-def mac_search(mac: str = None, vlan: str = None, interface: str = None,
-               switch: str = None, frm: str = None, to: str = None,
-               tenant: str = None,
+def mac_search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Optional[str] = None,
+               switch: Optional[str] = None, frm: Optional[str] = None, to: Optional[str] = None,
+               tenant: Optional[str] = None,
                current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     if tenant:
@@ -317,7 +317,7 @@ def mac_switch(ip: str, current_user = Depends(get_current_user)):
     return {"results": mac_history.switch_table(ip, tenants=scope)}
 
 @router.get("/api/mac/stats")
-def mac_stats(tenant: str = None, current_user = Depends(get_current_user)):
+def mac_stats(tenant: Optional[str] = None, current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     if tenant:
         if scope is not None and tenant not in scope:
