@@ -15,6 +15,7 @@ import re
 import sqlite3
 import threading
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 from core import data_config
 from collectors.mac_collector import expand_iface
@@ -371,7 +372,7 @@ def record_arp_entries(rows, source_ip: str, source_name: str = "",
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
 
-def search_arp(mac: str = None, ip: str = None, source_ip: str = None,
+def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: Optional[str] = None,
                tenants=None, limit: int = 500) -> list:
     """Ricerca i binding MAC<->IP. mac accetta anche frammenti (come search)."""
     init_db()
@@ -466,8 +467,8 @@ def _access_positions_for(macs, tenants=None) -> dict:
     return best
 
 
-def client_map(mac: str = None, ip: str = None, tenants=None,
-               limit: int = 500, source_ip: str = None) -> list:
+def client_map(mac: Optional[str] = None, ip: Optional[str] = None, tenants=None,
+               limit: int = 500, source_ip: Optional[str] = None) -> list:
     """Vista unificata client: binding MAC<->IP (ARP dei gateway) arricchito
     con l'ultima posizione fisica nota (switch/porta della MAC table, uplink
     esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'.
