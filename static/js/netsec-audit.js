@@ -405,8 +405,15 @@ th{background:#f6f6f6;}
     body { margin: 15mm 15mm; font-size: 10pt; }
     h1 { font-size: 16pt; }
     tr { page-break-inside: avoid; }
+    .no-print { display: none !important; }
 }
 </style></head><body>
+<div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 14px; font-weight: bold;">SentinelNet — Anteprima Report Compliance</span>
+    <div style="display: flex; gap: 10px;">
+        <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Stampa / Salva come PDF</button>
+    </div>
+</div>
 <h1>Report di Compliance — ${escapeHtml(benchmark)}</h1>
 <div class="meta">Apparato: ${escapeHtml(device)} · Generato il ${escapeHtml(generated)}</div>
 ${partialBanner}
@@ -424,7 +431,7 @@ ${partialBanner}
 
         const printWin = window.open('', '_blank');
         if (printWin) {
-            printWin.document.write(html + '<script>window.onload = function() { window.print(); };</script>');
+            printWin.document.write(html);
             printWin.document.close();
         } else {
             const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
