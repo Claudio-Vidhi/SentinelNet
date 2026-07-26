@@ -311,12 +311,95 @@
         }
     }
 
+    // Report HTML scaricabile. Nessuna dipendenza esterna: si costruisce il
+    // documento e lo si scarica via Blob, coerentemente col resto dell'app.
     function exportAuditReport() {
-        const score = document.getElementById('auditScoreValue')?.textContent || '--';
-        const benchmark = document.getElementById('auditBenchmarkSelect')?.value?.toUpperCase() || 'CIS';
-        alert(currentLang === 'en'
-            ? `Report Compliance Security (${benchmark}) generato. Score: ${score}.`
-            : `Report Compliance Security (${benchmark}) generato con successo. Score complessivo: ${score}.`);
+        if (!_auditRules.length) {
+            showToast(currentLang === 'en'
+                ? 'Run a scan before exporting a report.'
+                : 'Esegui una scansione prima di esportare il report.', 'warning');
+            return;
+        }
+        const benchSel = document.getElementById('auditBenchmarkSelect');
+        const benchmark = benchSel ? benchSel.options[benchSel.selectedIndex].text : 'CIS';
+        const devSel = document.getElementById('auditDeviceSelect');
+        const device = devSel ? devSel.options[devSel.selectedIndex].text : '—';
+        const s = _auditSummary || { total: 0, passed: 0, failed: 0, warned: 0, unknown: 0 };
+        const unknown = s.unknown || 0;
+        const hasScore = (_auditScore !== null && _auditScore !== undefined);
+        const scoreTxt = hasScore ? (_auditScore + '%') : 'N/D';
+        const generated = new Date().toLocaleString();
+
+        const rows = _auditRules.map(r => {
+            const ev = (r.evidence || []).map(e =>
+                `<div class="ev"><span>${e.line ? ('riga ' + escapeHtml(String(e.line))) : '—'}</span>`
+                + `<span>${escapeHtml(e.context || '')}</span>`
+                + `<code>${escapeHtml(e.text || '')}</code></div>`).join('');
+            const label = r.status === 'UNKNOWN' ? 'NON VALUTABILE' : escapeHtml(r.status);
+            return `<tr class="st-${escapeHtml(r.status)}">
+                <td><strong>${escapeHtml(r.id)}</strong></td>
+                <td>${escapeHtml(r.title)}<div class="detail">${escapeHtml(r.detail)}</div>${ev}</td>
+                <td>${escapeHtml(r.severity)}</td>
+                <td>${label}</td>
+                <td><code>${escapeHtml(r.remediation)}</code></td>
+            </tr>`;
+        }).join('');
+
+        // Se qualcosa non era valutabile va detto in testa al report, non solo
+        // in nota: un lettore che vede "100%" senza contesto conclude che tutto
+        // sia stato verificato.
+        const partialBanner = unknown > 0
+            ? `<div class="warn"><strong>Valutazione parziale.</strong> ${s.total - unknown} controlli su ${s.total}
+               sono stati valutati; ${unknown} non lo sono perche' le relative sezioni di configurazione
+               sono assenti nel file analizzato. Lo score si riferisce ai soli controlli valutabili.</div>`
+            : '';
+
+        const html = `<!doctype html><html lang="it"><head><meta charset="utf-8">
+<title>Report Audit — ${escapeHtml(device)}</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:32px;color:#111;}
+h1{font-size:20px;margin:0 0 4px;} .meta{color:#666;font-size:13px;margin-bottom:20px;}
+.warn{border:1px solid #a60;background:#fff8e6;color:#7a4d00;padding:10px 14px;border-radius:8px;margin-bottom:18px;font-size:13px;line-height:1.5;}
+.kpis{display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap;}
+.kpi{border:1px solid #ddd;border-radius:8px;padding:10px 16px;min-width:110px;font-size:12px;color:#666;}
+.kpi b{display:block;font-size:22px;color:#111;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th,td{border-bottom:1px solid #e5e5e5;padding:8px;text-align:left;vertical-align:top;}
+th{background:#f6f6f6;}
+.detail{color:#666;margin-top:3px;}
+.ev{display:flex;gap:10px;margin-top:4px;font-family:ui-monospace,monospace;font-size:11px;flex-wrap:wrap;}
+.ev span:first-child{color:#999;min-width:60px;} .ev span:nth-child(2){color:#999;min-width:170px;}
+.ev code{color:#b00;}
+.st-FAIL td:nth-child(4){color:#b00;font-weight:700;}
+.st-WARN td:nth-child(4){color:#a60;font-weight:700;}
+.st-PASS td:nth-child(4){color:#070;font-weight:700;}
+.st-UNKNOWN td:nth-child(4){color:#888;font-weight:700;}
+.note{margin-top:20px;font-size:12px;color:#666;border-top:1px solid #ddd;padding-top:10px;line-height:1.5;}
+</style></head><body>
+<h1>Report di Compliance — ${escapeHtml(benchmark)}</h1>
+<div class="meta">Apparato: ${escapeHtml(device)} · Generato il ${escapeHtml(generated)}</div>
+${partialBanner}
+<div class="kpis">
+  <div class="kpi"><b>${escapeHtml(scoreTxt)}</b>Score</div>
+  <div class="kpi"><b>${s.passed}</b>Conformi</div>
+  <div class="kpi"><b>${s.failed}</b>Non conformi</div>
+  <div class="kpi"><b>${s.warned}</b>Warning</div>
+  <div class="kpi"><b>${unknown}</b>Non valutabili</div>
+</div>
+<table><thead><tr><th>ID</th><th>Controllo ed evidenze</th><th>Severita'</th><th>Esito</th><th>Rimedio</th></tr></thead>
+<tbody>${rows}</tbody></table>
+<div class="note">I controlli marcati "non valutabile" corrispondono a sezioni di configurazione assenti nel file analizzato: sono esclusi dal calcolo dello score e non vanno letti come conformita'.</div>
+</body></html>`;
+
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     // Expose functions globally
