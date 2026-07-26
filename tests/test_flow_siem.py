@@ -225,5 +225,64 @@ class TestFlowSiem(unittest.TestCase):
         self.assertEqual(r.status_code, 404, r.text)
 
 
+class TestFlowSiemDeepScan(unittest.TestCase):
+    """Un IP presente nelle faccette deve essere raggiungibile dalla tabella.
+
+    src_ip/dst_ip non sono colonne: il filtro e' in Python. Prima veniva
+    applicato a un solo blocco di ``limit * 4`` righe recenti, mentre le
+    faccette ne scandiscono 2000: un IP raro compariva nella colonna faccette
+    ma cliccarlo non mostrava alcuna riga.
+    """
+
+    RARE = "192.168.194.254"
+
+    @classmethod
+    def setUpClass(cls):
+        conn = db.get_observability_connection()
+        # L'evento raro e' il piu' VECCHIO: sepolto sotto 800 righe recenti.
+        conn.execute(
+            "INSERT INTO syslog_events (ts, tenant, device_ip, severity, "
+            "action, message) VALUES (?, 'sede-a', '10.0.1.1', 6, 'accept', ?)",
+            (NOW - 3000, f"srcip={cls.RARE} dstip=10.0.1.9 dstport=443 proto=6"))
+        conn.executemany(
+            "INSERT INTO syslog_events (ts, tenant, device_ip, severity, "
+            "action, message) VALUES (?, 'sede-a', '10.0.1.1', 6, 'accept', ?)",
+            [(NOW - 100 - i, f"srcip=10.0.1.2 dstip=10.0.1.9 dstport=8765 proto=6")
+             for i in range(800)])
+        conn.commit()
+        conn.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        conn = db.get_observability_connection()
+        conn.execute("DELETE FROM syslog_events WHERE ts <= ?", (NOW - 100,))
+        conn.commit()
+        conn.close()
+
+    def _client(self):
+        c = TestClient(app_server.app)
+        r = c.post("/api/auth/login",
+                   json={"username": "adm_siem", "password": PASS})
+        assert r.status_code == 200, r.text
+        return c
+
+    def test_facet_ip_is_reachable_from_the_table(self):
+        c = self._client()
+        facets = c.get("/api/flow-siem/facets?window=24h").json()
+        self.assertIn(self.RARE, [f["value"] for f in facets["top_src_ips"]])
+
+        events = c.get(
+            f"/api/flow-siem/events?window=24h&limit=100&q={self.RARE}"
+        ).json()["events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["src_ip"], self.RARE)
+
+    def test_unfiltered_query_still_returns_the_newest_page(self):
+        c = self._client()
+        events = c.get("/api/flow-siem/events?window=24h&limit=100").json()["events"]
+        self.assertEqual(len(events), 100)
+        self.assertEqual(events, sorted(events, key=lambda e: e["ts"], reverse=True))
+
+
 if __name__ == "__main__":
     unittest.main()

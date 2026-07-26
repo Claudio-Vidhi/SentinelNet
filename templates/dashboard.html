@@ -2442,11 +2442,14 @@
           <div id="flowSiemFacets"></div>
         </div>
 
-        <div class="panel" style="padding:14px;">
+        <!-- Il pannello si allunga fino all'altezza della colonna faccette (la
+             riga di griglia e' unica): senza flex la tabella restava alta 450px
+             e il resto del pannello era spazio vuoto. -->
+        <div class="panel" style="padding:14px; display:flex; flex-direction:column;">
           <h4 style="margin:0 0 10px; font-size:14px;"><i class="fa-solid fa-table-list"></i> Registro Flussi Triage</h4>
-          <div class="table-container" style="max-height:450px; overflow-y:auto;">
+          <div class="table-container" style="flex:1; min-height:450px; overflow-y:auto;">
             <table>
-              <thead>
+              <thead style="position:sticky; top:0; z-index:1;">
                 <tr>
                   <th>Timestamp</th>
                   <th>Sorgente</th>
