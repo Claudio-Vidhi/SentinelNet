@@ -30,7 +30,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 3          # versione schema supportata da questo codice (v3: flow_aggregates.source)
+SCHEMA_VERSION = 4          # versione schema supportata da questo codice (v4: audit checklist)
 QUEUE_MAX = 10_000          # payload massimi in coda scritture
 BATCH_SIZE = 500            # payload massimi per singolo commit
 MAX_WRITER_RESTARTS = 5     # riavvii writer consentiti prima del fail-open
