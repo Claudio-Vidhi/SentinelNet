@@ -2320,10 +2320,10 @@
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(4, minmax(0,1fr)); margin-bottom:18px;">
+      <div class="kpi-grid" style="grid-template-columns:repeat(5, minmax(0,1fr)); margin-bottom:18px;">
         <div class="kpi">
           <h4>Regole Auditate</h4>
-          <strong>6</strong>
+          <strong id="auditStatTotal">0</strong>
         </div>
         <div class="kpi">
           <h4>Vulnerabili / Fail</h4>
@@ -2337,6 +2337,13 @@
           <h4>Warning / Attenzione</h4>
           <strong id="auditStatWarned" style="color:var(--warning);">0</strong>
         </div>
+        <div class="kpi" title="Sezioni di configurazione assenti dal file analizzato: non valutabili, escluse dal calcolo dello score.">
+          <h4>Non valutabili</h4>
+          <strong id="auditStatUnknown" style="color:var(--text-muted);">0</strong>
+        </div>
+      </div>
+      <div id="auditPartialWarning" style="display:none; margin:-8px 0 18px; padding:8px 12px; border-radius:8px; background:rgba(245,158,11,0.12); border:1px solid var(--warning); font-size:12px; color:var(--warning);">
+        <i class="fa-solid fa-circle-info"></i> <span id="auditPartialWarningText"></span>
       </div>
 
       <div style="display:grid; grid-template-columns: 1fr 340px; gap:18px; margin-bottom:18px;">
