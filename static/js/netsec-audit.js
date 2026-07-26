@@ -7,6 +7,14 @@
     // per lo stato vuoto mostrato prima della prima scansione.
     let _auditRules = [];
 
+    // Righe espanse memorizzate per id: la tabella viene ricostruita ad ogni
+    // render (filtri, nuova scansione) e senza questo l'espansione aperta si
+    // chiuderebbe da sola. Dichiarata qui, non accanto a toggleAuditDetail,
+    // perche' renderAuditRulesTable la legge: un const usato prima della
+    // propria riga di dichiarazione e' nella temporal dead zone e basterebbe
+    // una futura chiamata durante l'init del modulo per avere un ReferenceError.
+    const _auditOpenRows = new Set();
+
     async function applyNetSecAuditGating() {
         try {
             const res = await apiFetch('/api/settings/netsec-audit');
@@ -182,25 +190,38 @@
 
             const ev = r.evidence || [];
             const evId = String(r.id).replace(/[^\w-]/g, '_');
-            const evBtn = ev.length
-                ? `<button class="btn btn-sm btn-secondary" style="padding:2px 8px; font-size:11px; margin-top:6px;" onclick="toggleAuditEvidence('${escapeHtml(evId)}')">
+            const isOpen = _auditOpenRows.has(evId);
+
+            // Suggerimento del contenuto nascosto: quante evidenze ci sono.
+            // Non e' un pulsante: l'intera riga fa da interruttore, due
+            // comandi sovrapposti per la stessa azione confondono.
+            const evHint = ev.length
+                ? `<span class="badge" style="margin-top:6px; background:var(--surface-3); color:var(--text-muted);">
                        <i class="fa-solid fa-code"></i> ${ev.length} ${currentLang === 'en' ? 'evidence' : 'evidenze'}
-                   </button>`
+                   </span>`
                 : '';
 
-            const evRows = ev.map(e => `
+            const evRows = ev.length ? `
+                <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px;">
+                    ${currentLang === 'en' ? 'Evidence in the analysed config' : 'Evidenze nella configurazione analizzata'}
+                </div>
+                ${ev.map(e => `
                 <div style="display:flex; gap:10px; padding:3px 0; font-family:var(--font-code); font-size:11px; flex-wrap:wrap;">
                     <span style="color:var(--text-muted); min-width:60px;">${e.line ? (currentLang === 'en' ? 'line ' : 'riga ') + escapeHtml(String(e.line)) : '—'}</span>
                     <span style="color:var(--text-muted); min-width:190px;">${escapeHtml(e.context || '')}</span>
-                    <span style="color:var(--danger);">${escapeHtml(e.text || '')}</span>
-                </div>`).join('');
+                    <span style="color:var(--danger); word-break:break-all;">${escapeHtml(e.text || '')}</span>
+                </div>`).join('')}` : '';
 
-            return `<tr style="font-size:12px; border-top:1px solid var(--border);">
-                <td style="padding:8px; font-family:var(--font-code); font-weight:700;">${escapeHtml(r.id)}</td>
+            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;"
+                        onclick="toggleAuditDetail('${escapeHtml(evId)}')"
+                        title="${currentLang === 'en' ? 'Click to expand' : 'Clicca per espandere'}">
+                <td style="padding:8px; font-family:var(--font-code); font-weight:700; white-space:nowrap;">
+                    <i class="fa-solid fa-chevron-${isOpen ? 'down' : 'right'}" style="color:var(--text-muted); font-size:9px; margin-right:6px;"></i>${escapeHtml(r.id)}
+                </td>
                 <td style="padding:8px;">
                     <div style="font-weight:700;">${escapeHtml(r.title)}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(r.detail)}</div>
-                    ${evBtn}
+                    ${evHint}
                 </td>
                 <td style="padding:8px;">${sevBadge}</td>
                 <td style="padding:8px;"><span class="badge">${escapeHtml(r.category)}</span></td>
@@ -209,15 +230,22 @@
                     <code title="${escapeHtml(r.remediation)}" style="font-size:11px; color:var(--primary); background:var(--surface-2); padding:3px 6px; border-radius:4px; display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:middle;">${escapeHtml(r.remediation)}</code>
                 </td>
             </tr>
-            ${ev.length ? `<tr id="auditEv-${escapeHtml(evId)}" style="display:none;">
-                <td colspan="6" style="padding:8px 8px 12px 24px; background:var(--surface-2);">${evRows}</td>
-            </tr>` : ''}`;
+            <tr id="auditEv-${escapeHtml(evId)}" style="${isOpen ? '' : 'display:none;'}">
+                <td colspan="6" style="padding:12px 12px 14px 30px; background:var(--surface-2); border-top:1px solid var(--border);">
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
+                        ${currentLang === 'en' ? 'Recommendation / CLI fix' : 'Raccomandazione / Fix CLI'}
+                    </div>
+                    <code style="display:block; font-size:12px; color:var(--primary); background:var(--surface); padding:8px 10px; border-radius:6px; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:${ev.length ? '12px' : '0'};">${escapeHtml(r.remediation)}</code>
+                    ${evRows}
+                </td>
+            </tr>`;
         }).join('');
     }
 
-    function toggleAuditEvidence(ruleId) {
-        const row = document.getElementById('auditEv-' + ruleId);
-        if (row) row.style.display = (row.style.display === 'none') ? '' : 'none';
+    function toggleAuditDetail(ruleId) {
+        if (_auditOpenRows.has(ruleId)) _auditOpenRows.delete(ruleId);
+        else _auditOpenRows.add(ruleId);
+        renderAuditRulesTable();
     }    let _droppedConfigText = null;
 
     async function runAuditScan() {
@@ -407,5 +435,5 @@ ${partialBanner}
     window.runAuditScan = runAuditScan;
     window.exportAuditReport = exportAuditReport;
     window.renderAuditRulesTable = renderAuditRulesTable;
-    window.toggleAuditEvidence = toggleAuditEvidence;
+    window.toggleAuditDetail = toggleAuditDetail;
 })();
