@@ -96,16 +96,41 @@
         container.innerHTML = html;
     }
 
-    async function openNewAuditModal() {
-        const customerName = prompt("Inserisci il nome del cliente / azienda per l'audit:");
-        if (!customerName || !customerName.trim()) return;
+    function openNewAuditModal() {
+        const modal = document.getElementById("newAuditModal");
+        if (modal) {
+            const nameEl = document.getElementById("auditCustomerName");
+            const intEl = document.getElementById("auditInterviewee");
+            if (nameEl) nameEl.value = "";
+            if (intEl) intEl.value = "";
+            modal.style.display = "flex";
+        }
+    }
+
+    function closeNewAuditModal() {
+        const modal = document.getElementById("newAuditModal");
+        if (modal) modal.style.display = "none";
+    }
+
+    async function submitNewAuditForm(e) {
+        if (e) e.preventDefault();
+        const nameEl = document.getElementById("auditCustomerName");
+        const modEl = document.getElementById("auditModality");
+        const intEl = document.getElementById("auditInterviewee");
+
+        const customerName = nameEl ? nameEl.value.trim() : "";
+        const modality = modEl ? modEl.value : "onsite";
+        const interviewee = intEl ? intEl.value.trim() : "";
+
+        if (!customerName) return;
 
         try {
             const res = await apiFetch("/api/audit-checklist/engagements", {
                 method: "POST",
                 body: JSON.stringify({
-                    customer_name: customerName.trim(),
-                    onsite_or_remote: "onsite"
+                    customer_name: customerName,
+                    onsite_or_remote: modality,
+                    interviewee: interviewee || null
                 })
             });
             if (!res || !res.ok) {
@@ -113,10 +138,11 @@
                 return;
             }
             const newEng = await res.json();
-            loadAuditChecklistTab();
+            closeNewAuditModal();
+            await loadAuditChecklistTab();
             openAuditWorkspace(newEng.id);
-        } catch (e) {
-            console.error("Errore creazione audit:", e);
+        } catch (err) {
+            console.error("Errore creazione audit:", err);
             alert("Errore di rete durante la creazione dell'audit.");
         }
     }
@@ -311,6 +337,8 @@
     // Esporta funzioni globali
     window.loadAuditChecklistTab = loadAuditChecklistTab;
     window.openNewAuditModal = openNewAuditModal;
+    window.closeNewAuditModal = closeNewAuditModal;
+    window.submitNewAuditForm = submitNewAuditForm;
     window.openAuditWorkspace = openAuditWorkspace;
     window.saveAuditItem = saveAuditItem;
     window.viewAuditReport = viewAuditReport;

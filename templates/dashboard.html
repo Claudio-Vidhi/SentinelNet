@@ -2191,6 +2191,34 @@
         <div id="auditEngagementList"></div>
       </div>
 
+      <!-- Modale Creazione Nuovo Audit Cliente -->
+      <div id="newAuditModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
+        <div class="panel" style="width:100%; max-width:480px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+          <h3 style="margin-top:0; margin-bottom:15px; font-size:18px;"><i class="fa-solid fa-clipboard-check" style="color:var(--primary);"></i> Nuovo Audit Cliente</h3>
+          <form onsubmit="submitNewAuditForm(event)">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Nome Cliente / Azienda *</label>
+              <input id="auditCustomerName" type="text" required style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. ACME Corp S.p.A.">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Modalità Audit</label>
+              <select id="auditModality" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <option value="onsite">On-Site (Presenza presso sede cliente)</option>
+                <option value="remote">Remoto (Interview / Config Review)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:18px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Referente Intervistato (Opzionale)</label>
+              <input id="auditInterviewee" type="text" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. Mario Rossi (IT Manager)">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+              <button type="button" class="btn btn-secondary" onclick="closeNewAuditModal()" style="width:auto; margin:0;">Annulla</button>
+              <button type="submit" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-check"></i> Crea Audit</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- Area di lavoro checklist dell'audit attivo -->
       <div id="auditWorkspace" class="panel" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:15px;">

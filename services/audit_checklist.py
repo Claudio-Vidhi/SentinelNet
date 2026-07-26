@@ -1127,6 +1127,12 @@ def generate_audit_relazione(engagement_id: int) -> str:
         h1 {{ color: #1a252f; border-bottom: 3px solid #1a252f; padding-bottom: 10px; }}
         .meta-box {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 25px; border: 1px solid #e9ecef; }}
         .footer {{ margin-top: 50px; font-size: 11px; color: #6c757d; text-align: center; border-top: 1px solid #dee2e6; padding-top: 15px; }}
+        @media print {{
+            body {{ margin: 15mm 15mm; font-size: 11pt; }}
+            h1 {{ font-size: 18pt; }}
+            .no-print {{ display: none !important; }}
+            div {{ page-break-inside: avoid; }}
+        }}
     </style>
 </head>
 <body>
