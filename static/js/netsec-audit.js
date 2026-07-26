@@ -401,6 +401,11 @@ th{background:#f6f6f6;}
 .st-PASS td:nth-child(4){color:#070;font-weight:700;}
 .st-UNKNOWN td:nth-child(4){color:#888;font-weight:700;}
 .note{margin-top:20px;font-size:12px;color:#666;border-top:1px solid #ddd;padding-top:10px;line-height:1.5;}
+@media print {
+    body { margin: 15mm 15mm; font-size: 10pt; }
+    h1 { font-size: 16pt; }
+    tr { page-break-inside: avoid; }
+}
 </style></head><body>
 <h1>Report di Compliance — ${escapeHtml(benchmark)}</h1>
 <div class="meta">Apparato: ${escapeHtml(device)} · Generato il ${escapeHtml(generated)}</div>
@@ -417,15 +422,21 @@ ${partialBanner}
 <div class="note">I controlli marcati "non valutabile" corrispondono a sezioni di configurazione assenti nel file analizzato: sono esclusi dal calcolo dello score e non vanno letti come conformita'.</div>
 </body></html>`;
 
-        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.html`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const printWin = window.open('', '_blank');
+        if (printWin) {
+            printWin.document.write(html + '<script>window.onload = function() { window.print(); };</script>');
+            printWin.document.close();
+        } else {
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.html`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
     }
 
     // Expose functions globally
