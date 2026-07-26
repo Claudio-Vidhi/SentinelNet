@@ -33,6 +33,14 @@ router = APIRouter(prefix="/api/flow-siem", tags=["Flow SIEM"])
 
 MAX_LIMIT = 500
 
+# src_ip/dst_ip/proto/threat_flag non sono colonne: nascono da _to_event() sul
+# corpo del messaggio, quindi il filtro non e' esprimibile in SQL e resta in
+# Python. Per questo la lettura procede a lotti finche' non ha abbastanza
+# corrispondenze, invece di filtrare un unico blocco di righe recenti: con un
+# blocco solo un IP raro presente nelle faccette (che scandiscono 2000 righe)
+# non compariva mai in tabella. Tetto di righe grezze esaminate per richiesta.
+MAX_SCAN = 20000
+
 # Chiavi key=value FortiGate utili al registro. Il correlatore estrae solo
 # srcip/dstip/dstport; qui servono anche porta sorgente, protocollo e byte.
 _KV_RE = re.compile(
@@ -160,29 +168,41 @@ async def get_flow_siem_events(
     cutoff = int(time.time()) - _window_to_seconds(window)
     clause, params = _tenant_filter(current_user)
 
-    rows = await db.read(
-        f"""SELECT s.id, s.ts, s.tenant, s.device_ip, s.severity, s.action,
-                   s.message
-            FROM syslog_events AS s
-            WHERE s.ts >= ?{clause}
-              AND NOT EXISTS (SELECT 1 FROM siem_suppressions x
-                              WHERE x.event_id = s.id)
-            ORDER BY s.ts DESC, s.id DESC
-            LIMIT ?""",
-        (cutoff, *params, min(limit * 4, MAX_LIMIT * 4))) or []
+    want_deny = action.strip().upper() == "DENY" if action else None
+    needle = q.lower() if q else None
 
-    events = [_to_event(dict(r)) for r in rows]
-
-    if action:
-        want_deny = action.strip().upper() == "DENY"
-        events = [e for e in events if e["is_deny"] == want_deny]
-
-    if q:
-        needle = q.lower()
-        events = [e for e in events if needle in " ".join(
+    def keep(e: dict) -> bool:
+        if want_deny is not None and e["is_deny"] != want_deny:
+            return False
+        if needle is None:
+            return True
+        return needle in " ".join(
             str(v) for v in (e["src_ip"], e["dst_ip"], e["action"], e["proto"],
                              e["device_ip"], e["tenant"], e["threat_flag"],
-                             e["message"]) if v).lower()]
+                             e["message"]) if v).lower()
+
+    wanted = offset + limit
+    batch = min(max(limit * 4, 500), MAX_LIMIT * 4)
+    events: list = []
+    scanned = 0
+
+    while len(events) < wanted and scanned < MAX_SCAN:
+        rows = await db.read(
+            f"""SELECT s.id, s.ts, s.tenant, s.device_ip, s.severity, s.action,
+                       s.message
+                FROM syslog_events AS s
+                WHERE s.ts >= ?{clause}
+                  AND NOT EXISTS (SELECT 1 FROM siem_suppressions x
+                                  WHERE x.event_id = s.id)
+                ORDER BY s.ts DESC, s.id DESC
+                LIMIT ? OFFSET ?""",
+            (cutoff, *params, batch, scanned)) or []
+        if not rows:
+            break
+        scanned += len(rows)
+        events.extend(e for e in (_to_event(dict(r)) for r in rows) if keep(e))
+        if len(rows) < batch:
+            break
 
     return {
         "total": len(events),
@@ -251,11 +271,16 @@ async def get_flow_siem_facets(
     cutoff = int(time.time()) - _window_to_seconds(window)
     clause, params = _tenant_filter(current_user)
 
+    # Stessa esclusione delle soppressioni applicata da /events: senza, una
+    # faccetta poteva contare eventi che la tabella non mostra piu'.
     rows = await db.read(
-        f"""SELECT id, ts, tenant, device_ip, severity, action, message
-            FROM syslog_events
-            WHERE ts >= ?{clause}
-            ORDER BY ts DESC
+        f"""SELECT s.id, s.ts, s.tenant, s.device_ip, s.severity, s.action,
+                   s.message
+            FROM syslog_events AS s
+            WHERE s.ts >= ?{clause}
+              AND NOT EXISTS (SELECT 1 FROM siem_suppressions x
+                              WHERE x.event_id = s.id)
+            ORDER BY s.ts DESC
             LIMIT 2000""",
         (cutoff, *params)) or []
 
