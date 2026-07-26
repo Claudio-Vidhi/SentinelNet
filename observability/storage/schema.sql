@@ -86,3 +86,96 @@ CREATE TABLE IF NOT EXISTS siem_suppressions (
     reason        TEXT,
     suppressed_by TEXT
 );
+
+-- 7. TEMPLATE CHECKLIST AUDIT (v4: audit manutenzione firewall)
+CREATE TABLE IF NOT EXISTS audit_templates (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    version      INTEGER NOT NULL UNIQUE,
+    name         TEXT NOT NULL,
+    status       TEXT NOT NULL CHECK(status IN ('draft', 'published', 'archived')),
+    created_ts   INTEGER NOT NULL,
+    created_by   TEXT NOT NULL DEFAULT 'system',
+    notes        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS audit_template_items (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id       INTEGER NOT NULL,
+    ref               TEXT NOT NULL,
+    section_no        INTEGER NOT NULL,
+    section_title     TEXT NOT NULL,
+    title             TEXT NOT NULL,
+    guidance_why      TEXT,
+    guidance_good     TEXT,
+    guidance_how      TEXT,
+    thresholds_json   TEXT,
+    check_kind        TEXT NOT NULL CHECK(check_kind IN ('manual', 'semi', 'auto')),
+    severity_default  TEXT NOT NULL,
+    is_prerequisite   INTEGER NOT NULL DEFAULT 0,
+    requires_evidence INTEGER NOT NULL DEFAULT 0,
+    sort_order        INTEGER NOT NULL,
+    FOREIGN KEY (template_id) REFERENCES audit_templates(id) ON DELETE CASCADE,
+    UNIQUE(template_id, ref)
+);
+CREATE INDEX IF NOT EXISTS idx_audit_tpl_items_tpl ON audit_template_items(template_id);
+
+CREATE TABLE IF NOT EXISTS audit_engagements (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_name    TEXT NOT NULL,
+    tenant           TEXT,
+    site_id          TEXT,
+    template_id      INTEGER NOT NULL,
+    status           TEXT NOT NULL CHECK(status IN ('draft', 'in_progress', 'completed')),
+    created_ts       INTEGER NOT NULL,
+    updated_ts       INTEGER NOT NULL,
+    created_by       TEXT NOT NULL DEFAULT 'system',
+    assigned_to      TEXT,
+    scope_notes      TEXT,
+    onsite_or_remote TEXT DEFAULT 'remote',
+    interviewee      TEXT,
+    FOREIGN KEY (template_id) REFERENCES audit_templates(id)
+);
+CREATE INDEX IF NOT EXISTS idx_audit_eng_status ON audit_engagements(status);
+
+CREATE TABLE IF NOT EXISTS audit_engagement_items (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    engagement_id       INTEGER NOT NULL,
+    item_ref            TEXT NOT NULL,
+    status              TEXT NOT NULL CHECK(status IN ('non_valutato', 'conforme', 'parziale', 'non_conforme', 'non_applicabile', 'da_verificare')),
+    severity            TEXT CHECK(severity IN ('critica', 'alta', 'media', 'bassa', 'osservazione')),
+    finding_text        TEXT,
+    recommendation_text TEXT,
+    assessed_by         TEXT,
+    assessed_ts         INTEGER,
+    ai_assisted         INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (engagement_id) REFERENCES audit_engagements(id) ON DELETE CASCADE,
+    UNIQUE(engagement_id, item_ref)
+);
+CREATE INDEX IF NOT EXISTS idx_audit_eng_items_eng ON audit_engagement_items(engagement_id);
+
+CREATE TABLE IF NOT EXISTS audit_evidence (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    engagement_id INTEGER NOT NULL,
+    item_ref      TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK(kind IN ('file', 'config_ref', 'note', 'scan_finding')),
+    payload_json  TEXT,
+    filename      TEXT,
+    path          TEXT,
+    uploaded_ts   INTEGER NOT NULL,
+    confidential  INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (engagement_id) REFERENCES audit_engagements(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_audit_evidence_eng_ref ON audit_evidence(engagement_id, item_ref);
+
+CREATE TABLE IF NOT EXISTS audit_engagement_history (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    engagement_id INTEGER NOT NULL,
+    item_ref      TEXT,
+    action        TEXT NOT NULL,
+    details_json  TEXT,
+    actor         TEXT NOT NULL DEFAULT 'system',
+    ts            INTEGER NOT NULL,
+    FOREIGN KEY (engagement_id) REFERENCES audit_engagements(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_audit_hist_eng ON audit_engagement_history(engagement_id);
+

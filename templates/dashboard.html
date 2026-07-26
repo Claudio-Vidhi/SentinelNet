@@ -236,6 +236,10 @@
           <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
           <span class="preview-badge">preview</span>
         </button>
+        <button id="navAuditChecklist" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-audit-checklist', this); loadAuditChecklistTab();">
+          <span class="nav-left"><i class="fa-solid fa-clipboard-check"></i> Checklist Audit Firewall</span>
+          <span class="preview-badge">preview</span>
+        </button>
         <button class="nav-item requires-admin" onclick="switchTab('tab-settings', this)">
           <span class="nav-left" data-i18n="tabSettings"><i class="fa-solid fa-gear"></i> Impostazioni</span>
         </button>
@@ -2152,6 +2156,42 @@
             Nessun dato. Seleziona un dispositivo e premi Carica.
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="tab-audit-checklist" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow"><i class="fa-solid fa-clipboard-check"></i> Security Audit · <span class="preview-badge">preview</span></span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;">Checklist Audit Manutenzione Firewall</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:75ch;">
+            Guida passo-passo per l'audit di manutenzione dei firewall dei clienti. Compila i rilievi sulle 9 sezioni di sicurezza, registra le evidenze e genera la relazione di audit finale.
+          </p>
+        </div>
+      </div>
+
+      <!-- Elenco engagement / Creazione nuovo engagement -->
+      <div class="panel" style="margin-bottom:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+          <h3 style="font-size:16px; margin:0;"><i class="fa-solid fa-folder-open" style="color:var(--primary);"></i> Audit Clienti (Engagement)</h3>
+          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="openNewAuditModal()"><i class="fa-solid fa-plus"></i> Nuovo Audit Cliente</button>
+        </div>
+        <div id="auditEngagementList"></div>
+      </div>
+
+      <!-- Area di lavoro checklist dell'audit attivo -->
+      <div id="auditWorkspace" class="panel" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:15px;">
+          <div>
+            <h3 id="auditWorkHeader" style="margin:0; font-size:18px;">--</h3>
+            <span id="auditWorkSub" style="font-size:12px; color:var(--text-muted);">--</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="viewAuditReport()"><i class="fa-solid fa-file-lines"></i> Genera Relazione HTML</button>
+            <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="closeAuditWorkspace()"><i class="fa-solid fa-xmark"></i> Chiudi</button>
+          </div>
+        </div>
+        <div id="auditSectionAccordion"></div>
       </div>
     </div>
 
