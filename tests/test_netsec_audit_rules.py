@@ -286,5 +286,111 @@ class TestAccessRules(_RuleBase):
             rules.check_inbound_admin_ports(cfg).status, UNKNOWN)
 
 
+class TestIdentityAndLoggingRules(_RuleBase):
+    def test_trusthost_fails_for_admin_without_any(self):
+        """L'account 'admin' non ha trusthost: assenza = violazione."""
+        o = rules.check_admin_trusthost(self.bad)
+        self.assertEqual(o.status, FAIL)
+        ctxs = " ".join(e.context for e in o.evidence)
+        self.assertIn("admin", ctxs)
+        self.assertIn("mario.rossi", ctxs)   # trusthost 0.0.0.0 0.0.0.0
+
+    def test_trusthost_passes_when_restricted(self):
+        self.assertEqual(rules.check_admin_trusthost(self.good).status, PASS)
+
+    def test_trusthost_unknown_without_admin_block(self):
+        self.assertEqual(
+            rules.check_admin_trusthost(self.partial).status, UNKNOWN)
+
+    def test_snmp_fails_on_public_community(self):
+        o = rules.check_snmp_community(self.bad)
+        self.assertEqual(o.status, FAIL)
+        self.assertEvidenceLine(o, "public")
+
+    def test_snmp_passes_on_named_community(self):
+        self.assertEqual(rules.check_snmp_community(self.good).status, PASS)
+
+    def test_snmp_unknown_when_section_absent(self):
+        self.assertEqual(
+            rules.check_snmp_community(self.partial).status, UNKNOWN)
+
+    def test_snmp_passes_when_section_present_but_empty(self):
+        cfg = parse_with_lines("config system snmp community\nend\n")
+        self.assertEqual(rules.check_snmp_community(cfg).status, PASS)
+
+    def test_syslog_fails_when_section_absent(self):
+        """Assenza di logging remoto E' la violazione, non UNKNOWN."""
+        o = rules.check_syslog(self.partial)
+        self.assertEqual(o.status, FAIL)
+
+    def test_syslog_passes_when_enabled_with_server(self):
+        self.assertEqual(rules.check_syslog(self.good).status, PASS)
+
+    def test_syslog_fails_when_status_disabled(self):
+        cfg = parse_with_lines(
+            "config log syslogd setting\n set status disable\n"
+            ' set server "10.0.1.100"\nend\n')
+        self.assertEqual(rules.check_syslog(cfg).status, FAIL)
+
+    def test_syslog_fails_without_server(self):
+        cfg = parse_with_lines(
+            "config log syslogd setting\n set status enable\nend\n")
+        self.assertEqual(rules.check_syslog(cfg).status, FAIL)
+
+    def test_vendor_defaults_flags_admin_account(self):
+        o = rules.check_vendor_defaults(self.bad)
+        self.assertEqual(o.status, FAIL)
+
+    def test_vendor_defaults_passes_when_clean(self):
+        self.assertEqual(rules.check_vendor_defaults(self.good).status, PASS)
+
+    def test_vendor_defaults_unknown_when_nothing_to_inspect(self):
+        self.assertEqual(
+            rules.check_vendor_defaults(self.partial).status, UNKNOWN)
+
+    # --- Non-vacuita': i controlli non devono reagire a stringhe che
+    # compaiono altrove nella configurazione. Il vecchio motore usava
+    # '"public" in cfg' e '"syslog" not in cfg' sull'intero testo.
+
+    def test_snmp_ignores_public_outside_a_community_name(self):
+        """'public' in un commento o in un nome di oggetto non e' una
+        community di default: il vecchio motore la segnalava comunque."""
+        cfg = parse_with_lines(
+            '# la vecchia community public e stata rimossa\n'
+            'config firewall address\n'
+            '    edit "PUBLIC-DMZ-RANGE"\n'
+            '        set comment "ex public"\n'
+            '    next\n'
+            'end\n'
+            'config system snmp community\n'
+            '    edit 1\n'
+            '        set name "sn-monitor-v3"\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(rules.check_snmp_community(cfg).status, PASS)
+
+    def test_syslog_ignores_the_word_syslog_elsewhere(self):
+        """La parola 'syslog' altrove non prova che l'inoltro sia attivo."""
+        cfg = parse_with_lines(
+            'config firewall address\n'
+            '    edit "SYSLOG-COLLECTOR"\n'
+            '        set subnet 10.0.1.100 255.255.255.255\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(rules.check_syslog(cfg).status, FAIL)
+
+    def test_trusthost_evidence_points_at_the_offending_line(self):
+        cfg = parse_with_lines(
+            'config system admin\n'
+            '    edit "op1"\n'
+            '        set trusthost1 0.0.0.0 0.0.0.0\n'
+            '    next\n'
+            'end\n')
+        o = rules.check_admin_trusthost(cfg)
+        self.assertEqual(o.status, FAIL)
+        self.assertEqual(len(o.evidence), 1)
+        self.assertEqual(o.evidence[0].line, 3)
+
+
 if __name__ == "__main__":
     unittest.main()

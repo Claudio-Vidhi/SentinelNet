@@ -286,3 +286,146 @@ def check_inbound_admin_ports(cfg: ParsedConfig) -> RuleOutcome:
             "Internet in %d policy." % len(ev), ev)
     return RuleOutcome(
         PASS, "Nessuna esposizione diretta di SSH/RDP verso reti pubbliche.")
+
+
+# --- Identita' e logging -----------------------------------------------------
+
+_DEFAULT_COMMUNITIES = {"public", "private"}
+# I valori di un trusthost sono confrontati come INSIEME, quindi
+# 'set trusthost1 0.0.0.0 0.0.0.0' si riduce a {"0.0.0.0"}.
+_UNRESTRICTED_TRUSTHOST = ({"0.0.0.0"}, {"0.0.0.0/0"})
+
+
+def check_admin_trusthost(cfg: ParsedConfig) -> RuleOutcome:
+    """Account amministrativi raggiungibili da qualunque IP (NIST AC-17).
+
+    ASSENZA COME VIOLAZIONE: un account senza alcun 'trusthost' e' raggiungibile
+    da ovunque per default FortiOS, quindi vale FAIL e non UNKNOWN. E' invece
+    UNKNOWN l'assenza dell'intero blocco 'config system admin'.
+    """
+    admins = section_entries(cfg, "system admin")
+    if not admins:
+        return RuleOutcome(
+            UNKNOWN, "Sezione 'config system admin' assente: impossibile "
+                     "valutare le restrizioni di accesso amministrativo.")
+    ev: List[Evidence] = []
+    for name in sorted(admins):
+        recs = admins[name]
+        hosts = [r for r in recs if r.key.startswith("trusthost")]
+        if not hosts:
+            line = recs[0].line if recs else 0
+            ev.append(Evidence(
+                line, "nessun 'trusthost' definito per l'account",
+                _ctx("system admin", name)))
+            continue
+        for r in hosts:
+            vals = {v.lower() for v in r.values}
+            if any(vals == unrestricted
+                   for unrestricted in _UNRESTRICTED_TRUSTHOST):
+                ev.append(Evidence(r.line, r.raw.strip(),
+                                   _ctx("system admin", name)))
+    if ev:
+        return RuleOutcome(
+            FAIL,
+            "%d account amministrativi accessibili da qualunque IP sorgente."
+            % len(ev), ev)
+    return RuleOutcome(
+        PASS, "Tutti gli account amministrativi sono ristretti a sottoreti "
+              "di gestione fidate.")
+
+
+def check_snmp_community(cfg: ParsedConfig) -> RuleOutcome:
+    """Community string SNMP v1/v2c di default."""
+    if not section_present(cfg, "system snmp community"):
+        return RuleOutcome(
+            UNKNOWN, "Sezione 'config system snmp community' assente: "
+                     "impossibile valutare le community SNMP.")
+    communities = section_entries(cfg, "system snmp community")
+    ev: List[Evidence] = []
+    for name in sorted(communities):
+        for r in communities[name]:
+            if (r.key == "name" and r.values
+                    and r.values[0].lower() in _DEFAULT_COMMUNITIES):
+                ev.append(Evidence(r.line, r.raw.strip(),
+                                   _ctx("system snmp community", name)))
+    if ev:
+        return RuleOutcome(
+            FAIL,
+            "Community SNMP di default in chiaro ('public'/'private'): %d."
+            % len(ev), ev)
+    return RuleOutcome(
+        PASS, "Nessuna community SNMP di default configurata.")
+
+
+def check_syslog(cfg: ParsedConfig) -> RuleOutcome:
+    """Inoltro dei log verso un syslog remoto (NIST AU-2/AU-12, PCI 10.2).
+
+    ASSENZA COME VIOLAZIONE: se il blocco non esiste non c'e' alcun logging
+    remoto configurato, che e' esattamente il controllo che fallisce.
+    """
+    if not section_present(cfg, "log syslogd setting"):
+        return RuleOutcome(
+            FAIL,
+            "Nessun inoltro syslog remoto configurato: la sezione "
+            "'config log syslogd setting' non esiste.",
+            [Evidence(0, "blocco 'config log syslogd setting' assente",
+                      "log syslogd setting")])
+    status = setting(cfg, "log syslogd setting", "status")
+    server = setting(cfg, "log syslogd setting", "server")
+    ev: List[Evidence] = []
+    if (status is None or not status.values
+            or status.values[0].lower() != "enable"):
+        ev.append(Evidence(
+            status.line if status else 0,
+            status.raw.strip() if status else "'status' non impostato a enable",
+            _ctx("log syslogd setting")))
+    if server is None or not server.values:
+        ev.append(Evidence(
+            server.line if server else 0,
+            server.raw.strip() if server else "nessun 'server' syslog definito",
+            _ctx("log syslogd setting")))
+    if ev:
+        return RuleOutcome(
+            FAIL, "Inoltro syslog remoto non attivo o privo di destinazione.",
+            ev)
+    return RuleOutcome(
+        PASS, "Inoltro dei log verso syslog remoto attivo e configurato.")
+
+
+def check_vendor_defaults(cfg: ParsedConfig) -> RuleOutcome:
+    """Account di default e policy password (PCI-DSS 2.2)."""
+    admins = section_entries(cfg, "system admin")
+    has_policy_block = section_present(cfg, "system password-policy")
+    if not admins and not has_policy_block:
+        return RuleOutcome(
+            UNKNOWN, "Ne' 'config system admin' ne' "
+                     "'config system password-policy' presenti: impossibile "
+                     "valutare i default di fabbrica.")
+    ev: List[Evidence] = []
+    for name in sorted(admins):
+        if name.lower() == "admin":
+            recs = admins[name]
+            ev.append(Evidence(
+                recs[0].line if recs else 0,
+                "account amministrativo di default 'admin' presente",
+                _ctx("system admin", name)))
+    if has_policy_block:
+        status = setting(cfg, "system password-policy", "status")
+        if (status is None or not status.values
+                or status.values[0].lower() != "enable"):
+            ev.append(Evidence(
+                status.line if status else 0,
+                status.raw.strip() if status
+                else "'status' della password-policy non abilitato",
+                _ctx("system password-policy")))
+    else:
+        ev.append(Evidence(
+            0, "nessuna 'config system password-policy' definita",
+            _ctx("system password-policy")))
+    if ev:
+        return RuleOutcome(
+            FAIL,
+            "Rilevati default di fabbrica o policy password non applicata "
+            "(%d riscontri)." % len(ev), ev)
+    return RuleOutcome(
+        PASS, "Nessun account di default e policy password attiva.")
