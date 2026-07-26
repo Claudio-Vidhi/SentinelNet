@@ -58,6 +58,11 @@
       transition: grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    input::placeholder, textarea::placeholder {
+      color: var(--text-muted);
+      opacity: 0.75;
+    }
+
     /* Link di contenuto (es. IP sorgente/destinazione nelle tabelle flussi):
        il blu di default del browser è poco leggibile sul canvas viola scuro.
        Usiamo l'accent-violet del sistema, sottolineatura solo all'hover. */
