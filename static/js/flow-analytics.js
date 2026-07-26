@@ -185,13 +185,16 @@
             return;
         }
 
-        const renderSection = (title, items, icon) => `
+        // Ogni sezione filtra sul PROPRIO campo: senza, cliccare un IP fra le
+        // sorgenti cercava quell'IP ovunque e restituiva soprattutto le righe
+        // in cui e' la destinazione.
+        const renderSection = (title, items, icon, field) => `
             <div style="margin-bottom:14px;">
                 <h5 style="margin:0 0 6px; font-size:11px; text-transform:uppercase; color:var(--text-muted); letter-spacing:.05em;">
                     <i class="fa-solid ${icon}"></i> ${title}
                 </h5>
                 ${(items || []).map(item => `
-                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:4px; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" onclick="applySiemFilter('${escapeHtml(item.value)}')">
+                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:4px; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" onclick="applySiemFilter('${jsStr(item.value)}', '${field}')" title="${escapeHtml(field)}:${escapeHtml(item.value)}">
                         <span style="font-family:var(--font-code); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:130px;">${escapeHtml(item.value)}</span>
                         <span class="badge" style="font-size:10px;">${item.count}</span>
                     </div>
@@ -199,17 +202,19 @@
             </div>
         `;
 
-        facetBox.innerHTML = 
-            renderSection('Top Sorgenti IP', _flowSiemFacets.top_src_ips, 'fa-network-wired') +
-            renderSection('Top Destinazioni IP', _flowSiemFacets.top_dst_ips, 'fa-server') +
-            renderSection('Threat Flags SIEM', _flowSiemFacets.threat_flags, 'fa-triangle-exclamation') +
-            renderSection('Stato Azione', _flowSiemFacets.actions, 'fa-shield-halved');
+        facetBox.innerHTML =
+            renderSection('Top Sorgenti IP', _flowSiemFacets.top_src_ips, 'fa-network-wired', 'src_ip') +
+            renderSection('Top Destinazioni IP', _flowSiemFacets.top_dst_ips, 'fa-server', 'dst_ip') +
+            renderSection('Threat Flags SIEM', _flowSiemFacets.threat_flags, 'fa-triangle-exclamation', 'threat_flag') +
+            renderSection('Stato Azione', _flowSiemFacets.actions, 'fa-shield-halved', 'action');
     }
 
-    function applySiemFilter(term) {
+    function applySiemFilter(term, field) {
         const input = document.getElementById('flowSiemQueryInput');
         if (input) {
-            input.value = term;
+            // Il filtro resta visibile e modificabile nella casella di ricerca:
+            // "src_ip:10.0.1.2" e' la stessa sintassi che l'utente puo' digitare.
+            input.value = field ? `${field}:${term}` : term;
             filterSiemEvents();
         }
     }

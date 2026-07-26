@@ -41,6 +41,13 @@ MAX_LIMIT = 500
 # non compariva mai in tabella. Tetto di righe grezze esaminate per richiesta.
 MAX_SCAN = 20000
 
+# Campi filtrabili in modo esatto con la sintassi "campo:valore" nella query.
+# Serve perche' la ricerca libera guarda TUTTI i campi: cliccare un IP fra le
+# sorgenti restituiva anche le righe in cui quell'IP e' la destinazione, e con
+# quelle piu' numerose le righe volute finivano fuori dalla prima pagina.
+_FILTER_FIELDS = ("src_ip", "dst_ip", "action", "threat_flag", "proto",
+                  "device_ip", "tenant")
+
 # Chiavi key=value FortiGate utili al registro. Il correlatore estrae solo
 # srcip/dstip/dstport; qui servono anche porta sorgente, protocollo e byte.
 _KV_RE = re.compile(
@@ -155,6 +162,33 @@ def _to_event(row: dict) -> dict:
     }
 
 
+def _parse_field_query(q: Optional[str]):
+    """"src_ip:10.0.1.2" -> ("src_ip", "10.0.1.2"). Altrimenti (None, None).
+
+    Un prefisso non riconosciuto NON viene interpretato come campo: resta
+    ricerca libera, cosi' scrivere "8.8.8.8:53" continua a funzionare.
+    """
+    if not q or ":" not in q:
+        return None, None
+    key, _, val = q.partition(":")
+    key, val = key.strip().lower(), val.strip()
+    if key in _FILTER_FIELDS and val:
+        return key, val.lower()
+    return None, None
+
+
+def _field_value(event: dict, field: str):
+    """Valore su cui confrontare, nella forma mostrata dalle faccette.
+
+    Per ``action`` le faccette etichettano ogni verdetto di blocco come DENY
+    (il device puo' scrivere 'blocked', 'drop', ...): senza questa
+    normalizzazione cliccare la faccetta DENY non troverebbe quelle righe.
+    """
+    if field == "action":
+        return "DENY" if event["is_deny"] else (event["action"] or "N/D")
+    return event.get(field)
+
+
 @router.get("/events")
 async def get_flow_siem_events(
     q: Optional[str] = Query(None, description="Sottostringa su IP, azione, device, messaggio"),
@@ -169,11 +203,14 @@ async def get_flow_siem_events(
     clause, params = _tenant_filter(current_user)
 
     want_deny = action.strip().upper() == "DENY" if action else None
-    needle = q.lower() if q else None
+    field, value = _parse_field_query(q)
+    needle = None if field else (q.lower() if q else None)
 
     def keep(e: dict) -> bool:
         if want_deny is not None and e["is_deny"] != want_deny:
             return False
+        if field:
+            return str(_field_value(e, field) or "").lower() == value
         if needle is None:
             return True
         return needle in " ".join(

@@ -187,6 +187,13 @@ class TestFlowSiem(unittest.TestCase):
         self.assertTrue(events)
         self.assertTrue(all(e["is_deny"] for e in events))
 
+    def test_action_deny_facet_matches_every_blocking_verdict(self):
+        """La faccetta etichetta DENY sia 'deny' sia 'blocked': il filtro per
+        campo deve usare la stessa etichetta, non il valore grezzo."""
+        c = self._client("adm_siem")
+        events = c.get("/api/flow-siem/events?window=24h&q=action:DENY").json()["events"]
+        self.assertEqual({e["action"] for e in events}, {"DENY", "BLOCKED"})
+
     def test_query_filter_matches_ip(self):
         c = self._client("adm_siem")
         events = c.get("/api/flow-siem/events?window=24h&q=203.0.113.9").json()["events"]
@@ -276,6 +283,35 @@ class TestFlowSiemDeepScan(unittest.TestCase):
         ).json()["events"]
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["src_ip"], self.RARE)
+
+    def test_field_query_separates_source_from_destination(self):
+        """Il difetto segnalato: cliccare un IP fra le sorgenti mostrava le
+        righe in cui quell'IP e' la destinazione. Qui 10.0.1.9 e' destinazione
+        di 801 eventi e sorgente di nessuno."""
+        c = self._client()
+        as_src = c.get(
+            "/api/flow-siem/events?window=24h&limit=100&q=src_ip:10.0.1.9"
+        ).json()["events"]
+        self.assertEqual(as_src, [])
+
+        as_dst = c.get(
+            "/api/flow-siem/events?window=24h&limit=100&q=dst_ip:10.0.1.9"
+        ).json()["events"]
+        self.assertTrue(as_dst)
+        self.assertTrue(all(e["dst_ip"] == "10.0.1.9" for e in as_dst))
+
+        # Ricerca libera: nessun prefisso di campo, guarda ovunque.
+        free = c.get(
+            "/api/flow-siem/events?window=24h&limit=100&q=10.0.1.9"
+        ).json()["events"]
+        self.assertTrue(free)
+
+    def test_unknown_prefix_stays_a_free_text_search(self):
+        c = self._client()
+        events = c.get(
+            f"/api/flow-siem/events?window=24h&limit=10&q={self.RARE}:443"
+        ).json()["events"]
+        self.assertEqual(events, [])   # nessun messaggio contiene "ip:443"
 
     def test_unfiltered_query_still_returns_the_newest_page(self):
         c = self._client()
