@@ -207,8 +207,8 @@
             `;
 
             secItems.forEach(item => {
-                const prereqBadge = item.is_prerequisite ? '<span style="background:var(--danger); color:white; font-size:10px; padding:2px 6px; border-radius:3px; font-weight:bold; margin-left:6px;">PREREQUISITO</span>' : '';
-                const evBadge = item.requires_evidence ? '<span style="background:var(--cta); color:white; font-size:10px; padding:2px 6px; border-radius:3px; font-weight:bold; margin-left:6px;">EVIDENZA RICHIESTA</span>' : '';
+                const prereqBadge = item.is_prerequisite ? '<span style="background:rgba(250, 127, 170, 0.25); color:var(--danger); border:1px solid var(--danger); font-size:10px; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:6px;">PREREQUISITO</span>' : '';
+                const evBadge = item.requires_evidence ? '<span style="background:rgba(169, 159, 242, 0.25); color:var(--primary); border:1px solid var(--primary); font-size:10px; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:6px;">EVIDENZA RICHIESTA</span>' : '';
 
                 html += `
                     <div style="border:1px solid var(--border); border-radius:6px; padding:14px; margin-bottom:14px; background:var(--surface-3);">
