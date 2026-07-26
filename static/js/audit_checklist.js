@@ -214,19 +214,19 @@
                     <div style="border:1px solid var(--border); border-radius:6px; padding:14px; margin-bottom:14px; background:var(--surface-3);">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
                             <div>
-                                <strong style="font-size:14px;">Item ${escapeHtml(item.item_ref)} — ${escapeHtml(item.title)}</strong>
+                                <strong style="font-size:14px; color:var(--text);">Item ${escapeHtml(item.item_ref)} — ${escapeHtml(item.title)}</strong>
                                 ${prereqBadge} ${evBadge}
                             </div>
                             <div>
-                                <select id="status_${item.item_ref}" style="padding:4px 8px; border-radius:4px; border:1px solid var(--border); font-size:12px; font-weight:bold;">
+                                <select id="status_${item.item_ref}" style="padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; font-weight:bold;">
                                     <option value="non_valutato" ${item.status === 'non_valutato' ? 'selected' : ''}>NON VALUTATO</option>
-                                    <option value="conforme" ${item.status === 'conforme' ? 'selected' : ''} style="color:green;">CONFORME</option>
-                                    <option value="parziale" ${item.status === 'parziale' ? 'selected' : ''} style="color:orange;">PARZIALE</option>
-                                    <option value="non_conforme" ${item.status === 'non_conforme' ? 'selected' : ''} style="color:red;">NON CONFORME</option>
-                                    <option value="da_verificare" ${item.status === 'da_verificare' ? 'selected' : ''} style="color:blue;">DA VERIFICARE</option>
+                                    <option value="conforme" ${item.status === 'conforme' ? 'selected' : ''} style="color:var(--success);">CONFORME</option>
+                                    <option value="parziale" ${item.status === 'parziale' ? 'selected' : ''} style="color:var(--warning);">PARZIALE</option>
+                                    <option value="non_conforme" ${item.status === 'non_conforme' ? 'selected' : ''} style="color:var(--danger);">NON CONFORME</option>
+                                    <option value="da_verificare" ${item.status === 'da_verificare' ? 'selected' : ''} style="color:#60a5fa;">DA VERIFICARE</option>
                                     <option value="non_applicabile" ${item.status === 'non_applicabile' ? 'selected' : ''}>NON APPLICABILE</option>
                                 </select>
-                                <select id="sev_${item.item_ref}" style="padding:4px 8px; border-radius:4px; border:1px solid var(--border); font-size:12px;">
+                                <select id="sev_${item.item_ref}" style="padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                                     <option value="critica" ${item.severity === 'critica' ? 'selected' : ''}>Critica</option>
                                     <option value="alta" ${item.severity === 'alta' ? 'selected' : ''}>Alta</option>
                                     <option value="media" ${item.severity === 'media' ? 'selected' : ''}>Media</option>
@@ -235,18 +235,18 @@
                                 </select>
                             </div>
                         </div>
-                        <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; background:var(--surface); padding:8px; border-radius:4px; border-left:3px solid var(--primary);">
-                            <strong>Perché è importante:</strong> ${escapeHtml(item.guidance_why || '')}<br>
-                            <strong>Cosa cercare:</strong> ${escapeHtml(item.guidance_good || '')}
+                        <div style="font-size:13px; color:var(--text); line-height:1.5; margin-bottom:12px; background:var(--surface-2); padding:10px 14px; border-radius:6px; border-left:3px solid var(--primary);">
+                            <strong style="color:var(--primary);">Perché è importante:</strong> ${escapeHtml(item.guidance_why || '')}<br>
+                            <strong style="color:var(--primary);">Cosa cercare:</strong> ${escapeHtml(item.guidance_good || '')}
                         </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                             <div>
-                                <label style="display:block; font-size:11px; font-weight:bold; margin-bottom:4px;">Rilievo / Esito dell'audit:</label>
-                                <textarea id="finding_${item.item_ref}" rows="2" style="width:100%; font-size:12px; padding:6px; border-radius:4px; border:1px solid var(--border); background:var(--surface);" placeholder="Descrivi il riscontro ottenuto...">${escapeHtml(item.finding_text || '')}</textarea>
+                                <label style="display:block; font-size:11px; font-weight:bold; margin-bottom:4px; color:var(--text-muted);">Rilievo / Esito dell'audit:</label>
+                                <textarea id="finding_${item.item_ref}" rows="3" style="width:100%; font-size:13px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--font-main);" placeholder="Descrivi il riscontro ottenuto...">${escapeHtml(item.finding_text || '')}</textarea>
                             </div>
                             <div>
-                                <label style="display:block; font-size:11px; font-weight:bold; margin-bottom:4px;">Raccomandazione per la relazione:</label>
-                                <textarea id="recom_${item.item_ref}" rows="2" style="width:100%; font-size:12px; padding:6px; border-radius:4px; border:1px solid var(--border); background:var(--surface);" placeholder="Azione correttiva consigliata...">${escapeHtml(item.recommendation_text || '')}</textarea>
+                                <label style="display:block; font-size:11px; font-weight:bold; margin-bottom:4px; color:var(--text-muted);">Raccomandazione per la relazione:</label>
+                                <textarea id="recom_${item.item_ref}" rows="3" style="width:100%; font-size:13px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--font-main);" placeholder="Azione correttiva consigliata...">${escapeHtml(item.recommendation_text || '')}</textarea>
                             </div>
                         </div>
                         <div style="display:flex; justify-content:flex-end;">
