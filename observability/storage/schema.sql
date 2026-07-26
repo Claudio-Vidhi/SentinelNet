@@ -75,3 +75,14 @@ CREATE TABLE IF NOT EXISTS quarantined_exporters (
     last_seen    INTEGER,
     packet_count INTEGER NOT NULL DEFAULT 0
 );
+
+-- 6. ALLERTE SIEM SOPPRESSE (Flow SIEM): riferimento a syslog_events.id.
+-- Prima la soppressione era un no-op che rispondeva {"suppressed": true}
+-- senza scrivere nulla: l'allerta ricompariva al refresh successivo.
+CREATE TABLE IF NOT EXISTS siem_suppressions (
+    event_id      INTEGER PRIMARY KEY,
+    ts            INTEGER NOT NULL,
+    tenant        TEXT,
+    reason        TEXT,
+    suppressed_by TEXT
+);

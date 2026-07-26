@@ -75,16 +75,29 @@
         if (_streamTimer) clearInterval(_streamTimer);
         _streamTimer = setInterval(async () => {
             if (!_isStreaming || !document.getElementById('tab-flow-siem')?.classList.contains('active')) return;
-            
+
+            // Con un dettaglio aperto NON si aggiorna la tabella: il refresh la
+            // ricostruisce e sposta la riga che l'utente sta leggendo. Lo
+            // streaming riprende alla chiusura del dettaglio.
+            if (_selectedEventId !== null && _selectedEventId !== undefined) return;
+
             const windowVal = document.getElementById('flowSiemWindow') ? document.getElementById('flowSiemWindow').value : '24h';
             const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
-            
+
             try {
                 const res = await apiFetch(`/api/flow-siem/events?window=${windowVal}&limit=20${qParam}`);
                 if (res && res.ok) {
                     const data = await res.json();
                     if (data.events && data.events.length) {
-                        _flowSiemData = data.events.concat(_flowSiemData).slice(0, 150);
+                        // Deduplica per id. Il polling richiede sempre gli
+                        // ultimi 20 eventi, quindi senza questo gli stessi
+                        // eventi venivano riaccodati ogni 5s: la tabella si
+                        // riempiva di duplicati e un id selezionato compariva
+                        // piu' volte, aprendo piu' dettagli identici.
+                        const seen = new Set(_flowSiemData.map(e => e.id));
+                        const fresh = data.events.filter(e => !seen.has(e.id));
+                        if (!fresh.length) return;
+                        _flowSiemData = fresh.concat(_flowSiemData).slice(0, 150);
                         renderSiemHistogram();
                         renderSiemTable();
                     }
@@ -125,10 +138,23 @@
         const height = canvas.height = 100;
         ctx.clearRect(0, 0, width, height);
 
-        const buckets = _flowSiemHistogram.length ? _flowSiemHistogram : Array.from({length:30}, (_,i)=>({count:20+i}));
+        // Il fallback precedente disegnava una rampa finta (count: 20+i) quando
+        // non c'erano dati: un database vuoto sembrava traffico reale. Ora si
+        // dichiara l'assenza di dati.
+        const buckets = _flowSiemHistogram;
+        const style = getComputedStyle(document.body);
+        if (!buckets.length) {
+            ctx.fillStyle = style.getPropertyValue('--text-muted').trim() || '#888';
+            ctx.font = `12px ${style.getPropertyValue('--font-main').trim() || 'sans-serif'}`;
+            ctx.fillText(currentLang === 'en'
+                ? 'No events in the selected window.'
+                : 'Nessun evento nella finestra selezionata.', 20, height / 2);
+            return;
+        }
+
         const bars = buckets.length;
         const barWidth = (width - 40) / bars;
-        const maxVal = Math.max(...buckets.map(b => b.count || 10), 1);
+        const maxVal = Math.max(...buckets.map(b => b.count || 0), 1);
 
         for (let i = 0; i < bars; i++) {
             const b = buckets[i];
@@ -136,8 +162,8 @@
             const x = 20 + i * barWidth;
             const h = (val / maxVal) * (height - 28);
             const y = height - 20 - h;
-            
-            const isDeny = b.deny_count > 0;
+
+            const isDeny = (b.deny_count || 0) > 0;
             ctx.fillStyle = isDeny ? 'rgba(239, 68, 68, 0.6)' : 'rgba(106, 95, 193, 0.5)';
             ctx.fillRect(x + 1, y, barWidth - 2, h);
         }
@@ -197,19 +223,34 @@
             return;
         }
 
+        // La tabella viene ricostruita interamente: senza salvare e ripristinare
+        // lo scroll del contenitore, ogni refresh riporta l'utente in cima.
+        const scroller = tbody.closest('.table-container');
+        const prevScroll = scroller ? scroller.scrollTop : 0;
+
+        // Un campo assente nel messaggio syslog resta vuoto: si mostra un
+        // trattino, non un valore inventato.
+        const dash = '<span style="color:var(--text-muted);">—</span>';
+        const endpoint = (ip, port) => ip
+            ? `<strong>${escapeHtml(ip)}</strong>${port ? ':' + escapeHtml(String(port)) : ''}`
+            : dash;
+
         tbody.innerHTML = _flowSiemData.map(e => {
-            const isDeny = e.action === 'DENY';
+            const isDeny = !!e.is_deny;
             const actionCol = isDeny ? 'var(--danger)' : 'var(--success)';
             const timeStr = e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : '—';
             const isSelected = _selectedEventId === e.id;
+            const volume = (e.bytes === null || e.bytes === undefined)
+                ? dash
+                : `${(e.bytes / 1024).toFixed(1)} KB`;
 
-            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer; ${isSelected ? 'background:var(--surface-3);' : ''}" onclick="toggleEventDrawer('${escapeHtml(e.id)}')">
+            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer; ${isSelected ? 'background:var(--surface-3);' : ''}" onclick="toggleEventDrawer(${JSON.stringify(e.id)})">
                 <td style="padding:6px 8px; font-family:var(--font-code); color:var(--text-muted);">${timeStr}</td>
-                <td style="padding:6px 8px; font-family:var(--font-code);"><strong style="color:var(--primary);">${escapeHtml(e.src_ip)}</strong>:${e.src_port}</td>
-                <td style="padding:6px 8px; font-family:var(--font-code);"><strong>${escapeHtml(e.dst_ip)}</strong>:${e.dst_port}</td>
-                <td style="padding:6px 8px;"><span class="badge">${escapeHtml(e.proto)}</span></td>
-                <td style="padding:6px 8px; font-weight:700; color:${actionCol};">${escapeHtml(e.action)}</td>
-                <td style="padding:6px 8px; font-family:var(--font-code);">${(e.bytes / 1024).toFixed(1)} KB</td>
+                <td style="padding:6px 8px; font-family:var(--font-code); color:var(--primary);">${endpoint(e.src_ip, e.src_port)}</td>
+                <td style="padding:6px 8px; font-family:var(--font-code);">${endpoint(e.dst_ip, e.dst_port)}</td>
+                <td style="padding:6px 8px;">${e.proto ? `<span class="badge">${escapeHtml(e.proto)}</span>` : dash}</td>
+                <td style="padding:6px 8px; font-weight:700; color:${actionCol};">${escapeHtml(e.action || 'N/D')}</td>
+                <td style="padding:6px 8px; font-family:var(--font-code);">${volume}</td>
                 <td style="padding:6px 8px;"><span class="badge" style="background:${isDeny ? 'rgba(239, 68, 68, 0.15)' : 'var(--surface-3)'}; color:${isDeny ? 'var(--danger)' : 'var(--text)'};">${escapeHtml(e.threat_flag)}</span></td>
             </tr>
             ${isSelected ? `<tr style="background:var(--surface-2);"><td colspan="7" style="padding:12px;">
@@ -222,10 +263,12 @@
                     </div>` : ''}
                 </div>
                 <div style="display:flex; justify-content:flex-end;">
-                    <button class="btn btn-sm btn-secondary" onclick="suppressSiemAlert('${escapeHtml(e.id)}', event)"><i class="fa-solid fa-bell-slash"></i> Sopprimi Allerta Threat</button>
+                    <button class="btn btn-sm btn-secondary" onclick="suppressSiemAlert(${JSON.stringify(e.id)}, event)"><i class="fa-solid fa-bell-slash"></i> Sopprimi Allerta Threat</button>
                 </div>
             </td></tr>` : ''}`;
         }).join('');
+
+        if (scroller) scroller.scrollTop = prevScroll;
     }
 
     function toggleEventDrawer(id) {
@@ -242,11 +285,25 @@
                 body: JSON.stringify({ event_id: id })
             });
             if (res && res.ok) {
-                alert(`Allerta Threat per evento '${id}' soppressa con successo.`);
+                // La soppressione ora e' persistita e l'evento viene escluso
+                // dalle query successive, quindi il dettaglio aperto va chiuso:
+                // punterebbe a una riga che non esiste piu'.
+                _selectedEventId = null;
+                showToast(currentLang === 'en'
+                    ? `Alert for event ${id} suppressed.`
+                    : `Allerta per l'evento ${id} soppressa.`, 'info');
                 loadFlowSiemTab();
+            } else {
+                let detail = '';
+                try { const d = await res.json(); detail = d && d.detail; } catch (e2) {}
+                showToast(detail || (currentLang === 'en'
+                    ? 'Could not suppress the alert.'
+                    : 'Impossibile sopprimere l\'allerta.'), 'error');
             }
         } catch (e) {
-            alert('Errore durante la soppressione dell\'allerta.');
+            showToast(currentLang === 'en'
+                ? 'Error while suppressing the alert.'
+                : 'Errore durante la soppressione dell\'allerta.', 'error');
         }
     }
 
