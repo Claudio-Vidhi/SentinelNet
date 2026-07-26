@@ -92,3 +92,4 @@ data/redundancy.db-wal
 data/agent_jobs.db
 data/agent_jobs.db-shm
 data/agent_jobs.db-wal
+checklist_x_c.docx
