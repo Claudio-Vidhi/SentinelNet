@@ -206,9 +206,7 @@
                 <td style="padding:8px;"><span class="badge">${escapeHtml(r.category)}</span></td>
                 <td style="padding:8px;">${statusBadge}</td>
                 <td style="padding:8px;">
-                    <code style="font-size:11px; color:var(--primary); background:var(--surface-2); padding:3px 6px; border-radius:4px; display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                        ${escapeHtml(r.remediation)}
-                    </code>
+                    <code title="${escapeHtml(r.remediation)}" style="font-size:11px; color:var(--primary); background:var(--surface-2); padding:3px 6px; border-radius:4px; display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:middle;">${escapeHtml(r.remediation)}</code>
                 </td>
             </tr>
             ${ev.length ? `<tr id="auditEv-${escapeHtml(evId)}" style="display:none;">

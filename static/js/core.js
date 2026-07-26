@@ -93,12 +93,18 @@ function makeTableSortable(table) {
         if (th.dataset.noSort === '1') return;
         th.style.cursor = 'pointer';
         th.style.userSelect = 'none';
+        // Le intestazioni sono etichette brevi: senza nowrap la freccia di
+        // ordinamento veniva spinta da sola sulla riga sotto, perche' lo
+        // spazio davanti a ' ⇅' e' un punto di interruzione. Lo spazio e'
+        // sostituito da un margine, cosi' non resta alcun punto di rottura.
+        th.style.whiteSpace = 'nowrap';
         if (!th.querySelector('.sort-ind')) {
             const s = document.createElement('span');
             s.className = 'sort-ind';
-            s.textContent = ' ⇅';
+            s.textContent = '⇅';
             s.style.opacity = '0.35';
             s.style.fontSize = '10px';
+            s.style.marginLeft = '4px';
             th.appendChild(s);
         }
         th.addEventListener('click', () => sortTableByColumn(table, idx, th));
