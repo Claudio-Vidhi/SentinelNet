@@ -89,11 +89,11 @@ def get_fortigate_preview_settings(current_user = Depends(require_admin)):
 
 @router.post("/api/settings/fortigate-preview")
 def set_fortigate_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"fortigate_preview_enabled": bool(payload.enabled)})
+    save_app_settings({"fortigate_preview_enabled": payload.enabled})
     log_audit(f"Tab FortiGate LIVE (preview) "
               f"{'attivata' if payload.enabled else 'disattivata'} "
               f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "fortigate_preview": bool(payload.enabled)}
+    return {"status": "success", "fortigate_preview": payload.enabled}
 
 @router.get("/api/settings/netsec-audit")
 def get_netsec_audit_settings(current_user = Depends(require_admin)):
@@ -102,11 +102,11 @@ def get_netsec_audit_settings(current_user = Depends(require_admin)):
 
 @router.post("/api/settings/netsec-audit")
 def set_netsec_audit_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"netsec_audit_preview_enabled": bool(payload.enabled)})
+    save_app_settings({"netsec_audit_preview_enabled": payload.enabled})
     log_audit(f"Tab NetSec Audit (preview) "
               f"{'attivata' if payload.enabled else 'disattivata'} "
               f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "netsec_audit_preview": bool(payload.enabled)}
+    return {"status": "success", "netsec_audit_preview": payload.enabled}
 
 @router.get("/api/settings/flow-siem-preview")
 def get_flow_siem_preview_settings(current_user = Depends(require_admin)):
@@ -115,11 +115,11 @@ def get_flow_siem_preview_settings(current_user = Depends(require_admin)):
 
 @router.post("/api/settings/flow-siem-preview")
 def set_flow_siem_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"flow_siem_preview_enabled": bool(payload.enabled)})
+    save_app_settings({"flow_siem_preview_enabled": payload.enabled})
     log_audit(f"Tab Flow SIEM (preview) "
               f"{'attivata' if payload.enabled else 'disattivata'} "
               f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "flow_siem_preview": bool(payload.enabled)}
+    return {"status": "success", "flow_siem_preview": payload.enabled}
 
 @router.get("/api/settings/audit-checklist")
 def get_audit_checklist_preview_settings(current_user = Depends(require_admin)):
@@ -128,11 +128,11 @@ def get_audit_checklist_preview_settings(current_user = Depends(require_admin)):
 
 @router.post("/api/settings/audit-checklist")
 def set_audit_checklist_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"audit_checklist_preview_enabled": bool(payload.enabled)})
+    save_app_settings({"audit_checklist_preview_enabled": payload.enabled})
     log_audit(f"Tab Checklist Audit Firewall (preview) "
               f"{'attivata' if payload.enabled else 'disattivata'} "
               f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "audit_checklist_preview": bool(payload.enabled)}
+    return {"status": "success", "audit_checklist_preview": payload.enabled}
 
 
 @router.get("/api/settings/app")
