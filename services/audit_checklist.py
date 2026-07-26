@@ -639,7 +639,7 @@ def seed_default_template() -> int:
             )
         conn.commit()
         logger.info("Seeded default audit template v1 with %d items", len(DEFAULT_CHECKLIST_ITEMS))
-        return int(template_id)
+        return template_id
     finally:
         conn.close()
 
