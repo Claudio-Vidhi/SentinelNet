@@ -488,7 +488,56 @@ ${partialBanner}
         }
     }
 
+    // Requisiti dichiarati dal motore, non una copia scritta a mano nella UI:
+    // se una regola cambia titolo, severita' o rimedio, questo elenco segue.
+    let _benchmarkCatalog = null;
+
+    async function renderBenchmarkRequirements() {
+        const details = document.getElementById('auditBenchmarkReqs');
+        const body = document.getElementById('auditBenchmarkReqsBody');
+        if (!body || !details || !details.open) return;
+
+        const key = document.getElementById('auditBenchmarkSelect').value;
+        if (!_benchmarkCatalog) {
+            body.innerHTML = '<div style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Caricamento requisiti...</div>';
+            try {
+                const res = await apiFetch('/api/netsec-audit/benchmarks');
+                if (!res || !res.ok) {
+                    body.innerHTML = '<div style="font-size:12px; color:var(--danger);">Impossibile caricare i requisiti.</div>';
+                    return;
+                }
+                _benchmarkCatalog = await res.json();
+            } catch (e) {
+                body.innerHTML = '<div style="font-size:12px; color:var(--danger);">Errore di rete nel caricamento dei requisiti.</div>';
+                return;
+            }
+        }
+
+        const reqs = _benchmarkCatalog[key] || [];
+        const sevColor = { CRITICAL: 'var(--danger)', HIGH: 'var(--danger)', MEDIUM: 'var(--warning)', LOW: 'var(--text-muted)' };
+        body.innerHTML = `
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${reqs.length} controlli eseguiti sulla configurazione analizzata.</div>
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                ${reqs.map(r => `
+                    <tr style="border-top:1px solid var(--border);">
+                        <td style="padding:8px 10px 8px 0; vertical-align:top; white-space:nowrap; font-family:ui-monospace,monospace;">${escapeHtml(r.id)}</td>
+                        <td style="padding:8px 10px 8px 0; vertical-align:top;">
+                            <strong>${escapeHtml(r.title)}</strong>
+                            <div style="color:var(--text-muted); margin-top:2px;">Verifica: ${escapeHtml(r.checks)}</div>
+                            <div style="color:var(--text-muted); margin-top:2px;">Rimedio: ${escapeHtml(r.remediation)}</div>
+                        </td>
+                        <td style="padding:8px 0; vertical-align:top; text-align:right; white-space:nowrap;">
+                            <span style="color:${sevColor[r.severity] || 'var(--text-muted)'}; font-weight:700; font-size:11px;">${escapeHtml(r.severity)}</span>
+                            <div style="color:var(--text-muted); font-size:11px;">${escapeHtml(r.category)}</div>
+                        </td>
+                    </tr>
+                `).join('')}
+            </table>
+        `;
+    }
+
     // Expose functions globally
+    window.renderBenchmarkRequirements = renderBenchmarkRequirements;
     window.loadNetSecAuditTab = loadNetSecAuditTab;
     window.applyNetSecAuditGating = applyNetSecAuditGating;
     window.setNetSecAuditPreview = setNetSecAuditPreview;

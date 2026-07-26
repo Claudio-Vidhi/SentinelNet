@@ -2,9 +2,10 @@
 """FastAPI Router per la gestione della Checklist Audit Manutenzione Firewall."""
 
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 
+from routers.deps import require_admin
 from services import audit_checklist
 
 router = APIRouter(prefix="/api/audit-checklist", tags=["Audit Checklist"])
@@ -59,6 +60,60 @@ def get_template(template_id: int) -> Dict[str, Any]:
     if not tpl:
         raise HTTPException(status_code=404, detail="Template non trovato")
     return tpl
+
+
+class TemplateItemRequest(BaseModel):
+    ref: Optional[str] = None
+    section_no: Optional[int] = None
+    section_title: Optional[str] = None
+    title: Optional[str] = None
+    guidance_why: Optional[str] = None
+    guidance_good: Optional[str] = None
+    guidance_how: Optional[str] = None
+    check_kind: Optional[str] = None
+    severity_default: Optional[str] = None
+    is_prerequisite: Optional[bool] = None
+    requires_evidence: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+@router.post("/templates/{template_id}/items", status_code=201)
+def create_template_item(
+    template_id: int, req: TemplateItemRequest, current_user=Depends(require_admin)
+) -> Dict[str, Any]:
+    """Aggiunge una domanda al template di audit (solo amministratori)."""
+    fields = req.model_dump(exclude_none=True)
+    ref = fields.pop("ref", "")
+    try:
+        return audit_checklist.create_template_item(template_id, ref, **fields)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/templates/{template_id}/items/{ref}")
+def update_template_item(
+    template_id: int, ref: str, req: TemplateItemRequest, current_user=Depends(require_admin)
+) -> Dict[str, Any]:
+    """Modifica una domanda del template di audit (solo amministratori)."""
+    fields = req.model_dump(exclude_none=True)
+    fields.pop("ref", None)
+    try:
+        return audit_checklist.update_template_item(template_id, ref, **fields)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/templates/{template_id}/items/{ref}")
+def delete_template_item(
+    template_id: int, ref: str, current_user=Depends(require_admin)
+) -> Dict[str, Any]:
+    """Elimina una domanda del template, se non e' gia' stata valutata."""
+    try:
+        return audit_checklist.delete_template_item(template_id, ref)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/engagements")

@@ -88,6 +88,29 @@ class NetSecAuditSchema(BaseModel):
     benchmark: str = "cis"  # 'cis' | 'nist' | 'pci'
 
 
+@router.get("/api/netsec-audit/benchmarks")
+def netsec_audit_benchmarks(current_user = Depends(get_current_user)):
+    """Requisiti verificati da ciascun benchmark, senza eseguire alcuna scansione."""
+    from services import netsec_audit
+    return {
+        key: [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "severity": r["severity"],
+                "category": r["category"],
+                # Docstring della regola: descrive cosa viene cercato nella
+                # configurazione. Unica fonte, quindi non puo' divergere dal
+                # controllo realmente eseguito.
+                "checks": (r["check"].__doc__ or "").strip().split("\n")[0],
+                "remediation": r["remediation"],
+            }
+            for r in rules
+        ]
+        for key, rules in netsec_audit.BENCHMARKS.items()
+    }
+
+
 @router.post("/api/netsec-audit/scan")
 def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_current_user)):
     """Valutazione di compliance di sicurezza (CIS, NIST, PCI-DSS) su testo o dispositivo."""

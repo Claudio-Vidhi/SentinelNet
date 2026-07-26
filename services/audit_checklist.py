@@ -21,9 +21,6 @@ from core import db
 
 logger = logging.getLogger("sentinelnet.audit_checklist")
 
-# Item con prerequisiti vincolanti per la relazione finale
-PREREQUISITE_REFS = {"1.3", "1.6", "1.7"}
-
 # Vocabolario stati e gravita'
 VALID_STATUSES = {
     "non_valutato",
@@ -685,6 +682,149 @@ def get_template(template_id: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+# --- CRUD ITEM DI TEMPLATE (amministratori) ---------------------------------
+
+# Campi di un item modificabili dall'amministratore. 'ref' non c'e': e' la
+# chiave con cui gli engagement_items sono agganciati al template (JOIN in
+# get_engagement) e rinominarla scollegherebbe le valutazioni gia' raccolte.
+_EDITABLE_ITEM_FIELDS = (
+    "section_no",
+    "section_title",
+    "title",
+    "guidance_why",
+    "guidance_good",
+    "guidance_how",
+    "check_kind",
+    "severity_default",
+    "is_prerequisite",
+    "requires_evidence",
+    "sort_order",
+)
+
+
+def create_template_item(template_id: int, ref: str, **fields: Any) -> Dict[str, Any]:
+    """Aggiunge una domanda al template e la propaga agli engagement esistenti."""
+    ref = (ref or "").strip()
+    if not ref:
+        raise ValueError("Il riferimento (ref) dell'item e' obbligatorio")
+    severity = fields.get("severity_default") or "media"
+    if severity not in VALID_SEVERITIES:
+        raise ValueError(f"Gravita' '{severity}' non valida")
+
+    conn = db.get_observability_connection()
+    try:
+        if not conn.execute("SELECT 1 FROM audit_templates WHERE id = ?", (template_id,)).fetchone():
+            raise ValueError(f"Template audit {template_id} non trovato")
+        if conn.execute(
+            "SELECT 1 FROM audit_template_items WHERE template_id = ? AND ref = ?",
+            (template_id, ref),
+        ).fetchone():
+            raise ValueError(f"Esiste gia' un item con riferimento '{ref}'")
+
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO audit_template_items
+               (template_id, ref, section_no, section_title, title, guidance_why, guidance_good,
+                guidance_how, thresholds_json, check_kind, severity_default, is_prerequisite,
+                requires_evidence, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)""",
+            (
+                template_id,
+                ref,
+                int(fields.get("section_no") or 1),
+                fields.get("section_title") or "",
+                fields.get("title") or "",
+                fields.get("guidance_why"),
+                fields.get("guidance_good"),
+                fields.get("guidance_how"),
+                fields.get("check_kind") or "manual",
+                severity,
+                1 if fields.get("is_prerequisite") else 0,
+                1 if fields.get("requires_evidence") else 0,
+                int(fields.get("sort_order") or 0),
+            ),
+        )
+        # Senza questa riga la nuova domanda resterebbe invisibile negli audit
+        # gia' aperti: get_engagement parte da audit_engagement_items.
+        cursor.execute(
+            """INSERT INTO audit_engagement_items
+               (engagement_id, item_ref, status, severity, ai_assisted)
+               SELECT id, ?, 'non_valutato', ?, 0 FROM audit_engagements WHERE template_id = ?""",
+            (ref, severity, template_id),
+        )
+        conn.commit()
+        return {"template_id": template_id, "ref": ref, "engagements_updated": cursor.rowcount}
+    finally:
+        conn.close()
+
+
+def update_template_item(template_id: int, ref: str, **fields: Any) -> Dict[str, Any]:
+    """Modifica i campi di una domanda del template (vale per tutti gli audit)."""
+    updates = {k: v for k, v in fields.items() if k in _EDITABLE_ITEM_FIELDS and v is not None}
+    if not updates:
+        raise ValueError("Nessun campo da aggiornare")
+    if "severity_default" in updates and updates["severity_default"] not in VALID_SEVERITIES:
+        raise ValueError(f"Gravita' '{updates['severity_default']}' non valida")
+    for flag in ("is_prerequisite", "requires_evidence"):
+        if flag in updates:
+            updates[flag] = 1 if updates[flag] else 0
+
+    conn = db.get_observability_connection()
+    try:
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        cursor = conn.execute(
+            f"UPDATE audit_template_items SET {set_clause} WHERE template_id = ? AND ref = ?",
+            (*updates.values(), template_id, ref),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError(f"Item '{ref}' non trovato nel template {template_id}")
+        conn.commit()
+        return {"template_id": template_id, "ref": ref, "updated_fields": list(updates)}
+    finally:
+        conn.close()
+
+
+def delete_template_item(template_id: int, ref: str) -> Dict[str, Any]:
+    """Elimina una domanda dal template, se nessun audit l'ha gia' valutata."""
+    conn = db.get_observability_connection()
+    try:
+        if not conn.execute(
+            "SELECT 1 FROM audit_template_items WHERE template_id = ? AND ref = ?",
+            (template_id, ref),
+        ).fetchone():
+            raise ValueError(f"Item '{ref}' non trovato nel template {template_id}")
+
+        assessed = conn.execute(
+            """SELECT e.customer_name
+               FROM audit_engagement_items i
+               JOIN audit_engagements e ON e.id = i.engagement_id
+               WHERE e.template_id = ? AND i.item_ref = ? AND i.status != 'non_valutato'""",
+            (template_id, ref),
+        ).fetchall()
+        if assessed:
+            clienti = ", ".join(sorted({r["customer_name"] for r in assessed}))
+            raise PermissionError(
+                f"Item '{ref}' gia' valutato negli audit di: {clienti}. "
+                "Eliminarlo cancellerebbe valutazioni gia' raccolte."
+            )
+
+        cursor = conn.cursor()
+        cursor.execute(
+            """DELETE FROM audit_engagement_items
+               WHERE item_ref = ? AND engagement_id IN
+                     (SELECT id FROM audit_engagements WHERE template_id = ?)""",
+            (ref, template_id),
+        )
+        cursor.execute(
+            "DELETE FROM audit_template_items WHERE template_id = ? AND ref = ?",
+            (template_id, ref),
+        )
+        conn.commit()
+        return {"template_id": template_id, "ref": ref, "deleted": True}
+    finally:
+        conn.close()
+
+
 # --- CRUD ENGAGEMENTS -------------------------------------------------------
 
 def create_engagement(
@@ -1011,10 +1151,12 @@ def generate_audit_relazione(engagement_id: int) -> str:
     if not eng:
         raise ValueError(f"Engagement {engagement_id} non trovato")
 
-    # Controlla se i prerequisiti (1.3, 1.6, 1.7) sono non conformi o da verificare
+    # Controlla se i prerequisiti sono non conformi o da verificare. Il flag e'
+    # letto dal template (modificabile dagli amministratori), non da una lista
+    # di ref fissa che ignorerebbe gli item aggiunti o modificati.
     unmet_prerequisites = []
     for item in eng["items"]:
-        if item["item_ref"] in PREREQUISITE_REFS:
+        if item["is_prerequisite"]:
             if item["status"] in {"non_conforme", "da_verificare"}:
                 unmet_prerequisites.append(item)
 
