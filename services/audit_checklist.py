@@ -1136,6 +1136,12 @@ def generate_audit_relazione(engagement_id: int) -> str:
     </style>
 </head>
 <body>
+    <div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif;">
+        <span style="font-size: 14px; font-weight: bold;">SentinelNet — Anteprima Relazione Audit</span>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Stampa / Salva come PDF</button>
+        </div>
+    </div>
     <h1>Relazione Audit Manutenzione Firewall</h1>
     <div class="meta-box">
         <p><strong>Cliente:</strong> {eng['customer_name']} | <strong>Stato Audit:</strong> {eng['status'].upper()}</p>
