@@ -20,6 +20,18 @@
                 : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
             const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
             const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
+            // Solo una sede con agente puo' essere offline: il central poll non
+            // ha un processo remoto che riporta heartbeat. Soglia legata
+            // all'intervallo configurato dell'agente, non fissa: con un
+            // intervallo lungo un agente sano risulterebbe sempre offline.
+            let statusCell = '<span style="color:var(--text-muted);">—</span>';
+            if (s.mode === 'agent') {
+                const staleAfter = Math.max(120, (s.interval || 60) * 2);
+                const online = s.last_seen && (Date.now() / 1000 - s.last_seen) < staleAfter;
+                statusCell = online
+                    ? `<span class="status ok"><span class="led led-success"></span>${L.lblAgentOnline}</span>`
+                    : `<span class="status bad"><span class="led led-danger"></span>${L.lblAgentOffline}</span>`;
+            }
             let actions = '';
             if (s.mode === 'agent') {
                 actions += `<button data-s="${escapeHtml(s.id)}" onclick="openAgentControlModal(this.dataset.s)" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
@@ -34,6 +46,7 @@
                 <td><strong>${escapeHtml(s.id)}</strong></td>
                 <td>${escapeHtml(s.name)}</td>
                 <td>${modeBadge}</td>
+                <td>${statusCell}</td>
                 <td style="font-size:12px;">${subnets}</td>
                 <td style="font-size:12px; color:var(--text-muted);">${last}</td>
                 <td style="white-space:nowrap;">${actions}</td>

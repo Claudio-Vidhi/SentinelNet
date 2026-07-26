@@ -1677,9 +1677,9 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn(': `<span class="chip">${s}</span>`', html)
         self.assertNotIn('<span class="status ok">${s}</span>', html)
         self.assertIn('`<span class="status ok">${escapeHtml(st)}</span>`', html)
-        # Preview badge in the sidebar survives (Task 2).
+        # Flussi Live non e' piu' in preview: la voce di menu non porta badge.
         nav = html[html.index("switchTab('tab-flows'"):]
-        self.assertIn('<span class="preview-badge">preview</span>', nav[:400])
+        self.assertNotIn('<span class="preview-badge">preview</span>', nav[:400])
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
