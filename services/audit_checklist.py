@@ -1134,7 +1134,7 @@ def generate_audit_relazione(engagement_id: int) -> str:
             div {{ page-break-inside: avoid; }}
         }}
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
     <script>
         async function downloadPdf() {{
             const btn = document.getElementById('btnPdf');
