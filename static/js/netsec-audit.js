@@ -410,18 +410,31 @@ th{background:#f6f6f6;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
-    function downloadPdf() {
-        const element = document.body.cloneNode(true);
-        const noPrints = element.querySelectorAll('.no-print');
-        noPrints.forEach(el => el.remove());
+    async function downloadPdf() {
+        const btn = document.getElementById('btnPdfNetsec');
+        if (btn) btn.textContent = 'Generazione PDF...';
+        const noPrints = document.querySelectorAll('.no-print');
+        noPrints.forEach(el => el.style.display = 'none');
         const opt = {
-            margin: 10,
+            margin: [10, 10, 10, 10],
             filename: 'audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.pdf',
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
-        html2pdf().set(opt).from(element).save();
+        try {
+            if (typeof html2pdf !== 'undefined') {
+                await html2pdf().set(opt).from(document.body).save();
+            } else {
+                window.print();
+            }
+        } catch (e) {
+            console.error('PDF error:', e);
+            window.print();
+        } finally {
+            noPrints.forEach(el => el.style.display = '');
+            if (btn) btn.textContent = 'Scarica PDF';
+        }
     }
     function downloadHtml() {
         const clone = document.body.cloneNode(true);
@@ -438,7 +451,7 @@ th{background:#f6f6f6;}
 <div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif;">
     <span style="font-size: 14px; font-weight: bold;">SentinelNet — Anteprima Report Compliance</span>
     <div style="display: flex; gap: 10px;">
-        <button onclick="downloadPdf()" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Scarica PDF</button>
+        <button id="btnPdfNetsec" onclick="downloadPdf()" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Scarica PDF</button>
         <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Stampa</button>
         <button onclick="downloadHtml()" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Scarica HTML</button>
     </div>
