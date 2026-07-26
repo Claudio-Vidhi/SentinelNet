@@ -262,6 +262,10 @@ def check_inbound_admin_ports(cfg: ParsedConfig) -> RuleOutcome:
             UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
                      "valutare l'esposizione delle porte amministrative.")
     wan = {w.lower() for w in wan_interfaces(cfg)}
+    if not wan:
+        return RuleOutcome(
+            UNKNOWN, "Nessuna interfaccia WAN identificabile: impossibile "
+                     "valutare l'esposizione delle porte amministrative.")
     admin_services = _admin_service_names(cfg)
     ev: List[Evidence] = []
     for pid in sorted(policies, key=lambda k: (len(k), k)):
