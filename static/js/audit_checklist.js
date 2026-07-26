@@ -127,6 +127,7 @@
         try {
             const res = await apiFetch("/api/audit-checklist/engagements", {
                 method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     customer_name: customerName,
                     onsite_or_remote: modality,

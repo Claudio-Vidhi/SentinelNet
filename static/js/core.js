@@ -166,6 +166,9 @@ function getAuthHeaders() {
 async function apiFetch(url, options = {}) {
     options.headers = options.headers || {};
     Object.assign(options.headers, getAuthHeaders());
+    if (options.body && typeof options.body === 'string' && !options.headers['Content-Type'] && !options.headers['content-type']) {
+        options.headers['Content-Type'] = 'application/json';
+    }
 
     try {
         const res = await fetch(url, options);
