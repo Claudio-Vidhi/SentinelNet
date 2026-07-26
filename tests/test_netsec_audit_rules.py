@@ -207,6 +207,32 @@ class TestAccessRules(_RuleBase):
             'end\n')
         self.assertEqual(rules.wan_interfaces(cfg), {"wan1"})
 
+    def test_wan_interfaces_role_branch_isolated_from_name_fallback(self):
+        """'isp1' non rientra nel fallback per nome: solo 'set role wan' la
+        qualifica. Isola il ramo per ruolo, che nella fixture 'bad' non e'
+        distinguibile dal fallback perche' 'port1' soddisfa entrambi."""
+        cfg = parse_with_lines(
+            'config system interface\n'
+            '    edit "isp1"\n'
+            '        set role wan\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(rules.wan_interfaces(cfg), {"isp1"})
+
+    def test_wan_interfaces_role_takes_priority_over_fallback_names(self):
+        """Quando un'interfaccia dichiara il ruolo, il fallback per nome non
+        deve aggiungere anche le altre interfacce dal nome convenzionale."""
+        cfg = parse_with_lines(
+            'config system interface\n'
+            '    edit "isp1"\n'
+            '        set role wan\n'
+            '    next\n'
+            '    edit "port1"\n'
+            '        set role lan\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(rules.wan_interfaces(cfg), {"isp1"})
+
     def test_boundary_protection_fails_on_wan_to_all(self):
         o = rules.check_boundary_protection(self.bad)
         self.assertEqual(o.status, FAIL)
@@ -231,6 +257,33 @@ class TestAccessRules(_RuleBase):
     def test_inbound_admin_ports_unknown_without_policies(self):
         self.assertEqual(
             rules.check_inbound_admin_ports(self.partial).status, UNKNOWN)
+
+    def test_inbound_admin_ports_unknown_when_no_wan_identifiable(self):
+        """Se nessuna interfaccia dichiara 'role wan' e nessun nome rientra
+        nel fallback convenzionale (es. 'isp1'/'dmz'), la regola non puo'
+        stabilire quali policy siano esposte da Internet: deve restituire
+        UNKNOWN, non un PASS rassicurante ma non verificato."""
+        cfg = parse_with_lines(
+            'config system interface\n'
+            '    edit "isp1"\n'
+            '        set allowaccess ping\n'
+            '    next\n'
+            '    edit "dmz"\n'
+            '        set allowaccess ping\n'
+            '    next\n'
+            'end\n'
+            'config firewall policy\n'
+            '    edit 1\n'
+            '        set srcintf "isp1"\n'
+            '        set dstintf "dmz"\n'
+            '        set srcaddr "all"\n'
+            '        set dstaddr "all"\n'
+            '        set service "RDP"\n'
+            '        set action accept\n'
+            '    next\n'
+            'end\n')
+        self.assertEqual(
+            rules.check_inbound_admin_ports(cfg).status, UNKNOWN)
 
 
 if __name__ == "__main__":
