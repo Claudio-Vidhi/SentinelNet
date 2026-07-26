@@ -121,19 +121,6 @@ def set_flow_siem_preview_settings(payload: FortigatePreviewSchema, current_user
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "flow_siem_preview": payload.enabled}
 
-@router.get("/api/settings/audit-checklist")
-def get_audit_checklist_preview_settings(current_user = Depends(require_admin)):
-    """Stato del flag preview per la tab 'Checklist Audit Firewall' (default: attivo)."""
-    return {"audit_checklist_preview": bool(get_app_settings().get("audit_checklist_preview_enabled", True))}
-
-@router.post("/api/settings/audit-checklist")
-def set_audit_checklist_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"audit_checklist_preview_enabled": payload.enabled})
-    log_audit(f"Tab Checklist Audit Firewall (preview) "
-              f"{'attivata' if payload.enabled else 'disattivata'} "
-              f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "audit_checklist_preview": payload.enabled}
-
 
 @router.get("/api/settings/app")
 def get_app_advanced_settings(current_user = Depends(require_admin)):

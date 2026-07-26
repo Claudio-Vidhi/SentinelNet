@@ -4,10 +4,11 @@
 (function () {
     let currentAuditEngagementId = null;
     let currentAuditData = null;
+    let currentTemplate = null;   // template attivo (versione piu' recente)
+    let editingItemRef = null;    // null = modale in modalita' creazione
 
     async function loadAuditChecklistTab() {
-        const btn = document.getElementById("navAuditChecklist");
-        if (btn) btn.style.display = "flex";
+        loadAuditTemplate();
 
         const container = document.getElementById("auditEngagementList");
         if (!container) return;
@@ -306,32 +307,176 @@
         currentAuditEngagementId = null;
     }
 
-    async function applyAuditChecklistGating() {
-        try {
-            const res = await apiFetch('/api/settings/audit-checklist');
-            if (!res || !res.ok) return;
-            const data = await res.json();
-            const nav = document.getElementById('navAuditChecklist');
-            if (nav) nav.style.display = data.audit_checklist_preview ? '' : 'none';
-            const toggle = document.getElementById('auditChecklistToggle');
-            if (toggle) toggle.checked = !!data.audit_checklist_preview;
-        } catch (e) {}
-    }
+    // ===== Gestione domande del template (amministratori) =====
 
-    async function setAuditChecklistPreview(enabled) {
-        const st = document.getElementById('auditChecklistStatus');
+    async function loadAuditTemplate() {
         try {
-            const res = await apiFetch('/api/settings/audit-checklist', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: !!enabled })
-            });
-            if (res && res.ok) {
-                if (st) st.textContent = (typeof currentLang !== 'undefined' && currentLang === 'en') ? 'Saved.' : 'Salvato.';
-                await applyAuditChecklistGating();
+            const res = await apiFetch("/api/audit-checklist/templates");
+            if (!res || !res.ok) return;
+            const list = await res.json();
+            if (!list.length) return;
+            // list_templates ordina per versione decrescente: il primo e' l'attivo.
+            const full = await apiFetch(`/api/audit-checklist/templates/${list[0].id}`);
+            if (!full || !full.ok) return;
+            currentTemplate = await full.json();
+
+            const name = document.getElementById("auditTplName");
+            if (name) name.textContent = `— v${currentTemplate.version} (${currentTemplate.items.length} domande)`;
+            const dl = document.getElementById("tplSectionTitles");
+            if (dl) {
+                const titles = [...new Set(currentTemplate.items.map(i => i.section_title))];
+                dl.innerHTML = titles.map(t => `<option value="${escapeHtml(t)}">`).join("");
+            }
+            if (document.getElementById("auditTemplateEditor").style.display !== "none") {
+                renderTemplateEditor();
             }
         } catch (e) {
-            if (st) st.textContent = (typeof currentLang !== 'undefined' && currentLang === 'en') ? 'Error.' : 'Errore.';
+            console.error("Errore caricamento template audit:", e);
+        }
+    }
+
+    function toggleTemplateEditor() {
+        const box = document.getElementById("auditTemplateEditor");
+        const label = document.getElementById("auditTplToggleLabel");
+        const show = box.style.display === "none";
+        box.style.display = show ? "block" : "none";
+        if (label) label.textContent = show ? "Nascondi" : "Mostra";
+        if (show) renderTemplateEditor();
+    }
+
+    function renderTemplateEditor() {
+        const box = document.getElementById("auditTemplateEditor");
+        if (!box || !currentTemplate) return;
+
+        const sections = {};
+        currentTemplate.items.forEach(i => {
+            const key = `Sezione ${i.section_no} — ${i.section_title}`;
+            (sections[key] = sections[key] || []).push(i);
+        });
+
+        box.innerHTML = Object.keys(sections).map(sec => `
+            <details style="border:1px solid var(--border); border-radius:6px; margin-bottom:10px; background:var(--surface);">
+                <summary style="padding:10px 14px; cursor:pointer; font-weight:600; font-size:14px; background:var(--surface-2);">
+                    ${escapeHtml(sec)} <span style="font-size:12px; font-weight:normal; color:var(--text-muted);">(${sections[sec].length})</span>
+                </summary>
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    ${sections[sec].map(i => `
+                        <tr style="border-top:1px solid var(--border);">
+                            <td style="padding:8px 14px; width:60px; font-weight:600;">${escapeHtml(i.ref)}</td>
+                            <td style="padding:8px 0;">
+                                ${escapeHtml(i.title)}
+                                ${i.is_prerequisite ? '<span style="color:var(--danger); font-size:10px; font-weight:bold; margin-left:6px;">PREREQUISITO</span>' : ''}
+                                ${i.requires_evidence ? '<span style="color:var(--primary); font-size:10px; font-weight:bold; margin-left:6px;">EVIDENZA</span>' : ''}
+                                <div style="color:var(--text-muted); font-size:11px; margin-top:2px;">${escapeHtml(i.guidance_why || '')}</div>
+                            </td>
+                            <td style="padding:8px 14px; text-align:right; white-space:nowrap;">
+                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0 3px;" onclick="openTemplateItemModal('${jsStr(i.ref)}')"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="deleteTemplateItem('${jsStr(i.ref)}')"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `).join("")}
+                </table>
+            </details>
+        `).join("");
+    }
+
+    function openTemplateItemModal(ref) {
+        if (!currentTemplate) return;
+        editingItemRef = ref || null;
+        const item = ref ? currentTemplate.items.find(i => i.ref === ref) : null;
+
+        document.getElementById("tplItemModalTitle").innerHTML = item
+            ? `<i class="fa-solid fa-pen" style="color:var(--primary);"></i> Modifica Domanda ${escapeHtml(ref)}`
+            : '<i class="fa-solid fa-list-check" style="color:var(--primary);"></i> Nuova Domanda';
+
+        const refEl = document.getElementById("tplItemRef");
+        refEl.value = item ? item.ref : "";
+        // Il ref lega le valutazioni gia' raccolte all'item: modificabile solo in creazione.
+        refEl.disabled = !!item;
+
+        document.getElementById("tplItemSectionNo").value = item ? item.section_no : "";
+        document.getElementById("tplItemSortOrder").value = item ? item.sort_order : "";
+        document.getElementById("tplItemSectionTitle").value = item ? item.section_title : "";
+        document.getElementById("tplItemTitle").value = item ? item.title : "";
+        document.getElementById("tplItemWhy").value = item ? (item.guidance_why || "") : "";
+        document.getElementById("tplItemGood").value = item ? (item.guidance_good || "") : "";
+        document.getElementById("tplItemHow").value = item ? (item.guidance_how || "") : "";
+        document.getElementById("tplItemSeverity").value = item ? item.severity_default : "media";
+        document.getElementById("tplItemCheckKind").value = item ? (item.check_kind || "manual") : "manual";
+        document.getElementById("tplItemPrereq").checked = item ? !!item.is_prerequisite : false;
+        document.getElementById("tplItemEvidence").checked = item ? !!item.requires_evidence : false;
+
+        document.getElementById("templateItemModal").style.display = "flex";
+    }
+
+    function closeTemplateItemModal() {
+        document.getElementById("templateItemModal").style.display = "none";
+        editingItemRef = null;
+    }
+
+    async function submitTemplateItemForm(e) {
+        if (e) e.preventDefault();
+        if (!currentTemplate) return;
+
+        const payload = {
+            section_no: parseInt(document.getElementById("tplItemSectionNo").value, 10),
+            section_title: document.getElementById("tplItemSectionTitle").value.trim(),
+            title: document.getElementById("tplItemTitle").value.trim(),
+            guidance_why: document.getElementById("tplItemWhy").value.trim(),
+            guidance_good: document.getElementById("tplItemGood").value.trim(),
+            guidance_how: document.getElementById("tplItemHow").value.trim(),
+            severity_default: document.getElementById("tplItemSeverity").value,
+            check_kind: document.getElementById("tplItemCheckKind").value,
+            is_prerequisite: document.getElementById("tplItemPrereq").checked,
+            requires_evidence: document.getElementById("tplItemEvidence").checked,
+            sort_order: parseInt(document.getElementById("tplItemSortOrder").value, 10) || 0
+        };
+
+        const base = `/api/audit-checklist/templates/${currentTemplate.id}/items`;
+        const url = editingItemRef ? `${base}/${encodeURIComponent(editingItemRef)}` : base;
+        if (!editingItemRef) payload.ref = document.getElementById("tplItemRef").value.trim();
+
+        try {
+            const res = await apiFetch(url, {
+                method: editingItemRef ? "PUT" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!res || !res.ok) {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                alert(err.detail || "Errore durante il salvataggio della domanda.");
+                return;
+            }
+            closeTemplateItemModal();
+            await loadAuditTemplate();
+            renderTemplateEditor();
+            // L'audit aperto puo' aver guadagnato o cambiato una domanda.
+            if (currentAuditEngagementId) await openAuditWorkspace(currentAuditEngagementId);
+        } catch (err) {
+            console.error("Errore salvataggio domanda template:", err);
+            alert("Errore di rete durante il salvataggio della domanda.");
+        }
+    }
+
+    async function deleteTemplateItem(ref) {
+        if (!currentTemplate) return;
+        if (!confirm(`Eliminare la domanda ${ref} dalla checklist?`)) return;
+        try {
+            const res = await apiFetch(
+                `/api/audit-checklist/templates/${currentTemplate.id}/items/${encodeURIComponent(ref)}`,
+                { method: "DELETE" }
+            );
+            if (!res || !res.ok) {
+                const err = res ? await res.json().catch(() => ({})) : {};
+                alert(err.detail || "Errore durante l'eliminazione della domanda.");
+                return;
+            }
+            await loadAuditTemplate();
+            renderTemplateEditor();
+            if (currentAuditEngagementId) await openAuditWorkspace(currentAuditEngagementId);
+        } catch (e) {
+            console.error("Errore eliminazione domanda template:", e);
+            alert("Errore di rete durante l'eliminazione della domanda.");
         }
     }
 
@@ -345,10 +490,9 @@
     window.viewAuditReport = viewAuditReport;
     window.viewAuditReportForId = viewAuditReportForId;
     window.closeAuditWorkspace = closeAuditWorkspace;
-    window.setAuditChecklistPreview = setAuditChecklistPreview;
-    window.applyAuditChecklistGating = applyAuditChecklistGating;
-
-    document.addEventListener("DOMContentLoaded", () => {
-        applyAuditChecklistGating();
-    });
+    window.toggleTemplateEditor = toggleTemplateEditor;
+    window.openTemplateItemModal = openTemplateItemModal;
+    window.closeTemplateItemModal = closeTemplateItemModal;
+    window.submitTemplateItemForm = submitTemplateItemForm;
+    window.deleteTemplateItem = deleteTemplateItem;
 })();

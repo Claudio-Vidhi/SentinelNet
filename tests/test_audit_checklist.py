@@ -123,6 +123,56 @@ class TestAuditChecklist(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.headers["content-type"], "text/html; charset=utf-8")
         self.assertIn("Relazione Audit Manutenzione Firewall", res.text)
+    def test_04_template_item_crud(self):
+        """Aggiunta, modifica ed eliminazione di una domanda del template."""
+        tpl_id = audit_checklist.seed_default_template()
+
+        # Un engagement gia' aperto PRIMA che la domanda esista.
+        eng_id = audit_checklist.create_engagement(customer_name="Cliente CRUD")["id"]
+
+        audit_checklist.create_template_item(
+            tpl_id, "9.99",
+            section_no=9, section_title="Sezione di prova",
+            title="Domanda aggiunta dall'amministratore",
+            guidance_why="Motivazione", severity_default="alta",
+            is_prerequisite=True, sort_order=999,
+        )
+        # Backfill: la domanda deve comparire anche nell'audit gia' aperto.
+        refs = [i["item_ref"] for i in audit_checklist.get_engagement(eng_id)["items"]]
+        self.assertIn("9.99", refs)
+
+        audit_checklist.update_template_item(tpl_id, "9.99", title="Titolo modificato")
+        item = next(i for i in audit_checklist.get_template(tpl_id)["items"] if i["ref"] == "9.99")
+        self.assertEqual(item["title"], "Titolo modificato")
+
+        # is_prerequisite del template guida l'avvertimento nella relazione.
+        audit_checklist.update_item_assessment(eng_id, "9.99", status="non_conforme")
+        self.assertIn(
+            "AVVERTIMENTO PREREQUISITI NON SODDISFATTI",
+            audit_checklist.generate_audit_relazione(eng_id),
+        )
+
+        # Valutata -> non eliminabile.
+        with self.assertRaises(PermissionError):
+            audit_checklist.delete_template_item(tpl_id, "9.99")
+
+        audit_checklist.update_item_assessment(eng_id, "9.99", status="non_valutato")
+        audit_checklist.delete_template_item(tpl_id, "9.99")
+        refs = [i["ref"] for i in audit_checklist.get_template(tpl_id)["items"]]
+        self.assertNotIn("9.99", refs)
+        refs = [i["item_ref"] for i in audit_checklist.get_engagement(eng_id)["items"]]
+        self.assertNotIn("9.99", refs)
+
+    def test_05_template_item_endpoints_require_admin(self):
+        """Gli endpoint di modifica del template sono riservati agli amministratori."""
+        client = TestClient(app)
+        tpl_id = audit_checklist.seed_default_template()
+        res = client.post(
+            f"/api/audit-checklist/templates/{tpl_id}/items",
+            json={"ref": "9.98", "section_no": 9, "section_title": "X", "title": "Y"},
+            headers=CSRF,
+        )
+        self.assertIn(res.status_code, (401, 403))
 
 
 if __name__ == "__main__":

@@ -1381,8 +1381,9 @@ class TestMcpTabRestyle(unittest.TestCase):
                     'class="panel"'):
             self.assertIn(cls, tab)
         # client-config panel + tool-list panel + MCP Client preview-toggle panel
-        # + FortiGate LIVE preview-toggle panel + Audit Checklist preview-toggle panel
-        self.assertEqual(tab.count('class="panel"'), 5)
+        # + FortiGate LIVE preview-toggle panel. La Checklist Audit Firewall non
+        # e' piu' in preview: il suo toggle e' stato rimosso.
+        self.assertEqual(tab.count('class="panel"'), 4)
 
     def test_status_chip_classes_present_in_render_fn(self):
         # loadMcpTab() moved to static/js/settings.js.
