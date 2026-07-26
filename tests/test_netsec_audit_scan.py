@@ -50,14 +50,24 @@ class TestNetSecAuditScan(unittest.TestCase):
         assert r.status_code == 200, r.text
         return c
 
-    def test_empty_config_would_score_high(self):
-        """Documenta il motivo della guardia: senza guardia, una config vuota
-        produce un punteggio alto invece di un errore."""
+    def test_empty_config_is_not_assessable(self):
+        """Perche' la guardia nell'endpoint esiste ancora.
+
+        Storia di questo test: con il vecchio motore una config vuota otteneva
+        80% / GRADE A, perche' l'assenza di violazioni rilevabili valeva PASS.
+        La guardia serviva a impedire quel punteggio inventato.
+
+        Il motore parsato non ha piu' quel difetto: ogni controllo diventa
+        UNKNOWN e il punteggio non e' determinabile. La guardia resta comunque
+        giustificata, ma per una ragione diversa: restituire una schermata di
+        controlli tutti 'non valutabili' non aiuta l'utente, un errore
+        esplicito si'. Il test ora fissa il comportamento nuovo, cosi' un
+        eventuale ritorno al vecchio (punteggio alto sul nulla) lo rompe.
+        """
         res = netsec_audit.run_netsec_audit(config_text="", benchmark="cis")
-        self.assertGreaterEqual(
-            res["score"], 50,
-            "Se il motore non premia piu' una config vuota la guardia "
-            "nell'endpoint puo' essere riconsiderata.")
+        self.assertIsNone(res["score"])
+        self.assertEqual(res["summary"]["passed"], 0)
+        self.assertEqual(res["summary"]["unknown"], res["summary"]["total"])
 
     def test_scan_without_config_or_device_is_rejected(self):
         c = self._client()
@@ -98,6 +108,86 @@ class TestNetSecAuditScan(unittest.TestCase):
         body = r.json()
         self.assertIn("score", body)
         self.assertTrue(body["rules"])
+
+
+class TestAuditEngineResults(unittest.TestCase):
+    def _cfg(self, name):
+        import os
+        p = os.path.join(os.path.dirname(__file__), "fixtures", name)
+        with open(p, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_violations_config_scores_low_and_cites_lines(self):
+        res = netsec_audit.run_netsec_audit(
+            config_text=self._cfg("fortigate_violations.conf"),
+            benchmark="cis")
+        self.assertIsNotNone(res["score"])
+        self.assertLess(res["score"], 50)
+        failing = [r for r in res["rules"] if r["status"] == "FAIL"]
+        self.assertTrue(failing)
+        for r in failing:
+            self.assertTrue(r["evidence"], "%s senza evidenza" % r["id"])
+            for e in r["evidence"]:
+                self.assertIn("line", e)
+                self.assertIn("context", e)
+
+    def test_clean_config_scores_full(self):
+        res = netsec_audit.run_netsec_audit(
+            config_text=self._cfg("fortigate_clean.conf"), benchmark="cis")
+        self.assertEqual(res["score"], 100)
+        self.assertEqual(res["summary"]["failed"], 0)
+
+    def test_partial_config_reports_unknown_not_pass(self):
+        """Regressione: prima una sezione assente valeva PASS e gonfiava il voto."""
+        res = netsec_audit.run_netsec_audit(
+            config_text=self._cfg("fortigate_partial.conf"), benchmark="cis")
+        self.assertGreater(res["summary"]["unknown"], 0)
+        for r in res["rules"]:
+            if r["status"] == "UNKNOWN":
+                self.assertEqual(r["evidence"], [])
+
+    def test_all_benchmarks_run(self):
+        for bench in ("cis", "nist", "pci"):
+            res = netsec_audit.run_netsec_audit(
+                config_text=self._cfg("fortigate_violations.conf"),
+                benchmark=bench)
+            self.assertEqual(res["benchmark"], bench)
+            self.assertTrue(res["rules"])
+
+    def test_unknown_benchmark_falls_back_to_cis(self):
+        res = netsec_audit.run_netsec_audit(
+            config_text=self._cfg("fortigate_clean.conf"), benchmark="nope")
+        self.assertEqual(res["benchmark"], "cis")
+
+    def test_summary_keys_present(self):
+        res = netsec_audit.run_netsec_audit(
+            config_text=self._cfg("fortigate_clean.conf"))
+        for key in ("total", "passed", "failed", "warned", "unknown"):
+            self.assertIn(key, res["summary"])
+
+    def test_empty_config_no_longer_scores_high(self):
+        """Il difetto originale: una config vuota otteneva 80% / GRADE A perche'
+        l'assenza di violazioni rilevabili valeva PASS. Ora ogni controllo e'
+        UNKNOWN e il punteggio non e' determinabile."""
+        res = netsec_audit.run_netsec_audit(config_text="", benchmark="cis")
+        self.assertIsNone(res["score"])
+        self.assertEqual(res["summary"]["passed"], 0)
+        self.assertEqual(res["summary"]["unknown"], res["summary"]["total"])
+
+    def test_shared_evaluations_agree_across_benchmarks(self):
+        """TLS e' citata da CIS-03 e NIST-03, any-any da CIS-02 e PCI-02,
+        syslog da NIST-04 e PCI-04: una sola implementazione, quindi gli esiti
+        non possono divergere sulla stessa configurazione."""
+        cfg = self._cfg("fortigate_violations.conf")
+        def status(bench, rid):
+            for r in netsec_audit.run_netsec_audit(
+                    config_text=cfg, benchmark=bench)["rules"]:
+                if r["id"] == rid:
+                    return r["status"]
+            self.fail("regola %s assente in %s" % (rid, bench))
+        self.assertEqual(status("cis", "AUD-CIS-03"), status("nist", "AUD-NIST-03"))
+        self.assertEqual(status("cis", "AUD-CIS-02"), status("pci", "AUD-PCI-02"))
+        self.assertEqual(status("nist", "AUD-NIST-04"), status("pci", "AUD-PCI-04"))
 
 
 if __name__ == "__main__":
