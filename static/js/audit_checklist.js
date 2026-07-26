@@ -279,6 +279,35 @@
         currentAuditEngagementId = null;
     }
 
+    async function applyAuditChecklistGating() {
+        try {
+            const res = await apiFetch('/api/settings/audit-checklist');
+            if (!res || !res.ok) return;
+            const data = await res.json();
+            const nav = document.getElementById('navAuditChecklist');
+            if (nav) nav.style.display = data.audit_checklist_preview ? '' : 'none';
+            const toggle = document.getElementById('auditChecklistToggle');
+            if (toggle) toggle.checked = !!data.audit_checklist_preview;
+        } catch (e) {}
+    }
+
+    async function setAuditChecklistPreview(enabled) {
+        const st = document.getElementById('auditChecklistStatus');
+        try {
+            const res = await apiFetch('/api/settings/audit-checklist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: !!enabled })
+            });
+            if (res && res.ok) {
+                if (st) st.textContent = (typeof currentLang !== 'undefined' && currentLang === 'en') ? 'Saved.' : 'Salvato.';
+                await applyAuditChecklistGating();
+            }
+        } catch (e) {
+            if (st) st.textContent = (typeof currentLang !== 'undefined' && currentLang === 'en') ? 'Error.' : 'Errore.';
+        }
+    }
+
     // Esporta funzioni globali
     window.loadAuditChecklistTab = loadAuditChecklistTab;
     window.openNewAuditModal = openNewAuditModal;
@@ -287,10 +316,10 @@
     window.viewAuditReport = viewAuditReport;
     window.viewAuditReportForId = viewAuditReportForId;
     window.closeAuditWorkspace = closeAuditWorkspace;
+    window.setAuditChecklistPreview = setAuditChecklistPreview;
+    window.applyAuditChecklistGating = applyAuditChecklistGating;
 
-    // Rende visibile la tab nella sidebar se l'utente ha ruolo admin o in dev
     document.addEventListener("DOMContentLoaded", () => {
-        const btn = document.getElementById("navAuditChecklist");
-        if (btn) btn.style.display = "flex";
+        applyAuditChecklistGating();
     });
 })();

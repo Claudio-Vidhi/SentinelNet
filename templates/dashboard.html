@@ -2006,6 +2006,18 @@
         </label>
         <span id="fgtPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-flask" style="color:var(--primary);"></i> <span>Checklist Audit Firewall (anteprima)</span></h3>
+        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;">
+          Abilita la tab sperimentale "Checklist Audit Firewall": audit di manutenzione firewall guidato con note ed export relazione HTML.
+        </p>
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="auditChecklistToggle" onchange="setAuditChecklistPreview(this.checked)">
+          <span>Abilita la tab Checklist Audit Firewall (preview)</span>
+        </label>
+        <span id="auditChecklistStatus" style="font-size:12px; color:var(--text-muted);"></span>
+      </div>
     </div>
 
     <div id="tab-mcp-client" class="tab-content">

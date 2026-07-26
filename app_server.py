@@ -170,6 +170,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="SentinelNet Server")
     parser.add_argument("--mcp", action="store_true", help="Esegui il server MCP su stdio")
+    parser.add_argument("--no-browser", action="store_true", help="Non aprire il browser all'avvio")
     args, _ = parser.parse_known_args()
 
     if args.mcp:
@@ -184,7 +185,8 @@ def main():
     port = effective_port()
 
     _env_nb = os.environ.get("SENTINELNET_NO_BROWSER")
-    _nb = _env_nb.lower() == "true" if _env_nb is not None else bool(_app_adv_setting("no_browser"))
+    _env_is_nb = _env_nb.lower() in ("true", "1", "yes") if _env_nb is not None else False
+    _nb = args.no_browser or _env_is_nb or bool(_app_adv_setting("no_browser"))
     no_browser = _nb or host == "0.0.0.0"
 
     try:
