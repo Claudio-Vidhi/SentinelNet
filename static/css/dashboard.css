@@ -253,6 +253,26 @@
       transition: var(--transition);
     }
 
+    /* Un input dentro .input-wrapper ma FUORI da un .form-group non riceveva
+       alcuno stile: il browser lo disegnava bianco su pannello scuro (era il
+       caso del filtro di "Registro Flussi Triage"). Regola separata da quella
+       di .form-group di proposito: quella e' presidiata da un test di
+       regressione sui checkbox e non va allargata.
+       Le esclusioni checkbox/radio valgono anche qui, per la stessa ragione:
+       width:100% su un checkbox lo stira per tutta la riga. */
+    .input-wrapper input:not([type="checkbox"]):not([type="radio"]) {
+      width: 100%;
+      padding: 10px 12px 10px 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      transition: var(--transition);
+    }
+    .input-wrapper input::placeholder { color: var(--text-muted); }
+
     .form-group select {
       cursor: pointer;
     }
@@ -338,7 +358,11 @@
       box-shadow: 0 0 15px var(--danger-glow);
     }
 
-    .btn-small {
+    /* .btn-sm e' un alias: era usato in tutto il markup (template e HTML
+       generato da JS) senza essere mai definito, quindi quei pulsanti
+       restavano a dimensione piena e ogni chiamante compensava con uno
+       style inline. */
+    .btn-small, .btn-sm {
       padding: 6px 12px;
       font-size: 12px;
       border-radius: 6px;
@@ -438,6 +462,13 @@
       font-size: 11px;
       font-weight: 500;
       border: 1px solid var(--violet-deep);
+      /* Un badge e' una pillola: il testo non deve andare a capo dentro il
+         bordo arrotondato. Senza questo "Access Rules" si spezzava su due
+         righe sfondando la pillola. inline-block perche' su uno <span>
+         inline il padding verticale non allarga la riga. */
+      display: inline-block;
+      white-space: nowrap;
+      vertical-align: middle;
     }
 
     .actions-cell {
