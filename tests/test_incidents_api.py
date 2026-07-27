@@ -57,9 +57,8 @@ class TestIncidentsApi(unittest.TestCase):
 
     def setUp(self):
         conn = db.get_observability_connection()
-        conn.execute("DELETE FROM incident_events")
+        conn.execute("DELETE FROM evidence")
         conn.execute("DELETE FROM incidents")
-        conn.execute("DELETE FROM correlated_events")
         self.id_a = _seed_incident(conn, "sede-a")
         self.id_b = _seed_incident(conn, "sede-b", entity="ip:10.2.0.5")
         conn.commit()
@@ -117,32 +116,26 @@ class TestIncidentsApi(unittest.TestCase):
                    json={"from_status": "resolved", "status": "new"})
         self.assertEqual(r.status_code, 409)
 
-    def test_resolving_also_resolves_the_correlated_events(self):
+    def test_deleting_an_incident_takes_its_evidence_with_it(self):
+        # Le evidenze non hanno stato proprio: seguono l'incidente, anche in
+        # cancellazione (ON DELETE CASCADE). Senza, la retention lascerebbe
+        # evidenze orfane che puntano a incidenti inesistenti.
         conn = db.get_observability_connection()
-        cur = conn.execute(
-            """INSERT INTO correlated_events
-                   (created_ts, tenant, kind, src_ip, dst_ip, severity, status,
-                    dedup_key, evidence_json)
-               VALUES (?, 'sede-a', 'traffico_bloccato_alto', '10.1.0.5',
-                       '8.8.8.8', 3, 'new', 'dk-res', '{}')""", (NOW - 300,))
-        conn.execute("INSERT INTO incident_events VALUES (?, ?)",
-                     (self.id_a, cur.lastrowid))
+        conn.execute(
+            """INSERT INTO evidence
+                   (created_ts, ts, tenant, incident_id, entity_key, role,
+                    rule_id, rule_version, dedup_key)
+               VALUES (?, ?, 'sede-a', ?, 'ip:10.1.0.5', 'trigger',
+                       'BLOCKED_TRAFFIC_001', '1.0.0', 'dk-cascade')""",
+            (NOW - 300, NOW - 300, self.id_a))
         conn.commit()
+        conn.execute("DELETE FROM incidents WHERE id = ?", (self.id_a,))
+        conn.commit()
+        left = conn.execute(
+            "SELECT COUNT(*) AS n FROM evidence WHERE dedup_key = 'dk-cascade'"
+        ).fetchone()["n"]
         conn.close()
-
-        c = self._client("op_inc_a")
-        r = c.post(f"/api/incidents/{self.id_a}/status", headers=CSRF,
-                   json={"from_status": "new", "status": "resolved"})
-        self.assertEqual(r.status_code, 200)
-
-        conn = db.get_observability_connection()
-        try:
-            status = conn.execute(
-                "SELECT status FROM correlated_events WHERE dedup_key = 'dk-res'"
-            ).fetchone()["status"]
-        finally:
-            conn.close()
-        self.assertEqual(status, "resolved")
+        self.assertEqual(left, 0)
 
     def test_out_of_scope_transition_is_404(self):
         c = self._client("op_inc_a")

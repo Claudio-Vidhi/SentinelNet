@@ -127,10 +127,10 @@ def obs_config() -> dict:
             # così nessun evento sparisce prima della propria origine.
             "events": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                           or _app_adv("retention_flows_days") or 30),
-            "correlated_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
-                                     or _app_adv("retention_events_days") or 90),
-            # Gli incidenti seguono la stessa finestra degli eventi correlati da
-            # cui sono costruiti: nessuna manopola separata.
+            # Evidenze orfane (regola scattata, incidente mai formato): quelle
+            # legate a un incidente seguono l'incidente via CASCADE.
+            "evidence": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
+                            or _app_adv("retention_events_days") or 90),
             "incidents": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
                              or _app_adv("retention_events_days") or 90),
         },

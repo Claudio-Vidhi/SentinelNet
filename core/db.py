@@ -30,7 +30,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 6          # versione schema supportata da questo codice (v6: modello eventi unificato)
+SCHEMA_VERSION = 7          # versione schema supportata da questo codice (v7: evidence model)
 QUEUE_MAX = 10_000          # payload massimi in coda scritture
 BATCH_SIZE = 500            # payload massimi per singolo commit
 MAX_WRITER_RESTARTS = 5     # riavvii writer consentiti prima del fail-open
@@ -81,6 +81,50 @@ class SchemaTooNewError(RuntimeError):
     pass
 
 
+def _migrate_v7_evidence(conn: sqlite3.Connection) -> None:
+    """v7: ``correlated_events`` e ``incident_events`` vengono sostituiti da
+    ``evidence``. Le righe esistenti sono TRAVASATE, non buttate: ogni evento
+    correlato diventa un'evidenza con ruolo 'trigger' e provenienza
+    LEGACY_CORRELATOR.
+
+    Limite dichiarato: ``event_id`` viene risolto solo dove l'evento syslog
+    d'origine esiste ancora nel modello normalizzato. I correlati più vecchi
+    della retention syslog (7 giorni contro i 90 dei correlati) non hanno un
+    evento a cui puntare e restano con ``event_id`` NULL — il loro contenuto
+    originale è comunque conservato in ``attrs_json``, quindi non si perde
+    nulla.
+    """
+    tables = {r["name"] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "correlated_events" not in tables:
+        return
+    has_link = "incident_events" in tables
+    link_select = ("(SELECT incident_id FROM incident_events ie "
+                   " WHERE ie.correlated_event_id = ce.id)" if has_link else "NULL")
+    conn.execute(f"""
+        INSERT OR IGNORE INTO evidence
+            (created_ts, ts, tenant, incident_id, event_id, entity_key, role,
+             rule_id, rule_version, weight, severity, src_ip, dst_ip,
+             switch_port, summary, attrs_json, dedup_key)
+        SELECT ce.created_ts,
+               COALESCE(json_extract(ce.evidence_json, '$.syslog_ts'), ce.created_ts),
+               ce.tenant,
+               {link_select},
+               (SELECT e.id FROM events e
+                 WHERE e.source = 'syslog'
+                   AND e.source_id = json_extract(ce.evidence_json, '$.syslog_id')),
+               CASE WHEN ce.src_ip IS NOT NULL THEN 'ip:' || ce.src_ip END,
+               'trigger', 'LEGACY_CORRELATOR', '0', 1,
+               ce.severity, ce.src_ip, ce.dst_ip, ce.switch_port,
+               ce.kind, ce.evidence_json,
+               'legacy:' || ce.id
+        FROM correlated_events ce
+    """)
+    conn.execute("DROP TABLE IF EXISTS incident_events")
+    conn.execute("DROP TABLE correlated_events")
+    logger.info("Migrazione v7: correlated_events travasata in evidence.")
+
+
 def migrate() -> None:
     """Applica lo schema (idempotente, forward-only) e registra la versione.
 
@@ -110,6 +154,8 @@ def migrate() -> None:
             "PRAGMA table_info(flow_aggregates)").fetchall()}
         if "source" not in cols:
             conn.execute("ALTER TABLE flow_aggregates ADD COLUMN source TEXT")
+        if current and current < 7:
+            _migrate_v7_evidence(conn)
         if current < SCHEMA_VERSION:
             conn.execute("DELETE FROM schema_version")
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))

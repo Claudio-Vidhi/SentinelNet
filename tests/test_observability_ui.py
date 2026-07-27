@@ -33,11 +33,16 @@ CSRF = {"X-Requested-With": "SentinelNet"}
 
 def _seed_event(tenant="sede-a", status="new"):
     conn = db.get_observability_connection()
+    # Dalla v7 l'anomalia su cui si agisce è un INCIDENTE: era una riga di
+    # correlated_events per evento, quindi la stessa anomalia ripetuta si
+    # chiudeva N volte a mano.
+    now = int(time.time())
     cur = conn.execute(
-        "INSERT INTO correlated_events (created_ts, tenant, kind, src_ip, dst_ip, "
-        "severity, status, dedup_key) VALUES (?, ?, 'traffico_bloccato_alto', "
-        "'10.1.0.5', '203.0.113.7', 3, ?, ?)",
-        (int(time.time()), tenant, status, f"k{time.time_ns()}"))
+        "INSERT INTO incidents (tenant, entity_key, opened_ts, last_event_ts, "
+        "title, severity, event_count, status, cause_kind, confidence) "
+        "VALUES (?, 'ip:10.1.0.5', ?, ?, 'test', 3, 1, ?, "
+        "'BLOCKED_TRAFFIC_001', 70)",
+        (tenant, now, now, status))
     conn.commit()
     conn.close()
     return cur.lastrowid

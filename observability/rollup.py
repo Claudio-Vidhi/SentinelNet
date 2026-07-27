@@ -31,8 +31,9 @@ _TABLES = {
     # Il modello unificato è una proiezione: senza pruning crescerebbe per
     # sempre anche dopo che le righe d'origine sono state eliminate.
     "events": ("ts", ""),
-    "correlated_events": ("created_ts", " AND status = 'resolved'"),
-    # incident_events segue via ON DELETE CASCADE (foreign_keys=ON in db.py).
+    # Le evidenze di un incidente seguono via ON DELETE CASCADE; qui si potano
+    # quelle rimaste orfane (regola scattata, incidente mai formato).
+    "evidence": ("ts", " AND incident_id IS NULL"),
     "incidents": ("opened_ts", " AND status = 'resolved'"),
 }
 

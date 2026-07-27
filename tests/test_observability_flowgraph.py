@@ -35,9 +35,12 @@ def _seed_flow(conn, tenant, src, dst, ts=None, proto=6, dport=443,
 
 
 def _seed_anomaly(conn, tenant, status="new", ts=None):
+    ts = ts or NOW
     conn.execute(
-        "INSERT INTO correlated_events (created_ts, tenant, kind, status) "
-        "VALUES (?, ?, 'test', ?)", (ts or NOW, tenant, status))
+        "INSERT INTO incidents (tenant, entity_key, opened_ts, last_event_ts, "
+        "title, cause_kind, status) "
+        "VALUES (?, 'ip:10.1.0.5', ?, ?, 'test', 'test', ?)",
+        (tenant, ts, ts, status))
 
 
 class _Base(unittest.TestCase):

@@ -94,10 +94,10 @@ async def set_incident_status(
     payload: dict,
     current_user = Depends(require_operator),
 ):
-    """Transizione di stato: new→ack, new→resolved, ack→resolved. Concorrenza
-    ottimistica come per gli eventi correlati. Alla risoluzione anche gli eventi
-    correlati dell'incidente passano a 'resolved', così la retention esistente
-    può eliminarli."""
+    """Transizione di stato: new→ack, new→resolved, ack→resolved, con
+    concorrenza ottimistica. Lo stato vive sull'incidente e basta: le evidenze
+    non hanno uno stato proprio, seguono l'incidente (anche in cancellazione,
+    via ON DELETE CASCADE)."""
     new_status = (payload or {}).get("status")
     from_status = (payload or {}).get("from_status")
     if (from_status, new_status) not in _ALLOWED_TRANSITIONS:
@@ -119,12 +119,6 @@ async def set_incident_status(
             cur = conn.execute(
                 "UPDATE incidents SET status = ? WHERE id = ? AND status = ?",
                 (new_status, incident_id, from_status))
-            if cur.rowcount == 1 and new_status == "resolved":
-                conn.execute(
-                    """UPDATE correlated_events SET status = 'resolved'
-                       WHERE id IN (SELECT correlated_event_id FROM incident_events
-                                    WHERE incident_id = ?)""",
-                    (incident_id,))
             conn.commit()
             return "ok" if cur.rowcount == 1 else "stale"
         finally:

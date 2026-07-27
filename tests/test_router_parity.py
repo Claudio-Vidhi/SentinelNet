@@ -111,7 +111,14 @@ class TestFullParity(unittest.TestCase):
 
     NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit/scan", "/api/netsec-audit/benchmarks", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events")
     NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest")
-    ALLOWED_CHANGED_OPERATIONS = (("post", "/api/agent/heartbeat"),)
+    # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
+    # correlati. Parametri e forma della risposta restano quelli storici (li
+    # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
+    ALLOWED_CHANGED_OPERATIONS = (
+        ("post", "/api/agent/heartbeat"),
+        ("get", "/api/observability/anomalies"),
+        ("post", "/api/observability/anomalies/{event_id}/status"),
+    )
 
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")
 

@@ -10,11 +10,20 @@
     let _selectedId = null;
 
     const SOURCE_META = {
-        correlated: { icon: 'fa-link',           color: 'var(--danger)',   label: 'Evento correlato' },
+        evidence:   { icon: 'fa-scale-balanced', color: 'var(--danger)',   label: 'Evidenza' },
         syslog:     { icon: 'fa-file-lines',     color: 'var(--warning)',  label: 'Syslog' },
         flow:       { icon: 'fa-chart-area',     color: 'var(--primary)',  label: 'Flussi' },
         api:        { icon: 'fa-satellite-dish', color: 'var(--success)',  label: 'Stato apparato' },
         location:   { icon: 'fa-location-dot',   color: 'var(--text-muted)', label: 'Posizione' },
+    };
+
+    // Il ruolo causale lo dichiara la regola che ha prodotto l'evidenza: qui si
+    // mostra, non si reinterpreta.
+    const ROLE_META = {
+        trigger:     { color: 'var(--danger)',    label: 'INNESCO' },
+        supporting:  { color: 'var(--primary)',   label: 'SUPPORTO' },
+        symptom:     { color: 'var(--warning)',   label: 'SINTOMO' },
+        consequence: { color: 'var(--text-muted)', label: 'CONSEGUENZA' },
     };
 
     async function applyIncidentsGating() {
@@ -137,6 +146,12 @@
             `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || '<span style="color:var(--text-muted);">nessuna</span>';
         const sources = (r.sources_used || []).map(x =>
             `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || '<span style="color:var(--text-muted);">nessuna</span>';
+        const byRole = r.evidence_by_role || {};
+        const roleCounts = Object.keys(byRole).map(role => {
+            const meta = ROLE_META[role] || { color: 'var(--text-muted)', label: role };
+            return `<span style="padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700;
+                        color:${meta.color}; border:1px solid ${meta.color};">${escapeHtml(meta.label)} ${byRole[role].length}</span>`;
+        }).join(' ') || '<span style="color:var(--text-muted);">nessuna</span>';
         return `<div style="padding:12px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px;">
                 <div>
@@ -150,9 +165,12 @@
             </div>
             <div style="font-size:12px; margin-bottom:6px;"><strong>Regole attivate:</strong> ${rules}</div>
             <div style="font-size:12px; margin-bottom:6px;"><strong>Fonti corroboranti:</strong> ${sources}</div>
+            <div style="font-size:12px; margin-bottom:6px;"><strong>Evidenze per ruolo:</strong> ${roleCounts}</div>
             <div style="font-size:11px; color:var(--text-muted);">
                 Base ${escapeHtml(jsStr(r.base_confidence ?? '--'))}% + ${escapeHtml(jsStr(r.confidence_step ?? '--'))}% per fonte corroborante.
-                Eventi correlati: ${escapeHtml(jsStr((r.evidence_refs || []).join(', ') || '--'))}
+                Regola: ${escapeHtml(jsStr(r.rule_id || '--'))} v${escapeHtml(jsStr(r.rule_version || '--'))}
+                ${r.rule_params && Object.keys(r.rule_params).length
+                    ? '· soglie ' + escapeHtml(JSON.stringify(r.rule_params)) : ''}
             </div>
         </div>`;
     }
@@ -164,18 +182,29 @@
         return `<div style="border-left:2px solid var(--border); margin-left:8px; padding-left:16px;">` +
             entries.map(e => {
                 const meta = SOURCE_META[e.source] || { icon: 'fa-circle', color: 'var(--text-muted)', label: e.source };
-                const evidence = (e.ref && e.ref.evidence) ? JSON.stringify(e.ref.evidence) : '';
+                const role = e.role ? ROLE_META[e.role] : null;
+                const dotColor = role ? role.color : meta.color;
+                const prov = (e.ref && e.ref.rule_id)
+                    ? `${e.ref.rule_id} v${e.ref.rule_version}` + (e.ref.rule_params && Object.keys(e.ref.rule_params).length
+                        ? ' · ' + JSON.stringify(e.ref.rule_params) : '')
+                    : '';
+                const attrs = (e.ref && e.ref.attrs && Object.keys(e.ref.attrs).length)
+                    ? JSON.stringify(e.ref.attrs) : '';
                 return `<div style="position:relative; margin-bottom:12px;">
                     <span style="position:absolute; left:-23px; top:2px; width:12px; height:12px; border-radius:50%;
-                                 background:var(--surface); border:2px solid ${meta.color};"></span>
+                                 background:var(--surface); border:2px solid ${dotColor};"></span>
                     <div style="font-size:11px; color:var(--text-muted);">
                         ${escapeHtml(fmtTime(e.ts))} ·
                         <i class="fa-solid ${meta.icon}" style="color:${meta.color};"></i> ${escapeHtml(meta.label)}
+                        ${role ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
+                                     font-size:10px; color:${role.color}; border:1px solid ${role.color};">${escapeHtml(role.label)}</span>` : ''}
                     </div>
                     <div style="font-size:13px; color:${e.severity !== null && e.severity !== undefined ? sevColor(e.severity) : 'var(--text)'};">
                         ${escapeHtml(jsStr(e.text))}
                     </div>
-                    ${evidence ? `<div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-top:2px; word-break:break-all;">${escapeHtml(evidence)}</div>` : ''}
+                    ${prov ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;" title="Regola che ha prodotto questa evidenza e soglie usate">
+                                <i class="fa-solid fa-fingerprint"></i> ${escapeHtml(prov)}</div>` : ''}
+                    ${attrs ? `<div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-top:2px; word-break:break-all;">${escapeHtml(attrs)}</div>` : ''}
                 </div>`;
             }).join('') + '</div>';
     }

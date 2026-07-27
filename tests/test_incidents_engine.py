@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Test del motore incidenti: raggruppamento per entità + gap, chiusura per
-quiete, ragionamento deterministico (causa, confidenza, percorso) e timeline
-multi-fonte."""
+"""Test dell'Incident Engine: l'incidente come vista derivata dalle EVIDENZE.
+
+Copre raggruppamento per entità + gap, chiusura per quiete, ragionamento
+basato sui RUOLI (la causa è la regola del trigger) e timeline multi-fonte.
+"""
 
 import json
 import os
@@ -16,26 +18,24 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from core import db  # noqa: E402
-from observability import incidents, timeline  # noqa: E402
+from observability import incidents, rules, timeline  # noqa: E402
 
 NOW = int(time.time())
 
 
-def _seed_event(conn, tenant, src, dst, ts, kind="traffico_bloccato_alto",
-                severity=3, switch_port=None, flow_bytes=None, dst_port=443):
-    evidence = {"syslog_id": 1, "syslog_ts": ts, "action": "deny"}
-    if flow_bytes is not None:
-        evidence["flow"] = {"window_start": ts - ts % 60, "protocol": 6,
-                            "dst_port": dst_port, "bytes": flow_bytes,
-                            "packets": 10}
+def _seed_evidence(conn, tenant, entity, ts, role="trigger",
+                   rule_id="BLOCKED_TRAFFIC_001", rule_version="1.0.0",
+                   severity=3, src=None, dst=None, switch_port=None,
+                   summary="evidenza di test", params=None, key=None):
     cur = conn.execute(
-        """INSERT INTO correlated_events
-               (created_ts, tenant, kind, src_ip, dst_ip, switch_port, severity,
-                status, dedup_key, evidence_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)""",
-        (ts, tenant, kind, src, dst, switch_port, severity,
-         f"k-{tenant}-{src}-{dst}-{ts}-{dst_port}",
-         json.dumps(evidence)))
+        """INSERT INTO evidence
+               (created_ts, ts, tenant, entity_key, role, rule_id, rule_version,
+                params_json, weight, severity, src_ip, dst_ip, switch_port,
+                summary, attrs_json, dedup_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, '{}', ?)""",
+        (ts, ts, tenant, entity, role, rule_id, rule_version,
+         json.dumps(params or {}), severity, src, dst, switch_port, summary,
+         key or f"k-{tenant}-{entity}-{role}-{rule_id}-{ts}"))
     return cur.lastrowid
 
 
@@ -52,7 +52,7 @@ class _Base(unittest.TestCase):
 
     def setUp(self):
         conn = db.get_observability_connection()
-        for table in ("incident_events", "incidents", "correlated_events",
+        for table in ("evidence", "incidents", "events", "normalize_cursors",
                       "syslog_events", "flow_aggregates", "api_observations"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
@@ -70,13 +70,13 @@ class TestGrouping(_Base):
 
     def test_same_entity_within_gap_is_one_incident(self):
         conn = db.get_observability_connection()
-        _seed_event(conn, "sede-a", "10.1.0.5", "8.8.8.8", NOW - 600)
-        _seed_event(conn, "sede-a", "10.1.0.5", "1.1.1.1", NOW - 300)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 600)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300,
+                       role="supporting")
         conn.commit()
         conn.close()
 
-        linked = incidents.group_once(NOW)
-        self.assertEqual(linked, 2)
+        self.assertEqual(incidents.group_once(NOW), 2)
         rows = self._rows("SELECT * FROM incidents")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["event_count"], 2)
@@ -84,21 +84,19 @@ class TestGrouping(_Base):
 
     def test_beyond_gap_opens_a_second_incident(self):
         conn = db.get_observability_connection()
-        _seed_event(conn, "sede-a", "10.1.0.5", "8.8.8.8", NOW - 3000)
-        _seed_event(conn, "sede-a", "10.1.0.5", "8.8.8.8", NOW - 60,
-                    dst_port=8080)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 3000)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 60)
         conn.commit()
         conn.close()
 
         incidents.group_once(NOW)
         rows = self._rows("SELECT * FROM incidents ORDER BY opened_ts")
         self.assertEqual(len(rows), 2)
-        self.assertEqual([r["event_count"] for r in rows], [1, 1])
 
     def test_never_merges_across_tenants(self):
         conn = db.get_observability_connection()
-        _seed_event(conn, "sede-a", "10.1.0.5", "8.8.8.8", NOW - 300)
-        _seed_event(conn, "sede-b", "10.1.0.5", "8.8.8.8", NOW - 240)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300)
+        _seed_evidence(conn, "sede-b", "ip:10.1.0.5", NOW - 240)
         conn.commit()
         conn.close()
 
@@ -108,8 +106,9 @@ class TestGrouping(_Base):
 
     def test_rerun_is_idempotent(self):
         conn = db.get_observability_connection()
-        _seed_event(conn, "sede-a", "10.1.0.5", "8.8.8.8", NOW - 300)
-        _seed_event(conn, "sede-a", "10.1.0.5", "1.1.1.1", NOW - 200)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 200,
+                       role="supporting")
         conn.commit()
         conn.close()
 
@@ -121,78 +120,102 @@ class TestGrouping(_Base):
 
     def test_close_stale_only_after_quiet_period(self):
         conn = db.get_observability_connection()
-        _seed_event(conn, "sede-a", "10.1.0.5", "8.8.8.8", NOW - 60)
-        _seed_event(conn, "sede-b", "10.2.0.5", "8.8.8.8",
-                    NOW - incidents.QUIET_S - 120)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 60)
+        _seed_evidence(conn, "sede-b", "ip:10.2.0.5",
+                       NOW - incidents.QUIET_S - 120)
         conn.commit()
         conn.close()
 
         incidents.group_once(NOW)
-        closed = incidents.close_stale(NOW)
-        self.assertEqual(closed, 1)
-        rows = self._rows(
-            "SELECT tenant, closed_ts FROM incidents ORDER BY tenant")
+        self.assertEqual(incidents.close_stale(NOW), 1)
+        rows = self._rows("SELECT tenant, closed_ts FROM incidents ORDER BY tenant")
         self.assertIsNone(rows[0]["closed_ts"])       # sede-a: ancora attivo
         self.assertIsNotNone(rows[1]["closed_ts"])    # sede-b: silente
 
 
 class TestReasoning(_Base):
 
-    def test_scan_is_recognised_with_reconstructible_confidence(self):
+    def test_cause_is_the_rule_of_the_trigger(self):
         conn = db.get_observability_connection()
-        for i in range(5):
-            _seed_event(conn, "sede-a", "10.1.0.5", f"8.8.8.{i}", NOW - 300 + i,
-                        flow_bytes=1000, dst_port=1000 + i)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300, role="trigger",
+                       rule_id="CFG_CHANGE_001", severity=5)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 280,
+                       role="supporting", rule_id="TRAFFIC_SPIKE_001")
         conn.commit()
         conn.close()
 
         incidents.group_once(NOW)
         row = self._rows("SELECT * FROM incidents")[0]
-        self.assertEqual(row["cause_kind"], "scan_bloccato")
+        self.assertEqual(row["cause_kind"], "CFG_CHANGE_001")
         reasoning = json.loads(row["reasoning_json"])
-        self.assertIn("scan_bloccato", reasoning["rules_fired"])
         # La confidenza deve essere ricostruibile dal percorso pubblicato.
         expected = min(reasoning["base_confidence"]
                        + reasoning["confidence_step"] * len(reasoning["sources_used"]),
                        incidents.CONFIDENCE_MAX)
         self.assertEqual(row["confidence"], expected)
-        self.assertIn("flow_aggregates", reasoning["sources_used"])
-        self.assertEqual(len(reasoning["evidence_refs"]), 5)
+        self.assertEqual(reasoning["base_confidence"],
+                         rules.RULES["CFG_CHANGE_001"]["base_confidence"])
+        self.assertIn("evidenza_di_supporto", reasoning["sources_used"])
+        self.assertIn("piu_regole_concordi", reasoning["sources_used"])
 
-    def test_switch_port_counts_as_corroborating_source(self):
+    def test_most_severe_trigger_wins(self):
         conn = db.get_observability_connection()
-        _seed_event(conn, "sede-a", "10.1.0.7", "8.8.8.8", NOW - 300,
-                    switch_port="sw01:Gi1/0/12")
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300,
+                       rule_id="CFG_CHANGE_001", severity=5)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 290,
+                       rule_id="HIGH_SEVERITY_LOG_001", severity=1)
         conn.commit()
         conn.close()
 
         incidents.group_once(NOW)
         row = self._rows("SELECT * FROM incidents")[0]
-        reasoning = json.loads(row["reasoning_json"])
-        self.assertIn("switch_port", reasoning["sources_used"])
-        self.assertEqual(row["cause_kind"], "evento_critico_isolato")
-        self.assertEqual(row["confidence"],
-                         45 + incidents.CONFIDENCE_STEP * len(reasoning["sources_used"]))
+        self.assertEqual(row["cause_kind"], "HIGH_SEVERITY_LOG_001")
 
-    def test_repeated_block_on_one_pair(self):
+    def test_roles_are_published_grouped(self):
         conn = db.get_observability_connection()
-        for i in range(3):
-            _seed_event(conn, "sede-a", "10.1.0.9", "203.0.113.7", NOW - 300 + i,
-                        dst_port=443 + i)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300, role="trigger")
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 290, role="symptom",
+                       rule_id="IFACE_DOWN_001")
+        conn.commit()
+        conn.close()
+
+        incidents.group_once(NOW)
+        reasoning = json.loads(self._rows("SELECT * FROM incidents")[0]["reasoning_json"])
+        self.assertEqual(sorted(reasoning["evidence_by_role"]), ["symptom", "trigger"])
+        self.assertIn("sintomo_osservato", reasoning["sources_used"])
+
+    def test_no_trigger_means_no_declared_cause(self):
+        # Solo sintomi: non si inventa un innesco che nessuna regola ha dichiarato.
+        conn = db.get_observability_connection()
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300, role="symptom",
+                       rule_id="IFACE_DOWN_001")
         conn.commit()
         conn.close()
 
         incidents.group_once(NOW)
         row = self._rows("SELECT * FROM incidents")[0]
-        self.assertEqual(row["cause_kind"], "traffico_bloccato_ripetuto")
+        self.assertEqual(row["cause_kind"], "causa_non_determinata")
+
+    def test_rule_provenance_travels_to_the_incident(self):
+        conn = db.get_observability_connection()
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300,
+                       rule_id="BLOCKED_TRAFFIC_001", rule_version="9.9.9",
+                       params={"match_delta_s": 42})
+        conn.commit()
+        conn.close()
+
+        incidents.group_once(NOW)
+        reasoning = json.loads(self._rows("SELECT * FROM incidents")[0]["reasoning_json"])
+        self.assertEqual(reasoning["rule_version"], "9.9.9")
+        self.assertEqual(reasoning["rule_params"], {"match_delta_s": 42})
 
 
 class TestTimeline(_Base):
 
     def test_timeline_merges_sources_in_order(self):
         conn = db.get_observability_connection()
-        _seed_event(conn, "sede-a", "10.1.0.5", "8.8.8.8", NOW - 300,
-                    flow_bytes=2048)
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300,
+                       src="10.1.0.5", dst="8.8.8.8")
         conn.execute(
             "INSERT INTO syslog_events (ts, tenant, device_ip, severity, action, "
             "message) VALUES (?, 'sede-a', '10.1.0.254', 3, 'deny', ?)",
@@ -215,8 +238,24 @@ class TestTimeline(_Base):
 
         self.assertEqual([e["ts"] for e in entries],
                          sorted(e["ts"] for e in entries))
-        sources = {e["source"] for e in entries}
-        self.assertTrue({"correlated", "syslog", "flow", "api"} <= sources)
+        self.assertTrue({"evidence", "syslog", "flow", "api"} <=
+                        {e["source"] for e in entries})
+
+    def test_evidence_entries_carry_role_and_provenance(self):
+        conn = db.get_observability_connection()
+        _seed_evidence(conn, "sede-a", "ip:10.1.0.5", NOW - 300, role="symptom",
+                       rule_id="IFACE_DOWN_001", rule_version="1.0.0",
+                       src="10.1.0.5")
+        conn.commit()
+        conn.close()
+
+        incidents.group_once(NOW)
+        incident_id = self._rows("SELECT id FROM incidents")[0]["id"]
+        entry = next(e for e in timeline.build(incident_id)
+                     if e["source"] == "evidence")
+        self.assertEqual(entry["role"], "symptom")
+        self.assertEqual(entry["ref"]["rule_id"], "IFACE_DOWN_001")
+        self.assertEqual(entry["ref"]["rule_version"], "1.0.0")
 
     def test_iso_timestamps_are_converted_not_compared(self):
         # mac_history usa ISO-8601, observability.db usa unix: la conversione

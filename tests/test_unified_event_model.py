@@ -19,7 +19,7 @@ data_config.DATA_DIR = _TMP_DATA_DIR
 
 import app_server  # noqa: E402
 from core import db  # noqa: E402
-from observability import fieldmap, normalize  # noqa: E402
+from observability import fieldmap, normalize, rules  # noqa: E402
 from security import user_manager  # noqa: E402
 
 PASS = "PasswordSicura1!"
@@ -220,6 +220,82 @@ class TestDeviceChangeDetection(_Base):
         normalize.normalize_once(NOW)
         self.assertEqual(self._events("event_type = 'device.change'"), [])
         self.assertEqual(len(self._events("event_type = 'device.state'")), 2)
+
+
+class TestInterfaceEntities(_Base):
+    """``entity_type='interface'`` esisteva nello schema e non lo emetteva
+    nessuno: uno snapshot interfacce deve produrre eventi PER PORTA, non solo
+    per apparato."""
+
+    def _snapshot(self, conn, payload, ts):
+        conn.execute(
+            "INSERT INTO api_observations (ts, tenant, device_ip, kind, "
+            "summary_json) VALUES (?, 'sede-a', '10.1.0.254', 'interfaces', ?)",
+            (ts, json.dumps(payload)))
+
+    def test_interface_state_is_emitted_per_port(self):
+        conn = db.get_observability_connection()
+        self._snapshot(conn, {"results": {"port1": {"link": "up", "speed": 1000},
+                                          "port2": {"link": "up", "speed": 100}}},
+                       NOW - 300)
+        conn.commit()
+        conn.close()
+
+        normalize.normalize_once(NOW)
+        rows = self._events("event_type = 'interface.state'")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({r["interface"] for r in rows}, {"port1", "port2"})
+        self.assertEqual({r["entity_type"] for r in rows}, {"interface"})
+        self.assertEqual({r["entity_id"] for r in rows},
+                         {"10.1.0.254:port1", "10.1.0.254:port2"})
+        port1 = next(r for r in rows if r["interface"] == "port1")
+        self.assertEqual(json.loads(port1["attrs_json"])["link"], "up")
+
+    def test_link_down_becomes_an_interface_change_not_a_device_change(self):
+        conn = db.get_observability_connection()
+        self._snapshot(conn, {"results": {"port1": {"link": "up"}}}, NOW - 600)
+        self._snapshot(conn, {"results": {"port1": {"link": "down"}}}, NOW - 300)
+        conn.commit()
+        conn.close()
+
+        normalize.normalize_once(NOW)
+        changes = self._events("event_type = 'interface.change'")
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0]["interface"], "port1")
+        self.assertEqual(changes[0]["entity_type"], "interface")
+        attrs = json.loads(changes[0]["attrs_json"])
+        self.assertEqual((attrs["before"], attrs["after"]), ("up", "down"))
+        # Non deve finire anche fra i cambiamenti a livello di apparato.
+        self.assertEqual(self._events("event_type = 'device.change'"), [])
+
+    def test_system_status_changes_stay_on_the_device(self):
+        conn = db.get_observability_connection()
+        for ts, version in ((NOW - 600, "v7.2.5"), (NOW - 300, "v7.4.1")):
+            conn.execute(
+                "INSERT INTO api_observations (ts, tenant, device_ip, kind, "
+                "summary_json) VALUES (?, 'sede-a', '10.1.0.254', "
+                "'system_status', ?)",
+                (ts, json.dumps({"results": {"version": version}})))
+        conn.commit()
+        conn.close()
+
+        normalize.normalize_once(NOW)
+        self.assertEqual(len(self._events("event_type = 'device.change'")), 1)
+        self.assertEqual(self._events("event_type = 'interface.change'"), [])
+
+    def test_iface_down_rule_produces_a_symptom(self):
+        """Il termine `interface.down` dell'esempio di regola adesso esiste."""
+        conn = db.get_observability_connection()
+        self._snapshot(conn, {"results": {"port1": {"link": "up"}}}, NOW - 600)
+        self._snapshot(conn, {"results": {"port1": {"link": "down"}}}, NOW - 300)
+        conn.commit()
+        conn.close()
+
+        normalize.normalize_once(NOW)
+        events = self._events()
+        findings = [f for rid, _v, _p, f in rules.evaluate(events, only=["IFACE_DOWN_001"])]
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].role, "symptom")
 
 
 class TestEventsApi(_Base):
