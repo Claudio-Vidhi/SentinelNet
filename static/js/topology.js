@@ -2044,13 +2044,13 @@
                     if (n.stack) {
                         const warn = n.stack.health === 'degraded'
                             ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'Degraded stack':'Stack degradato'}" style="color:var(--danger); font-size:10px;"></i>` : '';
-                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="font-size:9px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:4px; padding:1px 4px; cursor:pointer;" onclick="toggleStackRow('${escapeHtml(n.id)}')">STACK ×${n.stack.member_count}</span>${warn}`);
+                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:4px; padding:2px 6px; cursor:pointer;" onclick="toggleStackRow('${escapeHtml(n.id)}')"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
                     }
                     // Solo switch/router gestiti possono essere marcati a mano.
                     const canMark = canAdmin && !n.discovered && ['switch','router'].includes(effVal(n,'category'));
                     return td(canMark
-                        ? `<button onclick="markAsStack('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
-                        : '<span style="color:var(--text-muted);">—</span>');
+                        ? `<button onclick="markAsStack('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:4px; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
+                        : '<span style="color:var(--text-muted);">—</span>', 'white-space:nowrap;');
                 }
                 case 'category': {
                     const curCat = effVal(n, 'category');
@@ -2080,24 +2080,35 @@
             const members = n.stack.members || [];
             const hdr = currentLang === 'en'
                 ? ['#', 'Role', 'Model', 'Serial', 'State'] : ['#', 'Ruolo', 'Modello', 'Serial', 'Stato'];
-            const inp = (i, field, val, w) => canAdmin
-                ? `<input data-stack-field="${field}" data-stack-idx="${i}" value="${attrEsc(val||'')}" style="width:${w}px; padding:3px 5px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:11px;">`
-                : escapeHtml(val || '—');
+            // Gli input riempiono la colonna: la tabella unità occupa tutta la
+            // larghezza della riga espansa invece di stringersi a sinistra.
+            const inp = (i, field, val) => canAdmin
+                ? `<input data-stack-field="${field}" data-stack-idx="${i}" value="${attrEsc(val||'')}" style="width:100%; box-sizing:border-box; padding:3px 6px; border-radius:5px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">`
+                : `<span style="font-size:11px;">${escapeHtml(val || '—')}</span>`;
             const body = members.map((m, i) => `<tr>
                 <td style="padding:3px 8px; font-size:11px; color:var(--text-muted);">${escapeHtml(String(m.index != null ? m.index : i + 1))}</td>
-                <td style="padding:3px 8px;">${inp(i, 'role', m.role, 80)}</td>
-                <td style="padding:3px 8px;">${inp(i, 'model', m.model, 140)}</td>
-                <td style="padding:3px 8px;">${inp(i, 'serial', m.serial, 130)}</td>
-                <td style="padding:3px 8px; font-size:11px; color:${m.state && m.state !== 'ready' ? 'var(--danger)' : 'var(--text-muted)'};">${escapeHtml(m.state || '—')}</td>
+                <td style="padding:3px 8px;">${inp(i, 'role', m.role)}</td>
+                <td style="padding:3px 8px;">${inp(i, 'model', m.model)}</td>
+                <td style="padding:3px 8px;">${inp(i, 'serial', m.serial)}</td>
+                <td style="padding:3px 8px; font-size:11px; white-space:nowrap; color:${m.state && m.state !== 'ready' ? 'var(--danger)' : 'var(--text-muted)'};">${escapeHtml(m.state || '—')}</td>
             </tr>`).join('');
-            const actions = canAdmin ? `<div style="margin-top:8px; display:flex; gap:8px;">
-                <button onclick="saveStackMembers('${escapeHtml(n.id)}')" style="font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:5px; padding:3px 8px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
-                <button onclick="removeStack('${escapeHtml(n.id)}')" style="font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:5px; padding:3px 8px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
+            // Azioni accanto al titolo: sfruttano lo spazio orizzontale libero.
+            const actions = canAdmin ? `<div style="display:flex; gap:8px;">
+                <button onclick="saveStackMembers('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:5px; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
+                <button onclick="removeStack('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:5px; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
             </div>` : '';
+            // Larghezze: #, Ruolo, Modello, Serial, Stato.
+            const widths = ['36px', '18%', '32%', '30%', '90px'];
             return `<tr class="stack-members" data-stack-for="${attrEsc(n.id)}" style="display:none;"><td colspan="${cols.length}" style="padding:10px 14px; background:var(--surface);">
-                <div style="font-size:11px; font-weight:700; color:${STACK_COLOR}; margin-bottom:6px;"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(stackLine(n.stack, '', n.model))}</div>
-                <table style="width:auto;"><thead><tr>${hdr.map(h=>`<th style="padding:3px 8px; font-size:10px;">${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>
-                ${actions}
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
+                    <div style="font-size:12px; font-weight:700; color:${STACK_COLOR};"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(stackLine(n.stack, '', n.model))}</div>
+                    ${actions}
+                </div>
+                <table style="width:100%; table-layout:fixed;">
+                    <colgroup>${widths.map(w=>`<col style="width:${w};">`).join('')}</colgroup>
+                    <thead><tr>${hdr.map(h=>`<th style="padding:3px 8px; font-size:10px;">${h}</th>`).join('')}</tr></thead>
+                    <tbody>${body}</tbody>
+                </table>
             </td></tr>`;
         };
 
