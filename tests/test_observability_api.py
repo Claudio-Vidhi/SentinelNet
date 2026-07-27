@@ -194,7 +194,9 @@ class TestCorrelator(_Base):
         _seed_syslog(conn, "sede-a", self.FGT_MSG, severity=4)
         conn.commit()
         conn.close()
-        with patch("collectors.mac_history.client_map", return_value=[
+        # Soglie ai default: il test verifica la regola, non la configurazione.
+        with patch("observability.rules.get_app_settings", return_value={}), \
+             patch("collectors.mac_history.client_map", return_value=[
                 {"switch_ip": "10.1.0.10", "switch_name": "SW-A1",
                  "switch_port": "Gi1/0/7"}]):
             correlator.correlate_once(NOW)
@@ -321,7 +323,7 @@ class TestCorrelator(_Base):
         self.assertIsNone(rows[0]["switch_port"])
 
     def test_flow_outside_delta_no_event(self):
-        delta = rules.RULES["BLOCKED_TRAFFIC_001"]["defaults"]["match_delta_s"]
+        delta = rules.defaults_for("BLOCKED_TRAFFIC_001")["match_delta_s"]
         conn = db.get_observability_connection()
         _seed_flow(conn, "sede-a", "10.1.0.5", "203.0.113.7",
                    ts=NOW - delta - 600)
