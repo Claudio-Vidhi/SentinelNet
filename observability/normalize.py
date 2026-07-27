@@ -293,10 +293,14 @@ def normalize_once(now: Optional[int] = None) -> dict:
     now = now or int(time.time())
     conn = db.get_observability_connection()
     try:
+        from observability import baseline
         counts = {
             "flow": _from_flows(conn, now),
             "syslog": _from_syslog(conn, now),
             "api": _from_api_observations(conn, now),
+            # Il baseline è un adapter come gli altri: osserva lo storico dei
+            # flussi e scrive la misura come fatto. Non conclude nulla.
+            "baseline": baseline.compute_once(conn, now),
         }
         conn.commit()
         metrics.set_gauge("last_normalize_ts", now)
