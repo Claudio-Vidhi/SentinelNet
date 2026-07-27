@@ -8,6 +8,7 @@
 (function () {
     let _incidents = [];
     let _selectedId = null;
+    let _catalog = {};   // rule_id -> definizione, per mostrare cosa fare
 
     const SOURCE_META = {
         evidence:   { icon: 'fa-scale-balanced', color: 'var(--danger)',   label: 'Evidenza' },
@@ -90,6 +91,8 @@
             const res = await apiFetch('/api/incidents/rules');
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
+            _catalog = {};
+            (data.rules || []).forEach(r => { _catalog[r.id] = r; });
             box.innerHTML = (data.rules || []).map(r => `
                 <div style="padding:10px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface-2);">
                     <div style="display:flex; justify-content:space-between; gap:12px; align-items:baseline;">
@@ -101,6 +104,10 @@
                         consuma: ${escapeHtml(jsStr((r.inputs || []).join(', ')))} ·
                         produce: ${escapeHtml(jsStr((r.outputs || []).join(', ')))}
                     </div>
+                    ${r.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
+                        <strong>Da verificare:</strong> ${escapeHtml(jsStr(r.investigation))}</div>` : ''}
+                    ${r.remediation ? `<div style="font-size:12px; margin-bottom:8px;">
+                        <strong>Rimedio:</strong> ${escapeHtml(jsStr(r.remediation))}</div>` : ''}
                     ${(r.parameters || []).length ? `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
                         ${r.parameters.map(p => `<div>
                             <label style="font-size:11px; color:var(--text-muted); display:block;" title="${escapeHtml(jsStr(p.description || ''))}">
@@ -191,6 +198,7 @@
     async function openIncident(id) {
         _selectedId = id;
         renderIncidentsList();
+        if (!Object.keys(_catalog).length) await loadRuleCatalog();
         const box = document.getElementById('incidentDetail');
         if (!box) return;
         box.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
@@ -237,6 +245,22 @@
                 ${r.rule_params && Object.keys(r.rule_params).length
                     ? '· soglie ' + escapeHtml(JSON.stringify(r.rule_params)) : ''}
             </div>
+            ${renderGuidance(r.rule_id)}
+        </div>`;
+    }
+
+    // "Cosa dovrebbe indagare l'ingegnere dopo": non un testo scritto a parte,
+    // ma i campi che la regola stessa dichiara nel catalogo.
+    function renderGuidance(ruleId) {
+        const rule = _catalog[ruleId];
+        if (!rule || (!rule.investigation && !rule.remediation)) return '';
+        return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
+            ${rule.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
+                <i class="fa-solid fa-magnifying-glass" style="color:var(--primary);"></i>
+                <strong>Da verificare:</strong> ${escapeHtml(jsStr(rule.investigation))}</div>` : ''}
+            ${rule.remediation ? `<div style="font-size:12px;">
+                <i class="fa-solid fa-screwdriver-wrench" style="color:var(--success);"></i>
+                <strong>Rimedio:</strong> ${escapeHtml(jsStr(rule.remediation))}</div>` : ''}
         </div>`;
     }
 
