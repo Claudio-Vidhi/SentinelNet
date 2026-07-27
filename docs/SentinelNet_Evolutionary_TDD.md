@@ -1,239 +1,442 @@
-# SentinelNet - Evolutionary Technical Design Document (TDD)
+# SentinelNet Engineering Principles
+## Network Observability Platform - Functional Design Guidelines
 
-Version: Draft 0.1
+# Purpose
 
-## 1. Scopo
+This document defines the architectural principles and engineering philosophy behind SentinelNet.
 
-Questo documento non descrive un progetto da iniziare, ma l'evoluzione
-di SentinelNet, un sistema già in sviluppo.
+It is **not** a list of features.
 
-Il suo obiettivo è preservare la coerenza architetturale mentre il
-progetto cresce.
+Its purpose is to ensure that every new module, service or dashboard contributes to the same objective:
 
-------------------------------------------------------------------------
+> Help Network Engineers understand **what happened, why it happened, and what should be investigated next**, instead of simply presenting raw telemetry.
 
-# 2. Principi architetturali
+Every implementation must be evaluated against these principles.
 
-## 2.1 Separazione delle responsabilità
+---
 
-SentinelNet deve essere composto da livelli indipendenti.
+# Core Philosophy
 
-    Data Plane
-        │
-    Normalization
-        │
-    Correlation Engine
-        │
-    Knowledge Base
-        │
-    Reasoning Engine
-        │
-    Service Layer
-        ├── REST API
-        ├── MCP Server
-        ├── Dashboard
-        └── Future Integrations
+SentinelNet is **not** a NetFlow collector.
 
-Nessuna logica di business deve risiedere nella dashboard.
+SentinelNet is **not** another monitoring dashboard.
 
-------------------------------------------------------------------------
+SentinelNet is a **Network Observability Platform**.
 
-## 2.2 Dashboard come client
+The platform should transform independent data sources into operational knowledge.
 
-La dashboard non è il prodotto.
+The objective is reducing Mean Time To Detect (MTTD) and Mean Time To Resolve (MTTR).
 
-È uno dei client del Service Layer.
+---
 
-Domani lo stesso motore dovrà poter essere interrogato da:
+# Primary Goals
 
--   Dashboard Web
--   REST API
--   MCP Server
--   CLI
--   Automazioni
--   AI Agent
+Every feature should answer one or more of the following questions.
 
-------------------------------------------------------------------------
+- What changed?
+- Why did it change?
+- Where did it happen?
+- Which systems are involved?
+- Which event most likely triggered the incident?
+- Which infrastructure components are affected?
+- Is this behavior normal?
+- Has this happened before?
+- What should the engineer investigate next?
 
-# 3. Stato attuale
+If a feature does not answer any of these questions, reconsider whether it should exist.
 
-Il progetto possiede già basi solide:
+---
 
--   pipeline di ingest asincrona
--   collector NetFlow/IPFIX/sFlow
--   raccolta Syslog
--   correlazione Flow/SIEM
--   modello multi-tenant
--   API
--   integrazione MCP iniziale
+# Dashboard Philosophy
 
-L'obiettivo NON è riscrivere questi componenti.
+Dashboards are **not** the product.
 
-L'obiettivo è costruire livelli di intelligenza sopra di essi.
+The dashboard is only the visualization layer.
 
-------------------------------------------------------------------------
+Business logic must never live inside the frontend.
 
-# 4. Roadmap evolutiva
+The frontend should consume processed information produced by backend services.
 
-## Fase 1 - Data Plane
+Avoid creating pages whose only purpose is displaying charts.
 
-Stabilizzare:
+Prefer dashboards that answer operational questions.
 
--   collector
--   parser
--   storage
--   normalizzazione
--   metriche
+Instead of
 
-Contratto:
+Core Utilization = 96%
 
-I dati raccolti devono essere indipendenti dalla modalità di
-visualizzazione.
+display
 
-------------------------------------------------------------------------
+Core utilization increased because Backup Server started transferring 2.4 Gbps toward NAS01 at 09:31.
+Traffic is entirely East-West and does not cross the firewall.
 
-## Fase 2 - Correlation Engine
+---
 
-Correlare:
+# Data First, Charts Second
 
--   NetFlow
--   SNMP
--   Syslog
--   Routing
--   Topologia
--   Configurazioni
+Charts are supporting evidence.
 
-Output:
+Charts are not conclusions.
 
-Eventi arricchiti.
+Every chart should answer a question.
 
-------------------------------------------------------------------------
+Bad example
 
-## Fase 3 - Knowledge Base
+- Top Talkers
+- Top Protocols
+- Bandwidth Usage
 
-Creare una base di conoscenza dei problemi.
+Better example
 
-Ogni problema descrive:
+Question:
 
--   sintomi
--   indicatori
--   possibili cause
--   livello di confidenza
--   verifiche consigliate
+Why is WAN1 saturated?
 
-Esempi:
+Evidence:
 
--   congestione
--   loop Layer2
--   broadcast storm
--   routing instability
--   backup fuori finestra
--   failover SD-WAN
+- Top contributor
+- Flow path
+- Related events
+- Configuration changes
+- Baseline comparison
 
-------------------------------------------------------------------------
+---
 
-## Fase 4 - Reasoning Engine
+# Multi-source Correlation
 
-Riceve eventi correlati.
+Never build features around a single datasource.
 
-Produce:
+Every module should consume multiple data sources whenever possible.
 
--   causa probabile
--   motivazione
--   evidenze
--   livello di confidenza
+Typical sources include
 
-Ogni conclusione deve essere spiegabile.
+- NetFlow
+- IPFIX
+- sFlow
+- SNMP
+- Syslog
+- LLDP/CDP
+- Routing Tables
+- Firewall Logs
+- Configuration Backups
+- API integrations
+- Cloud providers
 
-Mai "black box".
+Individual data sources are incomplete.
 
-------------------------------------------------------------------------
+Correlation creates value.
 
-## Fase 5 - Incident Intelligence
+---
 
-Costruzione automatica della timeline.
+# Correlation Engine
 
-Esempio
+Every incoming event should be normalized into a common internal model.
 
-09:31 Backup
+The Correlation Engine should detect relationships between
+
+- traffic
+- topology
+- devices
+- interfaces
+- routing
+- configuration
+- security events
+- historical behavior
+
+Correlation must be deterministic whenever possible.
+
+Avoid hidden logic.
+
+---
+
+# Reasoning Engine
+
+The Reasoning Engine should explain incidents.
+
+It should never simply state
+
+High CPU
+
+Instead explain
+
+High CPU most likely caused by increased East-West traffic generated by Backup01 after scheduled replication started.
+
+Every conclusion must expose
+
+- supporting evidence
+- confidence score
+- reasoning path
+
+The engineer must always understand why the conclusion was generated.
+
+---
+
+# Explainability
+
+Every automated conclusion must be explainable.
+
+Never return
+
+"AI detected anomaly."
+
+Instead return
+
+Reason:
+
+Traffic increased 650%.
+
+Supporting evidence:
+
+- NetFlow
+- SNMP
+- Baseline deviation
+- Configuration unchanged
+
+Confidence:
+
+92%
+
+---
+
+# Baseline Philosophy
+
+Do not compare only against yesterday.
+
+Behavior should be compared against
+
+- same weekday
+- same time window
+- rolling averages
+- seasonal patterns
+
+Baselines must adapt over time.
+
+Do not generate alerts from temporary spikes.
+
+---
+
+# Topology Awareness
+
+Topology is not documentation.
+
+Topology is operational context.
+
+Every node should expose
+
+- neighbors
+- interfaces
+- flows
+- utilization
+- errors
+- historical changes
+
+Every link should expose
+
+- bandwidth
+- packet loss
+- latency
+- flows
+- responsible hosts
+
+---
+
+# East-West Visibility
+
+The platform should distinguish
+
+Traffic crossing firewalls
+
+from
+
+Traffic remaining inside the data center.
+
+Many incidents never reach the firewall.
+
+This visibility is a major differentiator.
+
+---
+
+# Incident Timeline
+
+Every incident should automatically generate a timeline.
+
+Example
+
+09:31
+Backup started
 
 ↓
 
-09:32 Congestione
+09:33
+Core utilization reached 95%
 
 ↓
 
-09:33 CPU elevata
+09:34
+Switch CPU increased
 
 ↓
 
-09:35 Ticket utenti
+09:35
+Users reported slowness
 
 ↓
 
-Probabile causa: Backup fuori finestra.
+Most likely cause:
+Unexpected backup replication.
 
-------------------------------------------------------------------------
+The timeline should become the primary troubleshooting interface.
 
-# 5. Service Layer
+---
 
-Espone funzioni di dominio.
+# Knowledge Base
 
-Esempi:
+The platform should accumulate operational knowledge.
 
--   findRootCause()
--   tracePath()
--   analyzeBroadcastStorm()
--   explainInterface()
--   summarizeIncident()
--   compareBaseline()
+Example
 
-Il Service Layer è l'unico punto di accesso alla logica.
+Problem
 
-------------------------------------------------------------------------
+Broadcast Storm
 
-# 6. REST e MCP
+Indicators
 
-REST e MCP devono condividere gli stessi servizi.
+- Broadcast increase
+- MAC flapping
+- STP topology changes
+- Switch CPU
+- Interface saturation
 
-Non devono implementare logica diversa.
+Suggested investigation
 
-REST è pensato per:
+- Verify STP
+- Check loops
+- Inspect MAC table
 
--   frontend
--   integrazioni software
+Every incident enriches the knowledge base.
 
-MCP è pensato per:
+---
 
--   AI Agent
--   Copilot
--   ChatGPT
--   automazioni intelligenti
+# Layer 2 Awareness
 
-------------------------------------------------------------------------
+Do not focus only on Layer 3.
 
-# 7. Regole architetturali
+The platform should understand
 
--   Nessuna logica nella UI.
--   Nessuna duplicazione fra REST e MCP.
--   Tutte le conclusioni devono essere spiegabili.
--   Nessun dato sintetico presentato come reale.
--   Ogni correlazione deve essere verificabile.
--   Le fonti restano indipendenti.
+- Broadcast
+- Multicast
+- Unknown Unicast
+- STP
+- MAC Flapping
+- VLANs
+- Port Errors
+- CRC
+- Duplex mismatch
 
-------------------------------------------------------------------------
+These are often invisible to NetFlow alone.
 
-# 8. Visione
+---
 
-SentinelNet non deve essere ricordato come una dashboard NetFlow.
+# Vendor Independence
 
-L'obiettivo è diventare una piattaforma di Network Observability con
-capacità di Incident Intelligence.
+The architecture must remain vendor agnostic.
 
-Il valore non sarà mostrare più grafici.
+No internal component should depend directly on
 
-Il valore sarà trasformare telemetria grezza in spiegazioni operative.
+Cisco
 
-La dashboard rappresenta semplicemente una delle modalità con cui un
-operatore, uno script o un agente AI possono interrogare il motore di
-osservabilità.
+Fortinet
+
+Juniper
+
+Aruba
+
+Palo Alto
+
+Use adapters.
+
+Normalize data internally.
+
+---
+
+# API First
+
+Every capability should be available through internal APIs.
+
+The Web UI is only one possible client.
+
+Future consumers may include
+
+- CLI
+- AI assistants
+- Mobile applications
+- ChatOps
+- SIEM
+- SOAR
+- External automation
+
+---
+
+# Extensibility
+
+New collectors should require minimal changes.
+
+Every datasource should implement the same ingestion contract.
+
+Avoid coupling collectors with business logic.
+
+---
+
+# Feature Acceptance Checklist
+
+Before implementing any feature ask:
+
+✓ Does it reduce troubleshooting time?
+
+✓ Does it correlate multiple data sources?
+
+✓ Does it explain rather than visualize?
+
+✓ Is the conclusion explainable?
+
+✓ Does it integrate into the Incident Timeline?
+
+✓ Can another module reuse this information?
+
+✓ Does it remain vendor independent?
+
+✓ Is it exposing reusable APIs?
+
+If most answers are "No", redesign the feature.
+
+---
+
+# Long-term Vision
+
+The final goal is not building a dashboard.
+
+The final goal is building a Network Intelligence Platform.
+
+Raw telemetry
+
+↓
+
+Normalized Events
+
+↓
+
+Correlated Information
+
+↓
+
+Operational Knowledge
+
+↓
+
+Reasoned Incidents
+
+↓
+
+Actionable Recommendations
+
+The platform should evolve from monitoring infrastructure to understanding infrastructure.

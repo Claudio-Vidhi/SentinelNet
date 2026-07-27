@@ -74,6 +74,7 @@ from routers import sites as _sites_router
 from routers import agent as _agent_router
 from routers import flow_siem as _flow_siem_router
 from routers import audit_checklist as _audit_checklist_router
+from routers import incidents as _incidents_router
 from redundancy import router as _redundancy_router
 
 app.include_router(_fortigate_router.router)
@@ -99,6 +100,7 @@ app.include_router(_sites_router.router)
 app.include_router(_agent_router.router)
 app.include_router(_flow_siem_router.router)
 app.include_router(_audit_checklist_router.router)
+app.include_router(_incidents_router.router)
 app.include_router(_redundancy_router.router)
 
 _default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
