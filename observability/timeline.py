@@ -4,7 +4,9 @@ raccolte dalla piattaforma, così che l'ingegnere veda la SEQUENZA di ciò che �
 successo invece di una tabella di eventi.
 
 Fonti unite (nessuna nuova raccolta dati):
-- ``correlated``: gli eventi correlati dell'incidente, con la loro evidenza;
+- ``evidence``: le evidenze dell'incidente, ciascuna col proprio RUOLO causale
+  (trigger/supporting/symptom/consequence) e la provenienza della regola che
+  l'ha prodotta — è la spina dorsale della timeline;
 - ``syslog``: le righe syslog grezze attorno alla finestra, per le entità
   coinvolte (contesto che l'evento correlato da solo non mostra);
 - ``flow``: i volumi al minuto da ``flow_aggregates`` per le stesse entità;
@@ -71,32 +73,29 @@ def build(incident_id: int) -> list:
         frm = incident["opened_ts"] - PAD_S
         to = incident["last_event_ts"] + PAD_S
 
-        events = conn.execute(
-            """SELECT ce.id, ce.created_ts, ce.kind, ce.src_ip, ce.dst_ip,
-                      ce.switch_port, ce.severity, ce.evidence_json
-               FROM incident_events ie
-               JOIN correlated_events ce ON ce.id = ie.correlated_event_id
-               WHERE ie.incident_id = ?""", (incident_id,)).fetchall()
+        evidence_rows = conn.execute(
+            """SELECT id, ts, role, rule_id, rule_version, params_json, severity,
+                      src_ip, dst_ip, switch_port, summary, attrs_json, event_id
+               FROM evidence WHERE incident_id = ?
+               ORDER BY ts ASC, id ASC""", (incident_id,)).fetchall()
 
         entries = []
         ips = set()
-        for ev in events:
-            evidence = _evidence(ev["evidence_json"])
-            ts = evidence.get("syslog_ts")
-            ts = int(ts) if isinstance(ts, (int, float)) else int(ev["created_ts"])
+        for ev in evidence_rows:
             for ip in (ev["src_ip"], ev["dst_ip"]):
                 if ip:
                     ips.add(ip)
-            flow = evidence.get("flow") or {}
-            detail = f"{ev['src_ip'] or '?'} → {ev['dst_ip'] or '?'}"
-            if flow.get("dst_port"):
-                detail += f":{flow['dst_port']}"
+            detail = ev["summary"] or ""
             if ev["switch_port"]:
                 detail += f" ({ev['switch_port']})"
             entries.append({
-                "ts": ts, "source": "correlated", "severity": ev["severity"],
-                "text": f"{ev['kind']}: {detail}",
-                "ref": {"correlated_event_id": ev["id"], "evidence": evidence},
+                "ts": ev["ts"], "source": "evidence", "role": ev["role"],
+                "severity": ev["severity"], "text": detail,
+                "ref": {"evidence_id": ev["id"], "event_id": ev["event_id"],
+                        "rule_id": ev["rule_id"],
+                        "rule_version": ev["rule_version"],
+                        "rule_params": _evidence(ev["params_json"]),
+                        "attrs": _evidence(ev["attrs_json"])},
             })
 
         ip_list = sorted(ips)

@@ -191,6 +191,36 @@ def _stable_fields(payload: str) -> dict:
             if not any(h in k.lower() for h in _VOLATILE_HINTS)}
 
 
+_IFACE_KINDS = ("interfaces", "interface")
+
+
+def _interface_of(field: str, kind: str) -> Optional[str]:
+    """Nome interfaccia se il percorso appartiene al ramo di una interfaccia.
+
+    Gli snapshot ``interfaces`` sono dizionari indicizzati per nome porta
+    (``results.port1.link``): il segmento dopo ``results`` è l'interfaccia.
+    Fuori da quegli snapshot non si indovina nulla.
+    """
+    if kind not in _IFACE_KINDS:
+        return None
+    parts = field.split(".")
+    if len(parts) >= 3 and parts[0] == "results" and not parts[1].startswith("["):
+        return parts[1]
+    return None
+
+
+def _interfaces_of(payload: str, kind: str) -> dict:
+    """{nome_interfaccia: {campo_stabile: valore}} da uno snapshot interfacce."""
+    if kind not in _IFACE_KINDS:
+        return {}
+    grouped: dict = {}
+    for field, value in _stable_fields(payload).items():
+        iface = _interface_of(field, kind)
+        if iface:
+            grouped.setdefault(iface, {})[field.split(".", 2)[2]] = value
+    return grouped
+
+
 def _from_api_observations(conn, now: int) -> int:
     cur = _cursor(conn, "api")
     rows = conn.execute(
@@ -222,15 +252,34 @@ def _from_api_observations(conn, now: int) -> int:
             changed = [k for k in after
                        if k in before and before[k] != after[k]][:MAX_CHANGES_PER_SNAPSHOT]
             for field in changed:
+                # Un cambiamento dentro il ramo di un'interfaccia riguarda
+                # QUELL'interfaccia, non l'apparato: entità e tipo evento
+                # cambiano di conseguenza.
+                iface = _interface_of(field, r["kind"])
                 _emit(conn,
                       ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
                       source="fortigate_api", source_id=r["id"],
-                      event_type="device.change", entity_type="device",
-                      entity_id=r["device_ip"], device_ip=r["device_ip"],
+                      event_type="interface.change" if iface else "device.change",
+                      entity_type="interface" if iface else "device",
+                      entity_id=f"{r['device_ip']}:{iface}" if iface else r["device_ip"],
+                      device_ip=r["device_ip"], interface=iface,
                       severity=5,
                       attrs={"kind": r["kind"], "field": field,
                              "before": before[field], "after": after[field]},
                       dedup_key=f"api-change:{r['id']}:{field}")
+
+        # Stato per interfaccia: rende interrogabile la singola porta, non solo
+        # l'apparato. ``entity_type='interface'`` esisteva nello schema e non lo
+        # emetteva nessuno.
+        for iface, fields in _interfaces_of(r["summary_json"], r["kind"]).items():
+            _emit(conn,
+                  ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
+                  source="fortigate_api", source_id=r["id"],
+                  event_type="interface.state", entity_type="interface",
+                  entity_id=f"{r['device_ip']}:{iface}",
+                  device_ip=r["device_ip"], interface=iface,
+                  attrs=fields,
+                  dedup_key=f"api-iface:{r['id']}:{iface}")
         last_id = max(last_id, r["id"])
     if rows:
         _save_cursor(conn, "api", last_id, now)

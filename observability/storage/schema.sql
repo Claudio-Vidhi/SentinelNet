@@ -39,22 +39,10 @@ CREATE TABLE IF NOT EXISTS syslog_events (
 CREATE INDEX IF NOT EXISTS idx_syslog_ts_tenant ON syslog_events(ts, tenant);
 CREATE INDEX IF NOT EXISTS idx_syslog_src ON syslog_events(device_ip);
 
--- 3. EVENTI CORRELATI (popolati dal correlatore, fase 4)
-CREATE TABLE IF NOT EXISTS correlated_events (
-    id            INTEGER PRIMARY KEY,
-    created_ts    INTEGER NOT NULL,
-    tenant        TEXT NOT NULL,
-    kind          TEXT,
-    src_ip        TEXT,
-    dst_ip        TEXT,
-    switch_port   TEXT,
-    severity      INTEGER,
-    status        TEXT DEFAULT 'new' CHECK(status IN ('new','ack','resolved')),
-    dedup_key     TEXT UNIQUE,
-    evidence_json TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_corr_tenant_status
-    ON correlated_events(tenant, status);
+-- 3. (rimossa in v7) ``correlated_events`` e ``incident_events`` sono state
+-- sostituite da ``evidence``: il correlatore non produce più incidenti diretti
+-- ma evidenze, e l'incidente è una vista derivata. Le righe preesistenti
+-- vengono travasate da core/db.py::_migrate_v7_evidence.
 
 -- 5. OSSERVAZIONI API (schema v2, §9.2): snapshot periodici via REST poller.
 CREATE TABLE IF NOT EXISTS api_observations (
@@ -204,8 +192,8 @@ CREATE TABLE IF NOT EXISTS normalize_cursors (
     last_ts  INTEGER NOT NULL DEFAULT 0
 );
 
--- 8. INCIDENTI (v5): raggruppamento di correlated_events per entità condivisa
--- + gap temporale. Un incidente resta aperto (closed_ts NULL) finché arrivano
+-- 8. INCIDENTI (v5, ridefiniti in v7): raggruppamento delle EVIDENZE per
+-- entità condivisa + gap temporale. Un incidente resta aperto (closed_ts NULL) finché arrivano
 -- eventi; dopo un periodo di quiete viene chiuso.
 CREATE TABLE IF NOT EXISTS incidents (
     id             INTEGER PRIMARY KEY,
@@ -230,17 +218,48 @@ CREATE INDEX IF NOT EXISTS idx_incidents_open
 CREATE INDEX IF NOT EXISTS idx_incidents_entity
     ON incidents(tenant, entity_key, closed_ts);
 
--- Appartenenza evento→incidente. correlated_event_id NON ha FK: correlated_events
--- ha una retention propria (rollup.py) e un CASCADE da lì svuoterebbe in silenzio
--- gli incidenti.
-CREATE TABLE IF NOT EXISTS incident_events (
-    incident_id         INTEGER NOT NULL,
-    correlated_event_id INTEGER NOT NULL,
-    PRIMARY KEY (incident_id, correlated_event_id),
+-- 11. EVIDENZE (v7): il Correlation Engine NON produce più incidenti, produce
+-- evidenze. L'incidente è una vista derivata da esse.
+--
+--     events → regole di correlazione → evidence → incidents
+--
+-- Una riga di evidenza È l'associazione evento↔incidente: lo stesso evento può
+-- essere evidenza per più incidenti (righe distinte), cosa che una colonna
+-- correlation_id sull'evento non potrebbe esprimere.
+--
+-- ``role``: il ruolo causale è DICHIARATO DALLA REGOLA, mai dedotto. Sapere
+-- che un aumento di traffico è conseguenza e non innesco richiede la direzione
+-- causale, che la regola conosce per costruzione e un'euristica indovina.
+--
+-- ``rule_id``/``rule_version``/``params_json``: provenienza. La versione da
+-- sola non basta, perché le soglie sono modificabili dall'admin a runtime:
+-- stessa versione + soglia diversa = esito diverso. Le soglie EFFETTIVAMENTE
+-- usate vengono quindi salvate qui accanto alla versione.
+CREATE TABLE IF NOT EXISTS evidence (
+    id           INTEGER PRIMARY KEY,
+    created_ts   INTEGER NOT NULL,          -- quando la regola ha concluso
+    ts           INTEGER NOT NULL,          -- quando è successo il fatto
+    tenant       TEXT NOT NULL,
+    incident_id  INTEGER,                   -- NULL = non ancora assegnata
+    event_id     INTEGER,                   -- events.id (NULL solo per il backfill legacy)
+    entity_key   TEXT,                      -- 'ip:10.1.0.5' | 'port:sw01:Gi1/0/12'
+    role         TEXT NOT NULL CHECK(role IN ('trigger','supporting','symptom','consequence')),
+    rule_id      TEXT NOT NULL,
+    rule_version TEXT NOT NULL,
+    params_json  TEXT,                      -- soglie effettive al momento dello scatto
+    weight       INTEGER NOT NULL DEFAULT 1,
+    severity     INTEGER,
+    src_ip       TEXT,
+    dst_ip       TEXT,
+    switch_port  TEXT,
+    summary      TEXT,                      -- una riga leggibile dall'ingegnere
+    attrs_json   TEXT,
+    dedup_key    TEXT UNIQUE,
     FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_incident_events_ce
-    ON incident_events(correlated_event_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_incident ON evidence(incident_id, ts);
+CREATE INDEX IF NOT EXISTS idx_evidence_open     ON evidence(tenant, incident_id, ts);
+CREATE INDEX IF NOT EXISTS idx_evidence_event    ON evidence(event_id);
 
 CREATE TABLE IF NOT EXISTS audit_engagement_history (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

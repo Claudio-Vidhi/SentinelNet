@@ -1,121 +1,79 @@
 # -*- coding: utf-8 -*-
-"""Motore incidenti: raggruppa ``correlated_events`` in ``incidents`` e ne
-deduce la causa in modo DETERMINISTICO (causa + confidenza + percorso di
-ragionamento).
+"""Incident Engine: l'incidente come VISTA DERIVATA dalle evidenze.
+
+Il correlatore produce evidenze (``observability/rules.py`` →
+``observability/correlator.py``); qui le evidenze non ancora assegnate vengono
+raggruppate e da esse si deduce la conclusione.
 
 Raggruppamento (entità condivisa + gap temporale):
-- da ogni evento correlato si ricavano le chiavi entità ``ip:<src>``,
-  ``ip:<dst>``, ``port:<switch:porta>``;
-- un evento entra in un incidente APERTO dello STESSO tenant che condivide
-  almeno una chiave entità e il cui ``last_event_ts`` non è più vecchio di
-  GAP_S; a parità di candidati vince il più vecchio (deterministico);
+- ogni evidenza porta la propria ``entity_key`` (dichiarata dalla regola);
+- un'evidenza entra in un incidente APERTO dello STESSO tenant con la stessa
+  entità e ``last_event_ts`` non più vecchio di GAP_S; a parità vince il più
+  vecchio (deterministico);
 - altrimenti nasce un incidente nuovo;
-- dopo QUIET_S senza eventi l'incidente viene chiuso (``closed_ts``);
+- dopo QUIET_S senza evidenze l'incidente viene chiuso;
 - MAI raggruppamento cross-tenant.
 
-Idempotenza: gli eventi già associati sono esclusi con un anti-join su
-``incident_events``, quindi rieseguire un ciclo non duplica nulla.
+Ragionamento — usa i RUOLI, che è il motivo per cui esistono:
+- la causa è la regola dell'evidenza con ruolo ``trigger``;
+- le altre evidenze non competono per la causa, la rinforzano: ogni tipo di
+  corroborazione presente aggiunge CONFIDENCE_STEP;
+- ogni incremento è pubblicato in ``reasoning_json.sources_used``, così la
+  confidenza è ricostruibile da chi legge.
 
-Ragionamento: tabella di regole valutata sull'insieme degli eventi
-dell'incidente e sul loro ``evidence_json``. La confidenza parte dal punteggio
-base della regola e cresce di CONFIDENCE_STEP per ogni fonte corroborante; ogni
-incremento è registrato in ``reasoning_json.sources_used`` così il punteggio
-resta ricostruibile dall'ingegnere.
-
-Gira nel ciclo periodico del correlatore (nessun task aggiuntivo), su thread
-dedicato con connessione propria.
+Idempotenza: si lavora solo sulle evidenze con ``incident_id`` NULL.
 """
 
 import json
 import logging
-import statistics
 import time
 from typing import Optional
 
 from core import db
-from observability import metrics
+from observability import metrics, rules
 
 logger = logging.getLogger("sentinelnet.obs")
 
-GAP_S = 900           # evento entro 15 min da last_event_ts → stesso incidente
-QUIET_S = 1800        # 30 min senza eventi → incidente chiuso
-LOOKBACK_S = 3600     # eventi correlati considerati per il raggruppamento
-CONFIDENCE_STEP = 8   # bonus per fonte corroborante
+GAP_S = 900           # evidenza entro 15 min da last_event_ts → stesso incidente
+QUIET_S = 1800        # 30 min senza evidenze → incidente chiuso
+LOOKBACK_S = 3600
+CONFIDENCE_STEP = 8
 CONFIDENCE_MAX = 95
 
-_UNGROUPED_SQL = """
-SELECT ce.id, ce.created_ts, ce.tenant, ce.kind, ce.src_ip, ce.dst_ip,
-       ce.switch_port, ce.severity, ce.evidence_json
-FROM correlated_events ce
-LEFT JOIN incident_events ie ON ie.correlated_event_id = ce.id
-WHERE ce.created_ts >= ? AND ie.incident_id IS NULL
-ORDER BY ce.created_ts ASC, ce.id ASC
+# Ordine di severità dei ruoli nel decidere QUALE trigger è la causa primaria
+# quando ce n'è più d'uno: prima la severità più alta, poi il più antico.
+_UNASSIGNED_SQL = """
+SELECT id, ts, tenant, entity_key, role, rule_id, severity
+FROM evidence
+WHERE incident_id IS NULL AND ts >= ?
+ORDER BY ts ASC, id ASC
 """
-
-_CAUSE_TITLES = {
-    "scan_bloccato": "Scansione bloccata",
-    "traffico_bloccato_ripetuto": "Traffico bloccato ripetuto",
-    "trasferimento_anomalo": "Trasferimento anomalo",
-    "evento_critico_isolato": "Evento critico isolato",
-    "attivita_correlata": "Attività correlata",
-}
-
-
-def _event_ts(row) -> int:
-    """Istante reale dell'evento: il ts del syslog se presente nell'evidenza,
-    altrimenti il ts del ciclo di correlazione."""
-    ev = _evidence(row)
-    ts = ev.get("syslog_ts")
-    return int(ts) if isinstance(ts, (int, float)) else int(row["created_ts"])
-
-
-def _evidence(row) -> dict:
-    try:
-        data = json.loads(row["evidence_json"] or "{}")
-    except (ValueError, TypeError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _entity_keys(row) -> list:
-    """Chiavi entità candidate per un evento correlato."""
-    keys = []
-    for ip in (row["src_ip"], row["dst_ip"]):
-        if ip:
-            keys.append(f"ip:{ip}")
-    if row["switch_port"]:
-        keys.append(f"port:{row['switch_port']}")
-    return keys
 
 
 def _entity_label(entity_key: str) -> str:
     return entity_key.split(":", 1)[1] if ":" in entity_key else entity_key
 
 
-# --- RAGGRUPPAMENTO ----------------------------------------------------------
-
 def group_once(now: Optional[int] = None) -> int:
-    """Un ciclo di raggruppamento. Ritorna il numero di eventi associati."""
+    """Assegna le evidenze libere a un incidente. Ritorna quante ne ha assegnate."""
     now = now or int(time.time())
     conn = db.get_observability_connection()
     try:
-        rows = conn.execute(_UNGROUPED_SQL, (now - LOOKBACK_S,)).fetchall()
+        rows = conn.execute(_UNASSIGNED_SQL, (now - LOOKBACK_S,)).fetchall()
         linked = 0
         touched = set()
         for row in rows:
-            keys = _entity_keys(row)
-            if not keys:
-                continue  # senza entità non c'è nulla da correlare
-            ts = _event_ts(row)
+            if not row["entity_key"]:
+                continue  # senza entità non c'è nulla da raggruppare
+            ts = row["ts"]
             severity = row["severity"] if row["severity"] is not None else 4
 
-            placeholders = ",".join("?" * len(keys))
             match = conn.execute(
-                f"""SELECT id FROM incidents
-                    WHERE tenant = ? AND closed_ts IS NULL
-                      AND last_event_ts >= ? AND entity_key IN ({placeholders})
-                    ORDER BY opened_ts ASC, id ASC LIMIT 1""",
-                (row["tenant"], ts - GAP_S, *keys)).fetchone()
+                """SELECT id FROM incidents
+                   WHERE tenant = ? AND closed_ts IS NULL
+                     AND entity_key = ? AND last_event_ts >= ?
+                   ORDER BY opened_ts ASC, id ASC LIMIT 1""",
+                (row["tenant"], row["entity_key"], ts - GAP_S)).fetchone()
 
             if match is None:
                 cur = conn.execute(
@@ -123,17 +81,15 @@ def group_once(now: Optional[int] = None) -> int:
                            (tenant, entity_key, opened_ts, last_event_ts, title,
                             severity, event_count, status)
                        VALUES (?, ?, ?, ?, ?, ?, 0, 'new')""",
-                    (row["tenant"], keys[0], ts, ts,
-                     _entity_label(keys[0]), severity))
+                    (row["tenant"], row["entity_key"], ts, ts,
+                     _entity_label(row["entity_key"]), severity))
                 assert cur.lastrowid is not None   # garantito da sqlite3 dopo INSERT
                 incident_id = cur.lastrowid
             else:
                 incident_id = match["id"]
 
-            conn.execute(
-                """INSERT OR IGNORE INTO incident_events
-                       (incident_id, correlated_event_id) VALUES (?, ?)""",
-                (incident_id, row["id"]))
+            conn.execute("UPDATE evidence SET incident_id = ? WHERE id = ?",
+                         (incident_id, row["id"]))
             conn.execute(
                 """UPDATE incidents
                       SET last_event_ts = MAX(last_event_ts, ?),
@@ -150,14 +106,14 @@ def group_once(now: Optional[int] = None) -> int:
             _reason(conn, incident_id)
         conn.commit()
         metrics.set_gauge("last_incident_grouping_ts", now)
-        metrics.inc("incident_events_linked", linked)
+        metrics.inc("evidence_linked", linked)
         return linked
     finally:
         conn.close()
 
 
 def close_stale(now: Optional[int] = None) -> int:
-    """Chiude gli incidenti senza nuovi eventi da più di QUIET_S."""
+    """Chiude gli incidenti senza nuove evidenze da più di QUIET_S."""
     now = now or int(time.time())
     conn = db.get_observability_connection()
     try:
@@ -173,73 +129,54 @@ def close_stale(now: Optional[int] = None) -> int:
 
 # --- RAGIONAMENTO DETERMINISTICO ---------------------------------------------
 
-def _is_blocked(row) -> bool:
-    return (row["kind"] or "").startswith("traffico_bloccato")
-
-
-def _flow_bytes(row) -> Optional[int]:
-    flow = _evidence(row).get("flow") or {}
-    value = flow.get("bytes")
-    return int(value) if isinstance(value, (int, float)) else None
-
-
-def _rules_fired(events: list) -> list:
-    """Regole soddisfatte, in ordine di priorità. La prima è la causa."""
-    fired = []
-    blocked = [e for e in events if _is_blocked(e)]
-    srcs = {e["src_ip"] for e in blocked if e["src_ip"]}
-    dsts = {e["dst_ip"] for e in blocked if e["dst_ip"]}
-    ports = {(_evidence(e).get("flow") or {}).get("dst_port") for e in blocked}
-    ports.discard(None)
-
-    if len(blocked) >= 5 and len(srcs) == 1 and (len(dsts) >= 5 or len(ports) >= 5):
-        fired.append(("scan_bloccato", 70))
-    if len(blocked) >= 3 and len(srcs) <= 1 and len(dsts) <= 1:
-        fired.append(("traffico_bloccato_ripetuto", 65))
-
-    volumes = [b for b in (_flow_bytes(e) for e in events) if b is not None]
-    if len(volumes) >= 3:
-        peak = max(volumes)
-        rest = sorted(volumes)[:-1]
-        median = statistics.median(rest)
-        if median > 0 and peak >= 10 * median:
-            fired.append(("trasferimento_anomalo", 60))
-
-    if len(events) == 1 and (events[0]["severity"] or 4) <= 3 and not volumes:
-        fired.append(("evento_critico_isolato", 45))
-
-    if not fired:
-        fired.append(("attivita_correlata", 30))
-    return fired
-
-
-def _corroborating_sources(conn, incident, events: list) -> list:
-    """Fonti che corroborano la conclusione (una voce = un bonus confidenza)."""
+def _corroborating_sources(conn, incident, evidence: list) -> list:
+    """Cosa rinforza la conclusione. Una voce = un bonus di confidenza."""
+    roles = {e["role"] for e in evidence}
+    rule_ids = {e["rule_id"] for e in evidence}
     sources = []
-    if any(_flow_bytes(e) is not None for e in events):
-        sources.append("flow_aggregates")
-    if any(e["switch_port"] for e in events):
-        sources.append("switch_port")
+    if "supporting" in roles:
+        sources.append("evidenza_di_supporto")
+    if "symptom" in roles:
+        sources.append("sintomo_osservato")
+    if "consequence" in roles:
+        sources.append("conseguenza_osservata")
+    if len(rule_ids) > 1:
+        sources.append("piu_regole_concordi")
+    if any(e["switch_port"] for e in evidence):
+        sources.append("posizione_fisica")
 
-    ips = sorted({ip for e in events for ip in (e["src_ip"], e["dst_ip"]) if ip})
+    ips = sorted({ip for e in evidence
+                  for ip in (e["src_ip"], e["dst_ip"]) if ip})
     if ips:
         placeholders = ",".join("?" * len(ips))
         api_row = conn.execute(
-            f"""SELECT 1 FROM api_observations
-                WHERE tenant = ? AND device_ip IN ({placeholders})
+            f"""SELECT 1 FROM events
+                WHERE tenant = ? AND event_type IN ('device.state', 'interface.state')
+                  AND device_ip IN ({placeholders})
                   AND ts BETWEEN ? AND ? LIMIT 1""",
             (incident["tenant"], *ips,
              incident["opened_ts"] - 300, incident["last_event_ts"] + 300)).fetchone()
         if api_row is not None:
-            sources.append("api_observations")
+            sources.append("stato_apparato")
         try:
             from collectors import mac_history
             if mac_history.vlans_for_ips({ip: incident["tenant"] for ip in ips}):
-                sources.append("arp_vlan")
+                sources.append("binding_arp_vlan")
         except Exception as e:
             logger.debug("VLAN non risolvibili per l'incidente %s: %s",
                          incident["id"], e)
     return sources
+
+
+def _primary_trigger(evidence: list):
+    """Il trigger che vale come causa: il più severo, a parità il più antico.
+    Nessun trigger (solo sintomi o supporti) → nessuna causa dichiarata."""
+    triggers = [e for e in evidence if e["role"] == "trigger"]
+    if not triggers:
+        return None
+    return sorted(triggers,
+                  key=lambda e: (e["severity"] if e["severity"] is not None else 9,
+                                 e["ts"], e["id"]))[0]
 
 
 def _reason(conn, incident_id: int) -> None:
@@ -249,30 +186,47 @@ def _reason(conn, incident_id: int) -> None:
         "WHERE id = ?", (incident_id,)).fetchone()
     if incident is None:
         return
-    events = conn.execute(
-        """SELECT ce.id, ce.kind, ce.src_ip, ce.dst_ip, ce.switch_port,
-                  ce.severity, ce.evidence_json
-           FROM incident_events ie
-           JOIN correlated_events ce ON ce.id = ie.correlated_event_id
-           WHERE ie.incident_id = ?
-           ORDER BY ce.id ASC""", (incident_id,)).fetchall()
-    if not events:
+    evidence = conn.execute(
+        """SELECT id, ts, role, rule_id, rule_version, params_json, severity,
+                  src_ip, dst_ip, switch_port, summary
+           FROM evidence WHERE incident_id = ? ORDER BY ts ASC, id ASC""",
+        (incident_id,)).fetchall()
+    if not evidence:
         return
 
-    fired = _rules_fired(events)
-    cause, base = fired[0]
-    sources = _corroborating_sources(conn, incident, events)
+    trigger = _primary_trigger(evidence)
+    if trigger is None:
+        # Solo sintomi o corroborazioni: si registra ciò che si vede, senza
+        # inventare un innesco che nessuna regola ha dichiarato.
+        cause, base, rule_version, params = "causa_non_determinata", 25, "-", {}
+    else:
+        cause = trigger["rule_id"]
+        rule_version = trigger["rule_version"]
+        params = json.loads(trigger["params_json"] or "{}")
+        base = rules.base_confidence(cause)
+
+    sources = _corroborating_sources(conn, incident, evidence)
     confidence = min(base + CONFIDENCE_STEP * len(sources), CONFIDENCE_MAX)
+
+    by_role: dict = {}
+    for e in evidence:
+        by_role.setdefault(e["role"], []).append(e["id"])
 
     reasoning = json.dumps({
         "cause": cause,
+        "rule_id": cause,
+        "rule_version": rule_version,
+        "rule_params": params,
         "base_confidence": base,
         "confidence_step": CONFIDENCE_STEP,
-        "rules_fired": [r for r, _ in fired],
+        "rules_fired": sorted({e["rule_id"] for e in evidence}),
         "sources_used": sources,
-        "evidence_refs": [e["id"] for e in events],
+        "evidence_by_role": by_role,
+        "evidence_refs": [e["id"] for e in evidence],
     }, ensure_ascii=False)
-    title = f"{_CAUSE_TITLES.get(cause, cause)} — {_entity_label(incident['entity_key'])}"
+
+    title_source = trigger["summary"] if trigger is not None else evidence[0]["summary"]
+    title = (title_source or _entity_label(incident["entity_key"]))[:160]
 
     conn.execute(
         "UPDATE incidents SET cause_kind = ?, confidence = ?, "

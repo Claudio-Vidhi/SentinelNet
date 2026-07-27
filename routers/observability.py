@@ -306,19 +306,34 @@ async def obs_anomalies(
     page: int = Query(0, ge=0),
     current_user = Depends(get_current_user),
 ):
-    """Eventi correlati (fase 4.2), scoped per tenant, paginati."""
+    """Anomalie correlate, scoped per tenant, paginate.
+
+    Dalla v7 la riga è un INCIDENTE, non più un singolo evento correlato: la
+    stessa anomalia ripetuta 27 volte era 27 righe da chiudere a mano. La forma
+    della risposta resta quella storica (``kind``, ``src_ip``, ``switch_port``,
+    ``status``) perché la consumano il tab Flussi e il tool MCP ``get_anomalies``;
+    il dettaglio completo con ruoli e timeline sta in ``/api/incidents/{id}``.
+    """
     import time as _time
     seconds = _parse_window(window)
     cutoff = int(_time.time()) - seconds
     clause, params = _tenant_filter(current_user)
-    status_clause = "" if status == "all" else " AND status = ?"
+    status_clause = "" if status == "all" else " AND i.status = ?"
     status_params = () if status == "all" else (status,)
     rows = await db.read(
-        f"""SELECT id, created_ts, tenant, kind, src_ip, dst_ip, switch_port,
-                   severity, status, evidence_json
-            FROM correlated_events
-            WHERE created_ts >= ?{clause}{status_clause}
-            ORDER BY created_ts DESC
+        f"""SELECT i.id, i.opened_ts AS created_ts, i.tenant,
+                   i.cause_kind AS kind, i.title, i.severity, i.status,
+                   i.confidence, i.event_count, i.entity_key,
+                   (SELECT src_ip FROM evidence e WHERE e.incident_id = i.id
+                      AND e.src_ip IS NOT NULL ORDER BY e.ts LIMIT 1) AS src_ip,
+                   (SELECT dst_ip FROM evidence e WHERE e.incident_id = i.id
+                      AND e.dst_ip IS NOT NULL ORDER BY e.ts LIMIT 1) AS dst_ip,
+                   (SELECT switch_port FROM evidence e WHERE e.incident_id = i.id
+                      AND e.switch_port IS NOT NULL ORDER BY e.ts LIMIT 1) AS switch_port,
+                   i.reasoning_json AS evidence_json
+            FROM incidents i
+            WHERE i.last_event_ts >= ?{clause}{status_clause}
+            ORDER BY i.last_event_ts DESC
             LIMIT ? OFFSET ?""",
         (cutoff, *params, *status_params, limit, page * limit))
     return {"window": window, "status": status, "page": page,
@@ -334,9 +349,11 @@ async def obs_anomaly_status(
     payload: dict,
     current_user = Depends(require_operator),
 ):
-    """Transizione di stato di un evento correlato (5.5): new→ack,
-    new→resolved, ack→resolved. Concorrenza ottimistica: la transizione
-    avviene solo se lo stato corrente è ancora quello di partenza."""
+    """Transizione di stato di un'anomalia: new→ack, new→resolved,
+    ack→resolved. Concorrenza ottimistica: la transizione avviene solo se lo
+    stato corrente è ancora quello di partenza.
+
+    Dalla v7 ``event_id`` è l'id dell'INCIDENTE (vedi ``obs_anomalies``)."""
     new_status = (payload or {}).get("status")
     from_status = (payload or {}).get("from_status")
     if (from_status, new_status) not in _ALLOWED_TRANSITIONS:
@@ -351,13 +368,13 @@ async def obs_anomaly_status(
         conn = db.get_observability_connection()
         try:
             row = conn.execute(
-                "SELECT tenant, status FROM correlated_events WHERE id = ?",
+                "SELECT tenant, status FROM incidents WHERE id = ?",
                 (event_id,)).fetchone()
             # Fuori scope o inesistente → 404 identico (non confermare l'esistenza).
             if row is None or (scope is not None and row["tenant"] not in scope):
                 return "not_found"
             cur = conn.execute(
-                "UPDATE correlated_events SET status = ? WHERE id = ? AND status = ?",
+                "UPDATE incidents SET status = ? WHERE id = ? AND status = ?",
                 (new_status, event_id, from_status))
             conn.commit()
             return "ok" if cur.rowcount == 1 else "stale"
@@ -373,7 +390,7 @@ async def obs_anomaly_status(
             status_code=409,
             detail="The event status changed in the meantime: reload the list.")
     from security.security_manager import log_audit
-    log_audit(f"Anomalia observability #{event_id}: stato '{from_status}' → "
+    log_audit(f"Incidente #{event_id}: stato '{from_status}' → "
               f"'{new_status}' da '{current_user.get('sub')}'.")
     return {"status": "success", "id": event_id, "new_status": new_status}
 
@@ -421,8 +438,8 @@ async def obs_flowgraph(
         (cutoff, *params))
 
     spike_rows = await db.read(
-        f"""SELECT COUNT(*) AS n FROM correlated_events
-            WHERE created_ts >= ?{clause} AND status = 'new'""",
+        f"""SELECT COUNT(*) AS n FROM incidents
+            WHERE last_event_ts >= ?{clause} AND status = 'new'""",
         (cutoff, *params))
     spikes = spike_rows[0]["n"] if spike_rows else 0
 

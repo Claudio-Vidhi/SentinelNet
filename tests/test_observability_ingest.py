@@ -419,16 +419,22 @@ class TestRetention(unittest.TestCase):
                          "'2.2.2.2', 6, 443)", (ts,))
         elif table == "syslog_events":
             conn.execute("INSERT INTO syslog_events (ts, tenant) VALUES (?, 'sede-a')", (ts,))
+        elif table == "incidents":
+            conn.execute("INSERT INTO incidents (tenant, entity_key, opened_ts, "
+                         "last_event_ts, status) "
+                         "VALUES ('sede-a', 'ip:10.1.0.5', ?, ?, ?)",
+                         (ts, ts, extra.get("status", "resolved")))
         else:
-            conn.execute("INSERT INTO correlated_events (created_ts, tenant, status, "
-                         "dedup_key) VALUES (?, 'sede-a', ?, ?)",
-                         (ts, extra.get("status", "resolved"), f"k{ts}{extra}"))
+            conn.execute("INSERT INTO evidence (created_ts, ts, tenant, role, "
+                         "rule_id, rule_version, dedup_key) "
+                         "VALUES (?, ?, 'sede-a', 'trigger', 'X', '1.0.0', ?)",
+                         (ts, ts, f"k{ts}{extra}"))
         conn.commit()
         conn.close()
 
     def test_prune_strict_boundary(self):
         now = int(time.time())
-        cutoff_days = {"flow_aggregates": 30, "syslog_events": 7, "correlated_events": 90}
+        cutoff_days = {"flow_aggregates": 30, "syslog_events": 7, "incidents": 90}
         old = now - 31 * 86400
         inside = now - 29 * 86400
         self._seed("flow_aggregates", "window_start", old)
@@ -440,18 +446,43 @@ class TestRetention(unittest.TestCase):
         conn.close()
         self.assertEqual([r["window_start"] for r in rows], [inside])
 
-    def test_unresolved_events_survive(self):
+    def test_unresolved_incidents_survive(self):
         now = int(time.time())
         very_old = now - 365 * 86400
-        self._seed("correlated_events", "created_ts", very_old, status="new")
-        self._seed("correlated_events", "created_ts", very_old, status="ack")
-        self._seed("correlated_events", "created_ts", very_old, status="resolved")
-        deleted = rollup.prune_once({"correlated_events": 90})
-        self.assertEqual(deleted["correlated_events"], 1)  # solo resolved
+        self._seed("incidents", "opened_ts", very_old, status="new")
+        self._seed("incidents", "opened_ts", very_old, status="ack")
+        self._seed("incidents", "opened_ts", very_old, status="resolved")
+        deleted = rollup.prune_once({"incidents": 90})
+        self.assertEqual(deleted["incidents"], 1)  # solo resolved
         conn = db.get_observability_connection()
-        n = conn.execute("SELECT COUNT(*) AS n FROM correlated_events").fetchone()["n"]
+        n = conn.execute("SELECT COUNT(*) AS n FROM incidents").fetchone()["n"]
         conn.close()
         self.assertEqual(n, 2)
+
+    def test_orphan_evidence_is_pruned_assigned_is_not(self):
+        # Le evidenze legate a un incidente seguono l'incidente (CASCADE): qui
+        # si potano solo quelle rimaste senza, cioè regole scattate che non
+        # hanno mai formato un incidente.
+        now = int(time.time())
+        very_old = now - 365 * 86400
+        conn = db.get_observability_connection()
+        conn.execute("INSERT INTO incidents (id, tenant, entity_key, opened_ts, "
+                     "last_event_ts) VALUES (900, 'sede-a', 'ip:10.1.0.5', ?, ?)",
+                     (very_old, very_old))
+        conn.execute("INSERT INTO evidence (created_ts, ts, tenant, incident_id, "
+                     "role, rule_id, rule_version, dedup_key) "
+                     "VALUES (?, ?, 'sede-a', 900, 'trigger', 'X', '1.0.0', 'assigned')",
+                     (very_old, very_old))
+        conn.commit()
+        conn.close()
+        self._seed("evidence", "ts", very_old)
+
+        deleted = rollup.prune_once({"evidence": 90})
+        self.assertEqual(deleted["evidence"], 1)
+        conn = db.get_observability_connection()
+        left = conn.execute("SELECT dedup_key FROM evidence").fetchall()
+        conn.close()
+        self.assertEqual([r["dedup_key"] for r in left], ["assigned"])
 
 
 class TestHealthEndpoint(unittest.TestCase):
