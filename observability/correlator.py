@@ -177,6 +177,15 @@ async def correlation_loop():
                 emitted = await asyncio.to_thread(correlate_once)
                 if emitted:
                     logger.info("Correlazione: %d eventi emessi.", emitted)
+                # Gli eventi appena emessi sono ancora in coda al writer: il
+                # raggruppamento li prenderà al ciclo successivo (l'anti-join su
+                # incident_events lo rende idempotente).
+                from observability import incidents
+                linked = await asyncio.to_thread(incidents.group_once)
+                closed = await asyncio.to_thread(incidents.close_stale)
+                if linked or closed:
+                    logger.info("Incidenti: %d eventi associati, %d chiusi.",
+                                linked, closed)
             finally:
                 _running = False
         except Exception as e:

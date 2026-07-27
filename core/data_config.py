@@ -124,6 +124,10 @@ def obs_config() -> dict:
                                  or _app_adv("retention_syslog_days") or 7),
             "correlated_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
                                      or _app_adv("retention_events_days") or 90),
+            # Gli incidenti seguono la stessa finestra degli eventi correlati da
+            # cui sono costruiti: nessuna manopola separata.
+            "incidents": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
+                             or _app_adv("retention_events_days") or 90),
         },
     }
 

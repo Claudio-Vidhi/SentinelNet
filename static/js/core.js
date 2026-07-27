@@ -453,6 +453,10 @@ async function appInit() {
         try { await applyNetSecAuditGating(); } catch (e) { /* non bloccante */ }
     }
 
+    if (currentRole === 'admin' && typeof applyIncidentsGating === 'function') {
+        try { await applyIncidentsGating(); } catch (e) { /* non bloccante */ }
+    }
+
     try {
         const res = await apiFetch('/api/local-devices');
         if (!res) {

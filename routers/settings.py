@@ -108,6 +108,19 @@ def set_netsec_audit_settings(payload: FortigatePreviewSchema, current_user = De
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "netsec_audit_preview": payload.enabled}
 
+@router.get("/api/settings/incidents")
+def get_incidents_settings(current_user = Depends(require_admin)):
+    """Stato del flag preview per la tab 'Incidenti' (default: disattivo)."""
+    return {"incidents_preview": bool(get_app_settings().get("incidents_preview_enabled", False))}
+
+@router.post("/api/settings/incidents")
+def set_incidents_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
+    save_app_settings({"incidents_preview_enabled": payload.enabled})
+    log_audit(f"Tab Incidenti (preview) "
+              f"{'attivata' if payload.enabled else 'disattivata'} "
+              f"dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success", "incidents_preview": payload.enabled}
+
 @router.get("/api/settings/flow-siem-preview")
 def get_flow_siem_preview_settings(current_user = Depends(require_admin)):
     """Stato del flag preview per la tab 'Flow SIEM' (default: disattivo)."""

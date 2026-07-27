@@ -167,6 +167,44 @@ CREATE TABLE IF NOT EXISTS audit_evidence (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_evidence_eng_ref ON audit_evidence(engagement_id, item_ref);
 
+-- 8. INCIDENTI (v5): raggruppamento di correlated_events per entità condivisa
+-- + gap temporale. Un incidente resta aperto (closed_ts NULL) finché arrivano
+-- eventi; dopo un periodo di quiete viene chiuso.
+CREATE TABLE IF NOT EXISTS incidents (
+    id             INTEGER PRIMARY KEY,
+    tenant         TEXT NOT NULL,
+    entity_key     TEXT NOT NULL,      -- 'ip:10.0.0.5' | 'port:sw01:Gi1/0/12'
+    opened_ts      INTEGER NOT NULL,
+    last_event_ts  INTEGER NOT NULL,
+    closed_ts      INTEGER,            -- NULL = aperto, accetta nuovi eventi
+    title          TEXT,
+    severity       INTEGER,            -- la peggiore (min) fra gli eventi
+    event_count    INTEGER NOT NULL DEFAULT 0,
+    status         TEXT DEFAULT 'new' CHECK(status IN ('new','ack','resolved')),
+    cause_kind     TEXT,               -- regola deterministica che ha concluso
+    confidence     INTEGER,            -- 0-100, deterministico
+    reasoning_json TEXT,               -- {cause, rules_fired[], sources_used[], evidence_refs[]}
+    ai_narrative    TEXT,              -- prosa LLM: MAI la conclusione
+    ai_narrative_ts INTEGER,
+    ai_assisted     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_open
+    ON incidents(tenant, closed_ts, last_event_ts);
+CREATE INDEX IF NOT EXISTS idx_incidents_entity
+    ON incidents(tenant, entity_key, closed_ts);
+
+-- Appartenenza evento→incidente. correlated_event_id NON ha FK: correlated_events
+-- ha una retention propria (rollup.py) e un CASCADE da lì svuoterebbe in silenzio
+-- gli incidenti.
+CREATE TABLE IF NOT EXISTS incident_events (
+    incident_id         INTEGER NOT NULL,
+    correlated_event_id INTEGER NOT NULL,
+    PRIMARY KEY (incident_id, correlated_event_id),
+    FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_incident_events_ce
+    ON incident_events(correlated_event_id);
+
 CREATE TABLE IF NOT EXISTS audit_engagement_history (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     engagement_id INTEGER NOT NULL,

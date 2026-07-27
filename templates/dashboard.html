@@ -235,6 +235,10 @@
           <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
           <span class="preview-badge">preview</span>
         </button>
+        <button id="navIncidents" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-incidents', this); loadIncidentsTab();">
+          <span class="nav-left"><i class="fa-solid fa-timeline"></i> Incidenti</span>
+          <span class="preview-badge">preview</span>
+        </button>
         <button id="navAuditChecklist" class="nav-item requires-admin" onclick="switchTab('tab-audit-checklist', this); loadAuditChecklistTab();">
           <span class="nav-left"><i class="fa-solid fa-clipboard-check"></i> Checklist Audit Firewall</span>
         </button>
@@ -2389,6 +2393,12 @@
             <div id="netsecAuditStatus" style="font-size:12px; color:var(--text-muted); margin-left:24px;"></div>
 
             <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+              <input type="checkbox" id="incidentsToggle" onchange="setIncidentsPreview(this.checked)">
+              <span style="font-size:13px; font-weight:600;">Abilita la tab "Incidenti (preview)" (Timeline e ragionamento sugli eventi correlati)</span>
+            </label>
+            <div id="incidentsStatus" style="font-size:12px; color:var(--text-muted); margin-left:24px;"></div>
+
+            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
               <input type="checkbox" id="flowSiemPreviewToggle" onchange="setFlowSiemPreview(this.checked)">
               <span style="font-size:13px; font-weight:600;">Abilita la tab "Flow SIEM (preview)" (Network Traffic &amp; SIEM Analytics)</span>
             </label>
@@ -2462,6 +2472,48 @@
               <tbody id="flowSiemTableBody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Incidenti (preview) -->
+    <div id="tab-incidents" class="tab-content">
+      <div class="hero" style="margin-bottom:18px;">
+        <div class="hero-card" style="flex:1;">
+          <span class="eyebrow"><i class="fa-solid fa-timeline"></i> Incidenti (Preview)</span>
+          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;">Timeline e Ragionamento</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:640px;">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
+        </div>
+      </div>
+
+      <div class="panel" style="padding:12px 16px; margin-bottom:18px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+        <div>
+          <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Stato</label>
+          <select id="incStatusFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <option value="new">Nuovi</option>
+            <option value="ack">Presi in carico</option>
+            <option value="resolved">Risolti</option>
+            <option value="all">Tutti</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Finestra</label>
+          <select id="incWindowFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <option value="24h">24 ore</option>
+            <option value="6h">6 ore</option>
+            <option value="7d">7 giorni</option>
+          </select>
+        </div>
+        <button class="btn btn-secondary btn-small" style="width:auto;" onclick="loadIncidentsList()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px; align-items:start;">
+        <div class="panel" style="padding:12px;">
+          <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-list"></i> Incidenti</h4>
+          <div id="incidentsList"></div>
+        </div>
+        <div class="panel" style="padding:16px;">
+          <div id="incidentDetail"></div>
         </div>
       </div>
     </div>
@@ -2912,6 +2964,7 @@
   <script src="/static/js/flow-analytics.js"></script>
   <script src="/static/js/netsec-audit.js"></script>
   <script src="/static/js/audit_checklist.js"></script>
+  <script src="/static/js/incidents.js"></script>
   <script>
     // --- SIDEBAR RAIL (collasso a icone) --- [MOVED to static/js/core.js: syncNavTooltips,
     // applySidebarCollapsed, toggleSidebar, escapeHtml, apiFetch, auth handlers, appInit,

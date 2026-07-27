@@ -29,6 +29,8 @@ _TABLES = {
     "flow_aggregates": ("window_start", ""),
     "syslog_events": ("ts", ""),
     "correlated_events": ("created_ts", " AND status = 'resolved'"),
+    # incident_events segue via ON DELETE CASCADE (foreign_keys=ON in db.py).
+    "incidents": ("opened_ts", " AND status = 'resolved'"),
 }
 
 _running = False
