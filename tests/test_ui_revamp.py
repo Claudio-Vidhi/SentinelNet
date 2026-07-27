@@ -2497,9 +2497,23 @@ class TestCaSearch(unittest.TestCase):
 class TestRedundancyUi(unittest.TestCase):
     def test_redundancy_ui_uses_existing_payload_and_never_creates_vip_node(self):
         source = frontend_source()
-        self.assertIn("function decorateRedundancyNode", source)
+        # Il badge arriva su n.redundancy insieme al resto del nodo mappa: nessuna
+        # chiamata dedicata per disegnarlo, nessun nodo sintetico per il VIP.
+        self.assertIn("function nodeStack", source)
+        self.assertIn("r.type === 'stack'", source)
         self.assertIn("/api/redundancy/groups", source)
         self.assertNotIn("vip-node", source)
+
+    def test_stack_is_rendered_on_both_maps_and_device_table(self):
+        source = frontend_source()
+        # Etichetta costruita dai dati: "N × <vendor> <modello> in STACK".
+        self.assertIn("in STACK", source)
+        self.assertIn("function stackLine", source)
+        # Fascia STACK nella card SVG della mappa classica.
+        self.assertIn("STACK ×", source)
+        # Riga espandibile con le unità nella tab Dispositivi.
+        self.assertIn("function toggleStackRow", source)
+        self.assertIn("stack-members", source)
 
     def test_topology_ui_has_one_ha_heartbeat_style(self):
         source = frontend_source()

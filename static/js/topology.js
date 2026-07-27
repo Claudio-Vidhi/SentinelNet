@@ -181,7 +181,26 @@
         }).join("");
     }
 
-    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp) {
+    // ===== Stack (StackWise & co.) =====
+    // Il badge arriva dal backend su ogni nodo come n.redundancy (vedi
+    // redundancy/service.py device_redundancy_badge). Testo unico riusato da
+    // mappa classica, mappa minimal, tooltip e tab Dispositivi.
+    const STACK_COLOR = '#ff8c42';
+
+    function nodeStack(n) {
+        const r = n && n.redundancy;
+        return (r && r.type === 'stack') ? r : null;
+    }
+
+    // "2 × Cisco WS-C3850-24XS-S in STACK" — conteggio e modello dai dati.
+    function stackLine(stack, vendorTxt, fallbackModel) {
+        const parts = [vendorTxt, stack.model || fallbackModel || ''].filter(Boolean).join(' ').trim();
+        const n = stack.member_count;
+        if (!parts) return currentLang === 'en' ? `${n} units in STACK` : `${n} unità in STACK`;
+        return `${n} × ${parts} in STACK`;
+    }
+
+    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp, stack) {
         let statusColor = "#8d9bb0";
         let statusBg = "rgba(141, 155, 176, 0.1)";
         let statusGlow = "rgba(141, 155, 176, 0.2)";
@@ -232,20 +251,32 @@
         // VTP pill: quando presente il riquadro cresce in altezza (vedi hasVtp più
         // sotto) e la pillola prende una fascia orizzontale propria SOTTO le righe
         // IP/badge, così non si sovrappone più al badge tipo né all'hostname.
-        let vtpDomainSvg = '';
+        // Fasce opzionali sotto le righe IP/badge: una per riga, la scheda cresce
+        // di 22px per ciascuna (mai sovrapposte al badge tipo o all'hostname).
+        const bands = [];
+        if (stack) {
+            bands.push({
+                color: STACK_COLOR,
+                text: `STACK ×${stack.member_count}${stack.model ? ' · ' + stack.model : ''}`.slice(0, 34),
+            });
+        }
         const hasVtp = !!(vtp.showDomain && vtp.domain);
         if (hasVtp) {
             const dcol = vtpDomainColor(vtp.domain);
             borderGradStart = dcol;
-            const dEsc = String(vtp.domain).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 24);
+            const dEsc = String(vtp.domain).slice(0, 24);
             // Se disponibile, aggiunge la modalità VTP (server/client/transparent/off)
             // accanto al dominio; troncata per stare nella pillola larga 216px.
-            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
-            const pillTxt = (modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30);
-            vtpDomainSvg = `<rect x="16" y="80" width="216" height="16" rx="4" fill="${dcol}22" stroke="${dcol}" stroke-opacity="0.45" stroke-width="1" />
-          <text x="124" y="91.5" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${pillTxt}</text>`;
+            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase() : '';
+            bands.push({ color: dcol, text: `VTP: ${(modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30)}` });
         }
-        const cardH = hasVtp ? 106 : 84;
+        const bandsSvg = bands.map((b, i) => {
+            const y = 80 + 22 * i;
+            const txt = String(b.text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return `<rect x="16" y="${y}" width="216" height="16" rx="4" fill="${b.color}22" stroke="${b.color}" stroke-opacity="0.45" stroke-width="1" />
+          <text x="124" y="${y + 11.5}" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${b.color}" text-anchor="middle" letter-spacing="0.2">${txt}</text>`;
+        }).join('\n');
+        const cardH = 84 + 22 * bands.length;
 
         // Carica icone vettoriali moderne basate sulla tipologia di apparato
         let iconSvg = "";
@@ -328,9 +359,9 @@
           <rect x="139" y="58" width="70" height="14" rx="4" fill="${statusBg}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
           <text x="174" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="8" font-weight="900" fill="${statusColor}" text-anchor="middle" letter-spacing="0.5">${statusText}</text>
 
-          <!-- Fascia VTP dedicata sotto le righe IP/badge (solo se presente): mai
-               sovrapposta al badge tipo o all'hostname (Fix B). -->
-          ${vtpDomainSvg}
+          <!-- Fasce STACK / VTP sotto le righe IP/badge (solo se presenti): mai
+               sovrapposte al badge tipo o all'hostname (Fix B). -->
+          ${bandsSvg}
 
         </svg>
         `;
@@ -355,6 +386,11 @@
 
         // IP annunciato via CDP/LLDP diverso dall'IP di management reale: il vicino
         // ha pubblicato l'indirizzo di una SVI (es. Vlan1). Lo mostriamo come nota.
+        // Stack: numero di unità fisiche + elenco compatto (ruolo · serial).
+        const stackInfo = nodeStack(n);
+        const stackRow = stackInfo ? `
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Stack:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${STACK_COLOR};">${escapeHtml(stackLine(stackInfo, '', n.model))}${stackInfo.health === 'degraded' ? ' <i class="fa-solid fa-triangle-exclamation"></i>' : ''}<div style="font-weight: 400; font-size: 10px; color: var(--text-muted); margin-top: 2px;">${(stackInfo.members || []).map(m => escapeHtml(`${m.role || '?'} · ${m.serial || '—'}`)).join('<br>')}</div></td></tr>` : '';
+
         const reportedRow = (n.reported_ip && n.reported_ip !== n.id) ? `
             <tr style="border: none;"><td style="color: var(--warning); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Announced IP:' : 'IP Annunciato:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--warning);" title="${currentLang === 'en' ? 'CDP/LLDP advertised a non-management IP; resolved by hostname' : 'CDP/LLDP ha annunciato un IP non di management; risolto via hostname'}">${escapeHtml(n.reported_ip)} <i class="fa-solid fa-triangle-exclamation"></i></td></tr>` : '';
 
@@ -372,6 +408,7 @@
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Type:' : 'Tipo:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${deviceTypeMeta(n.device_type).color};">${escapeHtml(deviceTypeLabel(n.device_type))}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${escapeHtml(firmware)}</code></td></tr>
             ${(n.vtp_domain || n.vtp_mode) ? `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">VTP:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml([n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · '))}</td></tr>` : ''}
+            ${stackRow}
             ${reportedRow}
           </table>
         </div>
@@ -486,16 +523,18 @@
                 : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
 
             const vtp = { domain: n.vtp_domain, mode: n.vtp_mode, showDomain: showVtpDomain };
+            const stack = nodeStack(n);
+            const bandCount = (stack ? 1 : 0) + ((vtp.showDomain && vtp.domain) ? 1 : 0);
 
             return {
                 id: n.id,
                 shape: "image",
-                image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor, vtp),
+                image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor, vtp, stack),
                 title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
-                // Fix B: la card SVG cresce (84->106) quando mostra la fascia VTP; il
+                // Fix B: la card SVG cresce di 22px per ogni fascia (STACK, VTP); il
                 // nodo vis.js deve crescere di conseguenza, altrimenti l'immagine più
                 // alta viene ridotta in scala e il testo torna illeggibile.
-                size: (vtp.showDomain && vtp.domain) ? 46 : 38,
+                size: 38 + 8 * bandCount,
                 labelVal: n.label,
                 deviceTypeVal: n.device_type,
                 isBoundaryVal: n.is_boundary || false,
@@ -504,27 +543,6 @@
                 nodeDataVal: n
             };
         });
-
-function decorateRedundancyNode(node, r) {
-  if (!r) return node;
-  const colors = {active:'#2e7d32', standby:'#1565c0', out_of_sync:'#f9a825',
-                  split_brain:'#c62828', degraded:'#f9a825', ok:'#455a64'};
-  if (r.type === 'ha_pair') {
-    const key = ['split_brain', 'out_of_sync'].includes(r.health) ? r.health : (r.role || 'ok');
-    node.color = {border: colors[key] || colors.ok, background: node.color?.background || '#fff'};
-    node.borderWidth = 3;
-    node.label = `${node.label}\n[${key.replaceAll('_', '-')}]`;
-  } else if (r.type === 'stack') {
-    node.label = `${node.label}\n(stack ×${r.member_count ?? '?'})`;
-    node.color = {border: r.health === 'degraded' ? colors.degraded : colors.ok};
-    node.borderWidth = r.health === 'degraded' ? 3 : 1;
-  } else if (r.type === 'sso') {
-    node.label = `${node.label}\n[HA-SSO]`;
-    node.color = {border: r.health === 'degraded' ? '#c62828' : colors.ok};
-    node.borderWidth = r.health === 'degraded' ? 3 : 1;
-  }
-  return node;
-}
 
         // Trasforma archi filtrati per Vis.js con indicazioni di porta super leggibili ed eleganti
         const edges = filteredLinksData.map(l => {
@@ -1036,7 +1054,11 @@ function decorateRedundancyNode(node, r) {
             // Seconda riga del riquadro: vendor + modello (es. "Cisco N9K-C93180YC-EX")
             const vendorTxt = (resolvedVendor && resolvedVendor !== 'discovered')
                 ? resolvedVendor.charAt(0).toUpperCase() + resolvedVendor.slice(1) : '';
-            const modelLine = [vendorTxt, n.model || n.platform || ''].filter(Boolean).join(' ').trim();
+            // Se il nodo è uno stack la riga diventa "N × <vendor> <modello> in STACK".
+            const stack = nodeStack(n);
+            const modelLine = stack
+                ? stackLine(stack, vendorTxt, n.model || n.platform)
+                : [vendorTxt, n.model || n.platform || ''].filter(Boolean).join(' ').trim();
             // Riga di management (piccola, in corsivo/attenuata): VLAN + IP di
             // gestione mostrati DENTRO il riquadro. La VLAN arriva dal backend
             // (SVI con l'IP di management); se assente si mostra solo l'IP.
@@ -1069,7 +1091,8 @@ function decorateRedundancyNode(node, r) {
                 margin: S.node.margin,
                 label,
                 title: hoverInfo ? createNodeTooltip(n, scan, resolvedVendor) : undefined,
-                borderWidth: showVtpDomain && n.vtp_domain ? 2 : S.node.borderWidth,
+                borderWidth: (stack && stack.health === 'degraded') ? S.node.borderWidth + 1
+                           : (showVtpDomain && n.vtp_domain ? 2 : S.node.borderWidth),
                 borderWidthSelected: S.node.borderWidth + 1,
                 color: {
                     background: fill, border,
@@ -1791,6 +1814,7 @@ function decorateRedundancyNode(node, r) {
         { key: 'version',  it: 'Versione',  en: 'Version' },
         { key: 'vtp',      it: 'VTP',       en: 'VTP' },
         { key: 'ha',       it: 'HA',        en: 'HA' },
+        { key: 'stack',    it: 'Stack',     en: 'Stack' },
         { key: 'category', it: 'Categoria', en: 'Category', fixed: true },
     ];
     function colLabel(c) { return currentLang === 'en' ? c.en : c.it; }
@@ -1906,6 +1930,7 @@ function decorateRedundancyNode(node, r) {
             case 'version':  return n.version || '';
             case 'vtp':      return [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' / ');
             case 'ha':       return n.ha_group || '';
+            case 'stack':    return n.stack ? stackLine(n.stack, '', n.model) : '';
             case 'category': return deviceTypeLabel(n.device_type) + (n.subcategory ? ' / ' + n.subcategory : '');
             default: return '';
         }
@@ -1914,6 +1939,8 @@ function decorateRedundancyNode(node, r) {
     function renderCategoriesPanel() {
         const cats = categoriesData.categories;
         const canWrite = (currentRole === 'admin' || currentRole === 'operator');
+        // Le API /api/redundancy/groups sono admin-only: la gestione stack segue.
+        const canAdmin = (currentRole === 'admin');
         const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
 
         // Conteggi per categoria RELATIVI alla sede selezionata (non al totale).
@@ -1964,7 +1991,11 @@ function decorateRedundancyNode(node, r) {
                 case 'hostname': {
                     const conflictIcon = (canWrite && n.name_options && n.name_options.length > 1)
                         ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" onclick="openConflictModal('${escapeHtml(n.id)}')" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
-                    const dot = `<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>`;
+                    // Chevron di espansione: mostra le unità fisiche dello stack.
+                    const chevron = n.stack
+                        ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${currentLang==='en'?'Show stack units':'Mostra unità dello stack'}" onclick="toggleStackRow('${escapeHtml(n.id)}')" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
+                        : '';
+                    const dot = `${chevron}<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>`;
                     // Rinomina inline: modifica il nome mostrato (stage 'name', salvato col pulsante).
                     if (canWrite) {
                         const p = pendingEdits[n.id];
@@ -2009,6 +2040,18 @@ function decorateRedundancyNode(node, r) {
                         ? `${badge}<input value="${attrEsc(hg)}" onchange="stageEdit('${escapeHtml(n.id)}','ha_group',this.value.trim())" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : (hg ? `${badge}<span style="font-size:12px; color:#ff8c42;">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
                 }
+                case 'stack': {
+                    if (n.stack) {
+                        const warn = n.stack.health === 'degraded'
+                            ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'Degraded stack':'Stack degradato'}" style="color:var(--danger); font-size:10px;"></i>` : '';
+                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="font-size:9px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:4px; padding:1px 4px; cursor:pointer;" onclick="toggleStackRow('${escapeHtml(n.id)}')">STACK ×${n.stack.member_count}</span>${warn}`);
+                    }
+                    // Solo switch/router gestiti possono essere marcati a mano.
+                    const canMark = canAdmin && !n.discovered && ['switch','router'].includes(effVal(n,'category'));
+                    return td(canMark
+                        ? `<button onclick="markAsStack('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
+                        : '<span style="color:var(--text-muted);">—</span>');
+                }
                 case 'category': {
                     const curCat = effVal(n, 'category');
                     const curSub = effVal(n, 'subcategory') || '';
@@ -2031,9 +2074,36 @@ function decorateRedundancyNode(node, r) {
             }
         };
 
+        // Riga espansa con le unità fisiche dello stack (nascosta di default).
+        const stackRowHtml = (n) => {
+            if (!n.stack) return '';
+            const members = n.stack.members || [];
+            const hdr = currentLang === 'en'
+                ? ['#', 'Role', 'Model', 'Serial', 'State'] : ['#', 'Ruolo', 'Modello', 'Serial', 'Stato'];
+            const inp = (i, field, val, w) => canAdmin
+                ? `<input data-stack-field="${field}" data-stack-idx="${i}" value="${attrEsc(val||'')}" style="width:${w}px; padding:3px 5px; border-radius:5px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:11px;">`
+                : escapeHtml(val || '—');
+            const body = members.map((m, i) => `<tr>
+                <td style="padding:3px 8px; font-size:11px; color:var(--text-muted);">${escapeHtml(String(m.index != null ? m.index : i + 1))}</td>
+                <td style="padding:3px 8px;">${inp(i, 'role', m.role, 80)}</td>
+                <td style="padding:3px 8px;">${inp(i, 'model', m.model, 140)}</td>
+                <td style="padding:3px 8px;">${inp(i, 'serial', m.serial, 130)}</td>
+                <td style="padding:3px 8px; font-size:11px; color:${m.state && m.state !== 'ready' ? 'var(--danger)' : 'var(--text-muted)'};">${escapeHtml(m.state || '—')}</td>
+            </tr>`).join('');
+            const actions = canAdmin ? `<div style="margin-top:8px; display:flex; gap:8px;">
+                <button onclick="saveStackMembers('${escapeHtml(n.id)}')" style="font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:5px; padding:3px 8px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
+                <button onclick="removeStack('${escapeHtml(n.id)}')" style="font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:5px; padding:3px 8px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
+            </div>` : '';
+            return `<tr class="stack-members" data-stack-for="${attrEsc(n.id)}" style="display:none;"><td colspan="${cols.length}" style="padding:10px 14px; background:var(--surface);">
+                <div style="font-size:11px; font-weight:700; color:${STACK_COLOR}; margin-bottom:6px;"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(stackLine(n.stack, '', n.model))}</div>
+                <table style="width:auto;"><thead><tr>${hdr.map(h=>`<th style="padding:3px 8px; font-size:10px;">${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>
+                ${actions}
+            </td></tr>`;
+        };
+
         const headHtml = cols.map(c => `<th style="padding:8px;">${colLabel(c)}</th>`).join('');
         listBox.innerHTML = vendorDL + modelDLs + Object.keys(byGroup).sort().map(g => {
-            const rows = byGroup[g].map(n => `<tr data-node="${attrEsc(n.id)}" class="${pendingEdits[n.id]?'row-dirty':''}">${cols.map(c => cellHtml(c, n)).join('')}</tr>`).join("");
+            const rows = byGroup[g].map(n => `<tr data-node="${attrEsc(n.id)}" class="${pendingEdits[n.id]?'row-dirty':''}">${cols.map(c => cellHtml(c, n)).join('')}</tr>${stackRowHtml(n)}`).join("");
             return `<div style="margin-bottom:18px;">
                 <h4 style="font-size:14px; margin-bottom:8px;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)} <span style="color:var(--text-muted); font-weight:400;">(${byGroup[g].length})</span></h4>
                 <div class="table-wrap" style="margin-top:0;">
@@ -2108,6 +2178,77 @@ function decorateRedundancyNode(node, r) {
         pendingEdits = {};
         renderCategoriesPanel();
         updateSaveBar();
+    }
+
+    // ===== Gestione stack (tab Dispositivi) =====
+    // I gruppi vivono in redundancy.db via /api/redundancy/groups (admin-only).
+    // Salvare a mano marca il gruppo 'manual': il rilevamento CLI non lo tocca più.
+    function toggleStackRow(nodeId) {
+        const row = document.querySelector(`tr.stack-members[data-stack-for="${CSS.escape(nodeId)}"]`);
+        if (!row) return;
+        const open = row.style.display === 'none';
+        row.style.display = open ? '' : 'none';
+        const chev = document.getElementById(`stackChev_${nodeId}`);
+        if (chev) chev.className = `fa-solid fa-chevron-${open ? 'down' : 'right'}`;
+    }
+
+    async function saveStackGroup(n, members, groupId) {
+        const res = await apiFetch(groupId ? `/api/redundancy/groups/${groupId}` : '/api/redundancy/groups', {
+            method: groupId ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                group_name: n.group, group_type: 'stack', name: n.label,
+                logical_device_ip: n.id, members
+            })
+        });
+        if (!(res && res.ok)) {
+            alert(currentLang==='en' ? 'Stack save failed.' : 'Salvataggio stack non riuscito.');
+            return false;
+        }
+        await loadCategoriesData();
+        return true;
+    }
+
+    async function saveStackMembers(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n || !n.stack) return;
+        const row = document.querySelector(`tr.stack-members[data-stack-for="${CSS.escape(nodeId)}"]`);
+        if (!row) return;
+        const members = (n.stack.members || []).map((m, i) => {
+            const get = (f) => row.querySelector(`[data-stack-field="${f}"][data-stack-idx="${i}"]`)?.value.trim();
+            return {
+                role: get('role') || m.role || 'member',
+                model: get('model') || null,
+                serial: get('serial') || null,
+                state: m.state || 'ready',
+                device_ip: n.id, mgmt_ip: n.id,
+            };
+        });
+        await saveStackGroup(n, members, n.stack.group_id);
+    }
+
+    async function removeStack(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n || !n.stack) return;
+        if (!confirm(currentLang==='en'
+            ? `Remove the stack group for "${n.label}"? It will be re-detected on the next triage.`
+            : `Rimuovere il gruppo stack di "${n.label}"? Verrà ricreato al prossimo triage se rilevato.`)) return;
+        const res = await apiFetch(`/api/redundancy/groups/${n.stack.group_id}`, { method: 'DELETE' });
+        if (!(res && res.ok)) { alert(currentLang==='en'?'Delete failed.':'Eliminazione non riuscita.'); return; }
+        await loadCategoriesData();
+    }
+
+    async function markAsStack(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n) return;
+        const count = parseInt(prompt(currentLang==='en' ? 'Number of units in the stack:' : 'Numero di unità dello stack:', '2') || '', 10);
+        if (!(count >= 2)) return;
+        const model = (prompt(currentLang==='en' ? 'Unit model:' : 'Modello delle unità:', n.model || '') || '').trim();
+        const members = Array.from({ length: count }, (_, i) => ({
+            role: i === 0 ? 'master' : 'member',
+            model: model || null, state: 'ready', device_ip: n.id, mgmt_ip: n.id,
+        }));
+        await saveStackGroup(n, members, null);
     }
 
     async function promoteDevice(nodeId) {

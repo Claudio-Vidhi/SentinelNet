@@ -118,4 +118,7 @@ class GroupInfo:
             return GroupHealth.SPLIT_BRAIN
         if self.group_type == GroupType.HA_PAIR and len(self.members) < 2:
             return GroupHealth.DEGRADED
+        if any(m.state in (MemberState.DOWN, MemberState.RP_DOWN, MemberState.VERSION_MISMATCH)
+               for m in self.members):
+            return GroupHealth.DEGRADED
         return GroupHealth.OK

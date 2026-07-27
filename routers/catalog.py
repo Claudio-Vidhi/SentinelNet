@@ -154,6 +154,7 @@ def device_classification(current_user = Depends(get_current_user)):
     counts_by_group: dict = {}
     for n in data["nodes"]:
         a = assignments.get(n["id"], {})
+        red = n.get("redundancy") or {}
         dtype = n.get("device_type", "switch")
         group = n.get("group", "Generale")
         discovered = n.get("status") == "discovered"
@@ -177,6 +178,9 @@ def device_classification(current_user = Depends(get_current_user)):
             "vtp_mode": n.get("vtp_mode"),
             "discovered": discovered,
             "name_options": n.get("name_options") or [],
+            # Badge stack (già calcolato da generate_network_map): unità fisiche
+            # dietro questo IP di management.
+            "stack": red if red.get("type") == "stack" else None,
         }
         nodes.append(node)
         counts_by_category[dtype] = counts_by_category.get(dtype, 0) + 1
