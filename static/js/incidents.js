@@ -78,6 +78,70 @@
 
     function loadIncidentsTab() {
         loadIncidentsList();
+        loadRuleCatalog();
+    }
+
+    // Il pannello non conosce le regole: le legge dal catalogo, che è generato
+    // dal codice del motore. Aggiungere una regola non richiede toccare la UI.
+    async function loadRuleCatalog() {
+        const box = document.getElementById('incidentRules');
+        if (!box) return;
+        try {
+            const res = await apiFetch('/api/incidents/rules');
+            if (!res || !res.ok) { box.innerHTML = ''; return; }
+            const data = await res.json();
+            box.innerHTML = (data.rules || []).map(r => `
+                <div style="padding:10px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface-2);">
+                    <div style="display:flex; justify-content:space-between; gap:12px; align-items:baseline;">
+                        <strong style="font-size:13px;">${escapeHtml(jsStr(r.title))}</strong>
+                        <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(jsStr(r.id))} v${escapeHtml(jsStr(r.version))}</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); margin:4px 0 6px;">${escapeHtml(jsStr(r.description))}</div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
+                        consuma: ${escapeHtml(jsStr((r.inputs || []).join(', ')))} ·
+                        produce: ${escapeHtml(jsStr((r.outputs || []).join(', ')))}
+                    </div>
+                    ${(r.parameters || []).length ? `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                        ${r.parameters.map(p => `<div>
+                            <label style="font-size:11px; color:var(--text-muted); display:block;" title="${escapeHtml(jsStr(p.description || ''))}">
+                                ${escapeHtml(jsStr(p.name))} (${escapeHtml(jsStr(p.min))}–${escapeHtml(jsStr(p.max))})
+                            </label>
+                            <input type="number" id="rp-${escapeHtml(jsStr(r.id))}-${escapeHtml(jsStr(p.name))}"
+                                   value="${escapeHtml(jsStr((r.effective || {})[p.name] ?? p.default))}"
+                                   min="${escapeHtml(jsStr(p.min))}" max="${escapeHtml(jsStr(p.max))}"
+                                   style="width:110px; padding:5px 8px; border-radius:6px; border:1px solid var(--border);
+                                          background:var(--surface-2); color:var(--text); font-size:12px;">
+                        </div>`).join('')}
+                        <button class="btn btn-secondary btn-small" style="width:auto;"
+                                onclick="saveRuleParameters('${jsStr(r.id)}')">Salva soglie</button>
+                        <span id="rp-status-${escapeHtml(jsStr(r.id))}" style="font-size:11px; color:var(--text-muted);"></span>
+                    </div>` : '<div style="font-size:11px; color:var(--text-muted);">Nessuna soglia configurabile.</div>'}
+                </div>`).join('');
+        } catch (e) { box.innerHTML = ''; }
+    }
+
+    async function saveRuleParameters(ruleId) {
+        const st = document.getElementById(`rp-status-${ruleId}`);
+        const payload = {};
+        document.querySelectorAll(`[id^="rp-${ruleId}-"]`).forEach(input => {
+            payload[input.id.slice(`rp-${ruleId}-`.length)] = Number(input.value);
+        });
+        try {
+            const res = await apiFetch(`/api/incidents/rules/${encodeURIComponent(ruleId)}/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res) return;
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                if (st) st.textContent = err.detail || 'Errore.';
+                return;
+            }
+            if (st) st.textContent = 'Salvato.';
+        } catch (e) {
+            if (st) st.textContent = 'Errore.';
+        }
     }
 
     async function loadIncidentsList() {
@@ -134,7 +198,8 @@
             const res = await apiFetch(`/api/incidents/${Number(id)}`);
             if (!res || !res.ok) { box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Incidente non disponibile.</div>'; return; }
             const data = await res.json();
-            renderIncidentDetail(data.incident || {}, data.timeline || []);
+            renderIncidentDetail(data.incident || {}, data.timeline || [],
+                                 data.previous_conclusions || []);
         } catch (e) {
             box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Incidente non disponibile.</div>';
         }
@@ -190,18 +255,29 @@
                     : '';
                 const attrs = (e.ref && e.ref.attrs && Object.keys(e.ref.attrs).length)
                     ? JSON.stringify(e.ref.attrs) : '';
-                return `<div style="position:relative; margin-bottom:12px;">
+                // Un'evidenza ritrattata resta visibile, barrata: la timeline
+                // racconta anche cosa si era concluso e perché non regge più.
+                const retracted = e.status === 'retracted';
+                const why = retracted && e.ref
+                    ? `${e.ref.retracted_reason || 'invalidata'}${e.ref.retracted_by_rule_id ? ' — ' + e.ref.retracted_by_rule_id : ''}`
+                    : '';
+                return `<div style="position:relative; margin-bottom:12px; ${retracted ? 'opacity:0.65;' : ''}">
                     <span style="position:absolute; left:-23px; top:2px; width:12px; height:12px; border-radius:50%;
-                                 background:var(--surface); border:2px solid ${dotColor};"></span>
+                                 background:${retracted ? 'var(--surface-3)' : 'var(--surface)'}; border:2px solid ${dotColor};"></span>
                     <div style="font-size:11px; color:var(--text-muted);">
                         ${escapeHtml(fmtTime(e.ts))} ·
                         <i class="fa-solid ${meta.icon}" style="color:${meta.color};"></i> ${escapeHtml(meta.label)}
                         ${role ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
                                      font-size:10px; color:${role.color}; border:1px solid ${role.color};">${escapeHtml(role.label)}</span>` : ''}
+                        ${retracted ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
+                                     font-size:10px; color:var(--text-muted); border:1px solid var(--text-muted);">RITRATTATA</span>` : ''}
                     </div>
-                    <div style="font-size:13px; color:${e.severity !== null && e.severity !== undefined ? sevColor(e.severity) : 'var(--text)'};">
+                    <div style="font-size:13px; ${retracted ? 'text-decoration:line-through;' : ''}
+                                color:${e.severity !== null && e.severity !== undefined ? sevColor(e.severity) : 'var(--text)'};">
                         ${escapeHtml(jsStr(e.text))}
                     </div>
+                    ${why ? `<div style="font-size:11px; color:var(--warning); margin-top:2px;">
+                                <i class="fa-solid fa-rotate-left"></i> ${escapeHtml(jsStr(why))}</div>` : ''}
                     ${prov ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;" title="Regola che ha prodotto questa evidenza e soglie usate">
                                 <i class="fa-solid fa-fingerprint"></i> ${escapeHtml(prov)}</div>` : ''}
                     ${attrs ? `<div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-top:2px; word-break:break-all;">${escapeHtml(attrs)}</div>` : ''}
@@ -227,7 +303,20 @@
         </div>`;
     }
 
-    function renderIncidentDetail(inc, entries) {
+    function renderConclusionHistory(history) {
+        if (!history.length) return '';
+        return `<div style="margin-top:12px; padding:10px; border-radius:8px; background:var(--surface-3);">
+            <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:6px;">
+                <i class="fa-solid fa-clock-rotate-left"></i> Conclusioni precedenti (superate)
+            </div>
+            ${history.map(h => `<div style="font-size:12px; color:var(--text-muted); text-decoration:line-through;">
+                ${escapeHtml(fmtTime(h.concluded_ts))} — ${escapeHtml(jsStr(h.cause_kind))}
+                (${escapeHtml(jsStr(h.confidence))}%)
+            </div>`).join('')}
+        </div>`;
+    }
+
+    function renderIncidentDetail(inc, entries, history) {
         const box = document.getElementById('incidentDetail');
         if (!box) return;
         const next = inc.status === 'new'
@@ -248,7 +337,8 @@
                 <div style="display:flex; gap:8px;">${next}</div>
             </div>
             ${renderReasoning(inc)}
-            <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-timeline"></i> Timeline</h4>
+            ${renderConclusionHistory(history || [])}
+            <h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-timeline"></i> Timeline</h4>
             ${renderTimeline(entries)}
             ${renderAiBlock(inc)}`;
     }
@@ -299,4 +389,5 @@
     window.openIncident = openIncident;
     window.setIncidentStatus = setIncidentStatus;
     window.explainIncident = explainIncident;
+    window.saveRuleParameters = saveRuleParameters;
 })();

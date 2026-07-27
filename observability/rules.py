@@ -34,6 +34,33 @@ logger = logging.getLogger("sentinelnet.obs")
 ROLES = ("trigger", "supporting", "symptom", "consequence")
 
 
+class Retraction:
+    """Invalidazione di un'evidenza precedente, prodotta da una REGOLA.
+
+    Nessun adapter ritratta mai nulla: gli adapter osservano e normalizzano, le
+    regole interpretano. Il fatto nuovo ("l'interfaccia è tornata su", domani
+    "la deviazione rientra nella norma") arriva come evento; è una regola che,
+    vedendolo accanto all'evidenza precedente, decide che quella conclusione
+    non regge più.
+
+    ``witness`` è il Finding che giustifica la ritrattazione: viene registrato
+    come evidenza a sé, così il suo id finisce in ``retracted_by_evidence_id``
+    e la ritrattazione resta spiegabile (e a sua volta ritrattabile).
+    """
+
+    __slots__ = ("target_rule_id", "entity_key", "tenant", "reason", "witness",
+                 "window_s")
+
+    def __init__(self, target_rule_id, entity_key, tenant, reason, witness,
+                 window_s=3600):
+        self.target_rule_id = target_rule_id
+        self.entity_key = entity_key
+        self.tenant = tenant
+        self.reason = reason
+        self.witness = witness
+        self.window_s = window_s
+
+
 class Finding:
     """Una evidenza proposta da una regola. Non è ancora un incidente."""
 
@@ -57,18 +84,51 @@ class Finding:
         self.attrs = attrs or {}
 
 
-def params_for(rule_id: str, defaults: dict) -> dict:
+def parameter_specs(rule_id: str) -> list:
+    """Soglie dichiarate da una regola: [{name, default, min, max, description}]."""
+    specs = (RULES.get(rule_id) or {}).get("parameters")
+    return specs if isinstance(specs, list) else []
+
+
+def defaults_for(rule_id: str) -> dict:
+    return {p["name"]: p["default"] for p in parameter_specs(rule_id)}
+
+
+def params_for(rule_id: str) -> dict:
     """Soglie effettive: default della regola sovrascritti da app_settings.
-    Solo le chiavi già previste dalla regola, e solo valori numerici — la UI
-    non deve poter iniettare parametri arbitrari nel motore."""
+
+    Confine di sistema: si accettano solo i parametri dichiarati dalla regola,
+    solo valori numerici, e solo dentro l'intervallo ``min``/``max`` del
+    catalogo. Un valore fuori range viene riportato dentro invece di essere
+    scartato in silenzio, così una configurazione sbagliata non spegne la
+    regola senza dirlo."""
     saved = (get_app_settings().get("correlation_rules") or {}).get(rule_id) or {}
-    out = dict(defaults)
-    for key, default in defaults.items():
-        value = saved.get(key)
+    out = {}
+    for spec in parameter_specs(rule_id):
+        default = spec["default"]
+        value = saved.get(spec["name"], default)
         if isinstance(value, bool) or not isinstance(value, (int, float)):
-            continue
-        out[key] = type(default)(value)
+            value = default
+        value = max(spec["min"], min(spec["max"], value))
+        out[spec["name"]] = type(default)(value)
     return out
+
+
+def catalog() -> list:
+    """Il motore descrive se stesso: la UI costruisce il pannello soglie da
+    qui, l'assistente AI sa quali regole esistono e la documentazione deriva
+    dal codice. Una sola fonte di verità."""
+    return [{
+        "id": rule_id,
+        "version": rule["version"],
+        "title": rule["title"],
+        "description": rule["description"],
+        "inputs": list(rule["inputs"]),
+        "outputs": list(rule["outputs"]),
+        "base_confidence": rule.get("base_confidence"),
+        "parameters": [dict(p) for p in parameter_specs(rule_id)],
+        "effective": params_for(rule_id),
+    } for rule_id, rule in RULES.items()]
 
 
 # --- REGOLE ------------------------------------------------------------------
@@ -204,41 +264,120 @@ def _traffic_volume_spike(events: list, p: dict) -> list:
     return out
 
 
+def _interface_recovered(events: list, p: dict) -> list:
+    """L'interfaccia è tornata su: il sintomo precedente non regge più.
+
+    È il primo caso di ritrattazione, e vale come modello per quelli che
+    verranno (il Baseline che dice "quella deviazione rientrava nella norma"):
+    la regola NON ricalcola nulla, guarda un fatto nuovo accanto a una
+    conclusione vecchia e dichiara che quella conclusione è decaduta.
+    """
+    out = []
+    for ev in events:
+        if ev["event_type"] != "interface.change":
+            continue
+        attrs = json.loads(ev["attrs_json"] or "{}")
+        field = str(attrs.get("field", "")).lower()
+        if "link" not in field and "status" not in field:
+            continue
+        if str(attrs.get("after")).lower() not in ("up", "1", "true"):
+            continue
+        witness = Finding(
+            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
+            role="consequence", entity_key=f"ip:{ev['device_ip']}",
+            summary=f"Interfaccia {ev['interface']} tornata su",
+            attrs=attrs)
+        out.append(Retraction(
+            target_rule_id="IFACE_DOWN_001",
+            entity_key=f"ip:{ev['device_ip']}", tenant=ev["tenant"],
+            reason=f"Interfaccia {ev['interface']} tornata su",
+            witness=witness, window_s=p["window_s"]))
+    return out
+
+
 # ``base_confidence``: quanto vale da sola la conclusione di questa regola.
 # Il motore di ragionamento ci somma i bonus delle evidenze corroboranti.
+# ``inputs``/``outputs``: cosa consuma e cosa produce — servono al catalogo,
+# che è ciò che leggono la UI e l'assistente AI.
 RULES = {
     "BLOCKED_TRAFFIC_001": {
         "version": "1.0.0",
         "title": "Traffico bloccato con evidenza di flusso",
-        "defaults": {"match_delta_s": 120},
+        "description": "Un evento di sicurezza bloccante corroborato da un "
+                       "flusso reale fra gli stessi endpoint.",
+        "inputs": ["log.security", "flow.aggregate"],
+        "outputs": ["trigger", "supporting"],
+        "parameters": [
+            {"name": "match_delta_s", "default": 120, "min": 0, "max": 3600,
+             "description": "Distanza massima fra evento e bucket di flusso."},
+        ],
         "base_confidence": 65,
         "check": _blocked_traffic,
     },
     "HIGH_SEVERITY_LOG_001": {
         "version": "1.0.0",
         "title": "Log ad alta severità",
-        "defaults": {"max_severity": 3},
+        "description": "Un log abbastanza grave da emergere anche senza "
+                       "corroborazione di flusso.",
+        "inputs": ["log.security", "log.event"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "max_severity", "default": 3, "min": 0, "max": 7,
+             "description": "Severità syslog massima considerata (0 = emerg)."},
+        ],
         "base_confidence": 45,
         "check": _high_severity_log,
     },
     "CFG_CHANGE_001": {
         "version": "1.0.0",
         "title": "Variazione di configurazione o stato",
-        "defaults": {},
+        "description": "Qualcosa è cambiato su un apparato: ciò che segue va "
+                       "letto alla sua luce.",
+        "inputs": ["device.change", "interface.change"],
+        "outputs": ["trigger"],
+        "parameters": [],
         "base_confidence": 55,
         "check": _config_change,
     },
     "IFACE_DOWN_001": {
         "version": "1.0.0",
         "title": "Interfaccia giù",
-        "defaults": {},
+        "description": "Una porta è passata a down: sintomo osservato sullo "
+                       "stato, non causa.",
+        "inputs": ["interface.change"],
+        "outputs": ["symptom"],
+        "parameters": [],
         "base_confidence": 60,
         "check": _interface_down,
+    },
+    "IFACE_RECOVERED_001": {
+        "version": "1.0.0",
+        "title": "Interfaccia ripristinata (ritratta il sintomo)",
+        "description": "La porta è tornata su: ritratta l'evidenza di "
+                       "interfaccia giù, senza cancellarla.",
+        "inputs": ["interface.change"],
+        "outputs": ["consequence", "retraction"],
+        "parameters": [
+            {"name": "window_s", "default": 3600, "min": 60, "max": 86400,
+             "description": "Quanto indietro cercare il sintomo da ritrattare."},
+        ],
+        "base_confidence": 0,
+        "check": _interface_recovered,
     },
     "TRAFFIC_SPIKE_001": {
         "version": "1.0.0",
         "title": "Picco di volume nella finestra",
-        "defaults": {"min_flows": 5, "spike_ratio": 10},
+        "description": "Un flusso molto sopra la mediana della finestra "
+                       "corrente. Non è un baseline: confronta solo dentro la "
+                       "finestra.",
+        "inputs": ["flow.aggregate"],
+        "outputs": ["supporting"],
+        "parameters": [
+            {"name": "min_flows", "default": 5, "min": 2, "max": 1000,
+             "description": "Flussi minimi perché la mediana abbia senso."},
+            {"name": "spike_ratio", "default": 10, "min": 2, "max": 1000,
+             "description": "Quante volte la mediana per considerarlo picco."},
+        ],
         "base_confidence": 50,
         "check": _traffic_volume_spike,
     },
@@ -253,7 +392,7 @@ def base_confidence(rule_id: str, default: int = 40) -> int:
 
 def evaluate(events: list, only: Optional[list] = None) -> list:
     """Esegue le regole sulla finestra di eventi normalizzati.
-    Ritorna [(rule_id, version, params, Finding), ...].
+    Ritorna [(rule_id, version, params, Finding | Retraction), ...].
 
     Una regola che esplode non ferma le altre: si perde il suo contributo, non
     l'intero ciclo di correlazione.
@@ -262,12 +401,12 @@ def evaluate(events: list, only: Optional[list] = None) -> list:
     for rule_id, rule in RULES.items():
         if only is not None and rule_id not in only:
             continue
-        params = params_for(rule_id, rule["defaults"])
+        params = params_for(rule_id)
         try:
-            findings = rule["check"](events, params)
+            produced = rule["check"](events, params)
         except Exception as e:
             logger.warning("Regola %s fallita: %s", rule_id, e)
             continue
-        for finding in findings:
-            out.append((rule_id, rule["version"], params, finding))
+        for item in produced:
+            out.append((rule_id, rule["version"], params, item))
     return out

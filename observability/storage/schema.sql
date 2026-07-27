@@ -255,11 +255,40 @@ CREATE TABLE IF NOT EXISTS evidence (
     summary      TEXT,                      -- una riga leggibile dall'ingegnere
     attrs_json   TEXT,
     dedup_key    TEXT UNIQUE,
+    -- v8 — ciclo di vita, tenuto DELIBERATAMENTE minimo: active → retracted,
+    -- nient'altro. Ogni altra sfumatura vive nel ragionamento, non qui.
+    -- Un'evidenza ritrattata NON viene cancellata: il sistema deve poter dire
+    -- "avevamo concluso X, poi un fatto nuovo l'ha invalidata".
+    status                  TEXT NOT NULL DEFAULT 'active'
+                            CHECK(status IN ('active', 'retracted')),
+    retracted_by_evidence_id INTEGER,       -- QUALE evidenza l'ha invalidata
+    retracted_by_rule_id     TEXT,          -- e quale regola l'ha decisa
+    retracted_at             INTEGER,
+    retracted_reason         TEXT,
     FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_incident ON evidence(incident_id, ts);
 CREATE INDEX IF NOT EXISTS idx_evidence_open     ON evidence(tenant, incident_id, ts);
 CREATE INDEX IF NOT EXISTS idx_evidence_event    ON evidence(event_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_status   ON evidence(status, incident_id);
+
+-- 12. STORICO DELLE CONCLUSIONI (v8): la conclusione di un incidente è
+-- versionata come le regole. Quando un'evidenza viene ritrattata il
+-- ragionamento si rifà, e quella precedente non sparisce: è ciò che permette
+-- di dire "avevamo ipotizzato una congestione, ma una nuova evidenza l'ha
+-- invalidata" invece di cambiare idea in silenzio.
+CREATE TABLE IF NOT EXISTS incident_conclusions (
+    id             INTEGER PRIMARY KEY,
+    incident_id    INTEGER NOT NULL,
+    concluded_ts   INTEGER NOT NULL,
+    cause_kind     TEXT,
+    confidence     INTEGER,
+    reasoning_json TEXT,
+    superseded_ts  INTEGER,               -- NULL = conclusione corrente
+    FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_conclusions_incident
+    ON incident_conclusions(incident_id, concluded_ts);
 
 CREATE TABLE IF NOT EXISTS audit_engagement_history (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

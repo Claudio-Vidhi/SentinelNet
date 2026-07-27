@@ -45,8 +45,16 @@ CONFIDENCE_MAX = 95
 _UNASSIGNED_SQL = """
 SELECT id, ts, tenant, entity_key, role, rule_id, severity
 FROM evidence
-WHERE incident_id IS NULL AND ts >= ?
+WHERE incident_id IS NULL AND status = 'active' AND ts >= ?
 ORDER BY ts ASC, id ASC
+"""
+
+# Incidenti in cui qualcosa è stato ritrattato di recente: vanno ri-ragionati
+# anche se non hanno ricevuto evidenze nuove, altrimenti resterebbero con una
+# conclusione che si regge su un fatto ormai invalidato.
+_RETRACTED_SQL = """
+SELECT DISTINCT incident_id FROM evidence
+WHERE status = 'retracted' AND incident_id IS NOT NULL AND retracted_at >= ?
 """
 
 
@@ -100,6 +108,9 @@ def group_once(now: Optional[int] = None) -> int:
                 (ts, ts, severity, severity, incident_id))
             touched.add(incident_id)
             linked += 1
+
+        for row in conn.execute(_RETRACTED_SQL, (now - LOOKBACK_S,)).fetchall():
+            touched.add(row["incident_id"])
 
         conn.commit()
         for incident_id in sorted(touched):
@@ -186,12 +197,25 @@ def _reason(conn, incident_id: int) -> None:
         "WHERE id = ?", (incident_id,)).fetchone()
     if incident is None:
         return
+    # Le evidenze ritrattate restano nel database e nella timeline, ma NON
+    # partecipano più alla conclusione: è tutta la differenza fra "cambiare
+    # idea in silenzio" e "poter spiegare perché si è cambiata idea".
     evidence = conn.execute(
         """SELECT id, ts, role, rule_id, rule_version, params_json, severity,
                   src_ip, dst_ip, switch_port, summary
-           FROM evidence WHERE incident_id = ? ORDER BY ts ASC, id ASC""",
+           FROM evidence WHERE incident_id = ? AND status = 'active'
+           ORDER BY ts ASC, id ASC""",
         (incident_id,)).fetchall()
+    retracted = conn.execute(
+        "SELECT COUNT(*) AS n FROM evidence "
+        "WHERE incident_id = ? AND status = 'retracted'",
+        (incident_id,)).fetchone()["n"]
     if not evidence:
+        if retracted:
+            _record_conclusion(conn, incident_id, "tutte_le_evidenze_ritrattate",
+                               0, json.dumps({"cause": "tutte_le_evidenze_ritrattate",
+                                              "retracted_count": retracted},
+                                             ensure_ascii=False))
         return
 
     trigger = _primary_trigger(evidence)
@@ -223,6 +247,7 @@ def _reason(conn, incident_id: int) -> None:
         "sources_used": sources,
         "evidence_by_role": by_role,
         "evidence_refs": [e["id"] for e in evidence],
+        "retracted_count": retracted,
     }, ensure_ascii=False)
 
     title_source = trigger["summary"] if trigger is not None else evidence[0]["summary"]
@@ -232,6 +257,35 @@ def _reason(conn, incident_id: int) -> None:
         "UPDATE incidents SET cause_kind = ?, confidence = ?, "
         "reasoning_json = ?, title = ? WHERE id = ?",
         (cause, confidence, reasoning, title, incident_id))
+    _record_conclusion(conn, incident_id, cause, confidence, reasoning)
+
+
+def _record_conclusion(conn, incident_id: int, cause, confidence,
+                       reasoning: str) -> None:
+    """Archivia la conclusione precedente e registra quella nuova, ma SOLO se
+    è davvero cambiata: un ricalcolo che conferma non deve gonfiare lo storico.
+
+    Il confronto è sull'INTERO ragionamento, non sulla sola coppia
+    causa+confidenza: una ritrattazione può togliere una regola dal percorso
+    lasciando causa e punteggio invariati, e quella resta una conclusione
+    diversa da spiegare. ``reasoning_json`` è deterministico a parità di
+    evidenze, quindi il confronto per stringa è sufficiente."""
+    current = conn.execute(
+        "SELECT id, reasoning_json FROM incident_conclusions "
+        "WHERE incident_id = ? AND superseded_ts IS NULL "
+        "ORDER BY concluded_ts DESC, id DESC LIMIT 1",
+        (incident_id,)).fetchone()
+    if current is not None:
+        if current["reasoning_json"] == reasoning:
+            return
+        conn.execute(
+            "UPDATE incident_conclusions SET superseded_ts = ? WHERE id = ?",
+            (int(time.time()), current["id"]))
+    conn.execute(
+        """INSERT INTO incident_conclusions
+               (incident_id, concluded_ts, cause_kind, confidence, reasoning_json)
+           VALUES (?, ?, ?, ?, ?)""",
+        (incident_id, int(time.time()), cause, confidence, reasoning))
 
 
 def reason(incident_id: int) -> None:

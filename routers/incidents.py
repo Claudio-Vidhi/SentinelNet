@@ -20,7 +20,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core import db
 from observability import timeline
-from routers.deps import get_current_user, require_operator, user_group_scope
+from routers.deps import (get_current_user, require_admin, require_operator,
+                          user_group_scope)
 from routers.observability import MAX_LIMIT, _parse_window, _tenant_filter
 from security.security_manager import log_audit
 
@@ -36,6 +37,55 @@ def _parse_json(raw):
         return json.loads(raw or "{}")
     except (ValueError, TypeError):
         return {}
+
+
+@router.get("/rules")
+def list_rules(current_user = Depends(get_current_user)):
+    """Catalogo delle regole di correlazione: il motore descrive se stesso.
+
+    La UI ci costruisce il pannello soglie, l'assistente AI sa quali regole
+    esistono e la documentazione deriva dal codice — una sola fonte di verità.
+    Nessun dato di tenant qui dentro, solo la definizione del motore."""
+    from observability import rules
+    return {"rules": rules.catalog()}
+
+
+@router.post("/rules/{rule_id}/parameters")
+def set_rule_parameters(rule_id: str, payload: dict,
+                        current_user = Depends(require_admin)):
+    """Ritocca le soglie di UNA regola. La logica resta nel codice: qui si
+    accettano solo i parametri dichiarati dal catalogo, solo numerici e solo
+    dentro l'intervallo min/max — la UI non può iniettare nulla nel motore."""
+    from core.app_settings import get_app_settings, save_app_settings
+    from observability import rules
+
+    if rule_id not in rules.RULES:
+        raise HTTPException(status_code=404, detail="Rule not found.")
+    specs = {p["name"]: p for p in rules.parameter_specs(rule_id)}
+
+    accepted = {}
+    for name, value in (payload or {}).items():
+        spec = specs.get(name)
+        if spec is None:
+            raise HTTPException(status_code=400,
+                                detail=f"Parametro sconosciuto: '{name}'.")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise HTTPException(status_code=400,
+                                detail=f"'{name}' deve essere numerico.")
+        if not (spec["min"] <= value <= spec["max"]):
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{name}' fuori intervallo "
+                       f"({spec['min']}–{spec['max']}).")
+        accepted[name] = type(spec["default"])(value)
+
+    saved = dict(get_app_settings().get("correlation_rules") or {})
+    saved[rule_id] = {**(saved.get(rule_id) or {}), **accepted}
+    save_app_settings({"correlation_rules": saved})
+    log_audit(f"Soglie della regola {rule_id} aggiornate da "
+              f"'{current_user.get('sub')}': {accepted}.")
+    return {"status": "success", "rule_id": rule_id,
+            "effective": rules.params_for(rule_id)}
 
 
 @router.get("")
@@ -81,11 +131,22 @@ async def _incident_in_scope(incident_id: int, current_user):
 
 @router.get("/{incident_id}")
 async def get_incident(incident_id: int, current_user = Depends(get_current_user)):
-    """Dettaglio: conclusione deterministica + timeline multi-fonte."""
+    """Dettaglio: conclusione corrente, storico delle conclusioni superate e
+    timeline multi-fonte.
+
+    Lo storico esiste perché una ritrattazione può cambiare la causa: il
+    sistema deve poter dire "avevamo ipotizzato X, poi un fatto nuovo l'ha
+    invalidata" invece di cambiare idea in silenzio."""
     incident = await _incident_in_scope(incident_id, current_user)
     incident["reasoning"] = _parse_json(incident.pop("reasoning_json"))
     entries = await asyncio.to_thread(timeline.build, incident_id)
-    return {"incident": incident, "timeline": entries}
+    history = await db.read(
+        """SELECT concluded_ts, cause_kind, confidence, superseded_ts
+           FROM incident_conclusions
+           WHERE incident_id = ? AND superseded_ts IS NOT NULL
+           ORDER BY concluded_ts DESC LIMIT 20""", (incident_id,))
+    return {"incident": incident, "timeline": entries,
+            "previous_conclusions": [dict(r) for r in history]}
 
 
 @router.post("/{incident_id}/status")

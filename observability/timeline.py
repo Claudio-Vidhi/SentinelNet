@@ -73,9 +73,13 @@ def build(incident_id: int) -> list:
         frm = incident["opened_ts"] - PAD_S
         to = incident["last_event_ts"] + PAD_S
 
+        # Anche le evidenze ritrattate compaiono: la timeline racconta cosa si
+        # è pensato, non solo cosa si pensa adesso.
         evidence_rows = conn.execute(
             """SELECT id, ts, role, rule_id, rule_version, params_json, severity,
-                      src_ip, dst_ip, switch_port, summary, attrs_json, event_id
+                      src_ip, dst_ip, switch_port, summary, attrs_json, event_id,
+                      status, retracted_by_evidence_id, retracted_by_rule_id,
+                      retracted_at, retracted_reason
                FROM evidence WHERE incident_id = ?
                ORDER BY ts ASC, id ASC""", (incident_id,)).fetchall()
 
@@ -91,11 +95,16 @@ def build(incident_id: int) -> list:
             entries.append({
                 "ts": ev["ts"], "source": "evidence", "role": ev["role"],
                 "severity": ev["severity"], "text": detail,
+                "status": ev["status"],
                 "ref": {"evidence_id": ev["id"], "event_id": ev["event_id"],
                         "rule_id": ev["rule_id"],
                         "rule_version": ev["rule_version"],
                         "rule_params": _evidence(ev["params_json"]),
-                        "attrs": _evidence(ev["attrs_json"])},
+                        "attrs": _evidence(ev["attrs_json"]),
+                        "retracted_by_evidence_id": ev["retracted_by_evidence_id"],
+                        "retracted_by_rule_id": ev["retracted_by_rule_id"],
+                        "retracted_at": ev["retracted_at"],
+                        "retracted_reason": ev["retracted_reason"]},
             })
 
         ip_list = sorted(ips)

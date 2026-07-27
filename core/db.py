@@ -30,7 +30,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 7          # versione schema supportata da questo codice (v7: evidence model)
+SCHEMA_VERSION = 8          # versione schema supportata da questo codice (v8: evidence lifecycle)
 QUEUE_MAX = 10_000          # payload massimi in coda scritture
 BATCH_SIZE = 500            # payload massimi per singolo commit
 MAX_WRITER_RESTARTS = 5     # riavvii writer consentiti prima del fail-open
@@ -156,6 +156,18 @@ def migrate() -> None:
             conn.execute("ALTER TABLE flow_aggregates ADD COLUMN source TEXT")
         if current and current < 7:
             _migrate_v7_evidence(conn)
+        # v8: colonne del ciclo di vita su una tabella evidence preesistente
+        # (CREATE TABLE IF NOT EXISTS non tocca le tabelle già create).
+        ev_cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(evidence)").fetchall()}
+        for column, ddl in (
+                ("status", "TEXT NOT NULL DEFAULT 'active'"),
+                ("retracted_by_evidence_id", "INTEGER"),
+                ("retracted_by_rule_id", "TEXT"),
+                ("retracted_at", "INTEGER"),
+                ("retracted_reason", "TEXT")):
+            if ev_cols and column not in ev_cols:
+                conn.execute(f"ALTER TABLE evidence ADD COLUMN {column} {ddl}")
         if current < SCHEMA_VERSION:
             conn.execute("DELETE FROM schema_version")
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))
