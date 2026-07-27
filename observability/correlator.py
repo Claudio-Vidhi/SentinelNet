@@ -146,13 +146,25 @@ def correlate_once(now: Optional[int] = None) -> int:
         # interessante (il fatto che smonta la conclusione arriva nella stessa
         # finestra) non funzionerebbe mai.
         for rule_id, version, params, item in produced:
-            if not isinstance(item, rules.Retraction):
-                emitted += _insert_finding(conn, now, rule_id, version,
-                                           params, item)[1]
-        for rule_id, version, params, item in produced:
             if isinstance(item, rules.Retraction):
-                emitted += _apply_retraction(conn, now, rule_id, version,
-                                             params, item)
+                continue
+            if not rules.declares_output(rule_id, item.role):
+                logger.warning(
+                    "Regola %s ha prodotto un ruolo '%s' non dichiarato in "
+                    "outputs: evidenza scartata.", rule_id, item.role)
+                continue
+            emitted += _insert_finding(conn, now, rule_id, version,
+                                       params, item)[1]
+        for rule_id, version, params, item in produced:
+            if not isinstance(item, rules.Retraction):
+                continue
+            if not rules.declares_output(rule_id, "retraction"):
+                logger.warning(
+                    "Regola %s ha prodotto una ritrattazione non dichiarata in "
+                    "outputs: ignorata.", rule_id)
+                continue
+            emitted += _apply_retraction(conn, now, rule_id, version,
+                                         params, item)
         conn.commit()
         metrics.set_gauge("last_correlation_ts", now)
         metrics.inc("evidence_emitted", emitted)

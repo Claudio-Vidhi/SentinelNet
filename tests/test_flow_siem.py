@@ -207,10 +207,16 @@ class TestFlowSiem(unittest.TestCase):
         events = c.get("/api/flow-siem/events?window=24h").json()["events"]
         target = [e for e in events if e["src_ip"] == "10.0.1.5"][0]
 
+        # Il writer DEVE essere attivo prima della scrittura: stop_writer()
+        # drena la coda unendosi al thread, ma se nessun thread è in esecuzione
+        # (un altro modulo di test può averlo lasciato fermo) la coda non viene
+        # svuotata e la lettura successiva corre contro l'avvio. Era la causa
+        # di un fallimento intermittente dipendente dall'ordine dei moduli.
+        db.start_writer()
         r = c.post("/api/flow-siem/alerts/suppress", headers=CSRF,
                    json={"event_id": target["id"]})
         self.assertEqual(r.status_code, 200, r.text)
-        db.stop_writer()          # drena la coda di scrittura asincrona
+        db.stop_writer()          # join → coda drenata
         db.start_writer()
 
         after = c.get("/api/flow-siem/events?window=24h").json()["events"]

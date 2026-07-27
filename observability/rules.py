@@ -126,9 +126,24 @@ def catalog() -> list:
         "inputs": list(rule["inputs"]),
         "outputs": list(rule["outputs"]),
         "base_confidence": rule.get("base_confidence"),
+        # Knowledge base derivata dal codice, non scritta a parte: il catalogo
+        # dice quali regole esistono E cosa farci quando scattano.
+        "investigation": rule.get("investigation"),
+        "remediation": rule.get("remediation"),
         "parameters": [dict(p) for p in parameter_specs(rule_id)],
         "effective": params_for(rule_id),
     } for rule_id, rule in RULES.items()]
+
+
+def declares_output(rule_id: str, name: str) -> bool:
+    """Una regola può produrre solo ciò che ha dichiarato in ``outputs``.
+
+    Senza questo controllo il catalogo sarebbe una promessa non verificata: una
+    regola potrebbe restituire una ritrattazione senza averla dichiarata, e la
+    UI, l'assistente AI e la documentazione — che leggono tutti il catalogo —
+    descriverebbero un motore diverso da quello che gira."""
+    outputs = (RULES.get(rule_id) or {}).get("outputs")
+    return isinstance(outputs, list) and name in outputs
 
 
 # --- REGOLE ------------------------------------------------------------------
@@ -275,7 +290,7 @@ def _baseline_spike(events: list, p: dict) -> list:
         if ev["event_type"] != "flow.baseline":
             continue
         m = json.loads(ev["metrics_json"] or "{}")
-        if (m.get("samples") or 0) < p["min_samples"]:
+        if (m.get("quality") or 0) < p["min_quality"]:
             continue
         deviation = m.get("deviation_pct")
         if deviation is None or deviation < p["min_deviation_pct"]:
@@ -286,8 +301,32 @@ def _baseline_spike(events: list, p: dict) -> list:
             entity_key=f"ip:{ev['src_ip']}", severity=4, src_ip=ev["src_ip"],
             summary=f"{ev['src_ip']}: traffico {deviation:+.0f}% rispetto "
                     f"all'abitudine ({m.get('observed')} byte contro "
-                    f"{m.get('expected')} attesi)",
+                    f"{m.get('expected')} attesi, baseline "
+                    f"{attrs.get('quality_label', '?')})",
             attrs={**attrs, **m}))
+    return out
+
+
+def _new_talker(events: list, p: dict) -> list:
+    """Un talker mai visto prima. Non è una deviazione: è un'emergenza.
+
+    Distinzione voluta — chiedere "di quanto si discosta dalla sua abitudine"
+    a qualcosa che un'abitudine non ce l'ha produce solo numeri senza senso.
+    """
+    out = []
+    for ev in events:
+        if ev["event_type"] != "flow.emergence":
+            continue
+        m = json.loads(ev["metrics_json"] or "{}")
+        observed = m.get("observed") or 0
+        if observed < p["min_bytes"]:
+            continue
+        out.append(Finding(
+            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
+            entity_key=f"ip:{ev['src_ip']}", severity=5, src_ip=ev["src_ip"],
+            summary=f"{ev['src_ip']}: host mai osservato prima, "
+                    f"{observed} byte trasmessi",
+            attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
     return out
 
 
@@ -304,7 +343,11 @@ def _baseline_normal_retracts_spike(events: list, p: dict) -> list:
         if ev["event_type"] != "flow.baseline":
             continue
         m = json.loads(ev["metrics_json"] or "{}")
-        if (m.get("samples") or 0) < p["min_samples"]:
+        # Soglia di qualità PIÙ ALTA che nella regola di scoperta: per
+        # concludere si può accettare un rischio, per DIS-concludere ne serve
+        # meno. Ritrattare un allarme sulla base di una baseline debole fa un
+        # danno silenzioso, ed è il verso opposto del falso positivo.
+        if (m.get("quality") or 0) < p["min_quality"]:
             continue
         deviation = m.get("deviation_pct")
         if deviation is None or abs(deviation) > p["normal_band_pct"]:
@@ -373,6 +416,8 @@ RULES = {
              "description": "Distanza massima fra evento e bucket di flusso."},
         ],
         "base_confidence": 65,
+        "investigation": 'Verificare se il blocco è atteso dalla policy o se un servizio legittimo è stato bloccato per errore. Controllare la porta dello switch del client e se il tentativo si ripete verso destinazioni diverse.',
+        "remediation": "Se il traffico è legittimo, correggere la regola di firewall. Se non lo è, isolare l'host e verificare la presenza di malware.",
         "check": _blocked_traffic,
     },
     "HIGH_SEVERITY_LOG_001": {
@@ -387,6 +432,8 @@ RULES = {
              "description": "Severità syslog massima considerata (0 = emerg)."},
         ],
         "base_confidence": 45,
+        "investigation": "Leggere il messaggio completo dell'apparato e correlarlo con eventuali modifiche di configurazione o riavvii nella stessa finestra.",
+        "remediation": "Intervenire secondo la natura dell'errore riportato dall'apparato; se si ripete, aprire una verifica sullo stato hardware o sulla versione firmware.",
         "check": _high_severity_log,
     },
     "CFG_CHANGE_001": {
@@ -398,6 +445,8 @@ RULES = {
         "outputs": ["trigger"],
         "parameters": [],
         "base_confidence": 55,
+        "investigation": 'Identificare chi ha eseguito la modifica e se era pianificata. Confrontare il campo cambiato con il backup di configurazione precedente.',
+        "remediation": "Se la modifica non era autorizzata, ripristinare dal backup e verificare gli accessi amministrativi all'apparato.",
         "check": _config_change,
     },
     "IFACE_DOWN_001": {
@@ -409,6 +458,12 @@ RULES = {
         "outputs": ["symptom"],
         "parameters": [],
         "base_confidence": 60,
+        "investigation": "Verificare cablaggio, stato del transceiver e "
+                         "contatori di errore della porta. Controllare se la "
+                         "caduta coincide con una modifica di configurazione.",
+        "remediation": "Sostituire il collegamento difettoso o riabilitare la "
+                       "porta. Se la caduta si ripete, sospettare duplex "
+                       "mismatch o alimentazione PoE insufficiente.",
         "check": _interface_down,
     },
     "IFACE_RECOVERED_001": {
@@ -423,6 +478,8 @@ RULES = {
              "description": "Quanto indietro cercare il sintomo da ritrattare."},
         ],
         "base_confidence": 0,
+        "investigation": "Nessuna: registra un ripristino. Se il ciclo giù/su si ripete spesso, il vero problema è l'instabilità del collegamento, non la singola caduta.",
+        "remediation": "In caso di flapping ripetuto, indagare cablaggio e transceiver invece di considerare l'incidente chiuso.",
         "check": _interface_recovered,
     },
     "BASELINE_SPIKE_001": {
@@ -436,11 +493,39 @@ RULES = {
         "parameters": [
             {"name": "min_deviation_pct", "default": 200, "min": 20, "max": 10000,
              "description": "Scostamento minimo sull'atteso per parlare di picco."},
-            {"name": "min_samples", "default": 3, "min": 2, "max": 30,
-             "description": "Campioni storici minimi perché il confronto valga."},
+            {"name": "min_quality", "default": 0.3, "min": 0.0, "max": 1.0,
+             "description": "Qualità minima della baseline per fidarsene."},
         ],
         "base_confidence": 55,
+        "investigation": "Identificare il processo dietro il volume (backup, "
+                         "replica, sincronizzazione). Verificare se il picco è "
+                         "East-West o attraversa il firewall, e se coincide con "
+                         "una finestra pianificata.",
+        "remediation": "Se è un'attività legittima fuori finestra, riprogrammarla. "
+                       "Se non è riconducibile a nulla di noto, isolare l'host e "
+                       "ispezionare le sessioni attive.",
         "check": _baseline_spike,
+    },
+    "NEW_TALKER_001": {
+        "version": "1.0.0",
+        "title": "Host mai osservato prima",
+        "description": "Un IP che non ha mai trasmesso nella finestra "
+                       "conservata inizia a generare traffico. È un'emergenza, "
+                       "non uno scostamento da un'abitudine.",
+        "inputs": ["flow.emergence"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "min_bytes", "default": 10000, "min": 0, "max": 10 ** 12,
+             "description": "Volume minimo perché l'apparizione conti."},
+        ],
+        "base_confidence": 40,
+        "investigation": "Risalire a MAC, VLAN e porta dello switch dalla mappa "
+                         "client. Verificare se l'IP è nell'inventario, se è un "
+                         "rilascio DHCP legittimo o un dispositivo non censito.",
+        "remediation": "Se non è censito, registrarlo in inventario o rimuoverlo "
+                       "dalla rete. Verificare che la porta di accesso abbia il "
+                       "profilo di sicurezza previsto.",
+        "check": _new_talker,
     },
     "BASELINE_NORMAL_RETRACT_001": {
         "version": "1.0.0",
@@ -453,12 +538,19 @@ RULES = {
         "parameters": [
             {"name": "normal_band_pct", "default": 50, "min": 5, "max": 500,
              "description": "Entro quale scostamento il volume è considerato normale."},
-            {"name": "min_samples", "default": 3, "min": 2, "max": 30,
-             "description": "Campioni storici minimi perché il confronto valga."},
+            {"name": "min_quality", "default": 0.5, "min": 0.0, "max": 1.0,
+             "description": "Qualità minima per ritrattare: più alta che per "
+                            "concludere, perché disfare una conclusione su dati "
+                            "deboli fa un danno silenzioso."},
             {"name": "window_s", "default": 7200, "min": 60, "max": 86400,
              "description": "Quanto indietro cercare il picco da ritrattare."},
         ],
         "base_confidence": 0,
+        "investigation": "Nessuna: questa regola serve a togliere rumore, non a "
+                         "segnalarlo. Se la ritrattazione sembra sbagliata, "
+                         "controllare qualità e numero di campioni della baseline.",
+        "remediation": "Se il picco era invece reale, alzare `min_quality` o "
+                       "stringere `normal_band_pct`.",
         "check": _baseline_normal_retracts_spike,
     },
     "TRAFFIC_SPIKE_001": {
@@ -476,6 +568,11 @@ RULES = {
              "description": "Quante volte la mediana per considerarlo picco."},
         ],
         "base_confidence": 50,
+        "investigation": "Confrontare con la baseline storica prima di agire: "
+                         "questo confronto guarda solo dentro la finestra "
+                         "corrente e non conosce le abitudini del talker.",
+        "remediation": "Nessun intervento diretto: usare l'evidenza come "
+                       "contesto per l'innesco principale dell'incidente.",
         "check": _traffic_volume_spike,
     },
 }

@@ -49,9 +49,15 @@ INSERT INTO events
      protocol, metrics_json, attrs_json, dedup_key)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(dedup_key) DO UPDATE SET
-    metrics_json = excluded.metrics_json,
-    ingested_ts  = excluded.ingested_ts
+    metrics_json = excluded.metrics_json
 """
+# ``ingested_ts`` NON viene riscritto sul conflitto: significa "quando abbiamo
+# saputo questo fatto", non "l'ultima volta che l'abbiamo ritoccato". La
+# riproiezione di un bucket ancora aperto ne aggiorna le metriche, non l'età
+# della conoscenza — e il correlatore seleziona anche su quella colonna, quindi
+# riscriverla farebbe rientrare nella finestra fatti vecchi come se fossero
+# nuovi. Tempo dell'evento (``ts``) e tempo della conoscenza (``ingested_ts``)
+# restano due assi distinti.
 
 
 def _cursor(conn, source: str) -> dict:
