@@ -183,6 +183,9 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_ts_tenant  ON events(ts, tenant);
 CREATE INDEX IF NOT EXISTS idx_events_type       ON events(event_type, ts);
 CREATE INDEX IF NOT EXISTS idx_events_entity     ON events(tenant, entity_id, ts);
+-- Il correlatore seleziona per ts OPPURE per ingested_ts (vedi correlator.py):
+-- senza questo indice il secondo ramo dell'OR sarebbe una scansione.
+CREATE INDEX IF NOT EXISTS idx_events_ingested   ON events(ingested_ts);
 
 -- Posizione raggiunta da ogni adapter di normalizzazione: la tabella È il bus,
 -- i consumatori avanzano leggendo per posizione.

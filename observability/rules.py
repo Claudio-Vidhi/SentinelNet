@@ -264,6 +264,67 @@ def _traffic_volume_spike(events: list, p: dict) -> list:
     return out
 
 
+def _baseline_spike(events: list, p: dict) -> list:
+    """Il traffico si discosta dall'abitudine, non solo dai vicini di finestra.
+
+    Consuma la misura prodotta dal Baseline Adapter: la decisione su cosa sia
+    "troppo" vive qui, dove è tarabile e registrata nella provenienza.
+    """
+    out = []
+    for ev in events:
+        if ev["event_type"] != "flow.baseline":
+            continue
+        m = json.loads(ev["metrics_json"] or "{}")
+        if (m.get("samples") or 0) < p["min_samples"]:
+            continue
+        deviation = m.get("deviation_pct")
+        if deviation is None or deviation < p["min_deviation_pct"]:
+            continue
+        attrs = json.loads(ev["attrs_json"] or "{}")
+        out.append(Finding(
+            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
+            entity_key=f"ip:{ev['src_ip']}", severity=4, src_ip=ev["src_ip"],
+            summary=f"{ev['src_ip']}: traffico {deviation:+.0f}% rispetto "
+                    f"all'abitudine ({m.get('observed')} byte contro "
+                    f"{m.get('expected')} attesi)",
+            attrs={**attrs, **m}))
+    return out
+
+
+def _baseline_normal_retracts_spike(events: list, p: dict) -> list:
+    """La misura storica dice che l'ora rientra nella norma: il picco rilevato
+    guardando solo dentro la finestra non regge più.
+
+    È il caso che il documento chiede di evitare — allarmi da picchi temporanei
+    — risolto senza cancellare nulla: l'evidenza resta, ritrattata, e
+    l'incidente può raccontare di aver cambiato idea.
+    """
+    out = []
+    for ev in events:
+        if ev["event_type"] != "flow.baseline":
+            continue
+        m = json.loads(ev["metrics_json"] or "{}")
+        if (m.get("samples") or 0) < p["min_samples"]:
+            continue
+        deviation = m.get("deviation_pct")
+        if deviation is None or abs(deviation) > p["normal_band_pct"]:
+            continue
+        witness = Finding(
+            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
+            role="supporting", entity_key=f"ip:{ev['src_ip']}",
+            src_ip=ev["src_ip"],
+            summary=f"{ev['src_ip']}: volume nella norma storica "
+                    f"({deviation:+.0f}% sull'atteso)",
+            attrs={**m})
+        out.append(Retraction(
+            target_rule_id="TRAFFIC_SPIKE_001",
+            entity_key=f"ip:{ev['src_ip']}", tenant=ev["tenant"],
+            reason=f"Il confronto con lo storico colloca il volume nella norma "
+                   f"({deviation:+.0f}% sull'atteso)",
+            witness=witness, window_s=p["window_s"]))
+    return out
+
+
 def _interface_recovered(events: list, p: dict) -> list:
     """L'interfaccia è tornata su: il sintomo precedente non regge più.
 
@@ -363,6 +424,42 @@ RULES = {
         ],
         "base_confidence": 0,
         "check": _interface_recovered,
+    },
+    "BASELINE_SPIKE_001": {
+        "version": "1.0.0",
+        "title": "Scostamento dalla baseline storica",
+        "description": "Il volume di un talker si discosta dal suo "
+                       "comportamento abituale (stesso giorno e stessa ora "
+                       "delle settimane precedenti).",
+        "inputs": ["flow.baseline"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "min_deviation_pct", "default": 200, "min": 20, "max": 10000,
+             "description": "Scostamento minimo sull'atteso per parlare di picco."},
+            {"name": "min_samples", "default": 3, "min": 2, "max": 30,
+             "description": "Campioni storici minimi perché il confronto valga."},
+        ],
+        "base_confidence": 55,
+        "check": _baseline_spike,
+    },
+    "BASELINE_NORMAL_RETRACT_001": {
+        "version": "1.0.0",
+        "title": "Volume nella norma storica (ritratta il picco di finestra)",
+        "description": "Lo storico dice che l'ora rientra nell'abitudine: "
+                       "ritratta il picco rilevato guardando solo dentro la "
+                       "finestra corrente.",
+        "inputs": ["flow.baseline"],
+        "outputs": ["supporting", "retraction"],
+        "parameters": [
+            {"name": "normal_band_pct", "default": 50, "min": 5, "max": 500,
+             "description": "Entro quale scostamento il volume è considerato normale."},
+            {"name": "min_samples", "default": 3, "min": 2, "max": 30,
+             "description": "Campioni storici minimi perché il confronto valga."},
+            {"name": "window_s", "default": 7200, "min": 60, "max": 86400,
+             "description": "Quanto indietro cercare il picco da ritrattare."},
+        ],
+        "base_confidence": 0,
+        "check": _baseline_normal_retracts_spike,
     },
     "TRAFFIC_SPIKE_001": {
         "version": "1.0.0",

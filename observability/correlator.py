@@ -120,23 +120,39 @@ def correlate_once(now: Optional[int] = None) -> int:
 
     conn = db.get_observability_connection()
     try:
+        # Due condizioni, non una: ``ts`` prende i fatti appena accaduti, ma
+        # alcune sorgenti descrivono finestre più larghe del ciclo — il
+        # baseline misura un'ora intera e la data all'inizio di quell'ora, che
+        # con il solo filtro su ``ts`` cadrebbe sempre fuori. ``ingested_ts``
+        # prende quindi anche ciò che è stato normalizzato adesso, comunque
+        # datato.
         events = [dict(r) for r in conn.execute(
             """SELECT id, ts, tenant, source, source_id, event_type, entity_type,
                       entity_id, severity, device_ip, interface, src_ip, dst_ip,
                       dst_port, protocol, metrics_json, attrs_json
                FROM events
-               WHERE ts >= ?
+               WHERE ts >= ? OR ingested_ts >= ?
                ORDER BY ts ASC LIMIT ?""",
-            (now - LOOKBACK_S, MAX_EVENTS_PER_CYCLE)).fetchall()]
+            (now - LOOKBACK_S, now - LOOKBACK_S,
+             MAX_EVENTS_PER_CYCLE)).fetchall()]
 
+        produced = rules.evaluate(events)
         emitted = 0
-        for rule_id, version, params, item in rules.evaluate(events):
+
+        # DUE PASSATE, non una. Le ritrattazioni devono vedere anche le
+        # evidenze nate in questo stesso ciclo: se girassero mescolate
+        # all'ordine di dichiarazione delle regole, una regola potrebbe
+        # invalidare solo ciò che esisteva al giro precedente — e il caso
+        # interessante (il fatto che smonta la conclusione arriva nella stessa
+        # finestra) non funzionerebbe mai.
+        for rule_id, version, params, item in produced:
+            if not isinstance(item, rules.Retraction):
+                emitted += _insert_finding(conn, now, rule_id, version,
+                                           params, item)[1]
+        for rule_id, version, params, item in produced:
             if isinstance(item, rules.Retraction):
                 emitted += _apply_retraction(conn, now, rule_id, version,
                                              params, item)
-                continue
-            emitted += _insert_finding(conn, now, rule_id, version, params,
-                                       item)[1]
         conn.commit()
         metrics.set_gauge("last_correlation_ts", now)
         metrics.inc("evidence_emitted", emitted)
