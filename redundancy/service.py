@@ -152,6 +152,73 @@ def upsert_fgcp(group_name: str, group: GroupInfo, managed_devices: list[dict]) 
     return gid
 
 
+def _find_group_by_logical_ip(logical_ip: str) -> Optional[dict]:
+    for g in store.list_groups():
+        if g.get("logical_device_ip") == logical_ip:
+            return g
+    return None
+
+
+def upsert_stack_from_cli(group_name: str, device_ip: str, name: str,
+                          members: Optional[list[dict]]) -> Optional[int]:
+    """Crea/aggiorna il gruppo STACK rilevato dal parser CLI per un dispositivo.
+
+    `members=None` (apparato standalone) scioglie un gruppo rilevato in
+    precedenza. Un gruppo modificato a mano (detection_source='manual') non
+    viene mai sovrascritto: l'override dell'utente vince sul rilevamento.
+    """
+    existing = _find_group_by_logical_ip(device_ip)
+    if existing and existing.get("detection_source") == DetectionSource.MANUAL.value:
+        return existing["id"]
+
+    if not members:
+        if existing:
+            delete_group(existing["id"])
+        return None
+
+    infos = [
+        MemberInfo(
+            role=MemberRole(m.get("role", MemberRole.MEMBER.value)),
+            serial=m.get("serial"),
+            model=m.get("model"),
+            state=MemberState(m.get("state", MemberState.READY.value)),
+            device_ip=device_ip,
+        )
+        for m in members
+    ]
+    g_info = GroupInfo(group_type=GroupType.STACK, name=name, members=infos)
+
+    payload = {
+        "id": existing["id"] if existing else None,
+        "group_name": group_name,
+        "group_type": GroupType.STACK.value,
+        "name": name,
+        "virtual_ip": None,
+        "logical_device_ip": device_ip,
+        "health": g_info.compute_health().value,
+        "detection_source": DetectionSource.CLI_PARSER.value,
+        "last_verified": datetime.now(timezone.utc).isoformat(),
+        "members": [
+            {
+                "device_ip": device_ip,
+                "member_index": m.get("member_index", idx),
+                "role": info.role.value,
+                "serial": info.serial,
+                "norm_serial": info.norm_serial,
+                "model": info.model,
+                "state": info.state.value,
+                "mgmt_ip": device_ip,
+                "details": {},
+            }
+            for idx, (m, info) in enumerate(zip(members, infos))
+        ],
+    }
+
+    gid = store.save_group(payload)
+    _invalidate_cache()
+    return gid
+
+
 def discover_fgcp(device: dict) -> Optional[int]:
     from services import fortigate_service, inventory_manager
     from redundancy.parsers.fortios import parse_ha_status
@@ -213,26 +280,40 @@ def get_group(group_id: int) -> dict | None:
     return store.get_group(group_id)
 
 
+def _badge_for(g: dict, role: str) -> dict:
+    """Badge compatto per un gruppo: usato dalla mappa e dalla tab Dispositivi
+    per mostrare 'N × <modello> in STACK' e l'elenco delle unità."""
+    members = g.get("members", [])
+    models = [m.get("model") for m in members if m.get("model")]
+    return {
+        "type": g["group_type"],
+        "role": role,
+        "health": g["health"],
+        "group_id": g["id"],
+        "group_name": g.get("group_name"),
+        "name": g.get("name"),
+        "virtual_ip": g.get("virtual_ip"),
+        "member_count": len(members),
+        "model": max(set(models), key=models.count) if models else None,
+        "members": [
+            {
+                "index": m.get("member_index"),
+                "role": m.get("role"),
+                "serial": m.get("serial"),
+                "model": m.get("model"),
+                "state": m.get("state"),
+            }
+            for m in members
+        ],
+    }
+
+
 def device_redundancy_badge(device_ip: str) -> Optional[dict]:
     all_groups = store.list_groups()
     for g in all_groups:
         if g.get("logical_device_ip") == device_ip:
-            return {
-                "type": g["group_type"],
-                "role": "logical",
-                "health": g["health"],
-                "group_id": g["id"],
-                "virtual_ip": g.get("virtual_ip"),
-                "member_count": len(g.get("members", [])),
-            }
+            return _badge_for(g, "logical")
         for m in g.get("members", []):
             if m.get("device_ip") == device_ip:
-                return {
-                    "type": g["group_type"],
-                    "role": m.get("role"),
-                    "health": g["health"],
-                    "group_id": g["id"],
-                    "virtual_ip": g.get("virtual_ip"),
-                    "member_count": len(g.get("members", [])),
-                }
+                return _badge_for(g, m.get("role"))
     return None

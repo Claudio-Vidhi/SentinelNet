@@ -309,6 +309,8 @@ def run_backup_and_triage(device):
                     ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
                     ("show lldp neighbors",        "--- SHOW LLDP NEIGHBORS ---"),
                     ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
+                    ("show switch",                "--- SHOW SWITCH ---"),
+                    ("show inventory",             "--- SHOW INVENTORY ---"),
                 ]:
                     try:
                         out = net_connect.send_command(cmd)
@@ -348,6 +350,17 @@ def run_backup_and_triage(device):
             update_device_hostname(ip, sys_name)
 
             file_path = save_backup(device, sys_name, config_out)
+
+            # Rilevamento stack (StackWise & co.): aggiorna/scioglie il gruppo
+            # STACK associato a questo IP di management.
+            try:
+                from redundancy import service as redundancy_service
+                redundancy_service.upsert_stack_from_cli(
+                    device.get("Group", "Generale"), ip, sys_name,
+                    parse_switch_stack(config_out, vendor),
+                )
+            except Exception as stack_err:
+                logging.warning(f"Rilevamento stack fallito per {ip}: {stack_err}")
 
             log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' (Firmware: '{version}').")
             return {"status": "success", "version": version, "hostname": sys_name, "file": file_path}
@@ -696,6 +709,82 @@ def extract_model_from_backup(content: str) -> str | None:
         if m:
             return m.group(1).strip().strip(',')
     return None
+
+
+def _backup_section(content: str, tag: str) -> str | None:
+    """Ritorna il blocco di testo appeso al backup sotto '--- <TAG> ---'."""
+    sec = re.search(rf'--- {tag} ---\s*\n(.*?)(?=\n--- |\n===|\Z)',
+                    content, re.DOTALL | re.IGNORECASE)
+    return sec.group(1) if sec else None
+
+
+# Stato unità stack (Cisco) -> MemberState di redundancy.models
+_STACK_STATE_MAP = {
+    'ready': 'ready',
+    'provisioned': 'provisioned',
+    'v-mismatch': 'version_mismatch',
+    'version mismatch': 'version_mismatch',
+    'removed': 'rp_down',
+}
+
+
+def _parse_stack_cisco(content: str) -> list[dict]:
+    """Unità di uno stack StackWise da 'show switch' + 'show inventory'."""
+    members: dict[int, dict] = {}
+
+    block = _backup_section(content, 'SHOW SWITCH')
+    if block:
+        # Es: "*1       Active   0c6e.e2xx.xxxx     15     V02     Ready"
+        # Le colonne centrali (mac/priority/hw) variano per piattaforma: si
+        # ancorano solo indice, ruolo e stato finale, senza uscire dalla riga.
+        for m in re.finditer(
+            r'^[ \t]*\*?[ \t]*(\d+)[ \t]+(Active|Standby|Member|Master|Slave)[ \t]+'
+            r'(?:\S+[ \t]+)*?(Ready|Provisioned|V-Mismatch|Version Mismatch|Removed)[ \t]*$',
+            block, re.MULTILINE | re.IGNORECASE,
+        ):
+            idx = int(m.group(1))
+            role_raw = m.group(2).lower()
+            members[idx] = {
+                'member_index': idx,
+                'role': 'master' if role_raw in ('active', 'master') else 'member',
+                'serial': None,
+                'model': None,
+                'state': _STACK_STATE_MAP.get(m.group(3).lower(), 'ready'),
+            }
+
+    # 'show inventory': NAME: "Switch 1" ... PID: WS-C3850-24XS-S , VID: V02, SN: FOCxxxx
+    # Vale la PRIMA occorrenza per unità: le voci successive con lo stesso
+    # prefisso sono componenti (alimentatori, ventole), non lo chassis.
+    inv = _backup_section(content, 'SHOW INVENTORY')
+    if inv:
+        for m in re.finditer(
+            r'NAME:\s*"(?:Switch|Chassis)?\s*(\d+)[^"]*".{0,200}?'
+            r'PID:\s*(\S+).{0,120}?SN:\s*(\S+)',
+            inv, re.DOTALL | re.IGNORECASE,
+        ):
+            idx = int(m.group(1))
+            unit = members.setdefault(idx, {
+                'member_index': idx, 'role': 'member', 'state': 'ready',
+                'serial': None, 'model': None,
+            })
+            if unit['serial'] is None:
+                unit['model'] = m.group(2).strip().strip(',')
+                unit['serial'] = m.group(3).strip().strip(',')
+
+    return [members[i] for i in sorted(members)]
+
+
+_STACK_PARSERS = {'cisco': _parse_stack_cisco}
+
+
+def parse_switch_stack(content: str, vendor: str) -> list[dict] | None:
+    """Unità fisiche di uno stack dal testo di backup, o None se l'apparato
+    non è uno stack (o il vendor non è supportato)."""
+    parser = _STACK_PARSERS.get(str(vendor or '').lower())
+    if not parser:
+        return None
+    members = parser(content)
+    return members if len(members) >= 2 else None
 
 
 def parse_vtp_status(content: str) -> tuple[str | None, str | None]:
