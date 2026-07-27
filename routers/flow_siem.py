@@ -18,7 +18,6 @@ aperto in UI cambiava contenuto sotto gli occhi dell'utente. Qui l'id e' la
 chiave primaria di ``syslog_events``, quindi stabile.
 """
 
-import re
 import time
 from typing import Optional
 
@@ -26,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from core import db
-from observability.correlator import _SECURITY_ACTIONS
+from observability import fieldmap
 from routers.deps import get_current_user, user_group_scope
 
 router = APIRouter(prefix="/api/flow-siem", tags=["Flow SIEM"])
@@ -48,14 +47,8 @@ MAX_SCAN = 20000
 _FILTER_FIELDS = ("src_ip", "dst_ip", "action", "threat_flag", "proto",
                   "device_ip", "tenant")
 
-# Chiavi key=value FortiGate utili al registro. Il correlatore estrae solo
-# srcip/dstip/dstport; qui servono anche porta sorgente, protocollo e byte.
-_KV_RE = re.compile(
-    r'\b(srcip|dstip|srcport|dstport|proto|service|action|'
-    r'sentbyte|rcvdbyte)=(?:"([^"]*)"|(\S+))')
-_IP_RE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
-
-_PROTO_NUM = {"6": "TCP", "17": "UDP", "1": "ICMP"}
+_PROTO_NUM = fieldmap.PROTO_NUM
+_SECURITY_ACTIONS = fieldmap.SECURITY_ACTIONS
 
 
 def _window_to_seconds(window: str) -> int:
@@ -87,29 +80,20 @@ def _tenant_filter(current_user):
     return f" AND tenant IN ({placeholders})", tuple(groups)
 
 
-def _kv(message: str) -> dict:
-    return {k: (v1 or v2) for k, v1, v2 in _KV_RE.findall(message or "")}
-
-
-def _int_or_none(val):
-    try:
-        return int(val)
-    except (TypeError, ValueError):
-        return None
+# L'estrazione vive in observability/fieldmap.py: era duplicata qui e nel
+# correlatore, con set di campi diversi. Questi restano come nomi locali usati
+# nel resto del modulo.
+_kv = fieldmap.kv
+_int_or_none = fieldmap.int_or_none
 
 
 def _endpoints(message: str, kv: dict):
     """(src_ip, dst_ip) dal messaggio: kv FortiGate, altrimenti prime due IP."""
-    if kv.get("srcip") and kv.get("dstip"):
-        return kv["srcip"], kv["dstip"]
-    ips = list(dict.fromkeys(_IP_RE.findall(message or "")))
-    if len(ips) >= 2:
-        return ips[0], ips[1]
-    return None, None
+    return fieldmap.endpoints(message, kv)
 
 
 def _is_deny(action: Optional[str]) -> bool:
-    return (action or "").strip().lower() in _SECURITY_ACTIONS
+    return fieldmap.is_security_action(action)
 
 
 def _threat_flag(dst_ip: Optional[str], is_deny: bool,

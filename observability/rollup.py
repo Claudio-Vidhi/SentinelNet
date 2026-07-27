@@ -28,6 +28,9 @@ _TABLES = {
     # tabella -> (colonna ts, filtro extra)
     "flow_aggregates": ("window_start", ""),
     "syslog_events": ("ts", ""),
+    # Il modello unificato è una proiezione: senza pruning crescerebbe per
+    # sempre anche dopo che le righe d'origine sono state eliminate.
+    "events": ("ts", ""),
     "correlated_events": ("created_ts", " AND status = 'resolved'"),
     # incident_events segue via ON DELETE CASCADE (foreign_keys=ON in db.py).
     "incidents": ("opened_ts", " AND status = 'resolved'"),

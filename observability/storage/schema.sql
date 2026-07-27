@@ -167,6 +167,43 @@ CREATE TABLE IF NOT EXISTS audit_evidence (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_evidence_eng_ref ON audit_evidence(engagement_id, item_ref);
 
+-- 10. MODELLO EVENTI UNIFICATO (v6): ogni sorgente viene proiettata qui da
+-- observability/normalize.py. Tutto ciò che viene dopo (correlazione,
+-- ragionamento, baseline, knowledge base) legge SOLO questa tabella: le
+-- tabelle grezze restano la provenienza, non il contratto.
+CREATE TABLE IF NOT EXISTS events (
+    id           INTEGER PRIMARY KEY,
+    ts           INTEGER NOT NULL,       -- quando è successo
+    ingested_ts  INTEGER NOT NULL,       -- quando è stato normalizzato
+    tenant       TEXT NOT NULL,
+    source       TEXT NOT NULL,          -- netflow|ipfix|sflow|syslog|fortigate_api
+    source_id    INTEGER,                -- id nella tabella d'origine (provenienza)
+    event_type   TEXT NOT NULL,          -- flow.aggregate|log.security|log.event|device.state|device.change
+    entity_type  TEXT NOT NULL,          -- flow|device|interface
+    entity_id    TEXT NOT NULL,          -- '10.1.0.5>8.8.8.8' | '10.1.0.254' | '10.1.0.254:port1'
+    severity     INTEGER,                -- scala syslog 0-7
+    device_ip    TEXT,
+    interface    TEXT,
+    src_ip       TEXT,
+    dst_ip       TEXT,
+    dst_port     INTEGER,
+    protocol     TEXT,
+    metrics_json TEXT,                   -- byte/pacchetti/valori misurati
+    attrs_json   TEXT,                   -- resto normalizzato (azione, campo cambiato, ...)
+    dedup_key    TEXT UNIQUE             -- rientri idempotenti
+);
+CREATE INDEX IF NOT EXISTS idx_events_ts_tenant  ON events(ts, tenant);
+CREATE INDEX IF NOT EXISTS idx_events_type       ON events(event_type, ts);
+CREATE INDEX IF NOT EXISTS idx_events_entity     ON events(tenant, entity_id, ts);
+
+-- Posizione raggiunta da ogni adapter di normalizzazione: la tabella È il bus,
+-- i consumatori avanzano leggendo per posizione.
+CREATE TABLE IF NOT EXISTS normalize_cursors (
+    source   TEXT PRIMARY KEY,
+    last_id  INTEGER NOT NULL DEFAULT 0,
+    last_ts  INTEGER NOT NULL DEFAULT 0
+);
+
 -- 8. INCIDENTI (v5): raggruppamento di correlated_events per entità condivisa
 -- + gap temporale. Un incidente resta aperto (closed_ts NULL) finché arrivano
 -- eventi; dopo un periodo di quiete viene chiuso.

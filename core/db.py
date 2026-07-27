@@ -30,7 +30,7 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 5          # versione schema supportata da questo codice (v5: incidenti)
+SCHEMA_VERSION = 6          # versione schema supportata da questo codice (v6: modello eventi unificato)
 QUEUE_MAX = 10_000          # payload massimi in coda scritture
 BATCH_SIZE = 500            # payload massimi per singolo commit
 MAX_WRITER_RESTARTS = 5     # riavvii writer consentiti prima del fail-open
