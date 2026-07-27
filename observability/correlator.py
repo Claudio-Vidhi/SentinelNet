@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Motore di correlazione (fase 4.2): eventi di sicurezza syslog × flussi ×
+"""Motore di correlazione (fase 4.2): eventi di sicurezza × flussi ×
 posizione fisica (MAC history) → ``correlated_events``.
 
+Legge SOLO il modello eventi unificato (``events``): ogni ciclo proietta prima
+le sorgenti grezze con ``normalize.normalize_once()`` e poi correla. Le tabelle
+di ingestione restano la provenienza, non il contratto — così una sorgente
+nuova entra nella correlazione scrivendo un adapter, senza toccare questo file.
+
 Criteri (Decisione #9, default precision-over-recall):
-- si parte dagli eventi syslog di sicurezza (action in _SECURITY_ACTIONS)
-  degli ultimi LOOKBACK_S secondi;
-- src/dst/porta vengono estratti dal messaggio (kv FortiGate: srcip/dstip/
-  dstport; Palo Alto: coppie IP nel CSV);
-- serve EVIDENZA DI FLUSSO corroborante: un bucket in ``flow_aggregates``
-  stesso tenant, stessi src/dst, entro ±MATCH_DELTA_S dall'evento — senza
-  flusso non si emette nulla;
+- si parte dagli eventi ``log.security`` degli ultimi LOOKBACK_S secondi;
+- src/dst/porta arrivano già estratti dal normalizzatore (observability/
+  fieldmap.py: kv FortiGate, fallback sulle prime due IP);
+- serve EVIDENZA DI FLUSSO corroborante: un evento ``flow.aggregate`` stesso
+  tenant, stessi src/dst, entro ±MATCH_DELTA_S — senza flusso non si emette
+  nulla;
 - arricchimento switch/porta best-effort via mac_history.client_map (uplink
   già esclusi); assente → switch_port NULL;
 - MAI correlazione cross-tenant (tutte le query filtrano per tenant);
@@ -25,11 +29,10 @@ import hashlib
 import json
 from typing import Optional
 import logging
-import re
 import time
 
 from core import db
-from observability import metrics
+from observability import fieldmap, metrics
 
 logger = logging.getLogger("sentinelnet.obs")
 
@@ -39,11 +42,7 @@ MATCH_DELTA_S = 120       # ±120s fra evento e bucket di flusso (Decisione #9)
 MAX_EVENTS_PER_CYCLE = 500
 HIGH_SEVERITY_MAX = 3     # sev syslog 0-3 (emerg..error): emerge anche senza flusso
 
-_SECURITY_ACTIONS = ("deny", "denied", "blocked", "block", "drop",
-                     "reset-both", "reset-client", "reset-server", "sinkhole")
-
-_KV_RE = re.compile(r'(srcip|dstip|dstport)=(?:"([^"]*)"|(\S+))')
-_IP_RE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
+_SECURITY_ACTIONS = fieldmap.SECURITY_ACTIONS
 
 _SEVERITY_KIND = {0: "critico", 1: "critico", 2: "critico", 3: "alto",
                   4: "medio", 5: "medio", 6: "informativo", 7: "informativo"}
@@ -60,18 +59,8 @@ _running = False
 
 def _extract_endpoints(message: str):
     """Estrae (src_ip, dst_ip, dst_port) dal messaggio syslog normalizzato."""
-    kv = {k: (v1 or v2) for k, v1, v2 in _KV_RE.findall(message or "")}
-    if kv.get("srcip") and kv.get("dstip"):
-        try:
-            port = int(kv["dstport"]) if kv.get("dstport") else None
-        except ValueError:
-            port = None
-        return kv["srcip"], kv["dstip"], port
-    # Palo Alto / generico: prime due IP distinte nel messaggio
-    ips = list(dict.fromkeys(_IP_RE.findall(message or "")))
-    if len(ips) >= 2:
-        return ips[0], ips[1], None
-    return None, None, None
+    fields = fieldmap.extract(message)
+    return fields["src_ip"], fields["dst_ip"], fields["dst_port"]
 
 
 def _switch_port_for(src_ip: str, tenant: str):
@@ -90,64 +79,73 @@ def _switch_port_for(src_ip: str, tenant: str):
 def correlate_once(now: Optional[int] = None) -> int:
     """Un ciclo di correlazione. Ritorna il numero di eventi emessi (accodati)."""
     now = now or int(time.time())
+    # Il correlatore consuma SOLO il modello normalizzato: prima si proietta
+    # ciò che le sorgenti hanno prodotto, poi si correla.
+    from observability import normalize
+    normalize.normalize_once(now)
+
     conn = db.get_observability_connection()
     try:
-        placeholders = ",".join("?" * len(_SECURITY_ACTIONS))
-        # Candidati: azioni di sicurezza (regola precision-over-recall con
-        # evidenza di flusso) OPPURE alta severità (<= HIGH_SEVERITY_MAX), che
-        # emerge comunque, anche senza flusso e senza endpoint nel messaggio.
+        # Candidati: eventi di sicurezza normalizzati (regola precision-over-
+        # recall, servono le evidenze di flusso) OPPURE alta severità
+        # (<= HIGH_SEVERITY_MAX), che emerge comunque, anche senza flusso e
+        # senza endpoint nel messaggio.
         events = conn.execute(
-            f"""SELECT id, ts, tenant, severity, action, message
-                FROM syslog_events
-                WHERE ts >= ? AND (lower(coalesce(action,'')) IN ({placeholders})
-                                   OR severity <= ?)
-                ORDER BY ts DESC LIMIT ?""",
-            (now - LOOKBACK_S, *_SECURITY_ACTIONS, HIGH_SEVERITY_MAX,
+            """SELECT source_id, ts, tenant, severity, src_ip, dst_ip,
+                      attrs_json
+               FROM events
+               WHERE ts >= ? AND source = 'syslog'
+                 AND (event_type = 'log.security' OR severity <= ?)
+               ORDER BY ts DESC LIMIT ?""",
+            (now - LOOKBACK_S, HIGH_SEVERITY_MAX,
              MAX_EVENTS_PER_CYCLE)).fetchall()
 
         emitted = 0
         for ev in events:
             severity = ev["severity"] if ev["severity"] is not None else 4
-            src, dst, dport = _extract_endpoints(ev["message"])
+            attrs = json.loads(ev["attrs_json"] or "{}")
+            src, dst = ev["src_ip"], ev["dst_ip"]
             flow = None
             if src and dst:
                 # Evidenza di flusso corroborante: STESSO tenant, stessi endpoint,
                 # bucket entro ±MATCH_DELTA_S (bucket = 60s, quindi il confronto
                 # è sull'inizio finestra).
                 flow = conn.execute(
-                    """SELECT window_start, protocol, dst_port, total_bytes,
-                              total_packets
-                       FROM flow_aggregates
-                       WHERE tenant = ? AND src_ip = ? AND dst_ip = ?
-                         AND window_start BETWEEN ? AND ?
-                       ORDER BY window_start DESC LIMIT 1""",
+                    """SELECT ts, protocol, dst_port, metrics_json
+                       FROM events
+                       WHERE event_type = 'flow.aggregate'
+                         AND tenant = ? AND src_ip = ? AND dst_ip = ?
+                         AND ts BETWEEN ? AND ?
+                       ORDER BY ts DESC LIMIT 1""",
                     (ev["tenant"], src, dst,
                      ev["ts"] - MATCH_DELTA_S - 60, ev["ts"] + MATCH_DELTA_S)).fetchone()
 
             if flow is not None:
+                measures = json.loads(flow["metrics_json"] or "{}")
                 kind = f"traffico_bloccato_{_SEVERITY_KIND.get(severity, 'medio')}"
-                flow_tuple = (flow["window_start"], flow["protocol"], flow["dst_port"])
+                flow_tuple = (flow["ts"], flow["protocol"], flow["dst_port"])
                 dedup_key = hashlib.sha256(
-                    f"{ev['tenant']}|{kind}|{ev['id']}|{src}|{dst}|{flow_tuple}"
+                    f"{ev['tenant']}|{kind}|{ev['source_id']}|{src}|{dst}|{flow_tuple}"
                     .encode()).hexdigest()
                 evidence = json.dumps({
-                    "syslog_id": ev["id"], "syslog_ts": ev["ts"],
-                    "action": ev["action"],
-                    "flow": {"window_start": flow["window_start"],
+                    "syslog_id": ev["source_id"], "syslog_ts": ev["ts"],
+                    "action": attrs.get("action"),
+                    "flow": {"window_start": flow["ts"],
                              "protocol": flow["protocol"],
                              "dst_port": flow["dst_port"],
-                             "bytes": flow["total_bytes"],
-                             "packets": flow["total_packets"]},
+                             "bytes": measures.get("bytes"),
+                             "packets": measures.get("packets")},
                 }, ensure_ascii=False)
             elif severity <= HIGH_SEVERITY_MAX:
                 # Alta severità senza flusso corroborante: evento standalone,
                 # dedup sul solo id syslog (un evento per riga).
                 kind = f"syslog_{_SEVERITY_KIND.get(severity, 'alto')}"
                 dedup_key = hashlib.sha256(
-                    f"{ev['tenant']}|{kind}|{ev['id']}".encode()).hexdigest()
+                    f"{ev['tenant']}|{kind}|{ev['source_id']}".encode()).hexdigest()
                 evidence = json.dumps({
-                    "syslog_id": ev["id"], "syslog_ts": ev["ts"],
-                    "action": ev["action"], "message": ev["message"],
+                    "syslog_id": ev["source_id"], "syslog_ts": ev["ts"],
+                    "action": attrs.get("action"),
+                    "message": attrs.get("message"),
                 }, ensure_ascii=False)
             else:
                 continue  # precision over recall: niente flusso, niente evento

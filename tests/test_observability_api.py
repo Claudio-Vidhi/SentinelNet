@@ -155,6 +155,11 @@ class TestCorrelator(_Base):
         conn.execute("DELETE FROM correlated_events")
         conn.execute("DELETE FROM syslog_events")
         conn.execute("DELETE FROM flow_aggregates")
+        # Il correlatore consuma il modello normalizzato: la proiezione e i
+        # cursori vanno azzerati insieme alle tabelle d'origine, altrimenti un
+        # test eredita gli eventi normalizzati del precedente.
+        conn.execute("DELETE FROM events")
+        conn.execute("DELETE FROM normalize_cursors")
         conn.commit()
         conn.close()
         db.start_writer()

@@ -264,6 +264,40 @@ async def obs_syslog(
     return {"window": window, "events": [dict(r) for r in rows]}
 
 
+@router.get("/api/observability/events")
+async def obs_events(
+    window: str = Query("15m"),
+    event_type: str = Query("all"),
+    entity_id: str = Query(""),
+    limit: int = Query(100, ge=1, le=MAX_LIMIT),
+    page: int = Query(0, ge=0),
+    current_user = Depends(get_current_user),
+):
+    """Feed del modello eventi unificato: la stessa forma per NetFlow, syslog e
+    snapshot REST. È il livello su cui lavorano correlazione e ragionamento, ed
+    è esposto perché ogni consumatore (CLI, AI, automazione) possa partire da
+    qui invece che dalle tabelle grezze di ogni sorgente."""
+    import time as _time
+    seconds = _parse_window(window)
+    cutoff = int(_time.time()) - seconds
+    clause, params = _tenant_filter(current_user)
+    type_clause = "" if event_type == "all" else " AND event_type = ?"
+    type_params = () if event_type == "all" else (event_type,)
+    entity_clause = " AND entity_id = ?" if entity_id else ""
+    entity_params = (entity_id,) if entity_id else ()
+    rows = await db.read(
+        f"""SELECT id, ts, tenant, source, source_id, event_type, entity_type,
+                   entity_id, severity, device_ip, interface, src_ip, dst_ip,
+                   dst_port, protocol, metrics_json, attrs_json
+            FROM events
+            WHERE ts >= ?{clause}{type_clause}{entity_clause}
+            ORDER BY ts DESC
+            LIMIT ? OFFSET ?""",
+        (cutoff, *params, *type_params, *entity_params, limit, page * limit))
+    return {"window": window, "event_type": event_type, "page": page,
+            "events": [dict(r) for r in rows]}
+
+
 @router.get("/api/observability/anomalies")
 async def obs_anomalies(
     status: str = Query("new", pattern="^(new|ack|resolved|all)$"),

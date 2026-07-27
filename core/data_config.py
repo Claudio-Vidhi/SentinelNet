@@ -122,6 +122,11 @@ def obs_config() -> dict:
                                    or _app_adv("retention_flows_days") or 30),
             "syslog_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_SYSLOG_DAYS")
                                  or _app_adv("retention_syslog_days") or 7),
+            # Il modello unificato mescola proiezioni con vite diverse: si tiene
+            # la finestra dei flussi, la più lunga fra le sorgenti proiettate,
+            # così nessun evento sparisce prima della propria origine.
+            "events": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
+                          or _app_adv("retention_flows_days") or 30),
             "correlated_events": int(os.environ.get("SENTINELNET_OBS_RETENTION_EVENTS_DAYS")
                                      or _app_adv("retention_events_days") or 90),
             # Gli incidenti seguono la stessa finestra degli eventi correlati da
