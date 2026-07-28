@@ -97,6 +97,60 @@ class TestIsEndpoint(unittest.TestCase):
         self.assertFalse(endpoints.is_endpoint("boh"))
 
 
+class TestMacClassification(unittest.TestCase):
+    """Le due informazioni utili stanno nel primo byte, non in un database di
+    produttori da tenere aggiornato."""
+
+    def test_separators_do_not_matter(self):
+        for value in ("aa:bb:cc:80:01:00", "AA-BB-CC-80-01-00",
+                      "aabb.cc80.0100", "AABBCC800100"):
+            self.assertEqual(endpoints.classify_mac(value)["mac"],
+                             "aa:bb:cc:80:01:00", value)
+
+    def test_locally_administered_is_flagged(self):
+        # Il MAC dei nodi CML: secondo bit del primo byte a 1.
+        info = endpoints.classify_mac("aa:bb:cc:80:01:00")
+        self.assertEqual(info["administration"], "locale")
+        self.assertEqual(info["category"], "unicast")
+        self.assertIsNone(info["vendor_kind"])
+
+    def test_vendor_assigned_is_universal(self):
+        info = endpoints.classify_mac("84:ba:59:a1:87:15")
+        self.assertEqual(info["administration"], "universale")
+        self.assertIsNone(info["label"])
+
+    def test_virtualization_oui_is_named(self):
+        for value, kind in (("00:50:56:aa:bb:cc", "VMware"),
+                            ("00:15:5d:01:02:03", "Hyper-V"),
+                            ("52:54:00:12:34:56", "QEMU/KVM")):
+            self.assertEqual(endpoints.classify_mac(value)["vendor_kind"], kind)
+
+    def test_l2_broadcast_and_multicast(self):
+        self.assertEqual(endpoints.classify_mac("ff:ff:ff:ff:ff:ff")["category"],
+                         "broadcast")
+        self.assertEqual(endpoints.classify_mac("01:00:5e:00:00:fb")["category"],
+                         "multicast")
+
+    def test_garbage_is_none(self):
+        for value in ("", None, "aa:bb:cc", "zz:bb:cc:dd:ee:ff", "10.1.0.5"):
+            self.assertIsNone(endpoints.classify_mac(value), value)
+
+    def test_stable_identity_separates_trackable_from_ephemeral(self):
+        # Un MAC randomizzato di un telefono vale per la sessione corrente:
+        # correlare lo storico su di esso inventa continuità che non c'è.
+        self.assertFalse(endpoints.is_stable_identity("fa:d7:28:11:22:33"))
+        # Una VM invece conserva il proprio indirizzo fra i riavvii.
+        self.assertTrue(endpoints.is_stable_identity("00:50:56:aa:bb:cc"))
+        self.assertTrue(endpoints.is_stable_identity("84:ba:59:a1:87:15"))
+        self.assertFalse(endpoints.is_stable_identity("ff:ff:ff:ff:ff:ff"))
+
+    def test_describe_mac_says_something_only_when_there_is_something_to_say(self):
+        self.assertEqual(endpoints.describe_mac("84:ba:59:a1:87:15"),
+                         "84:ba:59:a1:87:15")
+        self.assertIn("VMware", endpoints.describe_mac("00:50:56:aa:bb:cc"))
+        self.assertIn("localmente", endpoints.describe_mac("aa:bb:cc:80:01:00"))
+
+
 class TestRulesConsumeMetadataOnly(unittest.TestCase):
     """Il principio architetturale, verificato sul codice: le regole non devono
     contenere conoscenza dei range IP. Se qualcuno la reintroduce, questo test

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from collectors import arp_collector
 from services import inventory_manager
 from collectors import mac_history
+from observability import endpoints
 from routers.mac import MacScanSchema
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope
@@ -69,9 +70,17 @@ def arp_client_map(mac: Optional[str] = None, ip: Optional[str] = None,
     tenants = user_group_scope(current_user)
     if tenant and tenant != "all":
         tenants = [tenant] if (tenants is None or tenant in tenants) else []
-    return {"results": mac_history.client_map(mac=mac, ip=ip, tenants=tenants,
-                                              source_ip=source_ip or None,
-                                              limit=limit)}
+    results = mac_history.client_map(mac=mac, ip=ip, tenants=tenants,
+                                     source_ip=source_ip or None, limit=limit)
+    # Arricchimento in LETTURA, come per gli endpoint IP: la classificazione non
+    # viene mai salvata accanto al binding, così un OUI imparato domani vale
+    # anche per i binding raccolti ieri. ``stable_identity`` false = il MAC può
+    # cambiare alla prossima sessione, quindi il binding vale adesso e basta.
+    for row in results:
+        info = endpoints.classify_mac(row.get("mac"))
+        row["mac_info"] = info
+        row["stable_identity"] = endpoints.is_stable_identity(row.get("mac"))
+    return {"results": results}
 
 @router.get("/api/arp/stats")
 def arp_stats_ep(current_user = Depends(get_current_user)):

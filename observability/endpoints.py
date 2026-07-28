@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Endpoint Knowledge Base: cosa È un indirizzo, non cosa significa.
+"""Endpoint Knowledge Base: cosa È un indirizzo (IP o MAC), non cosa significa.
 
 Arricchimento puramente descrittivo. Non cambia la semantica di nessun evento e
 non decide niente: dice che 224.0.0.5 è multicast link-local con ruolo
@@ -18,6 +18,9 @@ contesto storico di una decisione presa allora e deve restare com'era.
 Copertura: **solo IPv4**. Non è una scelta di questo modulo — l'estrazione a
 monte (``fieldmap._IP_RE``, i decoder di flusso) riconosce solo IPv4, quindi
 ``family`` sarà ``ipv4`` per tutto finché quella non cambia.
+
+Per i MAC la classificazione sta nei bit del primo byte, non in un database di
+produttori: vedi ``classify_mac``.
 """
 
 import ipaddress
@@ -117,6 +120,110 @@ def describe(address: Optional[str]) -> str:
     if info and info["label"]:
         return f"{info['label']} ({info['address']})"
     return address or "?"
+
+
+# --- MAC ---------------------------------------------------------------------
+# OUI di virtualizzazione: gli unici prefissi che vale la pena tenere in
+# tabella, perché dicono qualcosa di STRUTTURALE (questo non è un apparato
+# fisico) e sono una manciata stabile. Un database OUI completo direbbe solo il
+# produttore della scheda ed è un feed da mantenere: non è questo il posto.
+_VIRTUAL_OUI = {
+    "00:50:56": "VMware",
+    "00:0c:29": "VMware",
+    "00:05:69": "VMware",
+    "00:1c:14": "VMware",
+    "00:15:5d": "Hyper-V",
+    "00:03:ff": "Hyper-V",
+    "08:00:27": "VirtualBox",
+    "0a:00:27": "VirtualBox",
+    "52:54:00": "QEMU/KVM",
+    "00:16:3e": "Xen",
+    "00:1c:42": "Parallels",
+}
+
+_BROADCAST_MAC = "ff:ff:ff:ff:ff:ff"
+
+
+def _normalize_mac(mac: Optional[str]) -> Optional[str]:
+    """'AA-BB-CC-80-01-00' | 'aabb.cc80.0100' → 'aa:bb:cc:80:01:00'."""
+    if not mac:
+        return None
+    hexes = "".join(c for c in str(mac).lower() if c in "0123456789abcdef")
+    if len(hexes) != 12:
+        return None
+    return ":".join(hexes[i:i + 2] for i in range(0, 12, 2))
+
+
+@lru_cache(maxsize=4096)
+def classify_mac(mac: Optional[str]) -> Optional[dict]:
+    """{mac, oui, category, administration, vendor_kind, label} oppure None.
+
+    Le due informazioni che contano stanno nel primo byte, non in un database di
+    produttori: il bit I/G distingue unicast da multicast, il bit U/L distingue
+    un indirizzo assegnato dal costruttore da uno *amministrato localmente*.
+
+    Il secondo è quello utile davvero. Un MAC localmente amministrato può essere
+    una VM, una porta configurata a mano — oppure un telefono che randomizza il
+    proprio indirizzo per non farsi seguire. In quest'ultimo caso il binding
+    MAC↔IP non è un'identità: è valido per questa sessione e basta, e trattarlo
+    come un dispositivo stabile produce storie sbagliate sulla client map.
+    """
+    normalized = _normalize_mac(mac)
+    if normalized is None:
+        return None
+
+    first = int(normalized[:2], 16)
+    oui = normalized[:8]
+    local = bool(first & 0b10)
+
+    if normalized == _BROADCAST_MAC:
+        category = "broadcast"
+    elif first & 0b1:
+        category = "multicast"
+    else:
+        category = "unicast"
+
+    vendor_kind = _VIRTUAL_OUI.get(oui)
+    if vendor_kind:
+        # Un OUI di virtualizzazione è assegnato dal costruttore: resta
+        # "universale" anche se la scheda non esiste fisicamente.
+        label = f"macchina virtuale {vendor_kind}"
+    elif category == "broadcast":
+        label = "Broadcast"
+    elif category == "multicast":
+        label = "Multicast L2"
+    elif local:
+        label = "indirizzo amministrato localmente (VM o MAC randomizzato)"
+    else:
+        label = None
+
+    return {"mac": normalized, "oui": oui, "category": category,
+            "administration": "locale" if local else "universale",
+            "vendor_kind": vendor_kind, "label": label}
+
+
+def describe_mac(mac: Optional[str]) -> str:
+    """'aa:bb:cc:80:01:00 (indirizzo amministrato localmente)' quando c'è
+    qualcosa da dire, altrimenti il MAC nudo."""
+    info = classify_mac(mac)
+    if info is None:
+        return mac or "?"
+    if info["label"]:
+        return f"{info['mac']} ({info['label']})"
+    return info["mac"]
+
+
+def is_stable_identity(mac: Optional[str]) -> bool:
+    """Vero se il MAC può valere come identità persistente di un dispositivo.
+
+    Falso per gli indirizzi amministrati localmente che non appartengono a un
+    OUI di virtualizzazione noto: lì il MAC può cambiare alla sessione
+    successiva, e correlare lo storico su di esso significa inventare
+    continuità dove non ce n'è.
+    """
+    info = classify_mac(mac)
+    return bool(info) and info["category"] == "unicast" and (
+        info["administration"] == "universale" or info["vendor_kind"] is not None)
 
 
 def is_endpoint(address: Optional[str]) -> bool:
