@@ -228,6 +228,13 @@ def _config_change(events: list, p: dict) -> list:
         if ev["event_type"] not in ("device.change", "interface.change"):
             continue
         attrs = json.loads(ev["attrs_json"] or "{}")
+        # Un link che cade non è una MODIFICA: è qualcosa che è successo
+        # all'apparato, non qualcosa che qualcuno gli ha fatto. Chiamarlo
+        # "modifica di configurazione" mandava a cercare chi aveva toccato la
+        # configurazione mentre il cavo era staccato. Lo stato configurato
+        # (``admin_status``) resta qui: quello lo decide una persona.
+        if str(attrs.get("field", "")).rsplit(".", 1)[-1].lower() == "link":
+            continue
         where = ev["interface"] or ev["device_ip"]
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
@@ -280,6 +287,50 @@ def _interface_down(events: list, p: dict) -> list:
             entity_key=f"ip:{ev['device_ip']}", severity=ev["severity"],
             summary=f"Interfaccia {ev['interface']} passata a down",
             attrs=attrs))
+    return out
+
+
+def _interface_flapping(events: list, p: dict) -> list:
+    """Una porta che continua a cadere e risalire.
+
+    Le singole cadute sono rumore; il PATTERN è il segnale. Finché ogni caduta
+    resta un sintomo isolato, l'ingegnere vede dieci incidenti e nessuna causa
+    — che è esattamente il problema, perché il guasto non è la caduta di
+    stanotte ma il collegamento instabile.
+
+    NON ritratta nulla, di proposito. Delle singole cadute se ne occupa già
+    ``IFACE_RECOVERED_001``, che le ritratta a ogni risalita: su una porta che
+    oscilla restano quindi solo evidenze ritrattate e nessuna conclusione in
+    piedi — ed è precisamente il buco che questa regola riempie.
+
+    Ritrattare sarebbe anche impreciso: le evidenze di ``IFACE_DOWN_001`` sono
+    legate all'APPARATO, non alla porta, e una ritrattazione per entità
+    zittirebbe anche la porta accanto, davvero giù, per colpa di questa.
+    """
+    changes: dict = {}
+    for ev in events:
+        if ev["event_type"] != "interface.change" or not ev["interface"]:
+            continue
+        field = str(json.loads(ev["attrs_json"] or "{}").get("field", "")).lower()
+        if "link" not in field and "status" not in field:
+            continue
+        changes.setdefault((ev["tenant"], ev["device_ip"], ev["interface"]),
+                           []).append(ev)
+
+    out = []
+    for (tenant, device_ip, interface), seen in changes.items():
+        if len(seen) < p["min_transitions"]:
+            continue
+        span = seen[-1]["ts"] - seen[0]["ts"]
+        out.append(Finding(
+            event_id=seen[-1]["id"], ts=seen[-1]["ts"], tenant=tenant,
+            role="trigger", entity_key=f"ip:{device_ip}", severity=3,
+            # Due porte instabili sullo stesso apparato sono due conclusioni.
+            key=f"flap:{interface}",
+            summary=f"Interfaccia {interface} instabile: {len(seen)} "
+                    f"transizioni in {max(span // 60, 1)} minuti",
+            attrs={"interface": interface, "transitions": len(seen),
+                   "span_s": span}))
     return out
 
 
@@ -704,6 +755,34 @@ RULES = {
         "remediation": "Se il picco era invece reale, alzare `min_quality` o "
                        "stringere `normal_band_pct`.",
         "check": _baseline_normal_retracts_spike,
+    },
+    "IFACE_FLAPPING_001": {
+        "version": "1.0.0",
+        "title": "Interfaccia instabile (flapping)",
+        "description": "Una porta cade e risale ripetutamente nella stessa "
+                       "finestra. Il guasto non è la singola caduta ma il "
+                       "collegamento instabile, ed è quello che va indagato.",
+        "inputs": ["interface.change"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "min_transitions", "default": 4, "min": 2, "max": 100,
+             "description": "Transizioni di link nella finestra di "
+                            "correlazione perché sia instabilità e non una "
+                            "caduta singola con il suo ripristino. Quattro = "
+                            "due cicli completi."},
+        ],
+        "base_confidence": 70,
+        "investigation": "Cablaggio, transceiver e contatori di errore della "
+                         "porta — nell'ordine. Verificare se le transizioni "
+                         "coincidono con un negoziato di duplex o con "
+                         "alimentazione PoE al limite. Non trattare l'ultima "
+                         "caduta come l'evento da spiegare.",
+        "remediation": "Sostituire il collegamento o il transceiver. Nel "
+                       "frattempo, se la porta è in un port-channel, "
+                       "disabilitarla è meglio che lasciarla oscillare: un "
+                       "membro instabile ricalcola il bundle a ogni "
+                       "transizione.",
+        "check": _interface_flapping,
     },
     "DEVICE_LOAD_001": {
         "version": "1.0.0",
