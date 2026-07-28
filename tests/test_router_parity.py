@@ -63,6 +63,14 @@ class TestRouterParity(unittest.TestCase):
                and not p.startswith(self.ALLOWED_NEW_PREFIXES)]
         self.assertEqual(new, [], f"endpoint aggiunti fuori dai domini attesi: {new}")
 
+    # Operazioni la cui DESCRIZIONE è cambiata per estensioni volute, a
+    # parametri e risposta invariati per i client esistenti.
+    ALLOWED_CHANGED_OPERATIONS = (
+        # Il report Port-channel ora unisce due sorgenti (configurazione per i
+        # membri, SNMP per lo stato) e aggiunge campi: nessun campo rimosso.
+        ("get", "/api/portchannels"),
+    )
+
     def test_migrated_operations_identical(self):
         for path, ops in self.golden["paths"].items():
             if not path.startswith(MIGRATED_PREFIXES):
@@ -71,6 +79,8 @@ class TestRouterParity(unittest.TestCase):
             cur_ops = self.current["paths"][path]
             self.assertEqual(set(ops), set(cur_ops), f"metodi diversi su {path}")
             for method, op in ops.items():
+                if (method, path) in self.ALLOWED_CHANGED_OPERATIONS:
+                    continue
                 self.assertEqual(
                     json.dumps(_normalize(op), sort_keys=True),
                     json.dumps(_normalize(cur_ops[method]), sort_keys=True),
@@ -123,6 +133,9 @@ class TestFullParity(unittest.TestCase):
         # descrizione dell'operazione elenca le chiavi ammesse, e quella è
         # cambiata.
         ("post", "/api/observability/config"),
+        # Port-channel: stato vivo da SNMP accanto ai membri da configurazione.
+        # Campi aggiunti, nessuno rimosso.
+        ("get", "/api/portchannels"),
     )
 
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")
