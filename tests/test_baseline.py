@@ -78,12 +78,22 @@ class _Base(unittest.TestCase):
         return self._rows("SELECT * FROM events WHERE event_type = 'flow.baseline'")
 
     def _compute(self):
+        """Ritorna quante misure di BASELINE sono state emesse.
+
+        Non il totale di ``compute_once``: l'adapter statistico emette anche
+        emergenze e contributori principali, che sono fenomeni distinti e non
+        devono far cambiare i conti di questi test."""
         conn = db.get_observability_connection()
         try:
-            emitted = baseline.compute_once(conn, NOW)
+            baseline.compute_once(conn, NOW)
             conn.commit()
-            return emitted
+            return conn.execute(
+                "SELECT COUNT(*) FROM events WHERE event_type = 'flow.baseline'"
+            ).fetchone()[0] - getattr(self, "_seen_baselines", 0)
         finally:
+            self._seen_baselines = conn.execute(
+                "SELECT COUNT(*) FROM events WHERE event_type = 'flow.baseline'"
+            ).fetchone()[0]
             conn.close()
 
 

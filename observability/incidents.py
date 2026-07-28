@@ -42,10 +42,17 @@ CONFIDENCE_MAX = 95
 
 # Ordine di severità dei ruoli nel decidere QUALE trigger è la causa primaria
 # quando ce n'è più d'uno: prima la severità più alta, poi il più antico.
+# Si seleziona per ``created_ts`` (quando la regola ha concluso), NON per ``ts``
+# (quando il fatto è successo). Sono due assi distinti, come ``ingested_ts`` e
+# ``ts`` sugli eventi, e confonderli aveva un effetto preciso: le evidenze
+# statistiche portano il timestamp dell'INIZIO dell'ora misurata, e l'ultima ora
+# conclusa è sempre fra i 60 e i 120 minuti prima di adesso. Con la finestra su
+# ``ts`` non rientravano MAI, quindi BASELINE_SPIKE_001, NEW_TALKER_001 e
+# TOP_TALKER_001 producevano evidenze che nessun incidente raccoglieva.
 _UNASSIGNED_SQL = """
 SELECT id, ts, tenant, entity_key, role, rule_id, severity
 FROM evidence
-WHERE incident_id IS NULL AND status = 'active' AND ts >= ?
+WHERE incident_id IS NULL AND status = 'active' AND created_ts >= ?
 ORDER BY ts ASC, id ASC
 """
 
