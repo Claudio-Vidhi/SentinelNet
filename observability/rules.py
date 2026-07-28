@@ -260,6 +260,15 @@ def _traffic_volume_spike(events: list, p: dict) -> list:
     resta il punto in cui il volume diventa evidenza.
     """
     flows = [e for e in events if e["event_type"] == "flow.aggregate"]
+    if not p["include_control_plane"]:
+        # Su una rete reale la maggioranza schiacciante dei bucket è chiacchiera
+        # di scoperta verso multicast e broadcast (mDNS, SSDP, OSPF, ARP).
+        # Lasciandola dentro, la mediana descrive il rumore e non le
+        # conversazioni: sia il riferimento sia i "picchi" finiscono per
+        # misurare quanto un host annuncia se stesso.
+        flows = [f for f in flows
+                 if endpoints.traffic_direction(f["src_ip"],
+                                                f["dst_ip"]) != "control_plane"]
     if len(flows) < p["min_flows"]:
         return []
     volumes = sorted((json.loads(f["metrics_json"] or "{}").get("bytes") or 0)
@@ -279,7 +288,9 @@ def _traffic_volume_spike(events: list, p: dict) -> list:
             summary=f"Volume anomalo {endpoints.describe(f['src_ip'])} → "
                     f"{endpoints.describe(f['dst_ip'])}: "
                     f"{nbytes} byte contro una mediana di {mid}",
-            attrs={"bytes": nbytes, "median_bytes": mid}))
+            attrs={"bytes": nbytes, "median_bytes": mid,
+                   "direction": endpoints.traffic_direction(f["src_ip"],
+                                                            f["dst_ip"])}))
     return out
 
 
@@ -637,6 +648,15 @@ RULES = {
              "description": "Flussi minimi perché la mediana abbia senso."},
             {"name": "spike_ratio", "default": 10, "min": 2, "max": 1000,
              "description": "Quante volte la mediana per considerarlo picco."},
+            # 0/1 e non booleano: ``params_for`` accetta solo numeri e scarta
+            # esplicitamente i bool, perché una soglia deve restare confrontabile
+            # con il proprio min/max.
+            {"name": "include_control_plane", "default": 0, "min": 0, "max": 1,
+             "description": "1 per includere nel confronto anche il traffico "
+                            "verso multicast e broadcast (protocolli di "
+                            "scoperta e routing). Di norma va escluso: è la "
+                            "maggioranza dei bucket e non è una conversazione "
+                            "fra due host."},
         ],
         "base_confidence": 50,
         "investigation": "Confrontare con la baseline storica prima di agire: "

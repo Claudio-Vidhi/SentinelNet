@@ -302,6 +302,8 @@ async def obs_events(
         row = dict(r)
         row["src_info"] = endpoints.classify(row.get("src_ip"))
         row["dst_info"] = endpoints.classify(row.get("dst_ip"))
+        row["direction"] = endpoints.traffic_direction(row.get("src_ip"),
+                                                       row.get("dst_ip"))
         events.append(row)
     return {"window": window, "event_type": event_type, "page": page,
             "events": events}

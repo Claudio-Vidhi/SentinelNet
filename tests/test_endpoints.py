@@ -97,6 +97,49 @@ class TestIsEndpoint(unittest.TestCase):
         self.assertFalse(endpoints.is_endpoint("boh"))
 
 
+class TestTrafficDirection(unittest.TestCase):
+    """East-West Analysis: che genere di conversazione è, dai soli metadati.
+
+    La distinzione che conta davvero non è interno/esterno ma
+    conversazione/annuncio: su una rete reale i bucket verso multicast e
+    broadcast sono la maggioranza, e contarli come traffico fra host cambia il
+    significato di qualunque media."""
+
+    def test_internal_to_internal_is_east_west(self):
+        for src, dst in (("10.1.0.5", "10.1.0.9"),
+                         ("192.168.1.2", "172.16.0.3"),
+                         ("100.64.0.1", "10.0.0.1")):
+            self.assertEqual(endpoints.traffic_direction(src, dst), "east_west",
+                             f"{src}->{dst}")
+
+    def test_crossing_the_perimeter_is_north_south(self):
+        self.assertEqual(endpoints.traffic_direction("10.1.0.5", "8.8.8.8"),
+                         "north_south")
+        self.assertEqual(endpoints.traffic_direction("8.8.8.8", "10.1.0.5"),
+                         "north_south")
+
+    def test_discovery_and_routing_are_control_plane(self):
+        for dst in ("224.0.0.5", "224.0.0.251", "239.255.255.250",
+                    "255.255.255.255"):
+            self.assertEqual(endpoints.traffic_direction("10.1.0.5", dst),
+                             "control_plane", dst)
+
+    def test_a_failed_dhcp_is_still_control_plane(self):
+        # 0.0.0.0 → broadcast: la destinazione decide, e non è una
+        # conversazione fra due host.
+        self.assertEqual(endpoints.traffic_direction("0.0.0.0",
+                                                     "255.255.255.255"),
+                         "control_plane")
+
+    def test_loopback_is_local(self):
+        self.assertEqual(endpoints.traffic_direction("127.0.0.1", "127.0.0.1"),
+                         "local")
+
+    def test_unparseable_is_none_not_a_guess(self):
+        self.assertIsNone(endpoints.traffic_direction("boh", "10.1.0.5"))
+        self.assertIsNone(endpoints.traffic_direction("10.1.0.5", None))
+
+
 class TestMacClassification(unittest.TestCase):
     """Le due informazioni utili stanno nel primo byte, non in un database di
     produttori da tenere aggiornato."""
