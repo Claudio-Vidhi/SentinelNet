@@ -215,8 +215,14 @@ def _location_entries(tenant, ips) -> list:
             vlan = entry.get("port_vlan") or entry.get("vlan") or "?"
             out.append({
                 "ts": ts, "source": "location", "severity": None,
-                "text": f"{ip} ({entry.get('mac')}) su {where}:{port}, VLAN {vlan}",
+                "text": f"{ip} ({endpoints.describe_mac(entry.get('mac'))}) "
+                        f"su {where}:{port}, VLAN {vlan}",
                 "ref": {"mac": entry.get("mac"), "switch_ip": entry.get("switch_ip"),
-                        "switch_port": entry.get("switch_port"), "vlan": vlan},
+                        "switch_port": entry.get("switch_port"), "vlan": vlan,
+                        # Un MAC randomizzato non è un'identità: chi legge la
+                        # timeline deve sapere che quella posizione vale per
+                        # questa sessione e non identifica il dispositivo.
+                        "stable_identity": endpoints.is_stable_identity(entry.get("mac")),
+                        "mac_info": endpoints.classify_mac(entry.get("mac"))},
             })
     return out

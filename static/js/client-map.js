@@ -508,8 +508,19 @@
         const header = en
             ? [th('MAC'), th('IP'), th('VLAN'), th('Gateway (routes VLAN)'), th('Type'), th('Access switch'), th('Port'), th('Last seen')]
             : [th('MAC'), th('IP'), th('VLAN'), th('Gateway (ruota la VLAN)'), th('Tipo'), th('Switch di accesso'), th('Porta'), th('Ultimo avvistamento')];
+        // Un MAC amministrato localmente e non riconducibile a un OUI di
+        // virtualizzazione può cambiare alla sessione successiva: il binding
+        // vale adesso, non identifica il dispositivo. Chi legge la tabella deve
+        // saperlo, altrimenti costruisce uno storico su un'identità che non c'è.
+        const macBadge = r => {
+            const info = r.mac_info;
+            if (!info) return '';
+            if (info.vendor_kind) return ` <span class="badge" style="font-size:9px;" title="${escapeHtml(info.oui)}">${escapeHtml(info.vendor_kind)}</span>`;
+            if (r.stable_identity === false) return ` <span class="badge" style="font-size:9px; color:var(--warning);" title="${en ? 'Locally administered: may change between sessions' : 'Amministrato localmente: può cambiare fra le sessioni'}">${en ? 'not stable' : 'non stabile'}</span>`;
+            return '';
+        };
         const rowHtml = r => '<tr>' + [
-            td(`<code>${escapeHtml(r.mac)}</code>`),
+            td(`<code>${escapeHtml(r.mac)}</code>${macBadge(r)}`),
             td(`<code>${escapeHtml(r.ip)}</code>`),
             td(escapeHtml(r.vlan || '—')),
             td(`<span title="${escapeHtml(r.source_type || '')}">${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip)}</span></span>`),
