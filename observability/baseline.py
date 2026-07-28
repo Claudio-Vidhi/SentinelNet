@@ -2,12 +2,19 @@
 """Baseline Engine: adapter che misura quanto il presente si discosta dal
 comportamento abituale, e scrive la misura come FATTO nel modello unificato.
 
-Non produce incidenti e non ritratta nulla: emette eventi ``flow.baseline``
-con osservato, atteso e scostamento. Sono le regole a decidere se quello
-scostamento è un picco (``BASELINE_SPIKE_001``) o la conferma che tutto rientra
-nella norma (``BASELINE_NORMAL_RETRACT_001``). La banda di normalità vive
-quindi nel catalogo regole, dov'è tarabile e tracciata nella provenienza,
-invece che cablata qui dentro.
+Non produce incidenti e non ritratta nulla: emette FATTI, e sono le regole a
+interpretarli. Tre forme distinte, non tre sfumature della stessa:
+
+- ``flow.baseline``    quanto ci si discosta dall'abitudine;
+- ``flow.emergence``   qualcosa che prima non c'era (non ha un'abitudine);
+- ``flow.top_talker``  chi ha composto il traffico, e per quanta parte.
+
+L'ultima è quella che risponde a *"perché il link è saturo?"* — e un host può
+dominare il traffico restando perfettamente nella propria abitudine: nessuno
+scostamento, nessuna emergenza, eppure è lui la risposta.
+
+La banda di normalità e la soglia di dominanza vivono nel catalogo regole,
+dove sono tarabili e tracciate nella provenienza, invece che cablate qui.
 
 Confronto (principio del documento: mai solo "contro ieri"):
 1. stesso giorno della settimana, stessa ora, fino a WEEKS_BACK settimane —
@@ -163,6 +170,70 @@ def compute_hour(conn, hour: int, now: int) -> int:
     return emitted
 
 
+TOP_CONTRIBUTORS = 3      # quanti talker di testa misurare per ora e tenant
+
+
+def detect_top_contributors(conn, hour: int, now: int) -> int:
+    """Chi ha composto il traffico dell'ora, e per quanta parte.
+
+    Terza forma statistica accanto a scostamento ed emergenza, e fenomeno
+    distinto da entrambe: un host può dominare il traffico pur restando
+    perfettamente nella propria abitudine — nessuno scostamento, nessuna
+    emergenza, eppure è lui la risposta a "perché il link è saturo".
+
+    Qui si misura soltanto. La soglia oltre la quale una quota è *dominanza*
+    vive nella regola, dov'è tarabile e registrata nella provenienza.
+
+    LIMITE DICHIARATO: la quota è sul traffico OSSERVATO in quell'ora e per
+    quel tenant, non sulla capacità di un link. Senza sapere da quale
+    interfaccia è uscito il flusso, "il 68% del traffico" non è "il 68% di
+    WAN1" — e spacciare la prima per la seconda darebbe una risposta precisa a
+    una domanda che non è stata posta.
+    """
+    rows = conn.execute(
+        """SELECT tenant, src_ip, SUM(total_bytes) AS total
+           FROM flow_aggregates
+           WHERE window_start >= ? AND window_start < ?
+           GROUP BY tenant, src_ip""",
+        (hour, hour + HOUR_S)).fetchall()
+    if not rows:
+        return 0
+
+    by_tenant: dict = {}
+    for r in rows:
+        by_tenant.setdefault(r["tenant"], []).append((r["src_ip"], r["total"] or 0))
+
+    emitted = 0
+    for tenant, entities in by_tenant.items():
+        total = sum(value for _ip, value in entities)
+        if total <= 0:
+            continue
+        ranked = sorted(entities, key=lambda kv: kv[1], reverse=True)
+        for rank, (src_ip, value) in enumerate(ranked[:TOP_CONTRIBUTORS], start=1):
+            if not endpoints.is_endpoint(src_ip):
+                # Il multicast di scoperta domina quasi sempre il conteggio dei
+                # bucket: chiamarlo "principale contributore" sarebbe vero e
+                # inutile. La domanda riguarda gli host.
+                continue
+            conn.execute(
+                """INSERT INTO events
+                       (ts, ingested_ts, tenant, source, event_type, entity_type,
+                        entity_id, src_ip, metrics_json, attrs_json, dedup_key)
+                   VALUES (?, ?, ?, 'baseline', 'flow.top_talker', 'flow', ?, ?, ?, ?, ?)
+                   ON CONFLICT(dedup_key) DO UPDATE SET
+                       metrics_json = excluded.metrics_json""",
+                (hour, now, tenant, src_ip, src_ip,
+                 json.dumps({"observed": value, "total": total,
+                             "share_pct": round(value * 100.0 / total, 1),
+                             "rank": rank}, ensure_ascii=False),
+                 json.dumps({"window": "1h", "scope": "traffico osservato del "
+                             "tenant, non capacità di un link",
+                             "peers": len(entities)}, ensure_ascii=False),
+                 f"top:{tenant}:{src_ip}:{hour}"))
+            emitted += 1
+    return emitted
+
+
 MIN_HISTORY_S = 86400     # storia minima prima di poter dire "mai visto"
 
 
@@ -251,6 +322,7 @@ def compute_once(conn, now: Optional[int] = None) -> int:
     for hour in hours:
         emitted += compute_hour(conn, hour, now)
         emitted += detect_emergence(conn, hour, now)
+        emitted += detect_top_contributors(conn, hour, now)
     conn.execute(
         """INSERT INTO normalize_cursors (source, last_id, last_ts)
            VALUES ('baseline', 0, ?)

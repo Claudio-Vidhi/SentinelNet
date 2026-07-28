@@ -477,6 +477,37 @@ def _unknown_exporter(events: list, p: dict) -> list:
     return out
 
 
+def _top_talker(events: list, p: dict) -> list:
+    """Chi ha composto il traffico dell'ora, quando la quota è dominante.
+
+    È l'evidenza che risponde a *"perché?"*. Ruolo ``supporting``, non
+    ``trigger``: da sola una quota alta non è un problema — un backup notturno
+    fa il 90% del traffico ed è quello che deve fare. Diventa una risposta
+    quando si aggrega a un innesco sulla stessa entità.
+    """
+    out = []
+    for ev in events:
+        if ev["event_type"] != "flow.top_talker":
+            continue
+        m = json.loads(ev["metrics_json"] or "{}")
+        share = m.get("share_pct")
+        if share is None or share < p["min_share_pct"]:
+            continue
+        if (m.get("observed") or 0) < p["min_bytes"]:
+            # Su una rete quasi ferma il primo host fa il 90% di pochissimo.
+            # La quota senza volume descrive il silenzio, non un contributo.
+            continue
+        out.append(Finding(
+            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
+            role="supporting", entity_key=f"ip:{ev['src_ip']}",
+            src_ip=ev["src_ip"],
+            summary=f"{endpoints.describe(ev['src_ip'])} rappresenta il "
+                    f"{share:.0f}% del traffico osservato dell'ora "
+                    f"({m.get('observed')} byte su {m.get('total')})",
+            attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
+    return out
+
+
 def _baseline_normal_retracts_spike(events: list, p: dict) -> list:
     """La misura storica dice che l'ora rientra nella norma: il picco rilevato
     guardando solo dentro la finestra non regge più.
@@ -712,6 +743,34 @@ RULES = {
                        "successivo, senza recuperare quelli già persi. Se non "
                        "lo è, bloccarne il traffico verso i listener.",
         "check": _unknown_exporter,
+    },
+    "TOP_TALKER_001": {
+        "version": "1.0.0",
+        "title": "Principale contributore del traffico",
+        "description": "Un host rappresenta una quota dominante del traffico "
+                       "osservato nell'ora. È l'evidenza che risponde a "
+                       "'perché il link è carico', non un problema di per sé.",
+        "inputs": ["flow.top_talker"],
+        "outputs": ["supporting"],
+        "parameters": [
+            {"name": "min_share_pct", "default": 50, "min": 5, "max": 100,
+             "description": "Quota del traffico dell'ora oltre la quale il "
+                            "contributo vale come spiegazione."},
+            {"name": "min_bytes", "default": 10 ** 7, "min": 0, "max": 10 ** 15,
+             "description": "Volume minimo perché la quota significhi "
+                            "qualcosa: su una rete ferma il primo host fa il "
+                            "90% di pochissimo."},
+        ],
+        "base_confidence": 45,
+        "investigation": "Identificare il processo dietro il volume (backup, "
+                         "replica, sincronizzazione) e se la finestra è "
+                         "pianificata. Incrociare con la baseline dello stesso "
+                         "host: dominare il traffico restando nella propria "
+                         "abitudine è normale, dominarlo discostandosene no.",
+        "remediation": "Nessun intervento diretto: è contesto per l'innesco "
+                       "principale dell'incidente. Se l'attività è legittima "
+                       "ma fuori finestra, riprogrammarla.",
+        "check": _top_talker,
     },
     "BASELINE_NORMAL_RETRACT_001": {
         "version": "1.0.0",
