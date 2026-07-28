@@ -28,6 +28,7 @@ import logging
 from typing import Optional
 
 from core.app_settings import get_app_settings
+from observability import endpoints
 
 logger = logging.getLogger("sentinelnet.obs")
 
@@ -176,13 +177,15 @@ def _blocked_traffic(events: list, p: dict) -> list:
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
             entity_key=entity, severity=ev["severity"],
             src_ip=ev["src_ip"], dst_ip=ev["dst_ip"],
-            summary=f"Traffico bloccato {ev['src_ip']} → {ev['dst_ip']}",
+            summary=f"Traffico bloccato {endpoints.describe(ev['src_ip'])} → "
+                    f"{endpoints.describe(ev['dst_ip'])}",
             attrs={"action": json.loads(ev["attrs_json"] or "{}").get("action")}))
         out.append(Finding(
             event_id=match["id"], ts=match["ts"], tenant=match["tenant"],
             role="supporting", entity_key=entity,
             src_ip=match["src_ip"], dst_ip=match["dst_ip"],
-            summary=f"Flusso corrispondente {match['src_ip']} → {match['dst_ip']}",
+            summary=f"Flusso corrispondente {endpoints.describe(match['src_ip'])} → "
+                    f"{endpoints.describe(match['dst_ip'])}",
             attrs={"metrics": json.loads(match["metrics_json"] or "{}")}))
     return out
 
@@ -273,7 +276,8 @@ def _traffic_volume_spike(events: list, p: dict) -> list:
             event_id=f["id"], ts=f["ts"], tenant=f["tenant"], role="supporting",
             entity_key=f"ip:{f['src_ip']}",
             src_ip=f["src_ip"], dst_ip=f["dst_ip"],
-            summary=f"Volume anomalo {f['src_ip']} → {f['dst_ip']}: "
+            summary=f"Volume anomalo {endpoints.describe(f['src_ip'])} → "
+                    f"{endpoints.describe(f['dst_ip'])}: "
                     f"{nbytes} byte contro una mediana di {mid}",
             attrs={"bytes": nbytes, "median_bytes": mid}))
     return out
@@ -299,7 +303,7 @@ def _baseline_spike(events: list, p: dict) -> list:
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
             entity_key=f"ip:{ev['src_ip']}", severity=4, src_ip=ev["src_ip"],
-            summary=f"{ev['src_ip']}: traffico {deviation:+.0f}% rispetto "
+            summary=f"{endpoints.describe(ev['src_ip'])}: traffico {deviation:+.0f}% rispetto "
                     f"all'abitudine ({m.get('observed')} byte contro "
                     f"{m.get('expected')} attesi, baseline "
                     f"{attrs.get('quality_label', '?')})",
@@ -324,7 +328,7 @@ def _new_talker(events: list, p: dict) -> list:
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
             entity_key=f"ip:{ev['src_ip']}", severity=5, src_ip=ev["src_ip"],
-            summary=f"{ev['src_ip']}: host mai osservato prima, "
+            summary=f"{endpoints.describe(ev['src_ip'])}: host mai osservato prima, "
                     f"{observed} byte trasmessi",
             attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
     return out
@@ -356,7 +360,7 @@ def _baseline_normal_retracts_spike(events: list, p: dict) -> list:
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
             role="supporting", entity_key=f"ip:{ev['src_ip']}",
             src_ip=ev["src_ip"],
-            summary=f"{ev['src_ip']}: volume nella norma storica "
+            summary=f"{endpoints.describe(ev['src_ip'])}: volume nella norma storica "
                     f"({deviation:+.0f}% sull'atteso)",
             attrs={**m})
         out.append(Retraction(

@@ -16,6 +16,7 @@
         flow:       { icon: 'fa-chart-area',     color: 'var(--primary)',  label: 'Flussi' },
         api:        { icon: 'fa-satellite-dish', color: 'var(--success)',  label: 'Stato apparato' },
         location:   { icon: 'fa-location-dot',   color: 'var(--text-muted)', label: 'Posizione' },
+        endpoint:   { icon: 'fa-address-card',   color: 'var(--text-muted)', label: 'Indirizzo noto' },
     };
 
     // Il ruolo causale lo dichiara la regola che ha prodotto l'evidenza: qui si
