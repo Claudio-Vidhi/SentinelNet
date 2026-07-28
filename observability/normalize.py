@@ -210,8 +210,12 @@ def _stable_fields(payload: str) -> dict:
     except (ValueError, TypeError):
         return {}
     flat = _flatten(data)
+    # Il ramo ``metrics`` è escluso per definizione, non per euristica: una
+    # misura cambia a ogni lettura — è il suo mestiere. Confrontarla
+    # produrrebbe un "cambiamento di configurazione" a ogni giro di polling.
     return {k: v for k, v in flat.items()
-            if not any(h in k.lower() for h in _VOLATILE_HINTS)}
+            if not k.startswith("metrics.")
+            and not any(h in k.lower() for h in _VOLATILE_HINTS)}
 
 
 # Snapshot che descrivono interfacce, qualunque sia il trasporto che li ha
@@ -247,6 +251,23 @@ def _interfaces_of(payload: str, kind: str) -> dict:
     return grouped
 
 
+def _measured(payload: str) -> dict:
+    """Valori MISURATI dichiarati dallo snapshot (chiave ``metrics``).
+
+    Non si indovina quali campi siano metriche guardandone il tipo: è chi
+    raccoglie a sapere di aver misurato un carico invece di aver letto uno
+    stato. Uno snapshot che non lo dichiara non ne ha, e va bene così.
+    """
+    try:
+        data = json.loads(payload or "{}")
+    except (ValueError, TypeError):
+        return {}
+    metrics = data.get("metrics") if isinstance(data, dict) else None
+    if not isinstance(metrics, dict):
+        return {}
+    return {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
+
+
 def _source_of(kind: str) -> str:
     """Da quale trasporto arriva lo snapshot. ``api_observations`` raccoglie
     snapshot di apparato, non solo REST: l'evento deve dire quale sorgente lo
@@ -270,6 +291,7 @@ def _from_api_observations(conn, now: int) -> int:
               event_type="device.state", entity_type="device",
               entity_id=r["device_ip"], device_ip=r["device_ip"],
               attrs={"kind": r["kind"]},
+              metrics=_measured(r["summary_json"]),
               dedup_key=f"api:{r['id']}")
 
         # Variazione di configurazione/stato: confronto con lo snapshot

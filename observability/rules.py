@@ -66,12 +66,18 @@ class Finding:
     """Una evidenza proposta da una regola. Non è ancora un incidente."""
 
     __slots__ = ("event_id", "ts", "tenant", "role", "entity_key", "severity",
-                 "src_ip", "dst_ip", "switch_port", "summary", "attrs")
+                 "src_ip", "dst_ip", "switch_port", "summary", "attrs", "key")
 
     def __init__(self, event_id, ts, tenant, role, entity_key, summary,
                  severity=None, src_ip=None, dst_ip=None, switch_port=None,
-                 attrs=None):
+                 attrs=None, key=None):
         assert role in ROLES, f"ruolo non ammesso: {role}"
+        # ``key``: discriminante quando la STESSA regola trae più conclusioni
+        # distinte dallo STESSO evento (CPU e memoria dallo stesso snapshot).
+        # Senza, la deduplica le considera un doppione e ne perde una. È la
+        # regola a dichiararlo, perché è l'unica a sapere di aver risposto a
+        # due domande diverse.
+        self.key = key
         self.event_id = event_id
         self.ts = ts
         self.tenant = tenant
@@ -274,6 +280,42 @@ def _interface_down(events: list, p: dict) -> list:
             entity_key=f"ip:{ev['device_ip']}", severity=ev["severity"],
             summary=f"Interfaccia {ev['interface']} passata a down",
             attrs=attrs))
+    return out
+
+
+def _device_load(events: list, p: dict) -> list:
+    """Carico dell'apparato oltre soglia: CPU o memoria.
+
+    Prima regola che legge uno STATO invece di un cambiamento. Tutte le altre
+    aspettano una transizione — un log, una porta caduta, una configurazione
+    toccata — e quindi non sanno dire "questo valore è troppo alto", solo
+    "questo valore è diverso da prima".
+
+    Ruolo ``symptom``, non ``trigger``: una CPU alta è ciò che va SPIEGATO, non
+    la spiegazione. Se nella stessa finestra e sulla stessa entità arriva un
+    innesco — un picco di traffico, una modifica di configurazione — è quello a
+    diventare la causa, e il carico resta il sintomo che gli dà peso. È la
+    forma esatta della frase che il documento chiede al motore di produrre.
+    """
+    out = []
+    for ev in events:
+        if ev["event_type"] != "device.state":
+            continue
+        m = json.loads(ev["metrics_json"] or "{}")
+        for field, limit, label in (("cpu_pct", p["max_cpu_pct"], "CPU"),
+                                    ("memory_pct", p["max_memory_pct"], "Memoria")):
+            value = m.get(field)
+            # Assente ≠ zero: un apparato che non espone il carico non deve
+            # sembrare scarico.
+            if value is None or value < limit:
+                continue
+            out.append(Finding(
+                event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
+                role="symptom", entity_key=f"ip:{ev['device_ip']}", severity=4,
+                summary=f"{label} al {value}% su {ev['device_ip']} "
+                        f"(soglia {limit}%)",
+                key=field,
+                attrs={"metric": field, "value": value, "threshold": limit}))
     return out
 
 
@@ -662,6 +704,35 @@ RULES = {
         "remediation": "Se il picco era invece reale, alzare `min_quality` o "
                        "stringere `normal_band_pct`.",
         "check": _baseline_normal_retracts_spike,
+    },
+    "DEVICE_LOAD_001": {
+        "version": "1.0.0",
+        "title": "Carico dell'apparato oltre soglia",
+        "description": "CPU o memoria sopra la soglia dichiarata. È un "
+                       "sintomo da spiegare, non una causa: da solo dice che "
+                       "l'apparato è sotto sforzo, non perché.",
+        "inputs": ["device.state"],
+        "outputs": ["symptom"],
+        "parameters": [
+            {"name": "max_cpu_pct", "default": 85, "min": 1, "max": 100,
+             "description": "Percentuale di CPU oltre la quale segnalare. Si "
+                            "considera il core più carico, non la media: su "
+                            "uno chassis la media nasconde la scheda satura."},
+            {"name": "max_memory_pct", "default": 90, "min": 1, "max": 100,
+             "description": "Percentuale di memoria occupata oltre la quale "
+                            "segnalare."},
+        ],
+        "base_confidence": 50,
+        "investigation": "Cercare nella stessa finestra un innesco sulla "
+                         "stessa entità: picco di traffico, modifica di "
+                         "configurazione, interfaccia in flapping. Il carico "
+                         "da solo non identifica il processo — su Cisco "
+                         "serve `show processes cpu sorted`.",
+        "remediation": "Se il carico è causato da traffico legittimo fuori "
+                       "finestra, riprogrammarlo. Se non è riconducibile a "
+                       "nulla, verificare bug noti della versione firmware "
+                       "prima di sostituire l'apparato.",
+        "check": _device_load,
     },
     "TRAFFIC_SPIKE_001": {
         "version": "1.0.0",
