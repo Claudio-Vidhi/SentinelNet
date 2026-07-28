@@ -69,8 +69,11 @@ def _insert_finding(conn, now, rule_id, version, params, f):
     # La versione entra nella chiave: una regola nuova è una conclusione nuova,
     # e deve poter riemettere la propria evidenza accanto a quella vecchia
     # invece di essere scambiata per un doppione.
+    # ``f.key`` distingue più conclusioni della stessa regola sullo stesso
+    # evento (CPU e memoria dallo stesso snapshot). Vuoto per quasi tutte le
+    # regole, che dallo stesso evento traggono una conclusione sola.
     dedup_key = hashlib.sha256(
-        f"{rule_id}|{version}|{f.event_id}|{f.role}|{f.entity_key}"
+        f"{rule_id}|{version}|{f.event_id}|{f.role}|{f.entity_key}|{f.key or ''}"
         .encode()).hexdigest()
     switch_port = f.switch_port
     if switch_port is None and f.role == "trigger" and f.src_ip:

@@ -64,6 +64,23 @@ _IF_COLUMNS = {
 _IF_STATUS = {1: "up", 2: "down", 3: "testing", 4: "unknown",
               5: "dormant", 6: "notPresent", 7: "lowerLayerDown"}
 
+# Carico dell'apparato. Non c'è un OID unico che vada bene ovunque: si provano
+# entrambi e vince chi risponde. Determinare prima il vendor da sysObjectID
+# costerebbe una tabella di mappatura da mantenere per risparmiare una query.
+_CPU_OIDS = (
+    "1.3.6.1.4.1.9.9.109.1.1.1.1.8",   # CISCO-PROCESS-MIB cpmCPUTotal5minRev
+    "1.3.6.1.2.1.25.3.3.1.2",          # HOST-RESOURCES-MIB hrProcessorLoad
+    # OLD-CISCO-CPU-MIB avgBusy5: deprecata da vent'anni, ma è l'unica che
+    # rispondono gli IOL/IOSv di CML e la espone ancora qualunque IOS reale.
+    # Ultima della lista proprio perché è la meno precisa: si usa solo se le
+    # altre due tacciono.
+    "1.3.6.1.4.1.9.2.1.58",
+)
+# CISCO-MEMORY-POOL-MIB: usata e libera per pool. La percentuale si calcola,
+# non si legge — nessun OID standard la espone già fatta.
+_MEM_USED_OID = "1.3.6.1.4.1.9.9.48.1.1.1.5"
+_MEM_FREE_OID = "1.3.6.1.4.1.9.9.48.1.1.1.6"
+
 
 def _scalar(value):
     """Valore pysnmp → tipo Python semplice, adatto a json.dumps."""
@@ -94,6 +111,37 @@ async def _walk_column(engine, auth, target, context, oid: str) -> dict:
             out[key[len(prefix):]] = _scalar(value)
             if len(out) >= MAX_INTERFACES:
                 return out
+    return out
+
+
+async def _load(engine, auth, target, context) -> dict:
+    """{cpu_pct, memory_pct} — solo le misure effettivamente ottenute.
+
+    Un apparato che non espone il carico non deve comparire con uno zero: zero
+    e "non lo so" sono cose diverse, e una regola a soglia che le confonde
+    tacerebbe proprio dove non sta guardando.
+
+    Della CPU si prende il valore PIÙ ALTO fra i core: su uno chassis la media
+    nasconde il processo che sta saturando una scheda.
+    """
+    out: dict = {}
+    for oid in _CPU_OIDS:
+        values = [v for v in (await _walk_column(engine, auth, target, context,
+                                                 oid)).values()
+                  if isinstance(v, int)]
+        if values:
+            out["cpu_pct"] = max(values)
+            break
+
+    used = [v for v in (await _walk_column(engine, auth, target, context,
+                                           _MEM_USED_OID)).values()
+            if isinstance(v, int)]
+    free = [v for v in (await _walk_column(engine, auth, target, context,
+                                           _MEM_FREE_OID)).values()
+            if isinstance(v, int)]
+    total = sum(used) + sum(free)
+    if used and total > 0:
+        out["memory_pct"] = round(sum(used) * 100.0 / total, 1)
     return out
 
 
@@ -148,6 +196,8 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
             if field:
                 system[field] = _scalar(value)
 
+        load = await _load(engine, auth, target, context)
+
         columns = {}
         for oid, field in _IF_COLUMNS.items():
             columns[field] = await _walk_column(engine, auth, target, context, oid)
@@ -163,7 +213,11 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
         text = json.dumps(payload, ensure_ascii=False, default=str)
         return text[:_MAX_SUMMARY]
 
-    return [("snmp_system", dump({"results": system})),
+    # ``metrics`` accanto a ``results``: valori MISURATI, separati dai campi di
+    # stato. L'adapter li copia in ``events.metrics_json``, dove le regole a
+    # soglia possono leggerli — nei ``results`` sarebbero solo testo da
+    # confrontare, e finirebbero per generare un "cambiamento" a ogni giro.
+    return [("snmp_system", dump({"results": system, "metrics": load})),
             ("snmp_interfaces", dump({"results": interfaces}))]
 
 
