@@ -373,6 +373,47 @@ class TestBaselineRules(_Base):
              patch("collectors.mac_history.client_map", return_value=[]):
             return correlator.correlate_once(NOW)
 
+    def test_a_multicast_burst_is_not_a_conversation(self):
+        """Un annuncio verso multicast è traffico reale, ma non è due host che
+        si parlano: da solo non deve diventare un picco."""
+        conn = db.get_observability_connection()
+        for i in range(6):
+            self._flow(conn, TARGET_HOUR, f"10.1.0.{10 + i}", 100,
+                       dst="224.0.0.251")
+        self._flow(conn, TARGET_HOUR, "10.1.0.99", 100000, dst="224.0.0.251")
+        conn.commit()
+        conn.close()
+
+        self._correlate()
+        self.assertEqual(
+            self._rows("SELECT * FROM evidence WHERE rule_id = 'TRAFFIC_SPIKE_001'"),
+            [])
+
+    def test_chatter_no_longer_sets_the_reference(self):
+        """Il difetto vero: con la chiacchiera dentro il confronto, la mediana
+        descrive gli annunci e un picco reale fra due host ci sparisce sotto."""
+        conn = db.get_observability_connection()
+        for i in range(6):
+            self._flow(conn, TARGET_HOUR, f"10.1.0.{10 + i}", 100,
+                       dst="10.1.0.200")
+        self._flow(conn, TARGET_HOUR, "10.1.0.99", 100000, dst="10.1.0.200")
+        # Dieci bucket di scoperta molto più grossi: se entrassero nel
+        # confronto, la mediana passerebbe da 100 a 50.000 e il picco reale
+        # (100.000, cioè 10x su 100) non raggiungerebbe più la soglia.
+        for i in range(10):
+            self._flow(conn, TARGET_HOUR, f"10.2.0.{10 + i}", 50000,
+                       dst="239.255.255.250")
+        conn.commit()
+        conn.close()
+
+        self._correlate()
+        rows = self._rows(
+            "SELECT * FROM evidence WHERE rule_id = 'TRAFFIC_SPIKE_001'")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["entity_key"], "ip:10.1.0.99")
+        self.assertEqual(json.loads(rows[0]["attrs_json"])["direction"],
+                         "east_west")
+
     def test_spike_against_history_becomes_a_trigger(self):
         conn = db.get_observability_connection()
         self._seed_weeks(conn, [1000, 1000, 1000])

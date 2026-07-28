@@ -122,6 +122,36 @@ def describe(address: Optional[str]) -> str:
     return address or "?"
 
 
+# Categorie che stanno DENTRO il perimetro. Link-local incluso: un 169.254 è un
+# DHCP fallito, non un host su Internet.
+_INTERNAL = ("private", "cgnat", "link_local")
+
+
+def traffic_direction(src: Optional[str], dst: Optional[str]) -> Optional[str]:
+    """Che genere di conversazione è, dai soli metadati degli endpoint.
+
+    - ``east_west``     interno ↔ interno: due host della rete che si parlano;
+    - ``north_south``   interno ↔ esterno: traffico che attraversa il perimetro;
+    - ``control_plane`` destinazione multicast o broadcast: protocolli di
+      scoperta e di routing (mDNS, SSDP, OSPF, ARP). È traffico reale, ma non è
+      una conversazione fra due host, e confonderlo con una lo è cambia il
+      significato di qualunque conteggio;
+    - ``local``         loopback, "non specificato", range riservati.
+
+    ``None`` quando uno dei due indirizzi non è interpretabile.
+    """
+    source, target = classify(src), classify(dst)
+    if source is None or target is None:
+        return None
+    if target["category"] in ("multicast", "broadcast"):
+        return "control_plane"
+    if not is_endpoint(src) or not is_endpoint(dst):
+        return "local"
+    if source["category"] in _INTERNAL and target["category"] in _INTERNAL:
+        return "east_west"
+    return "north_south"
+
+
 # --- MAC ---------------------------------------------------------------------
 # OUI di virtualizzazione: gli unici prefissi che vale la pena tenere in
 # tabella, perché dicono qualcosa di STRUTTURALE (questo non è un apparato
