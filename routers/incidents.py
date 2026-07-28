@@ -19,7 +19,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core import db
-from observability import flowpath, timeline
+from observability import flowpath, rules, timeline
 from routers.deps import (get_current_user, require_admin, require_operator,
                           user_group_scope)
 from routers.observability import MAX_LIMIT, _parse_window, _tenant_filter
@@ -46,7 +46,6 @@ def list_rules(current_user = Depends(get_current_user)):
     La UI ci costruisce il pannello soglie, l'assistente AI sa quali regole
     esistono e la documentazione deriva dal codice — una sola fonte di verità.
     Nessun dato di tenant qui dentro, solo la definizione del motore."""
-    from observability import rules
     return {"rules": rules.catalog()}
 
 
@@ -57,7 +56,6 @@ def set_rule_parameters(rule_id: str, payload: dict,
     accettano solo i parametri dichiarati dal catalogo, solo numerici e solo
     dentro l'intervallo min/max — la UI non può iniettare nulla nel motore."""
     from core.app_settings import get_app_settings, save_app_settings
-    from observability import rules
 
     if rule_id not in rules.RULES:
         raise HTTPException(status_code=404, detail="Rule not found.")
@@ -86,6 +84,76 @@ def set_rule_parameters(rule_id: str, payload: dict,
               f"'{current_user.get('sub')}': {accepted}.")
     return {"status": "success", "rule_id": rule_id,
             "effective": rules.params_for(rule_id)}
+
+
+@router.get("/interfaces")
+async def list_interfaces(current_user = Depends(get_current_user)):
+    """Interfacce viste dal motore, con l'ultimo stato noto e la conferma
+    dell'operatore.
+
+    Serve a togliere rumore PRIMA che diventi tale: Loopback, Null e VLAN
+    dismesse sono giù per progetto, e senza un posto in cui dirlo ogni loro
+    transizione finisce in un incidente."""
+    clause, params = _tenant_filter(current_user)
+    rows = await db.read(
+        f"""SELECT tenant, device_ip, interface, attrs_json, ts FROM events
+            WHERE event_type = 'interface.state'{clause}
+              AND id IN (SELECT MAX(id) FROM events
+                         WHERE event_type = 'interface.state'
+                         GROUP BY tenant, entity_id)
+            ORDER BY device_ip, interface LIMIT ?""",
+        (*params, MAX_LIMIT))
+    expected = rules.expected_down()
+    out = []
+    for r in rows:
+        key = rules.expectation_key(r["tenant"], r["device_ip"],
+                                    r["interface"])
+        attrs = _parse_json(r["attrs_json"])
+        out.append({"tenant": r["tenant"], "device_ip": r["device_ip"],
+                    "interface": r["interface"], "ts": r["ts"],
+                    "link": attrs.get("link"),
+                    "admin_status": attrs.get("admin_status"),
+                    "expected_down": key in expected,
+                    "note": (expected.get(key) or {}).get("note", "")})
+    return {"interfaces": out}
+
+
+@router.post("/interfaces/expected")
+async def set_interface_expectation(payload: dict,
+                                    current_user = Depends(require_operator)):
+    """Conferma (o revoca) che una interfaccia è giù per progetto.
+
+    Non cancella e non nasconde niente: l'evento resta in ``events`` e nel
+    feed. Cambia solo se ``IFACE_DOWN_001`` lo consideri un sintomo — cioè
+    l'interpretazione, che è dove la conoscenza dell'operatore deve entrare."""
+    from core.app_settings import get_app_settings, save_app_settings
+
+    tenant = str((payload or {}).get("tenant") or "")
+    device_ip = str((payload or {}).get("device_ip") or "")
+    interface = str((payload or {}).get("interface") or "")
+    if not (tenant and device_ip and interface):
+        raise HTTPException(status_code=400,
+                            detail="tenant, device_ip e interface sono richiesti.")
+    scope = user_group_scope(current_user)
+    if scope is not None and tenant not in scope:
+        # Stesso 404 di una risorsa inesistente: non si conferma l'esistenza
+        # di un tenant fuori scope.
+        raise HTTPException(status_code=404, detail="Interface not found.")
+
+    key = rules.expectation_key(tenant, device_ip, interface)
+    saved = dict(get_app_settings().get("interface_expectations") or {})
+    if (payload or {}).get("expected_down"):
+        saved[key] = {"note": str((payload or {}).get("note") or "")[:200],
+                      "by": current_user.get("sub"), "ts": int(time.time())}
+        action = "confermata attesa giù"
+    else:
+        saved.pop(key, None)
+        action = "riportata sotto osservazione"
+    save_app_settings({"interface_expectations": saved})
+    log_audit(f"Interfaccia {device_ip}:{interface} ({tenant}) {action} da "
+              f"'{current_user.get('sub')}'.")
+    return {"status": "success", "key": key,
+            "expected_down": key in saved}
 
 
 @router.get("")

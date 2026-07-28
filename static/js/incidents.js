@@ -9,6 +9,7 @@
     let _incidents = [];
     let _selectedId = null;
     let _catalog = {};   // rule_id -> definizione, per mostrare cosa fare
+    let _interfaces = [];  // ultima vista interfacce, per l'indice dei checkbox
 
     const SOURCE_META = {
         evidence:   { icon: 'fa-scale-balanced', color: 'var(--danger)',   label: 'Evidenza' },
@@ -81,6 +82,69 @@
     function loadIncidentsTab() {
         loadIncidentsList();
         loadRuleCatalog();
+        loadInterfaceExpectations();
+    }
+
+    // Conoscenza dell'OPERATORE, non della rete: una porta giù per progetto
+    // resta giù, e senza un posto in cui dirlo ogni sua transizione diventa
+    // rumore che nasconde quello vero.
+    async function loadInterfaceExpectations() {
+        const box = document.getElementById('incidentInterfaces');
+        if (!box) return;
+        try {
+            const res = await apiFetch('/api/incidents/interfaces');
+            if (!res || !res.ok) { box.innerHTML = ''; return; }
+            const rows = (await res.json()).interfaces || [];
+            if (!rows.length) {
+                box.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">Nessuna interfaccia ancora osservata. Serve almeno un giro di polling (REST o SNMP).</div>';
+                return;
+            }
+            const dot = s => {
+                const down = String(s || '').toLowerCase() === 'down';
+                return `<span style="color:${down ? 'var(--danger)' : 'var(--success)'}; font-size:11px;">${escapeHtml(jsStr(s || '?'))}</span>`;
+            };
+            box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead><tr>${['Apparato','Interfaccia','Link','Admin','Atteso giù','Nota']
+                    .map(h => `<th style="text-align:left; padding:6px 8px; font-size:11px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border);">${h}</th>`).join('')}</tr></thead>
+                <tbody>${rows.map((r, i) => `<tr>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.device_ip))}</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.interface))}</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${dot(r.link)}</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${dot(r.admin_status)}</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
+                        <input type="checkbox" id="ifx-${i}" ${r.expected_down ? 'checked' : ''}
+                               onchange="saveInterfaceExpectation(${i})" style="accent-color:var(--primary);"></td>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
+                        <input type="text" id="ifn-${i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="perché"
+                               style="width:100%; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
+                </tr>`).join('')}</tbody></table>
+                <div id="ifxStatus" style="font-size:11px; color:var(--text-muted); margin-top:6px;"></div>`;
+            _interfaces = rows;
+        } catch (e) { box.innerHTML = ''; }
+    }
+
+    async function saveInterfaceExpectation(index) {
+        const row = _interfaces[index];
+        if (!row) return;
+        const st = document.getElementById('ifxStatus');
+        const res = await apiFetch('/api/incidents/interfaces/expected', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tenant: row.tenant, device_ip: row.device_ip,
+                interface: row.interface,
+                expected_down: document.getElementById(`ifx-${index}`).checked,
+                note: document.getElementById(`ifn-${index}`).value
+            })
+        });
+        if (!res) return;
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            if (st) st.textContent = err.detail || 'Errore.';
+            return;
+        }
+        row.expected_down = (await res.json()).expected_down;
+        if (st) st.textContent = `${row.device_ip}:${row.interface} aggiornata.`;
     }
 
     // Il pannello non conosce le regole: le legge dal catalogo, che è generato
@@ -448,4 +512,5 @@
     window.setIncidentStatus = setIncidentStatus;
     window.explainIncident = explainIncident;
     window.saveRuleParameters = saveRuleParameters;
+    window.saveInterfaceExpectation = saveInterfaceExpectation;
 })();

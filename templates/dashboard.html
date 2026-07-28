@@ -2540,6 +2540,18 @@
         </p>
         <div id="incidentRules"></div>
       </details>
+
+      <details class="panel" style="padding:12px 16px; margin-top:18px;">
+        <summary style="cursor:pointer; font-size:14px; color:var(--primary); font-weight:600;">
+          <i class="fa-solid fa-ethernet"></i> Interfacce e stato atteso
+        </summary>
+        <p style="font-size:12px; color:var(--text-muted); margin:10px 0;">
+          Loopback, Null e VLAN dismesse sono giù per progetto: confermarle qui evita che
+          ogni loro transizione diventi un sintomo. Non nasconde nulla — l'evento resta nel
+          feed, cambia solo se <code>IFACE_DOWN_001</code> lo consideri un sintomo.
+        </p>
+        <div id="incidentInterfaces"></div>
+      </details>
     </div>
 
     <!-- TAB: NetSec Audit (preview) -->
