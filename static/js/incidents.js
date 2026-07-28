@@ -89,6 +89,10 @@
     // per progetto" e per "e' in manutenzione stanotte": cambia solo se c'e'
     // una scadenza. Tenerli separati darebbe due posti dove cercare perche' un
     // allarme non e' scattato.
+    //
+    // Raggruppato tenant -> apparato -> interfacce: una tabella piatta con
+    // l'IP ripetuto su ogni riga regge tre switch di laboratorio, non venti
+    // apparati su quattro sedi.
     async function loadInterfaceExpectations() {
         const box = document.getElementById('incidentInterfaces');
         if (!box) return;
@@ -96,61 +100,164 @@
             const res = await apiFetch('/api/incidents/interfaces');
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
-            // Le instabili in cima: e' la ragione per cui si apre questo
-            // pannello. A parita', l'ordine resta quello dell'apparato.
-            const rows = (data.interfaces || []).slice().sort(
-                (a, b) => (b.transitions || 0) - (a.transitions || 0));
-            const soglia = data.min_transitions || 4;
-            const ore = Math.round((data.window_s || 86400) / 3600);
+            const rows = data.interfaces || [];
             if (!rows.length) {
                 box.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">Nessuna interfaccia ancora osservata. Serve almeno un giro di polling (REST o SNMP).</div>';
                 return;
             }
-            const dot = st => {
-                const down = String(st || '').toLowerCase() === 'down';
-                return `<span style="color:${down ? 'var(--danger)' : 'var(--success)'}; font-size:11px;">${escapeHtml(jsStr(st || '?'))}</span>`;
-            };
-            const local = ts => {
-                if (!ts) return '';
-                const d = new Date(ts * 1000);
-                return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-                    .toISOString().slice(0, 16);
-            };
-            // L'instabilita' va MOSTRATA anche quando non e' diventata un
-            // incidente: la regola guarda la finestra di correlazione, questa
-            // colonna guarda un giorno, quindi una porta che oscilla piano
-            // compare qui pur non scattando mai.
-            const flap = n => {
-                if (!n) return '<span style="color:var(--text-muted);">—</span>';
-                const grave = n >= soglia;
-                return `<span title="transizioni di link nelle ultime ${ore} ore${grave ? ' — oltre la soglia della regola' : ''}"
-                    style="color:${grave ? 'var(--danger)' : 'var(--warning)'}; font-weight:${grave ? '700' : '400'};">${n}${grave ? ' ⚠' : ''}</span>`;
-            };
-            box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
-                <thead><tr>${['Apparato','Interfaccia','Link','Admin',`Transizioni ${ore}h`,'Atteso','Fino a (vuoto = sempre)','Nota']
-                    .map(h => `<th style="text-align:left; padding:6px 8px; font-size:11px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border);">${h}</th>`).join('')}</tr></thead>
-                <tbody>${rows.map((r, i) => `<tr${r.scope === 'device' ? ' style="opacity:.6;"' : ''}>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.device_ip))}</td>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.interface))}</td>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${dot(r.link)}</td>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${dot(r.admin_status)}</td>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${flap(r.transitions)}</td>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
-                        <input type="checkbox" id="ifx-${i}" ${r.suppressed ? 'checked' : ''}
-                               ${r.scope === 'device' ? "disabled title=\"coperta da manutenzione sull intero apparato\"" : ''}
-                               onchange="saveInterfaceExpectation(${i})" style="accent-color:var(--primary);"></td>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
-                        <input type="datetime-local" id="ifu-${i}" value="${escapeHtml(jsStr(local(r.to_ts)))}"
-                               onchange="saveInterfaceExpectation(${i})"
-                               style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
-                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
-                        <input type="text" id="ifn-${i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="perche'"
-                               style="width:100%; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
-                </tr>`).join('')}</tbody></table>
-                <div id="ifxStatus" style="font-size:11px; color:var(--text-muted); margin-top:6px;"></div>
-                ${renderSuppressionList(data.suppressions || [])}`;
             _interfaces = rows;
+            const soglia = data.min_transitions || 4;
+            const ore = Math.round((data.window_s || 86400) / 3600);
+
+            // tenant -> apparato -> righe, conservando l'indice originale
+            // perche' i controlli lo usano per risalire alla riga.
+            const byTenant = new Map();
+            rows.forEach((r, i) => {
+                if (!byTenant.has(r.tenant)) byTenant.set(r.tenant, new Map());
+                const dev = byTenant.get(r.tenant);
+                if (!dev.has(r.device_ip)) dev.set(r.device_ip, []);
+                dev.get(r.device_ip).push(Object.assign({}, r, { _i: i }));
+            });
+
+            const suppressions = data.suppressions || [];
+            const deviceRule = ip => suppressions.find(
+                s => s.device_ip === ip && !s.interface && !s.expired);
+
+            const tenants = Array.from(byTenant.keys()).sort();
+            box.innerHTML = tenants.map(t => {
+                const devices = Array.from(byTenant.get(t).entries())
+                    .sort((a, b) => a[0].localeCompare(b[0]));
+                // Un solo tenant: l'intestazione di sede sarebbe rumore.
+                const head = tenants.length > 1
+                    ? `<div style="margin:14px 0 6px; font-size:12px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:.4px;">
+                           <i class="fa-solid fa-building"></i> ${escapeHtml(jsStr(t))}
+                           <span style="font-weight:400; color:var(--text-muted); text-transform:none;">· ${devices.length} apparati</span>
+                       </div>`
+                    : '';
+                return head + devices.map(entry =>
+                    renderDeviceBlock(entry[0], entry[1], deviceRule(entry[0]), soglia, ore)).join('');
+            }).join('') + `
+                <div id="ifxStatus" style="font-size:11px; color:var(--text-muted); margin-top:8px;"></div>
+                ${renderSuppressionList(suppressions)}`;
         } catch (e) { box.innerHTML = ''; }
+    }
+
+    function renderDeviceBlock(ip, list, devRule, soglia, ore) {
+        const name = list[0].hostname || '';
+        const down = list.filter(r => String(r.link).toLowerCase() === 'down').length;
+        const unstable = list.filter(r => (r.transitions || 0) > 0).length;
+        // Aperto solo se c'e' qualcosa da guardare: con venti apparati, venti
+        // tabelle aperte sono un muro. Chiuso non vuol dire nascosto, il
+        // riassunto sta nell'intestazione.
+        const interesting = down > 0 || unstable > 0 || !!devRule;
+        const badge = (txt, col) => `<span style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:5px; padding:1px 6px; margin-left:6px;">${txt}</span>`;
+
+        const sorted = list.slice().sort(
+            (a, b) => (b.transitions || 0) - (a.transitions || 0)
+                   || String(a.interface).localeCompare(String(b.interface)));
+
+        return `<details ${interesting ? 'open' : ''} style="margin-bottom:8px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);">
+            <summary style="cursor:pointer; padding:8px 10px; font-size:13px;">
+                <strong style="font-family:var(--font-code);">${escapeHtml(jsStr(name || ip))}</strong>
+                ${name ? `<span style="color:var(--text-muted); font-size:11px; font-family:var(--font-code);"> ${escapeHtml(jsStr(ip))}</span>` : ''}
+                <span style="color:var(--text-muted); font-size:11px;"> · ${list.length} interfacce</span>
+                ${down ? badge(down + ' down', 'var(--danger)') : ''}
+                ${unstable ? badge(unstable + ' instabili', 'var(--warning)') : ''}
+                ${devRule ? badge('apparato sotto manutenzione', 'var(--text-muted)') : ''}
+            </summary>
+            <div style="padding:0 10px 10px;">
+                ${renderDeviceSuppression(ip, list[0].tenant, devRule)}
+                ${renderInterfaceTable(sorted, soglia, ore)}
+            </div>
+        </details>`;
+    }
+
+    // La manutenzione sull'INTERO apparato non aveva un posto in cui essere
+    // dichiarata: si poteva sopprimere una porta alla volta, non il nodo.
+    function renderDeviceSuppression(ip, tenant, rule) {
+        const until = rule && rule.to_ts
+            ? new Date((rule.to_ts * 1000) - new Date().getTimezoneOffset() * 60000)
+                .toISOString().slice(0, 16) : '';
+        return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 0 10px; font-size:11px; color:var(--text-muted);">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="checkbox" id="dvx-${escapeHtml(jsStr(ip))}" ${rule ? 'checked' : ''}
+                       onchange="saveDeviceSuppression('${jsStr(tenant)}','${jsStr(ip)}')"
+                       style="accent-color:var(--warning);">
+                <span>Tutto l apparato atteso giu (manutenzione)</span>
+            </label>
+            <input type="datetime-local" id="dvu-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr(until))}"
+                   onchange="saveDeviceSuppression('${jsStr(tenant)}','${jsStr(ip)}')"
+                   title="fino a quando; vuoto = senza scadenza"
+                   style="padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
+            <input type="text" id="dvn-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr((rule || {}).note || ''))}" placeholder="motivo"
+                   style="flex:1; min-width:140px; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
+        </div>`;
+    }
+
+    function renderInterfaceTable(list, soglia, ore) {
+        const dot = st => {
+            const isDown = String(st || '').toLowerCase() === 'down';
+            return `<span style="color:${isDown ? 'var(--danger)' : 'var(--success)'}; font-size:11px;">${escapeHtml(jsStr(st || '?'))}</span>`;
+        };
+        // L'instabilita' va MOSTRATA anche quando non e' diventata un
+        // incidente: la regola guarda la finestra di correlazione, questa
+        // colonna guarda un giorno.
+        const flap = n => {
+            if (!n) return '<span style="color:var(--text-muted);">&mdash;</span>';
+            const grave = n >= soglia;
+            return `<span title="transizioni di link nelle ultime ${ore} ore${grave ? ' - oltre la soglia della regola' : ''}"
+                style="color:${grave ? 'var(--danger)' : 'var(--warning)'}; font-weight:${grave ? '700' : '400'};">${n}${grave ? ' &#9888;' : ''}</span>`;
+        };
+        const local = ts => {
+            if (!ts) return '';
+            const d = new Date(ts * 1000);
+            return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                .toISOString().slice(0, 16);
+        };
+        const th = t => `<th style="text-align:left; padding:5px 8px; font-size:10px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border);">${t}</th>`;
+        const cols = ['Interfaccia', 'Link', 'Admin', 'Transizioni ' + ore + 'h',
+                      'Atteso', 'Fino a', 'Nota'];
+        return `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr>${cols.map(th).join('')}</tr></thead>
+            <tbody>${list.map(r => `<tr${r.scope === 'device' ? ' style="opacity:.55;"' : ''}>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.interface))}</td>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border);">${dot(r.link)}</td>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border);">${dot(r.admin_status)}</td>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border);">${flap(r.transitions)}</td>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
+                    <input type="checkbox" id="ifx-${r._i}" ${r.suppressed ? 'checked' : ''}
+                           ${r.scope === 'device' ? 'disabled title="coperta dalla manutenzione dell apparato"' : ''}
+                           onchange="saveInterfaceExpectation(${r._i})" style="accent-color:var(--primary);"></td>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
+                    <input type="datetime-local" id="ifu-${r._i}" value="${escapeHtml(jsStr(local(r.to_ts)))}"
+                           onchange="saveInterfaceExpectation(${r._i})"
+                           style="padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
+                    <input type="text" id="ifn-${r._i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="motivo"
+                           style="width:100%; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
+            </tr>`).join('')}</tbody></table>`;
+    }
+
+    async function saveDeviceSuppression(tenant, ip) {
+        const until = document.getElementById('dvu-' + ip).value;
+        const res = await apiFetch('/api/incidents/interfaces/expected', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tenant: tenant, device_ip: ip, interface: null,
+                suppressed: document.getElementById('dvx-' + ip).checked,
+                to_ts: until ? Math.floor(new Date(until).getTime() / 1000) : null,
+                note: document.getElementById('dvn-' + ip).value
+            })
+        });
+        if (!res) return;
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            const st = document.getElementById('ifxStatus');
+            if (st) st.textContent = err.detail || 'Errore.';
+            return;
+        }
+        await loadInterfaceExpectations();
     }
 
     // Anche quelle scadute: mostrarle spente e' cio' che rende leggibile
@@ -562,4 +669,5 @@
     window.explainIncident = explainIncident;
     window.saveRuleParameters = saveRuleParameters;
     window.saveInterfaceExpectation = saveInterfaceExpectation;
+    window.saveDeviceSuppression = saveDeviceSuppression;
 })();
