@@ -232,8 +232,30 @@ def _config_change(events: list, p: dict) -> list:
     return out
 
 
+def expectation_key(tenant, device_ip, interface) -> str:
+    """Chiave di una interfaccia dichiarata 'attesa giù' dall'operatore."""
+    return f"{tenant}|{device_ip}|{interface}"
+
+
+def expected_down() -> dict:
+    """Interfacce che l'operatore ha confermato come volutamente giù.
+
+    Non è una regola e non è un fatto della rete: è CONOSCENZA DELL'OPERATORE,
+    e vive dove vive il resto della configurazione. Una Loopback, una Null0 o
+    una VLAN dismessa sono giù per progetto, e segnalarle a ogni transizione
+    riempie gli incidenti di rumore che nasconde quello vero.
+
+    Non sopprime nulla a monte: l'evento resta in ``events`` e resta visibile
+    nel feed. Cambia solo l'INTERPRETAZIONE — che è esattamente il posto in cui
+    la conoscenza di chi gestisce la rete deve entrare.
+    """
+    saved = get_app_settings().get("interface_expectations")
+    return saved if isinstance(saved, dict) else {}
+
+
 def _interface_down(events: list, p: dict) -> list:
     """Interfaccia passata a down: sintomo osservato sullo stato, non causa."""
+    expected = expected_down()
     out = []
     for ev in events:
         if ev["event_type"] != "interface.change":
@@ -243,6 +265,9 @@ def _interface_down(events: list, p: dict) -> list:
             continue
         if "link" not in str(attrs.get("field", "")).lower() \
                 and "status" not in str(attrs.get("field", "")).lower():
+            continue
+        if expectation_key(ev["tenant"], ev["device_ip"],
+                           ev["interface"]) in expected:
             continue
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="symptom",
@@ -507,7 +532,10 @@ RULES = {
         "base_confidence": 60,
         "investigation": "Verificare cablaggio, stato del transceiver e "
                          "contatori di errore della porta. Controllare se la "
-                         "caduta coincide con una modifica di configurazione.",
+                         "caduta coincide con una modifica di configurazione. "
+                         "Se la porta è giù per progetto (Loopback, Null, VLAN "
+                         "dismessa), confermarla come attesa dal pannello "
+                         "interfacce invece di conviverci come rumore.",
         "remediation": "Sostituire il collegamento difettoso o riabilitare la "
                        "porta. Se la caduta si ripete, sospettare duplex "
                        "mismatch o alimentazione PoE insufficiente.",
