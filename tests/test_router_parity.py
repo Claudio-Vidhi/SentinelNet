@@ -118,6 +118,11 @@ class TestFullParity(unittest.TestCase):
         ("post", "/api/agent/heartbeat"),
         ("get", "/api/observability/anomalies"),
         ("post", "/api/observability/anomalies/{event_id}/status"),
+        # Poller SNMP: la config accetta la chiave in più ``snmp_poll_s``.
+        # Aggiunta puramente additiva — nessun client esistente cambia — ma la
+        # descrizione dell'operazione elenca le chiavi ammesse, e quella è
+        # cambiata.
+        ("post", "/api/observability/config"),
     )
 
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")

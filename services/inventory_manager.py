@@ -160,7 +160,7 @@ def safe_write_hosts_csv(devices):
     temp_filename = hosts_csv + ".tmp"
     # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
-    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port', 'Transports']
+    _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port', 'Transports', 'SNMP Community']
     try:
         with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
@@ -244,7 +244,7 @@ def get_device_by_ip(ip: str):
         return _device_ip_cache.get(ip)
 
 
-def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None, ssh_port=None, transports=None):
+def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None, ssh_port=None, transports=None, snmp_community=None):
     # Validazione IP robusta
     match = IP_PATTERN.match(ip)
     if not match or not all(0 <= int(octet) <= 255 for octet in match.groups()):
@@ -284,6 +284,14 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
         ssh_mirror = resolved_transports.get('ssh')
         if ssh_mirror is None:
             ssh_mirror = resolved_port
+        # Community SNMP: None = preserva quella esistente (i moduli che
+        # aggiornano un device per altri motivi non devono cancellarla),
+        # stringa vuota = rimuovila. Cifrata nel vault come le altre credenziali.
+        if snmp_community is None:
+            enc_community = (existing.get('SNMP Community') if existing else '') or ''
+        else:
+            enc_community = crypto_vault.encrypt_password(snmp_community) \
+                if snmp_community else ''
         devices = [d for d in devices if d['IP'] != ip]
 
         new_device = {
@@ -293,6 +301,7 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             'Site': resolved_site,
             'SSH Port': str(ssh_mirror),
             'Transports': json.dumps(resolved_transports, separators=(',', ':')),
+            'SNMP Community': enc_community,
         }
         if existing_hostname:
             new_device['Hostname'] = existing_hostname
