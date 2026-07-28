@@ -110,12 +110,16 @@ async def list_interfaces(current_user = Depends(get_current_user)):
         (*params, MAX_LIMIT))
     now = int(time.time())
     flaps = await _link_transitions(current_user, now - INSTABILITY_WINDOW_S)
+    # Il motore conosce solo l'IP: il nome lo sa l'inventario. Senza, con più
+    # sedi la tabella è un elenco di indirizzi da tradurre a mente.
+    names = await asyncio.to_thread(_hostnames)
     out = []
     for r in rows:
         attrs = _parse_json(r["attrs_json"])
         rule = suppression.active(r["tenant"], f"ip:{r['device_ip']}",
                                   r["interface"], now)
         out.append({"tenant": r["tenant"], "device_ip": r["device_ip"],
+                    "hostname": names.get(r["device_ip"], ""),
                     "interface": r["interface"], "ts": r["ts"],
                     "link": attrs.get("link"),
                     "admin_status": attrs.get("admin_status"),
@@ -130,6 +134,12 @@ async def list_interfaces(current_user = Depends(get_current_user)):
     return {"interfaces": out, "window_s": INSTABILITY_WINDOW_S,
             "min_transitions": rules.params_for("IFACE_FLAPPING_001")["min_transitions"],
             "suppressions": _visible_suppressions(current_user)}
+
+
+def _hostnames() -> dict:
+    from services import inventory_manager
+    return {d.get("IP"): (d.get("Hostname") or "")
+            for d in inventory_manager.get_all_devices()}
 
 
 async def _link_transitions(current_user, since: int) -> dict:

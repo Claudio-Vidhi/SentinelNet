@@ -185,5 +185,61 @@ class TestAppliedToTheEngine(unittest.TestCase):
         self.assertEqual(self._rows("SELECT * FROM evidence"), [])
 
 
+
+class TestDeviceScopeFromTheApi(unittest.TestCase):
+    """La manutenzione sull'INTERO apparato non aveva un modo per essere
+    dichiarata dall'API: si poteva sopprimere una porta alla volta."""
+
+    def _client(self):
+        from fastapi.testclient import TestClient
+        import app_server
+        from routers import deps
+        overrides = app_server.app.dependency_overrides
+        self._previous = {
+            deps.get_current_user: overrides.get(deps.get_current_user),
+            deps.user_group_scope: overrides.get(deps.user_group_scope),
+        }
+        overrides[deps.get_current_user] = lambda: {"sub": "op", "role": "operator"}
+        overrides[deps.user_group_scope] = lambda: None
+        return TestClient(app_server.app)
+
+    def tearDown(self):
+        import app_server
+        for dep, previous in getattr(self, "_previous", {}).items():
+            if previous is None:
+                app_server.app.dependency_overrides.pop(dep, None)
+            else:
+                app_server.app.dependency_overrides[dep] = previous
+        from core.app_settings import save_app_settings
+        save_app_settings({"suppressions": {}})
+
+    def test_omitting_the_interface_suppresses_the_whole_device(self):
+        client = self._client()
+        r = client.post("/api/incidents/interfaces/expected",
+                        json={"tenant": TENANT, "device_ip": DEVICE,
+                              "suppressed": True, "note": "manutenzione"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["suppressed"])
+        self.assertEqual(r.json()["key"],
+                         suppression.key(TENANT, ENTITY, None))
+        # Copre ogni porta senza doverle elencare.
+        self.assertIsNotNone(suppression.active(TENANT, ENTITY, "Et0/0", NOW))
+        self.assertIsNotNone(suppression.active(TENANT, ENTITY, "Vl20", NOW))
+
+    def test_a_window_that_ends_before_it_starts_is_refused(self):
+        client = self._client()
+        r = client.post("/api/incidents/interfaces/expected",
+                        json={"tenant": TENANT, "device_ip": DEVICE,
+                              "suppressed": True,
+                              "from_ts": NOW, "to_ts": NOW - 60})
+        self.assertEqual(r.status_code, 400)
+
+    def test_a_device_without_an_ip_is_refused(self):
+        client = self._client()
+        r = client.post("/api/incidents/interfaces/expected",
+                        json={"tenant": TENANT, "suppressed": True})
+        self.assertEqual(r.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()
