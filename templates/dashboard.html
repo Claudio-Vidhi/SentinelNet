@@ -559,6 +559,18 @@
               </div>
             </div>
 
+            <div class="form-group">
+              <label for="devSnmp" data-i18n="lblSnmpCommunity">Community SNMP (sola lettura)</label>
+              <input id="devSnmp" type="password" autocomplete="off" placeholder="—" style="padding-left:12px;">
+              <label style="display:flex; align-items:center; gap:6px; font-size:11px; margin-top:4px; cursor:pointer;">
+                <input type="checkbox" id="devSnmpClear" style="accent-color:var(--danger);">
+                <span data-i18n="lblSnmpClear">Rimuovi la community e ferma il polling</span>
+              </label>
+              <small id="devSnmpHint" style="color:var(--text-muted); font-size:11px;" data-i18n="hintSnmpCommunity">
+                Solo v2c e sola lettura: abilita il polling di stato e contatori sugli apparati senza API REST. La community viaggia in chiaro — usare solo su rete di management. Vuoto in modifica = invariata.
+              </small>
+            </div>
+
             <button class="btn btn-primary" id="btnSaveDevice" style="margin-top: 10px;" data-i18n="btnSaveDevice">
               <i class="fa-solid fa-floppy-disk"></i> Salva Apparato
             </button>

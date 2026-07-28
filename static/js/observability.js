@@ -46,6 +46,11 @@
                 <label data-i18n="lblObsApiPoll">Intervallo polling API (s)</label>
                 <input id="obs_api_poll_s" type="number" min="1" value="${d.api_poll_s != null ? d.api_poll_s : ''}" style="padding-left:12px;">
             </div>
+            <div class="form-group" style="max-width:280px;">
+                <label data-i18n="lblObsSnmpPoll">Intervallo polling SNMP (s)</label>
+                <input id="obs_snmp_poll_s" type="number" min="0" value="${d.snmp_poll_s != null ? d.snmp_poll_s : 0}" style="padding-left:12px;">
+                <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsSnmpPoll">0 = spento. Interroga solo gli apparati che hanno una community configurata nella loro scheda.</small>
+            </div>
             <div style="margin-top:10px; margin-bottom:2px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="lblObsListeners">Listener</div>
             <div style="margin-bottom:8px; font-size:12px; color:var(--text-muted);">${L.hintObsListeners || "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche ai listener vengono applicate subito, senza riavviare l'applicazione."}</div>
             ${listenerRows}
@@ -63,7 +68,8 @@
         const payload = {
             enabled: document.getElementById('obs_enabled').checked,
             bind: document.getElementById('obs_bind').value.trim(),
-            api_poll_s: parseInt(document.getElementById('obs_api_poll_s').value, 10)
+            api_poll_s: parseInt(document.getElementById('obs_api_poll_s').value, 10),
+            snmp_poll_s: parseInt(document.getElementById('obs_snmp_poll_s').value, 10) || 0
         };
         OBS_LISTENERS.forEach(l => {
             payload[`${l}_enabled`] = document.getElementById(`obs_${l}_enabled`).checked;

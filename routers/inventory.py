@@ -31,6 +31,9 @@ class DeviceSchema(BaseModel):
     # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy
     # (deriva ssh-only dalla porta SSH). Validazione in inventory_manager.
     transports: Optional[Dict[str, Optional[int]]] = None
+    # Community SNMP v2c in sola lettura (poller di stato). None = lascia
+    # invariata quella già salvata; "" = rimuovila.
+    snmp_community: Optional[str] = Field(None, max_length=128)
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -75,6 +78,9 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
     for d in devices:
         dev_copy = dict(d)
         dev_copy["redundancy"] = redundancy_service.device_redundancy_badge(d["IP"])
+        # La community non esce mai da qui, nemmeno cifrata: alla UI serve
+        # sapere SE il polling SNMP è configurato, non quale sia il segreto.
+        dev_copy["snmp_enabled"] = bool(dev_copy.pop("SNMP Community", ""))
         devices_enriched.append(dev_copy)
     return {
         "devices": devices_enriched,
@@ -127,7 +133,8 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
         inventory_manager.add_or_update_device(
             device.ip, device.vendor, device.profile,
             device.username, device.password, device.enable_secret, device.group,
-            ssh_port=device.ssh_port, transports=device.transports
+            ssh_port=device.ssh_port, transports=device.transports,
+            snmp_community=device.snmp_community
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

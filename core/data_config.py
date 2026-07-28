@@ -117,6 +117,10 @@ def obs_config() -> dict:
         },
         # Poller REST (§9.2): intervallo in secondi, 0 = disattivato.
         "api_poll_s": _port("SENTINELNET_OBS_API_POLL_S", "api_poll_s", 300),
+        # Poller SNMP: default 0 (spento). Va acceso deliberatamente, perché
+        # interroga apparati con una credenziale — non deve partire da solo
+        # solo perché l'observability è attiva.
+        "snmp_poll_s": _port("SENTINELNET_OBS_SNMP_POLL_S", "snmp_poll_s", 0),
         "retention_days": {
             "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                                    or _app_adv("retention_flows_days") or 30),

@@ -52,9 +52,12 @@ QUARANTINE_BUCKET_S = 600
 # confrontarli produrrebbe un "cambiamento" ogni 5 minuti su ogni apparato.
 # ponytail: filtro per sottostringa, sufficiente sui payload FortiGate visti;
 # se servisse più precisione, la strada è una allowlist per vendor negli adapter.
-_VOLATILE_HINTS = ("byte", "packet", "uptime", "time", "count", "session",
-                   "error", "drop", "collision", "rate", "usage", "seconds",
-                   "timestamp", "last_", "current_")
+_VOLATILE_HINTS = ("byte", "octet", "packet", "uptime", "time", "count",
+                   "session", "error", "drop", "discard", "collision", "rate",
+                   "usage", "seconds", "timestamp", "last_", "current_")
+# ``octet`` e ``discard`` sono i nomi IF-MIB degli stessi contatori che sulla
+# REST FortiGate si chiamano ``byte`` e ``drop``: senza, ogni giro SNMP
+# produrrebbe un "cambiamento" su ogni porta di ogni apparato.
 
 _INSERT_SQL = """
 INSERT INTO events
@@ -211,7 +214,10 @@ def _stable_fields(payload: str) -> dict:
             if not any(h in k.lower() for h in _VOLATILE_HINTS)}
 
 
-_IFACE_KINDS = ("interfaces", "interface")
+# Snapshot che descrivono interfacce, qualunque sia il trasporto che li ha
+# portati: la REST FortiGate e il poller SNMP scrivono la stessa forma
+# ``results.<nome_porta>.<campo>`` proprio per finire qui dentro.
+_IFACE_KINDS = ("interfaces", "interface", "snmp_interfaces")
 
 
 def _interface_of(field: str, kind: str) -> Optional[str]:
@@ -241,6 +247,13 @@ def _interfaces_of(payload: str, kind: str) -> dict:
     return grouped
 
 
+def _source_of(kind: str) -> str:
+    """Da quale trasporto arriva lo snapshot. ``api_observations`` raccoglie
+    snapshot di apparato, non solo REST: l'evento deve dire quale sorgente lo
+    ha prodotto, altrimenti la provenienza mente."""
+    return "snmp" if str(kind).startswith("snmp_") else "fortigate_api"
+
+
 def _from_api_observations(conn, now: int) -> int:
     cur = _cursor(conn, "api")
     rows = conn.execute(
@@ -253,7 +266,7 @@ def _from_api_observations(conn, now: int) -> int:
     for r in rows:
         _emit(conn,
               ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
-              source="fortigate_api", source_id=r["id"],
+              source=_source_of(r["kind"]), source_id=r["id"],
               event_type="device.state", entity_type="device",
               entity_id=r["device_ip"], device_ip=r["device_ip"],
               attrs={"kind": r["kind"]},
@@ -278,7 +291,7 @@ def _from_api_observations(conn, now: int) -> int:
                 iface = _interface_of(field, r["kind"])
                 _emit(conn,
                       ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
-                      source="fortigate_api", source_id=r["id"],
+                      source=_source_of(r["kind"]), source_id=r["id"],
                       event_type="interface.change" if iface else "device.change",
                       entity_type="interface" if iface else "device",
                       entity_id=f"{r['device_ip']}:{iface}" if iface else r["device_ip"],
@@ -294,7 +307,7 @@ def _from_api_observations(conn, now: int) -> int:
         for iface, fields in _interfaces_of(r["summary_json"], r["kind"]).items():
             _emit(conn,
                   ts=r["ts"], ingested_ts=now, tenant=r["tenant"],
-                  source="fortigate_api", source_id=r["id"],
+                  source=_source_of(r["kind"]), source_id=r["id"],
                   event_type="interface.state", entity_type="interface",
                   entity_id=f"{r['device_ip']}:{iface}",
                   device_ip=r["device_ip"], interface=iface,

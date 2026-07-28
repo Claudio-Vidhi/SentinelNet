@@ -304,6 +304,14 @@
             transports: readTransportsForm()
         };
 
+        // La community non viene mai rimandata indietro dal server: campo vuoto
+        // significa "lasciala com'è", non "cancellala". Per rimuoverla serve la
+        // spunta esplicita, così un salvataggio distratto non spegne il polling.
+        const snmp = document.getElementById('devSnmp');
+        const snmpClear = document.getElementById('devSnmpClear');
+        if (snmpClear && snmpClear.checked) payload.snmp_community = '';
+        else if (snmp && snmp.value) payload.snmp_community = snmp.value;
+
         if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
 
         // §11.5b: la password non è preservata se vuota (add_or_update_device la
@@ -352,6 +360,13 @@
         try { devTransports = dev.Transports ? JSON.parse(dev.Transports) : null; } catch (e) { devTransports = null; }
         setTransportsForm(devTransports, dev['SSH Port']);
         document.getElementById('devVendor').value = (dev.Vendor || '').toLowerCase();
+        // Il segreto non torna dal server: il placeholder dice solo SE c'è.
+        document.getElementById('devSnmp').value = '';
+        document.getElementById('devSnmp').placeholder = dev.snmp_enabled
+            ? (currentLang === 'en' ? 'configured — leave blank to keep'
+                                    : 'configurata — lascia vuoto per non cambiarla')
+            : '—';
+        document.getElementById('devSnmpClear').checked = false;
 
         // switchTab('tab-provisioning') ha già ricaricato le identità per il
         // tenant precedentemente selezionato (loadProvisioningTab chiama
@@ -395,6 +410,9 @@
         document.getElementById('devUser').value = '';
         document.getElementById('devPass').value = '';
         document.getElementById('devSecret').value = '';
+        document.getElementById('devSnmp').value = '';
+        document.getElementById('devSnmp').placeholder = '—';
+        document.getElementById('devSnmpClear').checked = false;
         document.getElementById('devFormTitle').innerHTML = i18n[currentLang].titleProvisioning;
         document.getElementById('devEditNotice').style.display = 'none';
         document.getElementById('btnSaveDevice').innerHTML = i18n[currentLang].btnSaveDevice;

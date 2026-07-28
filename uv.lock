@@ -351,6 +351,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyasn1"
+version = "0.6.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/9a/23310166d960def5897e91fe20e5b724601b02a22e84ba1f94232c0b7f67/pyasn1-0.6.4.tar.gz", hash = "sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81", size = 151262, upload-time = "2026-07-09T01:12:33.988Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/3b/6163796d69c3977d1e4287bea4a6979161cbbdd170ebb430511e8e1999ce/pyasn1-0.6.4-py3-none-any.whl", hash = "sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b", size = 84410, upload-time = "2026-07-09T01:12:32.92Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -478,6 +487,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pysnmp"
+version = "7.1.27"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyasn1" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8d/6e/0d9c8a59ff4d6cb9c2477fe4cd106cb20cd6bbf008a0bca0c45ebb17aaad/pysnmp-7.1.27.tar.gz", hash = "sha256:01ce32d1bb0a14e8e3410a43fb7a8a7b050ec06186dc9ec240fcefa4af8b963c", size = 260310, upload-time = "2026-05-16T07:01:39.64Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fa/be/d509cf05e5af40715aa4a562ee16d3c303433d451b6f768593e92e6796d7/pysnmp-7.1.27-py3-none-any.whl", hash = "sha256:314ad98d94d9ed445d4bb07721c374ec6ca4158fb41f92b9bc72feb9557513f7", size = 344440, upload-time = "2026-05-16T07:01:37.981Z" },
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -564,6 +585,7 @@ dependencies = [
     { name = "paramiko" },
     { name = "pydantic" },
     { name = "pyjwt" },
+    { name = "pysnmp" },
     { name = "requests" },
     { name = "uvicorn" },
     { name = "websockets" },
@@ -578,6 +600,7 @@ requires-dist = [
     { name = "paramiko", specifier = ">=3.4.0" },
     { name = "pydantic", specifier = ">=2.6.0" },
     { name = "pyjwt", specifier = ">=2.8.0" },
+    { name = "pysnmp", specifier = ">=7.1.27" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "uvicorn", specifier = ">=0.28.0" },
     { name = "websockets", specifier = ">=12.0" },

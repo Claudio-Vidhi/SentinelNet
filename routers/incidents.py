@@ -19,7 +19,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core import db
-from observability import timeline
+from observability import flowpath, timeline
 from routers.deps import (get_current_user, require_admin, require_operator,
                           user_group_scope)
 from routers.observability import MAX_LIMIT, _parse_window, _tenant_filter
@@ -146,7 +146,25 @@ async def get_incident(incident_id: int, current_user = Depends(get_current_user
            WHERE incident_id = ? AND superseded_ts IS NOT NULL
            ORDER BY concluded_ts DESC LIMIT 20""", (incident_id,))
     return {"incident": incident, "timeline": entries,
-            "previous_conclusions": [dict(r) for r in history]}
+            "previous_conclusions": [dict(r) for r in history],
+            "flow_path": await _flow_path(incident_id, incident["tenant"])}
+
+
+async def _flow_path(incident_id: int, tenant: str) -> dict:
+    """Percorso della conversazione che ha innescato l'incidente.
+
+    Gli endpoint si prendono dall'evidenza di innesco ancora attiva: è quella
+    che la conclusione indica come causa, quindi è il traffico di cui ha senso
+    mostrare il percorso."""
+    rows = await db.read(
+        """SELECT src_ip, dst_ip FROM evidence
+           WHERE incident_id = ? AND status = 'active' AND role = 'trigger'
+             AND src_ip IS NOT NULL
+           ORDER BY ts ASC, id ASC LIMIT 1""", (incident_id,))
+    if not rows:
+        return {"direction": None, "hops": [], "complete": False}
+    return await asyncio.to_thread(flowpath.build, rows[0]["src_ip"],
+                                   rows[0]["dst_ip"], tenant)
 
 
 @router.post("/{incident_id}/status")

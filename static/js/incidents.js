@@ -208,7 +208,8 @@
             if (!res || !res.ok) { box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Incidente non disponibile.</div>'; return; }
             const data = await res.json();
             renderIncidentDetail(data.incident || {}, data.timeline || [],
-                                 data.previous_conclusions || []);
+                                 data.previous_conclusions || [],
+                                 data.flow_path || null);
         } catch (e) {
             box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Incidente non disponibile.</div>';
         }
@@ -341,7 +342,38 @@
         </div>`;
     }
 
-    function renderIncidentDetail(inc, entries, history) {
+    // Percorso logico della conversazione. Un salto sconosciuto va MOSTRATO
+    // come tale: l'ingegnere decide dove guardare in base a questo, e un buco
+    // taciuto lo manda a cercare nel posto sbagliato.
+    const DIRECTION_LABEL = {
+        east_west: 'East-West (interno ↔ interno)',
+        north_south: 'North-South (attraversa il perimetro)',
+        control_plane: 'Control plane (scoperta e routing)',
+        local: 'Locale'
+    };
+
+    function renderFlowPath(path) {
+        if (!path || !(path.hops || []).length) return '';
+        const hops = path.hops.map(h => {
+            const unknown = h.known === false;
+            const color = unknown ? 'var(--text-muted)' : 'var(--text)';
+            const icon = unknown ? 'fa-circle-question' : ({
+                endpoint: 'fa-desktop', access: 'fa-ethernet',
+                gateway: 'fa-route', perimeter: 'fa-shield-halved'
+            }[h.kind] || 'fa-circle-dot');
+            return `<div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:${color}; ${unknown ? 'border-style:dashed;' : ''}">
+                <i class="fa-solid ${icon}"></i>
+                <span>${escapeHtml(jsStr(h.label || h.kind))}</span>
+            </div>`;
+        }).join('<i class="fa-solid fa-angle-right" style="color:var(--text-muted); align-self:center;"></i>');
+        const warn = path.complete ? '' :
+            `<div style="font-size:11px; color:var(--warning); margin-top:6px;"><i class="fa-solid fa-triangle-exclamation"></i> Percorso parziale: i salti tratteggiati non sono noti.</div>`;
+        return `<h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-diagram-project"></i> Percorso
+                    <span style="font-weight:normal; font-size:12px; color:var(--text-muted);">${escapeHtml(jsStr(DIRECTION_LABEL[path.direction] || path.direction || ''))}</span></h4>
+                <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">${hops}</div>${warn}`;
+    }
+
+    function renderIncidentDetail(inc, entries, history, flowPath) {
         const box = document.getElementById('incidentDetail');
         if (!box) return;
         const next = inc.status === 'new'
@@ -363,6 +395,7 @@
             </div>
             ${renderReasoning(inc)}
             ${renderConclusionHistory(history || [])}
+            ${renderFlowPath(flowPath)}
             <h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-timeline"></i> Timeline</h4>
             ${renderTimeline(entries)}
             ${renderAiBlock(inc)}`;
