@@ -334,6 +334,38 @@ def _new_talker(events: list, p: dict) -> list:
     return out
 
 
+def _unknown_exporter(events: list, p: dict) -> list:
+    """Un exporter continua a inviare da un IP fuori inventario.
+
+    Non è correlazione: è un controllo di salute in cui SentinelNet osserva SÉ
+    STESSO. I record vengono scartati per non attribuirli a una sede sbagliata,
+    ma una perdita di dati che dura è un guasto della piattaforma, e finché
+    resta solo in una tabella di diagnostica nessuno la vede.
+
+    La soglia è sulla DURATA, non sul singolo pacchetto: un apparato appena
+    aggiunto e non ancora censito è normale per qualche minuto, un exporter
+    scartato da un'ora è una configurazione sbagliata.
+    """
+    out = []
+    for ev in events:
+        if ev["event_type"] != "platform.exporter_unknown":
+            continue
+        m = json.loads(ev["metrics_json"] or "{}")
+        persisted = m.get("persisted_s") or 0
+        packets = m.get("packets") or 0
+        if persisted < p["min_persistence_s"] or packets < p["min_packets"]:
+            continue
+        out.append(Finding(
+            event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
+            entity_key=f"exporter:{ev['entity_id']}", severity=ev["severity"],
+            src_ip=ev["src_ip"],
+            summary=f"Exporter {endpoints.describe(ev['entity_id'])} fuori "
+                    f"inventario da {persisted // 60} minuti: {packets} "
+                    f"pacchetti scartati",
+            attrs={**json.loads(ev["attrs_json"] or "{}"), **m}))
+    return out
+
+
 def _baseline_normal_retracts_spike(events: list, p: dict) -> list:
     """La misura storica dice che l'ora rientra nella norma: il picco rilevato
     guardando solo dentro la finestra non regge più.
@@ -530,6 +562,41 @@ RULES = {
                        "dalla rete. Verificare che la porta di accesso abbia il "
                        "profilo di sicurezza previsto.",
         "check": _new_talker,
+    },
+    "FLOW_EXPORTER_UNKNOWN_001": {
+        "version": "1.0.0",
+        "title": "Exporter di flussi fuori inventario",
+        "description": "Un exporter invia flussi da un IP non presente in "
+                       "inventario e i suoi record vengono scartati. È un "
+                       "controllo di salute della piattaforma, non "
+                       "un'anomalia della rete: qui SentinelNet osserva sé "
+                       "stesso.",
+        "inputs": ["platform.exporter_unknown"],
+        "outputs": ["trigger"],
+        "parameters": [
+            {"name": "min_persistence_s", "default": 3600, "min": 0, "max": 604800,
+             "description": "Da quanto deve durare la quarantena prima di "
+                            "segnalarla: un apparato appena aggiunto e non "
+                            "ancora censito è normale per qualche minuto."},
+            {"name": "min_packets", "default": 50, "min": 1, "max": 10 ** 9,
+             "description": "Pacchetti scartati minimi perché la segnalazione "
+                            "valga: qualche datagramma isolato è rumore."},
+        ],
+        # La più alta del catalogo, e giustificata: le altre regole INFERISCONO
+        # qualcosa sulla rete a partire da segnali indiretti. Questa riporta un
+        # fatto misurato dalla piattaforma su se stessa — i pacchetti scartati
+        # sono stati contati, non stimati. Non c'è margine di errore da scontare.
+        "base_confidence": 90,
+        "investigation": "Verificare se l'IP appartiene a un apparato "
+                         "legittimo non ancora censito, a un apparato che ha "
+                         "cambiato indirizzo, oppure a un dispositivo che non "
+                         "dovrebbe esportare nulla. Controllare `first_seen` "
+                         "per capire se coincide con un intervento recente.",
+        "remediation": "Se l'exporter è legittimo, aggiungerlo all'inventario: "
+                       "i flussi vengono accettati dal primo pacchetto "
+                       "successivo, senza recuperare quelli già persi. Se non "
+                       "lo è, bloccarne il traffico verso i listener.",
+        "check": _unknown_exporter,
     },
     "BASELINE_NORMAL_RETRACT_001": {
         "version": "1.0.0",

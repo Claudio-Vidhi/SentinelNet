@@ -164,10 +164,10 @@ CREATE TABLE IF NOT EXISTS events (
     ts           INTEGER NOT NULL,       -- quando è successo
     ingested_ts  INTEGER NOT NULL,       -- quando è stato normalizzato
     tenant       TEXT NOT NULL,
-    source       TEXT NOT NULL,          -- netflow|ipfix|sflow|syslog|fortigate_api
+    source       TEXT NOT NULL,          -- netflow|ipfix|sflow|syslog|fortigate_api|platform
     source_id    INTEGER,                -- id nella tabella d'origine (provenienza)
-    event_type   TEXT NOT NULL,          -- flow.aggregate|log.security|log.event|device.state|device.change
-    entity_type  TEXT NOT NULL,          -- flow|device|interface
+    event_type   TEXT NOT NULL,          -- flow.aggregate|log.security|log.event|device.state|device.change|platform.exporter_unknown
+    entity_type  TEXT NOT NULL,          -- flow|device|interface|exporter
     entity_id    TEXT NOT NULL,          -- '10.1.0.5>8.8.8.8' | '10.1.0.254' | '10.1.0.254:port1'
     severity     INTEGER,                -- scala syslog 0-7
     device_ip    TEXT,
