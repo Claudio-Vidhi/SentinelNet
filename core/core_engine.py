@@ -1191,6 +1191,26 @@ _PHYS_IFACE_RE = re.compile(
 )
 
 
+def parse_shutdown_interfaces(config: str) -> set:
+    """Interfacce con ``shutdown`` nella running-config.
+
+    È la porzione di verità che il backup contiene già e che il report
+    ignorava: un membro spento resta membro dell'aggregato, ma non lo compone.
+    Mostrarlo verde accanto agli altri fa credere che il bundle sia integro.
+    """
+    shut: set = set()
+    current = None
+    for line in config.splitlines():
+        m = re.match(r'^interface\s+(\S+)', line)
+        if m:
+            current = m.group(1)
+            continue
+        if current and re.match(r'^\s+shutdown\s*$', line):
+            shut.add(current)
+            current = None      # una sola riga basta a marcarla
+    return shut
+
+
 def parse_portchannel_summary(config: str) -> dict:
     """Riassume i Port-channel di un apparato (Cisco IOS/IOS-XE):
       - portchannels: {nome Po: [interfacce membro]}
@@ -1272,7 +1292,13 @@ def get_portchannel_report(group_filter=None) -> list:
             if not ip_match:
                 continue
             ip = ip_match.group(1)
-            dev = ip_to_device.get(ip, {})
+            dev = ip_to_device.get(ip)
+            if dev is None:
+                # Backup di un apparato non più in inventario: senza questo
+                # filtro riappariva come doppione dello stesso switch a un IP
+                # vecchio, con dati di settimane prima e tenant 'Generale' —
+                # quindi nemmeno nascondibile con il filtro per tenant.
+                continue
             group = dev.get('Group', 'Generale')
             if group_filter and group_filter != "all" and group != group_filter:
                 continue
@@ -1293,6 +1319,7 @@ def get_portchannel_report(group_filter=None) -> list:
                     neigh_by_port.setdefault(lp, nb["neighbor_id"])
 
             ec_status = parse_etherchannel_status(content)
+            shut = parse_shutdown_interfaces(content)
             pcs = []
             for po, members in summary["portchannels"].items():
                 neighbors = []
@@ -1306,6 +1333,9 @@ def get_portchannel_report(group_filter=None) -> list:
                 pcs.append({
                     "name": po,
                     "members": members,
+                    # Membri spenti da configurazione: campo a parte per non
+                    # cambiare la forma di ``members``, che ha altri lettori.
+                    "shut_members": [m for m in members if m in shut],
                     "neighbors": neighbors,
                     "status": st.get("status"),           # up|down|None(sconosciuto)
                     "up": st.get("up"),
@@ -1314,10 +1344,17 @@ def get_portchannel_report(group_filter=None) -> list:
                     "issue_msg": st.get("issue_msg", ""),
                 })
 
+            try:
+                backup_ts = int(os.path.getmtime(os.path.join(root, fn)))
+            except OSError:
+                backup_ts = None
             report.append({
                 "ip": ip,
                 "hostname": hostname,
                 "group": group,
+                # Quando è stato preso il backup: senza, un "2/2 UP" di due
+                # settimane fa e uno di tre minuti fa si leggono uguali.
+                "backup_ts": backup_ts,
                 "portchannels": pcs,
                 "singles": summary["singles"],
             })

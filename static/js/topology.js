@@ -47,6 +47,15 @@
                 return;
             }
             const toText = currentLang==='en' ? 'to' : 'verso';
+            // L'eta' del backup va detta: un "2/2 UP" di due settimane fa e uno
+            // di tre minuti fa altrimenti si leggono uguali.
+            const age = ts => {
+                if (!ts) return '';
+                const h = (Date.now() / 1000 - ts) / 3600;
+                const txt = h < 1 ? `${Math.max(1, Math.round(h * 60))} min`
+                    : (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} g`);
+                return `<span style="font-size:11px; color:${h > 168 ? 'var(--warning)' : 'var(--text-muted)'};" title="${currentLang==='en'?'backup age':'eta del backup'}"> · backup ${escapeHtml(txt)} fa</span>`;
+            };
             box.innerHTML = devices.map(d => {
                 const pcs = (d.portchannels || []).slice().sort((a,b)=>{
                     const na=parseInt(String(a.name).replace(/\D/g,''))||0, nb=parseInt(String(b.name).replace(/\D/g,''))||0; return na-nb;
@@ -55,9 +64,14 @@
                     const neigh = (po.neighbors && po.neighbors.length)
                         ? `<span style="font-size:11px; color:var(--primary);"> <i class="fa-solid fa-arrow-right-long"></i> ${toText} <strong>${po.neighbors.map(escapeHtml).join(', ')}</strong></span>`
                         : `<span style="font-size:11px; color:var(--text-muted);"> <i class="fa-solid fa-arrow-right-long"></i> ${currentLang==='en'?'unknown neighbor':'vicino sconosciuto'}</span>`;
-                    // Stato operativo: verde se tutto su, rosso/giallo se c'è un problema.
+                    // Stato operativo. Lo stato VIVO (SNMP) vince sul backup:
+                    // descrive adesso, non l'ultimo salvataggio.
                     let stateBadge = '';
-                    if (po.status === 'up' && !po.issue) {
+                    if (po.live_total) {
+                        const ok = po.live_up === po.live_total;
+                        const col = ok ? 'var(--success)' : '#ff6b7c';
+                        stateBadge = `<span title="${currentLang==='en'?'Live SNMP state':'Stato vivo da SNMP'}" style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-tower-broadcast"></i> ${po.live_up}/${po.live_total} UP</span>`;
+                    } else if (po.status === 'up' && !po.issue) {
                         stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
                     } else if (po.issue) {
                         const down = po.status === 'down';
@@ -65,7 +79,17 @@
                     }
                     return `<div style="margin-bottom:6px;">
                         <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po.name)}</span>
-                        <span style="font-family:var(--font-code); font-size:12px; color:var(--success);">${(po.members||[]).map(escapeHtml).join(', ')}</span>
+                        <span style="font-family:var(--font-code); font-size:12px;">${(po.members||[]).map(m => {
+                            const st = (po.live || {})[m];
+                            const shut = (po.shut_members || []).includes(m);
+                            const down = shut || (st && String(st.link).toLowerCase() === 'down');
+                            const title = shut ? (currentLang==='en'?'administratively shut':'spenta da configurazione')
+                                : (down ? (currentLang==='en'?'link down':'link giu') : '');
+                            // Un membro spento resta membro, ma non compone il
+                            // bundle: mostrarlo verde come gli altri fa credere
+                            // che l'aggregato sia integro.
+                            return `<span style="color:${down ? '#ff6b7c' : 'var(--success)'};"${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(m)}${shut ? ' ⛔' : ''}</span>`;
+                        }).join(', ')}</span>
                         <span style="font-size:11px; color:var(--text-muted);"> (${(po.members||[]).length} ${currentLang==='en'?'members':'membri'})</span>
                         ${stateBadge}
                         ${neigh}
@@ -73,7 +97,7 @@
                 }).join('')
                     : `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No Port-Channels.':'Nessun Port-Channel.'}</div>`;
                 return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px;">
-                    <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span></h4>
+                    <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span>${age(d.backup_ts)}</h4>
                     ${pcHtml}
                 </div>`;
             }).join('');
