@@ -28,7 +28,7 @@ import time
 from typing import Optional
 
 from core import db
-from observability import metrics, normalize, rules
+from observability import endpoints, metrics, normalize, rules
 
 logger = logging.getLogger("sentinelnet.obs")
 
@@ -49,6 +49,10 @@ _running = False
 
 def _switch_port_for(src_ip: str, tenant: str) -> Optional[str]:
     """Posizione fisica best-effort del client (switch/porta), stesso tenant."""
+    if not endpoints.is_endpoint(src_ip):
+        # Multicast, broadcast, loopback: nessuna porta di switch da trovare.
+        # La query su mac_history sarebbe garantita a vuoto.
+        return None
     try:
         from collectors import mac_history
         entries = mac_history.client_map(ip=src_ip, tenants=[tenant], limit=1)

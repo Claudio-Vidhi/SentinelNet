@@ -294,8 +294,17 @@ async def obs_events(
             ORDER BY ts DESC
             LIMIT ? OFFSET ?""",
         (cutoff, *params, *type_params, *entity_params, limit, page * limit))
+    # Classificazione DERIVATA in lettura, mai salvata dentro l'evento: quando
+    # la Endpoint KB impara un ruolo nuovo, migliora anche il passato.
+    from observability import endpoints
+    events = []
+    for r in rows:
+        row = dict(r)
+        row["src_info"] = endpoints.classify(row.get("src_ip"))
+        row["dst_info"] = endpoints.classify(row.get("dst_ip"))
+        events.append(row)
     return {"window": window, "event_type": event_type, "page": page,
-            "events": [dict(r) for r in rows]}
+            "events": events}
 
 
 @router.get("/api/observability/anomalies")

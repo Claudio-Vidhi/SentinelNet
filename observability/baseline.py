@@ -35,7 +35,7 @@ import time
 from typing import Optional
 
 from core import db
-from observability import metrics
+from observability import endpoints, metrics
 
 logger = logging.getLogger("sentinelnet.obs")
 
@@ -209,6 +209,11 @@ def detect_emergence(conn, hour: int, now: int) -> int:
 
         for src_ip, total in entities:
             if src_ip in seen:
+                continue
+            if not endpoints.is_endpoint(src_ip):
+                # 0.0.0.0 di un DHCP discover, un APIPA, un multicast come
+                # sorgente: non sono host che "compaiono", e segnalarli
+                # produrrebbe rumore garantito a ogni ciclo.
                 continue
             conn.execute(
                 """INSERT INTO events

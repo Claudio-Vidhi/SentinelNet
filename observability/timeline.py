@@ -24,6 +24,7 @@ from datetime import datetime
 from typing import Optional
 
 from core import db
+from observability import endpoints
 
 logger = logging.getLogger("sentinelnet.obs")
 
@@ -113,6 +114,7 @@ def build(incident_id: int) -> list:
             entries += _flow_entries(conn, tenant, ip_list, frm, to)
             entries += _api_entries(conn, tenant, ip_list, frm, to)
             entries += _location_entries(tenant, ip_list)
+            entries += _endpoint_entries(ip_list)
 
         entries.sort(key=lambda e: e["ts"])
         return entries
@@ -157,6 +159,24 @@ def _flow_entries(conn, tenant, ips, frm, to) -> list:
         "text": f"{_human_bytes(r['total_bytes'] or 0)} in {r['pairs']} flussi",
         "ref": {"bytes": r["total_bytes"], "packets": r["total_packets"]},
     } for r in rows]
+
+
+def _endpoint_entries(ips: list) -> list:
+    """Cosa SONO gli indirizzi coinvolti, quando hanno un ruolo noto.
+
+    Voce senza tempo proprio (ts 0, resta in testa): non è successo nulla, è
+    contesto che aiuta a leggere tutto il resto della timeline."""
+    out = []
+    for ip in ips:
+        info = endpoints.classify(ip)
+        if not info or not info["role"]:
+            continue
+        out.append({
+            "ts": 0, "source": "endpoint", "severity": None,
+            "text": f"{ip} è {info['label']} ({info['category']}, {info['scope']})",
+            "ref": info,
+        })
+    return out
 
 
 def _api_entries(conn, tenant, ips, frm, to) -> list:
