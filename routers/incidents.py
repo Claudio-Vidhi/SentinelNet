@@ -19,7 +19,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core import db
-from observability import flowpath, rules, timeline
+from observability import flowpath, rules, suppression, timeline
 from routers.deps import (get_current_user, require_admin, require_operator,
                           user_group_scope)
 from routers.observability import MAX_LIMIT, _parse_window, _tenant_filter
@@ -86,14 +86,19 @@ def set_rule_parameters(rule_id: str, payload: dict,
             "effective": rules.params_for(rule_id)}
 
 
+INSTABILITY_WINDOW_S = 86400
+
+
 @router.get("/interfaces")
 async def list_interfaces(current_user = Depends(get_current_user)):
-    """Interfacce viste dal motore, con l'ultimo stato noto e la conferma
-    dell'operatore.
+    """Interfacce viste dal motore: ultimo stato, instabilità recente e la
+    soppressione che le copre.
 
-    Serve a togliere rumore PRIMA che diventi tale: Loopback, Null e VLAN
-    dismesse sono giù per progetto, e senza un posto in cui dirlo ogni loro
-    transizione finisce in un incidente."""
+    Serve a due cose opposte. Togliere rumore prima che diventi tale (Loopback,
+    Null e VLAN dismesse sono giù per progetto), e MOSTRARE l'instabilità anche
+    quando non è mai diventata un incidente: la regola guarda una finestra di
+    correlazione, questa vista guarda un giorno intero, quindi una porta che
+    oscilla piano compare qui pur non scattando mai."""
     clause, params = _tenant_filter(current_user)
     rows = await db.read(
         f"""SELECT tenant, device_ip, interface, attrs_json, ts FROM events
@@ -103,57 +108,125 @@ async def list_interfaces(current_user = Depends(get_current_user)):
                          GROUP BY tenant, entity_id)
             ORDER BY device_ip, interface LIMIT ?""",
         (*params, MAX_LIMIT))
-    expected = rules.expected_down()
+    now = int(time.time())
+    flaps = await _link_transitions(current_user, now - INSTABILITY_WINDOW_S)
     out = []
     for r in rows:
-        key = rules.expectation_key(r["tenant"], r["device_ip"],
-                                    r["interface"])
         attrs = _parse_json(r["attrs_json"])
+        rule = suppression.active(r["tenant"], f"ip:{r['device_ip']}",
+                                  r["interface"], now)
         out.append({"tenant": r["tenant"], "device_ip": r["device_ip"],
                     "interface": r["interface"], "ts": r["ts"],
                     "link": attrs.get("link"),
                     "admin_status": attrs.get("admin_status"),
-                    "expected_down": key in expected,
-                    "note": (expected.get(key) or {}).get("note", "")})
-    return {"interfaces": out}
+                    "transitions": flaps.get((r["tenant"], r["device_ip"],
+                                              r["interface"]), 0),
+                    "suppressed": rule is not None,
+                    "scope": ("device" if rule and not rule.get("interface")
+                              else "interface") if rule else None,
+                    "from_ts": (rule or {}).get("from_ts"),
+                    "to_ts": (rule or {}).get("to_ts"),
+                    "note": (rule or {}).get("note", "")})
+    return {"interfaces": out, "window_s": INSTABILITY_WINDOW_S,
+            "min_transitions": rules.params_for("IFACE_FLAPPING_001")["min_transitions"],
+            "suppressions": _visible_suppressions(current_user)}
+
+
+async def _link_transitions(current_user, since: int) -> dict:
+    """{(tenant, device_ip, interface): transizioni di link} nella finestra.
+
+    Solo il campo ``link``: uno shutdown amministrativo è una decisione, non
+    instabilità, e contarlo qui farebbe sembrare inaffidabile una porta che
+    qualcuno ha semplicemente spento."""
+    clause, params = _tenant_filter(current_user)
+    rows = await db.read(
+        f"""SELECT tenant, device_ip, interface, COUNT(*) AS n FROM events
+            WHERE event_type = 'interface.change' AND ts >= ?{clause}
+              AND json_extract(attrs_json, '$.field') LIKE '%.link'
+            GROUP BY tenant, device_ip, interface""",
+        (since, *params))
+    return {(r["tenant"], r["device_ip"], r["interface"]): r["n"] for r in rows}
+
+
+def _visible_suppressions(current_user) -> list:
+    """Tutte le soppressioni dello scope, anche scadute: mostrarle spente è ciò
+    che rende leggibile *perché* un incidente di ieri non è mai nato."""
+    scope = user_group_scope(current_user)
+    now = int(time.time())
+    out = []
+    for key, rule in suppression.all_rules().items():
+        if not isinstance(rule, dict):
+            continue
+        if scope is not None and rule.get("tenant") not in scope:
+            continue
+        out.append({**rule, "key": key, "expired": suppression.expired(rule, now)})
+    return sorted(out, key=lambda r: (r.get("entity_key") or "",
+                                      r.get("interface") or ""))
 
 
 @router.post("/interfaces/expected")
-async def set_interface_expectation(payload: dict,
-                                    current_user = Depends(require_operator)):
-    """Conferma (o revoca) che una interfaccia è giù per progetto.
+async def set_suppression(payload: dict,
+                          current_user = Depends(require_operator)):
+    """Dichiara che qualcosa è atteso, con o senza scadenza.
+
+    Nessuna finestra = "è così per progetto". Con ``to_ts`` = manutenzione
+    pianificata. Sono lo stesso modello: 'per sempre' è il caso senza scadenza,
+    non un caso speciale.
 
     Non cancella e non nasconde niente: l'evento resta in ``events`` e nel
-    feed. Cambia solo se ``IFACE_DOWN_001`` lo consideri un sintomo — cioè
-    l'interpretazione, che è dove la conoscenza dell'operatore deve entrare."""
+    feed. Cambia solo se le regole ne traggano un'evidenza — l'interpretazione,
+    che è dove la conoscenza dell'operatore deve entrare."""
     from core.app_settings import get_app_settings, save_app_settings
 
     tenant = str((payload or {}).get("tenant") or "")
     device_ip = str((payload or {}).get("device_ip") or "")
-    interface = str((payload or {}).get("interface") or "")
-    if not (tenant and device_ip and interface):
+    # Interfaccia assente = tutto l'apparato (manutenzione sul nodo).
+    interface = str((payload or {}).get("interface") or "") or None
+    if not (tenant and device_ip):
         raise HTTPException(status_code=400,
-                            detail="tenant, device_ip e interface sono richiesti.")
+                            detail="tenant e device_ip sono richiesti.")
     scope = user_group_scope(current_user)
     if scope is not None and tenant not in scope:
         # Stesso 404 di una risorsa inesistente: non si conferma l'esistenza
         # di un tenant fuori scope.
         raise HTTPException(status_code=404, detail="Interface not found.")
 
-    key = rules.expectation_key(tenant, device_ip, interface)
-    saved = dict(get_app_settings().get("interface_expectations") or {})
-    if (payload or {}).get("expected_down"):
-        saved[key] = {"note": str((payload or {}).get("note") or "")[:200],
-                      "by": current_user.get("sub"), "ts": int(time.time())}
-        action = "confermata attesa giù"
+    frm = _optional_ts(payload, "from_ts")
+    to = _optional_ts(payload, "to_ts")
+    if frm is not None and to is not None and to <= frm:
+        raise HTTPException(status_code=400,
+                            detail="La fine della finestra precede l'inizio.")
+
+    entity_key = f"ip:{device_ip}"
+    key = suppression.key(tenant, entity_key, interface)
+    saved = dict(get_app_settings().get("suppressions") or {})
+    if (payload or {}).get("suppressed"):
+        saved[key] = {"tenant": tenant, "entity_key": entity_key,
+                      "device_ip": device_ip, "interface": interface,
+                      "from_ts": frm, "to_ts": to,
+                      "note": str((payload or {}).get("note") or "")[:200],
+                      "by": current_user.get("sub"),
+                      "created_ts": int(time.time())}
+        window = "sempre" if to is None else f"fino a {to}"
+        action = f"soppressa ({window})"
     else:
         saved.pop(key, None)
         action = "riportata sotto osservazione"
-    save_app_settings({"interface_expectations": saved})
-    log_audit(f"Interfaccia {device_ip}:{interface} ({tenant}) {action} da "
-              f"'{current_user.get('sub')}'.")
-    return {"status": "success", "key": key,
-            "expected_down": key in saved}
+    save_app_settings({"suppressions": saved})
+    log_audit(f"{device_ip}:{interface or 'tutto l apparato'} ({tenant}) "
+              f"{action} da '{current_user.get('sub')}'.")
+    return {"status": "success", "key": key, "suppressed": key in saved}
+
+
+def _optional_ts(payload: dict, name: str):
+    """Estremo di finestra: assente o vuoto = aperto."""
+    raw = (payload or {}).get(name)
+    if raw in (None, ""):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"'{name}' non valido.")
 
 
 @router.get("")
