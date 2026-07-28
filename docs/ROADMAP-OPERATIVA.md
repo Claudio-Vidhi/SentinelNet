@@ -13,7 +13,7 @@ obiettivo diverso, e va tenuto distinto.
 | # | Voce | Stato | Nota |
 |---|------|-------|------|
 | 1 | Flapping detection | **fatto** | `IFACE_FLAPPING_001` |
-| 2 | Soppressione con finestra (Scheduled Downtime) | da fare | unificare con `interface_expectations` |
+| 2 | Soppressione con finestra (Scheduled Downtime) | **fatto** | `observability/suppression.py`, applicata nel correlatore |
 | 3 | Conferma prima di concludere | da fare | il debito che esplode con le notifiche |
 | 4 | `device.unreachable` | da fare | il silenzio deve diventare un fatto |
 | 5 | Acknowledgement completo | da fare | 3 colonne, non una funzionalità |

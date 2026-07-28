@@ -28,7 +28,7 @@ import time
 from typing import Optional
 
 from core import db
-from observability import endpoints, metrics, normalize, rules
+from observability import endpoints, metrics, normalize, rules, suppression
 
 logger = logging.getLogger("sentinelnet.obs")
 
@@ -152,6 +152,7 @@ def correlate_once(now: Optional[int] = None) -> int:
         # invalidare solo ciò che esisteva al giro precedente — e il caso
         # interessante (il fatto che smonta la conclusione arriva nella stessa
         # finestra) non funzionerebbe mai.
+        suppressed = 0
         for rule_id, version, params, item in produced:
             if isinstance(item, rules.Retraction):
                 continue
@@ -159,6 +160,15 @@ def correlate_once(now: Optional[int] = None) -> int:
                 logger.warning(
                     "Regola %s ha prodotto un ruolo '%s' non dichiarato in "
                     "outputs: evidenza scartata.", rule_id, item.role)
+                continue
+            # Filtro in UN posto solo, non regola per regola: una manutenzione
+            # deve zittire tutto ciò che riguarda quell'apparato, non soltanto
+            # le regole a cui qualcuno si è ricordato di aggiungere il
+            # controllo. Si valuta sul tempo dell'EVENTO: una finestra di ieri
+            # notte copre i fatti di ieri notte anche se li rileggiamo adesso.
+            if suppression.active(item.tenant, item.entity_key,
+                                  item.interface, item.ts) is not None:
+                suppressed += 1
                 continue
             emitted += _insert_finding(conn, now, rule_id, version,
                                        params, item)[1]
@@ -175,6 +185,13 @@ def correlate_once(now: Optional[int] = None) -> int:
         conn.commit()
         metrics.set_gauge("last_correlation_ts", now)
         metrics.inc("evidence_emitted", emitted)
+        if suppressed:
+            # Contato, non silenzioso: una soppressione sbagliata deve essere
+            # visibile da qualche parte, altrimenti spegne il motore senza
+            # che nessuno se ne accorga.
+            metrics.inc("findings_suppressed", suppressed)
+            logger.info("Correlazione: %d conclusioni soppresse da finestre "
+                        "dichiarate dall'operatore.", suppressed)
         return emitted
     finally:
         conn.close()

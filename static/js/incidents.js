@@ -85,55 +85,105 @@
         loadInterfaceExpectations();
     }
 
-    // Conoscenza dell'OPERATORE, non della rete: una porta giù per progetto
-    // resta giù, e senza un posto in cui dirlo ogni sua transizione diventa
-    // rumore che nasconde quello vero.
+    // Conoscenza dell'OPERATORE, non della rete. Stesso modello per "e' giu'
+    // per progetto" e per "e' in manutenzione stanotte": cambia solo se c'e'
+    // una scadenza. Tenerli separati darebbe due posti dove cercare perche' un
+    // allarme non e' scattato.
     async function loadInterfaceExpectations() {
         const box = document.getElementById('incidentInterfaces');
         if (!box) return;
         try {
             const res = await apiFetch('/api/incidents/interfaces');
             if (!res || !res.ok) { box.innerHTML = ''; return; }
-            const rows = (await res.json()).interfaces || [];
+            const data = await res.json();
+            // Le instabili in cima: e' la ragione per cui si apre questo
+            // pannello. A parita', l'ordine resta quello dell'apparato.
+            const rows = (data.interfaces || []).slice().sort(
+                (a, b) => (b.transitions || 0) - (a.transitions || 0));
+            const soglia = data.min_transitions || 4;
+            const ore = Math.round((data.window_s || 86400) / 3600);
             if (!rows.length) {
                 box.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">Nessuna interfaccia ancora osservata. Serve almeno un giro di polling (REST o SNMP).</div>';
                 return;
             }
-            const dot = s => {
-                const down = String(s || '').toLowerCase() === 'down';
-                return `<span style="color:${down ? 'var(--danger)' : 'var(--success)'}; font-size:11px;">${escapeHtml(jsStr(s || '?'))}</span>`;
+            const dot = st => {
+                const down = String(st || '').toLowerCase() === 'down';
+                return `<span style="color:${down ? 'var(--danger)' : 'var(--success)'}; font-size:11px;">${escapeHtml(jsStr(st || '?'))}</span>`;
+            };
+            const local = ts => {
+                if (!ts) return '';
+                const d = new Date(ts * 1000);
+                return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                    .toISOString().slice(0, 16);
+            };
+            // L'instabilita' va MOSTRATA anche quando non e' diventata un
+            // incidente: la regola guarda la finestra di correlazione, questa
+            // colonna guarda un giorno, quindi una porta che oscilla piano
+            // compare qui pur non scattando mai.
+            const flap = n => {
+                if (!n) return '<span style="color:var(--text-muted);">—</span>';
+                const grave = n >= soglia;
+                return `<span title="transizioni di link nelle ultime ${ore} ore${grave ? ' — oltre la soglia della regola' : ''}"
+                    style="color:${grave ? 'var(--danger)' : 'var(--warning)'}; font-weight:${grave ? '700' : '400'};">${n}${grave ? ' ⚠' : ''}</span>`;
             };
             box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
-                <thead><tr>${['Apparato','Interfaccia','Link','Admin','Atteso giù','Nota']
+                <thead><tr>${['Apparato','Interfaccia','Link','Admin',`Transizioni ${ore}h`,'Atteso','Fino a (vuoto = sempre)','Nota']
                     .map(h => `<th style="text-align:left; padding:6px 8px; font-size:11px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border);">${h}</th>`).join('')}</tr></thead>
-                <tbody>${rows.map((r, i) => `<tr>
+                <tbody>${rows.map((r, i) => `<tr${r.scope === 'device' ? ' style="opacity:.6;"' : ''}>
                     <td style="padding:6px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.device_ip))}</td>
                     <td style="padding:6px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.interface))}</td>
                     <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${dot(r.link)}</td>
                     <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${dot(r.admin_status)}</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">${flap(r.transitions)}</td>
                     <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
-                        <input type="checkbox" id="ifx-${i}" ${r.expected_down ? 'checked' : ''}
+                        <input type="checkbox" id="ifx-${i}" ${r.suppressed ? 'checked' : ''}
+                               ${r.scope === 'device' ? "disabled title=\"coperta da manutenzione sull intero apparato\"" : ''}
                                onchange="saveInterfaceExpectation(${i})" style="accent-color:var(--primary);"></td>
                     <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
-                        <input type="text" id="ifn-${i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="perché"
+                        <input type="datetime-local" id="ifu-${i}" value="${escapeHtml(jsStr(local(r.to_ts)))}"
+                               onchange="saveInterfaceExpectation(${i})"
+                               style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
+                    <td style="padding:6px 8px; border-bottom:1px solid var(--border);">
+                        <input type="text" id="ifn-${i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="perche'"
                                style="width:100%; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
                 </tr>`).join('')}</tbody></table>
-                <div id="ifxStatus" style="font-size:11px; color:var(--text-muted); margin-top:6px;"></div>`;
+                <div id="ifxStatus" style="font-size:11px; color:var(--text-muted); margin-top:6px;"></div>
+                ${renderSuppressionList(data.suppressions || [])}`;
             _interfaces = rows;
         } catch (e) { box.innerHTML = ''; }
+    }
+
+    // Anche quelle scadute: mostrarle spente e' cio' che rende leggibile
+    // perche' un incidente di ieri non e' mai nato.
+    function renderSuppressionList(list) {
+        if (!list.length) return '';
+        const when = r => r.to_ts
+            ? `fino al ${new Date(r.to_ts * 1000).toLocaleString()}`
+            : 'senza scadenza';
+        return `<div style="margin-top:12px; font-size:11px;">
+            <div style="color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-bottom:6px;">Soppressioni dichiarate</div>
+            ${list.map(r => `<div style="padding:4px 0; border-bottom:1px solid var(--border); ${r.expired ? 'opacity:.45; text-decoration:line-through;' : ''}">
+                <code>${escapeHtml(jsStr(r.device_ip || ''))}</code>${r.interface ? ':' + escapeHtml(jsStr(r.interface)) : " <em>(tutto l apparato)</em>"}
+                — ${escapeHtml(jsStr(when(r)))}
+                ${r.note ? ' · ' + escapeHtml(jsStr(r.note)) : ''}
+                <span style="color:var(--text-muted);">· ${escapeHtml(jsStr(r.by || ''))}</span>
+            </div>`).join('')}
+        </div>`;
     }
 
     async function saveInterfaceExpectation(index) {
         const row = _interfaces[index];
         if (!row) return;
         const st = document.getElementById('ifxStatus');
+        const until = document.getElementById(`ifu-${index}`).value;
         const res = await apiFetch('/api/incidents/interfaces/expected', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tenant: row.tenant, device_ip: row.device_ip,
                 interface: row.interface,
-                expected_down: document.getElementById(`ifx-${index}`).checked,
+                suppressed: document.getElementById(`ifx-${index}`).checked,
+                to_ts: until ? Math.floor(new Date(until).getTime() / 1000) : null,
                 note: document.getElementById(`ifn-${index}`).value
             })
         });
@@ -143,12 +193,11 @@
             if (st) st.textContent = err.detail || 'Errore.';
             return;
         }
-        row.expected_down = (await res.json()).expected_down;
-        if (st) st.textContent = `${row.device_ip}:${row.interface} aggiornata.`;
+        await loadInterfaceExpectations();
+        const box = document.getElementById('ifxStatus');
+        if (box) box.textContent = `${row.device_ip}:${row.interface} aggiornata.`;
     }
 
-    // Il pannello non conosce le regole: le legge dal catalogo, che è generato
-    // dal codice del motore. Aggiungere una regola non richiede toccare la UI.
     async function loadRuleCatalog() {
         const box = document.getElementById('incidentRules');
         if (!box) return;

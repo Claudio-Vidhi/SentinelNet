@@ -66,11 +66,12 @@ class Finding:
     """Una evidenza proposta da una regola. Non è ancora un incidente."""
 
     __slots__ = ("event_id", "ts", "tenant", "role", "entity_key", "severity",
-                 "src_ip", "dst_ip", "switch_port", "summary", "attrs", "key")
+                 "src_ip", "dst_ip", "switch_port", "summary", "attrs", "key",
+                 "interface")
 
     def __init__(self, event_id, ts, tenant, role, entity_key, summary,
                  severity=None, src_ip=None, dst_ip=None, switch_port=None,
-                 attrs=None, key=None):
+                 attrs=None, key=None, interface=None):
         assert role in ROLES, f"ruolo non ammesso: {role}"
         # ``key``: discriminante quando la STESSA regola trae più conclusioni
         # distinte dallo STESSO evento (CPU e memoria dallo stesso snapshot).
@@ -78,6 +79,10 @@ class Finding:
         # regola a dichiararlo, perché è l'unica a sapere di aver risposto a
         # due domande diverse.
         self.key = key
+        # Quale porta riguarda, quando ne riguarda una: senza, una manutenzione
+        # su una singola interfaccia non sarebbe distinguibile da una
+        # sull'intero apparato.
+        self.interface = interface
         self.event_id = event_id
         self.ts = ts
         self.tenant = tenant
@@ -239,36 +244,15 @@ def _config_change(events: list, p: dict) -> list:
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="trigger",
             entity_key=f"ip:{ev['device_ip']}", severity=ev["severity"],
+            interface=ev["interface"],
             summary=f"Modifica su {where}: {attrs.get('field')} "
                     f"{attrs.get('before')} → {attrs.get('after')}",
             attrs=attrs))
     return out
 
 
-def expectation_key(tenant, device_ip, interface) -> str:
-    """Chiave di una interfaccia dichiarata 'attesa giù' dall'operatore."""
-    return f"{tenant}|{device_ip}|{interface}"
-
-
-def expected_down() -> dict:
-    """Interfacce che l'operatore ha confermato come volutamente giù.
-
-    Non è una regola e non è un fatto della rete: è CONOSCENZA DELL'OPERATORE,
-    e vive dove vive il resto della configurazione. Una Loopback, una Null0 o
-    una VLAN dismessa sono giù per progetto, e segnalarle a ogni transizione
-    riempie gli incidenti di rumore che nasconde quello vero.
-
-    Non sopprime nulla a monte: l'evento resta in ``events`` e resta visibile
-    nel feed. Cambia solo l'INTERPRETAZIONE — che è esattamente il posto in cui
-    la conoscenza di chi gestisce la rete deve entrare.
-    """
-    saved = get_app_settings().get("interface_expectations")
-    return saved if isinstance(saved, dict) else {}
-
-
 def _interface_down(events: list, p: dict) -> list:
     """Interfaccia passata a down: sintomo osservato sullo stato, non causa."""
-    expected = expected_down()
     out = []
     for ev in events:
         if ev["event_type"] != "interface.change":
@@ -279,12 +263,10 @@ def _interface_down(events: list, p: dict) -> list:
         if "link" not in str(attrs.get("field", "")).lower() \
                 and "status" not in str(attrs.get("field", "")).lower():
             continue
-        if expectation_key(ev["tenant"], ev["device_ip"],
-                           ev["interface"]) in expected:
-            continue
         out.append(Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"], role="symptom",
             entity_key=f"ip:{ev['device_ip']}", severity=ev["severity"],
+            interface=ev["interface"],
             summary=f"Interfaccia {ev['interface']} passata a down",
             attrs=attrs))
     return out
@@ -326,7 +308,7 @@ def _interface_flapping(events: list, p: dict) -> list:
             event_id=seen[-1]["id"], ts=seen[-1]["ts"], tenant=tenant,
             role="trigger", entity_key=f"ip:{device_ip}", severity=3,
             # Due porte instabili sullo stesso apparato sono due conclusioni.
-            key=f"flap:{interface}",
+            key=f"flap:{interface}", interface=interface,
             summary=f"Interfaccia {interface} instabile: {len(seen)} "
                     f"transizioni in {max(span // 60, 1)} minuti",
             attrs={"interface": interface, "transitions": len(seen),
@@ -554,6 +536,7 @@ def _interface_recovered(events: list, p: dict) -> list:
         witness = Finding(
             event_id=ev["id"], ts=ev["ts"], tenant=ev["tenant"],
             role="consequence", entity_key=f"ip:{ev['device_ip']}",
+            interface=ev["interface"],
             summary=f"Interfaccia {ev['interface']} tornata su",
             attrs=attrs)
         out.append(Retraction(
