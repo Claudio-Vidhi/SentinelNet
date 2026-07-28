@@ -126,7 +126,7 @@ rifiuta di partire (contratto di rollback §6.3).
 | `syslog_events` | ingester syslog | `/syslog`, **tutto Flow SIEM**, correlatore | `action` = verdetto reale dell'apparato |
 | `correlated_events` | correlatore | `/anomalies`, KPI "spikes" | `dedup_key UNIQUE` + `INSERT OR IGNORE` |
 | `siem_suppressions` | `POST /alerts/suppress` | esclusione in `/events` e `/facets` | PK = `syslog_events.id` |
-| `quarantined_exporters` | ingest | diagnostica | exporter non in inventario |
+| `quarantined_exporters` | ingest | `normalize._from_quarantine` → `platform.exporter_unknown` → `FLOW_EXPORTER_UNKNOWN_001` | exporter non in inventario; la perdita di dati diventa evidenza sul tenant riservato `__platform__` invece di restare solo diagnostica |
 | `api_observations` | api_poller REST | `/api-context` | snapshot FortiGate, non flussi |
 
 ### 3.1 Retention ([observability/rollup.py](observability/rollup.py))

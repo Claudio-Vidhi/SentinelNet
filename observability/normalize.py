@@ -10,6 +10,12 @@ Adapter attivi (solo sorgenti già raccolte oggi):
 - ``flow_aggregates``  → ``flow.aggregate``   (entità flow)
 - ``syslog_events``    → ``log.security`` / ``log.event``   (entità device)
 - ``api_observations`` → ``device.state`` + ``device.change`` (entità device)
+- ``quarantined_exporters`` → ``platform.exporter_unknown`` (entità exporter)
+
+L'ultimo non osserva la rete: osserva la PIATTAFORMA. Ha lo stesso posto degli
+altri perché è lo stesso tipo di cosa — un fatto misurato — e passando dal bus
+degli eventi eredita regole, evidenze, incidenti, timeline e catalogo senza un
+percorso parallelo per la diagnostica interna.
 
 Avanzamento: ``normalize_cursors`` tiene la posizione per sorgente. Il rientro
 è comunque idempotente grazie a ``dedup_key`` UNIQUE, quindi un cursore
@@ -33,6 +39,14 @@ logger = logging.getLogger("sentinelnet.obs")
 LOOKBACK_S = 3600         # quanto indietro guardare al primo giro / dopo un fermo
 MAX_ROWS_PER_SOURCE = 2000
 MAX_CHANGES_PER_SNAPSHOT = 20
+
+# Tenant riservato ai fatti che riguardano la piattaforma e non una sede.
+# Un exporter fuori inventario non è attribuibile a nessun tenant — è il motivo
+# stesso per cui i suoi record vengono scartati — quindi non può prenderne uno
+# in prestito. Lo scope multi-tenant lo rende così visibile solo a chi non ha
+# restrizioni di gruppo, cioè a chi amministra la piattaforma.
+PLATFORM_TENANT = "__platform__"
+QUARANTINE_BUCKET_S = 600
 
 # Campi che cambiano a ogni poll per costruzione (contatori, uptime, sessioni):
 # confrontarli produrrebbe un "cambiamento" ogni 5 minuti su ogni apparato.
@@ -292,6 +306,45 @@ def _from_api_observations(conn, now: int) -> int:
     return len(rows)
 
 
+# --- ADAPTER: SALUTE DELLA PIATTAFORMA ---------------------------------------
+
+def _from_quarantine(conn, now: int) -> int:
+    """Exporter che continuano a inviare da un IP fuori inventario.
+
+    L'ingestione li scarta di proposito (attribuirli a una sede sbagliata è
+    peggio che perderli), ma scartarli in SILENZIO significa perdere dati senza
+    dirlo: qui il fatto entra nel bus come tutti gli altri.
+
+    Nessun cursore: la tabella è un upsert per exporter, non una coda. La
+    finestra su ``last_seen`` è già il filtro — un exporter che ha smesso di
+    inviare smette da solo di produrre eventi, e l'incidente si chiude per
+    quiete come qualunque altro.
+
+    Il bucket tiene ``ingested_ts`` fresco mentre la quarantena dura: il
+    correlatore guarda una finestra di 15 minuti, quindi un fatto emesso una
+    volta sola e poi solo aggiornato in place gli uscirebbe di vista subito.
+    """
+    rows = conn.execute(
+        """SELECT exporter_ip, first_seen, last_seen, packet_count
+           FROM quarantined_exporters
+           WHERE last_seen >= ?
+           ORDER BY last_seen ASC LIMIT ?""",
+        (now - LOOKBACK_S, MAX_ROWS_PER_SOURCE)).fetchall()
+    for r in rows:
+        bucket = (r["last_seen"] // QUARANTINE_BUCKET_S) * QUARANTINE_BUCKET_S
+        _emit(conn,
+              ts=bucket, ingested_ts=now, tenant=PLATFORM_TENANT,
+              source="platform", event_type="platform.exporter_unknown",
+              entity_type="exporter", entity_id=r["exporter_ip"],
+              severity=5, device_ip=r["exporter_ip"], src_ip=r["exporter_ip"],
+              metrics={"packets": r["packet_count"],
+                       "persisted_s": max(0, r["last_seen"] - r["first_seen"])},
+              attrs={"first_seen": r["first_seen"], "last_seen": r["last_seen"],
+                     "status": "quarantined"},
+              dedup_key=f"quarantine:{r['exporter_ip']}:{bucket}")
+    return len(rows)
+
+
 # --- CICLO -------------------------------------------------------------------
 
 def normalize_once(now: Optional[int] = None) -> dict:
@@ -304,6 +357,7 @@ def normalize_once(now: Optional[int] = None) -> dict:
             "flow": _from_flows(conn, now),
             "syslog": _from_syslog(conn, now),
             "api": _from_api_observations(conn, now),
+            "quarantine": _from_quarantine(conn, now),
             # Il baseline è un adapter come gli altri: osserva lo storico dei
             # flussi e scrive la misura come fatto. Non conclude nulla.
             "baseline": baseline.compute_once(conn, now),
