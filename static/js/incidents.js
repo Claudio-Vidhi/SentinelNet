@@ -11,22 +11,28 @@
     let _catalog = {};   // rule_id -> definizione, per mostrare cosa fare
     let _interfaces = [];  // ultima vista interfacce, per l'indice dei checkbox
 
+    // Le etichette si risolvono al RENDER, non alla definizione: un oggetto
+    // costante catturerebbe la lingua al caricamento dello script e non si
+    // aggiornerebbe piu' al cambio lingua.
+    const L = k => ((typeof i18n !== 'undefined' && i18n[currentLang]) || {})[k] || k;
+    const metaLabel = m => (m.labelKey ? L(m.labelKey) : (m.label || ''));
+
     const SOURCE_META = {
-        evidence:   { icon: 'fa-scale-balanced', color: 'var(--danger)',   label: 'Evidenza' },
-        syslog:     { icon: 'fa-file-lines',     color: 'var(--warning)',  label: 'Syslog' },
-        flow:       { icon: 'fa-chart-area',     color: 'var(--primary)',  label: 'Flussi' },
-        api:        { icon: 'fa-satellite-dish', color: 'var(--success)',  label: 'Stato apparato' },
-        location:   { icon: 'fa-location-dot',   color: 'var(--text-muted)', label: 'Posizione' },
-        endpoint:   { icon: 'fa-address-card',   color: 'var(--text-muted)', label: 'Indirizzo noto' },
+        evidence:   { icon: 'fa-scale-balanced', color: 'var(--danger)',   labelKey: 'incSrcEvidence' },
+        syslog:     { icon: 'fa-file-lines',     color: 'var(--warning)',  labelKey: 'incSrcSyslog' },
+        flow:       { icon: 'fa-chart-area',     color: 'var(--primary)',  labelKey: 'incSrcFlow' },
+        api:        { icon: 'fa-satellite-dish', color: 'var(--success)',  labelKey: 'incSrcApi' },
+        location:   { icon: 'fa-location-dot',   color: 'var(--text-muted)', labelKey: 'incSrcLocation' },
+        endpoint:   { icon: 'fa-address-card',   color: 'var(--text-muted)', labelKey: 'incSrcEndpoint' },
     };
 
     // Il ruolo causale lo dichiara la regola che ha prodotto l'evidenza: qui si
     // mostra, non si reinterpreta.
     const ROLE_META = {
-        trigger:     { color: 'var(--danger)',    label: 'INNESCO' },
-        supporting:  { color: 'var(--primary)',   label: 'SUPPORTO' },
-        symptom:     { color: 'var(--warning)',   label: 'SINTOMO' },
-        consequence: { color: 'var(--text-muted)', label: 'CONSEGUENZA' },
+        trigger:     { color: 'var(--danger)',    labelKey: 'incRoleTrigger' },
+        supporting:  { color: 'var(--primary)',   labelKey: 'incRoleSupporting' },
+        symptom:     { color: 'var(--warning)',   labelKey: 'incRoleSymptom' },
+        consequence: { color: 'var(--text-muted)', labelKey: 'incRoleConsequence' },
     };
 
     async function applyIncidentsGating() {
@@ -102,7 +108,7 @@
             const data = await res.json();
             const rows = data.interfaces || [];
             if (!rows.length) {
-                box.innerHTML = '<div style="font-size:12px; color:var(--text-muted);">Nessuna interfaccia ancora osservata. Serve almeno un giro di polling (REST o SNMP).</div>';
+                box.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${L('incNoIfacesYet')}</div>`;
                 return;
             }
             _interfaces = rows;
@@ -160,10 +166,10 @@
             <summary style="cursor:pointer; padding:8px 10px; font-size:13px;">
                 <strong style="font-family:var(--font-code);">${escapeHtml(jsStr(name || ip))}</strong>
                 ${name ? `<span style="color:var(--text-muted); font-size:11px; font-family:var(--font-code);"> ${escapeHtml(jsStr(ip))}</span>` : ''}
-                <span style="color:var(--text-muted); font-size:11px;"> · ${list.length} interfacce</span>
+                <span style="color:var(--text-muted); font-size:11px;"> · ${list.length} ${L('incIfaces')}</span>
                 ${down ? badge(down + ' down', 'var(--danger)') : ''}
-                ${unstable ? badge(unstable + ' instabili', 'var(--warning)') : ''}
-                ${devRule ? badge('apparato sotto manutenzione', 'var(--text-muted)') : ''}
+                ${unstable ? badge(unstable + ' ' + L('incUnstable'), 'var(--warning)') : ''}
+                ${devRule ? badge(L('incDevUnderMaint'), 'var(--text-muted)') : ''}
             </summary>
             <div style="padding:0 10px 10px;">
                 ${renderDeviceSuppression(ip, list[0].tenant, devRule)}
@@ -183,13 +189,13 @@
                 <input type="checkbox" id="dvx-${escapeHtml(jsStr(ip))}" ${rule ? 'checked' : ''}
                        onchange="saveDeviceSuppression('${jsStr(tenant)}','${jsStr(ip)}')"
                        style="accent-color:var(--warning);">
-                <span>Tutto l apparato atteso giu (manutenzione)</span>
+                <span>${L('incDevExpectedDown')}</span>
             </label>
             <input type="datetime-local" id="dvu-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr(until))}"
                    onchange="saveDeviceSuppression('${jsStr(tenant)}','${jsStr(ip)}')"
-                   title="fino a quando; vuoto = senza scadenza"
+                   title="${L('incUntilHint')}"
                    style="padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
-            <input type="text" id="dvn-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr((rule || {}).note || ''))}" placeholder="motivo"
+            <input type="text" id="dvn-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr((rule || {}).note || ''))}" placeholder="${L('incReasonPl')}"
                    style="flex:1; min-width:140px; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
         </div>`;
     }
@@ -205,7 +211,7 @@
         const flap = n => {
             if (!n) return '<span style="color:var(--text-muted);">&mdash;</span>';
             const grave = n >= soglia;
-            return `<span title="transizioni di link nelle ultime ${ore} ore${grave ? ' - oltre la soglia della regola' : ''}"
+            return `<span title="${L('incFlapTitle').replace('{h}', ore)}${grave ? L('incFlapOver') : ''}"
                 style="color:${grave ? 'var(--danger)' : 'var(--warning)'}; font-weight:${grave ? '700' : '400'};">${n}${grave ? ' &#9888;' : ''}</span>`;
         };
         const local = ts => {
@@ -215,8 +221,9 @@
                 .toISOString().slice(0, 16);
         };
         const th = t => `<th style="text-align:left; padding:5px 8px; font-size:10px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border);">${t}</th>`;
-        const cols = ['Interfaccia', 'Link', 'Admin', 'Transizioni ' + ore + 'h',
-                      'Atteso', 'Fino a', 'Nota'];
+        const cols = [L('incThInterface'), L('incThLink'), L('incThAdmin'),
+                      L('incThTransitions') + ' ' + ore + 'h',
+                      L('incThExpected'), L('incThUntil'), L('incThNote')];
         return `<table style="width:100%; border-collapse:collapse; font-size:12px;">
             <thead><tr>${cols.map(th).join('')}</tr></thead>
             <tbody>${list.map(r => `<tr${r.scope === 'device' ? ' style="opacity:.55;"' : ''}>
@@ -226,14 +233,14 @@
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">${flap(r.transitions)}</td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
                     <input type="checkbox" id="ifx-${r._i}" ${r.suppressed ? 'checked' : ''}
-                           ${r.scope === 'device' ? 'disabled title="coperta dalla manutenzione dell apparato"' : ''}
+                           ${r.scope === 'device' ? `disabled title="${L('incCoveredByDevice')}"` : ''}
                            onchange="saveInterfaceExpectation(${r._i})" style="accent-color:var(--primary);"></td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
                     <input type="datetime-local" id="ifu-${r._i}" value="${escapeHtml(jsStr(local(r.to_ts)))}"
                            onchange="saveInterfaceExpectation(${r._i})"
                            style="padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
-                    <input type="text" id="ifn-${r._i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="motivo"
+                    <input type="text" id="ifn-${r._i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="${L('incReasonPl')}"
                            style="width:100%; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
             </tr>`).join('')}</tbody></table>`;
     }
@@ -265,12 +272,12 @@
     function renderSuppressionList(list) {
         if (!list.length) return '';
         const when = r => r.to_ts
-            ? `fino al ${new Date(r.to_ts * 1000).toLocaleString()}`
-            : 'senza scadenza';
+            ? `${L('incSuppUntil')} ${new Date(r.to_ts * 1000).toLocaleString()}`
+            : L('incSuppNoExpiry');
         return `<div style="margin-top:12px; font-size:11px;">
-            <div style="color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-bottom:6px;">Soppressioni dichiarate</div>
+            <div style="color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-bottom:6px;">${L('incSuppDeclared')}</div>
             ${list.map(r => `<div style="padding:4px 0; border-bottom:1px solid var(--border); ${r.expired ? 'opacity:.45; text-decoration:line-through;' : ''}">
-                <code>${escapeHtml(jsStr(r.device_ip || ''))}</code>${r.interface ? ':' + escapeHtml(jsStr(r.interface)) : " <em>(tutto l apparato)</em>"}
+                <code>${escapeHtml(jsStr(r.device_ip || ''))}</code>${r.interface ? ':' + escapeHtml(jsStr(r.interface)) : ` <em>${L('incSuppWholeDevice')}</em>`}
                 — ${escapeHtml(jsStr(when(r)))}
                 ${r.note ? ' · ' + escapeHtml(jsStr(r.note)) : ''}
                 <span style="color:var(--text-muted);">· ${escapeHtml(jsStr(r.by || ''))}</span>
@@ -341,9 +348,9 @@
                                           background:var(--surface-2); color:var(--text); font-size:12px;">
                         </div>`).join('')}
                         <button class="btn btn-secondary btn-small" style="width:auto;"
-                                onclick="saveRuleParameters('${jsStr(r.id)}')">Salva soglie</button>
+                                onclick="saveRuleParameters('${jsStr(r.id)}')">${L('incSaveThresholds')}</button>
                         <span id="rp-status-${escapeHtml(jsStr(r.id))}" style="font-size:11px; color:var(--text-muted);"></span>
-                    </div>` : '<div style="font-size:11px; color:var(--text-muted);">Nessuna soglia configurabile.</div>'}
+                    </div>` : `<div style="font-size:11px; color:var(--text-muted);">${L('incNoThresholds')}</div>`}
                 </div>`).join('');
         } catch (e) { box.innerHTML = ''; }
     }
@@ -438,15 +445,16 @@
     function renderReasoning(inc) {
         const r = inc.reasoning || {};
         const rules = (r.rules_fired || []).map(x =>
-            `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || '<span style="color:var(--text-muted);">nessuna</span>';
+            `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
         const sources = (r.sources_used || []).map(x =>
-            `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || '<span style="color:var(--text-muted);">nessuna</span>';
+            `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
         const byRole = r.evidence_by_role || {};
         const roleCounts = Object.keys(byRole).map(role => {
             const meta = ROLE_META[role] || { color: 'var(--text-muted)', label: role };
+            const roleLabel = metaLabel(meta);
             return `<span style="padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700;
-                        color:${meta.color}; border:1px solid ${meta.color};">${escapeHtml(meta.label)} ${byRole[role].length}</span>`;
-        }).join(' ') || '<span style="color:var(--text-muted);">nessuna</span>';
+                        color:${meta.color}; border:1px solid ${meta.color};">${escapeHtml(roleLabel)} ${byRole[role].length}</span>`;
+        }).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
         return `<div style="padding:12px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px;">
                 <div>
@@ -458,9 +466,9 @@
                     ${confidenceBar(inc.confidence)}
                 </div>
             </div>
-            <div style="font-size:12px; margin-bottom:6px;"><strong>Regole attivate:</strong> ${rules}</div>
-            <div style="font-size:12px; margin-bottom:6px;"><strong>Fonti corroboranti:</strong> ${sources}</div>
-            <div style="font-size:12px; margin-bottom:6px;"><strong>Evidenze per ruolo:</strong> ${roleCounts}</div>
+            <div style="font-size:12px; margin-bottom:6px;"><strong>${L('incRulesFired')}</strong> ${rules}</div>
+            <div style="font-size:12px; margin-bottom:6px;"><strong>${L('incSourcesCorrob')}</strong> ${sources}</div>
+            <div style="font-size:12px; margin-bottom:6px;"><strong>${L('incEvidenceByRole')}</strong> ${roleCounts}</div>
             <div style="font-size:11px; color:var(--text-muted);">
                 Base ${escapeHtml(jsStr(r.base_confidence ?? '--'))}% + ${escapeHtml(jsStr(r.confidence_step ?? '--'))}% per fonte corroborante.
                 Regola: ${escapeHtml(jsStr(r.rule_id || '--'))} v${escapeHtml(jsStr(r.rule_version || '--'))}
@@ -488,7 +496,7 @@
 
     function renderTimeline(entries) {
         if (!entries.length) {
-            return '<div style="color:var(--text-muted); font-size:12px;">Nessuna voce di timeline.</div>';
+            return `<div style="color:var(--text-muted); font-size:12px;">${L('incNoTimeline')}</div>`;
         }
         return `<div style="border-left:2px solid var(--border); margin-left:8px; padding-left:16px;">` +
             entries.map(e => {
@@ -505,16 +513,16 @@
                 // racconta anche cosa si era concluso e perché non regge più.
                 const retracted = e.status === 'retracted';
                 const why = retracted && e.ref
-                    ? `${e.ref.retracted_reason || 'invalidata'}${e.ref.retracted_by_rule_id ? ' — ' + e.ref.retracted_by_rule_id : ''}`
+                    ? `${e.ref.retracted_reason || L('incRetractedDefault')}${e.ref.retracted_by_rule_id ? ' — ' + e.ref.retracted_by_rule_id : ''}`
                     : '';
                 return `<div style="position:relative; margin-bottom:12px; ${retracted ? 'opacity:0.65;' : ''}">
                     <span style="position:absolute; left:-23px; top:2px; width:12px; height:12px; border-radius:50%;
                                  background:${retracted ? 'var(--surface-3)' : 'var(--surface)'}; border:2px solid ${dotColor};"></span>
                     <div style="font-size:11px; color:var(--text-muted);">
                         ${escapeHtml(fmtTime(e.ts))} ·
-                        <i class="fa-solid ${meta.icon}" style="color:${meta.color};"></i> ${escapeHtml(meta.label)}
+                        <i class="fa-solid ${meta.icon}" style="color:${meta.color};"></i> ${escapeHtml(metaLabel(meta))}
                         ${role ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
-                                     font-size:10px; color:${role.color}; border:1px solid ${role.color};">${escapeHtml(role.label)}</span>` : ''}
+                                     font-size:10px; color:${role.color}; border:1px solid ${role.color};">${escapeHtml(metaLabel(role))}</span>` : ''}
                         ${retracted ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
                                      font-size:10px; color:var(--text-muted); border:1px solid var(--text-muted);">RITRATTATA</span>` : ''}
                     </div>
@@ -524,7 +532,7 @@
                     </div>
                     ${why ? `<div style="font-size:11px; color:var(--warning); margin-top:2px;">
                                 <i class="fa-solid fa-rotate-left"></i> ${escapeHtml(jsStr(why))}</div>` : ''}
-                    ${prov ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;" title="Regola che ha prodotto questa evidenza e soglie usate">
+                    ${prov ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;" title="${L('incProvTitle')}">
                                 <i class="fa-solid fa-fingerprint"></i> ${escapeHtml(prov)}</div>` : ''}
                     ${attrs ? `<div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-top:2px; word-break:break-all;">${escapeHtml(attrs)}</div>` : ''}
                 </div>`;
@@ -535,14 +543,14 @@
         const body = inc.ai_narrative
             ? `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(jsStr(inc.ai_narrative))}</div>
                <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(inc.ai_narrative_ts))}</div>`
-            : '<div style="font-size:12px; color:var(--text-muted);">Nessuna narrativa generata. La conclusione qui sopra resta valida senza AI.</div>';
+            : `<div style="font-size:12px; color:var(--text-muted);">${L('incNoNarrative')}</div>`;
         return `<div style="margin-top:18px; padding:12px; border-radius:8px; border:1px dashed var(--primary); background:rgba(99,102,241,0.06);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
                 <span style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--primary);">
                     <i class="fa-solid fa-robot"></i> Riformulazione generata da AI — non è la conclusione
                 </span>
                 <button class="btn btn-secondary btn-small" style="width:auto;" onclick="explainIncident(${Number(inc.id)})">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> ${inc.ai_narrative ? 'Rigenera' : 'Spiega con AI'}
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> ${inc.ai_narrative ? L('incRegenerate') : L('incExplainAi')}
                 </button>
             </div>
             <div id="incidentAiBody">${body}</div>
@@ -565,11 +573,11 @@
     // Percorso logico della conversazione. Un salto sconosciuto va MOSTRATO
     // come tale: l'ingegnere decide dove guardare in base a questo, e un buco
     // taciuto lo manda a cercare nel posto sbagliato.
-    const DIRECTION_LABEL = {
-        east_west: 'East-West (interno ↔ interno)',
-        north_south: 'North-South (attraversa il perimetro)',
-        control_plane: 'Control plane (scoperta e routing)',
-        local: 'Locale'
+    const DIRECTION_KEY = {
+        east_west: 'incDirEastWest',
+        north_south: 'incDirNorthSouth',
+        control_plane: 'incDirControlPlane',
+        local: 'incDirLocal'
     };
 
     function renderFlowPath(path) {
@@ -587,9 +595,9 @@
             </div>`;
         }).join('<i class="fa-solid fa-angle-right" style="color:var(--text-muted); align-self:center;"></i>');
         const warn = path.complete ? '' :
-            `<div style="font-size:11px; color:var(--warning); margin-top:6px;"><i class="fa-solid fa-triangle-exclamation"></i> Percorso parziale: i salti tratteggiati non sono noti.</div>`;
-        return `<h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-diagram-project"></i> Percorso
-                    <span style="font-weight:normal; font-size:12px; color:var(--text-muted);">${escapeHtml(jsStr(DIRECTION_LABEL[path.direction] || path.direction || ''))}</span></h4>
+            `<div style="font-size:11px; color:var(--warning); margin-top:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${L('incPathPartial')}</div>`;
+        return `<h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-diagram-project"></i> ${L('incPathTitle')}
+                    <span style="font-weight:normal; font-size:12px; color:var(--text-muted);">${escapeHtml(jsStr(DIRECTION_KEY[path.direction] ? L(DIRECTION_KEY[path.direction]) : (path.direction || '')))}</span></h4>
                 <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">${hops}</div>${warn}`;
     }
 
@@ -597,10 +605,10 @@
         const box = document.getElementById('incidentDetail');
         if (!box) return;
         const next = inc.status === 'new'
-            ? `<button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'new', 'ack')">Prendi in carico</button>
-               <button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'new', 'resolved')">Risolvi</button>`
+            ? `<button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'new', 'ack')">${L('incBtnAck')}</button>
+               <button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'new', 'resolved')">${L('incBtnResolve')}</button>`
             : (inc.status === 'ack'
-                ? `<button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'ack', 'resolved')">Risolvi</button>`
+                ? `<button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'ack', 'resolved')">${L('incBtnResolve')}</button>`
                 : '');
         box.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px;">
@@ -631,7 +639,7 @@
             if (!res) return;
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                alert(err.detail || 'Transizione non riuscita.');
+                alert(err.detail || L('incErrTransition'));
                 return;
             }
             await loadIncidentsList();
@@ -647,7 +655,7 @@
             if (!res) return;
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                if (body) body.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(jsStr(err.detail || 'Generazione non riuscita.'))}</div>`;
+                if (body) body.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(jsStr(err.detail || L('incErrGeneration')))}</div>`;
                 return;
             }
             const data = await res.json();
@@ -656,7 +664,7 @@
                                   <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(data.ai_narrative_ts))}</div>`;
             }
         } catch (e) {
-            if (body) body.innerHTML = '<div style="color:var(--danger); font-size:12px;">Generazione non riuscita.</div>';
+            if (body) body.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incErrGeneration')}</div>`;
         }
     }
 
