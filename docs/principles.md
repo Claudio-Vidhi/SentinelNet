@@ -1,37 +1,27 @@
-# SentinelNet Engineering Principles
-## Network Observability Platform - Functional Design Guidelines
+# Engineering principles
 
-# Purpose
+The design guidelines behind SentinelNet. This is not a feature list; it is the
+standard every new module, service or dashboard is measured against.
 
-This document defines the architectural principles and engineering philosophy behind SentinelNet.
+The objective:
 
-It is **not** a list of features.
+> Help network engineers understand **what happened, why it happened, and what
+> to investigate next** — instead of presenting raw telemetry.
 
-Its purpose is to ensure that every new module, service or dashboard contributes to the same objective:
-
-> Help Network Engineers understand **what happened, why it happened, and what should be investigated next**, instead of simply presenting raw telemetry.
-
-Every implementation must be evaluated against these principles.
-
----
-
-# Core Philosophy
-
-SentinelNet is **not** a NetFlow collector.
-
-SentinelNet is **not** another monitoring dashboard.
-
-SentinelNet is a **Network Observability Platform**.
-
-The platform should transform independent data sources into operational knowledge.
-
-The objective is reducing Mean Time To Detect (MTTD) and Mean Time To Resolve (MTTR).
+Everything else follows from that. Where these principles have been translated
+into concrete mechanisms, [architecture.md](architecture.md) explains how, and
+[adr/](adr/) records why each mechanism was chosen.
 
 ---
 
-# Primary Goals
+## 1. Core philosophy
 
-Every feature should answer one or more of the following questions.
+SentinelNet is not a NetFlow collector, and not another monitoring dashboard. It
+is a network observability platform: it turns independent data sources into
+operational knowledge, with the goal of reducing mean time to detect (MTTD) and
+mean time to resolve (MTTR).
+
+Every feature should answer at least one of these questions:
 
 - What changed?
 - Why did it change?
@@ -39,404 +29,242 @@ Every feature should answer one or more of the following questions.
 - Which systems are involved?
 - Which event most likely triggered the incident?
 - Which infrastructure components are affected?
-- Is this behavior normal?
+- Is this behaviour normal?
 - Has this happened before?
 - What should the engineer investigate next?
 
-If a feature does not answer any of these questions, reconsider whether it should exist.
+If a feature answers none of them, reconsider whether it should exist.
 
 ---
 
-# Dashboard Philosophy
+## 2. Dashboards are not the product
 
-Dashboards are **not** the product.
+The dashboard is a visualization layer. Business logic must never live in the
+frontend; the frontend consumes information the backend has already processed.
 
-The dashboard is only the visualization layer.
+Avoid pages whose only purpose is to display charts. Prefer views that answer
+operational questions.
 
-Business logic must never live inside the frontend.
+Instead of:
 
-The frontend should consume processed information produced by backend services.
+> Core utilization = 96%
 
-Avoid creating pages whose only purpose is displaying charts.
+show:
 
-Prefer dashboards that answer operational questions.
+> Core utilization increased because Backup Server started transferring 2.4 Gbps
+> to NAS01 at 09:31. The traffic is entirely east-west and does not cross the
+> firewall.
 
-Instead of
+### Data first, charts second
 
-Core Utilization = 96%
+Charts are supporting evidence, not conclusions. Every chart should answer a
+question.
 
-display
-
-Core utilization increased because Backup Server started transferring 2.4 Gbps toward NAS01 at 09:31.
-Traffic is entirely East-West and does not cross the firewall.
-
----
-
-# Data First, Charts Second
-
-Charts are supporting evidence.
-
-Charts are not conclusions.
-
-Every chart should answer a question.
-
-Bad example
-
-- Top Talkers
-- Top Protocols
-- Bandwidth Usage
-
-Better example
-
-Question:
-
-Why is WAN1 saturated?
-
-Evidence:
-
-- Top contributor
-- Flow path
-- Related events
-- Configuration changes
-- Baseline comparison
+| Weak framing | Strong framing |
+|---|---|
+| Top talkers | **Why is WAN1 saturated?** |
+| Top protocols | Top contributor · flow path · related events |
+| Bandwidth usage | Configuration changes · baseline comparison |
 
 ---
 
-# Multi-source Correlation
+## 3. Multi-source correlation
 
-Never build features around a single datasource.
+Never build a feature around a single data source. Every module should consume
+several wherever possible: NetFlow, IPFIX, sFlow, SNMP, syslog, LLDP/CDP,
+routing tables, firewall logs, configuration backups, API integrations, cloud
+providers.
 
-Every module should consume multiple data sources whenever possible.
-
-Typical sources include
-
-- NetFlow
-- IPFIX
-- sFlow
-- SNMP
-- Syslog
-- LLDP/CDP
-- Routing Tables
-- Firewall Logs
-- Configuration Backups
-- API integrations
-- Cloud providers
-
-Individual data sources are incomplete.
-
-Correlation creates value.
+Individual data sources are incomplete. Correlation is what creates value.
 
 ---
 
-# Correlation Engine
+## 4. Correlation engine
 
-Every incoming event should be normalized into a common internal model.
+Every incoming event is normalized into a common internal model. The correlation
+engine detects relationships between traffic, topology, devices, interfaces,
+routing, configuration, security events and historical behaviour.
 
-The Correlation Engine should detect relationships between
+**Correlation must be deterministic wherever possible. Avoid hidden logic.**
 
-- traffic
-- topology
-- devices
-- interfaces
-- routing
-- configuration
-- security events
-- historical behavior
-
-Correlation must be deterministic whenever possible.
-
-Avoid hidden logic.
+Realized as: [ADR-0002](adr/0002-unified-event-model.md) (unified event model),
+[ADR-0001](adr/0001-python-rules-not-yaml.md) (rules as inspectable Python),
+[ADR-0006](adr/0006-deterministic-correlation.md) (no AI in the decision path).
 
 ---
 
-# Reasoning Engine
+## 5. Reasoning engine
 
-The Reasoning Engine should explain incidents.
+The reasoning engine explains incidents. It should never state:
 
-It should never simply state
+> High CPU
 
-High CPU
+It should state:
 
-Instead explain
+> High CPU most likely caused by increased east-west traffic generated by
+> Backup01 after scheduled replication started.
 
-High CPU most likely caused by increased East-West traffic generated by Backup01 after scheduled replication started.
+Every conclusion must expose its supporting evidence, a confidence score and the
+reasoning path. The engineer must always be able to see why a conclusion was
+produced.
 
-Every conclusion must expose
-
-- supporting evidence
-- confidence score
-- reasoning path
-
-The engineer must always understand why the conclusion was generated.
+Realized as: [ADR-0003](adr/0003-evidence-and-derived-incident.md).
 
 ---
 
-# Explainability
+## 6. Explainability
 
-Every automated conclusion must be explainable.
+Every automated conclusion must be explainable. Never return "AI detected
+anomaly". Return:
 
-Never return
+> **Reason:** traffic increased 650%.
+> **Supporting evidence:** NetFlow · SNMP · baseline deviation · configuration
+> unchanged.
+> **Confidence:** 92%.
 
-"AI detected anomaly."
-
-Instead return
-
-Reason:
-
-Traffic increased 650%.
-
-Supporting evidence:
-
-- NetFlow
-- SNMP
-- Baseline deviation
-- Configuration unchanged
-
-Confidence:
-
-92%
+A corollary that runs through the whole codebase: **what isn't known is stated.**
+A synthetic VLAN is marked as synthetic; an unknown hop in a path says it is
+unknown. Never present an invented value as a measured one.
 
 ---
 
-# Baseline Philosophy
+## 7. Baseline philosophy
 
-Do not compare only against yesterday.
+Do not compare only against yesterday. Behaviour should be compared against the
+same weekday, the same time window, rolling averages and seasonal patterns.
 
-Behavior should be compared against
+Baselines must adapt over time. Do not generate alerts from temporary spikes.
 
-- same weekday
-- same time window
-- rolling averages
-- seasonal patterns
-
-Baselines must adapt over time.
-
-Do not generate alerts from temporary spikes.
+Realized in [observability/baseline.py](../observability/baseline.py), which also
+declines to emit anything when it has too few samples — an invented baseline is
+worse than none.
 
 ---
 
-# Topology Awareness
+## 8. Topology awareness
 
-Topology is not documentation.
+Topology is not documentation. It is operational context.
 
-Topology is operational context.
-
-Every node should expose
-
-- neighbors
-- interfaces
-- flows
-- utilization
-- errors
-- historical changes
-
-Every link should expose
-
-- bandwidth
-- packet loss
-- latency
-- flows
-- responsible hosts
+Every node should expose its neighbours, interfaces, flows, utilization, errors
+and historical changes. Every link should expose bandwidth, packet loss, latency,
+flows and the hosts responsible for them.
 
 ---
 
-# East-West Visibility
+## 9. East-west visibility
 
-The platform should distinguish
-
-Traffic crossing firewalls
-
-from
-
-Traffic remaining inside the data center.
-
-Many incidents never reach the firewall.
-
-This visibility is a major differentiator.
+The platform must distinguish traffic crossing firewalls from traffic staying
+inside the data centre. Many incidents never reach the firewall at all, and that
+visibility is a significant differentiator.
 
 ---
 
-# Incident Timeline
+## 10. Incident timeline
 
-Every incident should automatically generate a timeline.
+Every incident should generate a timeline automatically:
 
-Example
+```
+09:31   Backup started
+  ↓
+09:33   Core utilization reached 95%
+  ↓
+09:34   Switch CPU increased
+  ↓
+09:35   Users reported slowness
 
-09:31
-Backup started
+Most likely cause: unexpected backup replication.
+```
 
-↓
-
-09:33
-Core utilization reached 95%
-
-↓
-
-09:34
-Switch CPU increased
-
-↓
-
-09:35
-Users reported slowness
-
-↓
-
-Most likely cause:
-Unexpected backup replication.
-
-The timeline should become the primary troubleshooting interface.
+The timeline should be the primary troubleshooting interface. Realized in
+[observability/timeline.py](../observability/timeline.py).
 
 ---
 
-# Knowledge Base
+## 11. Knowledge base
 
-The platform should accumulate operational knowledge.
+The platform should accumulate operational knowledge. For example:
 
-Example
+**Problem:** broadcast storm.
+**Indicators:** broadcast increase · MAC flapping · STP topology changes · switch
+CPU · interface saturation.
+**Suggested investigation:** verify STP · check for loops · inspect the MAC
+table.
 
-Problem
-
-Broadcast Storm
-
-Indicators
-
-- Broadcast increase
-- MAC flapping
-- STP topology changes
-- Switch CPU
-- Interface saturation
-
-Suggested investigation
-
-- Verify STP
-- Check loops
-- Inspect MAC table
-
-Every incident enriches the knowledge base.
+Every incident should enrich the knowledge base.
 
 ---
 
-# Layer 2 Awareness
+## 12. Layer 2 awareness
 
-Do not focus only on Layer 3.
+Do not focus only on Layer 3. The platform should understand broadcast,
+multicast, unknown unicast, STP, MAC flapping, VLANs, port errors, CRC errors and
+duplex mismatches.
 
-The platform should understand
-
-- Broadcast
-- Multicast
-- Unknown Unicast
-- STP
-- MAC Flapping
-- VLANs
-- Port Errors
-- CRC
-- Duplex mismatch
-
-These are often invisible to NetFlow alone.
+These are frequently invisible to NetFlow alone.
 
 ---
 
-# Vendor Independence
+## 13. Vendor independence
 
-The architecture must remain vendor agnostic.
-
-No internal component should depend directly on
-
-Cisco
-
-Fortinet
-
-Juniper
-
-Aruba
-
-Palo Alto
-
-Use adapters.
-
-Normalize data internally.
+The architecture must remain vendor agnostic. No internal component should depend
+directly on Cisco, Fortinet, Juniper, Aruba or Palo Alto. Use adapters and
+normalize data internally.
 
 ---
 
-# API First
+## 14. API first
 
-Every capability should be available through internal APIs.
-
-The Web UI is only one possible client.
-
-Future consumers may include
-
-- CLI
-- AI assistants
-- Mobile applications
-- ChatOps
-- SIEM
-- SOAR
-- External automation
+Every capability should be available through internal APIs. The web UI is only
+one possible client. Future consumers may include a CLI, AI assistants, mobile
+applications, ChatOps, SIEM, SOAR and external automation.
 
 ---
 
-# Extensibility
+## 15. Extensibility
 
-New collectors should require minimal changes.
+New collectors should require minimal changes. Every data source should implement
+the same ingestion contract, and collectors must not be coupled to business
+logic.
 
-Every datasource should implement the same ingestion contract.
-
-Avoid coupling collectors with business logic.
-
----
-
-# Feature Acceptance Checklist
-
-Before implementing any feature ask:
-
-✓ Does it reduce troubleshooting time?
-
-✓ Does it correlate multiple data sources?
-
-✓ Does it explain rather than visualize?
-
-✓ Is the conclusion explainable?
-
-✓ Does it integrate into the Incident Timeline?
-
-✓ Can another module reuse this information?
-
-✓ Does it remain vendor independent?
-
-✓ Is it exposing reusable APIs?
-
-If most answers are "No", redesign the feature.
+Realized as the adapter contract in [collectors.md](collectors.md) §10: a new
+source costs a decoder plus an adapter, and nothing downstream.
 
 ---
 
-# Long-term Vision
+## 16. Feature acceptance checklist
 
-The final goal is not building a dashboard.
+Before implementing any feature, ask:
 
-The final goal is building a Network Intelligence Platform.
+- Does it reduce troubleshooting time?
+- Does it correlate multiple data sources?
+- Does it explain rather than visualize?
+- Is the conclusion explainable?
+- Does it integrate into the incident timeline?
+- Can another module reuse this information?
+- Does it remain vendor independent?
+- Does it expose reusable APIs?
 
+If most answers are "no", redesign the feature.
+
+---
+
+## 17. Long-term vision
+
+The goal is not a dashboard. The goal is a network intelligence platform:
+
+```
 Raw telemetry
+    ↓
+Normalized events
+    ↓
+Correlated information
+    ↓
+Operational knowledge
+    ↓
+Reasoned incidents
+    ↓
+Actionable recommendations
+```
 
-↓
-
-Normalized Events
-
-↓
-
-Correlated Information
-
-↓
-
-Operational Knowledge
-
-↓
-
-Reasoned Incidents
-
-↓
-
-Actionable Recommendations
-
-The platform should evolve from monitoring infrastructure to understanding infrastructure.
+The platform should evolve from monitoring infrastructure to understanding
+infrastructure.

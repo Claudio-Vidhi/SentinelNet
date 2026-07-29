@@ -1,79 +1,179 @@
-# Roadmap operativa — rumore e flusso di lavoro
+# Roadmap
 
-Spunti presi da Nagios/Naemon, riordinati dopo verifica sul codice. Il criterio
-non è la ricchezza della funzionalità ma **quanto dato nuovo richiede**: le voci
-che si reggono su ciò che già raccogliamo vengono prima.
+What is deliberately not built yet, and why in this order. Nothing here is a
+commitment; it is the reasoning that should survive the next six months so the
+same debate doesn't get re-run from scratch.
 
-Nessuna di queste voci fa vedere di più della rete. Servono a far sì che
-l'ingegnere si fidi di ciò che legge, non a scoprire qualcosa di nuovo. È un
-obiettivo diverso, e va tenuto distinto.
+Ordering criterion throughout: **how much new data does it require?** Items that
+stand on data already collected come first.
 
-## Ordine
+---
 
-| # | Voce | Stato | Nota |
-|---|------|-------|------|
-| 1 | Flapping detection | **fatto** | `IFACE_FLAPPING_001` |
-| 2 | Soppressione con finestra (Scheduled Downtime) | **fatto** | `observability/suppression.py`, applicata nel correlatore |
-| 3 | Conferma prima di concludere | da fare | il debito che esplode con le notifiche |
-| 4 | `device.unreachable` | da fare | il silenzio deve diventare un fatto |
-| 5 | Acknowledgement completo | da fare | 3 colonne, non una funzionalità |
-| 6 | Notification Engine → Escalation | da decidere | fuori scope dal piano iniziale |
+## 1. Noise and workflow
 
-## Perché quest'ordine e non quello proposto
+Ideas taken from Nagios/Naemon, reordered after checking them against the code.
 
-**1. Flapping prima di tutto.** Unica voce che non richiede nessun dato nuovo, e
-il rumore esiste già: un `IFACE_DOWN_001` a ogni caduta, un `IFACE_RECOVERED_001`
-che ritratta a ogni risalita, una conclusione riscritta a ogni giro. Il codice lo
-sapeva già — sta scritto nel rimedio di `IFACE_RECOVERED_001` — e non faceva
-nulla.
+None of these items make the network more visible. They exist so the engineer
+trusts what they read, not so they discover something new. That is a different
+goal and worth keeping distinct.
 
-**2. Downtime e `interface_expectations` sono lo stesso modello.** Uno dice
-"questa porta è giù per progetto, per sempre", l'altro "questo apparato è giù per
-progetto, da martedì alle 22". Stessa domanda (*l'operatore se lo aspettava?*),
-stessa risposta architetturale: non sopprimere il fatto, cambiare
-l'interpretazione. Implementarli separati significa avere due posti dove cercare
-perché un allarme non è scattato. Va fatta **una** soppressione con finestra
-opzionale, dove "per sempre" è il caso senza scadenza.
+| # | Item | Status | Note |
+|---|---|---|---|
+| 1 | Flapping detection | **done** | `IFACE_FLAPPING_001` |
+| 2 | Windowed suppression (scheduled downtime) | **done** | [suppression.py](../observability/suppression.py), applied in the correlator |
+| 3 | Confirm before concluding | to do | The debt that explodes once notifications exist |
+| 4 | `device.unreachable` | to do | Silence must become a fact |
+| 5 | Full acknowledgement | to do | Three columns, not a feature |
+| 6 | Notification engine → escalation | undecided | Out of the original plan's scope |
 
-**3. Conferma prima di concludere — il punto su cui dissentiamo da Nagios.**
-Scartare HARD/SOFT dicendo che «Evidence → Incident con confidence e retraction è
-più ricco» confonde due problemi. HARD/SOFT serve a *non concludere alla prima
-osservazione*; la ritrattazione agisce **dopo** aver concluso.
+### 1.1 Why this order
 
-Finché la conclusione la legge solo la UI, va bene. Con un Notification Engine,
-«avevo concluso, poi ho ritrattato» significa aver già svegliato qualcuno alle
-tre di notte, e ritrattare un'email non si può.
+**Flapping first.** The only item requiring no new data, and the noise already
+existed: an `IFACE_DOWN_001` on every drop, an `IFACE_RECOVERED_001` retracting
+it on every recovery, a conclusion rewritten every cycle. The code already knew
+— it's written in the remedy text of `IFACE_RECOVERED_001` — and did nothing
+about it.
 
-Che il buco esista si vede dal codice: `BASELINE_NORMAL_RETRACT_001` è nato per
-smontare picchi transitori a posteriori — è una conferma fatta al contrario, che
-paga il prezzo di aver concluso nel frattempo.
+**Downtime and interface expectations are one model.** One says "this port is
+down by design, forever", the other "this device is down by design, from Tuesday
+at 22:00". Same question (*was the operator expecting this?*), same
+architectural answer: don't suppress the fact, change its interpretation.
+Implementing them separately means two places to look when an alarm doesn't
+fire. It has to be **one** suppression with an optional window, where "forever"
+is the case with no expiry.
 
-Non serve la macchina a stati di Nagios. Serve che una regola dichiari **quante
-osservazioni le occorrono prima di produrre evidenza**: un parametro in più nel
-catalogo.
+**Confirm before concluding — where we disagree with Nagios.** Dismissing
+HARD/SOFT on the grounds that "evidence → incident with confidence and
+retraction is richer" conflates two problems. HARD/SOFT exists to *avoid
+concluding on the first observation*; retraction acts **after** concluding.
 
-**4. `device.unreachable` invece dell'albero delle dipendenze.** Nagios ha
-bisogno di UNREACHABLE perché fa check attivi: pinga tutto e deve distinguere
-"host guasto" da "router in mezzo guasto". SentinelNet è passivo.
+While only the UI reads conclusions, that's fine. With a notification engine, "I
+concluded, then retracted" means someone was already woken at three in the
+morning, and you cannot unsend an email.
 
-Il poller SNMP ha introdotto il primo check attivo, e oggi un apparato che smette
-di rispondere non produce niente: `_poll_device` torna lista vuota e si passa
-oltre. **Silenzio, non un fatto.** Quello è il buco reale, ed è molto più piccolo
-di un albero di dipendenze. La propagazione topologica viene dopo, e richiede il
-Flow Path via CDP.
+That the gap is real shows in the code: `BASELINE_NORMAL_RETRACT_001` exists to
+dismantle transient spikes after the fact — a confirmation performed backwards,
+paying the price of having concluded in the meantime.
 
-**5. Acknowledgement è già all'80%.** `incidents.status` ha `new → ack →
-resolved` con transizioni vincolate e concorrenza ottimistica. Mancano
-`acknowledged_by`, timestamp e nota: oggi il "chi" finisce solo in audit log, non
-sull'incidente.
+This does not need Nagios's state machine. It needs a rule to declare **how many
+observations it requires before producing evidence**: one more parameter in the
+catalog. See [ADR-0003](adr/0003-evidence-and-derived-incident.md).
 
-## Scartate, e perché
+**`device.unreachable` instead of a dependency tree.** Nagios needs UNREACHABLE
+because it does active checks: it pings everything and must distinguish "host
+failed" from "router in between failed". SentinelNet is passive.
 
-| Voce | Motivo |
-|------|--------|
-| Active checks continui | SentinelNet osserva; l'unica eccezione è il poller, che raccoglie stato, non verifica raggiungibilità |
-| Stati OK/WARNING/CRITICAL | evidenze con ruolo causale e confidenza dicono di più |
-| **Plugin architecture** | l'equivalente esiste già **due volte**: una sorgente nuova è un adapter in `normalize.py`, una logica nuova è una voce in `RULES`. Un terzo meccanismo darebbe solo tre posti dove cercare |
+The SNMP poller introduced the first active check, and today a device that stops
+answering produces nothing: `_poll_device` returns an empty list and the loop
+moves on. **Silence, not a fact.** That's the real gap, and it is far smaller
+than a dependency tree. Topological propagation comes later and needs the flow
+path over CDP.
 
-Passive checks non è una voce: flussi, syslog, API e SNMP *sono* già osservazioni
-passive.
+**Acknowledgement is already 80% there.** `incidents.status` has
+`new → ack → resolved` with constrained transitions and optimistic concurrency.
+Missing: `acknowledged_by`, a timestamp and a note. Today the "who" ends up only
+in the audit log, not on the incident.
+
+### 1.2 Rejected, and why
+
+| Item | Reason |
+|---|---|
+| Continuous active checks | SentinelNet observes. The one exception is the poller, which collects state rather than verifying reachability |
+| OK/WARNING/CRITICAL states | Evidence with causal roles and confidence says more |
+| **Plugin architecture** | The equivalent already exists **twice**: a new source is an adapter in `normalize.py`, new logic is an entry in `RULES`. A third mechanism would only give three places to look |
+
+"Passive checks" isn't an item: flows, syslog, API and SNMP *are* passive
+observations already.
+
+---
+
+## 2. Separating the agent control plane from the device data plane
+
+Remote-site security and remote-device management should be **separate planes**.
+They cooperate, but they answer different questions and should not share an
+all-or-nothing authority boundary:
+
+| Plane | Principal | Responsibility | Must not grant |
+|---|---|---|---|
+| Agent / control | The registered site agent | Prove agent identity, deliver work, report health, inventory and results | Unrestricted access to every device or every possible action |
+| Device / data | A device identity and its credential/policy | Connect to, observe and change one device | Authority to impersonate the agent, create jobs, or administer central |
+
+**Sound today:** the agent connects outbound over HTTPS only, central needs no
+inbound access to the site, central authenticates the agent with a per-site
+token (stored as a SHA-256 hash), and device credentials stay in the agent's
+local data directory. That already limits credential exfiltration from a
+compromised central server.
+
+**Not yet separated:** an authenticated agent receives *all* pending jobs for
+its site and executes them using whichever local device record matches the
+requested IP. Agent identity therefore implies full device authority within the
+site.
+
+If this gets built, it belongs in an ADR — it changes an authority boundary, not
+just an implementation. See [remote-sites.md](remote-sites.md).
+
+---
+
+## 3. Server integrations (Linux / Windows)
+
+Proposals, none implemented. Ordered by value-to-effort ratio.
+
+### High value, low effort
+
+1. **Servers as inventory devices.** Linux over SSH (already in `core_engine`) →
+   hostname, OS, kernel, interfaces, IPs, uptime, critical packages. Windows
+   over WinRM (`pywinrm`) → the same via remote PowerShell. Servers appear in
+   the inventory and on the map as endpoint nodes, correlated to their switch
+   port through MAC history, which is already collected.
+
+2. **MAC → server correlation.** Automatically match server MACs against
+   `mac_history`, so the map can say "this server is on SW-X Gi1/0/12". No new
+   collector — just a join.
+
+3. **Central syslog receiver.** Already shipped for network devices
+   ([collectors.md](collectors.md) §5); extending it to Linux (rsyslog) and
+   Windows (NXLog or native forwarding) is configuration on the sending side
+   plus UI work on this side.
+
+### Medium value
+
+4. **Service health checks.** Ping and TCP port checks (SSH 22, RDP 3389,
+   HTTP/S, database ports) against registered servers, with green/red state in
+   the dashboard and on the map. Reuses `network_scanner`.
+
+5. **Server vulnerabilities via EUVD.** The EUVD lookup already exists for
+   network vendors (`inventory_manager.resolve_euvd_term`); extending it to
+   server operating systems needs only the version from SSH/WinRM inventory.
+
+6. **Config backup for servers.** Same shape as `backup-config` for switches: a
+   scheduled dump of critical files (`/etc`, a minimal registry/GPO export).
+
+### Larger efforts
+
+7. **Unified remote agent** — the same site agent also collects local server
+   data: one deployment per site.
+8. **AD/LDAP integration** — SentinelNet login with domain credentials, and the
+   AD computer list as an inventory source.
+9. **SNMP against servers** — Linux (net-snmp) and Windows (SNMP service) for
+   CPU/RAM/disk metrics.
+
+**Suggested entry point:** items 1 and 2. They reuse almost all existing code
+and make the map immediately more useful. Then 3 and 4.
+
+---
+
+## 4. Known limitations tracked elsewhere
+
+These are accepted trade-offs rather than roadmap items, but they are the things
+most likely to be mistaken for bugs:
+
+- Observability does not scale horizontally
+  ([ADR-0004](adr/0004-single-process-sqlite-writer.md)).
+- Tenant attribution breaks for exporters behind NAT
+  ([ADR-0005](adr/0005-strict-tenant-attribution.md)).
+- The flow path is logical, not packet-by-packet
+  ([architecture.md](architecture.md) §5).
+- Flow SIEM deep-scan cost
+  ([live-flows-and-siem.md](live-flows-and-siem.md) §9).
+- Open security findings ([security-audit.md](security-audit.md),
+  [security-semgrep.md](security-semgrep.md)).
