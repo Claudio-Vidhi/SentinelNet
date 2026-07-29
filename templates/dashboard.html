@@ -2500,23 +2500,23 @@
 
       <div class="panel" style="padding:12px 16px; margin-bottom:18px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
         <div>
-          <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Stato</label>
+          <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterStatus">Stato</label>
           <select id="incStatusFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-            <option value="new">Nuovi</option>
-            <option value="ack">Presi in carico</option>
-            <option value="resolved">Risolti</option>
-            <option value="all">Tutti</option>
+            <option value="new" data-i18n="incOptNew">Nuovi</option>
+            <option value="ack" data-i18n="incOptAck">Presi in carico</option>
+            <option value="resolved" data-i18n="incOptResolved">Risolti</option>
+            <option value="all" data-i18n="incOptAll">Tutti</option>
           </select>
         </div>
         <div>
-          <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Finestra</label>
+          <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterWindow">Finestra</label>
           <select id="incWindowFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-            <option value="24h">24 ore</option>
-            <option value="6h">6 ore</option>
-            <option value="7d">7 giorni</option>
+            <option value="24h" data-i18n="optWin24h">24 ore</option>
+            <option value="6h" data-i18n="optWin6h">6 ore</option>
+            <option value="7d" data-i18n="optWin7d">7 giorni</option>
           </select>
         </div>
-        <button class="btn btn-secondary btn-small" style="width:auto;" onclick="loadIncidentsList()"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        <button class="btn btn-secondary btn-small" style="width:auto;" onclick="loadIncidentsList()" data-i18n="incBtnRefresh"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
       </div>
 
       <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px; align-items:start;">
