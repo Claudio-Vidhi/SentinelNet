@@ -93,3 +93,6 @@ data/agent_jobs.db
 data/agent_jobs.db-shm
 data/agent_jobs.db-wal
 checklist_x_c.docx
+
+# Security findings: never public while issues are open (see CLAUDE.md)
+data/security/

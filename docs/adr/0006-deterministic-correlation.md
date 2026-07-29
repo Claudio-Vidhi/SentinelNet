@@ -46,7 +46,7 @@ that path:
 - Accepted by design: config and flow summaries do leave for third-party LLM
   providers. Redaction reduces the exposure; choosing which providers are
   acceptable is a user policy decision, not something the code can settle
-  (finding I-1 in [security-audit.md](../security-audit.md)).
+  (gate I-1 in [CONTRIBUTING.md](../../CONTRIBUTING.md) §6).
 
 ## Alternatives rejected
 

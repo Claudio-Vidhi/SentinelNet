@@ -77,15 +77,44 @@ observability module.
 
 ## 6. Permanent security gates
 
-| Gate | Command | Expected |
-|---|---|---|
-| Token in sessionStorage (L-1) | `grep -c "sessionStorage" templates/dashboard.html` | No token usage |
-| sqlite3 on async paths | `grep -n "get_observability_connection" app_server.py routers/ observability/ingesters/` | Migrations and tests only |
-| Cleartext secrets in the provisioner (I-2) | `tests/test_provisioning_secrets.py` | Green |
-| LLM redaction (I-1) | `tests/test_redaction.py` | Green |
-| TLS fail-closed (H-1) | `tests/test_tls_config.py` | Green |
+| Gate | What it protects | Command | Expected |
+|---|---|---|---|
+| L-1 | Session JWT must not be readable by JavaScript — cookie only | `grep -c "sessionStorage" templates/dashboard.html` | No token usage |
+| — | No `sqlite3` on async paths | `grep -n "get_observability_connection" app_server.py routers/ observability/ingesters/` | Migrations and tests only |
+| I-2 | Provisioner day-0 config must not emit cleartext secrets | `tests/test_provisioning_secrets.py` | Green |
+| I-1 | LLM context passes the redaction choke-point | `tests/test_redaction.py` | Green |
+| H-1 | TLS config is fail-closed, no silent HTTP fallback | `tests/test_tls_config.py` | Green |
 
-Finding identifiers refer to [docs/security-audit.md](docs/security-audit.md).
+Each gate carries its own meaning above; the audit documents that assigned these
+identifiers are kept outside the public tree (see the next section).
+
+### Security findings stay out of the public tree
+
+**This repository is public.** A document that names an unfixed vulnerability at
+`file:line` is an exploitation roadmap for source anyone can already read.
+
+Audit and scan results live in `data/security/`, which is gitignored. A finding
+may be written up publicly only once it is fixed and the fix is covered by a
+gate above.
+
+### Do not launder gitignored data into tracked files
+
+`data/` is gitignored — `backup-config/`, `detected_versions.json`,
+`network_hosts.csv`, `mac_history.db` — because it holds real customer network
+state. **Conclusions derived from it are as sensitive as the files themselves**
+and must not be written into tracked files, including documentation.
+
+Device models, software versions, hostnames, serial numbers, management IPs and
+topology roles are all customer intelligence. Software versions in particular
+are CVE-relevant: recording that a given model runs a given release publishes an
+attack surface.
+
+Using a real backup to *verify* a parser is correct and encouraged. Writing what
+that backup revealed about a customer's network into `docs/` is not.
+
+Reference material under `docs/reference/` describes **vendor products**, never a
+deployment. Examples and IP addresses there must come from vendor
+documentation, not from `data/`.
 
 ## 7. Tests
 

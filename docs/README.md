@@ -46,8 +46,6 @@ for user-facing strings, logs and comments, English for identifiers — see
 |---|---|
 | [operations.md](operations.md) | Runbook: paths, logs, metrics, retention, symptoms and causes, backup |
 | [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure |
-| [security-audit.md](security-audit.md) | White-box security review, findings with status |
-| [security-semgrep.md](security-semgrep.md) | SAST triage: verdicts and remediation plan |
 
 ### Building
 
