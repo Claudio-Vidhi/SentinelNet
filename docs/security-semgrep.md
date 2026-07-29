@@ -1,6 +1,17 @@
-# semgrep.md — SentinelNet Semgrep Triage & Remediation Plan
+# Semgrep triage and remediation plan
 
-Scan of commit `245d31a3` on `refs/heads/master`. All findings verified against source. Verdicts: **TP** (true positive), **FP** (false positive), **AM** (already mitigated in code, tool cannot see it), **WF** (won't fix, accepted).
+Static-analysis findings, triaged by hand. Complements
+[security-audit.md](security-audit.md), which is the white-box review; this
+document covers what the SAST tool reported and what was decided about each
+finding.
+
+Scan of commit `245d31a3` on `refs/heads/master`. All findings verified against
+source. Verdicts: **TP** (true positive), **FP** (false positive), **AM**
+(already mitigated in code, the tool cannot see it), **WF** (won't fix,
+accepted).
+
+> This is a point-in-time snapshot. Before acting on an entry, confirm the code
+> at the cited location still looks the way the finding describes.
 
 ---
 

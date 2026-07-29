@@ -1,68 +1,102 @@
 # SentinelNet
 
-> SentinelNet — self-hosted network management, backup automation and vulnerability intelligence for sysadmins and small IT teams.
+> Self-hosted network management, observability, backup automation and
+> vulnerability intelligence for sysadmins and small IT teams.
 
-**SentinelNet** è una piattaforma self-hosted per la gestione centralizzata dell'infrastruttura di rete. Automatizza il backup delle configurazioni, rileva le versioni firmware degli apparati attivi e le confronta in tempo reale con il database europeo delle vulnerabilità ENISA EUVD, offrendo una console di gestione unificata accessibile via browser.
-
----
-
-## Caratteristiche Principali
-
-* 🔄 **Backup Automatico**: Salva automaticamente la configurazione running degli apparati in file di testo locali con nomenclatura per hostname e IP.
-* 🧩 **Architettura Multi-Vendor**: Driver pluggabili guidati dal registro vendor — supporto integrato per Cisco IOS, HPE ProCurve, Juniper Junos, Aruba OS, Fortinet FortiOS e Palo Alto PAN-OS. L'associazione vendor → driver → `device_type` netmiko è centralizzata e facilmente estendibile.
-* 🛡️ **Triage Firmware & Vulnerabilità**: Rileva la versione firmware installata e la confronta con il database europeo ENISA EUVD, con classificazione CVSS per severità (CRITICAL / HIGH / MEDIUM / LOW).
-* 📡 **Scansione Subnet**: Discovery automatico di host su una subnet (ping + probe SSH) con triage opzionale e registrazione in inventario.
-* 🗺️ **Mappa Topologica Interattiva**: Genera automaticamente la mappa di rete 2D da tabelle CDP/LLDP presenti nei backup, con nodi dinamici via Vis.js e tooltip avanzati.
-* 🖥️ **Terminale SSH Interattivo**: Console WebSocket/Xterm.js per sessioni SSH live direttamente da browser, autenticata via token OTP monouso.
-* 👥 **Gestione Gruppi e Sedi**: Organizza i dispositivi in gruppi logici (sedi, clienti) con riassegnazione drag-and-drop e filtro per gruppo su tutte le viste.
-* 📥 **Importazione CSV**: Caricamento massivo di inventario da file CSV con validazione per riga e report dettagliato degli errori.
-* 🔒 **Sicurezza Integrata**: Autenticazione JWT (fail-closed sul segreto), cifratura Fernet delle credenziali a riposo, audit log rotante, rate-limiting con lockout anti brute-force e blacklist comandi CLI pericolosi applicata sia all'API one-shot che al terminale interattivo.
+**SentinelNet** is a self-hosted platform for centralized management of network
+infrastructure. It automates configuration backup, detects the firmware versions
+running on active devices and compares them in real time against the European
+ENISA EUVD vulnerability database — and it collects passive network telemetry
+(NetFlow, IPFIX, sFlow, syslog, SNMP), correlates it with deterministic rules,
+and turns it into explainable incidents. Everything is reachable from a single
+browser console.
 
 ---
 
-## Struttura del Progetto
+## Key features
 
-| File | Responsabilità |
-|------|---------------|
-| `app_server.py` | Entrypoint FastAPI: rotte HTTP, API REST, WebSocket e proxy verso ENISA EUVD. |
-| `core_engine.py` | Motore SSH: backup, triage firmware, registro driver, parsing CDP/LLDP e generazione mappa topologica. |
-| `inventory_manager.py` | Persistenza inventario CSV, gruppi/vendor JSON e cache versioni rilevate (scritture serializzate). |
-| `network_scanner.py` | Parsing subnet e discovery concorrente (ping + probe SSH) degli host. |
-| `security_manager.py` | JWT, audit log, rate-limiting e lockout per brute-force. |
-| `crypto_vault.py` | Cifratura/decifratura Fernet delle credenziali degli apparati. |
-| `user_manager.py` | Gestione account locali con hashing bcrypt (cost factor 12). |
-| `data_config.py` | Risoluzione dei percorsi dei file di stato (supporto `SENTINELNET_DATA_DIR`). |
-| `drivers/base_driver.py` | Classe base astratta dei driver (`get_version`, `get_backup_command`). |
-| `drivers/cisco_ios.py` | Driver Cisco IOS. |
-| `drivers/hp_procurve.py` | Driver HPE ProCurve. |
-| `drivers/juniper_junos.py` | Driver Juniper Junos. |
-| `drivers/aruba_os.py` | Driver Aruba OS. |
-| `drivers/fortinet.py` | Driver Fortinet FortiOS. |
-| `drivers/paloalto_panos.py` | Driver Palo Alto PAN-OS. |
-| `templates/dashboard.html` | Single-page Web UI: inventario, topologia, threat intel, terminale SSH. |
-| `Dockerfile` / `docker-compose.yml` | Build e orchestrazione del container. |
-| `requirements.txt` | Dipendenze Python del progetto. |
+- **Automatic backup** — saves device running-configs to local text files,
+  organized by group and vendor.
+- **Multi-vendor architecture** — pluggable drivers driven by a vendor registry:
+  Cisco IOS, HPE ProCurve, Juniper Junos, Aruba OS, Fortinet FortiOS and Palo
+  Alto PAN-OS. The vendor → driver → netmiko `device_type` mapping is
+  centralized and easy to extend.
+- **Firmware and vulnerability triage** — detects the installed firmware version
+  and checks it against ENISA EUVD, with CVSS severity classification
+  (CRITICAL / HIGH / MEDIUM / LOW).
+- **Network observability** — passive collectors for IPFIX, NetFlow, sFlow and
+  syslog, plus active FortiGate REST and SNMP polling, feeding a deterministic
+  correlation engine that produces evidence-backed incidents.
+- **Subnet scanning** — automatic host discovery (ping + SSH probe) with
+  optional triage and inventory registration.
+- **Interactive topology map** — generates the 2D network map from CDP/LLDP
+  tables found in backups, rendered with Vis.js.
+- **Interactive SSH terminal** — WebSocket/Xterm.js console for live SSH
+  sessions from the browser, authenticated with a single-use OTP token.
+- **Groups and sites** — organize devices into logical groups (sites, customers)
+  with drag-and-drop reassignment and per-group filtering across every view.
+- **CSV import** — bulk inventory upload with per-row validation and a detailed
+  error report.
+- **Built-in security** — JWT authentication (fail-closed on the secret), Fernet
+  encryption of credentials at rest, rotating audit log, rate limiting with
+  brute-force lockout, and a dangerous-CLI-command blacklist enforced on both the
+  one-shot API and the interactive terminal.
 
 ---
 
-## Contribuire
+## Documentation
 
-Regole per lo sviluppo (lingua, doppio artefatto, regola async-DB, scope multi-gruppo): [CONTRIBUTING.md](CONTRIBUTING.md).
+Full index: [docs/README.md](docs/README.md).
+
+| Topic | Document |
+|---|---|
+| Engineering principles | [docs/principles.md](docs/principles.md) |
+| Architecture, data pipeline, event/evidence/incident model | [docs/architecture.md](docs/architecture.md) |
+| Data sources (NetFlow, IPFIX, sFlow, syslog, SNMP, REST) | [docs/collectors.md](docs/collectors.md) |
+| Operations runbook (logs, diagnostics, retention, backup) | [docs/operations.md](docs/operations.md) |
+| Secure exposure (TLS, reverse proxy) | [docs/hardening.md](docs/hardening.md) |
+| Multi-site deployment | [docs/remote-sites.md](docs/remote-sites.md) |
+| Layout, tests, build | [docs/development.md](docs/development.md) |
+| Architecture decisions and their rationale | [docs/adr/](docs/adr/) |
+
+Development rules (language convention, dual artifact, async-DB rule,
+multi-group scope): [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## Requisiti e Installazione
+## Project layout
 
-Il progetto richiede **Python 3.11+** e utilizza `netmiko` per le sessioni SSH, `fastapi`/`uvicorn` per il server web e `cryptography` per la cifratura delle credenziali.
+| Path | Responsibility |
+|---|---|
+| `app_server.py` | FastAPI entrypoint: lifespan, router mounting, static files |
+| `core/` | SQLite writer, path/config resolution, SSH engine |
+| `observability/` | Ingest → events → rules → evidence → incidents pipeline |
+| `collectors/` | ARP, MAC tables, MAC history, subnet scanner |
+| `routers/` | One FastAPI router per functional area |
+| `services/` | FortiGate, WLC, inventory, provisioners, sites, site agent |
+| `security/` | JWT/RBAC/audit, credential encryption, keystore, redaction |
+| `ai/` | LLM assistant, config analyzer, MCP server and client |
+| `drivers/` | One driver per vendor, `BaseDriver` as the contract |
+| `templates/`, `static/` | Single-page web UI |
 
-### Con `uv` (Consigliato)
+Detailed map with responsibilities: [docs/architecture.md](docs/architecture.md) §9.
+
+---
+
+## Requirements and installation
+
+Python **3.14+** (see `pyproject.toml`). Key dependencies: `netmiko` for SSH
+sessions, `fastapi`/`uvicorn` for the web server, `cryptography` for credential
+encryption, `pysnmp` for the SNMP poller.
+
+### With `uv` (recommended)
 
 ```bash
 uv venv
 uv pip install -r requirements.txt
 ```
 
-### Con `pip` standard
+### With standard `pip`
 
 ```bash
 pip install -r requirements.txt
@@ -70,36 +104,31 @@ pip install -r requirements.txt
 
 ---
 
-## Avvio dell'Applicazione
+## Running the application
 
-### Esecuzione Locale (PC)
+### Locally
 
 ```bash
-# Con uv
-uv run app_server.py
-
-# Con Python standard
-python app_server.py
+uv run app_server.py     # with uv
+python app_server.py     # with standard Python
 ```
 
-SentinelNet avvierà automaticamente il browser predefinito all'indirizzo **`http://localhost:8765/`**.
+SentinelNet opens the default browser at **`http://localhost:8765/`**.
 
-Al primo avvio, un setup wizard guidato richiede la creazione dell'account amministratore locale. Le credenziali sono archiviate in `users.json` con hash bcrypt e non vengono mai trasmesse in chiaro.
+On first start a setup wizard asks you to create the local administrator
+account. Credentials are stored in `users.json` as bcrypt hashes and are never
+transmitted in clear text.
 
-### Esecuzione con Docker
+### With Docker
 
-Puoi compilare ed eseguire SentinelNet all'interno di un container isolato. Le configurazioni, le credenziali e i backup verranno salvati in una directory locale `data` per garantire la persistenza dei dati.
-
-#### Con Docker Compose
+Configurations, credentials and backups are stored in a local `data` directory
+for persistence.
 
 ```bash
-# Avvio in background
 docker compose up -d
 ```
 
-#### Esecuzione standalone (Immagine ufficiale pre-compilata)
-
-Se si desidera eseguire l'applicazione immediatamente senza scaricare il codice sorgente o compilarlo localmente, è possibile scaricare l'immagine ufficiale pre-compilata da Docker Hub (pubblicata dall'autore):
+Or run the pre-built official image without cloning the source:
 
 ```bash
 docker run -d \
@@ -111,61 +140,69 @@ docker run -d \
 ```
 
 > [!NOTE]
-> `claudiovidhi/sentinelnet` è l'immagine pubblica ufficiale ospitata sul registro dell'autore. Se compili e pubblichi autonomamente la tua versione personalizzata dell'immagine su Docker Hub, sostituisci `claudiovidhi` con il tuo username Docker.
+> `claudiovidhi/sentinelnet` is the author's official public image. If you build
+> and publish your own customized image, replace `claudiovidhi` with your Docker
+> username.
 
-L'applicazione sarà accessibile su **`http://localhost:8765/`**.
-
----
-
-## Variabili d'Ambiente
-
-Tutte le variabili sono opzionali. Se non definite, SentinelNet genera e persiste automaticamente chiavi sicure sui file locali (`secret.key`, `jwt_secret.key`).
-
-| Variabile | Descrizione | Default |
-|-----------|-------------|---------|
-| `SENTINELNET_MASTER_KEY` | Passphrase da cui derivare (via SHA-256) la chiave Fernet per la cifratura delle credenziali degli apparati. | file `secret.key` |
-| `SENTINELNET_JWT_SECRET` | Segreto per la firma dei token JWT di sessione. | file `jwt_secret.key` |
-| `SENTINELNET_ADMIN_USER` | Username usato dal profilo credenziali `default` e come fallback per i dispositivi senza username. | `Admin` |
-| `SENTINELNET_ADMIN_PASS` | Password usata dal profilo credenziali `default` e come fallback. | `admin` |
-| `SENTINELNET_ADMIN_SECRET` | Enable secret usato dal profilo credenziali `default` e come fallback. | `admin` |
-| `SENTINELNET_DATA_DIR` | Percorso della directory dati (inventario, log e chiavi) per esecuzione Docker. | directory corrente |
-| `SENTINELNET_HOST` | Indirizzo di bind del server. | `127.0.0.1` |
-| `SENTINELNET_PORT` | Porta di ascolto del server. | `8765` |
-| `SENTINELNET_NO_BROWSER` | Se `true`, non apre il browser all'avvio (impostato automaticamente quando host è `0.0.0.0`). | `false` |
-| `SENTINELNET_CORS_ORIGINS` | Lista (separata da virgole) delle origini CORS consentite. | `http://localhost:8765,http://127.0.0.1:8765` |
-| `SENTINELNET_SSL_CERTFILE` | Certificato TLS (PEM) per HTTPS nativo; richiede anche `SENTINELNET_SSL_KEYFILE`. Percorsi relativi risolti in `SENTINELNET_DATA_DIR`. Vedi [docs/HARDENING.md](docs/HARDENING.md). | HTTP |
-| `SENTINELNET_SSL_KEYFILE` | Chiave privata TLS (PEM) per HTTPS nativo. | HTTP |
-
-> ⚠️ **Esposizione del pannello**: non esporre mai il pannello in HTTP su reti non fidate. Guida completa a TLS nativo e reverse proxy: [docs/HARDENING.md](docs/HARDENING.md).
+The application is available at **`http://localhost:8765/`**.
 
 ---
 
-## Sedi Remote (multi-sito)
+## Environment variables
 
-SentinelNet gestisce più sedi su VPN da un unico centrale, in modalità
-**central poll** (SSH diretto via VPN) o **site agent** (agente remoto che si
-connette in uscita e riceve i comandi da una coda). Guida completa alla
-creazione e gestione: [docs/REMOTE-SITES.md](docs/REMOTE-SITES.md).
+All variables are optional. When unset, SentinelNet generates and persists secure
+keys in local files (`secret.key`, `jwt_secret.key`).
+
+| Variable | Description | Default |
+|---|---|---|
+| `SENTINELNET_MASTER_KEY` | Passphrase from which the Fernet key for device-credential encryption is derived (via SHA-256). | `secret.key` file |
+| `SENTINELNET_JWT_SECRET` | Secret used to sign session JWTs. | `jwt_secret.key` file |
+| `SENTINELNET_ADMIN_USER` | Username used by the `default` credential profile and as a fallback for devices without one. | `Admin` |
+| `SENTINELNET_ADMIN_PASS` | Password used by the `default` credential profile and as a fallback. | `admin` |
+| `SENTINELNET_ADMIN_SECRET` | Enable secret used by the `default` credential profile and as a fallback. | `admin` |
+| `SENTINELNET_DATA_DIR` | Data directory path (inventory, logs, keys). | `./data` |
+| `SENTINELNET_HOST` | Server bind address. | `127.0.0.1` |
+| `SENTINELNET_PORT` | Listening port. | `8765` |
+| `SENTINELNET_NO_BROWSER` | If `true`, does not open the browser at startup (set automatically when the host is `0.0.0.0`). | `false` |
+| `SENTINELNET_CORS_ORIGINS` | Comma-separated list of allowed CORS origins. | `http://localhost:8765,http://127.0.0.1:8765` |
+| `SENTINELNET_SSL_CERTFILE` | TLS certificate (PEM) for native HTTPS; also requires `SENTINELNET_SSL_KEYFILE`. Relative paths resolve inside `SENTINELNET_DATA_DIR`. | HTTP |
+| `SENTINELNET_SSL_KEYFILE` | TLS private key (PEM) for native HTTPS. | HTTP |
+
+Observability listener variables (`SENTINELNET_OBS_*`) are documented in
+[docs/operations.md](docs/operations.md) §3.
+
+> **Panel exposure:** never expose the management panel over HTTP on untrusted
+> networks. Full guidance on native TLS and reverse proxies:
+> [docs/hardening.md](docs/hardening.md).
 
 ---
 
-## Server MCP — usare SentinelNet da un client LLM esterno
+## Remote sites (multi-site)
 
-Oltre all'AI Assistant integrato nella dashboard, SentinelNet espone i propri
-dati come **server MCP** (Model Context Protocol) su stdio: qualunque client
-compatibile (Claude Desktop, LM Studio, Cline, ecc.) può interrogare
-inventario, mappa di rete, MAC tracker e config analyzer, eseguire comandi CLI
-e generare config day-0, con autorizzazione (ruoli, tenant, blacklist comandi)
-applicata sempre lato server.
+SentinelNet manages multiple sites over VPN from a single central server, in
+**central poll** mode (direct SSH over VPN) or **site agent** mode (a remote
+agent that connects outbound and receives commands from a queue). Full
+deployment guide: [docs/remote-sites.md](docs/remote-sites.md).
 
-Esempio di configurazione per Claude Desktop (`claude_desktop_config.json`):
+---
+
+## MCP server — using SentinelNet from an external LLM client
+
+Besides the AI assistant built into the dashboard, SentinelNet exposes its data
+as an **MCP server** (Model Context Protocol) over stdio. Any compatible client
+(Claude Desktop, LM Studio, Cline, …) can query the inventory, network map, MAC
+tracker and config analyzer, run CLI commands and generate day-0 configuration —
+with authorization (roles, tenants, command blacklist) always enforced
+server-side.
+
+Example Claude Desktop configuration (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "sentinelnet": {
       "command": "python",
-      "args": ["/percorso/SentinelNet/mcp_server.py"],
+      "args": ["/path/to/SentinelNet/ai/mcp_server.py"],
       "env": {
         "SENTINELNET_URL": "http://127.0.0.1:8765",
         "SENTINELNET_USERNAME": "admin",
@@ -176,25 +213,27 @@ Esempio di configurazione per Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Il server centrale deve essere in esecuzione. Tool disponibili: `list_devices`,
+The central server must be running. Available tools: `list_devices`,
 `get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`,
 `analyze_config`, `get_triage_status`, `send_cli_command`, `list_sites`,
-`generate_switch_config`. I tool di scrittura richiedono un account con ruolo
-*operator*; usare un account *viewer* per accesso in sola lettura.
+`generate_switch_config`. Write tools require an *operator* account; use a
+*viewer* account for read-only access.
 
-Dalla dashboard, tab **MCP Server** (admin): guida alla configurazione, snippet
-JSON pronto da copiare e selezione dei tool esposti ai client (i tool
-disattivati spariscono dall'elenco e ogni chiamata viene rifiutata).
+The dashboard's **MCP Server** tab (admin) provides setup guidance, a
+ready-to-copy JSON snippet, and control over which tools are exposed to clients —
+disabled tools disappear from the list and every call to them is rejected.
 
 ---
 
-## Sicurezza delle Credenziali
+## Credential security
 
-Il file `network_hosts.csv` contiene le credenziali cifrate degli apparati fisici ed è escluso dal tracciamento Git tramite `.gitignore`. Prima di pubblicare il repository, verificare che i seguenti file siano esclusi:
+`network_hosts.csv` holds the encrypted credentials of physical devices and is
+excluded from Git tracking via `.gitignore`. Before publishing the repository,
+verify these files are excluded:
 
-* `network_hosts.csv` — inventario con credenziali cifrate
-* `backup-config/` — configurazioni running degli apparati
-* `detected_versions.json` — cache dello stato di triage
-* `groups.json` — gruppi/sedi configurati
-* `secret.key` / `jwt_secret.key` — chiavi crittografiche locali
-* `users.json` — account amministratore locale
+- `network_hosts.csv` — inventory with encrypted credentials
+- `backup-config/` — device running-configs
+- `detected_versions.json` — triage state cache
+- `groups.json` — configured groups and sites
+- `secret.key` / `jwt_secret.key` — local cryptographic keys
+- `users.json` — local administrator accounts

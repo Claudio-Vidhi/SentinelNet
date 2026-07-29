@@ -24,7 +24,7 @@ security_scheme = HTTPBearer(auto_error=False)
 SESSION_COOKIE = "net_session"
 # Metodi che modificano stato: su autenticazione via cookie richiedono la
 # prova anti-CSRF (header custom X-Requested-With, non impostabile cross-site
-# da un form; vedi docs/HARDENING.md).
+# da un form; vedi docs/hardening.md).
 _CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_HEADER = "x-requested-with"
 

@@ -1,300 +1,305 @@
-# Flussi Live (Top Talker) + Flow SIEM — report tecnico
+# Live Flows and Flow SIEM
 
-Documento di orientamento al codice per chi deve mettere mano ai due tab.
-Copre: pipeline di ingest, schema dati, endpoint, frontend, decisioni prese e
-loro motivazione, limiti noti.
+A code-oriented reference for anyone working on the two flow tabs. Covers the
+ingest pipeline, the data schema, the endpoints, the frontend, the decisions
+behind them, and the known limits.
 
-Riferimenti incrociati: `docs/MASTER-IMPLEMENTATION-PLAN.md` (fasi 1–5, §9),
-`CONTRIBUTING.md` §3 (regola async-DB) e §4 (regola di scope multi-tenant).
+Cross-references: [architecture.md](architecture.md) (full pipeline),
+[collectors.md](collectors.md) (sources), [CONTRIBUTING.md](../CONTRIBUTING.md)
+§3 (async-DB rule) and §4 (multi-tenant scope rule).
 
 ---
 
-## 1. In una riga
+## 1. In one line
 
-| | Flussi Live | Flow SIEM |
+| | Live Flows | Flow SIEM |
 |---|---|---|
 | Tab | `tab-flows` | `tab-flow-siem` |
-| Domanda a cui risponde | *quanto traffico, fra chi, su che protocollo* | *quel traffico è stato permesso o bloccato, e perché* |
-| Tabella sorgente | `flow_aggregates` (+ `syslog_events`, `correlated_events`) | `syslog_events` (+ `siem_suppressions`) |
-| Router | [routers/observability.py](routers/observability.py) | [routers/flow_siem.py](routers/flow_siem.py) |
-| JS | [static/js/observability.js](static/js/observability.js) | [static/js/flow-analytics.js](static/js/flow-analytics.js) |
-| Visibilità | sempre presente | dietro flag preview admin |
+| Question it answers | *how much traffic, between whom, over which protocol* | *was that traffic allowed or blocked, and why* |
+| Source table | `flow_aggregates` (+ `syslog_events`, `correlated_events`) | `syslog_events` (+ `siem_suppressions`) |
+| Router | [routers/observability.py](../routers/observability.py) | [routers/flow_siem.py](../routers/flow_siem.py) |
+| JS | [static/js/observability.js](../static/js/observability.js) | [static/js/flow-analytics.js](../static/js/flow-analytics.js) |
+| Visibility | Always present | Behind an admin preview flag |
 
-La separazione non è estetica: `flow_aggregates` **non ha nessuna nozione di
-ALLOW/DENY** (sono contatori NetFlow/IPFIX/sFlow), mentre `syslog_events` è
-l'unica tabella che contiene verdetti reali degli apparati. Vedi §7.1 per
-com'è andata quando questa distinzione è stata ignorata.
+The split is not cosmetic: `flow_aggregates` **has no notion of ALLOW/DENY**
+(they are NetFlow/IPFIX/sFlow counters), while `syslog_events` is the only table
+holding real device verdicts. See §7.1 for what happened when that distinction
+was ignored.
 
 ---
 
-## 2. Pipeline di ingest (comune a entrambi)
+## 2. Ingest pipeline (common to both)
 
 ```
-apparati di rete
+network devices
    │ UDP (IPFIX 4739 / NetFlow 2055 / sFlow 6343 / syslog 5514)
    ▼
 _IngestProtocol.datagram_received   ← observability/ingesters/udp_server.py
-   │ put_nowait su asyncio.Queue (maxsize 20_000)
+   │ put_nowait on an asyncio.Queue (maxsize 20_000)
    ▼
 _consumer (1 task per listener)
    │ parser(data, src_ip)           ← ipfix.py / sflow.py / syslog.py
    │ _resolve_tenant(exporter_ip)   ← inventory_manager.get_device_by_ip
    ▼
-db.enqueue_flow() / db.enqueue_write()   ← coda bounded 10_000
+db.enqueue_flow() / db.enqueue_write()   ← bounded queue, 10_000
    ▼
-thread "obs-db-writer" (unica connessione in scrittura, commit batch da 500)
+"obs-db-writer" thread (single write connection, batch commit of 500)
    ▼
 observability.db  (SQLite WAL)
 ```
 
-### 2.1 Decisioni strutturali dell'ingest
+### 2.1 Structural decisions in the ingest path
 
-**Loop di ingest separato.** I listener UDP non girano sull'event loop
-principale di FastAPI ma su un loop asyncio dedicato in un thread proprio
-(`_get_ingest_loop()`, [udp_server.py:141](observability/ingesters/udp_server.py#L141)).
-Un burst di decine di migliaia di datagrammi non deve rendere non reattivi il
-terminale WebSocket e le API. È la correzione del "difetto #1" della guida
-originale, dove il parsing avveniva inline nel loop principale.
+**Separate ingest loop.** The UDP listeners do not run on FastAPI's main event
+loop but on a dedicated asyncio loop in its own thread (`_get_ingest_loop()`,
+[udp_server.py:141](../observability/ingesters/udp_server.py#L141)). A burst of
+tens of thousands of datagrams must not make the WebSocket terminal and the API
+unresponsive. This corrects "defect #1" of the original implementation guide,
+where parsing happened inline on the main loop.
 
-**`datagram_received` non fa nulla oltre ad accodare.** Nessun task per
-pacchetto, nessun parsing, nessun DB nell'handler. Coda piena → scarto +
-metrica `dropped_queue_full`. Perdere pacchetti in modo misurato è preferibile
-a bloccare il loop.
+**`datagram_received` does nothing but enqueue.** No task per packet, no
+parsing, no database access in the handler. Queue full → drop plus a
+`dropped_queue_full` metric. Losing packets in a measured way is preferable to
+blocking the loop.
 
-**Switch interval del GIL abbassato a 1ms**
-([udp_server.py:152](observability/ingesters/udp_server.py#L152)). Il thread di
-parsing è CPU-bound a burst; col default di 5ms il loop principale attendeva
-decine di ms sotto carico.
+**GIL switch interval lowered to 1 ms**
+([udp_server.py:152](../observability/ingesters/udp_server.py#L152)). The
+parsing thread is CPU-bound in bursts; at the 5 ms default the main loop was
+waiting tens of milliseconds under load.
 
-**Yield periodico nel consumer** (`await asyncio.sleep(0)` ogni 20 record). Con
-la coda piena `queue.get()` ritorna senza sospendere: senza lo yield il
-consumer affamerebbe il loop di ingest.
+**Periodic yield in the consumer** (`await asyncio.sleep(0)` every 20 records).
+With a full queue `queue.get()` returns without suspending; without the yield
+the consumer would starve its own ingest loop.
 
-**Attribuzione tenant rigida.** L'IP sorgente del datagramma viene risolto in
-un device dell'inventario. Exporter sconosciuto (o collisione: due device con
-lo stesso IP) → **record scartati**, upsert in `quarantined_exporters`, una
-voce di audit rate-limited a 1/ora per exporter, metrica
-`dropped_unknown_exporter`. *Nessun record viene mai scritto con tenant
-`default`*: un dato senza sede attendibile è peggio di nessun dato, perché
-inquina lo scoping multi-tenant.
+**Strict tenant attribution.** The datagram's source IP is resolved to an
+inventory device. Unknown exporter (or a collision between two devices with the
+same IP) → **records dropped**, upsert into `quarantined_exporters`, one audit
+entry rate-limited to 1/hour per exporter, `dropped_unknown_exporter` metric.
+*No record is ever written with a `default` tenant*: data without a trustworthy
+site is worse than no data, because it poisons multi-tenant scoping. See
+[ADR-0005](adr/0005-strict-tenant-attribution.md).
 
-### 2.2 Strato DB ([core/db.py](core/db.py))
+### 2.2 Database layer ([core/db.py](../core/db.py))
 
-Regole non negoziabili:
+Non-negotiable rules:
 
-- **Una sola connessione in scrittura**, posseduta dal thread writer.
-- Le scritture si accodano con `enqueue_write()` — coda bounded, mai bloccante.
-- Le letture dagli endpoint async passano da `await db.read()`, che fa
-  `asyncio.to_thread` con connessione read-only per chiamata (WAL permette
-  letture concorrenti).
-- `get_observability_connection()` è **solo** per migrazioni e test: vietata nei
-  percorsi async (gate CI via grep). Unica eccezione consapevole:
-  `obs_anomaly_status()` la usa dentro `asyncio.to_thread` perché serve una
-  transazione read-then-write atomica.
+- **A single write connection**, owned by the writer thread.
+- Writes are enqueued with `enqueue_write()` — bounded queue, never blocking.
+- Reads from async endpoints go through `await db.read()`, which uses
+  `asyncio.to_thread` with a read-only connection per call (WAL allows
+  concurrent readers).
+- `get_observability_connection()` is **only** for migrations and tests, and is
+  forbidden on async paths (grep gate in review). One deliberate exception:
+  `obs_anomaly_status()` uses it inside `asyncio.to_thread` because it needs an
+  atomic read-then-write transaction.
 
-**Resilienza del writer.** Commit batch (fino a 500 payload). Se un payload del
-batch fallisce → rollback e riesecuzione item-per-item, scartando solo i payload
-difettosi (`writes_dropped_error`). Crash del writer → riavvio con backoff
-esponenziale, max 5 tentativi; oltre il limite le scritture vengono scartate ma
-**l'app resta viva** (§2.7 del piano).
+See [ADR-0004](adr/0004-single-process-sqlite-writer.md).
 
-**Clock skew.** `flow_window_start()` usa il timestamp dell'exporter solo se
-entro ±300s dalla ricezione, altrimenti ricade sul tempo di ricezione e
-incrementa `clock_skew_fallback`. Un apparato con l'orologio sbagliato non deve
-poter scrivere bucket nel futuro o nel passato remoto.
+**Writer resilience.** Batch commits, up to 500 payloads. If one payload in a
+batch fails → rollback and re-run item by item, dropping only the faulty
+payloads (`writes_dropped_error`). If the writer crashes → restart with
+exponential backoff, max 5 attempts; beyond that, writes are dropped but **the
+application stays alive**.
 
-### 2.3 Aggregazione dei flussi
+**Clock skew.** `flow_window_start()` uses the exporter's timestamp only if it
+is within ±300 s of reception; otherwise it falls back to reception time and
+increments `clock_skew_fallback`. A device with a wrong clock must not be able
+to write buckets into the future or the distant past.
 
-`FLOW_UPSERT_SQL` fa UPSERT su
-`UNIQUE(window_start, tenant, src_ip, dst_ip, protocol, dst_port)` con
-`window_start` troncato al minuto. Quindi `flow_aggregates` **non è un log di
-flussi**, è un rollup al minuto: `flow_count` conta quanti record di flusso
-sono confluiti nel bucket.
+### 2.3 Flow aggregation
+
+`FLOW_UPSERT_SQL` upserts on
+`UNIQUE(window_start, tenant, src_ip, dst_ip, protocol, dst_port)` with
+`window_start` truncated to the minute. So `flow_aggregates` **is not a flow
+log**: it is a per-minute rollup, and `flow_count` counts how many flow records
+landed in the bucket.
 
 ---
 
-## 3. Schema dati ([observability/storage/schema.sql](observability/storage/schema.sql))
+## 3. Data schema ([observability/storage/schema.sql](../observability/storage/schema.sql))
 
-Migrazioni forward-only e idempotenti (`IF NOT EXISTS` ovunque).
-`SCHEMA_VERSION = 4`. Guardia di **downgrade**: se il DB dichiara una versione
-più nuova del codice, `migrate()` solleva `SchemaTooNewError` e l'osservabilità
-rifiuta di partire (contratto di rollback §6.3).
+Forward-only, idempotent migrations (`IF NOT EXISTS` everywhere).
+`SCHEMA_VERSION = 4`. **Downgrade guard**: if the database declares a version
+newer than the code, `migrate()` raises `SchemaTooNewError` and observability
+refuses to start.
 
-| Tabella | Chi la scrive | Chi la legge | Note |
+| Table | Written by | Read by | Notes |
 |---|---|---|---|
-| `flow_aggregates` | ingester flow (upsert al minuto) | `/top`, `/flowgraph`, `/protocol-distribution`, correlatore, `summary.py` | colonna `source` aggiunta in v3 via ALTER idempotente; NULL = righe legacy |
-| `syslog_events` | ingester syslog | `/syslog`, **tutto Flow SIEM**, correlatore | `action` = verdetto reale dell'apparato |
-| `correlated_events` | correlatore | `/anomalies`, KPI "spikes" | `dedup_key UNIQUE` + `INSERT OR IGNORE` |
-| `siem_suppressions` | `POST /alerts/suppress` | esclusione in `/events` e `/facets` | PK = `syslog_events.id` |
-| `quarantined_exporters` | ingest | `normalize._from_quarantine` → `platform.exporter_unknown` → `FLOW_EXPORTER_UNKNOWN_001` | exporter non in inventario; la perdita di dati diventa evidenza sul tenant riservato `__platform__` invece di restare solo diagnostica |
-| `api_observations` | api_poller REST | `/api-context` | snapshot FortiGate, non flussi |
+| `flow_aggregates` | Flow ingester (per-minute upsert) | `/top`, `/flowgraph`, `/protocol-distribution`, correlator, `summary.py` | `source` column added in v3 via idempotent ALTER; NULL means legacy rows |
+| `syslog_events` | Syslog ingester | `/syslog`, **all of Flow SIEM**, correlator | `action` is the device's real verdict |
+| `correlated_events` | Correlator | `/anomalies`, "spikes" KPI | `dedup_key UNIQUE` + `INSERT OR IGNORE` |
+| `siem_suppressions` | `POST /alerts/suppress` | Exclusion in `/events` and `/facets` | PK is `syslog_events.id` |
+| `quarantined_exporters` | Ingest | `normalize._from_quarantine` → `platform.exporter_unknown` → `FLOW_EXPORTER_UNKNOWN_001` | Exporters outside inventory; data loss becomes evidence on the reserved `__platform__` tenant instead of staying diagnostic-only |
+| `api_observations` | REST/SNMP pollers | `/api-context` | Device snapshots, not flows |
 
-### 3.1 Retention ([observability/rollup.py](observability/rollup.py))
+### 3.1 Retention ([observability/rollup.py](../observability/rollup.py))
 
-Job orario, misura tecnica GDPR (§6.7). DELETE batchati a 5000 righe per
-transazione via `rowid`, per non tenere lock lunghi. Gli eventi correlati
-**non risolti** (`new`/`ack`) non vengono mai eliminati automaticamente —
-solo quelli `resolved`.
+Hourly job, a technical GDPR measure. DELETEs batched at 5000 rows per
+transaction via `rowid`, to avoid holding long locks. **Unresolved** correlated
+events (`new`/`ack`) are never deleted automatically — only `resolved` ones.
 
-> Nota: `siem_suppressions` non è nella tabella di retention. Le soppressioni
-> sopravvivono alla cancellazione dell'evento syslog a cui puntano (righe
-> orfane innocue, ma è un dettaglio da sapere).
+> Note: `siem_suppressions` is not in the retention table. Suppressions outlive
+> the syslog event they point at (harmless orphan rows, but worth knowing).
 
 ---
 
-## 4. Flussi Live (`tab-flows`)
+## 4. Live Flows (`tab-flows`)
 
-### 4.1 Endpoint
+### 4.1 Endpoints
 
-Tutti in [routers/observability.py](routers/observability.py), tutti scoped da
+All in [routers/observability.py](../routers/observability.py), all scoped by
 `_tenant_filter()`.
 
-| Endpoint | Auth | Cosa fa |
+| Endpoint | Auth | What it does |
 |---|---|---|
-| `GET /api/observability/top` | utente | top talker aggregati; `window`, `metric` (bytes\|packets), `source`, `limit≤500` |
-| `GET /api/observability/flowgraph` | utente | nodi/archi top-50, KPI, riepilogo tenant, breakdown protocolli |
-| `GET /api/observability/protocol-distribution` | utente | totali + trend temporale + breakdown per drill-down |
-| `GET /api/observability/syslog` | utente | ultimi eventi syslog normalizzati |
-| `GET /api/observability/anomalies` | utente | eventi correlati, paginati, filtrati per stato |
-| `POST /api/observability/anomalies/{id}/status` | operator | transizione di stato |
-| `GET/POST /api/observability/config` | **admin** | config listener, applicata a caldo |
-| `GET /api/observability/health` | **admin** | listener attivi, metriche, dimensione DB |
-| `POST /api/observability/api-poll` | operator | polling REST one-shot |
+| `GET /api/observability/top` | user | Aggregated top talkers; `window`, `metric` (bytes\|packets), `source`, `limit≤500` |
+| `GET /api/observability/flowgraph` | user | Top-50 nodes/edges, KPIs, tenant summary, protocol breakdown |
+| `GET /api/observability/protocol-distribution` | user | Totals, time trend and drill-down breakdown |
+| `GET /api/observability/syslog` | user | Latest normalized syslog events |
+| `GET /api/observability/anomalies` | user | Correlated events, paginated, filtered by status |
+| `POST /api/observability/anomalies/{id}/status` | operator | Status transition |
+| `GET/POST /api/observability/config` | **admin** | Listener config, applied hot |
+| `GET /api/observability/health` | **admin** | Active listeners, metrics, DB size |
+| `POST /api/observability/api-poll` | operator | One-shot REST poll |
 
-### 4.2 Regola di scope (§4 di CONTRIBUTING.md)
+### 4.2 Scope rule (CONTRIBUTING.md §4)
 
 ```python
 def _tenant_filter(current_user):
     scope = user_group_scope(current_user)
     if scope is None:
-        return "", ()                      # admin o utente non limitato
+        return "", ()                      # admin, or user with no restriction
     groups = sorted(scope)
     placeholders = ",".join("?" * len(groups))
     return f" AND tenant IN ({placeholders})", tuple(groups)
 ```
 
-Sempre `WHERE tenant IN (…placeholders…)` con parametri bound. **Mai**
-interpolazione di stringhe, **mai** un gruppo scalare (un utente può
-appartenere a più sedi). `user_group_scope` ritorna `None` per admin e per
-utenti senza gruppi assegnati.
+Always `WHERE tenant IN (…placeholders…)` with bound parameters. **Never** string
+interpolation, **never** a scalar group — a user can belong to multiple sites.
+`user_group_scope` returns `None` for admins and for users with no groups
+assigned.
 
-### 4.3 Validazione finestra
+### 4.3 Window validation
 
-`_parse_window()` accetta `^(\d{1,4})([mhd])$` con tetto a 7 giorni
-(`MAX_WINDOW_S`). Fuori formato o fuori range → 400. È l'unico punto di
-ingresso della finestra per tutti gli endpoint del router.
+`_parse_window()` accepts `^(\d{1,4})([mhd])$` with a 7-day ceiling
+(`MAX_WINDOW_S`). Malformed or out of range → 400. It is the single entry point
+for the window across every endpoint in the router.
 
-### 4.4 `/flowgraph` — le decisioni interessanti
+### 4.4 `/flowgraph` — the interesting decisions
 
-**Bytes del nodo = src + dst.**
+**Node bytes = src + dst.**
+
 ```python
 node_bytes[src] = node_bytes.get(src, 0) + nbytes
 node_bytes[dst] = node_bytes.get(dst, 0) + nbytes
 ```
-Un host solo-destinazione (un server interno mai visto come sorgente) altrimenti
-resterebbe a 0 e verrebbe scartato ingiustamente dal cap top-50.
 
-**Cap a 50 nodi, poi archi filtrati sui nodi sopravvissuti, poi top-50 archi.**
-L'ordine conta: filtrare gli archi prima dei nodi produrrebbe archi pendenti.
+A destination-only host (an internal server never seen as a source) would
+otherwise sit at 0 and be unfairly dropped by the top-50 cap.
 
-**VLAN: reale se nota, sintetica se no, e la differenza è dichiarata.**
-Se esiste un binding ARP per l'IP (tabella `arp_entries` di Client Map,
-popolata dai gateway L3) si usa la VLAN 802.1Q reale. Altrimenti si ricade su
-`_synthetic_vlan(tenant)` e **il nodo/arco viene marcato `vlan_real: false`**.
-Il frontend alza il flag `vlan_disclosure` e mostra un asterisco con tooltip
-([observability.js:872](static/js/observability.js#L872)). Principio: mai
-spacciare un valore inventato per un tag reale.
+**Cap at 50 nodes, then filter edges against surviving nodes, then top-50
+edges.** The order matters: filtering edges before nodes would produce dangling
+edges.
 
-`_synthetic_vlan()` usa **sha1 troncato**, non `hash()`: il builtin è salato per
-processo (`PYTHONHASHSEED` random), quindi la stessa sede avrebbe avuto VLAN
-diverse fra restart e fra worker.
+**VLAN: real when known, synthetic when not, and the difference is declared.**
+If an ARP binding exists for the IP (the `arp_entries` table behind Client Map,
+populated from L3 gateways), the real 802.1Q VLAN is used. Otherwise it falls
+back to `_synthetic_vlan(tenant)` and **the node/edge is marked
+`vlan_real: false`**. The frontend raises the `vlan_disclosure` flag and shows an
+asterisk with a tooltip
+([observability.js:872](../static/js/observability.js#L872)). Principle: never
+pass an invented value off as a real tag.
 
-**Il grafo force-directed non esiste più.** Il canvas è stato rimosso; restano
-KPI, riepilogo tenant e le due tabelle. `_fgVisibleEdges()` ritorna l'intera
-finestra proprio perché non c'è più un grafo su cui fare click-to-filter.
+`_synthetic_vlan()` uses a **truncated sha1**, not `hash()`: the builtin is
+salted per process (`PYTHONHASHSEED` is random), so the same site would have had
+different VLANs across restarts and across workers.
 
-### 4.5 Correlatore ([observability/correlator.py](observability/correlator.py))
+**The force-directed graph no longer exists.** The canvas was removed; what
+remains are the KPIs, the tenant summary and the two tables. `_fgVisibleEdges()`
+returns the whole window precisely because there is no longer a graph to
+click-to-filter on.
 
-Task periodico ogni 300s, lookback 900s, max 500 eventi/ciclo.
+### 4.5 Correlator ([observability/correlator.py](../observability/correlator.py))
 
-Politica **precision-over-recall** (Decisione #9): si parte dagli eventi syslog
-con `action` in `_SECURITY_ACTIONS`, si estraggono src/dst/porta dal messaggio,
-e **serve evidenza di flusso corroborante** — un bucket in `flow_aggregates`
-stesso tenant, stessi endpoint, entro ±120s. Senza flusso non si emette nulla.
+Periodic task every 300 s, 900 s lookback, max 500 events per cycle.
 
-Unica eccezione: severità ≤ 3 (emerg…error) emerge comunque come evento
-standalone, anche senza flusso e senza endpoint estraibili. Un `critical` non
-può sparire perché il NetFlow non è arrivato.
+**Precision-over-recall policy:** start from syslog events whose `action` is in
+`_SECURITY_ACTIONS`, extract src/dst/port from the message, and **require
+corroborating flow evidence** — a bucket in `flow_aggregates` with the same
+tenant, the same endpoints, within ±120 s. No flow, no evidence.
 
-Dedup: `sha256(tenant|kind|syslog_id|src|dst|flow_tuple)` su colonna `UNIQUE`
-con `INSERT OR IGNORE`. Le ri-esecuzioni non duplicano.
+One exception: severity ≤ 3 (emerg…error) is emitted as a standalone event
+regardless, even without a flow and without extractable endpoints. A `critical`
+must not vanish because the NetFlow record didn't arrive.
 
-Arricchimento switch/porta best-effort via `mac_history.client_map` (uplink già
-esclusi), stesso tenant. Assente → `switch_port` NULL, non un placeholder.
+Dedup: `sha256(tenant|kind|syslog_id|src|dst|flow_tuple)` on a `UNIQUE` column
+with `INSERT OR IGNORE`. Re-runs do not duplicate.
 
-Mai correlazione cross-tenant: tutte le query filtrano per tenant.
+Switch/port enrichment is best-effort via `mac_history.client_map` (uplinks
+already excluded), same tenant. Absent → `switch_port` is NULL, not a
+placeholder.
 
-### 4.6 Frontend ([static/js/observability.js](static/js/observability.js))
+Never cross-tenant: every query filters by tenant.
 
-- **Auto-refresh 30s**, in pausa se il tab non è attivo o la pagina non è
-  visibile; refresh immediato al ritorno (`visibilitychange`).
-- **Anti-sovrapposizione**: `flowsFetchInFlight` e `_fgFetchInFlight` evitano
-  fetch concorrenti.
-- **Selezione per tupla, non per indice riga.** `flowKey(f)` =
-  `tenant|src|dst|proto|port|source`. La selezione sopravvive al filtro tenant e
-  al refresh periodico; con l'indice si sarebbe spostata sotto le dita
-  dell'utente.
-- **Chip per origine** (`all`/`netflow`/`ipfix`/`sflow`/`syslog`). In modo
-  `syslog` lo schema colonne è diverso: tabella dedicata, non un adattamento
-  della tabella flussi. In modo `all` il syslog compare in una sezione separata
-  sotto.
-- **Colonne nascondibili** persistite in `localStorage`
+### 4.6 Frontend ([static/js/observability.js](../static/js/observability.js))
+
+- **Auto-refresh every 30 s**, paused when the tab is inactive or the page is
+  hidden; immediate refresh on return (`visibilitychange`).
+- **Overlap prevention**: `flowsFetchInFlight` and `_fgFetchInFlight` prevent
+  concurrent fetches.
+- **Selection by tuple, not by row index.** `flowKey(f)` is
+  `tenant|src|dst|proto|port|source`. The selection survives the tenant filter
+  and the periodic refresh; with an index it would have moved under the user's
+  fingers.
+- **Source chips** (`all`/`netflow`/`ipfix`/`sflow`/`syslog`). In `syslog` mode
+  the column layout differs: a dedicated table, not an adaptation of the flow
+  table. In `all` mode syslog appears in a separate section below.
+- **Hideable columns** persisted in `localStorage`
   (`sentinelnet_flows_hidden_cols`).
-- **Banner di stato**: se `/health` dice observability spenta o nessun listener
-  attivo, lo si dichiara. Prima l'assenza di dati era silenziosa e
-  indistinguibile da "rete tranquilla". `/health` è admin-only: 403 → banner
-  nascosto, non errore.
-- **Pannello dettaglio flusso** (slide-in): riusa
-  `/api/arp/client-map` per MAC/switch/porta della sorgente — nessun endpoint
-  nuovo.
-- **Ponte verso la topologia**: `highlightInTopology(ip)` cambia tab e fa
-  `networkInstance.focus(ip)` con retry (20 tentativi × 250ms) perché il grafo
-  Vis.js potrebbe non essere ancora caricato.
-- **Ponte verso le anomalie**: `jumpToAnomaliesForFlow()` imposta un filtro
-  client-side su src/dst e scrolla su un'ancora esplicita
-  (`#anomSectionTitle`) — il vecchio selettore `#tab-flows h4` si rompeva a ogni
-  modifica della gerarchia.
+- **Status banner**: if `/health` reports observability off or no active
+  listener, it says so. Previously the absence of data was silent and
+  indistinguishable from "quiet network". `/health` is admin-only: a 403 hides
+  the banner rather than raising an error.
+- **Flow detail panel** (slide-in): reuses `/api/arp/client-map` for the source's
+  MAC/switch/port — no new endpoint.
+- **Bridge to topology**: `highlightInTopology(ip)` switches tab and calls
+  `networkInstance.focus(ip)` with a retry (20 attempts × 250 ms), because the
+  Vis.js graph may not be loaded yet.
+- **Bridge to anomalies**: `jumpToAnomaliesForFlow()` applies a client-side
+  filter on src/dst and scrolls to an explicit anchor (`#anomSectionTitle`) — the
+  old `#tab-flows h4` selector broke on every hierarchy change.
 
-### 4.7 Transizioni di stato delle anomalie
+### 4.7 Anomaly status transitions
 
 `_ALLOWED_TRANSITIONS = {(new,ack), (new,resolved), (ack,resolved)}`.
-Concorrenza ottimistica: il client manda `from_status` e l'UPDATE ha
-`AND status = ?`; `rowcount == 0` → **409** con messaggio "ricarica la lista".
-Evento fuori scope o inesistente → **404 identico**, per non confermare
-l'esistenza di eventi di altre sedi.
 
-### 4.8 Integrazione AI
+Optimistic concurrency: the client sends `from_status` and the UPDATE carries
+`AND status = ?`; `rowcount == 0` → **409** with a "reload the list" message. An
+out-of-scope or non-existent event returns an **identical 404**, so as not to
+confirm the existence of other sites' events.
 
-Due percorsi, entrambi con assemblaggio del contesto **lato server**:
+### 4.8 AI integration
 
-- nessuna riga selezionata → `attach_top_flows: true` → riassunto top-N;
-- righe selezionate → `attach_flow_keys: [{src_ip,dst_ip,protocol,dst_port}]`,
+Two paths, both with **server-side** context assembly:
+
+- no rows selected → `attach_top_flows: true` → top-N summary;
+- rows selected → `attach_flow_keys: [{src_ip, dst_ip, protocol, dst_port}]`,
   max 20.
 
-Il browser invia **solo tuple identificative**: mai byte o pacchetti. I totali
-vengono ri-derivati dal DB in `top_flows_context()`
-([observability/summary.py](observability/summary.py)), e lo scope tenant resta
-applicato in AND — le key fornite dal client non possono estrarre righe di altri
-tenant. Il contesto passa comunque dal choke-point di redazione in
-`ai_assistant.chat()`. L'UI dichiara esplicitamente cosa sta per essere inviato
-e a quale provider.
+The browser sends **identifying tuples only**: never bytes or packets. Totals are
+re-derived from the database in `top_flows_context()`
+([observability/summary.py](../observability/summary.py)), and tenant scope stays
+applied in `AND` — client-supplied keys cannot extract other tenants' rows. The
+context still passes through the redaction choke-point in `ai_assistant.chat()`.
+The UI explicitly states what is about to be sent and to which provider. See
+[ADR-0006](adr/0006-deterministic-correlation.md).
 
-### 4.9 Esposizione MCP
+### 4.9 MCP exposure
 
-`get_top_talkers` e `get_anomalies` sono definiti in
-[ai/mcp_server.py:414](ai/mcp_server.py#L414) ma sono in
-`_MCP_DEFAULT_DISABLED` ([routers/mcp.py:15](routers/mcp.py#L15)): vanno
-abilitati esplicitamente.
+`get_top_talkers` and `get_anomalies` are defined in
+[ai/mcp_server.py:414](../ai/mcp_server.py#L414) but sit in
+`_MCP_DEFAULT_DISABLED` ([routers/mcp.py:15](../routers/mcp.py#L15)): they must
+be enabled explicitly.
 
 ---
 
@@ -302,50 +307,51 @@ abilitati esplicitamente.
 
 ### 5.1 Gating
 
-Tab dietro flag preview admin: `GET/POST /api/settings/flow-siem-preview`
-([routers/settings.py:111](routers/settings.py#L111)), persistito in
-`app_settings.json` come `flow_siem_preview_enabled`, con voce di audit a ogni
-cambio. Il pulsante di nav è `display:none` finché il flag è off.
+The tab sits behind an admin preview flag:
+`GET/POST /api/settings/flow-siem-preview`
+([routers/settings.py:111](../routers/settings.py#L111)), persisted in
+`app_settings.json` as `flow_siem_preview_enabled`, with an audit entry on every
+change. The nav button is `display:none` while the flag is off.
 
-### 5.2 Endpoint
+### 5.2 Endpoints
 
-Prefix `/api/flow-siem`, tutti scoped.
+Prefix `/api/flow-siem`, all scoped.
 
-| Endpoint | Cosa fa |
+| Endpoint | What it does |
 |---|---|
-| `GET /events` | registro eventi, `q`, `window`, `action`, `limit≤500`, `offset` |
-| `GET /histogram` | conteggi + deny per bucket temporale (10–100 bucket) |
-| `GET /facets` | top src/dst IP, threat flag, azioni |
-| `POST /alerts/suppress` | soppressione persistita |
+| `GET /events` | Event log; `q`, `window`, `action`, `limit≤500`, `offset` |
+| `GET /histogram` | Counts and denies per time bucket (10–100 buckets) |
+| `GET /facets` | Top source/destination IPs, threat flags, actions |
+| `POST /alerts/suppress` | Persisted suppression |
 
-### 5.3 Da riga syslog a evento SIEM
+### 5.3 From a syslog row to a SIEM event
 
-`_to_event()` ([flow_siem.py:129](routers/flow_siem.py#L129)):
+`_to_event()` ([flow_siem.py:129](../routers/flow_siem.py#L129)):
 
-| Campo | Origine |
+| Field | Origin |
 |---|---|
-| `id` | `syslog_events.id` — **chiave primaria, stabile** |
-| `src_ip`/`dst_ip` | kv FortiGate `srcip`/`dstip`, fallback prime due IP nel messaggio |
+| `id` | `syslog_events.id` — **primary key, stable** |
+| `src_ip`/`dst_ip` | FortiGate kv `srcip`/`dstip`, falling back to the first two IPs in the message |
 | `src_port`/`dst_port` | kv `srcport`/`dstport` |
-| `proto` | kv `proto`\|`service`, numerico mappato (6→TCP, 17→UDP, 1→ICMP) |
-| `bytes` | `sentbyte + rcvdbyte`, `None` se assenti |
-| `action` | colonna `action` oppure kv `action` |
-| `is_deny` | `action` ∈ `_SECURITY_ACTIONS` (importato dal correlatore) |
-| `threat_flag` | derivato: vedi sotto |
+| `proto` | kv `proto`\|`service`, numeric values mapped (6→TCP, 17→UDP, 1→ICMP) |
+| `bytes` | `sentbyte + rcvdbyte`, `None` if absent |
+| `action` | The `action` column, or kv `action` |
+| `is_deny` | `action` ∈ `_SECURITY_ACTIONS` (imported from the correlator) |
+| `threat_flag` | Derived: see below |
 
-`_threat_flag()` deriva **solo da dati reali**, in ordine di priorità:
+`_threat_flag()` derives **only from real data**, in priority order:
 `BLOCKED_TRAFFIC` (deny) → `HIGH_SEVERITY` (sev ≤ 3) → `HIGH_VOLUME_TRANSFER`
 (> 1 MB) → `EXTERNAL_DNS` (dst 8.8.8.8 / 1.1.1.1) → `NORMAL`.
 
-**Ciò che il messaggio non contiene resta `None`** e la UI mostra un trattino.
-Nessun campo sintetizzato.
+**Whatever the message does not contain stays `None`** and the UI shows a dash.
+No field is synthesized.
 
-### 5.4 Deep scan a lotti
+### 5.4 Batched deep scan
 
-`src_ip`, `dst_ip`, `proto`, `threat_flag` non sono colonne: nascono da
-`_to_event()` sul corpo del messaggio. Il filtro **non è esprimibile in SQL** e
-resta in Python. Quindi `/events` legge a lotti finché non ha abbastanza
-corrispondenze:
+`src_ip`, `dst_ip`, `proto` and `threat_flag` are not columns: they come from
+`_to_event()` applied to the message body. The filter **is not expressible in
+SQL** and stays in Python. So `/events` reads in batches until it has enough
+matches:
 
 ```python
 wanted = offset + limit
@@ -354,194 +360,190 @@ while len(events) < wanted and scanned < MAX_SCAN:   # MAX_SCAN = 20_000
     ...
 ```
 
-Con un blocco unico di righe recenti, un IP raro presente nelle faccette (che
-scandiscono 2000 righe) non compariva mai in tabella. Il tetto a 20.000 righe
-grezze per richiesta limita il costo.
+With a single block of recent rows, a rare IP present in the facets (which scan
+2000 rows) never appeared in the table. The 20,000-raw-row ceiling per request
+bounds the cost.
 
-**Costo noto:** filtro non selettivo su finestra ampia = fino a 20.000 righe
-lette e parsate in Python per richiesta, con lo streaming che ripete la query
-ogni 5s. È il compromesso accettato per non aggiungere colonne derivate allo
-schema.
+**Known cost:** a non-selective filter over a wide window means up to 20,000 rows
+read and parsed in Python per request, with streaming repeating the query every
+5 s. This is the accepted trade-off for not adding derived columns to the schema.
 
-### 5.5 Sintassi `campo:valore`
+### 5.5 `field:value` syntax
 
 `_FILTER_FIELDS = (src_ip, dst_ip, action, threat_flag, proto, device_ip, tenant)`.
 
-La ricerca libera guarda **tutti** i campi: cliccare un IP fra le sorgenti
-restituiva anche le righe in cui quell'IP è la destinazione, e con quelle più
-numerose le righe volute finivano fuori dalla prima pagina. Da qui il filtro
-esatto per campo.
+Free-text search looks at **every** field: clicking an IP among the sources also
+returned rows where that IP is the destination, and since those are more
+numerous the intended rows fell off the first page. Hence exact per-field
+filtering.
 
-Un prefisso non riconosciuto **non** viene interpretato come campo: resta
-ricerca libera, così `8.8.8.8:53` continua a funzionare.
+An unrecognized prefix is **not** interpreted as a field: it stays free-text
+search, so `8.8.8.8:53` keeps working.
 
-`_field_value()` normalizza `action`: le faccette etichettano ogni verdetto di
-blocco come `DENY` (l'apparato può scrivere `blocked`, `drop`, …); senza la
-normalizzazione, cliccare la faccetta `DENY` non avrebbe trovato quelle righe.
+`_field_value()` normalizes `action`: the facets label every blocking verdict as
+`DENY` (a device may write `blocked`, `drop`, …); without the normalization,
+clicking the `DENY` facet would not have found those rows.
 
-### 5.6 Soppressione
+### 5.6 Suppression
 
-`POST /alerts/suppress` verifica che l'evento sia **nello scope dell'utente**
-(altrimenti si potrebbe sopprimere un'allerta di un'altra sede → 404), poi
-accoda un `INSERT OR REPLACE` in `siem_suppressions` con `reason` e
-`suppressed_by`.
+`POST /alerts/suppress` verifies the event is **within the user's scope**
+(otherwise one could suppress another site's alert → 404), then enqueues an
+`INSERT OR REPLACE` into `siem_suppressions` with `reason` and `suppressed_by`.
 
-Sia `/events` sia `/facets` applicano
+Both `/events` and `/facets` apply
 `AND NOT EXISTS (SELECT 1 FROM siem_suppressions x WHERE x.event_id = s.id)`:
-senza l'esclusione anche in `/facets`, una faccetta contava eventi che la
-tabella non mostrava più.
+without the exclusion in `/facets` too, a facet counted events the table no
+longer showed.
 
-### 5.7 Frontend ([static/js/flow-analytics.js](static/js/flow-analytics.js))
+### 5.7 Frontend ([static/js/flow-analytics.js](../static/js/flow-analytics.js))
 
-- **Live tail** ogni 5s, pausabile. Non gira se il tab non è attivo.
-- **Congelamento con dettaglio aperto**: se `_selectedEventId` è impostato, lo
-  streaming non aggiorna la tabella — il refresh la ricostruisce e sposterebbe
-  la riga che l'utente sta leggendo.
-- **Deduplica per id**: il polling chiede sempre gli ultimi 20 eventi; senza la
-  deduplica gli stessi eventi venivano riaccodati ogni 5s (duplicati in tabella,
-  e un id selezionato apriva più dettagli identici). Buffer client capped a 150.
-- **Scroll preservato**: la tabella viene ricostruita interamente, quindi si
-  salva e ripristina `scrollTop` del contenitore.
-- **Istogramma su canvas 2D**, barre rosse dove `deny_count > 0`. Nessun dato →
-  lo si scrive. (Vedi §7.2.)
-- **Faccette cliccabili**, ognuna sul proprio campo, che scrivono
-  `campo:valore` nella casella di ricerca — stessa sintassi digitabile a mano,
-  quindi il filtro resta visibile e modificabile.
-- **Escaping**: convenzione di progetto `escapeHtml(...)` per il contenuto e
-  `jsStr(...)` dentro gli handler inline.
-- **Nota DENY nel dettaglio**: quando l'azione è di blocco, il drawer chiarisce
-  che SentinelNet è una piattaforma di osservabilità **passiva** — il blocco
-  l'ha fatto l'apparato, non SentinelNet.
+- **Live tail** every 5 s, pausable. Does not run when the tab is inactive.
+- **Freeze while a detail is open**: if `_selectedEventId` is set, streaming does
+  not refresh the table — a rebuild would move the row the user is reading.
+- **Dedup by id**: polling always requests the last 20 events; without dedup the
+  same events were re-appended every 5 s (duplicate rows, and a selected id
+  opening multiple identical details). Client buffer capped at 150.
+- **Scroll preserved**: the table is rebuilt entirely, so the container's
+  `scrollTop` is saved and restored.
+- **2D canvas histogram**, red bars where `deny_count > 0`. No data → it says so
+  (see §7.2).
+- **Clickable facets**, each on its own field, writing `field:value` into the
+  search box — the same syntax that can be typed by hand, so the filter stays
+  visible and editable.
+- **Escaping**: project convention is `escapeHtml(...)` for content and
+  `jsStr(...)` inside inline handlers.
+- **DENY note in the detail drawer**: when the action is a block, the drawer
+  clarifies that SentinelNet is a **passive** observability platform — the device
+  did the blocking, not SentinelNet.
 
 ---
 
-## 6. Configurazione e ciclo di vita
+## 6. Configuration and lifecycle
 
-### 6.1 Default sicuri ([core/data_config.py:65](core/data_config.py#L65))
+### 6.1 Safe defaults ([core/data_config.py:65](../core/data_config.py#L65))
 
-Tutto spento, bind su `127.0.0.1`, porte alte non privilegiate
-(IPFIX 4739, NetFlow 2055, sFlow 6343, syslog **5514** — mai 514 in-process; il
-mapping privilegiato si fa solo via Docker). `0.0.0.0` richiede opt-in
-esplicito.
+Everything off, bind on `127.0.0.1`, high unprivileged ports (IPFIX 4739,
+NetFlow 2055, sFlow 6343, syslog **5514** — never 514 in-process; privileged
+mapping is done through Docker only). `0.0.0.0` requires explicit opt-in.
 
-Precedenza: **variabili d'ambiente > `app_settings.json` > default**.
+Precedence: **environment variables > `app_settings.json` > defaults**.
 
-### 6.2 Applicazione a caldo ([observability/listener_manager.py](observability/listener_manager.py))
+### 6.2 Hot application ([observability/listener_manager.py](../observability/listener_manager.py))
 
-`apply_obs_config()` è idempotente e viene chiamata sia dal lifespan sia da
-`POST /api/observability/config`: **nessun riavvio del processo richiesto**.
+`apply_obs_config()` is idempotent and is called both from the lifespan and from
+`POST /api/observability/config`: **no process restart required**.
 
-Diff fra handle attivi e config desiderata; **stop-before-start** per lo stesso
-nome, obbligatorio su Windows che non permette il doppio bind della stessa
-porta. Bind fallito → metrica `listener_bind_failed`, stato registrato in
-`listener_status`, log di errore, **listener saltato e app viva**.
+It diffs active handles against the desired config, with **stop-before-start**
+for the same name — mandatory on Windows, which does not allow double-binding a
+port. A failed bind produces a `listener_bind_failed` metric, a recorded state in
+`listener_status`, an error log, **a skipped listener and a live application**.
 
-Lo stato è a livello di modulo, non su `app.state`, così l'endpoint può
-richiamare `apply_obs_config` senza un riferimento a `FastAPI`.
+State is module-level rather than on `app.state`, so the endpoint can call
+`apply_obs_config` without a reference to the `FastAPI` instance.
 
-Task di background (retention, correlazione, poller API): partono alla prima
-attivazione del master switch e restano attivi (sono no-op se non c'è nulla da
-fare); il poller API viene riavviato se cambia l'intervallo.
+Background tasks (retention, correlation, API poller) start on the first
+activation of the master switch and stay up (they are no-ops when there is
+nothing to do); the API poller is restarted if its interval changes.
 
-### 6.3 Lifespan ([app_server.py:25](app_server.py#L25))
+### 6.3 Lifespan ([app_server.py:25](../app_server.py#L25))
 
 ```
-db.start_writer()        → migrate() + thread writer
-apply_obs_config(cfg)    → listener + task
+db.start_writer()        → migrate() + writer thread
+apply_obs_config(cfg)    → listeners + tasks
    yield
 listener_manager.shutdown()
-db.stop_writer()         → drena la coda, best-effort 10s
+db.stop_writer()         → drains the queue, best-effort 10 s
 ```
 
-`SchemaTooNewError` all'avvio è fatale e stampata su stderr: meglio non partire
-che scrivere su un DB di una versione futura.
+`SchemaTooNewError` at startup is fatal and printed to stderr: better not to
+start than to write to a database of a future version.
 
 ---
 
-## 7. Errori storici corretti (utili per non reintrodurli)
+## 7. Historical mistakes, corrected (useful for not reintroducing them)
 
-### 7.1 Flow SIEM costruito su `flow_aggregates`
+### 7.1 Flow SIEM built on `flow_aggregates`
 
-La prima versione del router leggeva `flow_aggregates` e **sintetizzava i campi
-mancanti**: azione da `idx % 5`, porta sorgente da `1024 + idx*37`, timestamp da
-`now - idx*45`, VLAN fissa a 10. L'id era posizionale (`siem-fl-<indice>`),
-derivato dal rango per byte: **non identificava un evento ma una posizione in
-classifica**, quindi al refresh successivo lo stesso id puntava a un'altra
-connessione e il dettaglio aperto cambiava contenuto sotto gli occhi
-dell'utente.
+The first version of the router read `flow_aggregates` and **synthesized the
+missing fields**: action from `idx % 5`, source port from `1024 + idx*37`,
+timestamp from `now - idx*45`, VLAN fixed at 10. The id was positional
+(`siem-fl-<index>`), derived from the byte ranking: **it identified a position in
+a leaderboard, not an event**, so on the next refresh the same id pointed at a
+different connection and the open detail changed content under the user.
 
-Correzione: fonte = `syslog_events`, id = chiave primaria.
+Fix: source is `syslog_events`, id is the primary key.
 
-### 7.2 Istogramma sinusoidale
+### 7.2 Sinusoidal histogram
 
-`/histogram` non interrogava il database: i valori erano
-`abs(sin(i * 0.4)) * 45` e i deny il 15% di quelli. Le barre disegnate erano una
-sinusoide. Anche il fallback lato client disegnava una rampa finta
-(`count: 20+i`) a DB vuoto: un database senza dati sembrava traffico reale.
+`/histogram` did not query the database: the values were
+`abs(sin(i * 0.4)) * 45`, with denies at 15% of that. The bars drawn were a sine
+wave. The client-side fallback drew a fake ramp too (`count: 20+i`) on an empty
+database: a database with no data looked like real traffic.
 
-### 7.3 Soppressione no-op
+### 7.3 No-op suppression
 
-`POST /alerts/suppress` rispondeva `{"suppressed": true}` senza scrivere nulla.
-L'allerta ricompariva al refresh successivo. Da qui la tabella
-`siem_suppressions`.
+`POST /alerts/suppress` returned `{"suppressed": true}` without writing
+anything. The alert reappeared on the next refresh. Hence the
+`siem_suppressions` table.
 
-### 7.4 Flow SIEM senza scope tenant
+### 7.4 Flow SIEM without tenant scope
 
-Il router non applicava `_tenant_filter` affatto: un utente limitato a una sede
-vedeva gli eventi di tutte le sedi.
+The router did not apply `_tenant_filter` at all: a user restricted to one site
+saw every site's events.
 
-### 7.5 `hash()` per la VLAN sintetica
+### 7.5 `hash()` for the synthetic VLAN
 
-Salato per processo: VLAN diverse fra restart e fra worker. Sostituito con sha1
-troncato.
+Salted per process: different VLANs across restarts and across workers. Replaced
+with a truncated sha1.
 
 ---
 
-## 8. Test
+## 8. Tests
 
-| File | Copre |
+| File | Covers |
 |---|---|
 | `tests/test_flow_siem.py` | `TestFlowSiem`, `TestFlowSiemDeepScan` |
-| `tests/test_observability_api.py` | endpoint del router observability |
+| `tests/test_observability_api.py` | Observability router endpoints |
 | `tests/test_observability_flowgraph.py` | `TestFlowGraph`, `TestFlowGraphRealVlan`, `TestFlowGraphVlanTenantScope` |
-| `tests/test_observability_ingest.py` | parser e pipeline di ingest |
-| `tests/test_observability_ui.py` | markup e wiring dei tab |
+| `tests/test_observability_ingest.py` | Parsers and ingest pipeline |
+| `tests/test_observability_ui.py` | Tab markup and wiring |
 
-Esecuzione: `unittest` (i test del progetto girano anche come script).
-
----
-
-## 9. Limiti noti / punti di attenzione
-
-1. **Costo del deep scan** (§5.4): fino a 20.000 righe parsate in Python per
-   richiesta, ripetute ogni 5s dal live tail. Se diventa un problema, la strada
-   è materializzare `src_ip`/`dst_ip`/`action` come colonne in `syslog_events` al
-   momento dell'ingest — non ottimizzare il loop Python.
-2. **`total` in `/events` è il conteggio dei match trovati finora**, non il
-   totale reale nella finestra: il deep scan si ferma appena ha abbastanza
-   risultati. Non usarlo per una paginazione con numero di pagine.
-3. **RFC 3164 senza anno né timezone**: si assume anno corrente e fuso locale
-   del server. Limite del formato BSD, non del parser.
-4. **`siem_suppressions` fuori dalla retention** (§3.1).
-5. **VLAN sintetica** quando manca il binding ARP: sempre marcata, mai
-   silenziosa — ma è comunque un valore non reale.
-6. **Precision-over-recall del correlatore**: un evento di sicurezza senza
-   NetFlow corroborante e con severità > 3 non genera anomalia. È voluto
-   (Decisione #9), ma va saputo quando si indaga un "perché non è comparso".
+Run from the repository root:
+`uv run python -m unittest discover -s tests -v`.
 
 ---
 
-## 10. Percorso di indagine tipico (cosa il codice supporta)
+## 9. Known limits and gotchas
 
-1. **Flussi Live** → KPI (throughput, top path %, talker, spikes) e tabella top
-   talker. Filtri: finestra, metrica, origine, tenant.
-2. Riga sospetta → click apre il **pannello dettaglio**: MAC/switch/porta della
-   sorgente via client-map, link alla topologia, salto alle anomalie di quel
-   flusso.
-3. **Anomalie correlate** → transizioni `new` → `ack` → `resolved`.
-4. **Flow SIEM** → filtro `src_ip:<ip>` o `dst_ip:<ip>` per il verdetto reale
-   ALLOW/DENY dell'apparato, con faccette e istogramma.
-5. Falso positivo confermato → **sopprimi** (persistito, escluso da eventi e
-   faccette).
-6. Opzionale: selezione righe in Flussi Live → **analisi AI** con contesto
-   assemblato e redatto lato server.
+1. **Deep scan cost** (§5.4): up to 20,000 rows parsed in Python per request,
+   repeated every 5 s by the live tail. If it becomes a problem, the path is to
+   materialize `src_ip`/`dst_ip`/`action` as columns in `syslog_events` at
+   ingestion time — not to optimize the Python loop.
+2. **`total` in `/events` is the count of matches found so far**, not the real
+   total in the window: the deep scan stops as soon as it has enough results. Do
+   not use it for page-count pagination.
+3. **RFC 3164 has no year and no timezone**: the current year and the server's
+   local timezone are assumed. A limitation of the BSD format, not of the parser.
+4. **`siem_suppressions` is outside retention** (§3.1).
+5. **Synthetic VLAN** when the ARP binding is missing: always marked, never
+   silent — but still a value that isn't real.
+6. **Correlator precision-over-recall**: a security event with no corroborating
+   NetFlow and severity > 3 produces no anomaly. Intended, but worth knowing when
+   investigating "why didn't this show up".
+
+---
+
+## 10. Typical investigation path
+
+1. **Live Flows** → KPIs (throughput, top path %, talkers, spikes) and the top
+   talker table. Filters: window, metric, source, tenant.
+2. Suspicious row → click opens the **detail panel**: the source's
+   MAC/switch/port via client-map, a link to topology, a jump to that flow's
+   anomalies.
+3. **Correlated anomalies** → transitions `new` → `ack` → `resolved`.
+4. **Flow SIEM** → filter `src_ip:<ip>` or `dst_ip:<ip>` for the device's real
+   ALLOW/DENY verdict, with facets and histogram.
+5. Confirmed false positive → **suppress** (persisted, excluded from events and
+   facets).
+6. Optional: select rows in Live Flows → **AI analysis** with context assembled
+   and redacted server-side.

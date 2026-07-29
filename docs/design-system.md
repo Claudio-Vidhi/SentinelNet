@@ -272,9 +272,26 @@ components:
     padding: 32px 24px
 ---
 
+# UI design system
+
+The design language the dashboard implements. The YAML block above is the token
+source of truth — colours, typography, spacing, radii, component specs — and the
+prose below explains the intent behind each group so new UI can be built without
+guessing.
+
+**Where it lives in the code:** [static/css/dashboard.css](../static/css/dashboard.css)
+carries the tokens; [templates/dashboard.html](../templates/dashboard.html) loads
+the type families; individual tab styling sits in
+[static/js/](../static/js/) alongside each tab's logic.
+
+When adding UI, take values from the tokens rather than hand-picking hex codes.
+A colour that isn't in the palette is a decision that should be made here first.
+
+---
+
 ## Overview
 
-Sentry's design language reads like a debugging console wearing a leather jacket. The home and product surfaces sit on a near-black violet midnight (`{colors.surface-canvas-dark}` / `{colors.surface-night}`), strewn with starfield textures and floating sticker-style mascots — astronauts, monsters, traffic cones — that puncture the seriousness of an observability product. Headlines run in a chunky proprietary display sans where the most important keywords are wrapped in lime-green highlight chips (`{colors.accent-lime}`), as if the copy itself has been marked up by a developer redlining their own console output.
+The language reads like a debugging console wearing a leather jacket. The home and product surfaces sit on a near-black violet midnight (`{colors.surface-canvas-dark}` / `{colors.surface-night}`), strewn with starfield textures and floating sticker-style mascots — astronauts, monsters, traffic cones — that puncture the seriousness of an observability product. Headlines run in a chunky proprietary display sans where the most important keywords are wrapped in lime-green highlight chips (`{colors.accent-lime}`), as if the copy itself has been marked up by a developer redlining their own console output.
 
 The palette is deliberately narrow: deep midnight as the dominant canvas, electric lime as the primary attention-grabber, hot pink (`{colors.accent-pink}`) as a secondary punctuation, and a violet-mid (`{colors.accent-violet-mid}`) for tag chips and hairline strokes. White appears in two roles — as text on dark, and as the canvas for pricing, contact, and content-heavy pages where developers need to scan dense tables. The "single primary CTA" is visually inverted depending on context: filled black-violet (`{colors.primary}`) with white type on light surfaces, or filled white with dark type on dark surfaces. The button always reads as the strongest UI affordance regardless of polarity.
 

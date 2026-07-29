@@ -1,40 +1,39 @@
-# SentinelNet — Guida all'hardening del pannello di gestione
+# Hardening
 
-> Riferimento per il finding **H-1** (assenza di TLS built-in) e per la
-> configurazione sicura dell'esposizione del pannello web.
+How to expose the management panel safely, and how the observability listeners
+should be reachable.
 
-**Regola fondamentale: il pannello di gestione non deve MAI essere esposto a
-reti non fidate in HTTP.** Le opzioni supportate sono due, in ordine di
-preferenza:
+**Core rule: the management panel must NEVER be exposed to untrusted networks
+over HTTP.** Two supported options, in order of preference:
 
-1. **Reverse proxy con terminazione TLS** (consigliata)
-2. **TLS nativo** (integrato in SentinelNet, per installazioni semplici)
+1. Reverse proxy with TLS termination (recommended)
+2. Native TLS, built into SentinelNet, for simple installations
 
 ---
 
-## 1. Reverse proxy (consigliato)
+## 1. Reverse proxy (recommended)
 
-Un reverse proxy (nginx, Caddy, Traefik) davanti a SentinelNet gestisce
-certificati, rinnovo automatico (ACME/Let's Encrypt), security header e
-terminazione TLS. SentinelNet resta in ascolto solo su localhost o sulla rete
-interna Docker.
+A reverse proxy (nginx, Caddy, Traefik) in front of SentinelNet handles
+certificates, automatic renewal (ACME/Let's Encrypt), security headers and TLS
+termination. SentinelNet keeps listening on localhost or on the internal Docker
+network only.
 
-### Requisiti obbligatori del proxy
+### Mandatory proxy requirements
 
-- Terminazione TLS (certificato valido, TLS ≥ 1.2).
-- Security header:
+- TLS termination (valid certificate, TLS ≥ 1.2).
+- Security headers:
   - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
   - `X-Content-Type-Options: nosniff`
   - `Referrer-Policy: no-referrer`
   - `X-Frame-Options: DENY`
-- **Passthrough WebSocket** per il terminale SSH integrato (upgrade su `/ws/...`).
+- **WebSocket passthrough** for the built-in SSH terminal (upgrade on `/ws/...`).
 
-### Esempio nginx
+### nginx example
 
 ```nginx
 server {
     listen 443 ssl;
-    server_name sentinelnet.esempio.it;
+    server_name sentinelnet.example.com;
 
     ssl_certificate     /etc/ssl/sentinelnet.crt;
     ssl_certificate_key /etc/ssl/sentinelnet.key;
@@ -48,7 +47,7 @@ server {
         proxy_pass http://127.0.0.1:8765;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
-        # WebSocket (terminale SSH)
+        # WebSocket (SSH terminal)
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -57,10 +56,10 @@ server {
 }
 ```
 
-### Esempio Caddy (TLS automatico)
+### Caddy example (automatic TLS)
 
 ```
-sentinelnet.esempio.it {
+sentinelnet.example.com {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options nosniff
@@ -71,34 +70,35 @@ sentinelnet.esempio.it {
 }
 ```
 
-Caddy gestisce automaticamente certificato, rinnovo e upgrade WebSocket. In
-`docker-compose.yml` è presente una stanza `proxy` commentata pronta all'uso.
+Caddy handles the certificate, its renewal and the WebSocket upgrade
+automatically. `docker-compose.yml` ships a commented-out `proxy` stanza ready
+to use.
 
 ---
 
-## 2. TLS nativo
+## 2. Native TLS
 
-SentinelNet può servire HTTPS direttamente, senza proxy. Impostare **entrambe**
-le variabili d'ambiente:
+SentinelNet can serve HTTPS directly, without a proxy. Set **both** environment
+variables:
 
-| Variabile | Significato |
+| Variable | Meaning |
 |---|---|
-| `SENTINELNET_SSL_CERTFILE` | Percorso del certificato (PEM, catena completa) |
-| `SENTINELNET_SSL_KEYFILE`  | Percorso della chiave privata (PEM) |
+| `SENTINELNET_SSL_CERTFILE` | Certificate path (PEM, full chain) |
+| `SENTINELNET_SSL_KEYFILE` | Private key path (PEM) |
 
-- I percorsi **relativi** sono risolti rispetto a `SENTINELNET_DATA_DIR`
-  (identico tra sorgente, exe e Docker).
-- Se è impostata **una sola** variabile, o un file non è leggibile, il server
-  **rifiuta di avviarsi** (fail-closed) con un errore esplicito: nessun
-  fallback silenzioso a HTTP.
-- Se nessuna delle due è impostata il comportamento resta HTTP invariato
-  (adatto solo a localhost/laboratorio).
+- **Relative** paths resolve against `SENTINELNET_DATA_DIR` — identical
+  behaviour across source, exe and Docker.
+- If only **one** variable is set, or a file is unreadable, the server **refuses
+  to start** (fail-closed) with an explicit error. There is no silent fallback
+  to HTTP.
+- If neither is set, behaviour stays HTTP — suitable for localhost and lab use
+  only.
 
-**Il rinnovo del certificato è responsabilità dell'operatore**: SentinelNet non
-genera né rinnova certificati. Dopo la sostituzione dei file è necessario
-riavviare il servizio.
+**Certificate renewal is the operator's responsibility**: SentinelNet neither
+generates nor renews certificates. Restart the service after replacing the
+files.
 
-Esempio (Docker):
+Docker example:
 
 ```yaml
 environment:
@@ -106,7 +106,7 @@ environment:
   - SENTINELNET_SSL_KEYFILE=certs/server.key
 ```
 
-Esempio (exe/sorgente, PowerShell):
+Exe / source example (PowerShell):
 
 ```powershell
 $env:SENTINELNET_SSL_CERTFILE = "C:\sentinelnet\data\certs\server.crt"
@@ -115,50 +115,60 @@ $env:SENTINELNET_SSL_KEYFILE  = "C:\sentinelnet\data\certs\server.key"
 
 ---
 
-## 3. Sessione browser: cookie HttpOnly + anti-CSRF
+## 3. Browser session: HttpOnly cookie and CSRF defence
 
-Dal fix del finding **L-1** la sessione browser non usa più `sessionStorage`:
+The browser session does not use `sessionStorage`:
 
-- Al login il server imposta il cookie **`net_session`**: `HttpOnly`,
-  `SameSite=Strict`, e `Secure` quando la richiesta arriva su HTTPS (TLS
-  nativo o reverse proxy con `X-Forwarded-Proto: https`).
-- Le richieste che **modificano stato** (POST/PUT/PATCH/DELETE) autenticate
-  via cookie devono includere l'header **`X-Requested-With`** (la dashboard lo
-  invia sempre). Un form cross-site non può impostare header custom: insieme a
-  `SameSite=Strict` questo costituisce la difesa anti-CSRF.
-- I **client programmatici** (server MCP, script, agent) continuano a usare
-  `Authorization: Bearer <token>`: il Bearer esplicito non è forgiabile
-  cross-site e non richiede l'header anti-CSRF.
-- Il logout (`POST /api/auth/logout`) cancella il cookie; il JWT è stateless e
-  scade comunque entro 60 minuti.
+- On login the server sets the **`net_session`** cookie: `HttpOnly`,
+  `SameSite=Strict`, and `Secure` when the request arrives over HTTPS (native
+  TLS, or a reverse proxy sending `X-Forwarded-Proto: https`).
+- **State-changing requests** (POST/PUT/PATCH/DELETE) authenticated by cookie
+  must carry the **`X-Requested-With`** header — the dashboard always sends it.
+  A cross-site form cannot set custom headers; together with `SameSite=Strict`
+  that constitutes the CSRF defence.
+- **Programmatic clients** (MCP server, scripts, agents) keep using
+  `Authorization: Bearer <token>`: an explicit bearer token cannot be forged
+  cross-site and needs no anti-CSRF header.
+- Logout (`POST /api/auth/logout`) clears the cookie; the JWT is stateless and
+  expires within 60 minutes regardless.
 
-## 4. Listener di osservabilità (IPFIX/sFlow/syslog)
+---
 
-Spenti di default ovunque (exe e Docker). Abilitazione via env:
+## 4. Observability listeners (IPFIX/sFlow/syslog)
+
+Off by default everywhere, in both the exe and Docker. Enable via environment:
 
 ```
 SENTINELNET_OBS_ENABLE=1          # master switch
-SENTINELNET_OBS_BIND=127.0.0.1    # 0.0.0.0 solo con opt-in esplicito
+SENTINELNET_OBS_BIND=127.0.0.1    # 0.0.0.0 requires explicit opt-in
 SENTINELNET_OBS_IPFIX_PORT=4739   SENTINELNET_OBS_IPFIX_ENABLE=1
 SENTINELNET_OBS_SFLOW_PORT=6343   SENTINELNET_OBS_SFLOW_ENABLE=1
 SENTINELNET_OBS_SYSLOG_PORT=5514  SENTINELNET_OBS_SYSLOG_ENABLE=1
 SENTINELNET_OBS_RETENTION_FLOWS_DAYS=30   # _SYSLOG_DAYS=7, _EVENTS_DAYS=90
 ```
 
-- **Mai la porta 514 in-process**: usare 5514 e, se serve la 514 standard,
-  mapparla solo dal Docker compose (`"514:5514/udp"`).
-- L'ingest UDP non è autenticato: esporlo SOLO su reti di management fidate.
-  I datagrammi da IP non presenti in inventario sono scartati e messi in
-  quarantena (tabella `quarantined_exporters`, voce di audit oraria).
-- **Limite noto (NAT)**: l'attribuzione tenant usa l'IP sorgente del
-  datagramma; exporter dietro NAT verrebbero attribuiti male e vanno gestiti
-  con il relay di sede (fase 6.3 del piano), non esponendo l'UDP sulla VPN.
-- Diagnostica: `GET /api/observability/health` (solo admin).
+- **Never port 514 in-process**: use 5514, and if the standard port is required,
+  map it from Docker Compose (`"514:5514/udp"`).
+- **UDP ingest is unauthenticated.** Expose it ONLY on trusted management
+  networks. Datagrams from IPs absent from the inventory are dropped and
+  quarantined (`quarantined_exporters` table, hourly audit entry) — see
+  [ADR-0005](adr/0005-strict-tenant-attribution.md).
+- **Known limitation (NAT)**: tenant attribution uses the datagram's source IP,
+  so exporters behind NAT would be misattributed. Handle them with a site relay,
+  not by exposing UDP over the VPN.
+- Diagnostics: `GET /api/observability/health` (admin only).
 
-## 5. Altre raccomandazioni
+---
 
-- Non pubblicare mai la porta 8765 direttamente su Internet.
-- Limitare l'accesso al pannello a VPN/rete di gestione.
-- Impostare `SENTINELNET_JWT_SECRET` e `SENTINELNET_MASTER_KEY` espliciti in
-  produzione (altrimenti generati e salvati in `SENTINELNET_DATA_DIR`).
-- Proteggere `SENTINELNET_DATA_DIR` (credenziali apparati cifrate, chiavi).
+## 5. Other recommendations
+
+- Never publish port 8765 directly on the Internet.
+- Restrict panel access to a VPN or management network.
+- Set `SENTINELNET_JWT_SECRET` and `SENTINELNET_MASTER_KEY` explicitly in
+  production; otherwise they are generated and stored in
+  `SENTINELNET_DATA_DIR`.
+- Protect `SENTINELNET_DATA_DIR` — it holds encrypted device credentials and
+  the keys that decrypt them.
+
+Current security findings and their status: [security-audit.md](security-audit.md)
+and [security-semgrep.md](security-semgrep.md).

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Strato di accesso async-safe a observability.db (SQLite, WAL).
 
-Regole (vedi docs/MASTER-IMPLEMENTATION-PLAN.md §1.2 e CONTRIBUTING.md):
+Regole (vedi CONTRIBUTING.md §3 e docs/adr/0004-single-process-sqlite-writer.md):
 - UNICA connessione in scrittura, posseduta dal thread writer dedicato.
 - Le scritture NON si fanno mai direttamente: si accodano con
   ``enqueue_write()`` (coda bounded, non bloccante; se piena il payload viene
