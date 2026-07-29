@@ -15,35 +15,6 @@
     // una futura chiamata durante l'init del modulo per avere un ReferenceError.
     const _auditOpenRows = new Set();
 
-    async function applyNetSecAuditGating() {
-        try {
-            const res = await apiFetch('/api/settings/netsec-audit');
-            if (!res || !res.ok) return;
-            const data = await res.json();
-            const nav = document.getElementById('navNetSecAudit');
-            if (nav) nav.style.display = data.netsec_audit_preview ? '' : 'none';
-            const toggle = document.getElementById('netsecAuditToggle');
-            if (toggle) toggle.checked = !!data.netsec_audit_preview;
-        } catch (e) {}
-    }
-
-    async function setNetSecAuditPreview(enabled) {
-        const st = document.getElementById('netsecAuditStatus');
-        try {
-            const res = await apiFetch('/api/settings/netsec-audit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: !!enabled })
-            });
-            if (res && res.ok) {
-                if (st) st.textContent = currentLang === 'en' ? 'Saved.' : 'Salvato.';
-                await applyNetSecAuditGating();
-            }
-        } catch (e) {
-            if (st) st.textContent = currentLang === 'en' ? 'Error.' : 'Errore.';
-        }
-    }
-
     function loadNetSecAuditTab() {
         populateAuditDeviceSelect();
         renderAuditOverview();
@@ -186,7 +157,25 @@
                 ? `<span class="badge" style="background:var(--danger); color:#fff; font-weight:700;">CRITICAL</span>`
                 : r.severity === 'HIGH'
                 ? `<span class="badge" style="background:var(--warning); color:#000; font-weight:700;">HIGH</span>`
-                : `<span class="badge" style="background:var(--surface-3);">MEDIUM</span>`;
+                : `<span class="badge" style="background:var(--surface-3);">${escapeHtml(r.severity || 'MEDIUM')}</span>`;
+
+            // Riferimento alla raccomandazione nel benchmark di origine: senza
+            // di esso l'esito non e' verificabile contro il documento.
+            const refBadge = r.ref
+                ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted); font-weight:600;"
+                         title="${currentLang === 'en' ? 'Benchmark recommendation' : 'Raccomandazione del benchmark'}">${escapeHtml(String(r.ref))}</span>`
+                : '';
+            const levelBadge = r.level
+                ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);"
+                         title="${currentLang === 'en' ? 'CIS profile level' : 'Livello di profilo CIS'}">L${escapeHtml(String(r.level))}</span>`
+                : '';
+            // Il benchmark distingue i controlli automatizzabili da quelli che
+            // vuole verificati a mano: quelli manuali qui sono valutati su cio'
+            // che la configurazione dichiara, non sul comportamento reale.
+            const manualBadge = (r.automated === false)
+                ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);"
+                         title="${currentLang === 'en' ? 'The benchmark marks this as a manual check: the verdict here reads the configuration, it does not observe the device.' : 'Il benchmark la marca come verifica manuale: il verdetto qui legge la configurazione, non osserva l\'apparato.'}"><i class="fa-solid fa-hand"></i> ${currentLang === 'en' ? 'manual' : 'manuale'}</span>`
+                : '';
 
             const ev = r.evidence || [];
             const evId = String(r.id).replace(/[^\w-]/g, '_');
@@ -196,7 +185,7 @@
             // Non e' un pulsante: l'intera riga fa da interruttore, due
             // comandi sovrapposti per la stessa azione confondono.
             const evHint = ev.length
-                ? `<span class="badge" style="margin-top:6px; background:var(--surface-3); color:var(--text-muted);">
+                ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);">
                        <i class="fa-solid fa-code"></i> ${ev.length} ${currentLang === 'en' ? 'evidence' : 'evidenze'}
                    </span>`
                 : '';
@@ -221,7 +210,9 @@
                 <td style="padding:8px;">
                     <div style="font-weight:700;">${escapeHtml(r.title)}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(r.detail)}</div>
-                    ${evHint}
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px;">
+                        ${refBadge}${levelBadge}${manualBadge}${evHint}
+                    </div>
                 </td>
                 <td style="padding:8px;">${sevBadge}</td>
                 <td style="padding:8px;"><span class="badge">${escapeHtml(r.category)}</span></td>
@@ -232,6 +223,11 @@
             </tr>
             <tr id="auditEv-${escapeHtml(evId)}" style="${isOpen ? '' : 'display:none;'}">
                 <td colspan="6" style="padding:12px 12px 14px 30px; background:var(--surface-2); border-top:1px solid var(--border);">
+                    ${r.audit ? `
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
+                        ${currentLang === 'en' ? 'Verify on the device' : 'Verifica sull\'apparato'}
+                    </div>
+                    <code style="display:block; font-size:12px; color:var(--text); background:var(--surface); padding:8px 10px; border-radius:6px; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:12px;">${escapeHtml(r.audit)}</code>` : ''}
                     <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
                         ${currentLang === 'en' ? 'Recommendation / CLI fix' : 'Raccomandazione / Fix CLI'}
                     </div>
@@ -362,9 +358,18 @@
                 + `<span>${escapeHtml(e.context || '')}</span>`
                 + `<code>${escapeHtml(e.text || '')}</code></div>`).join('');
             const label = r.status === 'UNKNOWN' ? 'NON VALUTABILE' : escapeHtml(r.status);
+            // Il riferimento alla raccomandazione e il comando di verifica
+            // rendono il report controllabile contro il benchmark di origine:
+            // senza di essi resta un'affermazione da prendere per buona.
+            const ref = r.ref
+                ? `<div class="detail">${escapeHtml(String(r.ref))}${r.level ? ' · Livello ' + escapeHtml(String(r.level)) : ''}${r.automated === false ? ' · verifica manuale' : ''}</div>`
+                : '';
+            const auditCmd = r.audit
+                ? `<div class="detail">Verifica sull'apparato: <code>${escapeHtml(r.audit)}</code></div>`
+                : '';
             return `<tr class="st-${escapeHtml(r.status)}">
-                <td><strong>${escapeHtml(r.id)}</strong></td>
-                <td>${escapeHtml(r.title)}<div class="detail">${escapeHtml(r.detail)}</div>${ev}</td>
+                <td><strong>${escapeHtml(r.id)}</strong>${ref}</td>
+                <td>${escapeHtml(r.title)}<div class="detail">${escapeHtml(r.detail)}</div>${auditCmd}${ev}</td>
                 <td>${escapeHtml(r.severity)}</td>
                 <td>${label}</td>
                 <td><code>${escapeHtml(r.remediation)}</code></td>
@@ -497,38 +502,58 @@ ${partialBanner}
         const body = document.getElementById('auditBenchmarkReqsBody');
         if (!body || !details || !details.open) return;
 
+        const en = currentLang === 'en';
         const key = document.getElementById('auditBenchmarkSelect').value;
         if (!_benchmarkCatalog) {
-            body.innerHTML = '<div style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Caricamento requisiti...</div>';
+            body.innerHTML = `<div style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> ${en ? 'Loading requirements…' : 'Caricamento requisiti...'}</div>`;
             try {
                 const res = await apiFetch('/api/netsec-audit/benchmarks');
                 if (!res || !res.ok) {
-                    body.innerHTML = '<div style="font-size:12px; color:var(--danger);">Impossibile caricare i requisiti.</div>';
+                    body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${en ? 'Unable to load the requirements.' : 'Impossibile caricare i requisiti.'}</div>`;
                     return;
                 }
                 _benchmarkCatalog = await res.json();
             } catch (e) {
-                body.innerHTML = '<div style="font-size:12px; color:var(--danger);">Errore di rete nel caricamento dei requisiti.</div>';
+                body.innerHTML = `<div style="font-size:12px; color:var(--danger);">${en ? 'Network error while loading the requirements.' : 'Errore di rete nel caricamento dei requisiti.'}</div>`;
                 return;
             }
         }
 
         const reqs = _benchmarkCatalog[key] || [];
         const sevColor = { CRITICAL: 'var(--danger)', HIGH: 'var(--danger)', MEDIUM: 'var(--warning)', LOW: 'var(--text-muted)' };
+        // Le regole di un benchmark coprono piu' piattaforme: una scansione ne
+        // esegue solo quelle del vendor riconosciuto nella configurazione, e
+        // dirlo qui evita che l'elenco sembri una promessa di eseguirle tutte.
+        const vendorLabel = { fortios: 'FortiOS', ios: 'Cisco IOS XE' };
+        const counts = reqs.reduce((acc, r) => {
+            acc[r.vendor] = (acc[r.vendor] || 0) + 1;
+            return acc;
+        }, {});
+        const breakdown = Object.keys(counts).sort()
+            .map(v => `${counts[v]} ${vendorLabel[v] || v}`).join(' · ');
         body.innerHTML = `
-            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">${reqs.length} controlli eseguiti sulla configurazione analizzata.</div>
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
+                ${reqs.length} ${en ? 'checks' : 'controlli'} (${escapeHtml(breakdown)}). ${en
+                    ? 'Only the checks matching the platform detected in the analysed configuration are run.'
+                    : 'Vengono eseguiti solo i controlli della piattaforma riconosciuta nella configurazione analizzata.'}
+            </div>
             <table style="width:100%; border-collapse:collapse; font-size:12px;">
                 ${reqs.map(r => `
                     <tr style="border-top:1px solid var(--border);">
-                        <td style="padding:8px 10px 8px 0; vertical-align:top; white-space:nowrap; font-family:ui-monospace,monospace;">${escapeHtml(r.id)}</td>
+                        <td style="padding:8px 10px 8px 0; vertical-align:top; white-space:nowrap; font-family:ui-monospace,monospace;">
+                            ${escapeHtml(r.id)}
+                            ${r.ref ? `<div style="color:var(--text-muted); font-size:11px;">${escapeHtml(String(r.ref))}${r.level ? ' · L' + escapeHtml(String(r.level)) : ''}</div>` : ''}
+                        </td>
                         <td style="padding:8px 10px 8px 0; vertical-align:top;">
                             <strong>${escapeHtml(r.title)}</strong>
-                            <div style="color:var(--text-muted); margin-top:2px;">Verifica: ${escapeHtml(r.checks)}</div>
-                            <div style="color:var(--text-muted); margin-top:2px;">Rimedio: ${escapeHtml(r.remediation)}</div>
+                            <div style="color:var(--text-muted); margin-top:2px;">${en ? 'Check' : 'Verifica'}: ${escapeHtml(r.checks)}</div>
+                            ${r.audit ? `<div style="color:var(--text-muted); margin-top:2px; font-family:ui-monospace,monospace;">${en ? 'Audit' : 'Audit'}: ${escapeHtml(r.audit)}</div>` : ''}
+                            <div style="color:var(--text-muted); margin-top:2px;">${en ? 'Remediation' : 'Rimedio'}: ${escapeHtml(r.remediation)}</div>
                         </td>
                         <td style="padding:8px 0; vertical-align:top; text-align:right; white-space:nowrap;">
                             <span style="color:${sevColor[r.severity] || 'var(--text-muted)'}; font-weight:700; font-size:11px;">${escapeHtml(r.severity)}</span>
                             <div style="color:var(--text-muted); font-size:11px;">${escapeHtml(r.category)}</div>
+                            <div style="color:var(--text-muted); font-size:11px;">${escapeHtml(vendorLabel[r.vendor] || r.vendor || '')}</div>
                         </td>
                     </tr>
                 `).join('')}
@@ -539,8 +564,6 @@ ${partialBanner}
     // Expose functions globally
     window.renderBenchmarkRequirements = renderBenchmarkRequirements;
     window.loadNetSecAuditTab = loadNetSecAuditTab;
-    window.applyNetSecAuditGating = applyNetSecAuditGating;
-    window.setNetSecAuditPreview = setNetSecAuditPreview;
     window.runAuditScan = runAuditScan;
     window.exportAuditReport = exportAuditReport;
     window.renderAuditRulesTable = renderAuditRulesTable;

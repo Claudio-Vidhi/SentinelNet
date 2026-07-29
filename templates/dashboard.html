@@ -161,8 +161,8 @@
         <button class="nav-item active" onclick="switchTab('tab-home', this)">
           <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-grid-2"></i> Home</span>
         </button>
-        <button id="navIncidents" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-incidents', this); loadIncidentsTab();">
-          <span class="nav-left"><i class="fa-solid fa-timeline"></i> Incidenti</span>
+        <button id="navIncidents" class="nav-item requires-admin" onclick="switchTab('tab-incidents', this); loadIncidentsTab();">
+          <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
           <span class="preview-badge">preview</span>
         </button>
         <button class="nav-item" data-tabs="tab-flows tab-flow-siem" onclick="switchTab('tab-flows', this); flowsTabShown();">
@@ -197,7 +197,7 @@
         <button class="nav-item" onclick="switchTab('tab-config', this)">
           <span class="nav-left" data-i18n="tabConfigAnalyzer"><i class="fa-solid fa-file-code"></i> Config Analyzer</span>
         </button>
-        <button id="navNetSecAudit" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-netsec-audit', this); loadNetSecAuditTab();">
+        <button id="navNetSecAudit" class="nav-item requires-admin" onclick="switchTab('tab-netsec-audit', this); loadNetSecAuditTab();">
           <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
           <span class="preview-badge">preview</span>
         </button>
@@ -1192,7 +1192,7 @@
     <div id="tab-flows" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
         <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-flows'); flowsTabShown();" data-i18n="tabFlows"></button>
-        <button class="btn btn-secondary ti-subtab preview-flow-siem" style="display:none;" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -2411,33 +2411,6 @@
         <div id="appAdvBody">
           <div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
         </div>
-
-        <!-- Ambito: Funzionalità in Anteprima (Preview Features) -->
-        <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
-          <h4 style="font-size:14px; margin:0 0 6px; color:var(--text);"><i class="fa-solid fa-flask" style="color:var(--primary);"></i> Funzionalità in Anteprima (Preview)</h4>
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">
-            Abilita o disabilita le tab e le funzionalità sperimentali della piattaforma SentinelNet.
-          </p>
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-              <input type="checkbox" id="netsecAuditToggle" onchange="setNetSecAuditPreview(this.checked)">
-              <span style="font-size:13px; font-weight:600;">Abilita la tab "NetSec Audit (preview)" (Compliance Firewall &amp; Router)</span>
-            </label>
-            <div id="netsecAuditStatus" style="font-size:12px; color:var(--text-muted); margin-left:24px;"></div>
-
-            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-              <input type="checkbox" id="incidentsToggle" onchange="setIncidentsPreview(this.checked)">
-              <span style="font-size:13px; font-weight:600;">Abilita la tab "Incidenti (preview)" (Timeline e ragionamento sugli eventi correlati)</span>
-            </label>
-            <div id="incidentsStatus" style="font-size:12px; color:var(--text-muted); margin-left:24px;"></div>
-
-            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-              <input type="checkbox" id="flowSiemPreviewToggle" onchange="setFlowSiemPreview(this.checked)">
-              <span style="font-size:13px; font-weight:600;">Abilita la tab "Flow SIEM (preview)" (Network Traffic &amp; SIEM Analytics)</span>
-            </label>
-            <div id="flowSiemPreviewStatus" style="font-size:12px; color:var(--text-muted); margin-left:24px;"></div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -2445,7 +2418,7 @@
     <div id="tab-flow-siem" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-flows'); flowsTabShown();" data-i18n="tabFlows"></button>
-        <button class="btn btn-secondary ti-subtab preview-flow-siem active" style="display:none;" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
       </div>
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
@@ -2517,9 +2490,9 @@
     <div id="tab-incidents" class="tab-content">
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <span class="eyebrow"><i class="fa-solid fa-timeline"></i> Incidenti (Preview)</span>
-          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;">Timeline e Ragionamento</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:640px;">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
+          <span class="eyebrow" data-i18n="incEyebrow"><i class="fa-solid fa-timeline"></i> Incidenti (Preview)</span>
+          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;" data-i18n="incTitle">Timeline e Ragionamento</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:640px;" data-i18n="incDesc">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
         </div>
       </div>
 
@@ -2546,7 +2519,7 @@
 
       <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px; align-items:start;">
         <div class="panel" style="padding:12px;">
-          <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-list"></i> Incidenti</h4>
+          <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-list"></i> <span data-i18n="incListTitle">Incidenti</span></h4>
           <div id="incidentsList"></div>
         </div>
         <div class="panel" style="padding:16px;">
@@ -2556,9 +2529,9 @@
 
       <details class="panel" style="padding:12px 16px; margin-top:18px;">
         <summary style="cursor:pointer; font-size:14px; color:var(--primary); font-weight:600;">
-          <i class="fa-solid fa-sliders"></i> Regole di correlazione e soglie
+          <i class="fa-solid fa-sliders"></i> <span data-i18n="incRulesTitle">Regole di correlazione e soglie</span>
         </summary>
-        <p style="font-size:12px; color:var(--text-muted); margin:10px 0;">
+        <p style="font-size:12px; color:var(--text-muted); margin:10px 0;" data-i18n="incRulesDesc">
           La logica delle regole vive nel codice; qui si tarano solo le soglie, entro gli
           intervalli dichiarati dalla regola stessa. Il valore usato viene registrato accanto
           alla versione su ogni evidenza prodotta.
@@ -2568,9 +2541,9 @@
 
       <details class="panel" style="padding:12px 16px; margin-top:18px;">
         <summary style="cursor:pointer; font-size:14px; color:var(--primary); font-weight:600;">
-          <i class="fa-solid fa-ethernet"></i> Interfacce e stato atteso
+          <i class="fa-solid fa-ethernet"></i> <span data-i18n="incIfacesTitle">Interfacce e stato atteso</span>
         </summary>
-        <p style="font-size:12px; color:var(--text-muted); margin:10px 0;">
+        <p style="font-size:12px; color:var(--text-muted); margin:10px 0;" data-i18n="incIfacesDesc">
           Loopback, Null e VLAN dismesse sono giù per progetto: confermarle qui evita che
           ogni loro transizione diventi un sintomo. Non nasconde nulla — l'evento resta nel
           feed, cambia solo se <code>IFACE_DOWN_001</code> lo consideri un sintomo.
@@ -2583,12 +2556,12 @@
     <div id="tab-netsec-audit" class="tab-content">
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <span class="eyebrow"><i class="fa-solid fa-shield-cat"></i> Network Security &amp; Compliance Audit (Preview)</span>
-          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;">Auditing Configurazione Firewall, Router e Switch</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:600px;">Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati di rete gestiti.</p>
+          <span class="eyebrow" data-i18n="nsaEyebrow"><i class="fa-solid fa-shield-cat"></i> Network Security &amp; Compliance Audit (Preview)</span>
+          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;" data-i18n="nsaTitle">Auditing Configurazione Firewall, Router e Switch</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:600px;" data-i18n="nsaDesc">Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati di rete gestiti.</p>
         </div>
         <div class="hero-card" style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px 24px;">
-          <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Score Compliance Security</span>
+          <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;" data-i18n="nsaScoreLabel">Score Compliance Security</span>
           <h1 id="auditScoreValue" style="margin:4px 0; font-family:var(--font-display); font-size:36px; color:var(--primary);">--</h1>
           <span id="auditGradeBadge" class="badge" style="font-size:11px; font-weight:700;">--</span>
         </div>
@@ -2596,23 +2569,23 @@
 
       <div class="kpi-grid" style="grid-template-columns:repeat(5, minmax(0,1fr)); margin-bottom:18px;">
         <div class="kpi">
-          <h4>Regole Auditate</h4>
+          <h4 data-i18n="nsaKpiTotal">Regole Auditate</h4>
           <strong id="auditStatTotal">0</strong>
         </div>
         <div class="kpi">
-          <h4>Vulnerabili / Fail</h4>
+          <h4 data-i18n="nsaKpiFailed">Vulnerabili / Fail</h4>
           <strong id="auditStatFailed" style="color:var(--danger);">0</strong>
         </div>
         <div class="kpi">
-          <h4>Conformi / Pass</h4>
+          <h4 data-i18n="nsaKpiPassed">Conformi / Pass</h4>
           <strong id="auditStatPassed" style="color:var(--success);">0</strong>
         </div>
         <div class="kpi">
-          <h4>Warning / Attenzione</h4>
+          <h4 data-i18n="nsaKpiWarned">Warning / Attenzione</h4>
           <strong id="auditStatWarned" style="color:var(--warning);">0</strong>
         </div>
-        <div class="kpi" title="Sezioni di configurazione assenti dal file analizzato: non valutabili, escluse dal calcolo dello score.">
-          <h4>Non valutabili</h4>
+        <div class="kpi" data-i18n-title="nsaKpiUnknownHint" title="Sezioni di configurazione assenti dal file analizzato: non valutabili, escluse dal calcolo dello score.">
+          <h4 data-i18n="nsaKpiUnknown">Non valutabili</h4>
           <strong id="auditStatUnknown" style="color:var(--text-muted);">0</strong>
         </div>
       </div>
@@ -2622,45 +2595,49 @@
 
       <div style="display:grid; grid-template-columns: 1fr 340px; gap:18px; margin-bottom:18px;">
         <div class="panel" style="padding:16px;">
-          <h4 style="margin:0 0 12px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-sliders"></i> Parametri di Scansione Audit</h4>
+          <h4 style="margin:0 0 12px; font-size:14px; color:var(--primary);" data-i18n="nsaScanParams"><i class="fa-solid fa-sliders"></i> Parametri di Scansione Audit</h4>
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
             <div>
-              <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Apparato Target dall'Inventario</label>
+              <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaTargetLabel">Apparato Target dall'Inventario</label>
               <select id="auditDeviceSelect" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
                 <!-- La scansione multi-dispositivo non e' implementata: questa
                      voce e' un segnaposto, non una promessa di funzionalita'. -->
-                <option value="all">— Seleziona un dispositivo —</option>
+                <option value="all" data-i18n="nsaSelectDevice">— Seleziona un dispositivo —</option>
               </select>
             </div>
             <div>
-              <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Benchmark / Standard di Security</label>
+              <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label>
               <select id="auditBenchmarkSelect" onchange="renderBenchmarkRequirements()" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-                <option value="cis">CIS Benchmark (Fortinet FortiGate)</option>
-                <option value="nist">NIST SP 800-53 (High Security)</option>
-                <option value="pci">PCI-DSS v4.0 Network Requirement</option>
+                <option value="cis" data-i18n="nsaBenchCis">CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x)</option>
+                <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
+                <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
               </select>
             </div>
           </div>
 
           <details id="auditBenchmarkReqs" style="margin-bottom:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);" ontoggle="renderBenchmarkRequirements()">
-            <summary style="padding:8px 12px; cursor:pointer; font-size:12px; font-weight:600; color:var(--primary);">
+            <summary style="padding:8px 12px; cursor:pointer; font-size:12px; font-weight:600; color:var(--primary);" data-i18n="nsaReqsSummary">
               <i class="fa-solid fa-circle-info"></i> Requisiti verificati da questo benchmark
             </summary>
             <div id="auditBenchmarkReqsBody" style="padding:0 12px 12px;"></div>
           </details>
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <button id="btnRunAuditScan" class="btn btn-primary" onclick="runAuditScan()" style="width:auto; margin:0;"><i class="fa-solid fa-play"></i> Esegui Audit Scan</button>
-            <button class="btn btn-secondary" onclick="exportAuditReport()" style="width:auto; margin:0;"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
+            <button id="btnRunAuditScan" class="btn btn-primary" onclick="runAuditScan()" style="width:auto; margin:0;" data-i18n="nsaBtnRun"><i class="fa-solid fa-play"></i> Esegui Audit Scan</button>
+            <button class="btn btn-secondary" onclick="exportAuditReport()" style="width:auto; margin:0;" data-i18n="nsaBtnExport"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
           </div>
         </div>
 
         <div class="panel" style="padding:16px; display:flex; flex-direction:column; justify-content:center;">
-          <h4 style="margin:0 0 8px; font-size:13px; color:var(--text-muted);"><i class="fa-solid fa-file-arrow-up"></i> Upload File Config (.conf / .cfg / .xml)</h4>
+          <h4 style="margin:0 0 8px; font-size:13px; color:var(--text-muted);" data-i18n="nsaUploadTitle"><i class="fa-solid fa-file-arrow-up"></i> Upload File Config (.conf / .cfg / .xml)</h4>
           <div id="auditDropZone" style="border:2px dashed var(--border); border-radius:8px; padding:20px; text-align:center; cursor:pointer; background:var(--surface-2);">
             <input type="file" id="auditFileInput" style="display:none;" accept=".conf,.cfg,.txt,.xml">
+            <!-- Il testo tradotto sta in uno span interno: il drop di un file
+                 riscrive #auditDropText, e un data-i18n sul contenitore
+                 ripristinerebbe l'invito al caricamento a ogni cambio lingua,
+                 cancellando il nome del file appena caricato. -->
             <div id="auditDropText" style="font-size:12px; color:var(--text-muted);">
               <i class="fa-solid fa-cloud-arrow-up fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
-              Trascina qui il file di configurazione o clicca per caricare
+              <span data-i18n="nsaDropText">Trascina qui il file di configurazione o clicca per caricare</span>
             </div>
           </div>
         </div>
@@ -2668,21 +2645,28 @@
 
       <div class="panel" style="padding:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
-          <h4 style="margin:0; font-size:15px;"><i class="fa-solid fa-list-check"></i> Matrice Risultati Audit Policy</h4>
+          <h4 style="margin:0; font-size:15px;" data-i18n="nsaResultsTitle"><i class="fa-solid fa-list-check"></i> Matrice Risultati Audit Policy</h4>
           <div style="display:flex; gap:8px;">
             <select id="auditSevFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-              <option value="all">Filtra Severità: Tutte</option>
+              <option value="all" data-i18n="nsaFilterSevAll">Filtra Severità: Tutte</option>
               <option value="critical">Critical</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
+              <option value="low">Low</option>
             </select>
+            <!-- Le categorie corrispondono al campo 'category' delle regole in
+                 services/netsec_audit/benchmarks.py: aggiungerne una li' senza
+                 aggiungerla qui la rende non filtrabile. -->
             <select id="auditCatFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-              <option value="all">Filtra Categoria: Tutte</option>
+              <option value="all" data-i18n="nsaFilterCatAll">Filtra Categoria: Tutte</option>
               <option value="hardening">Hardening</option>
               <option value="access rules">Access Rules</option>
               <option value="encryption">Encryption</option>
+              <option value="identity">Identity</option>
               <option value="logging">Logging</option>
-              <option value="routing">Routing</option>
+              <option value="management">Management</option>
+              <option value="threat prevention">Threat Prevention</option>
+              <option value="availability">Availability</option>
             </select>
           </div>
         </div>
@@ -2690,12 +2674,12 @@
           <table>
             <thead>
               <tr>
-                <th>ID Regola</th>
-                <th>Titolo &amp; Dettagli</th>
-                <th>Severità</th>
-                <th>Categoria</th>
-                <th>Stato Audit</th>
-                <th>Raccomandazione / Fix CLI</th>
+                <th data-i18n="nsaThId">ID Regola</th>
+                <th data-i18n="nsaThTitle">Titolo &amp; Dettagli</th>
+                <th data-i18n="nsaThSeverity">Severità</th>
+                <th data-i18n="nsaThCategory">Categoria</th>
+                <th data-i18n="nsaThStatus">Stato Audit</th>
+                <th data-i18n="nsaThFix">Raccomandazione / Fix CLI</th>
               </tr>
             </thead>
             <tbody id="auditRulesTableBody"></tbody>

@@ -10,39 +10,6 @@
     let _streamTimer = null;
     let _selectedEventId = null;
 
-    async function applyFlowSiemPreviewGating() {
-        try {
-            const res = await apiFetch('/api/settings/flow-siem-preview');
-            if (!res || !res.ok) return;
-            const data = await res.json();
-            // Il tab e' accorpato sotto "Traffico": ha piu' punti d'ingresso
-            // (una striscia di sotto-tab per corpo), quindi il gate e' su classe
-            // e non su id -- vanno nascosti tutti, non il primo.
-            document.querySelectorAll('.preview-flow-siem').forEach(el => {
-                el.style.display = data.flow_siem_preview ? '' : 'none';
-            });
-            const toggle = document.getElementById('flowSiemPreviewToggle');
-            if (toggle) toggle.checked = !!data.flow_siem_preview;
-        } catch (e) {}
-    }
-
-    async function setFlowSiemPreview(enabled) {
-        const st = document.getElementById('flowSiemPreviewStatus');
-        try {
-            const res = await apiFetch('/api/settings/flow-siem-preview', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: !!enabled })
-            });
-            if (res && res.ok) {
-                if (st) st.textContent = currentLang === 'en' ? 'Saved.' : 'Salvato.';
-                await applyFlowSiemPreviewGating();
-            }
-        } catch (e) {
-            if (st) st.textContent = currentLang === 'en' ? 'Error.' : 'Errore.';
-        }
-    }
-
     async function loadFlowSiemTab() {
         const windowVal = document.getElementById('flowSiemWindow') ? document.getElementById('flowSiemWindow').value : '24h';
         const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
@@ -318,8 +285,6 @@
 
     // Expose functions globally
     window.loadFlowSiemTab = loadFlowSiemTab;
-    window.applyFlowSiemPreviewGating = applyFlowSiemPreviewGating;
-    window.setFlowSiemPreview = setFlowSiemPreview;
     window.toggleSiemStream = toggleSiemStream;
     window.filterSiemEvents = filterSiemEvents;
     window.applySiemFilter = applySiemFilter;
