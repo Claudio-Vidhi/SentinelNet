@@ -543,8 +543,12 @@ function switchTab(tabId, clickedBtn) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
-    // Se chiamato senza pulsante (es. dopo import CSV) evidenzia comunque la tab corretta
-    const btn = clickedBtn || document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
+    // Se chiamato senza pulsante (es. dopo import CSV) evidenzia comunque la tab corretta.
+    // I sotto-tab passano solo il tabId: la voce di nav che li raggruppa si
+    // dichiara con data-tabs, così una sola voce resta attiva per piu' tab.
+    const btn = clickedBtn
+        || document.querySelector(`.nav-item[onclick*="'${tabId}'"]`)
+        || document.querySelector(`.nav-item[data-tabs~="${tabId}"]`);
     if (btn) {
         btn.classList.add('active');
     }

@@ -126,6 +126,31 @@ class TestRbacScope(unittest.TestCase):
         anon = TestClient(app_server.app)
         self.assertEqual(anon.get("/api/mcp-client/servers").status_code, 401)
 
+    def test_tenant_rename_and_delete_are_admin_only(self):
+        # La voce di nav "Gestione Tenant" e' requires-admin: se gli endpoint
+        # restassero operator il gate sarebbe solo cosmetico, perche' l'API
+        # resta chiamabile. Rinominare/eliminare un tenant riscrive
+        # l'assegnazione di tutti i suoi apparati e cambia lo scope RBAC.
+        op = self._client("single")
+        op.headers.update({"X-Requested-With": "XMLHttpRequest"})
+        for path, body in (("/api/groups/rename", {"old_name": "sede-a", "new_name": "x"}),
+                           ("/api/groups/delete", {"name": "sede-a"})):
+            self.assertEqual(op.post(path, json=body).status_code, 403,
+                             f"{path}: operator non deve poter agire sui tenant")
+
+        # La CREAZIONE resta operator: serve nel form di Provisioning, dove il
+        # controllo inline e' gated requires-write.
+        created = op.post("/api/groups", json={"name": "tenant-nuovo-test"})
+        self.assertNotEqual(created.status_code, 403,
+                            "operator deve poter creare tenant dal provisioning")
+
+        adm = self._client("adm")
+        adm.headers.update({"X-Requested-With": "XMLHttpRequest"})
+        self.assertNotEqual(
+            adm.post("/api/groups/rename",
+                     json={"old_name": "tenant-nuovo-test", "new_name": "tenant-rinominato"}
+                     ).status_code, 403, "admin deve poter rinominare")
+
     def test_site_relay_command_is_device_scoped(self):
         # Il relay CLI verso una sede agent è `require_operator`: senza scoping
         # sul device, un operator limitato a sede-a pilota gli apparati di

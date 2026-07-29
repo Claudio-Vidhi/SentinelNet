@@ -157,90 +157,75 @@
     </div>
 
     <nav class="sidenav">
-      <div class="nav-group"><h3 data-i18n="navOps">Operations</h3>
+      <div class="nav-group"><h3 data-i18n="navInvestigate">Indaga</h3>
         <button class="nav-item active" onclick="switchTab('tab-home', this)">
           <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-grid-2"></i> Home</span>
         </button>
+        <button id="navIncidents" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-incidents', this); loadIncidentsTab();">
+          <span class="nav-left"><i class="fa-solid fa-timeline"></i> Incidenti</span>
+          <span class="preview-badge">preview</span>
+        </button>
+        <button class="nav-item" data-tabs="tab-flows tab-flow-siem" onclick="switchTab('tab-flows', this); flowsTabShown();">
+          <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
+        </button>
+        <button class="nav-item" data-tabs="tab-mac tab-clientmap" onclick="switchTab('tab-mac', this)">
+          <span class="nav-left" data-i18n="tabEndpointLoc"><i class="fa-solid fa-map-pin"></i> Localizzazione Endpoint</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-ai', this)">
+          <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
+        </button>
+      </div>
+      <div class="nav-group"><h3 data-i18n="navInventory">Inventario</h3>
         <button class="nav-item" onclick="switchTab('tab-devices', this)">
           <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
         </button>
-        <button class="nav-item" onclick="switchTab('tab-mac', this)">
-          <span class="nav-left" data-i18n="tabMacTracker"><i class="fa-solid fa-magnifying-glass-location"></i> MAC Tracker</span>
-        </button>
-        <button class="nav-item" onclick="switchTab('tab-clientmap', this); loadClientMapTab();">
-          <span class="nav-left" data-i18n="tabClientMap"><i class="fa-solid fa-map-pin"></i> Client Map (MAC &#8596; IP)</span>
-        </button>
-        <button class="nav-item" onclick="switchTab('tab-flows', this); flowsTabShown();">
-          <span class="nav-left" data-i18n="tabFlows"><i class="fa-solid fa-wave-square"></i> Flussi Live</span>
-        </button>
-      </div>
-      <div class="nav-group"><h3 data-i18n="navAnalysis">Analysis</h3>
-        <button class="nav-item" onclick="switchTab('tab-map', this)">
-          <span class="nav-left" data-i18n="tabMap"><i class="fa-solid fa-link"></i> Port-Channel &amp; Link</span>
-        </button>
-        <button class="nav-item" onclick="switchTab('tab-map-interactive', this)">
-          <span class="nav-left" data-i18n="tabInteractive"><i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D</span>
+        <button class="nav-item" data-tabs="tab-map tab-map-interactive" onclick="switchTab('tab-map', this)">
+          <span class="nav-left" data-i18n="tabTopologyGroup"><i class="fa-solid fa-circle-nodes"></i> Topologia</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-categories', this)">
           <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
         </button>
+        <button id="navFortigatePreview" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-fortigate-preview', this)">
+          <span class="nav-left" data-i18n="tabFgtPreview"><i class="fa-solid fa-shield-halved"></i> FortiGate LIVE</span>
+          <span class="preview-badge">preview</span>
+        </button>
+      </div>
+      <div class="nav-group"><h3 data-i18n="navAssess">Valuta</h3>
         <button class="nav-item" onclick="switchTab('tab-security', this)">
           <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-config', this)">
           <span class="nav-left" data-i18n="tabConfigAnalyzer"><i class="fa-solid fa-file-code"></i> Config Analyzer</span>
         </button>
-        <button class="nav-item" onclick="switchTab('tab-ai', this)">
-          <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
+        <button id="navNetSecAudit" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-netsec-audit', this); loadNetSecAuditTab();">
+          <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
+          <span class="preview-badge">preview</span>
+        </button>
+        <button id="navAuditChecklist" class="nav-item requires-admin" onclick="switchTab('tab-audit-checklist', this); loadAuditChecklistTab();">
+          <span class="nav-left"><i class="fa-solid fa-clipboard-check"></i> Checklist Audit Firewall</span>
         </button>
       </div>
-      <div class="nav-group"><h3 data-i18n="navProvisioning">Provisioning</h3>
-        <button class="nav-item requires-write" onclick="switchTab('tab-provisioning', this)">
-          <span class="nav-left" data-i18n="tabProvisioning"><i class="fa-solid fa-plus"></i> Provisioning Apparato</span>
-        </button>
-        <button class="nav-item requires-write" onclick="switchTab('tab-provisioner', this)">
-          <span class="nav-left" data-i18n="tabProvisioner"><i class="fa-solid fa-wand-magic-sparkles"></i> Apparato da Zero</span>
+      <div class="nav-group"><h3 data-i18n="navChange">Modifica</h3>
+        <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" onclick="switchTab('tab-provisioning', this)">
+          <span class="nav-left" data-i18n="tabProvGroup"><i class="fa-solid fa-circle-plus"></i> Provisioning</span>
         </button>
         <button class="nav-item requires-write" onclick="switchTab('tab-import', this)">
           <span class="nav-left" data-i18n="tabImport"><i class="fa-solid fa-file-csv"></i> Importazione CSV</span>
         </button>
-        <button class="nav-item" onclick="switchTab('tab-groups', this)">
-          <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi</span>
-        </button>
       </div>
-      <div class="nav-group"><h3 data-i18n="navAdmin">Administration</h3>
+      <div class="nav-group"><h3 data-i18n="navAdminister">Amministra</h3>
         <button class="nav-item requires-admin" onclick="switchTab('tab-users', this)">
           <span class="nav-left" data-i18n="tabUsers"><i class="fa-solid fa-users-gear"></i> Utenti</span>
+        </button>
+        <button class="nav-item requires-admin" onclick="switchTab('tab-groups', this)">
+          <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Tenant</span>
         </button>
         <button class="nav-item requires-admin" onclick="switchTab('tab-sites', this)">
           <span class="nav-left" data-i18n="tabSites"><i class="fa-solid fa-building"></i> Sedi</span>
           <span class="preview-badge">preview</span>
         </button>
-        <button class="nav-item requires-admin" onclick="switchTab('tab-mcp', this)">
-          <span class="nav-left" data-i18n="tabMcp"><i class="fa-solid fa-plug"></i> MCP Server</span>
-        </button>
-        <button id="navMcpClient" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-mcp-client', this)">
-          <span class="nav-left" data-i18n="tabMcpClient"><i class="fa-solid fa-network-wired"></i> MCP Client</span>
-          <span class="preview-badge">preview</span>
-        </button>
-        <button id="navFortigatePreview" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-fortigate-preview', this)">
-          <span class="nav-left" data-i18n="tabFgtPreview"><i class="fa-solid fa-shield-halved"></i> FortiGate LIVE</span>
-          <span class="preview-badge">preview</span>
-        </button>
-        <button id="navFlowSiemPreview" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-flow-siem', this); loadFlowSiemTab();">
-          <span class="nav-left"><i class="fa-solid fa-chart-line"></i> Flow SIEM</span>
-          <span class="preview-badge">preview</span>
-        </button>
-        <button id="navNetSecAudit" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-netsec-audit', this); loadNetSecAuditTab();">
-          <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
-          <span class="preview-badge">preview</span>
-        </button>
-        <button id="navIncidents" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-incidents', this); loadIncidentsTab();">
-          <span class="nav-left"><i class="fa-solid fa-timeline"></i> Incidenti</span>
-          <span class="preview-badge">preview</span>
-        </button>
-        <button id="navAuditChecklist" class="nav-item requires-admin" onclick="switchTab('tab-audit-checklist', this); loadAuditChecklistTab();">
-          <span class="nav-left"><i class="fa-solid fa-clipboard-check"></i> Checklist Audit Firewall</span>
+        <button class="nav-item requires-admin" data-tabs="tab-mcp tab-mcp-client" onclick="switchTab('tab-mcp', this)">
+          <span class="nav-left" data-i18n="tabIntegrations"><i class="fa-solid fa-plug"></i> Integrazioni</span>
         </button>
         <button class="nav-item requires-admin" onclick="switchTab('tab-settings', this)">
           <span class="nav-left" data-i18n="tabSettings"><i class="fa-solid fa-gear"></i> Impostazioni</span>
@@ -426,6 +411,10 @@
 
     <!-- TAB 1b: Provisioning Apparato (estratto da Network Inventory) -->
     <div id="tab-provisioning" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-provisioning');" data-i18n="tabProvisioning"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-provisioner');" data-i18n="tabProvisioner"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="provisioningEyebrow"><i class="fa-solid fa-plus"></i> Provisioning</span>
@@ -447,14 +436,14 @@
               <i class="fa-solid fa-building"></i> <span data-i18n="secTenant">1 · Tenant</span>
             </h4>
             <div class="form-group">
-              <label data-i18n="lblGroup">Assegna a Gruppo/Sede</label>
+              <label data-i18n="lblGroup">Assegna a Tenant</label>
               <div style="display:flex; gap:8px; align-items:center;">
                 <select id="devGroupSelect" style="flex:1;"></select>
                 <button class="btn btn-secondary" id="btnInlineNewTenant" type="button" title="Nuovo tenant" style="white-space:nowrap; width:auto; flex:0 0 auto;"><i class="fa-solid fa-plus"></i></button>
               </div>
               <div id="inlineNewTenantRow" style="display:none; margin-top:8px; gap:8px;">
                 <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" style="flex:1; padding-left:12px;">
-                <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text); width:auto; flex:0 0 auto;" data-i18n="btnCreateGroup"><i class="fa-solid fa-folder-plus"></i> Crea Gruppo</button>
+                <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text); width:auto; flex:0 0 auto;" data-i18n="btnCreateGroup"><i class="fa-solid fa-folder-plus"></i> Crea Tenant</button>
               </div>
             </div>
 
@@ -603,7 +592,7 @@
       </div>
     </div>
 
-    <!-- TAB 2: Gestione Gruppi/Sedi -->
+    <!-- TAB 2: Gestione Tenant -->
     <div id="tab-groups" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr;">
         <div class="hero-card">
@@ -672,6 +661,10 @@
     <!-- TAB 3: Port-Channel & Link (la lista adjacency testuale è stata rimossa:
          la topologia si consulta nella mappa interattiva) -->
     <div id="tab-map" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-map');" data-i18n="tabMap"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-map-interactive');" data-i18n="tabInteractive"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="portchannelsEyebrow"><i class="fa-solid fa-link"></i> Rete</span>
@@ -697,6 +690,10 @@
 
     <!-- TAB 4: Mappa Topologia 2D (Premium Vis.js) -->
     <div id="tab-map-interactive" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-map');" data-i18n="tabMap"></button>
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-map-interactive');" data-i18n="tabInteractive"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="mapEyebrow"><i class="fa-solid fa-diagram-project"></i> Mappa</span>
@@ -953,6 +950,10 @@
 
     <!-- TAB: MAC Address Tracker (storico MAC -> porta/vlan) -->
     <div id="tab-mac" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="macEyebrow"><i class="fa-solid fa-location-crosshairs"></i> Rete</span>
@@ -1087,6 +1088,10 @@
 
     <!-- TAB: Client Map (MAC <-> IP dai gateway L3) -->
     <div id="tab-clientmap" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="clientmapEyebrow"><i class="fa-solid fa-network-wired"></i> Rete</span>
@@ -1150,7 +1155,7 @@
             <input id="arpSearchIp" class="ui-input" type="text" placeholder="10.0.0." style="width:140px;">
           </div>
           <div>
-            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant/Sede</label>
+            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant</label>
             <!-- Multi-selezione tenant a checkbox (nessun tenant di default): evita di
                  mostrare tutti i binding di tutti i tenant senza una scelta esplicita. -->
             <details id="arpTenantMenu" style="position:relative;">
@@ -1185,6 +1190,10 @@
 
     <!-- TAB: Live Flows -->
     <div id="tab-flows" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-flows'); flowsTabShown();" data-i18n="tabFlows"></button>
+        <button class="btn btn-secondary ti-subtab preview-flow-siem" style="display:none;" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="flowsEyebrow"><i class="fa-solid fa-wave-square"></i> Observability</span>
@@ -1538,7 +1547,7 @@
             <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
           </label>
           <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
-            <option value="" data-i18n="optAiNoTenant">Nessuna sede/tenant allegata</option>
+            <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
           </select>
           <div style="position:relative; display:inline-block;">
             <button id="aiAttachDeviceBtn" class="btn" onclick="toggleAiDeviceDropdown()" style="padding:6px 12px;">
@@ -1568,7 +1577,7 @@
         </p>
         <div class="filterbar" style="margin-top:0; align-items:flex-end; flex-wrap:wrap; gap:10px;">
           <div class="form-group" style="min-width:170px; margin:0;">
-            <label data-i18n="lblGenCfgTenant">Sede/Tenant</label>
+            <label data-i18n="lblGenCfgTenant">Tenant</label>
             <select id="genCfgTenant" onchange="populateGenCfgTemplates()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
           </div>
           <div class="form-group" style="min-width:220px; margin:0;">
@@ -1621,6 +1630,10 @@
 
     <!-- TAB: Switch da Zero (Provisioner) -->
     <div id="tab-provisioner" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-provisioning');" data-i18n="tabProvisioning"></button>
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-provisioner');" data-i18n="tabProvisioner"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="provisionerEyebrow"><i class="fa-solid fa-screwdriver-wrench"></i> Provisioning</span>
@@ -1954,6 +1967,10 @@
     </div>
 
     <div id="tab-mcp" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-mcp');" data-i18n="tabMcp"></button>
+        <button class="btn btn-secondary ti-subtab preview-mcp-client" style="display:none;" onclick="switchTab('tab-mcp-client');" data-i18n="tabMcpClient"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="mcpEyebrow"><i class="fa-solid fa-plug"></i> Integrazioni</span>
@@ -2024,6 +2041,10 @@
     </div>
 
     <div id="tab-mcp-client" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mcp');" data-i18n="tabMcp"></button>
+        <button class="btn btn-secondary ti-subtab preview-mcp-client active" style="display:none;" onclick="switchTab('tab-mcp-client');" data-i18n="tabMcpClient"></button>
+      </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <span class="eyebrow" data-i18n="mcpClientEyebrow"><i class="fa-solid fa-network-wired"></i> Integrazioni · <span class="preview-badge">preview</span></span>
@@ -2422,6 +2443,10 @@
 
     <!-- TAB: Flow SIEM Analytics (preview) -->
     <div id="tab-flow-siem" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-flows'); flowsTabShown();" data-i18n="tabFlows"></button>
+        <button class="btn btn-secondary ti-subtab preview-flow-siem active" style="display:none;" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
+      </div>
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
           <span class="eyebrow"><i class="fa-solid fa-chart-line"></i> Flow SIEM &amp; Traffic Analytics (Preview)</span>
