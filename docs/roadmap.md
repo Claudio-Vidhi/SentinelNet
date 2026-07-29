@@ -175,5 +175,5 @@ most likely to be mistaken for bugs:
   ([architecture.md](architecture.md) §5).
 - Flow SIEM deep-scan cost
   ([live-flows-and-siem.md](live-flows-and-siem.md) §9).
-- Open security findings ([security-audit.md](security-audit.md),
-  [security-semgrep.md](security-semgrep.md)).
+- Open security findings — tracked in `data/security/`, outside the public tree
+  ([CONTRIBUTING.md](../CONTRIBUTING.md) §6).

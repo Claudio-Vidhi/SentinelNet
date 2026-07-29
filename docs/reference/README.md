@@ -15,3 +15,17 @@ this codebase — they change only when the vendor's product does.
 
 Note the version: these notes were distilled against FortiOS 7.4.12. Check them
 against the running firmware before trusting a CLI syntax detail.
+
+## Cisco Catalyst
+
+| Document | Covers |
+|---|---|
+| [cisco/snmp-mibs.md](cisco/snmp-mibs.md) | MIB support matrix for Catalyst 9200/9300/9400/9500, and the verdict on every OID `snmp_poller.py` queries |
+| [cisco/programmability.md](cisco/programmability.md) | NETCONF/RESTCONF preconditions and the diagnostic order when `mac_collector.py` silently falls back to CLI |
+| [cisco/system-messages.md](cisco/system-messages.md) | IOS-XE syslog message structure, severity mapping, and what the 17.18 catalog does and doesn't contain |
+
+Sources: MIB data scraped from Cisco's published support lists; the other two
+distilled from the IOS-XE 17.18 Programmability Command Reference and System
+Message Guide. 17.18 is likely **ahead of any deployed train**, so each document
+flags which statements are version-sensitive and cites the release that
+introduced each command.

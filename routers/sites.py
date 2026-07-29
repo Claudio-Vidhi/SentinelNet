@@ -8,11 +8,27 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 from security.security_manager import log_audit
-from routers.deps import require_admin, require_operator
+from routers.deps import require_admin, require_operator, user_group_scope
 from routers.commands import command_allowed, is_command_safe, _bypass_note
-from services import site_manager
+from services import inventory_manager, site_manager
 
 router = APIRouter(tags=["Sites"])
+
+
+def _device_in_scope(current_user, device_ip: str) -> bool:
+    """Il device ricade in una sede consentita all'utente (CONTRIBUTING §4).
+
+    Predicato e non ``assert_device_allowed``: quello solleva 403 se il device
+    esiste fuori scope ma ritorna ``None`` se non esiste, e qui i due casi vanno
+    resi indistinguibili. Si autorizza sul device, non sul ``site_id``, perché è
+    il gruppo del device a definire lo scope utente. Un device sconosciuto non è
+    autorizzabile: falso, tranne per chi non ha restrizioni."""
+    scope = user_group_scope(current_user)
+    if scope is None:
+        return True
+    device = next((d for d in inventory_manager.get_all_devices()
+                   if d["IP"] == device_ip), None)
+    return device is not None and device.get("Group", "Generale") in scope
 
 class SiteSchema(BaseModel):
     name: str
@@ -84,6 +100,12 @@ def site_command_ep(site_id: str, payload: SiteCommandSchema,
         raise HTTPException(status_code=400, detail="Il relay comandi è disponibile solo per sedi in modalità agent.")
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", payload.ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
+    if not _device_in_scope(current_user, payload.ip):
+        log_audit(f"Relay comando negato (fuori scope) su '{payload.ip}' sede "
+                  f"'{site_id}' a '{current_user.get('sub')}'.")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Dispositivo '{payload.ip}' non fra le sedi consentite.")
     if not command_allowed(payload.command, current_user):
         log_audit(f"Relay comando bloccato (blacklist) '{payload.command}' su '{payload.ip}' "
                   f"sede '{site_id}' da '{current_user.get('sub')}'.")
@@ -102,11 +124,23 @@ def get_command_job_ep(job_id: str, current_user = Depends(require_operator)):
     job = site_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job non trovato.")
+    # Job fuori scope: 404 identico al job inesistente, per non confermare
+    # l'esistenza di attività in sedi altrui (stessa politica di /anomalies).
+    if not _device_in_scope(current_user, job.get("device_ip", "")):
+        raise HTTPException(status_code=404, detail="Job non trovato.")
     return job
 
 @router.get("/api/sites/{site_id}/command-jobs")
 def list_site_command_jobs_ep(site_id: str, current_user = Depends(require_operator)):
-    return {"jobs": site_manager.list_jobs(site_id)}
+    jobs = site_manager.list_jobs(site_id)
+    scope = user_group_scope(current_user)
+    if scope is not None:
+        # Filtro, non 403: la lista è la vista dell'utente sulla sede, e deve
+        # contenere ciò che gli è consentito vedere e nient'altro.
+        allowed = {d["IP"] for d in inventory_manager.get_all_devices()
+                   if d.get("Group", "Generale") in scope}
+        jobs = [j for j in jobs if j.get("device_ip") in allowed]
+    return {"jobs": jobs}
 
 
 class AgentConfigUpdateSchema(BaseModel):

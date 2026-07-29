@@ -126,6 +126,65 @@ class TestRbacScope(unittest.TestCase):
         anon = TestClient(app_server.app)
         self.assertEqual(anon.get("/api/mcp-client/servers").status_code, 401)
 
+    def test_site_relay_command_is_device_scoped(self):
+        # Il relay CLI verso una sede agent è `require_operator`: senza scoping
+        # sul device, un operator limitato a sede-a pilota gli apparati di
+        # sede-c. Il ruolo da solo non basta (CONTRIBUTING.md §4).
+        from services import site_manager
+        sid = site_manager.create_site("relay-scope-test", "agent", [])[0]["id"]
+        c = self._client("single")           # solo sede-a
+        # Le POST autenticate via cookie richiedono l'header anti-CSRF: senza,
+        # si otterrebbe 403 per un motivo che non c'entra con lo scoping.
+        c.headers.update({"X-Requested-With": "XMLHttpRequest"})
+        body = {"command": "show version"}
+
+        out_of_scope = c.post(f"/api/sites/{sid}/command",
+                              json={**body, "ip": "10.3.0.1"})   # sede-c
+        self.assertEqual(out_of_scope.status_code, 403,
+                         "device di altra sede accodabile dal relay")
+
+        in_scope = c.post(f"/api/sites/{sid}/command",
+                          json={**body, "ip": "10.1.0.1"})       # sede-a
+        self.assertNotEqual(in_scope.status_code, 403,
+                            "device della propria sede negato")
+
+        # Un device sconosciuto non è autorizzabile: si nega.
+        unknown = c.post(f"/api/sites/{sid}/command",
+                         json={**body, "ip": "10.9.9.9"})
+        self.assertEqual(unknown.status_code, 403)
+
+        # Admin: nessuna restrizione, stesso device fuori dallo scope altrui.
+        adm = self._client("adm")
+        adm.headers.update({"X-Requested-With": "XMLHttpRequest"})
+        self.assertNotEqual(
+            adm.post(f"/api/sites/{sid}/command",
+                     json={**body, "ip": "10.3.0.1"}).status_code, 403)
+
+    def test_command_job_lookup_is_scoped(self):
+        # Job di un'altra sede: 404 identico al job inesistente, per non
+        # confermarne l'esistenza (stessa politica di /anomalies).
+        from services import site_manager
+        sid = site_manager.create_site("job-scope-test", "agent", [])[0]["id"]
+        job_a = site_manager.enqueue_job(sid, "10.1.0.1", "show version")
+        job_c = site_manager.enqueue_job(sid, "10.3.0.1", "show version")
+
+        c = self._client("single")           # solo sede-a
+        self.assertEqual(c.get(f"/api/command-jobs/{job_a['id']}").status_code, 200)
+        self.assertEqual(c.get(f"/api/command-jobs/{job_c['id']}").status_code, 404,
+                         "job di altra sede leggibile")
+        self.assertEqual(c.get("/api/command-jobs/inesistente").status_code, 404)
+
+        # L'elenco per sede espone solo i job dei device consentiti.
+        listed = c.get(f"/api/sites/{sid}/command-jobs")
+        self.assertEqual(listed.status_code, 200)
+        ips = {j["device_ip"] for j in listed.json()["jobs"]}
+        self.assertEqual(ips, {"10.1.0.1"}, f"lista non filtrata: {ips}")
+
+        # Admin vede entrambi.
+        adm_ips = {j["device_ip"] for j in
+                   self._client("adm").get(f"/api/sites/{sid}/command-jobs").json()["jobs"]}
+        self.assertEqual(adm_ips, {"10.1.0.1", "10.3.0.1"})
+
     def test_no_scalar_user_group_in_routers(self):
         # Gate permanente (CONTRIBUTING.md §4): mai `user.group`/`.get("group")`
         # scalare nei router.

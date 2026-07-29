@@ -170,5 +170,5 @@ SENTINELNET_OBS_RETENTION_FLOWS_DAYS=30   # _SYSLOG_DAYS=7, _EVENTS_DAYS=90
 - Protect `SENTINELNET_DATA_DIR` — it holds encrypted device credentials and
   the keys that decrypt them.
 
-Current security findings and their status: [security-audit.md](security-audit.md)
-and [security-semgrep.md](security-semgrep.md).
+Audit and scan findings are tracked in `data/security/`, outside the public tree
+— see [CONTRIBUTING.md](../CONTRIBUTING.md) §6.
