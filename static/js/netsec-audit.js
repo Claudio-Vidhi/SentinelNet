@@ -15,7 +15,26 @@
     // una futura chiamata durante l'init del modulo per avere un ReferenceError.
     const _auditOpenRows = new Set();
 
+    // Piattaforma riconosciuta nella configurazione analizzata: decide quali
+    // regole il motore ha eseguito, quindi va detto nel report.
+    let _auditVendor = null;
+
+    // Un file caricato diventa una VOCE della tendina dei dispositivi, non uno
+    // stato nascosto. Prima il testo restava in una variabile e vinceva sempre
+    // sul dispositivo selezionato: si sceglieva un apparato dall'inventario,
+    // si lanciava la scansione e si ottenevano i risultati del file caricato
+    // mezz'ora prima, senza che nulla lo dicesse. Ora la tendina e' l'unica
+    // fonte di verita' su cosa si sta analizzando.
+    const UPLOADED_VALUE = '__uploaded__';
+    let _droppedConfigText = null;
+    let _droppedConfigName = '';
+
     function loadNetSecAuditTab() {
+        // Il report esce per default nella lingua in cui si sta lavorando;
+        // il selettore serve a consegnarlo in un'altra, non a doverlo
+        // reimpostare ogni volta.
+        const langSel = document.getElementById('auditReportLang');
+        if (langSel) langSel.value = (currentLang === 'en') ? 'en' : 'it';
         populateAuditDeviceSelect();
         renderAuditOverview();
         renderAuditRulesTable();
@@ -28,6 +47,7 @@
     async function populateAuditDeviceSelect() {
         const sel = document.getElementById('auditDeviceSelect');
         if (!sel) return;
+        const previous = sel.value;
         // Segnaposto, non una funzionalita': la scansione multi-dispositivo non
         // esiste e il backend rifiuta 'all' con un messaggio esplicito.
         const allOption = '<option value="all">— Seleziona un dispositivo —</option>';
@@ -58,7 +78,66 @@
         } catch (e) {
             console.error('populateAuditDeviceSelect error:', e);
             sel.innerHTML = allOption;
+        } finally {
+            // Ricostruire la tendina non deve far sparire il file caricato:
+            // e' esattamente il momento in cui l'utente lo perdeva di vista.
+            restoreUploadedOption(sel, previous);
         }
+    }
+
+    // Rimette in cima la voce del file caricato e ripristina la selezione.
+    function restoreUploadedOption(sel, previous) {
+        if (_droppedConfigText) {
+            const opt = document.createElement('option');
+            opt.value = UPLOADED_VALUE;
+            opt.textContent = '📄 ' + (_droppedConfigName || 'config');
+            sel.insertBefore(opt, sel.firstChild);
+        }
+        if (previous && [...sel.options].some(o => o.value === previous)) {
+            sel.value = previous;
+        } else if (_droppedConfigText) {
+            sel.value = UPLOADED_VALUE;
+        }
+        syncDropzoneHint();
+    }
+
+    // Il riquadro di upload dice cosa e' caricato e come toglierlo. Senza,
+    // l'unico modo di sapere se un file e' ancora in gioco e' ricordarselo.
+    function syncDropzoneHint() {
+        const dropText = document.getElementById('auditDropText');
+        if (!dropText) return;
+        const en = currentLang === 'en';
+        if (!_droppedConfigText) {
+            dropText.innerHTML = `<i class="fa-solid fa-cloud-arrow-up fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
+                <span data-i18n="nsaDropText">${en
+                    ? 'Drop the configuration file here, or click to upload'
+                    : 'Trascina qui il file di configurazione o clicca per caricare'}</span>`;
+            return;
+        }
+        const sel = document.getElementById('auditDeviceSelect');
+        const active = sel && sel.value === UPLOADED_VALUE;
+        dropText.innerHTML = `
+            <i class="fa-solid fa-file-code fa-2x" style="color:var(--success); margin-bottom:8px;"></i><br>
+            <strong>${escapeHtml(_droppedConfigName)}</strong><br>
+            <span style="color:var(--text-muted);">${active
+                ? (en ? 'Selected as the audit target.' : 'Selezionato come oggetto dell\'audit.')
+                : (en ? 'Loaded, but a device is selected instead.' : 'Caricato, ma è selezionato un dispositivo.')}</span>
+            <br><a href="#" onclick="clearUploadedConfig(); return false;" style="font-size:11px; color:var(--danger);">${en ? 'Remove file' : 'Rimuovi file'}</a>`;
+    }
+
+    function clearUploadedConfig() {
+        _droppedConfigText = null;
+        _droppedConfigName = '';
+        const sel = document.getElementById('auditDeviceSelect');
+        if (sel) {
+            [...sel.options].forEach(o => {
+                if (o.value === UPLOADED_VALUE) o.remove();
+            });
+            sel.value = 'all';
+        }
+        const fileInput = document.getElementById('auditFileInput');
+        if (fileInput) fileInput.value = '';
+        syncDropzoneHint();
     }
 
     // Riepilogo e punteggio arrivano dal motore. NON ricalcolati qui: la regola
@@ -121,6 +200,27 @@
         set('auditStatPassed', s.passed);
         set('auditStatWarned', s.warned);
         set('auditStatUnknown', unknown);
+    }
+
+    // "Perche' dovrebbe essere impostato cosi'": motivazione, impatto del
+    // rimedio e valore di fabbrica. Arrivano dal motore (guidance.py) gia'
+    // nella lingua del report; il blocco sparisce del tutto se il controllo
+    // non ha una voce, invece di mostrare tre riquadri vuoti.
+    function auditGuidanceBlock(r) {
+        const g = r.guidance || {};
+        if (!g.why && !g.impact && !g.default) return '';
+        const en = currentLang === 'en';
+        const section = (label, text, color) => text ? `
+            <div style="margin-bottom:10px;">
+                <div style="font-size:11px; font-weight:700; color:${color}; text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px;">${label}</div>
+                <div style="font-size:12px; line-height:1.55; color:var(--text);">${escapeHtml(text)}</div>
+            </div>` : '';
+        return `
+            <div style="border-left:3px solid var(--primary); padding:2px 0 2px 12px; margin-bottom:14px;">
+                ${section(en ? 'Why it matters' : 'Perché conta', g.why, 'var(--primary)')}
+                ${section(en ? 'Impact of the fix' : 'Impatto del rimedio', g.impact, 'var(--warning)')}
+                ${section(en ? 'Factory default' : 'Valore di fabbrica', g.default, 'var(--text-muted)')}
+            </div>`;
     }
 
     function renderAuditRulesTable() {
@@ -190,6 +290,14 @@
                    </span>`
                 : '';
 
+            // Segnala che espandendo si trova la motivazione, non solo il
+            // comando: senza, nessuno apre la riga di un controllo PASS.
+            const whyHint = (r.guidance && (r.guidance.why || r.guidance.impact))
+                ? `<span class="badge" style="background:rgba(99,102,241,0.15); color:var(--primary); font-weight:600;">
+                       <i class="fa-solid fa-circle-question"></i> ${currentLang === 'en' ? 'why' : 'perché'}
+                   </span>`
+                : '';
+
             const evRows = ev.length ? `
                 <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin:0 0 6px;">
                     ${currentLang === 'en' ? 'Evidence in the analysed config' : 'Evidenze nella configurazione analizzata'}
@@ -211,7 +319,7 @@
                     <div style="font-weight:700;">${escapeHtml(r.title)}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(r.detail)}</div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px;">
-                        ${refBadge}${levelBadge}${manualBadge}${evHint}
+                        ${refBadge}${levelBadge}${manualBadge}${whyHint}${evHint}
                     </div>
                 </td>
                 <td style="padding:8px;">${sevBadge}</td>
@@ -223,6 +331,7 @@
             </tr>
             <tr id="auditEv-${escapeHtml(evId)}" style="${isOpen ? '' : 'display:none;'}">
                 <td colspan="6" style="padding:12px 12px 14px 30px; background:var(--surface-2); border-top:1px solid var(--border);">
+                    ${auditGuidanceBlock(r)}
                     ${r.audit ? `
                     <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
                         ${currentLang === 'en' ? 'Verify on the device' : 'Verifica sull\'apparato'}
@@ -242,12 +351,15 @@
         if (_auditOpenRows.has(ruleId)) _auditOpenRows.delete(ruleId);
         else _auditOpenRows.add(ruleId);
         renderAuditRulesTable();
-    }    let _droppedConfigText = null;
+    }
 
     async function runAuditScan() {
         const btn = document.getElementById('btnRunAuditScan');
         const benchmark = document.getElementById('auditBenchmarkSelect') ? document.getElementById('auditBenchmarkSelect').value : 'cis';
         const deviceIp = document.getElementById('auditDeviceSelect') ? document.getElementById('auditDeviceSelect').value : 'all';
+        // Il testo caricato si invia SOLO se e' lui l'oggetto selezionato:
+        // altrimenti sovrascriverebbe in silenzio il dispositivo scelto.
+        const uploaded = (deviceIp === UPLOADED_VALUE);
 
         if (btn) {
             btn.disabled = true;
@@ -261,7 +373,11 @@
                 body: JSON.stringify({
                     benchmark: benchmark,
                     device_ip: deviceIp,
-                    config_text: _droppedConfigText || null
+                    // La tabella a schermo segue la lingua dell'interfaccia;
+                    // il report esportato ha un proprio selettore.
+                    lang: currentLang,
+                    device_ip: uploaded ? null : deviceIp,
+                    config_text: uploaded ? _droppedConfigText : null
                 })
             });
 
@@ -273,6 +389,7 @@
                 _auditRules = data.rules || [];
                 _auditSummary = data.summary || null;
                 _auditScore = (data.score === undefined) ? null : data.score;
+                _auditVendor = data.vendor || null;
                 renderAuditOverview();
                 renderAuditRulesTable();
             } else if (res) {
@@ -308,6 +425,12 @@
             benchSel.addEventListener('change', () => runAuditScan());
         }
 
+        const devSel = document.getElementById('auditDeviceSelect');
+        if (devSel && !devSel.dataset.bound) {
+            devSel.dataset.bound = 'true';
+            devSel.addEventListener('change', syncDropzoneHint);
+        }
+
         zone.onclick = () => fileInput.click();
 
         zone.ondragover = e => { e.preventDefault(); zone.style.borderColor = 'var(--primary)'; };
@@ -326,50 +449,165 @@
             const reader = new FileReader();
             reader.onload = e => {
                 _droppedConfigText = e.target.result;
-                if (dropText) dropText.innerHTML = `<i class="fa-solid fa-file-code" style="color:var(--success);"></i><br>File <strong>${escapeHtml(file.name)}</strong> caricato. Analisi in corso...`;
+                _droppedConfigName = file.name;
+                const sel = document.getElementById('auditDeviceSelect');
+                if (sel) {
+                    [...sel.options].forEach(o => {
+                        if (o.value === UPLOADED_VALUE) o.remove();
+                    });
+                    restoreUploadedOption(sel, UPLOADED_VALUE);
+                }
+                syncDropzoneHint();
                 runAuditScan();
             };
             reader.readAsText(file);
         }
     }
 
+    // Rivaluta la stessa configurazione in un'altra lingua. Ripete la
+    // scansione invece di tradurre a schermo: i verdetti nascono nel motore,
+    // e tradurli qui significherebbe tenerne una seconda copia disallineata.
+    async function rescanForLanguage(benchmarkKey, lang) {
+        const devSel = document.getElementById('auditDeviceSelect');
+        const deviceIp = devSel ? devSel.value : 'all';
+        const uploaded = (deviceIp === UPLOADED_VALUE);
+        try {
+            const res = await apiFetch('/api/netsec-audit/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    benchmark: benchmarkKey,
+                    device_ip: uploaded ? null : deviceIp,
+                    lang: lang,
+                    config_text: uploaded ? _droppedConfigText : null
+                })
+            });
+            if (res && res.ok) return await res.json();
+            let detail = '';
+            try { const err = await res.json(); detail = err && err.detail; } catch (e) {}
+            showToast(detail || (currentLang === 'en'
+                ? 'Could not produce the report in the selected language.'
+                : 'Impossibile produrre il report nella lingua selezionata.'), 'error');
+        } catch (e) {
+            console.error('Audit re-scan error:', e);
+            showToast(currentLang === 'en'
+                ? 'Could not produce the report in the selected language.'
+                : 'Impossibile produrre il report nella lingua selezionata.', 'error');
+        }
+        return null;
+    }
+
+    // Etichette del documento esportato. Non passano da i18n.js perche' il
+    // report puo' uscire in una lingua diversa da quella dell'interfaccia:
+    // usare le stringhe della UI legherebbe le due cose.
+    const REPORT_TEXT = {
+        it: {
+            docTitle: 'Report Audit', heading: 'Report di Compliance',
+            device: 'Apparato', platform: 'Piattaforma',
+            generatedOn: 'Generato il', score: 'Score',
+            passed: 'Conformi', failed: 'Non conformi', warned: 'Warning',
+            unknown: 'Non valutabili', notAssessable: 'NON VALUTABILE',
+            na: 'N/D', level: 'Livello', manual: 'verifica manuale',
+            verifyOn: 'Verifica sull\'apparato', line: 'riga',
+            thId: 'ID', thCheck: 'Controllo ed evidenze', thSeverity: 'Severità',
+            thStatus: 'Esito', thFix: 'Rimedio',
+            why: 'Perché conta', impact: 'Impatto del rimedio',
+            defaultValue: 'Valore di fabbrica',
+            partialTitle: 'Valutazione parziale.',
+            partial: (a, t, u) => `${a} controlli su ${t} sono stati valutati; ${u} non lo sono perché le relative sezioni di configurazione sono assenti nel file analizzato. Lo score si riferisce ai soli controlli valutabili.`,
+            note: 'I controlli marcati "non valutabile" corrispondono a sezioni di configurazione assenti nel file analizzato: sono esclusi dal calcolo dello score e non vanno letti come conformità.',
+            preview: 'Anteprima Report Compliance', pdf: 'Scarica PDF',
+            generating: 'Generazione PDF...', print: 'Stampa',
+            html: 'Scarica HTML',
+        },
+        en: {
+            docTitle: 'Audit Report', heading: 'Compliance Report',
+            device: 'Device', platform: 'Platform',
+            generatedOn: 'Generated on', score: 'Score',
+            passed: 'Compliant', failed: 'Non-compliant', warned: 'Warning',
+            unknown: 'Not assessable', notAssessable: 'NOT ASSESSABLE',
+            na: 'N/A', level: 'Level', manual: 'manual check',
+            verifyOn: 'Verify on the device', line: 'line',
+            thId: 'ID', thCheck: 'Check and evidence', thSeverity: 'Severity',
+            thStatus: 'Result', thFix: 'Remediation',
+            why: 'Why it matters', impact: 'Impact of the fix',
+            defaultValue: 'Factory default',
+            partialTitle: 'Partial assessment.',
+            partial: (a, t, u) => `${a} of ${t} checks were assessed; ${u} were not, because the corresponding configuration sections are absent from the analysed file. The score covers the assessed checks only.`,
+            note: 'Checks marked "not assessable" correspond to configuration sections absent from the analysed file: they are excluded from the score and must not be read as compliance.',
+            preview: 'Compliance Report Preview', pdf: 'Download PDF',
+            generating: 'Generating PDF...', print: 'Print',
+            html: 'Download HTML',
+        },
+    };
+
     // Report HTML scaricabile. Nessuna dipendenza esterna: si costruisce il
     // documento e lo si scarica via Blob, coerentemente col resto dell'app.
-    function exportAuditReport() {
+    //
+    // La lingua del report e' indipendente da quella dell'interfaccia. I
+    // verdetti sono resi dal motore, quindi cambiarla significa rieseguire la
+    // valutazione: e' una funzione pura sul testo di configurazione, costa
+    // quanto la scansione appena fatta e garantisce che TUTTO il documento sia
+    // nella lingua scelta, non solo le intestazioni.
+    async function exportAuditReport() {
         if (!_auditRules.length) {
             showToast(currentLang === 'en'
                 ? 'Run a scan before exporting a report.'
                 : 'Esegui una scansione prima di esportare il report.', 'warning');
             return;
         }
+        const langSel = document.getElementById('auditReportLang');
+        const lang = (langSel && langSel.value === 'en') ? 'en' : 'it';
+        const T = REPORT_TEXT[lang];
+
         const benchSel = document.getElementById('auditBenchmarkSelect');
+        const benchmarkKey = benchSel ? benchSel.value : 'cis';
         const benchmark = benchSel ? benchSel.options[benchSel.selectedIndex].text : 'CIS';
         const devSel = document.getElementById('auditDeviceSelect');
         const device = devSel ? devSel.options[devSel.selectedIndex].text : '—';
-        const s = _auditSummary || { total: 0, passed: 0, failed: 0, warned: 0, unknown: 0 };
-        const unknown = s.unknown || 0;
-        const hasScore = (_auditScore !== null && _auditScore !== undefined);
-        const scoreTxt = hasScore ? (_auditScore + '%') : 'N/D';
-        const generated = new Date().toLocaleString();
 
-        const rows = _auditRules.map(r => {
+        let rules = _auditRules;
+        let summary = _auditSummary;
+        let score = _auditScore;
+        if (lang !== currentLang) {
+            const refreshed = await rescanForLanguage(benchmarkKey, lang);
+            if (!refreshed) return;          // errore già segnalato all'utente
+            rules = refreshed.rules || [];
+            summary = refreshed.summary || summary;
+            score = (refreshed.score === undefined) ? null : refreshed.score;
+        }
+
+        const s = summary || { total: 0, passed: 0, failed: 0, warned: 0, unknown: 0 };
+        const unknown = s.unknown || 0;
+        const hasScore = (score !== null && score !== undefined);
+        const scoreTxt = hasScore ? (score + '%') : T.na;
+        const generated = new Date().toLocaleString(lang === 'en' ? 'en-GB' : 'it-IT');
+        const platform = _auditVendor === 'ios' ? 'Cisco IOS XE'
+            : _auditVendor === 'fortios' ? 'FortiOS' : '—';
+
+        const rows = rules.map(r => {
             const ev = (r.evidence || []).map(e =>
-                `<div class="ev"><span>${e.line ? ('riga ' + escapeHtml(String(e.line))) : '—'}</span>`
+                `<div class="ev"><span>${e.line ? (T.line + ' ' + escapeHtml(String(e.line))) : '—'}</span>`
                 + `<span>${escapeHtml(e.context || '')}</span>`
                 + `<code>${escapeHtml(e.text || '')}</code></div>`).join('');
-            const label = r.status === 'UNKNOWN' ? 'NON VALUTABILE' : escapeHtml(r.status);
+            const label = r.status === 'UNKNOWN' ? T.notAssessable : escapeHtml(r.status);
             // Il riferimento alla raccomandazione e il comando di verifica
             // rendono il report controllabile contro il benchmark di origine:
             // senza di essi resta un'affermazione da prendere per buona.
             const ref = r.ref
-                ? `<div class="detail">${escapeHtml(String(r.ref))}${r.level ? ' · Livello ' + escapeHtml(String(r.level)) : ''}${r.automated === false ? ' · verifica manuale' : ''}</div>`
+                ? `<div class="detail">${escapeHtml(String(r.ref))}${r.level ? ' · ' + T.level + ' ' + escapeHtml(String(r.level)) : ''}${r.automated === false ? ' · ' + T.manual : ''}</div>`
                 : '';
             const auditCmd = r.audit
-                ? `<div class="detail">Verifica sull'apparato: <code>${escapeHtml(r.audit)}</code></div>`
+                ? `<div class="detail">${T.verifyOn}: <code>${escapeHtml(r.audit)}</code></div>`
                 : '';
+            const g = r.guidance || {};
+            const guide = (label2, text) => text
+                ? `<div class="guide"><b>${label2}:</b> ${escapeHtml(text)}</div>` : '';
+            const guidance = guide(T.why, g.why) + guide(T.impact, g.impact)
+                + guide(T.defaultValue, g.default);
             return `<tr class="st-${escapeHtml(r.status)}">
                 <td><strong>${escapeHtml(r.id)}</strong>${ref}</td>
-                <td>${escapeHtml(r.title)}<div class="detail">${escapeHtml(r.detail)}</div>${auditCmd}${ev}</td>
+                <td>${escapeHtml(r.title)}<div class="detail">${escapeHtml(r.detail)}</div>${guidance}${auditCmd}${ev}</td>
                 <td>${escapeHtml(r.severity)}</td>
                 <td>${label}</td>
                 <td><code>${escapeHtml(r.remediation)}</code></td>
@@ -380,13 +618,11 @@
         // in nota: un lettore che vede "100%" senza contesto conclude che tutto
         // sia stato verificato.
         const partialBanner = unknown > 0
-            ? `<div class="warn"><strong>Valutazione parziale.</strong> ${s.total - unknown} controlli su ${s.total}
-               sono stati valutati; ${unknown} non lo sono perche' le relative sezioni di configurazione
-               sono assenti nel file analizzato. Lo score si riferisce ai soli controlli valutabili.</div>`
+            ? `<div class="warn"><strong>${T.partialTitle}</strong> ${T.partial(s.total - unknown, s.total, unknown)}</div>`
             : '';
 
-        const html = `<!doctype html><html lang="it"><head><meta charset="utf-8">
-<title>Report Audit — ${escapeHtml(device)}</title>
+        const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<title>${T.docTitle} — ${escapeHtml(device)}</title>
 <style>
 body{font-family:system-ui,sans-serif;margin:32px;color:#111;}
 h1{font-size:20px;margin:0 0 4px;} .meta{color:#666;font-size:13px;margin-bottom:20px;}
@@ -405,6 +641,8 @@ th{background:#f6f6f6;}
 .st-WARN td:nth-child(4){color:#a60;font-weight:700;}
 .st-PASS td:nth-child(4){color:#070;font-weight:700;}
 .st-UNKNOWN td:nth-child(4){color:#888;font-weight:700;}
+.guide{color:#444;margin-top:4px;font-size:11px;line-height:1.5;}
+.guide b{color:#111;}
 .note{margin-top:20px;font-size:12px;color:#666;border-top:1px solid #ddd;padding-top:10px;line-height:1.5;}
 @media print {
     body { margin: 15mm 15mm; font-size: 10pt; }
@@ -417,7 +655,7 @@ th{background:#f6f6f6;}
 <script>
     async function downloadPdf() {
         const btn = document.getElementById('btnPdfNetsec');
-        if (btn) btn.textContent = 'Generazione PDF...';
+        if (btn) btn.textContent = '${T.generating}';
         const noPrints = document.querySelectorAll('.no-print');
         noPrints.forEach(el => el.style.display = 'none');
         const opt = {
@@ -438,7 +676,7 @@ th{background:#f6f6f6;}
             window.print();
         } finally {
             noPrints.forEach(el => el.style.display = '');
-            if (btn) btn.textContent = 'Scarica PDF';
+            if (btn) btn.textContent = '${T.pdf}';
         }
     }
     function downloadHtml() {
@@ -454,26 +692,26 @@ th{background:#f6f6f6;}
 </script>
 </head><body>
 <div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif;">
-    <span style="font-size: 14px; font-weight: bold;">SentinelNet — Anteprima Report Compliance</span>
+    <span style="font-size: 14px; font-weight: bold;">SentinelNet — ${T.preview}</span>
     <div style="display: flex; gap: 10px;">
-        <button id="btnPdfNetsec" onclick="downloadPdf()" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Scarica PDF</button>
-        <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Stampa</button>
-        <button onclick="downloadHtml()" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">Scarica HTML</button>
+        <button id="btnPdfNetsec" onclick="downloadPdf()" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">${T.pdf}</button>
+        <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">${T.print}</button>
+        <button onclick="downloadHtml()" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">${T.html}</button>
     </div>
 </div>
-<h1>Report di Compliance — ${escapeHtml(benchmark)}</h1>
-<div class="meta">Apparato: ${escapeHtml(device)} · Generato il ${escapeHtml(generated)}</div>
+<h1>${T.heading} — ${escapeHtml(benchmark)}</h1>
+<div class="meta">${T.device}: ${escapeHtml(device)} · ${T.platform}: ${escapeHtml(platform)} · ${T.generatedOn} ${escapeHtml(generated)}</div>
 ${partialBanner}
 <div class="kpis">
-  <div class="kpi"><b>${escapeHtml(scoreTxt)}</b>Score</div>
-  <div class="kpi"><b>${s.passed}</b>Conformi</div>
-  <div class="kpi"><b>${s.failed}</b>Non conformi</div>
-  <div class="kpi"><b>${s.warned}</b>Warning</div>
-  <div class="kpi"><b>${unknown}</b>Non valutabili</div>
+  <div class="kpi"><b>${escapeHtml(scoreTxt)}</b>${T.score}</div>
+  <div class="kpi"><b>${s.passed}</b>${T.passed}</div>
+  <div class="kpi"><b>${s.failed}</b>${T.failed}</div>
+  <div class="kpi"><b>${s.warned}</b>${T.warned}</div>
+  <div class="kpi"><b>${unknown}</b>${T.unknown}</div>
 </div>
-<table><thead><tr><th>ID</th><th>Controllo ed evidenze</th><th>Severita'</th><th>Esito</th><th>Rimedio</th></tr></thead>
+<table><thead><tr><th>${T.thId}</th><th>${T.thCheck}</th><th>${T.thSeverity}</th><th>${T.thStatus}</th><th>${T.thFix}</th></tr></thead>
 <tbody>${rows}</tbody></table>
-<div class="note">I controlli marcati "non valutabile" corrispondono a sezioni di configurazione assenti nel file analizzato: sono esclusi dal calcolo dello score e non vanno letti come conformita'.</div>
+<div class="note">${T.note}</div>
 </body></html>`;
 
         const printWin = window.open('', '_blank');
@@ -568,4 +806,5 @@ ${partialBanner}
     window.exportAuditReport = exportAuditReport;
     window.renderAuditRulesTable = renderAuditRulesTable;
     window.toggleAuditDetail = toggleAuditDetail;
+    window.clearUploadedConfig = clearUploadedConfig;
 })();

@@ -86,17 +86,31 @@ class NetSecAuditSchema(BaseModel):
     device_ip: Optional[str] = None
     device_name: Optional[str] = None
     benchmark: str = "cis"  # 'cis' | 'nist' | 'pci'
+    # Lingua del REPORT, indipendente da quella dell'interfaccia: un audit si
+    # consegna, e il destinatario puo' non leggere la lingua di chi lo esegue.
+    lang: str = "it"        # 'it' | 'en'
 
 
 @router.get("/api/netsec-audit/benchmarks")
-def netsec_audit_benchmarks(current_user = Depends(get_current_user)):
+def netsec_audit_benchmarks(lang: str = "it",
+                            current_user = Depends(get_current_user)):
     """Requisiti verificati da ciascun benchmark, senza eseguire alcuna scansione."""
     from services import netsec_audit
+    from services.netsec_audit import guidance as _guidance
+    from services.netsec_audit import messages as _messages
+
+    code = _messages.normalize_lang(lang)
+
+    def _text(value):
+        if isinstance(value, dict):
+            return value.get(code) or value.get(_messages.DEFAULT_LANG) or ""
+        return value or ""
+
     return {
         key: [
             {
                 "id": r["id"],
-                "title": r["title"],
+                "title": _text(r["title"]),
                 "severity": r["severity"],
                 "category": r["category"],
                 "vendor": r["vendor"],
@@ -108,7 +122,8 @@ def netsec_audit_benchmarks(current_user = Depends(get_current_user)):
                 # configurazione. Unica fonte, quindi non puo' divergere dal
                 # controllo realmente eseguito.
                 "checks": (r["check"].__doc__ or "").strip().split("\n")[0],
-                "remediation": r["remediation"],
+                "remediation": _text(r["remediation"]),
+                "guidance": _guidance.guidance_for(r["check"].__name__, code),
             }
             for r in rules
         ]
@@ -144,6 +159,7 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
     return netsec_audit.run_netsec_audit(
         config_text=text,
         device_name=dev_name,
-        benchmark=payload.benchmark
+        benchmark=payload.benchmark,
+        lang=payload.lang,
     )
 

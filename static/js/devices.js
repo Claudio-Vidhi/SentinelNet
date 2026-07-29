@@ -849,10 +849,95 @@
 
     // --- CSV UPLOAD ---
 
+    // Modello scaricabile: il riquadro di esempio andava ricopiato a mano, ed
+    // e' li' che nascevano le intestazioni sbagliate.
+    const CSV_TEMPLATE = [
+        'IP,Username,Password,Enable Secret,Hostname,Group,Vendor',
+        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,cisco',
+        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,hpe',
+        ''
+    ].join('\n');
+
+    const btnTemplate = document.getElementById('btnDownloadCsvTemplate');
+    if (btnTemplate) {
+        btnTemplate.addEventListener('click', () => {
+            // BOM in testa: senza, Excel apre il file interpretandolo in ANSI e
+            // storpia gli accenti dei nomi di sede.
+            const blob = new Blob(['﻿' + CSV_TEMPLATE],
+                                  { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'sentinelnet-inventario-modello.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+    }
+
+    const csvZone = document.getElementById('csvDropZone');
+    const csvInput = document.getElementById('csvFileInput');
+    const csvDropText = document.getElementById('csvDropText');
+
+    function showCsvFile(file) {
+        if (!csvDropText) return;
+        csvDropText.innerHTML = `<i class="fa-solid fa-file-circle-check fa-2x" style="color:var(--success); margin-bottom:8px;"></i><br>
+            <strong>${escapeHtml(file.name)}</strong>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${Math.max(1, Math.round(file.size / 1024))} KB</div>`;
+    }
+
+    if (csvZone && csvInput) {
+        csvZone.onclick = () => csvInput.click();
+        csvZone.ondragover = e => { e.preventDefault(); csvZone.style.borderColor = 'var(--primary)'; };
+        csvZone.ondragleave = () => { csvZone.style.borderColor = 'var(--border)'; };
+        csvZone.ondrop = e => {
+            e.preventDefault();
+            csvZone.style.borderColor = 'var(--border)';
+            if (e.dataTransfer.files.length) {
+                csvInput.files = e.dataTransfer.files;
+                showCsvFile(e.dataTransfer.files[0]);
+            }
+        };
+        csvInput.onchange = () => {
+            if (csvInput.files.length) showCsvFile(csvInput.files[0]);
+        };
+    }
+
+    function renderCsvImportResult(result, errorDetail) {
+        const box = document.getElementById('csvImportResult');
+        if (!box) return;
+        const en = currentLang === 'en';
+        box.style.display = '';
+        if (errorDetail) {
+            box.innerHTML = `<div style="padding:12px 14px; border-radius:8px; border:1px solid var(--danger); background:rgba(239,68,68,0.10); font-size:13px; color:var(--danger);">
+                <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(errorDetail)}</div>`;
+            return;
+        }
+        const ok = (result.imported || []).length;
+        const failed = result.failed || [];
+        const rowsHtml = failed.map(f => `
+            <tr style="border-top:1px solid var(--border);">
+                <td style="padding:5px 8px; color:var(--text-muted);">${escapeHtml(String(f.row))}</td>
+                <td style="padding:5px 8px; font-family:var(--font-code);">${escapeHtml(String(f.ip))}</td>
+                <td style="padding:5px 8px; color:var(--danger);">${escapeHtml(String(f.error))}</td>
+            </tr>`).join('');
+        box.innerHTML = `
+            <div style="padding:12px 14px; border-radius:8px; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'rgba(245,158,11,0.10)' : 'rgba(34,197,94,0.10)'}; font-size:13px;">
+                <strong>${ok}</strong> ${en ? 'devices imported' : 'dispositivi importati'}${failed.length ? ` · <strong>${failed.length}</strong> ${en ? 'rows skipped' : 'righe scartate'}` : ''}
+            </div>
+            ${failed.length ? `
+            <div class="table-container" style="margin-top:10px;">
+                <table style="font-size:12px;">
+                    <thead><tr>
+                        <th>${en ? 'Row' : 'Riga'}</th><th>IP</th><th>${en ? 'Reason' : 'Motivo'}</th>
+                    </tr></thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            </div>` : ''}`;
+    }
+
     document.getElementById('btnUploadCsv').addEventListener('click', async () => {
         const fileInput = document.getElementById('csvFileInput');
         if (fileInput.files.length === 0) { alert(i18n[currentLang].alertSelectCsv); return; }
-        
+
         const file = fileInput.files[0];
         const reader = new FileReader();
         reader.onload = async function(e) {
@@ -863,30 +948,21 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ csv_data: text })
                 });
-                if(res && res.ok) {
+                if (res && res.ok) {
                     const result = await res.json();
-                    const importedCount = result.imported ? result.imported.length : 0;
-                    const failedCount = result.failed ? result.failed.length : 0;
-                    
-                    let msg = i18n[currentLang].csvImportSuccess.replace("{importedCount}", importedCount);
-                    if (failedCount > 0) {
-                        msg += i18n[currentLang].csvImportFailedRows.replace("{failedCount}", failedCount);
-                        result.failed.forEach(f => {
-                            msg += i18n[currentLang].csvImportRowDetail
-                                .replace("{row}", f.row)
-                                .replace("{ip}", f.ip)
-                                .replace("{error}", f.error);
-                        });
-                    }
-                    alert(msg);
+                    renderCsvImportResult(result, null);
                     fileInput.value = "";
                     appInit();
-                    switchTab('tab-devices');
+                    // Non si cambia piu' tab automaticamente: l'elenco delle
+                    // righe scartate e' proprio qui, e passare all'inventario
+                    // lo faceva sparire prima che qualcuno lo leggesse.
                 } else if (res) {
-                    alert(i18n[currentLang].alertImportCsvError);
+                    let detail = '';
+                    try { const err = await res.json(); detail = err && err.detail; } catch (e2) {}
+                    renderCsvImportResult(null, detail || i18n[currentLang].alertImportCsvError);
                 }
             } catch (err) {
-                alert(`${i18n[currentLang].alertError}${err}`);
+                renderCsvImportResult(null, `${i18n[currentLang].alertError}${err}`);
             }
         };
         reader.readAsText(file);

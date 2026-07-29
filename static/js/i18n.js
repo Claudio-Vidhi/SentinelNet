@@ -623,6 +623,9 @@
         descImportCsv: "Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.",
         importPanelUpload: "Carica file CSV",
         lblSelectCsv: "Seleziona file CSV",
+        importFlexNote: "Solo la colonna <code>IP</code> è obbligatoria. Maiuscole, underscore e nomi in italiano (<code>indirizzo</code>, <code>utente</code>, <code>sede</code>) sono riconosciuti, così come il punto e virgola come separatore e i file salvati da Excel.",
+        btnDownloadCsvTemplate: '<i class="fa-solid fa-download"></i> Scarica modello CSV',
+        importDropText: "Trascina qui il file CSV o clicca per selezionarlo",
         btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa',
         
         // Modals / Progress
@@ -995,6 +998,7 @@
         nsaTargetLabel: "Apparato Target dall'Inventario",
         nsaSelectDevice: "— Seleziona un dispositivo —",
         nsaBenchmarkLabel: "Benchmark / Standard di Security",
+        nsaReportLangLabel: "Lingua report",
         nsaBenchCis: "CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x)",
         nsaBenchNist: "NIST SP 800-53 Rev. 5",
         nsaBenchPci: "PCI-DSS v4.0 Network Requirement",
@@ -1660,6 +1664,9 @@
         descImportCsv: "The CSV file must strictly contain the header specified below.",
         importPanelUpload: "Upload CSV file",
         lblSelectCsv: "Select CSV file",
+        importFlexNote: "Only the <code>IP</code> column is required. Capitalisation, underscores and Italian column names (<code>indirizzo</code>, <code>utente</code>, <code>sede</code>) are recognised, as are the semicolon separator and files saved by Excel.",
+        btnDownloadCsvTemplate: '<i class="fa-solid fa-download"></i> Download CSV template',
+        importDropText: "Drop the CSV file here, or click to select it",
         btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Process and Import',
         
         // Modals / Progress
@@ -2030,6 +2037,7 @@
         nsaTargetLabel: "Target device from inventory",
         nsaSelectDevice: "— Select a device —",
         nsaBenchmarkLabel: "Benchmark / Security standard",
+        nsaReportLangLabel: "Report language",
         nsaBenchCis: "CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x)",
         nsaBenchNist: "NIST SP 800-53 Rev. 5",
         nsaBenchPci: "PCI-DSS v4.0 Network Requirement",
