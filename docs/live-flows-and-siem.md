@@ -307,11 +307,12 @@ be enabled explicitly.
 
 ### 5.1 Gating
 
-The tab sits behind an admin preview flag:
-`GET/POST /api/settings/flow-siem-preview`
-([routers/settings.py:111](../routers/settings.py#L111)), persisted in
-`app_settings.json` as `flow_siem_preview_enabled`, with an audit entry on every
-change. The nav button is `display:none` while the flag is off.
+None. The tab is always present as a sub-tab of **Traffic**, alongside
+`tab-flows`. It previously sat behind an admin preview flag
+(`/api/settings/flow-siem-preview`, persisted as `flow_siem_preview_enabled`);
+that flag and its endpoints were removed, and any leftover key in
+`app_settings.json` is ignored. Access is governed only by the per-endpoint
+scope checks in §5.2.
 
 ### 5.2 Endpoints
 

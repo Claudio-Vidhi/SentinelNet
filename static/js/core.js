@@ -445,17 +445,8 @@ async function appInit() {
         try { await applyFgtPreviewGating(); } catch (e) { /* non bloccante */ }
     }
 
-    if (currentRole === 'admin' && typeof applyFlowSiemPreviewGating === 'function') {
-        try { await applyFlowSiemPreviewGating(); } catch (e) { /* non bloccante */ }
-    }
-
-    if (currentRole === 'admin' && typeof applyNetSecAuditGating === 'function') {
-        try { await applyNetSecAuditGating(); } catch (e) { /* non bloccante */ }
-    }
-
-    if (currentRole === 'admin' && typeof applyIncidentsGating === 'function') {
-        try { await applyIncidentsGating(); } catch (e) { /* non bloccante */ }
-    }
+    // Flow SIEM, NetSec Audit e Incidenti non sono piu' dietro un flag: le tab
+    // sono sempre presenti, gated solo dalla RBAC di nav come ogni altra voce.
 
     try {
         const res = await apiFetch('/api/local-devices');

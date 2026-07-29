@@ -99,6 +99,11 @@ def netsec_audit_benchmarks(current_user = Depends(get_current_user)):
                 "title": r["title"],
                 "severity": r["severity"],
                 "category": r["category"],
+                "vendor": r["vendor"],
+                "ref": r["ref"],
+                "level": r["level"],
+                "automated": r["automated"],
+                "audit": r["audit"],
                 # Docstring della regola: descrive cosa viene cercato nella
                 # configurazione. Unica fonte, quindi non puo' divergere dal
                 # controllo realmente eseguito.

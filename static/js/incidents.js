@@ -35,35 +35,6 @@
         consequence: { color: 'var(--text-muted)', labelKey: 'incRoleConsequence' },
     };
 
-    async function applyIncidentsGating() {
-        try {
-            const res = await apiFetch('/api/settings/incidents');
-            if (!res || !res.ok) return;
-            const data = await res.json();
-            const nav = document.getElementById('navIncidents');
-            if (nav) nav.style.display = data.incidents_preview ? '' : 'none';
-            const toggle = document.getElementById('incidentsToggle');
-            if (toggle) toggle.checked = !!data.incidents_preview;
-        } catch (e) {}
-    }
-
-    async function setIncidentsPreview(enabled) {
-        const st = document.getElementById('incidentsStatus');
-        try {
-            const res = await apiFetch('/api/settings/incidents', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled: !!enabled })
-            });
-            if (res && res.ok) {
-                if (st) st.textContent = currentLang === 'en' ? 'Saved.' : 'Salvato.';
-                await applyIncidentsGating();
-            }
-        } catch (e) {
-            if (st) st.textContent = currentLang === 'en' ? 'Error.' : 'Errore.';
-        }
-    }
-
     function fmtTime(ts) {
         if (!ts) return '--';
         return new Date(ts * 1000).toLocaleString();
@@ -137,7 +108,7 @@
                 const head = tenants.length > 1
                     ? `<div style="margin:14px 0 6px; font-size:12px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:.4px;">
                            <i class="fa-solid fa-building"></i> ${escapeHtml(jsStr(t))}
-                           <span style="font-weight:400; color:var(--text-muted); text-transform:none;">· ${devices.length} apparati</span>
+                           <span style="font-weight:400; color:var(--text-muted); text-transform:none;">· ${devices.length} ${L('incDevices')}</span>
                        </div>`
                     : '';
                 return head + devices.map(entry =>
@@ -261,7 +232,7 @@
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             const st = document.getElementById('ifxStatus');
-            if (st) st.textContent = err.detail || 'Errore.';
+            if (st) st.textContent = err.detail || L('incErrGeneric');
             return;
         }
         await loadInterfaceExpectations();
@@ -304,7 +275,7 @@
         if (!res) return;
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            if (st) st.textContent = err.detail || 'Errore.';
+            if (st) st.textContent = err.detail || L('incErrGeneric');
             return;
         }
         await loadInterfaceExpectations();
@@ -333,9 +304,9 @@
                         produce: ${escapeHtml(jsStr((r.outputs || []).join(', ')))}
                     </div>
                     ${r.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
-                        <strong>Da verificare:</strong> ${escapeHtml(jsStr(r.investigation))}</div>` : ''}
+                        <strong>${L('incInvestigate')}</strong> ${escapeHtml(jsStr(r.investigation))}</div>` : ''}
                     ${r.remediation ? `<div style="font-size:12px; margin-bottom:8px;">
-                        <strong>Rimedio:</strong> ${escapeHtml(jsStr(r.remediation))}</div>` : ''}
+                        <strong>${L('incRemediation')}</strong> ${escapeHtml(jsStr(r.remediation))}</div>` : ''}
                     ${(r.parameters || []).length ? `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
                         ${r.parameters.map(p => `<div>
                             <label style="font-size:11px; color:var(--text-muted); display:block;" title="${escapeHtml(jsStr(p.description || ''))}">
@@ -370,12 +341,12 @@
             if (!res) return;
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                if (st) st.textContent = err.detail || 'Errore.';
+                if (st) st.textContent = err.detail || L('incErrGeneric');
                 return;
             }
-            if (st) st.textContent = 'Salvato.';
+            if (st) st.textContent = L('incSaved');
         } catch (e) {
-            if (st) st.textContent = 'Errore.';
+            if (st) st.textContent = L('incErrGeneric');
         }
     }
 
@@ -387,12 +358,12 @@
         box.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
         try {
             const res = await apiFetch(`/api/incidents?status=${encodeURIComponent(status)}&window=${encodeURIComponent(window_)}`);
-            if (!res || !res.ok) { box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Errore nel caricamento.</div>'; return; }
+            if (!res || !res.ok) { box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incErrLoad')}</div>`; return; }
             const data = await res.json();
             _incidents = data.incidents || [];
             renderIncidentsList();
         } catch (e) {
-            box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Errore nel caricamento.</div>';
+            box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incErrLoad')}</div>`;
         }
     }
 
@@ -400,7 +371,7 @@
         const box = document.getElementById('incidentsList');
         if (!box) return;
         if (!_incidents.length) {
-            box.innerHTML = '<div style="color:var(--text-muted); font-size:12px; padding:12px;">Nessun incidente nella finestra selezionata.</div>';
+            box.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:12px;">${L('incNoIncidents')}</div>`;
             return;
         }
         box.innerHTML = _incidents.map(inc => {
@@ -432,13 +403,13 @@
         box.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
         try {
             const res = await apiFetch(`/api/incidents/${Number(id)}`);
-            if (!res || !res.ok) { box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Incidente non disponibile.</div>'; return; }
+            if (!res || !res.ok) { box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incNotAvailable')}</div>`; return; }
             const data = await res.json();
             renderIncidentDetail(data.incident || {}, data.timeline || [],
                                  data.previous_conclusions || [],
                                  data.flow_path || null);
         } catch (e) {
-            box.innerHTML = '<div style="color:var(--danger); font-size:12px;">Incidente non disponibile.</div>';
+            box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incNotAvailable')}</div>`;
         }
     }
 
@@ -458,7 +429,7 @@
         return `<div style="padding:12px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px;">
                 <div>
-                    <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Causa più probabile (deterministica)</div>
+                    <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">${L('incCauseTitle')}</div>
                     <div style="font-size:18px; font-family:var(--font-display);">${escapeHtml(jsStr(inc.cause_kind || '--'))}</div>
                 </div>
                 <div style="min-width:160px;">
@@ -470,8 +441,8 @@
             <div style="font-size:12px; margin-bottom:6px;"><strong>${L('incSourcesCorrob')}</strong> ${sources}</div>
             <div style="font-size:12px; margin-bottom:6px;"><strong>${L('incEvidenceByRole')}</strong> ${roleCounts}</div>
             <div style="font-size:11px; color:var(--text-muted);">
-                Base ${escapeHtml(jsStr(r.base_confidence ?? '--'))}% + ${escapeHtml(jsStr(r.confidence_step ?? '--'))}% per fonte corroborante.
-                Regola: ${escapeHtml(jsStr(r.rule_id || '--'))} v${escapeHtml(jsStr(r.rule_version || '--'))}
+                ${L('incConfBasis').replace('{b}', escapeHtml(jsStr(r.base_confidence ?? '--'))).replace('{s}', escapeHtml(jsStr(r.confidence_step ?? '--')))}
+                ${L('incRuleRef')} ${escapeHtml(jsStr(r.rule_id || '--'))} v${escapeHtml(jsStr(r.rule_version || '--'))}
                 ${r.rule_params && Object.keys(r.rule_params).length
                     ? '· soglie ' + escapeHtml(JSON.stringify(r.rule_params)) : ''}
             </div>
@@ -487,10 +458,10 @@
         return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
             ${rule.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
                 <i class="fa-solid fa-magnifying-glass" style="color:var(--primary);"></i>
-                <strong>Da verificare:</strong> ${escapeHtml(jsStr(rule.investigation))}</div>` : ''}
+                <strong>${L('incInvestigate')}</strong> ${escapeHtml(jsStr(rule.investigation))}</div>` : ''}
             ${rule.remediation ? `<div style="font-size:12px;">
                 <i class="fa-solid fa-screwdriver-wrench" style="color:var(--success);"></i>
-                <strong>Rimedio:</strong> ${escapeHtml(jsStr(rule.remediation))}</div>` : ''}
+                <strong>${L('incRemediation')}</strong> ${escapeHtml(jsStr(rule.remediation))}</div>` : ''}
         </div>`;
     }
 
@@ -524,7 +495,7 @@
                         ${role ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
                                      font-size:10px; color:${role.color}; border:1px solid ${role.color};">${escapeHtml(metaLabel(role))}</span>` : ''}
                         ${retracted ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
-                                     font-size:10px; color:var(--text-muted); border:1px solid var(--text-muted);">RITRATTATA</span>` : ''}
+                                     font-size:10px; color:var(--text-muted); border:1px solid var(--text-muted);">${L('incRetractedBadge')}</span>` : ''}
                     </div>
                     <div style="font-size:13px; ${retracted ? 'text-decoration:line-through;' : ''}
                                 color:${e.severity !== null && e.severity !== undefined ? sevColor(e.severity) : 'var(--text)'};">
@@ -547,7 +518,7 @@
         return `<div style="margin-top:18px; padding:12px; border-radius:8px; border:1px dashed var(--primary); background:rgba(99,102,241,0.06);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
                 <span style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--primary);">
-                    <i class="fa-solid fa-robot"></i> Riformulazione generata da AI — non è la conclusione
+                    <i class="fa-solid fa-robot"></i> ${L('incAiRestated')}
                 </span>
                 <button class="btn btn-secondary btn-small" style="width:auto;" onclick="explainIncident(${Number(inc.id)})">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> ${inc.ai_narrative ? L('incRegenerate') : L('incExplainAi')}
@@ -616,7 +587,7 @@
                     <h3 style="margin:0; font-family:var(--font-display); font-size:20px;">${escapeHtml(jsStr(inc.title || inc.entity_key))}</h3>
                     <div style="font-size:12px; color:var(--text-muted);">
                         ${escapeHtml(jsStr(inc.entity_key))} · tenant ${escapeHtml(jsStr(inc.tenant))} ·
-                        dal ${escapeHtml(fmtTime(inc.opened_ts))} al ${escapeHtml(fmtTime(inc.last_event_ts))}
+                        ${L('incFromTo').replace('{a}', escapeHtml(fmtTime(inc.opened_ts))).replace('{b}', escapeHtml(fmtTime(inc.last_event_ts)))}
                     </div>
                 </div>
                 <div style="display:flex; gap:8px;">${next}</div>
@@ -624,7 +595,7 @@
             ${renderReasoning(inc)}
             ${renderConclusionHistory(history || [])}
             ${renderFlowPath(flowPath)}
-            <h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-timeline"></i> Timeline</h4>
+            <h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-timeline"></i> ${L('incTimeline')}</h4>
             ${renderTimeline(entries)}
             ${renderAiBlock(inc)}`;
     }
@@ -649,7 +620,7 @@
 
     async function explainIncident(id) {
         const body = document.getElementById('incidentAiBody');
-        if (body) body.innerHTML = '<div style="color:var(--text-muted); font-size:12px;"><i class="fa-solid fa-circle-notch fa-spin"></i> Generazione in corso…</div>';
+        if (body) body.innerHTML = `<div style="color:var(--text-muted); font-size:12px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${L('incGenerating')}</div>`;
         try {
             const res = await apiFetch(`/api/incidents/${Number(id)}/explain`, { method: 'POST' });
             if (!res) return;
@@ -668,8 +639,6 @@
         }
     }
 
-    window.applyIncidentsGating = applyIncidentsGating;
-    window.setIncidentsPreview = setIncidentsPreview;
     window.loadIncidentsTab = loadIncidentsTab;
     window.loadIncidentsList = loadIncidentsList;
     window.openIncident = openIncident;

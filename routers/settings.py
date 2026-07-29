@@ -95,44 +95,11 @@ def set_fortigate_preview_settings(payload: FortigatePreviewSchema, current_user
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "fortigate_preview": payload.enabled}
 
-@router.get("/api/settings/netsec-audit")
-def get_netsec_audit_settings(current_user = Depends(require_admin)):
-    """Stato del flag preview per la tab 'NetSec Audit' (default: disattivo)."""
-    return {"netsec_audit_preview": bool(get_app_settings().get("netsec_audit_preview_enabled", False))}
-
-@router.post("/api/settings/netsec-audit")
-def set_netsec_audit_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"netsec_audit_preview_enabled": payload.enabled})
-    log_audit(f"Tab NetSec Audit (preview) "
-              f"{'attivata' if payload.enabled else 'disattivata'} "
-              f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "netsec_audit_preview": payload.enabled}
-
-@router.get("/api/settings/incidents")
-def get_incidents_settings(current_user = Depends(require_admin)):
-    """Stato del flag preview per la tab 'Incidenti' (default: disattivo)."""
-    return {"incidents_preview": bool(get_app_settings().get("incidents_preview_enabled", False))}
-
-@router.post("/api/settings/incidents")
-def set_incidents_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"incidents_preview_enabled": payload.enabled})
-    log_audit(f"Tab Incidenti (preview) "
-              f"{'attivata' if payload.enabled else 'disattivata'} "
-              f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "incidents_preview": payload.enabled}
-
-@router.get("/api/settings/flow-siem-preview")
-def get_flow_siem_preview_settings(current_user = Depends(require_admin)):
-    """Stato del flag preview per la tab 'Flow SIEM' (default: disattivo)."""
-    return {"flow_siem_preview": bool(get_app_settings().get("flow_siem_preview_enabled", False))}
-
-@router.post("/api/settings/flow-siem-preview")
-def set_flow_siem_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"flow_siem_preview_enabled": payload.enabled})
-    log_audit(f"Tab Flow SIEM (preview) "
-              f"{'attivata' if payload.enabled else 'disattivata'} "
-              f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "flow_siem_preview": payload.enabled}
+# NetSec Audit, Incidenti e Flow SIEM non hanno piu' un flag di attivazione:
+# le tab sono sempre presenti (restano gated dalla sola RBAC di nav). Le vecchie
+# chiavi `netsec_audit_preview_enabled` / `incidents_preview_enabled` /
+# `flow_siem_preview_enabled` eventualmente rimaste in app_settings.json sono
+# semplicemente ignorate: nessuna migrazione necessaria.
 
 
 @router.get("/api/settings/app")
