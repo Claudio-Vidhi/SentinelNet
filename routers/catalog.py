@@ -11,7 +11,8 @@ from services import inventory_manager
 from core import core_engine
 from security.security_manager import log_audit
 from routers.deps import (
-    get_current_user, require_operator, user_group_scope, filter_map_to_scope, assert_group_allowed
+    get_current_user, require_admin, require_operator, user_group_scope,
+    filter_map_to_scope, assert_group_allowed
 )
 
 router = APIRouter(tags=["Catalog"])
@@ -85,9 +86,13 @@ def create_group(group: GroupSchema, current_user = Depends(require_operator)):
     return {"status": "success", "message": "Gruppo creato"}
 
 @router.post("/api/groups/rename")
-def rename_group(payload: GroupRenameSchema, current_user = Depends(require_operator)):
-    """Rinomina una sede/gruppo (admin/operator) e riassegna i relativi apparati.
-    'Generale' non è rinominabile."""
+def rename_group(payload: GroupRenameSchema, current_user = Depends(require_admin)):
+    """Rinomina un tenant e riassegna i relativi apparati. 'Generale' non è
+    rinominabile.
+
+    Solo admin: rinominare un tenant riscrive l'assegnazione di TUTTI i suoi
+    apparati e cambia lo scope RBAC di chi vi è limitato. La creazione resta
+    operator (serve durante il provisioning, tab Provisioning)."""
     old = payload.old_name.strip()
     new = payload.new_name.strip()
     if not old or not new:
@@ -106,7 +111,8 @@ def rename_group(payload: GroupRenameSchema, current_user = Depends(require_oper
     return {"status": "success"}
 
 @router.post("/api/groups/delete")
-def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_operator)):
+def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_admin)):
+    """Elimina un tenant. Solo admin: e' distruttivo e tocca lo scope RBAC."""
     group_name = payload.name
     assert_group_allowed(current_user, group_name)
     groups = inventory_manager.get_all_groups()

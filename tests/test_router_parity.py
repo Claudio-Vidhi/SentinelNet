@@ -69,6 +69,14 @@ class TestRouterParity(unittest.TestCase):
         # Il report Port-channel ora unisce due sorgenti (configurazione per i
         # membri, SNMP per lo stato) e aggiunge campi: nessun campo rimosso.
         ("get", "/api/portchannels"),
+        # Rinomina/eliminazione tenant sono passate a require_admin: la voce di
+        # nav "Gestione Tenant" e' requires-admin e un gate solo lato UI sarebbe
+        # cosmetico. Cambia SOLO la descrizione (la docstring che motiva il
+        # vincolo); parametri e risposta sono invariati, cambia chi puo'
+        # chiamarli. Copertura: test_rbac_scope
+        # .test_tenant_rename_and_delete_are_admin_only.
+        ("post", "/api/groups/rename"),
+        ("post", "/api/groups/delete"),
     )
 
     def test_migrated_operations_identical(self):
@@ -125,6 +133,12 @@ class TestFullParity(unittest.TestCase):
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
     ALLOWED_CHANGED_OPERATIONS = (
+        # Rinomina/eliminazione tenant ora require_admin: cambia solo la
+        # descrizione (docstring che motiva il vincolo), parametri e
+        # risposta invariati. Chi puo' chiamarli e' coperto da
+        # test_rbac_scope.test_tenant_rename_and_delete_are_admin_only.
+        ("post", "/api/groups/rename"),
+        ("post", "/api/groups/delete"),
         ("post", "/api/agent/heartbeat"),
         ("get", "/api/observability/anomalies"),
         ("post", "/api/observability/anomalies/{event_id}/status"),

@@ -15,8 +15,12 @@
             const res = await apiFetch('/api/settings/flow-siem-preview');
             if (!res || !res.ok) return;
             const data = await res.json();
-            const nav = document.getElementById('navFlowSiemPreview');
-            if (nav) nav.style.display = data.flow_siem_preview ? '' : 'none';
+            // Il tab e' accorpato sotto "Traffico": ha piu' punti d'ingresso
+            // (una striscia di sotto-tab per corpo), quindi il gate e' su classe
+            // e non su id -- vanno nascosti tutti, non il primo.
+            document.querySelectorAll('.preview-flow-siem').forEach(el => {
+                el.style.display = data.flow_siem_preview ? '' : 'none';
+            });
             const toggle = document.getElementById('flowSiemPreviewToggle');
             if (toggle) toggle.checked = !!data.flow_siem_preview;
         } catch (e) {}

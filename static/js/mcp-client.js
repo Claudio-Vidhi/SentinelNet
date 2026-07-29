@@ -9,8 +9,11 @@ async function applyMcpClientGating() {
     const res = await apiFetch('/api/mcp-client/settings');
     if (!res || !res.ok) return;
     const data = await res.json();
-    const nav = document.getElementById('navMcpClient');
-    if (nav) nav.style.display = data.preview_enabled ? '' : 'none';
+    // Accorpato sotto "Integrazioni": gate su classe, non su id, perche' i
+    // punti d'ingresso sono piu' d'uno (vedi flow-analytics.js).
+    document.querySelectorAll('.preview-mcp-client').forEach(el => {
+        el.style.display = data.preview_enabled ? '' : 'none';
+    });
     const toggle = document.getElementById('mcpPreviewToggle');
     if (toggle) toggle.checked = !!data.preview_enabled;
 }

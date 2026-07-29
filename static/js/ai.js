@@ -3,7 +3,7 @@
     let aiProfilesCache = [];   // ultima lista di profili (mascherati) caricata dal server
     let aiActiveProfileId = ''; // id del profilo attivo lato server
 
-    // Popola la select dei dispositivi allegabili, filtrata per il tenant/sede
+    // Popola la select dei dispositivi allegabili, filtrata per il tenant
     // selezionato: la config allegata deve appartenere al tenant scelto.
     function populateAiAttachDevices() {
         const box = document.getElementById('aiAttachDeviceList');
@@ -106,7 +106,7 @@
         const btn = document.getElementById('btnGenCfg');
         const tenant = document.getElementById('genCfgTenant')?.value || '';
         const hostname = (document.getElementById('genCfgHostname')?.value || '').trim();
-        if (!tenant) { if (statusEl) statusEl.textContent = L.errGenCfgTenantRequired || 'Seleziona una sede/tenant.'; return; }
+        if (!tenant) { if (statusEl) statusEl.textContent = L.errGenCfgTenantRequired || 'Seleziona un tenant.'; return; }
         if (!hostname) { if (statusEl) statusEl.textContent = L.errGenCfgHostnameRequired || "Inserisci l'hostname del nuovo switch."; return; }
         const body = {
             tenant,

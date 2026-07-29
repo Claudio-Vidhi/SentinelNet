@@ -235,8 +235,13 @@ class TestComponentLayer(unittest.TestCase):
 class TestSidebarIA(unittest.TestCase):
     def test_nav_groups_present_and_flat_strip_gone(self):
         html = _html()
-        for grp in (">Operations<", ">Analysis<", ">Provisioning<", ">Administration<"):
-            self.assertIn(grp, html)
+        # I gruppi sono organizzati per DOMANDA a cui si risponde e le
+        # intestazioni seguono il selettore di lingua: si fissano le chiavi
+        # i18n, non il testo, che altrimenti fallirebbe in inglese.
+        for key in ("navInvestigate", "navInventory", "navAssess",
+                    "navChange", "navAdminister"):
+            self.assertIn(f'data-i18n="{key}"', html,
+                          f"gruppo di nav {key} assente")
         # every existing tab still reachable (tab-home is deferred to Task 3)
         for tab in ("tab-devices", "tab-mac", "tab-clientmap", "tab-flows",
                     "tab-map", "tab-map-interactive", "tab-categories", "tab-security",
@@ -246,9 +251,19 @@ class TestSidebarIA(unittest.TestCase):
         # RBAC preserved on gated nav
         self.assertIn('requires-admin', html)
         self.assertIn('requires-write', html)
-        # compound onclicks preserved verbatim
-        self.assertIn("switchTab('tab-clientmap', this); loadClientMapTab();", html)
-        self.assertIn("switchTab('tab-flows', this); flowsTabShown();", html)
+        # Hook di caricamento: OGNI controllo che porta al tab deve portarselo
+        # dietro, non solo uno. Un tab accorpato ha piu' punti d'ingresso (una
+        # striscia di sotto-tab per corpo): se uno solo perde l'hook, entrare da
+        # quel lato mostra il tab senza averlo caricato.
+        for tab, hook in (("tab-clientmap", "loadClientMapTab"),
+                          ("tab-flows", "flowsTabShown")):
+            entries = re.findall(
+                r"onclick=\"switchTab\('" + tab + r"'(?:, this)?\);([^\"]*)\"", html)
+            self.assertTrue(entries, f"{tab}: nessun controllo lo apre")
+            for i, rest in enumerate(entries):
+                self.assertIn(
+                    f"{hook}()", rest,
+                    f"{tab}: il punto d'ingresso #{i} non chiama {hook}()")
         # old flat tab strip is gone
         self.assertNotIn('class="tab-nav"', html)
 
@@ -1368,9 +1383,13 @@ class TestMcpTabRestyle(unittest.TestCase):
         html = _html()
         # Precedent from Task 14-17: gated at the nav entry, tab body itself
         # carries no requires-admin gate.
-        self.assertIn(
-            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-mcp', this)\"",
-            html)
+        # La voce di nav puo' portare attributi in mezzo (data-tabs, per i tab
+        # accorpati): si fissa il gate sulla voce che apre tab-mcp, non la forma
+        # esatta della stringa.
+        self.assertRegex(
+            html,
+            r'<button class="nav-item requires-admin"[^>]*'
+            r'onclick="switchTab\(\'tab-mcp\', this\)"')
         tab = self._tab(html)
         self.assertNotIn('requires-admin', tab)
 
@@ -2375,11 +2394,21 @@ class TestSidebarRail(unittest.TestCase):
                           ('tab-sites', 'requires-admin'),
                           ('tab-mcp', 'requires-admin'),
                           ('tab-settings', 'requires-admin')):
-            m = re.search(
-                r'<button class="nav-item ([^"]*)"[^>]*onclick="switchTab\(\'' + tab + r'\'',
-                self.html)
-            self.assertIsNotNone(m, f"nav item for {tab} lost its switchTab onclick")
-            self.assertIn(gate, m.group(1), f"{tab} nav item lost its {gate} gate")
+            # Il gate RBAC vive sulla voce di nav che apre il tab: direttamente
+            # (onclick) oppure, per i tab accorpati, sulla voce del gruppo che
+            # lo dichiara in data-tabs. I sotto-tab non portano gate: stanno
+            # gia' dentro una regione gated (stessa regola di TestMcpTabRestyle,
+            # "il corpo del tab non porta requires-admin").
+            direct = re.search(
+                r'<button class="nav-item([^"]*)"[^>]*onclick="switchTab\(\''
+                + tab + r'\'', self.html)
+            grouped = re.search(
+                r'<button class="nav-item([^"]*)"[^>]*data-tabs="[^"]*\b'
+                + tab + r'\b', self.html)
+            m = direct or grouped
+            self.assertIsNotNone(
+                m, f"nessuna voce di nav apre {tab} (ne' diretta ne' via data-tabs)")
+            self.assertIn(gate, m.group(1), f"{tab} ha perso il gate {gate}")
 
     def test_active_tab_cue_survives_in_the_rail(self):
         active = self._rule('.nav-item.active')
