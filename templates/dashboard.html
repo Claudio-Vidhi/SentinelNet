@@ -1849,16 +1849,37 @@
       <div class="panel" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-upload" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="importPanelUpload">Carica file CSV</span></h3>
         <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Vendor
-192.168.1.1,admin,Mypass123!,enablepass,SW-Milano-01,Tenant_Milano,cisco
-192.168.2.1,manager,Pwd456!,secret,SW-Roma-Core,Tenant_Roma,hpe</div>
-
-        <div class="form-group" style="margin-top: 20px; margin-bottom: 20px;">
-          <label data-i18n="lblSelectCsv">Seleziona file CSV</label>
-          <input type="file" id="csvFileInput" accept=".csv" style="padding-left: 12px; cursor: pointer;">
+192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,cisco
+198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,hpe</div>
+        <p style="margin:10px 0 0; font-size:12px; color:var(--text-muted); line-height:1.55;" data-i18n="importFlexNote">
+          Solo la colonna <code>IP</code> è obbligatoria. Maiuscole, underscore e nomi in italiano
+          (<code>indirizzo</code>, <code>utente</code>, <code>sede</code>) sono riconosciuti, così come
+          il punto e virgola come separatore e i file salvati da Excel.
+        </p>
+        <div style="margin-top:14px;">
+          <button class="btn btn-secondary" id="btnDownloadCsvTemplate" style="width:auto; margin:0;" data-i18n="btnDownloadCsvTemplate">
+            <i class="fa-solid fa-download"></i> Scarica modello CSV
+          </button>
         </div>
-        <button class="btn btn-primary" id="btnUploadCsv" data-i18n="btnUploadCsv">
+
+        <!-- Trascinamento oltre al selettore: il file arriva quasi sempre da
+             una cartella già aperta, e obbligare a passare dal dialogo di
+             sistema è il passaggio in più che rende l'operazione noiosa. -->
+        <div id="csvDropZone" style="margin-top:18px; border:2px dashed var(--border); border-radius:8px; padding:22px; text-align:center; cursor:pointer; background:var(--surface-2);">
+          <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none;">
+          <div id="csvDropText" style="font-size:13px; color:var(--text-muted);">
+            <i class="fa-solid fa-file-csv fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
+            <span data-i18n="importDropText">Trascina qui il file CSV o clicca per selezionarlo</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btnUploadCsv" style="margin-top:16px;" data-i18n="btnUploadCsv">
           <i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa
         </button>
+        <!-- Esito in pagina invece che in un alert(): l'elenco delle righe
+             scartate va letto riga per riga, e un alert lo rende illeggibile
+             e non copiabile. -->
+        <div id="csvImportResult" style="display:none; margin-top:16px;"></div>
       </div>
     </div>
 
@@ -2621,9 +2642,19 @@
             </summary>
             <div id="auditBenchmarkReqsBody" style="padding:0 12px 12px;"></div>
           </details>
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
             <button id="btnRunAuditScan" class="btn btn-primary" onclick="runAuditScan()" style="width:auto; margin:0;" data-i18n="nsaBtnRun"><i class="fa-solid fa-play"></i> Esegui Audit Scan</button>
-            <button class="btn btn-secondary" onclick="exportAuditReport()" style="width:auto; margin:0;" data-i18n="nsaBtnExport"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <!-- Lingua del REPORT, non dell'interfaccia: un audit si consegna,
+                   e il destinatario puo' non leggere la lingua di chi lo esegue.
+                   Default sulla lingua della UI, sovrascrivibile. -->
+              <label for="auditReportLang" style="font-size:12px; color:var(--text-muted);" data-i18n="nsaReportLangLabel">Lingua report</label>
+              <select id="auditReportLang" style="padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+                <option value="it">Italiano</option>
+                <option value="en">English</option>
+              </select>
+              <button class="btn btn-secondary" onclick="exportAuditReport()" style="width:auto; margin:0;" data-i18n="nsaBtnExport"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
+            </div>
           </div>
         </div>
 

@@ -6,11 +6,18 @@ NON inventano verdetti: quando il blocco necessario alla valutazione non
 esiste restituiscono UNKNOWN, tranne dove l'assenza E' essa stessa la
 violazione (assenza di logging remoto, admin senza trusthost) — in quei casi
 il comportamento e' documentato sulla singola regola.
+
+Le regole non scrivono frasi: dichiarano una CHIAVE di ``messages.py`` e i
+parametri che la riempiono. Vedi la nota sulla lingua in ``model.py``.
+
+I riferimenti CIS citati nei commenti sono al *CIS Fortinet FortiGate
+Benchmark v1.0.1*; il numero di raccomandazione di ogni regola sta in
+``benchmarks.py``, perche' una stessa funzione serve piu' benchmark.
 """
 
-from typing import List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .model import FAIL, PASS, UNKNOWN, WARN, Evidence, RuleOutcome
+from .model import (FAIL, PASS, UNKNOWN, WARN, Evidence, RuleOutcome, absent)
 from .parser import (ConfigRecord, ParsedConfig, section_entries,
                      section_present, setting)
 
@@ -18,22 +25,24 @@ from .parser import (ConfigRecord, ParsedConfig, section_entries,
 
 _INSECURE_ACCESS = {"telnet", "http"}
 _WEAK_TLS = {"sslv3", "tlsv1-0", "tlsv1-1", "tlsv1.0", "tlsv1.1"}
-# CIS Fortinet FortiGate 7.4.x, raccomandazione 2.4.4: 15 minuti.
-_MAX_ADMINTIMEOUT = 15
+# CIS Fortinet FortiGate 7.4.x, raccomandazione 2.4.4: 5 minuti, che e'
+# anche il default di fabbrica.
+_MAX_ADMINTIMEOUT = 5
 
 
 def _ctx(*parts: str) -> str:
     return " / ".join(p for p in parts if p)
 
 
+def _ev1(rec: ConfigRecord, *ctx: str) -> Evidence:
+    return Evidence(rec.line, rec.raw.strip(), _ctx(*ctx))
+
+
 def check_management_protocols(cfg: ParsedConfig) -> RuleOutcome:
     """Telnet/HTTP abilitati su un'interfaccia (allowaccess)."""
     ifaces = section_entries(cfg, "system interface")
     if not ifaces:
-        return RuleOutcome(
-            UNKNOWN,
-            "Sezione 'config system interface' assente: impossibile valutare "
-            "i protocolli di gestione.")
+        return RuleOutcome(UNKNOWN, "fos.mgmt_proto.no_section")
     ev: List[Evidence] = []
     for name in sorted(ifaces):
         for r in ifaces[name]:
@@ -41,16 +50,11 @@ def check_management_protocols(cfg: ParsedConfig) -> RuleOutcome:
                 continue
             bad = sorted({v.lower() for v in r.values} & _INSECURE_ACCESS)
             if bad:
-                ev.append(Evidence(r.line, r.raw.strip(),
-                                   _ctx("system interface", name)))
+                ev.append(_ev1(r, "system interface", name))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Protocolli di amministrazione non cifrati (Telnet/HTTP) abilitati "
-            "su %d interfaccia/e." % len(ev),
-            ev)
-    return RuleOutcome(
-        PASS, "Tutte le interfacce usano solo protocolli di gestione cifrati.")
+        return RuleOutcome(FAIL, "fos.mgmt_proto.insecure", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.mgmt_proto.ok")
 
 
 def check_tls_version(cfg: ParsedConfig) -> RuleOutcome:
@@ -59,20 +63,16 @@ def check_tls_version(cfg: ParsedConfig) -> RuleOutcome:
            or setting(cfg, "system global", "admin-https-ssl-versions"))
     if rec is None:
         if not section_present(cfg, "system global"):
-            return RuleOutcome(
-                UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                         "valutare la versione minima TLS.")
-        return RuleOutcome(
-            WARN,
-            "Versione minima TLS non impostata esplicitamente: si applica il "
-            "default della piattaforma, che varia con la versione di FortiOS.")
+            return RuleOutcome(UNKNOWN, "fos.tls.no_section")
+        return RuleOutcome(WARN, "fos.tls.not_set",
+                           [absent("ev.no_directive", _ctx("system global"),
+                                   what="set ssl-min-proto-version TLSv1-2")])
     weak = sorted({v.lower() for v in rec.values} & _WEAK_TLS)
     if weak:
-        return RuleOutcome(
-            FAIL,
-            "Versione TLS deprecata ammessa: %s." % ", ".join(weak),
-            [Evidence(rec.line, rec.raw.strip(), _ctx("system global"))])
-    return RuleOutcome(PASS, "Versione minima SSL/TLS conforme (TLS 1.2+).")
+        return RuleOutcome(FAIL, "fos.tls.weak",
+                           [_ev1(rec, "system global")],
+                           {"versions": ", ".join(weak)})
+    return RuleOutcome(PASS, "fos.tls.ok")
 
 
 def check_idle_timeout(cfg: ParsedConfig) -> RuleOutcome:
@@ -80,49 +80,29 @@ def check_idle_timeout(cfg: ParsedConfig) -> RuleOutcome:
     rec = setting(cfg, "system global", "admintimeout")
     if rec is None:
         if not section_present(cfg, "system global"):
-            return RuleOutcome(
-                UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                         "valutare il timeout amministrativo.")
-        return RuleOutcome(
-            WARN, "'admintimeout' non configurato: si applica il default "
-                  "della piattaforma.")
-    try:
-        val = int(rec.values[0])
-    except (IndexError, ValueError):
-        return RuleOutcome(
-            WARN, "Valore di 'admintimeout' non interpretabile.",
-            [Evidence(rec.line, rec.raw.strip(), _ctx("system global"))])
+            return RuleOutcome(UNKNOWN, "fos.idle.no_section")
+        return RuleOutcome(WARN, "fos.idle.not_set",
+                           [absent("ev.no_directive", _ctx("system global"),
+                                   what="set admintimeout %d"
+                                        % _MAX_ADMINTIMEOUT)])
+    val = _int_value(rec)
+    if val is None:
+        return RuleOutcome(WARN, "fos.idle.unreadable",
+                           [_ev1(rec, "system global")])
     if val == 0:
-        return RuleOutcome(
-            FAIL, "Timeout amministrativo disabilitato (0): le sessioni non "
-                  "scadono mai.",
-            [Evidence(rec.line, rec.raw.strip(), _ctx("system global"))])
+        return RuleOutcome(FAIL, "fos.idle.disabled",
+                           [_ev1(rec, "system global")])
     if val > _MAX_ADMINTIMEOUT:
-        return RuleOutcome(
-            FAIL, "Timeout amministrativo troppo alto (%d minuti, massimo "
-                  "consigliato %d)." % (val, _MAX_ADMINTIMEOUT),
-            [Evidence(rec.line, rec.raw.strip(), _ctx("system global"))])
-    return RuleOutcome(
-        PASS, "Timeout di inattivita' amministrativa configurato a %d minuti."
-              % val)
+        return RuleOutcome(FAIL, "fos.idle.too_high",
+                           [_ev1(rec, "system global")],
+                           {"value": val, "max": _MAX_ADMINTIMEOUT})
+    return RuleOutcome(PASS, "fos.idle.ok", (), {"value": val})
 
 
 def check_strong_crypto(cfg: ParsedConfig) -> RuleOutcome:
     """'set strong-crypto enable' (cifrari deboli disabilitati)."""
-    rec = setting(cfg, "system global", "strong-crypto")
-    if rec is None:
-        if not section_present(cfg, "system global"):
-            return RuleOutcome(
-                UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                         "valutare 'strong-crypto'.")
-        return RuleOutcome(
-            WARN, "'strong-crypto' non impostato: cifrari deboli "
-                  "potenzialmente ammessi.")
-    if rec.values and rec.values[0].lower() == "enable":
-        return RuleOutcome(PASS, "'strong-crypto' abilitato.")
-    return RuleOutcome(
-        WARN, "'strong-crypto' disabilitato: cifrari deboli ammessi.",
-        [Evidence(rec.line, rec.raw.strip(), _ctx("system global"))])
+    return _flag(cfg, "system global", "strong-crypto", "enable",
+                 "fos.strong_crypto", missing=WARN, bad_status=WARN)
 
 
 # --- Regole di accesso -------------------------------------------------------
@@ -170,9 +150,7 @@ def check_any_any_policy(cfg: ParsedConfig) -> RuleOutcome:
     """Policy che accetta qualunque sorgente verso qualunque destinazione."""
     policies = section_entries(cfg, "firewall policy")
     if not policies:
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
-                     "valutare le regole di accesso.")
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
     ev: List[Evidence] = []
     for pid in sorted(policies, key=lambda k: (len(k), k)):
         vals = _policy_values(policies[pid])
@@ -184,27 +162,18 @@ def check_any_any_policy(cfg: ParsedConfig) -> RuleOutcome:
             line, raw = _policy_line(policies[pid])
             ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Trovate %d policy che accettano traffico any-to-any su qualunque "
-            "servizio." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Nessuna policy any-to-any: sorgente, destinazione e servizio "
-              "sono sempre specificati.")
+        return RuleOutcome(FAIL, "fos.any_any.found", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.any_any.ok")
 
 
 def check_boundary_protection(cfg: ParsedConfig) -> RuleOutcome:
     """Traffico in INGRESSO da un'interfaccia WAN verso qualunque destinazione."""
     policies = section_entries(cfg, "firewall policy")
     if not policies:
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
-                     "valutare la protezione del perimetro.")
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
     wan = wan_interfaces(cfg)
     if not wan:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna interfaccia WAN identificabile: impossibile "
-                     "valutare il confine di rete.")
+        return RuleOutcome(UNKNOWN, "fos.policy.no_wan")
     ev: List[Evidence] = []
     for pid in sorted(policies, key=lambda k: (len(k), k)):
         vals = _policy_values(policies[pid])
@@ -217,12 +186,8 @@ def check_boundary_protection(cfg: ParsedConfig) -> RuleOutcome:
             line, raw = _policy_line(policies[pid])
             ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Trovate %d policy in ingresso da WAN verso qualunque "
-            "destinazione interna." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Nessuna policy in ingresso da WAN verso destinazioni generiche.")
+        return RuleOutcome(FAIL, "fos.boundary.found", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.boundary.ok")
 
 
 def _range_hits_admin_port(token: str) -> bool:
@@ -260,14 +225,10 @@ def check_inbound_admin_ports(cfg: ParsedConfig) -> RuleOutcome:
     """SSH/RDP esposti da WAN verso sorgenti generiche (PCI-DSS 1.2)."""
     policies = section_entries(cfg, "firewall policy")
     if not policies:
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
-                     "valutare l'esposizione delle porte amministrative.")
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
     wan = {w.lower() for w in wan_interfaces(cfg)}
     if not wan:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna interfaccia WAN identificabile: impossibile "
-                     "valutare l'esposizione delle porte amministrative.")
+        return RuleOutcome(UNKNOWN, "fos.policy.no_wan")
     admin_services = _admin_service_names(cfg)
     ev: List[Evidence] = []
     for pid in sorted(policies, key=lambda k: (len(k), k)):
@@ -282,12 +243,9 @@ def check_inbound_admin_ports(cfg: ParsedConfig) -> RuleOutcome:
             line, raw = _policy_line(policies[pid], prefer="service")
             ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Porte amministrative (SSH 22 / RDP 3389) raggiungibili da "
-            "Internet in %d policy." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Nessuna esposizione diretta di SSH/RDP verso reti pubbliche.")
+        return RuleOutcome(FAIL, "fos.admin_ports.exposed", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.admin_ports.ok")
 
 
 # --- Identita' e logging -----------------------------------------------------
@@ -307,56 +265,40 @@ def check_admin_trusthost(cfg: ParsedConfig) -> RuleOutcome:
     """
     admins = section_entries(cfg, "system admin")
     if not admins:
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config system admin' assente: impossibile "
-                     "valutare le restrizioni di accesso amministrativo.")
+        return RuleOutcome(UNKNOWN, "fos.trusthost.no_section")
     ev: List[Evidence] = []
     for name in sorted(admins):
         recs = admins[name]
         hosts = [r for r in recs if r.key.startswith("trusthost")]
         if not hosts:
-            line = recs[0].line if recs else 0
-            ev.append(Evidence(
-                line, "nessun 'trusthost' definito per l'account",
-                _ctx("system admin", name)))
+            ev.append(absent("ev.no_trusthost", _ctx("system admin", name)))
             continue
         for r in hosts:
             vals = {v.lower() for v in r.values}
             if any(vals == unrestricted
                    for unrestricted in _UNRESTRICTED_TRUSTHOST):
-                ev.append(Evidence(r.line, r.raw.strip(),
-                                   _ctx("system admin", name)))
+                ev.append(_ev1(r, "system admin", name))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "%d account amministrativi accessibili da qualunque IP sorgente."
-            % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Tutti gli account amministrativi sono ristretti a sottoreti "
-              "di gestione fidate.")
+        return RuleOutcome(FAIL, "fos.trusthost.unrestricted", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.trusthost.ok")
 
 
 def check_snmp_community(cfg: ParsedConfig) -> RuleOutcome:
     """Community string SNMP v1/v2c di default."""
     if not section_present(cfg, "system snmp community"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config system snmp community' assente: "
-                     "impossibile valutare le community SNMP.")
+        return RuleOutcome(UNKNOWN, "fos.snmp_default.no_section")
     communities = section_entries(cfg, "system snmp community")
     ev: List[Evidence] = []
     for name in sorted(communities):
         for r in communities[name]:
             if (r.key == "name" and r.values
                     and r.values[0].lower() in _DEFAULT_COMMUNITIES):
-                ev.append(Evidence(r.line, r.raw.strip(),
-                                   _ctx("system snmp community", name)))
+                ev.append(_ev1(r, "system snmp community", name))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Community SNMP di default in chiaro ('public'/'private'): %d."
-            % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Nessuna community SNMP di default configurata.")
+        return RuleOutcome(FAIL, "fos.snmp_default.found", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.snmp_default.ok")
 
 
 def check_syslog(cfg: ParsedConfig) -> RuleOutcome:
@@ -367,31 +309,24 @@ def check_syslog(cfg: ParsedConfig) -> RuleOutcome:
     """
     if not section_present(cfg, "log syslogd setting"):
         return RuleOutcome(
-            FAIL,
-            "Nessun inoltro syslog remoto configurato: la sezione "
-            "'config log syslogd setting' non esiste.",
-            [Evidence(0, "blocco 'config log syslogd setting' assente",
-                      "log syslogd setting")])
+            FAIL, "fos.syslog.no_section",
+            [absent("ev.no_block", "log syslogd setting",
+                    what="config log syslogd setting")])
     status = setting(cfg, "log syslogd setting", "status")
     server = setting(cfg, "log syslogd setting", "server")
     ev: List[Evidence] = []
     if (status is None or not status.values
             or status.values[0].lower() != "enable"):
-        ev.append(Evidence(
-            status.line if status else 0,
-            status.raw.strip() if status else "'status' non impostato a enable",
-            _ctx("log syslogd setting")))
+        ev.append(_ev1(status, "log syslogd setting") if status is not None
+                  else absent("ev.no_directive", _ctx("log syslogd setting"),
+                              what="set status enable"))
     if server is None or not server.values:
-        ev.append(Evidence(
-            server.line if server else 0,
-            server.raw.strip() if server else "nessun 'server' syslog definito",
-            _ctx("log syslogd setting")))
+        ev.append(_ev1(server, "log syslogd setting") if server is not None
+                  else absent("ev.no_directive", _ctx("log syslogd setting"),
+                              what="set server <ip>"))
     if ev:
-        return RuleOutcome(
-            FAIL, "Inoltro syslog remoto non attivo o privo di destinazione.",
-            ev)
-    return RuleOutcome(
-        PASS, "Inoltro dei log verso syslog remoto attivo e configurato.")
+        return RuleOutcome(FAIL, "fos.syslog.incomplete", ev)
+    return RuleOutcome(PASS, "fos.syslog.ok")
 
 
 def check_vendor_defaults(cfg: ParsedConfig) -> RuleOutcome:
@@ -399,80 +334,67 @@ def check_vendor_defaults(cfg: ParsedConfig) -> RuleOutcome:
     admins = section_entries(cfg, "system admin")
     has_policy_block = section_present(cfg, "system password-policy")
     if not admins and not has_policy_block:
-        return RuleOutcome(
-            UNKNOWN, "Ne' 'config system admin' ne' "
-                     "'config system password-policy' presenti: impossibile "
-                     "valutare i default di fabbrica.")
+        return RuleOutcome(UNKNOWN, "fos.defaults.no_section")
     ev: List[Evidence] = []
     for name in sorted(admins):
         if name.lower() == "admin":
             recs = admins[name]
-            ev.append(Evidence(
-                recs[0].line if recs else 0,
-                "account amministrativo di default 'admin' presente",
-                _ctx("system admin", name)))
+            ev.append(Evidence(recs[0].line if recs else 0, "",
+                               _ctx("system admin", name),
+                               message="ev.default_admin_account"))
     if has_policy_block:
         status = setting(cfg, "system password-policy", "status")
         if (status is None or not status.values
                 or status.values[0].lower() != "enable"):
-            ev.append(Evidence(
-                status.line if status else 0,
-                status.raw.strip() if status
-                else "'status' della password-policy non abilitato",
-                _ctx("system password-policy")))
+            ev.append(_ev1(status, "system password-policy")
+                      if status is not None
+                      else absent("ev.no_directive",
+                                  _ctx("system password-policy"),
+                                  what="set status enable"))
     else:
-        ev.append(Evidence(
-            0, "nessuna 'config system password-policy' definita",
-            _ctx("system password-policy")))
+        ev.append(absent("ev.no_block", _ctx("system password-policy"),
+                         what="config system password-policy"))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Rilevati default di fabbrica o policy password non applicata "
-            "(%d riscontri)." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Nessun account di default e policy password attiva.")
+        return RuleOutcome(FAIL, "fos.defaults.found", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.defaults.ok")
 
 
 # =============================================================================
 # CIS Fortinet FortiGate 7.4.x — controlli aggiuntivi
 #
-# Le regole qui sotto seguono la stessa convenzione di quelle sopra: blocco
-# assente -> UNKNOWN, salvo dove l'assenza E' la violazione (e in quel caso
-# lo dice la docstring). Il numero di raccomandazione sta in ``benchmarks.py``,
-# non qui: una funzione puo' servire piu' benchmark.
+# Stessa convenzione: blocco assente -> UNKNOWN, salvo dove l'assenza E' la
+# violazione (e in quel caso lo dice la docstring).
 # =============================================================================
 
-def _ev1(rec: ConfigRecord, *ctx: str) -> Evidence:
-    return Evidence(rec.line, rec.raw.strip(), _ctx(*ctx))
-
-
-def _records_under(cfg: ParsedConfig,
-                   *path: str) -> List[ConfigRecord]:
+def _records_under(cfg: ParsedConfig, *path: str) -> List[ConfigRecord]:
     """Tutti i record il cui path inizia con ``path`` (blocchi annidati inclusi)."""
     return [r for r in cfg.records if r.path[:len(path)] == path]
 
 
 def _flag(cfg: ParsedConfig, section: str, key: str, want: str,
-          subject: str, why: str,
-          missing: str = WARN) -> RuleOutcome:
-    """Controllo di un interruttore enable/disable in un blocco singolo."""
+          prefix: str, missing: str = WARN,
+          bad_status: str = FAIL) -> RuleOutcome:
+    """Controllo di un interruttore enable/disable in un blocco singolo.
+
+    ``prefix`` e' il prefisso delle chiavi di catalogo: la regola espone
+    ``<prefix>.no_section``, ``.not_set``, ``.bad`` e ``.ok``.
+    """
     rec = setting(cfg, section, key)
     if rec is None:
         if not section_present(cfg, section):
-            return RuleOutcome(
-                UNKNOWN, "Sezione 'config %s' assente: impossibile valutare "
-                         "%s." % (section, subject))
+            return RuleOutcome(UNKNOWN, prefix + ".no_section")
         return RuleOutcome(
-            missing,
-            "'%s' non impostato: vale il default della piattaforma." % key,
-            [Evidence(0, "nessun 'set %s %s'" % (key, want), _ctx(section))])
+            missing, prefix + ".not_set",
+            [absent("ev.no_directive", _ctx(section),
+                    what="set %s %s" % (key, want))])
     if rec.values and rec.values[0].lower() == want:
-        return RuleOutcome(PASS, "%s: conforme ('%s %s')."
-                                 % (subject.capitalize(), key, want))
-    return RuleOutcome(FAIL, why, [_ev1(rec, section)])
+        return RuleOutcome(PASS, prefix + ".ok")
+    return RuleOutcome(bad_status, prefix + ".bad", [_ev1(rec, section)])
 
 
-def _int_value(rec: ConfigRecord) -> Optional[int]:
+def _int_value(rec: Optional[ConfigRecord]) -> Optional[int]:
+    if rec is None:
+        return None
     try:
         return int(rec.values[0])
     except (IndexError, ValueError):
@@ -488,49 +410,39 @@ def check_dns_configured(cfg: ParsedConfig) -> RuleOutcome:
     e' esattamente cio' che il controllo verifica.
     """
     if not section_present(cfg, "system dns"):
-        return RuleOutcome(
-            FAIL, "Nessun server DNS configurato: la sezione "
-                  "'config system dns' non esiste.",
-            [Evidence(0, "blocco 'config system dns' assente", "system dns")])
+        return RuleOutcome(FAIL, "fos.dns.no_section",
+                           [absent("ev.no_block", "system dns",
+                                   what="config system dns")])
     servers = [setting(cfg, "system dns", k)
                for k in ("primary", "secondary")]
     present = [r for r in servers if r is not None and r.values]
     if not present:
-        return RuleOutcome(
-            FAIL, "Blocco DNS presente ma nessun server risolutore definito.",
-            [Evidence(0, "nessun 'set primary' / 'set secondary'",
-                      "system dns")])
+        return RuleOutcome(FAIL, "fos.dns.no_server",
+                           [absent("ev.no_directive", "system dns",
+                                   what="set primary <ip>")])
     if len(present) < 2:
-        return RuleOutcome(
-            WARN, "Un solo server DNS configurato: la risoluzione si ferma se "
-                  "quel server non risponde.",
-            [_ev1(present[0], "system dns")])
-    return RuleOutcome(PASS, "Due server DNS configurati.")
+        return RuleOutcome(WARN, "fos.dns.single",
+                           [_ev1(present[0], "system dns")])
+    return RuleOutcome(PASS, "fos.dns.ok")
 
 
 def check_intrazone_deny(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 1.2 — traffico intra-zona negato per default."""
     zones = section_entries(cfg, "system zone")
     if not zones:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna zona definita: il traffico intra-zona non e' "
-                     "applicabile.")
+        return RuleOutcome(UNKNOWN, "fos.intrazone.no_zones")
     ev: List[Evidence] = []
     for name in sorted(zones):
         rec = next((r for r in zones[name] if r.key == "intrazone"), None)
         if rec is None:
-            ev.append(Evidence(
-                zones[name][0].line if zones[name] else 0,
-                "nessun 'set intrazone deny' (default: allow)",
-                _ctx("system zone", name)))
+            ev.append(absent("ev.no_directive", _ctx("system zone", name),
+                             what="set intrazone deny"))
         elif not rec.values or rec.values[0].lower() != "deny":
             ev.append(_ev1(rec, "system zone", name))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "%d zone consentono il traffico fra le proprie interfacce senza "
-            "passare da una policy." % len(ev), ev)
-    return RuleOutcome(PASS, "Tutte le zone negano il traffico intra-zona.")
+        return RuleOutcome(FAIL, "fos.intrazone.allowed", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.intrazone.ok")
 
 
 # --- 2.1 Impostazioni di sistema ---------------------------------------------
@@ -538,22 +450,19 @@ def check_intrazone_deny(cfg: ParsedConfig) -> RuleOutcome:
 def check_login_banners(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.1.1 / 2.1.2 — banner pre-login e post-login."""
     if not section_present(cfg, "system global"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                     "valutare i banner di accesso.")
+        return RuleOutcome(UNKNOWN, "fos.banners.no_section")
     ev: List[Evidence] = []
     for key in ("pre-login-banner", "post-login-banner"):
         rec = setting(cfg, "system global", key)
         if rec is None:
-            ev.append(Evidence(0, "nessun 'set %s enable'" % key,
-                               _ctx("system global")))
+            ev.append(absent("ev.no_directive", _ctx("system global"),
+                             what="set %s enable" % key))
         elif not rec.values or rec.values[0].lower() != "enable":
             ev.append(_ev1(rec, "system global"))
     if ev:
-        return RuleOutcome(
-            FAIL, "Banner di accesso mancanti (%d su 2): nessuna avvertenza "
-                  "legale prima o dopo l'autenticazione." % len(ev), ev)
-    return RuleOutcome(PASS, "Banner pre-login e post-login entrambi attivi.")
+        return RuleOutcome(FAIL, "fos.banners.missing", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.banners.ok")
 
 
 def check_timezone(cfg: ParsedConfig) -> RuleOutcome:
@@ -561,28 +470,25 @@ def check_timezone(cfg: ParsedConfig) -> RuleOutcome:
     rec = setting(cfg, "system global", "timezone")
     if rec is None:
         if not section_present(cfg, "system global"):
-            return RuleOutcome(
-                UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                         "valutare il fuso orario.")
-        return RuleOutcome(
-            WARN, "Fuso orario non impostato: i timestamp dei log usano il "
-                  "default di fabbrica e non corrispondono all'ora locale.",
-            [Evidence(0, "nessun 'set timezone'", _ctx("system global"))])
-    return RuleOutcome(PASS, "Fuso orario impostato esplicitamente.")
+            return RuleOutcome(UNKNOWN, "fos.timezone.no_section")
+        return RuleOutcome(WARN, "fos.timezone.not_set",
+                           [absent("ev.no_directive", _ctx("system global"),
+                                   what="set timezone <id>")])
+    return RuleOutcome(PASS, "fos.timezone.ok")
 
 
 def check_ntp(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.1.4 — sincronizzazione oraria attiva con server dichiarati."""
     if not section_present(cfg, "system ntp"):
-        return RuleOutcome(
-            FAIL, "Nessuna sincronizzazione oraria configurata: la sezione "
-                  "'config system ntp' non esiste.",
-            [Evidence(0, "blocco 'config system ntp' assente", "system ntp")])
+        return RuleOutcome(FAIL, "fos.ntp.no_section",
+                           [absent("ev.no_block", "system ntp",
+                                   what="config system ntp")])
     ev: List[Evidence] = []
     sync = setting(cfg, "system ntp", "ntpsync")
     if sync is None or not sync.values or sync.values[0].lower() != "enable":
-        ev.append(_ev1(sync, "system ntp") if sync
-                  else Evidence(0, "nessun 'set ntpsync enable'", "system ntp"))
+        ev.append(_ev1(sync, "system ntp") if sync is not None
+                  else absent("ev.no_directive", "system ntp",
+                              what="set ntpsync enable"))
     # I server custom stanno in 'config ntpserver', annidata dentro 'system ntp'.
     servers = {r.path[2] for r in _records_under(cfg, "system ntp", "ntpserver")
                if len(r.path) > 2}
@@ -590,16 +496,10 @@ def check_ntp(cfg: ParsedConfig) -> RuleOutcome:
     is_custom = (ntp_type is not None and ntp_type.values
                  and ntp_type.values[0].lower() == "custom")
     if is_custom and not servers:
-        ev.append(Evidence(ntp_type.line if ntp_type else 0,
-                           "'type custom' senza alcun server in "
-                           "'config ntpserver'", "system ntp"))
+        ev.append(absent("ev.ntp_custom_without_server", "system ntp"))
     if ev:
-        return RuleOutcome(
-            FAIL, "Sincronizzazione oraria non attiva o priva di sorgente: "
-                  "i log non sono correlabili fra apparati.", ev)
-    return RuleOutcome(
-        PASS, "Sincronizzazione NTP attiva%s."
-              % (" con %d server dichiarati" % len(servers) if servers else ""))
+        return RuleOutcome(FAIL, "fos.ntp.not_syncing", ev)
+    return RuleOutcome(PASS, "fos.ntp.ok", (), {"count": len(servers)})
 
 
 def check_hostname(cfg: ParsedConfig) -> RuleOutcome:
@@ -607,82 +507,65 @@ def check_hostname(cfg: ParsedConfig) -> RuleOutcome:
     rec = setting(cfg, "system global", "hostname")
     if rec is None:
         if not section_present(cfg, "system global"):
-            return RuleOutcome(
-                UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                         "valutare l'hostname.")
-        return RuleOutcome(
-            WARN, "Hostname non impostato: l'apparato resta col nome di "
-                  "fabbrica e i log non lo distinguono dagli altri.",
-            [Evidence(0, "nessun 'set hostname'", _ctx("system global"))])
+            return RuleOutcome(UNKNOWN, "fos.hostname.no_section")
+        return RuleOutcome(WARN, "fos.hostname.not_set",
+                           [absent("ev.no_directive", _ctx("system global"),
+                                   what="set hostname <nome>")])
     name = (rec.values[0] if rec.values else "").strip()
     # Il default di fabbrica e' il modello, spesso col numero di serie: e' il
     # nome che l'apparato ha prima di essere messo in servizio.
     if not name or name.lower().startswith(("fortigate", "fgt")):
-        return RuleOutcome(
-            FAIL, "Hostname ancora quello di fabbrica.",
-            [_ev1(rec, "system global")])
-    return RuleOutcome(PASS, "Hostname personalizzato.")
+        return RuleOutcome(FAIL, "fos.hostname.factory",
+                           [_ev1(rec, "system global")])
+    return RuleOutcome(PASS, "fos.hostname.ok")
 
 
 def check_auto_install(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.1.7 — installazione automatica da USB disabilitata."""
     if not section_present(cfg, "system auto-install"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config system auto-install' assente: vale il "
-                     "default della piattaforma.")
+        return RuleOutcome(UNKNOWN, "fos.auto_install.no_section")
     ev: List[Evidence] = []
     for key in ("auto-install-config", "auto-install-image"):
         rec = setting(cfg, "system auto-install", key)
         if rec is not None and rec.values and rec.values[0].lower() == "enable":
             ev.append(_ev1(rec, "system auto-install"))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Installazione automatica da chiavetta USB attiva: chi ha accesso "
-            "fisico puo' sostituire configurazione o firmware al riavvio.", ev)
-    return RuleOutcome(PASS, "Installazione automatica da USB disabilitata.")
+        return RuleOutcome(FAIL, "fos.auto_install.enabled", ev)
+    return RuleOutcome(PASS, "fos.auto_install.ok")
 
 
 def check_static_key_ciphers(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.1.8 — 'ssl-static-key-ciphers disable' (perfect forward secrecy)."""
-    return _flag(
-        cfg, "system global", "ssl-static-key-ciphers", "disable",
-        "cifrari a chiave statica",
-        "Cifrari a chiave statica ammessi: senza forward secrecy, chi "
-        "compromette la chiave del server puo' decifrare il traffico "
-        "registrato in passato.")
+    return _flag(cfg, "system global", "ssl-static-key-ciphers", "disable",
+                 "fos.static_ciphers")
 
 
 def check_admin_https_redirect(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.1.9 — redirect da HTTP a HTTPS sulla GUI."""
-    return _flag(
-        cfg, "system global", "admin-https-redirect", "enable",
-        "redirect HTTPS della GUI",
-        "Redirect HTTPS disabilitato: la GUI resta raggiungibile in chiaro "
-        "sugli indirizzi dove HTTP e' ammesso.")
+    return _flag(cfg, "system global", "admin-https-redirect", "enable",
+                 "fos.https_redirect")
 
 
 def check_cpu_log_threshold(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.1.12 — 'log-single-cpu-high enable'."""
-    return _flag(
-        cfg, "system global", "log-single-cpu-high", "enable",
-        "allarme di saturazione CPU",
-        "Saturazione di un singolo core non registrata: un processo che "
-        "satura una CPU passa inosservato finche' il carico medio resta basso.")
+    return _flag(cfg, "system global", "log-single-cpu-high", "enable",
+                 "fos.cpu_log")
 
 
 def check_gui_hostname_display(cfg: ParsedConfig) -> RuleOutcome:
-    """CIS 2.1.13 — hostname mostrato nella GUI."""
-    return _flag(
-        cfg, "system global", "gui-display-hostname", "enable",
-        "hostname nella GUI",
-        "Hostname non mostrato nella GUI: chi amministra piu' apparati non "
-        "distingue a colpo d'occhio su quale sta operando.")
+    """CIS 2.1.13 — hostname NON mostrato nella pagina di login della GUI.
+
+    Il verso non e' quello che suggerisce il nome dell'impostazione: il
+    benchmark vuole ``disable``, perche' la pagina di login e' pre-autenticazione
+    e l'hostname vi comparirebbe per chiunque la raggiunga.
+    """
+    return _flag(cfg, "system global", "gui-display-hostname", "disable",
+                 "fos.gui_hostname")
 
 
 # --- 2.2 Password e blocco account -------------------------------------------
 
-_MIN_PASSWORD_LENGTH = 8            # CIS 2.2.1
+_MIN_PASSWORD_LENGTH = 14           # CIS 2.2.1
 _MAX_LOCKOUT_THRESHOLD = 3          # CIS 2.2.2
 _MIN_LOCKOUT_DURATION = 900         # CIS 2.2.2, secondi
 
@@ -693,74 +576,59 @@ def check_password_policy_strength(cfg: ParsedConfig) -> RuleOutcome:
     Distinta da ``check_vendor_defaults``, che si limita a verificare che la
     policy sia ATTIVA: qui si guarda cosa impone.
     """
-    if not section_present(cfg, "system password-policy"):
-        return RuleOutcome(
-            FAIL, "Nessuna policy password definita: la sezione "
-                  "'config system password-policy' non esiste.",
-            [Evidence(0, "blocco 'config system password-policy' assente",
-                      "system password-policy")])
     sec = "system password-policy"
+    if not section_present(cfg, sec):
+        return RuleOutcome(FAIL, "fos.pwpolicy.no_section",
+                           [absent("ev.no_block", sec,
+                                   what="config system password-policy")])
     ev: List[Evidence] = []
     length = setting(cfg, sec, "minimum-length")
     if length is None:
-        ev.append(Evidence(0, "nessun 'set minimum-length'", _ctx(sec)))
-    else:
-        val = _int_value(length)
-        if val is None or val < _MIN_PASSWORD_LENGTH:
-            ev.append(_ev1(length, sec))
+        ev.append(absent("ev.no_directive", _ctx(sec),
+                         what="set minimum-length %d" % _MIN_PASSWORD_LENGTH))
+    elif (_int_value(length) or 0) < _MIN_PASSWORD_LENGTH:
+        ev.append(_ev1(length, sec))
     # Le quattro classi di caratteri richieste dal benchmark.
     for key in ("min-lower-case-letter", "min-upper-case-letter",
                 "min-non-alphanumeric", "min-number"):
         rec = setting(cfg, sec, key)
-        val = _int_value(rec) if rec is not None else None
+        val = _int_value(rec)
         if val is None or val < 1:
             ev.append(_ev1(rec, sec) if rec is not None
-                      else Evidence(0, "nessun 'set %s 1'" % key, _ctx(sec)))
+                      else absent("ev.no_directive", _ctx(sec),
+                                  what="set %s 1" % key))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Policy password sotto i requisiti minimi (%d parametri non "
-            "conformi): lunghezza minima %d caratteri e almeno un carattere "
-            "per ciascuna delle quattro classi."
-            % (len(ev), _MIN_PASSWORD_LENGTH), ev)
-    return RuleOutcome(
-        PASS, "Policy password conforme: almeno %d caratteri con tutte e "
-              "quattro le classi richieste." % _MIN_PASSWORD_LENGTH)
+        return RuleOutcome(FAIL, "fos.pwpolicy.weak", ev,
+                           {"count": len(ev),
+                            "minlen": _MIN_PASSWORD_LENGTH})
+    return RuleOutcome(PASS, "fos.pwpolicy.ok", (),
+                       {"minlen": _MIN_PASSWORD_LENGTH})
 
 
 def check_admin_lockout(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.2.2 — soglia e durata del blocco dopo tentativi falliti."""
     if not section_present(cfg, "system global"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                     "valutare il blocco degli account.")
+        return RuleOutcome(UNKNOWN, "fos.lockout.no_section")
     ev: List[Evidence] = []
     thr = setting(cfg, "system global", "admin-lockout-threshold")
     if thr is None:
-        ev.append(Evidence(0, "nessun 'set admin-lockout-threshold %d'"
-                           % _MAX_LOCKOUT_THRESHOLD, _ctx("system global")))
-    else:
-        val = _int_value(thr)
-        if val is None or val > _MAX_LOCKOUT_THRESHOLD:
-            ev.append(_ev1(thr, "system global"))
+        ev.append(absent("ev.no_directive", _ctx("system global"),
+                         what="set admin-lockout-threshold %d"
+                              % _MAX_LOCKOUT_THRESHOLD))
+    elif (_int_value(thr) or 10 ** 6) > _MAX_LOCKOUT_THRESHOLD:
+        ev.append(_ev1(thr, "system global"))
     dur = setting(cfg, "system global", "admin-lockout-duration")
     if dur is None:
-        ev.append(Evidence(0, "nessun 'set admin-lockout-duration %d'"
-                           % _MIN_LOCKOUT_DURATION, _ctx("system global")))
-    else:
-        val = _int_value(dur)
-        if val is None or val < _MIN_LOCKOUT_DURATION:
-            ev.append(_ev1(dur, "system global"))
+        ev.append(absent("ev.no_directive", _ctx("system global"),
+                         what="set admin-lockout-duration %d"
+                              % _MIN_LOCKOUT_DURATION))
+    elif (_int_value(dur) or 0) < _MIN_LOCKOUT_DURATION:
+        ev.append(_ev1(dur, "system global"))
+    params = {"threshold": _MAX_LOCKOUT_THRESHOLD,
+              "duration": _MIN_LOCKOUT_DURATION}
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Blocco degli account amministrativi troppo permissivo: servono "
-            "al massimo %d tentativi e almeno %d secondi di blocco, altrimenti "
-            "un attacco a forza bruta resta praticabile."
-            % (_MAX_LOCKOUT_THRESHOLD, _MIN_LOCKOUT_DURATION), ev)
-    return RuleOutcome(
-        PASS, "Blocco account dopo %d tentativi per almeno %d secondi."
-              % (_MAX_LOCKOUT_THRESHOLD, _MIN_LOCKOUT_DURATION))
+        return RuleOutcome(FAIL, "fos.lockout.weak", ev, params)
+    return RuleOutcome(PASS, "fos.lockout.ok", (), params)
 
 
 # --- 2.3 SNMP -----------------------------------------------------------------
@@ -775,8 +643,7 @@ def check_snmp_v3_only(cfg: ParsedConfig) -> RuleOutcome:
     has_community = section_present(cfg, "system snmp community")
     has_user = section_present(cfg, "system snmp user")
     if not has_community and not has_user:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna configurazione SNMP presente: nulla da valutare.")
+        return RuleOutcome(UNKNOWN, "fos.snmpv3.no_snmp")
     communities = section_entries(cfg, "system snmp community")
     ev: List[Evidence] = []
     for name in sorted(communities):
@@ -785,22 +652,16 @@ def check_snmp_v3_only(cfg: ParsedConfig) -> RuleOutcome:
         if status is not None and status.values \
                 and status.values[0].lower() == "disable":
             continue
-        ev.append(Evidence(
-            recs[0].line if recs else 0,
-            "community SNMP v1/v2c attiva",
-            _ctx("system snmp community", name)))
+        ev.append(Evidence(recs[0].line if recs else 0, "",
+                           _ctx("system snmp community", name),
+                           message="ev.snmp_v1v2c_active"))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "%d community SNMP v1/v2c attive: la community viaggia in chiaro "
-            "e vale come credenziale." % len(ev), ev)
+        return RuleOutcome(FAIL, "fos.snmpv3.v1v2c", ev, {"count": len(ev)})
     if not has_user:
-        return RuleOutcome(
-            WARN, "Nessuna community v1/v2c attiva ma nemmeno un utente "
-                  "SNMPv3: il monitoraggio SNMP non e' configurato.",
-            [Evidence(0, "nessuna 'config system snmp user'",
-                      "system snmp user")])
-    return RuleOutcome(PASS, "Solo SNMPv3 in uso.")
+        return RuleOutcome(WARN, "fos.snmpv3.no_user",
+                           [absent("ev.no_block", "system snmp user",
+                                   what="config system snmp user")])
+    return RuleOutcome(PASS, "fos.snmpv3.ok")
 
 
 # --- 2.4 Amministrazione ------------------------------------------------------
@@ -811,43 +672,34 @@ _DEFAULT_ADMIN_PORTS = {"admin-sport": 443, "admin-ssh-port": 22}
 def check_admin_ports_changed(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.4.7 — porte amministrative spostate dai valori di default."""
     if not section_present(cfg, "system global"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config system global' assente: impossibile "
-                     "valutare le porte amministrative.")
+        return RuleOutcome(UNKNOWN, "fos.admin_port.no_section")
     ev: List[Evidence] = []
     for key, default in sorted(_DEFAULT_ADMIN_PORTS.items()):
         rec = setting(cfg, "system global", key)
         if rec is None:
-            ev.append(Evidence(0, "'%s' non impostato: vale il default %d"
-                               % (key, default), _ctx("system global")))
+            ev.append(absent("ev.not_set_default_value", _ctx("system global"),
+                             what=key, value=default))
         elif _int_value(rec) == default:
             ev.append(_ev1(rec, "system global"))
     if ev:
-        return RuleOutcome(
-            WARN,
-            "Porte amministrative sui valori di default (%d su 2): non e' una "
-            "vulnerabilita' di per se', ma le scansioni di massa le trovano "
-            "per prime." % len(ev), ev)
-    return RuleOutcome(PASS, "Porte amministrative spostate dai default.")
+        return RuleOutcome(WARN, "fos.admin_port.default", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.admin_port.ok")
 
 
 def check_local_in_policy(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 2.4.6 — policy local-in a protezione dei servizi dell'apparato."""
     if not section_present(cfg, "firewall local-in-policy"):
         return RuleOutcome(
-            WARN,
-            "Nessuna policy 'local-in': il traffico diretto all'apparato e' "
-            "filtrato solo da 'allowaccess', che non distingue le sorgenti.",
-            [Evidence(0, "blocco 'config firewall local-in-policy' assente",
-                      "firewall local-in-policy")])
+            WARN, "fos.local_in.no_section",
+            [absent("ev.no_block", "firewall local-in-policy",
+                    what="config firewall local-in-policy")])
     entries = section_entries(cfg, "firewall local-in-policy")
     if not entries:
-        return RuleOutcome(
-            WARN, "Blocco 'local-in-policy' presente ma vuoto.",
-            [Evidence(0, "nessuna voce definita", "firewall local-in-policy")])
-    return RuleOutcome(
-        PASS, "%d policy 'local-in' a protezione dei servizi dell'apparato."
-              % len(entries))
+        return RuleOutcome(WARN, "fos.local_in.empty",
+                           [absent("ev.block_empty",
+                                   "firewall local-in-policy")])
+    return RuleOutcome(PASS, "fos.local_in.ok", (), {"count": len(entries)})
 
 
 # --- 2.5 Alta disponibilita' --------------------------------------------------
@@ -859,24 +711,17 @@ def check_ha_configured(cfg: ParsedConfig) -> RuleOutcome:
     architetturale, non una violazione che questo motore possa giudicare.
     """
     if not section_present(cfg, "system ha"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config system ha' assente: apparato non in "
-                     "configurazione di alta disponibilita'.")
+        return RuleOutcome(UNKNOWN, "fos.ha.no_section")
     mode = setting(cfg, "system ha", "mode")
     if mode is None or not mode.values \
             or mode.values[0].lower() in ("standalone", ""):
-        return RuleOutcome(
-            UNKNOWN, "HA in modalita' standalone: nessun cluster da valutare.")
+        return RuleOutcome(UNKNOWN, "fos.ha.standalone")
     monitor = setting(cfg, "system ha", "monitor")
     if monitor is None or not monitor.values:
-        return RuleOutcome(
-            FAIL,
-            "Cluster HA senza interfacce monitorate: il failover non scatta "
-            "se cade un collegamento dati, solo se cade il nodo.",
-            [_ev1(mode, "system ha")])
-    return RuleOutcome(
-        PASS, "Cluster HA in modalita' '%s' con %d interfacce monitorate."
-              % (mode.values[0], len(monitor.values)))
+        return RuleOutcome(FAIL, "fos.ha.no_monitor",
+                           [_ev1(mode, "system ha")])
+    return RuleOutcome(PASS, "fos.ha.ok", (),
+                       {"mode": mode.values[0], "count": len(monitor.values)})
 
 
 # --- 3.x / 4.x Igiene delle policy -------------------------------------------
@@ -905,42 +750,29 @@ def check_policy_logging(cfg: ParsedConfig) -> RuleOutcome:
     'set logtraffic' FortiOS registra solo le sessioni con security profile,
     quindi il traffico semplicemente consentito non lascia traccia.
     """
-    policies = section_entries(cfg, "firewall policy")
-    if not policies:
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
-                     "valutare la registrazione del traffico.")
+    if not section_entries(cfg, "firewall policy"):
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
     ev: List[Evidence] = []
     for pid, recs in _accept_policies(cfg):
         rec = next((r for r in recs if r.key == "logtraffic"), None)
         if rec is None:
-            ev.append(Evidence(
-                recs[0].line if recs else 0,
-                "nessun 'set logtraffic all'",
-                _ctx("firewall policy", pid)))
+            ev.append(absent("ev.no_directive", _ctx("firewall policy", pid),
+                             what="set logtraffic all"))
         elif rec.values and rec.values[0].lower() == "disable":
             ev.append(_ev1(rec, "firewall policy", pid))
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "%d policy accettano traffico senza registrarlo: quel traffico "
-            "non compare in nessuna indagine successiva." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Tutte le policy che accettano traffico lo registrano.")
+        return RuleOutcome(FAIL, "fos.policy_log.missing", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.policy_log.ok")
 
 
 def check_policy_security_profiles(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 4.x — profili di sicurezza applicati al traffico in uscita da WAN."""
-    policies = section_entries(cfg, "firewall policy")
-    if not policies:
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
-                     "valutare i profili di sicurezza.")
+    if not section_entries(cfg, "firewall policy"):
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
     wan = {w.lower() for w in wan_interfaces(cfg)}
     if not wan:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna interfaccia WAN identificabile: impossibile "
-                     "stabilire quali policy attraversano il perimetro.")
+        return RuleOutcome(UNKNOWN, "fos.policy.no_wan")
     ev: List[Evidence] = []
     for pid, recs in _accept_policies(cfg):
         vals = _policy_values(recs)
@@ -951,23 +783,16 @@ def check_policy_security_profiles(cfg: ParsedConfig) -> RuleOutcome:
         line, raw = _policy_line(recs)
         ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
     if ev:
-        return RuleOutcome(
-            WARN,
-            "%d policy instradano traffico verso Internet senza alcun profilo "
-            "di ispezione: l'apparato le tratta come semplice routing."
-            % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Ogni policy verso Internet applica almeno un profilo di "
-              "ispezione.")
+        return RuleOutcome(WARN, "fos.profiles.missing", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.profiles.ok")
 
 
 def check_policy_comments(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 3.x — ogni policy documentata da un commento."""
     policies = section_entries(cfg, "firewall policy")
     if not policies:
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config firewall policy' assente: impossibile "
-                     "valutare la documentazione delle regole.")
+        return RuleOutcome(UNKNOWN, "fos.policy.no_section")
     ev: List[Evidence] = []
     for pid in sorted(policies, key=lambda k: (len(k), k)):
         recs = policies[pid]
@@ -976,12 +801,9 @@ def check_policy_comments(cfg: ParsedConfig) -> RuleOutcome:
         line, raw = _policy_line(recs)
         ev.append(Evidence(line, raw, _ctx("firewall policy", pid)))
     if ev:
-        return RuleOutcome(
-            WARN,
-            "%d policy prive di commento: senza una motivazione registrata "
-            "nessuno se la sente di rimuoverle, e restano per sempre."
-            % len(ev), ev)
-    return RuleOutcome(PASS, "Tutte le policy sono documentate.")
+        return RuleOutcome(WARN, "fos.comments.missing", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "fos.comments.ok")
 
 
 # --- 6.x VPN ------------------------------------------------------------------
@@ -989,45 +811,33 @@ def check_policy_comments(cfg: ParsedConfig) -> RuleOutcome:
 def check_sslvpn_tls(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 6.1.2 — versione TLS minima del portale SSL-VPN."""
     if not section_present(cfg, "vpn ssl settings"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config vpn ssl settings' assente: SSL-VPN non "
-                     "configurata.")
+        return RuleOutcome(UNKNOWN, "fos.sslvpn.no_section")
     rec = (setting(cfg, "vpn ssl settings", "ssl-min-proto-ver")
            or setting(cfg, "vpn ssl settings", "ssl-min-proto-version"))
     if rec is None:
-        return RuleOutcome(
-            WARN, "Versione TLS minima della SSL-VPN non impostata: vale il "
-                  "default della piattaforma.",
-            [Evidence(0, "nessun 'set ssl-min-proto-ver tls1-2'",
-                      "vpn ssl settings")])
+        return RuleOutcome(WARN, "fos.sslvpn_tls.not_set",
+                           [absent("ev.no_directive", "vpn ssl settings",
+                                   what="set ssl-min-proto-ver tls1-2")])
     val = (rec.values[0].lower() if rec.values else "")
     if val in ("tls1-2", "tls1-3", "tlsv1-2", "tlsv1-3"):
-        return RuleOutcome(PASS, "SSL-VPN limitata a TLS 1.2 o superiore.")
-    return RuleOutcome(
-        FAIL, "SSL-VPN accetta TLS deprecato ('%s')." % val,
-        [_ev1(rec, "vpn ssl settings")])
+        return RuleOutcome(PASS, "fos.sslvpn_tls.ok")
+    return RuleOutcome(FAIL, "fos.sslvpn_tls.weak",
+                       [_ev1(rec, "vpn ssl settings")], {"version": val})
 
 
 def check_sslvpn_source_restriction(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 6.1.x — portale SSL-VPN ristretto per indirizzo sorgente."""
     if not section_present(cfg, "vpn ssl settings"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config vpn ssl settings' assente: SSL-VPN non "
-                     "configurata.")
+        return RuleOutcome(UNKNOWN, "fos.sslvpn.no_section")
     rec = setting(cfg, "vpn ssl settings", "source-address")
     if rec is None or not rec.values:
-        return RuleOutcome(
-            WARN,
-            "Portale SSL-VPN raggiungibile da qualunque indirizzo: senza "
-            "'source-address' l'unica barriera sono le credenziali.",
-            [Evidence(0, "nessun 'set source-address'", "vpn ssl settings")])
+        return RuleOutcome(WARN, "fos.sslvpn_src.unrestricted",
+                           [absent("ev.no_directive", "vpn ssl settings",
+                                   what="set source-address <gruppo>")])
     if {v.lower() for v in rec.values} & _ANY_ADDR:
-        return RuleOutcome(
-            FAIL, "Portale SSL-VPN esposto a 'all': restrizione sorgente "
-                  "presente ma inefficace.",
-            [_ev1(rec, "vpn ssl settings")])
-    return RuleOutcome(
-        PASS, "Accesso al portale SSL-VPN ristretto per indirizzo sorgente.")
+        return RuleOutcome(FAIL, "fos.sslvpn_src.any",
+                           [_ev1(rec, "vpn ssl settings")])
+    return RuleOutcome(PASS, "fos.sslvpn_src.ok")
 
 
 # --- 7.x Logging --------------------------------------------------------------
@@ -1040,37 +850,26 @@ def check_syslog_encrypted(cfg: ParsedConfig) -> RuleOutcome:
     stesso problema due volte nel punteggio.
     """
     if not section_present(cfg, "log syslogd setting"):
-        return RuleOutcome(
-            UNKNOWN, "Nessun syslog remoto configurato: la cifratura del "
-                     "trasporto non e' applicabile.")
+        return RuleOutcome(UNKNOWN, "fos.syslog_enc.no_syslog")
     status = setting(cfg, "log syslogd setting", "status")
     if status is None or not status.values \
             or status.values[0].lower() != "enable":
-        return RuleOutcome(
-            UNKNOWN, "Inoltro syslog non attivo: la cifratura del trasporto "
-                     "non e' applicabile.")
+        return RuleOutcome(UNKNOWN, "fos.syslog_enc.disabled")
     rec = setting(cfg, "log syslogd setting", "enc-algorithm")
     if rec is not None and rec.values \
             and rec.values[0].lower() in ("high", "high-medium", "low"):
-        return RuleOutcome(
-            PASS, "Inoltro syslog cifrato ('enc-algorithm %s')."
-                  % rec.values[0])
+        return RuleOutcome(PASS, "fos.syslog_enc.ok", (),
+                           {"algorithm": rec.values[0]})
     return RuleOutcome(
-        WARN,
-        "Log inviati al syslog remoto in chiaro: chi intercetta il segmento "
-        "legge indirizzi, utenti e destinazioni di ogni sessione.",
+        WARN, "fos.syslog_enc.plaintext",
         [_ev1(rec, "log syslogd setting") if rec is not None
-         else Evidence(0, "nessun 'set enc-algorithm high'",
-                       "log syslogd setting")])
+         else absent("ev.no_directive", "log syslogd setting",
+                     what="set enc-algorithm high")])
 
 
 def check_event_logging(cfg: ParsedConfig) -> RuleOutcome:
     """CIS 7.x — registrazione degli eventi di sistema abilitata."""
-    return _flag(
-        cfg, "log eventfilter", "event", "enable",
-        "registrazione degli eventi di sistema",
-        "Registrazione degli eventi di sistema disabilitata: login, modifiche "
-        "di configurazione e failover HA non lasciano traccia.")
+    return _flag(cfg, "log eventfilter", "event", "enable", "fos.event_log")
 
 
 def check_log_local_disk(cfg: ParsedConfig) -> RuleOutcome:
@@ -1080,16 +879,13 @@ def check_log_local_disk(cfg: ParsedConfig) -> RuleOutcome:
     non espongono affatto 'config log disk setting'.
     """
     if not section_present(cfg, "log disk setting"):
-        return RuleOutcome(
-            UNKNOWN, "Sezione 'config log disk setting' assente: l'apparato "
-                     "potrebbe non avere un disco locale.")
+        return RuleOutcome(UNKNOWN, "fos.log_disk.no_section")
     status = setting(cfg, "log disk setting", "status")
     if status is not None and status.values \
             and status.values[0].lower() == "enable":
-        return RuleOutcome(PASS, "Registrazione locale su disco attiva.")
+        return RuleOutcome(PASS, "fos.log_disk.ok")
     return RuleOutcome(
-        WARN,
-        "Registrazione su disco locale disattivata: se il collector remoto e' "
-        "irraggiungibile non resta alcuna traccia.",
+        WARN, "fos.log_disk.disabled",
         [_ev1(status, "log disk setting") if status is not None
-         else Evidence(0, "nessun 'set status enable'", "log disk setting")])
+         else absent("ev.no_directive", "log disk setting",
+                     what="set status enable")])

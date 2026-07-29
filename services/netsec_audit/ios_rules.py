@@ -6,6 +6,9 @@ raccomandazione, il comando di audit e quello di rimedio vivono in
 ``benchmarks.py``; qui sta solo la valutazione, che e' una funzione pura
 ``IosConfig -> RuleOutcome``.
 
+Come per FortiOS, le regole dichiarano una CHIAVE di ``messages.py``, non una
+frase: vedi la nota sulla lingua in ``model.py``.
+
 ASSENZA E VERDETTO — su IOS la distinzione e' diversa da FortiOS. Una
 ``running-config`` e' completa per costruzione: se ``aaa new-model`` non
 compare, non e' "non valutabile", e' disabilitato. Quindi:
@@ -27,7 +30,7 @@ from typing import List, Optional
 from .ios_parser import (
     IosConfig, IosLine, blocks_matching, child, find, find_top, first_top,
     has_top, is_empty)
-from .model import FAIL, PASS, UNKNOWN, WARN, Evidence, RuleOutcome
+from .model import (FAIL, PASS, UNKNOWN, WARN, Evidence, RuleOutcome, absent)
 
 # --- soglie dichiarate dal benchmark -----------------------------------------
 
@@ -37,19 +40,13 @@ _MAX_SSH_RETRIES = 3            # 2.1.1.1.5
 _MIN_LOG_BUFFER = 64000         # 2.2.2 ("Recommended size is 64000")
 _MIN_SNMP_AES_BITS = 128        # 1.5.10
 
-_EMPTY = "Configurazione vuota o non riconosciuta come Cisco IOS."
-
 
 def _ev(l: IosLine, note: str = "") -> Evidence:
     return Evidence(l.line, l.text, " / ".join(p for p in l.path if p) or note)
 
 
-def _absent(what: str, ctx: str = "running-config") -> Evidence:
-    return Evidence(0, what, ctx)
-
-
 def _guard(cfg: IosConfig) -> Optional[RuleOutcome]:
-    return RuleOutcome(UNKNOWN, _EMPTY) if is_empty(cfg) else None
+    return RuleOutcome(UNKNOWN, "ios.empty") if is_empty(cfg) else None
 
 
 def _int_arg(l: IosLine, index: int) -> Optional[int]:
@@ -67,16 +64,12 @@ def check_ios_aaa_new_model(cfg: IosConfig) -> RuleOutcome:
     if g:
         return g
     if has_top(cfg, "no aaa new-model"):
-        return RuleOutcome(
-            FAIL, "'aaa new-model' esplicitamente disabilitato: nessun "
-                  "controllo accessi centralizzato.",
-            [_ev(find_top(cfg, "no aaa new-model")[0])])
+        return RuleOutcome(FAIL, "ios.aaa.disabled",
+                           [_ev(find_top(cfg, "no aaa new-model")[0])])
     if has_top(cfg, "aaa new-model"):
-        return RuleOutcome(PASS, "'aaa new-model' abilitato.")
-    return RuleOutcome(
-        FAIL, "'aaa new-model' assente: l'apparato usa l'autenticazione "
-              "legacy di linea.",
-        [_absent("nessun 'aaa new-model' nella configurazione")])
+        return RuleOutcome(PASS, "ios.aaa.ok")
+    return RuleOutcome(FAIL, "ios.aaa.absent",
+                       [absent("ev.no_directive", what="aaa new-model")])
 
 
 def check_ios_aaa_authentication_login(cfg: IosConfig) -> RuleOutcome:
@@ -85,24 +78,19 @@ def check_ios_aaa_authentication_login(cfg: IosConfig) -> RuleOutcome:
     if g:
         return g
     if not has_top(cfg, "aaa new-model"):
-        return RuleOutcome(
-            UNKNOWN, "'aaa new-model' non attivo: i metodi AAA di login non "
-                     "sono applicabili.")
+        return RuleOutcome(UNKNOWN, "ios.aaa.not_applicable_login")
     hits = find_top(cfg, "aaa authentication login")
     if not hits:
         return RuleOutcome(
-            FAIL, "Nessun 'aaa authentication login' definito.",
-            [_absent("nessun 'aaa authentication login'")])
+            FAIL, "ios.aaa_login.absent",
+            [absent("ev.no_directive", what="aaa authentication login")])
     # Un metodo 'none' vanifica il controllo: e' peggio dell'assenza, perche'
     # sembra configurato.
     weak = [l for l in hits if l.words[-1:] == ["none"]]
     if weak:
-        return RuleOutcome(
-            FAIL, "Metodo di login con fallback 'none': accesso senza "
-                  "credenziali.",
-            [_ev(l) for l in weak])
-    return RuleOutcome(
-        PASS, "Autenticazione di login AAA definita (%d liste)." % len(hits))
+        return RuleOutcome(FAIL, "ios.aaa_login.none",
+                           [_ev(l) for l in weak])
+    return RuleOutcome(PASS, "ios.aaa_login.ok", (), {"count": len(hits)})
 
 
 def check_ios_aaa_accounting_commands(cfg: IosConfig) -> RuleOutcome:
@@ -111,16 +99,12 @@ def check_ios_aaa_accounting_commands(cfg: IosConfig) -> RuleOutcome:
     if g:
         return g
     if not has_top(cfg, "aaa new-model"):
-        return RuleOutcome(
-            UNKNOWN, "'aaa new-model' non attivo: l'accounting AAA non e' "
-                     "applicabile.")
+        return RuleOutcome(UNKNOWN, "ios.aaa.not_applicable_accounting")
     if find_top(cfg, "aaa accounting commands 15"):
-        return RuleOutcome(
-            PASS, "Accounting dei comandi privilegiati (livello 15) attivo.")
+        return RuleOutcome(PASS, "ios.accounting.ok")
     return RuleOutcome(
-        FAIL, "Nessun 'aaa accounting commands 15': i comandi privilegiati "
-              "non lasciano traccia di chi li ha eseguiti.",
-        [_absent("nessun 'aaa accounting commands 15'")])
+        FAIL, "ios.accounting.absent",
+        [absent("ev.no_directive", what="aaa accounting commands 15")])
 
 
 # --- 1.2 Accesso --------------------------------------------------------------
@@ -136,24 +120,20 @@ def check_ios_vty_transport_ssh(cfg: IosConfig) -> RuleOutcome:
         return g
     vtys = _vty_blocks(cfg)
     if not vtys:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna 'line vty' configurata: accesso remoto non "
-                     "valutabile.")
+        return RuleOutcome(UNKNOWN, "ios.vty.absent")
     ev: List[Evidence] = []
     for header, kids in vtys:
         t = child(kids, "transport input")
         if t is None:
-            ev.append(_absent("nessun 'transport input' (default: tutti i "
-                              "protocolli, telnet compreso)", header))
+            ev.append(absent("ev.no_transport_input", header))
             continue
         allowed = set(t.words[2:])
         if allowed - {"ssh", "none"}:
             ev.append(_ev(t, header))
     if ev:
-        return RuleOutcome(
-            FAIL, "Protocolli non cifrati ammessi su %d linea/e vty." % len(ev),
-            ev)
-    return RuleOutcome(PASS, "Tutte le 'line vty' accettano solo SSH.")
+        return RuleOutcome(FAIL, "ios.vty_transport.insecure", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.vty_transport.ok")
 
 
 def check_ios_vty_access_class(cfg: IosConfig) -> RuleOutcome:
@@ -163,29 +143,23 @@ def check_ios_vty_access_class(cfg: IosConfig) -> RuleOutcome:
         return g
     vtys = _vty_blocks(cfg)
     if not vtys:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna 'line vty' configurata: nessun accesso remoto "
-                     "da restringere.")
-    ev = [_absent("nessuna 'access-class ... in' sulla linea", header)
-          for header, kids in vtys
-          if child(kids, "access-class") is None]
+        return RuleOutcome(UNKNOWN, "ios.vty.absent")
+    ev = [absent("ev.no_directive", header, what="access-class <ACL> in")
+          for header, kids in vtys if child(kids, "access-class") is None]
     if ev:
-        return RuleOutcome(
-            FAIL, "%d linea/e vty raggiungibili da qualunque indirizzo "
-                  "sorgente." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Ogni 'line vty' e' ristretta da una access-class.")
+        return RuleOutcome(FAIL, "ios.vty_acl.missing", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.vty_acl.ok")
 
 
 def _check_exec_timeout(cfg: IosConfig, prefix: str,
-                        what: str) -> RuleOutcome:
+                        key: str) -> RuleOutcome:
     g = _guard(cfg)
     if g:
         return g
     found = blocks_matching(cfg, prefix)
     if not found:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna linea '%s' configurata." % prefix)
+        return RuleOutcome(UNKNOWN, key + ".absent")
     ev: List[Evidence] = []
     for header, kids in found:
         t = child(kids, "exec-timeout")
@@ -193,8 +167,8 @@ def _check_exec_timeout(cfg: IosConfig, prefix: str,
             # Default IOS: 10 minuti sulle linee EXEC. Conforme, ma implicito:
             # una modifica al default della piattaforma lo cambia senza che la
             # configurazione lo dica.
-            ev.append(_absent("'exec-timeout' non impostato: vale il default "
-                              "di piattaforma", header))
+            ev.append(absent("ev.not_set_default", header,
+                             what="exec-timeout"))
             continue
         mins = _int_arg(t, 1)
         secs = _int_arg(t, 2) or 0
@@ -205,24 +179,20 @@ def _check_exec_timeout(cfg: IosConfig, prefix: str,
         elif mins > _MAX_EXEC_TIMEOUT_MIN or (
                 mins == _MAX_EXEC_TIMEOUT_MIN and secs > 0):
             ev.append(_ev(t, header))
+    params = {"count": len(ev), "max": _MAX_EXEC_TIMEOUT_MIN}
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "Timeout di inattivita' assente, disabilitato o superiore a %d "
-            "minuti su %d %s." % (_MAX_EXEC_TIMEOUT_MIN, len(ev), what), ev)
-    return RuleOutcome(
-        PASS, "Timeout di inattivita' entro %d minuti su tutte le %s."
-              % (_MAX_EXEC_TIMEOUT_MIN, what))
+        return RuleOutcome(FAIL, key + ".bad", ev, params)
+    return RuleOutcome(PASS, key + ".ok", (), params)
 
 
 def check_ios_vty_exec_timeout(cfg: IosConfig) -> RuleOutcome:
     """CIS 1.2.8 — 'exec-timeout' <= 10 minuti su 'line vty'."""
-    return _check_exec_timeout(cfg, "line vty", "linee vty")
+    return _check_exec_timeout(cfg, "line vty", "ios.vty_timeout")
 
 
 def check_ios_console_exec_timeout(cfg: IosConfig) -> RuleOutcome:
     """CIS 1.2.7 — 'exec-timeout' <= 10 minuti su 'line con 0'."""
-    return _check_exec_timeout(cfg, "line con", "linee console")
+    return _check_exec_timeout(cfg, "line con", "ios.con_timeout")
 
 
 def check_ios_aux_no_exec(cfg: IosConfig) -> RuleOutcome:
@@ -236,15 +206,12 @@ def check_ios_aux_no_exec(cfg: IosConfig) -> RuleOutcome:
         return g
     aux = blocks_matching(cfg, "line aux")
     if not aux:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna 'line aux' presente: l'apparato non espone una "
-                     "porta ausiliaria.")
-    ev = [_absent("nessun 'no exec' sulla porta ausiliaria", header)
+        return RuleOutcome(UNKNOWN, "ios.aux.absent")
+    ev = [absent("ev.no_directive", header, what="no exec")
           for header, kids in aux if child(kids, "no exec") is None]
     if ev:
-        return RuleOutcome(
-            FAIL, "Processo EXEC attivo sulla porta ausiliaria.", ev)
-    return RuleOutcome(PASS, "Processo EXEC disabilitato sulla porta ausiliaria.")
+        return RuleOutcome(FAIL, "ios.aux.exec_active", ev)
+    return RuleOutcome(PASS, "ios.aux.ok")
 
 
 def check_ios_local_user_privilege(cfg: IosConfig) -> RuleOutcome:
@@ -254,16 +221,11 @@ def check_ios_local_user_privilege(cfg: IosConfig) -> RuleOutcome:
         return g
     users = find_top(cfg, "username ")
     if not users:
-        return RuleOutcome(
-            UNKNOWN, "Nessun utente locale definito: privilegi non valutabili.")
+        return RuleOutcome(UNKNOWN, "ios.users.absent")
     ev = [_ev(u) for u in users if "privilege 15" in u.lower]
     if ev:
-        return RuleOutcome(
-            WARN,
-            "%d utenti locali con 'privilege 15': ottengono EXEC privilegiato "
-            "senza passare da 'enable'." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Nessun utente locale con privilegio 15 diretto.")
+        return RuleOutcome(WARN, "ios.user_priv.high", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.user_priv.ok")
 
 
 # --- 1.3 Banner ---------------------------------------------------------------
@@ -273,11 +235,10 @@ def _check_banner(cfg: IosConfig, kind: str) -> RuleOutcome:
     if g:
         return g
     if find(cfg, "banner %s" % kind):
-        return RuleOutcome(PASS, "Banner '%s' configurato." % kind)
-    return RuleOutcome(
-        FAIL,
-        "Banner '%s' assente: nessuna avvertenza legale all'accesso." % kind,
-        [_absent("nessun 'banner %s'" % kind)])
+        return RuleOutcome(PASS, "ios.banner.ok", (), {"kind": kind})
+    return RuleOutcome(FAIL, "ios.banner.absent",
+                       [absent("ev.no_directive", what="banner %s" % kind)],
+                       {"kind": kind})
 
 
 def check_ios_banner_login(cfg: IosConfig) -> RuleOutcome:
@@ -300,15 +261,12 @@ def check_ios_enable_secret(cfg: IosConfig) -> RuleOutcome:
     weak = find_top(cfg, "enable password")
     secret = find_top(cfg, "enable secret")
     if weak:
-        return RuleOutcome(
-            FAIL, "'enable password' in uso: cifratura reversibile di tipo 7.",
-            [_ev(l) for l in weak])
+        return RuleOutcome(FAIL, "ios.enable.password",
+                           [_ev(l) for l in weak])
     if secret:
-        return RuleOutcome(PASS, "'enable secret' configurato.")
-    return RuleOutcome(
-        FAIL, "Nessun 'enable secret': l'accesso privilegiato non e' protetto "
-              "da password.",
-        [_absent("nessun 'enable secret'")])
+        return RuleOutcome(PASS, "ios.enable.ok")
+    return RuleOutcome(FAIL, "ios.enable.absent",
+                       [absent("ev.no_directive", what="enable secret")])
 
 
 def check_ios_service_password_encryption(cfg: IosConfig) -> RuleOutcome:
@@ -318,15 +276,13 @@ def check_ios_service_password_encryption(cfg: IosConfig) -> RuleOutcome:
         return g
     if has_top(cfg, "no service password-encryption"):
         return RuleOutcome(
-            FAIL, "'service password-encryption' esplicitamente disabilitato: "
-                  "password in chiaro nella configurazione.",
+            FAIL, "ios.pw_encryption.disabled",
             [_ev(find_top(cfg, "no service password-encryption")[0])])
     if has_top(cfg, "service password-encryption"):
-        return RuleOutcome(PASS, "'service password-encryption' abilitato.")
+        return RuleOutcome(PASS, "ios.pw_encryption.ok")
     return RuleOutcome(
-        FAIL, "'service password-encryption' assente: le password di linea "
-              "restano in chiaro.",
-        [_absent("nessun 'service password-encryption'")])
+        FAIL, "ios.pw_encryption.absent",
+        [absent("ev.no_directive", what="service password-encryption")])
 
 
 def check_ios_username_secret(cfg: IosConfig) -> RuleOutcome:
@@ -336,15 +292,12 @@ def check_ios_username_secret(cfg: IosConfig) -> RuleOutcome:
         return g
     users = find_top(cfg, "username ")
     if not users:
-        return RuleOutcome(
-            UNKNOWN, "Nessun utente locale definito.")
+        return RuleOutcome(UNKNOWN, "ios.users.absent")
     ev = [_ev(u) for u in users if " secret " not in (u.lower + " ")]
     if ev:
-        return RuleOutcome(
-            FAIL,
-            "%d utenti locali con 'password' invece di 'secret': hash "
-            "reversibile o debole." % len(ev), ev)
-    return RuleOutcome(PASS, "Tutti gli utenti locali usano 'secret'.")
+        return RuleOutcome(FAIL, "ios.user_secret.password", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.user_secret.ok")
 
 
 # --- 1.5 SNMP -----------------------------------------------------------------
@@ -363,15 +316,13 @@ def check_ios_snmp_default_community(cfg: IosConfig) -> RuleOutcome:
         return g
     comms = _communities(cfg)
     if not comms:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna community SNMP configurata: nulla da valutare.")
+        return RuleOutcome(UNKNOWN, "ios.snmp.absent")
     ev = [_ev(c) for c in comms
           if len(c.words) > 2 and c.words[2] in _DEFAULT_COMMUNITIES]
     if ev:
-        return RuleOutcome(
-            FAIL, "Community SNMP di default ('public'/'private') in uso: %d."
-                  % len(ev), ev)
-    return RuleOutcome(PASS, "Nessuna community SNMP di default.")
+        return RuleOutcome(FAIL, "ios.snmp_default.found", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.snmp_default.ok")
 
 
 def check_ios_snmp_readwrite(cfg: IosConfig) -> RuleOutcome:
@@ -381,14 +332,11 @@ def check_ios_snmp_readwrite(cfg: IosConfig) -> RuleOutcome:
         return g
     comms = _communities(cfg)
     if not comms:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna community SNMP configurata: nulla da valutare.")
+        return RuleOutcome(UNKNOWN, "ios.snmp.absent")
     ev = [_ev(c) for c in comms if "rw" in c.words[3:]]
     if ev:
-        return RuleOutcome(
-            FAIL, "Community SNMP in scrittura: consentono di riconfigurare "
-                  "l'apparato via SNMP (%d)." % len(ev), ev)
-    return RuleOutcome(PASS, "Nessuna community SNMP in scrittura.")
+        return RuleOutcome(FAIL, "ios.snmp_rw.found", ev, {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.snmp_rw.ok")
 
 
 def check_ios_snmp_community_acl(cfg: IosConfig) -> RuleOutcome:
@@ -398,8 +346,7 @@ def check_ios_snmp_community_acl(cfg: IosConfig) -> RuleOutcome:
         return g
     comms = _communities(cfg)
     if not comms:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna community SNMP configurata: nulla da valutare.")
+        return RuleOutcome(UNKNOWN, "ios.snmp.absent")
     ev = []
     for c in comms:
         # 'snmp-server community <str> [ro|rw] [ipv6 <acl>] [<acl>]'
@@ -407,11 +354,9 @@ def check_ios_snmp_community_acl(cfg: IosConfig) -> RuleOutcome:
         if not tail:
             ev.append(_ev(c))
     if ev:
-        return RuleOutcome(
-            FAIL, "%d community SNMP interrogabili da qualunque host: manca "
-                  "la access-list." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Ogni community SNMP e' ristretta da una access-list.")
+        return RuleOutcome(FAIL, "ios.snmp_acl.missing", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.snmp_acl.ok")
 
 
 def check_ios_snmpv3_privacy(cfg: IosConfig) -> RuleOutcome:
@@ -422,8 +367,7 @@ def check_ios_snmpv3_privacy(cfg: IosConfig) -> RuleOutcome:
     groups = find_top(cfg, "snmp-server group")
     users = find_top(cfg, "snmp-server user")
     if not groups and not users:
-        return RuleOutcome(
-            UNKNOWN, "Nessun gruppo o utente SNMPv3 configurato.")
+        return RuleOutcome(UNKNOWN, "ios.snmpv3.absent")
     ev: List[Evidence] = []
     for grp in groups:
         if "v3" in grp.words and "priv" not in grp.words:
@@ -440,13 +384,10 @@ def check_ios_snmpv3_privacy(cfg: IosConfig) -> RuleOutcome:
         bits = _int_arg(usr, usr.words.index("aes") + 1)
         if bits is None or bits < _MIN_SNMP_AES_BITS:
             ev.append(_ev(usr))
+    params = {"count": len(ev), "bits": _MIN_SNMP_AES_BITS}
     if ev:
-        return RuleOutcome(
-            FAIL, "SNMPv3 senza cifratura o con cifratura sotto AES-%d (%d "
-                  "riscontri)." % (_MIN_SNMP_AES_BITS, len(ev)), ev)
-    return RuleOutcome(
-        PASS, "SNMPv3 configurato con autenticazione e cifratura AES-%d o "
-              "superiore." % _MIN_SNMP_AES_BITS)
+        return RuleOutcome(FAIL, "ios.snmpv3.weak", ev, params)
+    return RuleOutcome(PASS, "ios.snmpv3.ok", (), params)
 
 
 # --- 2.1 Servizi globali e SSH ------------------------------------------------
@@ -458,15 +399,12 @@ def check_ios_ssh_version(cfg: IosConfig) -> RuleOutcome:
         return g
     rec = first_top(cfg, "ip ssh version")
     if rec is None:
-        return RuleOutcome(
-            WARN, "'ip ssh version' non impostato: SSH opera in modalita' "
-                  "compatibile e accetta anche la versione 1.",
-            [_absent("nessun 'ip ssh version 2'")])
+        return RuleOutcome(WARN, "ios.ssh_version.not_set",
+                           [absent("ev.no_directive",
+                                   what="ip ssh version 2")])
     if rec.words[-1] == "2":
-        return RuleOutcome(PASS, "SSH forzato alla versione 2.")
-    return RuleOutcome(
-        FAIL, "SSH versione 1 ammessa: protocollo con vulnerabilita' note.",
-        [_ev(rec)])
+        return RuleOutcome(PASS, "ios.ssh_version.ok")
+    return RuleOutcome(FAIL, "ios.ssh_version.v1", [_ev(rec)])
 
 
 def check_ios_ssh_timeout(cfg: IosConfig) -> RuleOutcome:
@@ -476,19 +414,17 @@ def check_ios_ssh_timeout(cfg: IosConfig) -> RuleOutcome:
         return g
     rec = first_top(cfg, "ip ssh time-out", "ip ssh timeout")
     if rec is None:
-        return RuleOutcome(
-            WARN, "'ip ssh time-out' non impostato: vale il default di "
-                  "piattaforma (120 s).",
-            [_absent("nessun 'ip ssh time-out'")])
+        return RuleOutcome(WARN, "ios.ssh_timeout.not_set",
+                           [absent("ev.no_directive",
+                                   what="ip ssh time-out %d"
+                                        % _MAX_SSH_TIMEOUT_S)])
     val = _int_arg(rec, -1)
     if val is None:
-        return RuleOutcome(WARN, "Valore di 'ip ssh time-out' non "
-                                 "interpretabile.", [_ev(rec)])
+        return RuleOutcome(WARN, "ios.ssh_timeout.unreadable", [_ev(rec)])
     if val > _MAX_SSH_TIMEOUT_S:
-        return RuleOutcome(
-            FAIL, "Timeout di login SSH troppo alto (%d s, massimo consigliato "
-                  "%d)." % (val, _MAX_SSH_TIMEOUT_S), [_ev(rec)])
-    return RuleOutcome(PASS, "Timeout di login SSH a %d secondi." % val)
+        return RuleOutcome(FAIL, "ios.ssh_timeout.too_high", [_ev(rec)],
+                           {"value": val, "max": _MAX_SSH_TIMEOUT_S})
+    return RuleOutcome(PASS, "ios.ssh_timeout.ok", (), {"value": val})
 
 
 def check_ios_ssh_auth_retries(cfg: IosConfig) -> RuleOutcome:
@@ -498,21 +434,17 @@ def check_ios_ssh_auth_retries(cfg: IosConfig) -> RuleOutcome:
         return g
     rec = first_top(cfg, "ip ssh authentication-retries")
     if rec is None:
-        return RuleOutcome(
-            WARN, "'ip ssh authentication-retries' non impostato: vale il "
-                  "default di piattaforma (3).",
-            [_absent("nessun 'ip ssh authentication-retries'")])
+        return RuleOutcome(WARN, "ios.ssh_retries.not_set",
+                           [absent("ev.no_directive",
+                                   what="ip ssh authentication-retries %d"
+                                        % _MAX_SSH_RETRIES)])
     val = _int_arg(rec, -1)
     if val is None:
-        return RuleOutcome(WARN, "Valore di 'ip ssh authentication-retries' "
-                                 "non interpretabile.", [_ev(rec)])
+        return RuleOutcome(WARN, "ios.ssh_retries.unreadable", [_ev(rec)])
     if val > _MAX_SSH_RETRIES:
-        return RuleOutcome(
-            FAIL, "Troppi tentativi di autenticazione per sessione SSH (%d, "
-                  "massimo consigliato %d)." % (val, _MAX_SSH_RETRIES),
-            [_ev(rec)])
-    return RuleOutcome(
-        PASS, "Tentativi di autenticazione SSH limitati a %d." % val)
+        return RuleOutcome(FAIL, "ios.ssh_retries.too_high", [_ev(rec)],
+                           {"value": val, "max": _MAX_SSH_RETRIES})
+    return RuleOutcome(PASS, "ios.ssh_retries.ok", (), {"value": val})
 
 
 def check_ios_domain_name(cfg: IosConfig) -> RuleOutcome:
@@ -522,55 +454,49 @@ def check_ios_domain_name(cfg: IosConfig) -> RuleOutcome:
         return g
     rec = first_top(cfg, "ip domain-name", "ip domain name")
     if rec is None:
-        return RuleOutcome(
-            FAIL, "'ip domain-name' assente: senza dominio non e' possibile "
-                  "generare la coppia di chiavi RSA per SSH.",
-            [_absent("nessun 'ip domain-name'")])
-    return RuleOutcome(PASS, "Dominio configurato: %s." % rec.words[-1])
+        return RuleOutcome(FAIL, "ios.domain.absent",
+                           [absent("ev.no_directive", what="ip domain-name")])
+    return RuleOutcome(PASS, "ios.domain.ok", (), {"domain": rec.words[-1]})
 
 
-def _check_service_off(cfg: IosConfig, service: str, why: str) -> RuleOutcome:
+def _check_service_off(cfg: IosConfig, service: str,
+                       key: str) -> RuleOutcome:
     """Servizio che deve risultare disattivato ('no <service>')."""
     g = _guard(cfg)
     if g:
         return g
     if has_top(cfg, "no %s" % service):
-        return RuleOutcome(PASS, "'%s' disabilitato." % service)
+        return RuleOutcome(PASS, "ios.service.ok", (), {"service": service})
     enabled = find_top(cfg, service)
     if enabled:
-        return RuleOutcome(FAIL, why, [_ev(enabled[0])])
+        # Solo l'esito negativo ha una chiave per servizio: il rischio di un CDP
+        # acceso non e' quello di un PAD acceso, e dirlo in modo generico
+        # ("servizio attivo") toglierebbe al report la sola parte utile.
+        return RuleOutcome(FAIL, key + ".enabled", [_ev(enabled[0])],
+                           {"service": service})
     # IOS non stampa i default: l'assenza della riga 'no ...' significa che il
     # servizio e' attivo col default di fabbrica, ma la configurazione non lo
     # afferma. WARN, non FAIL: il verdetto certo richiede 'show running-config
     # all', che qui non c'e'.
     return RuleOutcome(
-        WARN,
-        "Nessun 'no %s' in configurazione: il servizio resta al default di "
-        "fabbrica (attivo) e non e' disattivato esplicitamente." % service,
-        [_absent("nessun 'no %s'" % service)])
+        WARN, "ios.service.not_disabled",
+        [absent("ev.no_directive", what="no %s" % service)],
+        {"service": service})
 
 
 def check_ios_cdp(cfg: IosConfig) -> RuleOutcome:
     """CIS 2.1.2 — 'no cdp run'."""
-    return _check_service_off(
-        cfg, "cdp run",
-        "CDP attivo: annuncia modello, versione IOS e identita' dell'apparato "
-        "a chiunque sia sul segmento.")
+    return _check_service_off(cfg, "cdp run", "ios.cdp")
 
 
 def check_ios_service_dhcp(cfg: IosConfig) -> RuleOutcome:
     """CIS 2.1.4 — 'no service dhcp'."""
-    return _check_service_off(
-        cfg, "service dhcp",
-        "Servizio DHCP attivo sull'apparato di rete: superficie di attacco "
-        "inutile se l'indirizzamento e' erogato altrove.")
+    return _check_service_off(cfg, "service dhcp", "ios.dhcp")
 
 
 def check_ios_service_pad(cfg: IosConfig) -> RuleOutcome:
     """CIS 2.1.7 — 'no service pad'."""
-    return _check_service_off(
-        cfg, "service pad",
-        "Servizio PAD (X.25) attivo: espone il set di comandi PAD.")
+    return _check_service_off(cfg, "service pad", "ios.pad")
 
 
 def check_ios_tcp_keepalives(cfg: IosConfig) -> RuleOutcome:
@@ -582,14 +508,12 @@ def check_ios_tcp_keepalives(cfg: IosConfig) -> RuleOutcome:
                if not has_top(cfg, "service tcp-keepalives-%s" % d)]
     if missing:
         return RuleOutcome(
-            FAIL,
-            "Keepalive TCP mancanti (%s): le sessioni interrotte restano "
-            "aperte e sono dirottabili."
-            % ", ".join("tcp-keepalives-%s" % d for d in missing),
-            [_absent("nessun 'service tcp-keepalives-%s'" % d)
-             for d in missing])
-    return RuleOutcome(
-        PASS, "Keepalive TCP attivi in ingresso e in uscita.")
+            FAIL, "ios.keepalive.missing",
+            [absent("ev.no_directive", what="service tcp-keepalives-%s" % d)
+             for d in missing],
+            {"directives": ", ".join("tcp-keepalives-%s" % d
+                                     for d in missing)})
+    return RuleOutcome(PASS, "ios.keepalive.ok")
 
 
 # --- 2.2 Logging --------------------------------------------------------------
@@ -605,13 +529,10 @@ def check_ios_logging_host(cfg: IosConfig) -> RuleOutcome:
     legacy = [l for l in find_top(cfg, "logging ")
               if len(l.words) == 2 and l.words[1][:1].isdigit()]
     if hosts or legacy:
-        return RuleOutcome(
-            PASS, "Inoltro dei log verso %d collector remoto/i."
-                  % len(set(hosts + legacy)))
-    return RuleOutcome(
-        FAIL, "Nessun 'logging host': i log restano solo sull'apparato e si "
-              "perdono al riavvio.",
-        [_absent("nessun 'logging host'")])
+        return RuleOutcome(PASS, "ios.log_host.ok", (),
+                           {"count": len(set(hosts + legacy))})
+    return RuleOutcome(FAIL, "ios.log_host.absent",
+                       [absent("ev.no_directive", what="logging host")])
 
 
 def check_ios_logging_buffered(cfg: IosConfig) -> RuleOutcome:
@@ -621,23 +542,19 @@ def check_ios_logging_buffered(cfg: IosConfig) -> RuleOutcome:
         return g
     rec = first_top(cfg, "logging buffered")
     if rec is None:
-        return RuleOutcome(
-            FAIL, "Nessun 'logging buffered': senza buffer locale non resta "
-                  "traccia consultabile dall'apparato.",
-            [_absent("nessun 'logging buffered'")])
+        return RuleOutcome(FAIL, "ios.log_buffer.absent",
+                           [absent("ev.no_directive",
+                                   what="logging buffered %d"
+                                        % _MIN_LOG_BUFFER)])
     size = next((v for v in (_int_arg(rec, i)
                              for i in range(2, len(rec.words)))
                  if v is not None), None)
     if size is None:
-        return RuleOutcome(
-            WARN, "'logging buffered' senza dimensione esplicita: vale il "
-                  "default di piattaforma.", [_ev(rec)])
+        return RuleOutcome(WARN, "ios.log_buffer.no_size", [_ev(rec)])
     if size < _MIN_LOG_BUFFER:
-        return RuleOutcome(
-            WARN, "Buffer di log piccolo (%d byte, consigliato %d): gli eventi "
-                  "piu' vecchi vengono sovrascritti in fretta."
-                  % (size, _MIN_LOG_BUFFER), [_ev(rec)])
-    return RuleOutcome(PASS, "Buffer di log di %d byte." % size)
+        return RuleOutcome(WARN, "ios.log_buffer.small", [_ev(rec)],
+                           {"size": size, "min": _MIN_LOG_BUFFER})
+    return RuleOutcome(PASS, "ios.log_buffer.ok", (), {"size": size})
 
 
 def check_ios_logging_console(cfg: IosConfig) -> RuleOutcome:
@@ -647,18 +564,14 @@ def check_ios_logging_console(cfg: IosConfig) -> RuleOutcome:
         return g
     rec = first_top(cfg, "logging console")
     if rec is None:
-        return RuleOutcome(
-            WARN, "'logging console' non limitato: il default invia OGNI "
-                  "messaggio alla console, che e' lenta e li perde in caso "
-                  "di picco.",
-            [_absent("nessun 'logging console critical'")])
+        return RuleOutcome(WARN, "ios.log_console.not_set",
+                           [absent("ev.no_directive",
+                                   what="logging console critical")])
     if rec.words[-1] in ("critical", "2", "emergencies", "0", "alerts", "1"):
-        return RuleOutcome(
-            PASS, "Log su console limitati a '%s'." % rec.words[-1])
-    return RuleOutcome(
-        WARN, "Livello di log su console troppo verboso ('%s'): in caso di "
-              "picco la coda si riempie e i messaggi vengono scartati."
-              % rec.words[-1], [_ev(rec)])
+        return RuleOutcome(PASS, "ios.log_console.ok", (),
+                           {"level": rec.words[-1]})
+    return RuleOutcome(WARN, "ios.log_console.verbose", [_ev(rec)],
+                       {"level": rec.words[-1]})
 
 
 def check_ios_logging_trap(cfg: IosConfig) -> RuleOutcome:
@@ -668,18 +581,14 @@ def check_ios_logging_trap(cfg: IosConfig) -> RuleOutcome:
         return g
     rec = first_top(cfg, "logging trap")
     if rec is None:
-        return RuleOutcome(
-            WARN, "'logging trap' non impostato: la severita' inviata al "
-                  "syslog remoto resta quella di default.",
-            [_absent("nessun 'logging trap informational'")])
+        return RuleOutcome(WARN, "ios.log_trap.not_set",
+                           [absent("ev.no_directive",
+                                   what="logging trap informational")])
     level = rec.words[-1]
-    ok = {"informational", "6", "debugging", "7"}
-    if level in ok:
-        return RuleOutcome(
-            PASS, "Severita' verso syslog remoto a '%s'." % level)
-    return RuleOutcome(
-        FAIL, "Severita' verso syslog remoto troppo restrittiva ('%s'): gli "
-              "eventi informativi non vengono inoltrati." % level, [_ev(rec)])
+    if level in ("informational", "6", "debugging", "7"):
+        return RuleOutcome(PASS, "ios.log_trap.ok", (), {"level": level})
+    return RuleOutcome(FAIL, "ios.log_trap.too_strict", [_ev(rec)],
+                       {"level": level})
 
 
 def check_ios_service_timestamps(cfg: IosConfig) -> RuleOutcome:
@@ -689,17 +598,14 @@ def check_ios_service_timestamps(cfg: IosConfig) -> RuleOutcome:
         return g
     stamps = find_top(cfg, "service timestamps")
     if not stamps:
-        return RuleOutcome(
-            FAIL, "Nessun 'service timestamps': i messaggi non sono "
-                  "correlabili con quelli degli altri apparati.",
-            [_absent("nessun 'service timestamps'")])
+        return RuleOutcome(FAIL, "ios.timestamps.absent",
+                           [absent("ev.no_directive",
+                                   what="service timestamps log datetime")])
     bad = [l for l in stamps if "datetime" not in l.words]
     if bad:
-        return RuleOutcome(
-            WARN, "Timestamp basati sull'uptime invece che sulla data: "
-                  "inutilizzabili per correlare tra apparati.",
-            [_ev(l) for l in bad])
-    return RuleOutcome(PASS, "Timestamp con data e ora su log e debug.")
+        return RuleOutcome(WARN, "ios.timestamps.uptime",
+                           [_ev(l) for l in bad])
+    return RuleOutcome(PASS, "ios.timestamps.ok")
 
 
 def check_ios_logging_source_interface(cfg: IosConfig) -> RuleOutcome:
@@ -708,12 +614,10 @@ def check_ios_logging_source_interface(cfg: IosConfig) -> RuleOutcome:
     if g:
         return g
     if has_top(cfg, "logging source-interface"):
-        return RuleOutcome(
-            PASS, "Interfaccia sorgente dei log fissata.")
-    return RuleOutcome(
-        WARN, "Nessuna 'logging source-interface': l'IP sorgente dei messaggi "
-              "cambia con la rotta e complica filtri e correlazione.",
-        [_absent("nessun 'logging source-interface'")])
+        return RuleOutcome(PASS, "ios.log_source.ok")
+    return RuleOutcome(WARN, "ios.log_source.absent",
+                       [absent("ev.no_directive",
+                               what="logging source-interface")])
 
 
 def check_ios_login_logging(cfg: IosConfig) -> RuleOutcome:
@@ -725,12 +629,11 @@ def check_ios_login_logging(cfg: IosConfig) -> RuleOutcome:
                if not has_top(cfg, "login %s log" % d)]
     if missing:
         return RuleOutcome(
-            FAIL,
-            "Accessi non registrati (%s): impossibile ricostruire chi e' "
-            "entrato e quando." % ", ".join("login %s log" % d for d in missing),
-            [_absent("nessun 'login %s log'" % d) for d in missing])
-    return RuleOutcome(
-        PASS, "Accessi riusciti e falliti registrati entrambi.")
+            FAIL, "ios.login_log.missing",
+            [absent("ev.no_directive", what="login %s log" % d)
+             for d in missing],
+            {"directives": ", ".join("login %s log" % d for d in missing)})
+    return RuleOutcome(PASS, "ios.login_log.ok")
 
 
 # --- 2.3 NTP ------------------------------------------------------------------
@@ -742,16 +645,11 @@ def check_ios_ntp_servers(cfg: IosConfig) -> RuleOutcome:
         return g
     servers = find_top(cfg, "ntp server")
     if not servers:
-        return RuleOutcome(
-            FAIL, "Nessun 'ntp server': senza orologio sincronizzato i log e "
-                  "la validita' dei certificati non sono affidabili.",
-            [_absent("nessun 'ntp server'")])
+        return RuleOutcome(FAIL, "ios.ntp.absent",
+                           [absent("ev.no_directive", what="ntp server")])
     if len(servers) < 2:
-        return RuleOutcome(
-            WARN, "Un solo server NTP configurato: nessuna ridondanza in caso "
-                  "di guasto della sorgente oraria.",
-            [_ev(servers[0])])
-    return RuleOutcome(PASS, "%d server NTP configurati." % len(servers))
+        return RuleOutcome(WARN, "ios.ntp.single", [_ev(servers[0])])
+    return RuleOutcome(PASS, "ios.ntp.ok", (), {"count": len(servers)})
 
 
 def check_ios_ntp_authentication(cfg: IosConfig) -> RuleOutcome:
@@ -760,29 +658,22 @@ def check_ios_ntp_authentication(cfg: IosConfig) -> RuleOutcome:
     if g:
         return g
     if not find_top(cfg, "ntp server"):
-        return RuleOutcome(
-            UNKNOWN, "Nessun server NTP configurato: autenticazione NTP non "
-                     "applicabile.")
+        return RuleOutcome(UNKNOWN, "ios.ntp_auth.not_applicable")
     ev: List[Evidence] = []
     if not has_top(cfg, "ntp authenticate"):
-        ev.append(_absent("nessun 'ntp authenticate'"))
+        ev.append(absent("ev.no_directive", what="ntp authenticate"))
     if not has_top(cfg, "ntp trusted-key"):
-        ev.append(_absent("nessuna 'ntp trusted-key'"))
+        ev.append(absent("ev.no_directive", what="ntp trusted-key"))
     if ev:
-        return RuleOutcome(
-            FAIL, "NTP non autenticato: l'apparato accetta l'ora da qualunque "
-                  "sorgente che si dichiari server.", ev)
-    return RuleOutcome(PASS, "NTP autenticato con chiave fidata.")
+        return RuleOutcome(FAIL, "ios.ntp_auth.missing", ev)
+    return RuleOutcome(PASS, "ios.ntp_auth.ok")
 
 
 # --- 3.1 Piano dati -----------------------------------------------------------
 
 def check_ios_source_route(cfg: IosConfig) -> RuleOutcome:
     """CIS 3.1.1 — 'no ip source-route'."""
-    return _check_service_off(
-        cfg, "ip source-route",
-        "Source routing attivo: consente al mittente di imporre il percorso "
-        "dei pacchetti, tecnica usata per aggirare i controlli di rotta.")
+    return _check_service_off(cfg, "ip source-route", "ios.source_route")
 
 
 def check_ios_proxy_arp(cfg: IosConfig) -> RuleOutcome:
@@ -793,19 +684,13 @@ def check_ios_proxy_arp(cfg: IosConfig) -> RuleOutcome:
     ifaces = [(h, k) for h, k in blocks_matching(cfg, "interface")
               if child(k, "ip address") is not None]
     if not ifaces:
-        return RuleOutcome(
-            UNKNOWN, "Nessuna interfaccia con indirizzo IP: proxy ARP non "
-                     "valutabile.")
-    ev = [_absent("nessun 'no ip proxy-arp' (default: attivo)", header)
+        return RuleOutcome(UNKNOWN, "ios.proxy_arp.no_ip_iface")
+    ev = [absent("ev.not_set_default_on", header, what="no ip proxy-arp")
           for header, kids in ifaces if child(kids, "no ip proxy-arp") is None]
     if ev:
-        return RuleOutcome(
-            WARN,
-            "Proxy ARP non disabilitato su %d interfaccia/e: estende il "
-            "dominio di broadcast oltre il segmento e indebolisce la "
-            "segmentazione." % len(ev), ev)
-    return RuleOutcome(
-        PASS, "Proxy ARP disabilitato su tutte le interfacce indirizzate.")
+        return RuleOutcome(WARN, "ios.proxy_arp.enabled", ev,
+                           {"count": len(ev)})
+    return RuleOutcome(PASS, "ios.proxy_arp.ok")
 
 
 def check_ios_tunnel_interfaces(cfg: IosConfig) -> RuleOutcome:
@@ -813,11 +698,10 @@ def check_ios_tunnel_interfaces(cfg: IosConfig) -> RuleOutcome:
     g = _guard(cfg)
     if g:
         return g
-    tunnels = [(h, k) for h, k in blocks_matching(cfg, "interface tunnel")]
+    tunnels = blocks_matching(cfg, "interface tunnel")
     if not tunnels:
-        return RuleOutcome(PASS, "Nessuna interfaccia tunnel configurata.")
+        return RuleOutcome(PASS, "ios.tunnel.none")
     return RuleOutcome(
-        WARN,
-        "%d interfacce tunnel presenti: da confermare come previste, sono un "
-        "canale di uscita che aggira i controlli perimetrali." % len(tunnels),
-        [Evidence(0, header, "interface") for header, _ in tunnels])
+        WARN, "ios.tunnel.present",
+        [Evidence(0, header, "interface") for header, _ in tunnels],
+        {"count": len(tunnels)})
