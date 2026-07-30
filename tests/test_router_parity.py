@@ -150,6 +150,13 @@ class TestFullParity(unittest.TestCase):
         # Port-channel: stato vivo da SNMP accanto ai membri da configurazione.
         # Campi aggiunti, nessuno rimosso.
         ("get", "/api/portchannels"),
+        # Filtro telemetria: query param ``exclude_telemetry`` opzionale con
+        # default False. Aggiunta additiva — omettendolo il comportamento è
+        # quello storico — ma i parametri dell'operazione cambiano.
+        # Copertura: test_observability_api.TestTopTalkers
+        # .test_telemetry_filter_excludes_collector_ports.
+        ("get", "/api/observability/top"),
+        ("get", "/api/observability/flowgraph"),
     )
 
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")

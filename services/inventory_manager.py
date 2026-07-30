@@ -154,6 +154,95 @@ def get_all_groups():
 def save_groups(groups_dict):
     safe_json_write(get_groups_json(), groups_dict)
 
+# --- Lettura tollerante di un CSV di inventario ---
+# Vive qui e non nel router perché la usano due chiamanti: l'import CSV di
+# central (routers/inventory.py) e il salvataggio dell'inventario remoto
+# dell'agente di sede (services/site_agent.py), che gira senza FastAPI.
+
+# Intestazioni accettate per ciascun campo. Un CSV di inventario viene quasi
+# sempre da un foglio di calcolo passato di mano in mano, e arriva con
+# maiuscole diverse, underscore al posto degli spazi o le colonne tradotte.
+# Rifiutarlo per questo significa che l'utente deve indovinare la grafia esatta
+# leggendo un riquadro di esempio: e' il motivo per cui l'import "non funziona".
+_CSV_ALIASES: Dict[str, str] = {
+    "ip": "IP", "indirizzo": "IP", "indirizzoip": "IP", "host": "IP",
+    "mgmtip": "IP", "ipaddress": "IP",
+    "username": "Username", "user": "Username", "utente": "Username",
+    "login": "Username",
+    "password": "Password", "pass": "Password", "pwd": "Password",
+    "enablesecret": "Enable Secret", "enable": "Enable Secret",
+    "secret": "Enable Secret", "enablepassword": "Enable Secret",
+    "hostname": "Hostname", "nome": "Hostname", "name": "Hostname",
+    "device": "Hostname", "nomeapparato": "Hostname",
+    "group": "Group", "gruppo": "Group", "sede": "Group", "site": "Group",
+    "tenant": "Group",
+    "vendor": "Vendor", "marca": "Vendor", "produttore": "Vendor",
+    "brand": "Vendor",
+    # Colonne canoniche restanti: senza questi alias un round-trip
+    # lettura → scrittura le perdeva silenziosamente.
+    "profile": "Profile", "profilo": "Profile",
+    "sshport": "SSH Port", "porta": "SSH Port", "portassh": "SSH Port",
+    "transports": "Transports", "trasporti": "Transports",
+    "snmpcommunity": "SNMP Community", "communitysnmp": "SNMP Community",
+}
+
+
+def _canonical_header(name: str) -> "str | None":
+    """Nome canonico della colonna, o ``None`` se non riconosciuta."""
+    key = "".join(ch for ch in (name or "").lower() if ch.isalnum())
+    return _CSV_ALIASES.get(key)
+
+
+def _read_inventory_csv(raw: str):
+    """Righe del CSV come dizionari a chiavi canoniche.
+
+    Tollerante su tre cose che fanno fallire OGNI riga senza dire perche':
+
+    - il BOM che Excel scrive in testa al file, che rinomina la prima colonna
+      in ``\\ufeffIP`` e la rende irriconoscibile;
+    - il separatore, che nei fogli di calcolo con impostazioni italiane e' ``;``
+      e non ``,`` — con la virgola l'intero file diventa una colonna sola;
+    - la grafia delle intestazioni (vedi ``_CSV_ALIASES``).
+
+    Solleva ``ValueError`` con un messaggio azionabile quando manca la colonna
+    IP, che e' l'unica davvero indispensabile.
+    """
+    text = (raw or "").lstrip("﻿").strip()
+    if not text:
+        raise ValueError("File CSV vuoto.")
+
+    header_line = text.splitlines()[0]
+    # Sniffer di csv: comodo ma sbaglia sui file a colonna singola. Qui si
+    # sceglie il separatore piu' presente nell'intestazione, che e' la riga in
+    # cui i separatori ci sono per definizione.
+    delimiter = max((",", ";", "\t", "|"), key=header_line.count)
+    if header_line.count(delimiter) == 0:
+        delimiter = ","
+
+    reader = csv.reader(text.splitlines(), delimiter=delimiter)
+    rows = list(reader)
+    if not rows:
+        raise ValueError("File CSV vuoto.")
+
+    header = [_canonical_header(h) for h in rows[0]]
+    if "IP" not in header:
+        raise ValueError(
+            "Colonna IP non trovata. Intestazioni lette: %s. "
+            "La prima riga deve contenere i nomi delle colonne, "
+            "almeno 'IP'." % (", ".join(h.strip() for h in rows[0]) or "(nessuna)"))
+
+    out = []
+    for line_no, values in enumerate(rows[1:], start=2):
+        if not any((v or "").strip() for v in values):
+            continue                      # riga vuota: non e' un errore
+        record = {}
+        for col, value in zip(header, values):
+            if col:
+                record[col] = (value or "").strip()
+        out.append((line_no, record))
+    return out
+
+
 def safe_write_hosts_csv(devices):
     invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
     hosts_csv = get_hosts_csv()

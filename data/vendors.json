@@ -3,6 +3,10 @@
         "euvd_term": "cisco",
         "driver": "cisco_ios"
     },
+    "cisco_cbs": {
+        "euvd_term": "cisco",
+        "driver": "cisco_s300"
+    },
     "hpe": {
         "euvd_term": "hewlett packard enterprise",
         "driver": "hp_procurve"
@@ -30,5 +34,9 @@
     "cisco_9800": {
         "euvd_term": "cisco",
         "driver": "cisco_9800"
+    },
+    "ubuntu": {
+        "euvd_term": "ubuntu",
+        "driver": null
     }
 }

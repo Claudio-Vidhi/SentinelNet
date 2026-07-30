@@ -141,10 +141,25 @@ python3 scripts/vm_agent_test_helper.py setup \
 mkdir -p agent-data
 
 cat << 'EOF' > agent-data/network_hosts.csv
-IP,Hostname,Vendor,Model,Driver,Transport,Port,AuthGroup,Username,Password,Secret,SNMP_Community,SNMP_Version,Tenant,Group,Site,Category,Status,Notes
-192.168.56.10,sw-milan-01,cisco,C2960,cisco_ios,ssh,22,,admin,adminpw,,public,2c,Milan,Milan,milan-vm,Switch,active,VM lab device
+IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Site,SSH Port,Transports,SNMP Community
+192.0.2.10,cisco,custom,admin,,,Tenant_Milano,switch-01,milan-vm,22,,
 EOF
 ```
+
+These twelve columns are the canonical schema — the same ones
+`inventory_manager.safe_write_hosts_csv` writes. Any other column is dropped
+the first time the inventory is rewritten, so a `Tenant` column silently moves
+the device to the `Generale` group: the tenant is `Group`.
+
+Only `IP` is required. `Site` defaults to `central`, `SSH Port` to `22`.
+`Transports` is a JSON map (`{"ssh": 22}`) — leave it empty for plain SSH.
+
+`Password`, `Enable Secret` and `SNMP Community` must be **Fernet ciphertext
+produced by this agent's own key**. A plaintext value is not an error: it is
+ignored, and the agent falls back to the default credentials. Set real
+credentials through the agent's own inventory, not by pasting them into the
+file. The remote editor in the dashboard cannot encrypt them either — central
+does not hold the agent's key.
 
 ### 3.4 Verify connectivity before starting
 

@@ -215,6 +215,13 @@ def agent_save_inventory_ep(site_id: str, payload: AgentInventorySaveSchema, cur
         raise HTTPException(status_code=404, detail="Sede non trovata.")
     if site.get("mode") != "agent":
         raise HTTPException(status_code=400, detail="Gestione agente disponibile solo per sedi in modalità agent.")
+    # Il CSV lo scriverà l'agente, ma se è illeggibile va detto adesso: dopo
+    # l'accodamento l'errore arriverebbe solo al polling successivo, dentro il
+    # risultato di un job, dove nessuno lo cerca.
+    try:
+        inventory_manager._read_inventory_csv(payload.content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     cmd = f"_agent_save_inventory {payload.content}"
     job = site_manager.enqueue_job(site_id, "127.0.0.1", cmd, requested_by=current_user.get("sub"))
     log_audit(f"Salvataggio inventario agent accodato per sede '{site_id}' da '{current_user.get('sub')}' (job {job['id']}).")

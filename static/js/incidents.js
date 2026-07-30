@@ -361,6 +361,14 @@
             if (!res || !res.ok) { box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incErrLoad')}</div>`; return; }
             const data = await res.json();
             _incidents = data.incidents || [];
+            // Il pannello di destra viene scritto solo da openIncident(): senza
+            // questo, cambiando filtro la lista si svuota ma il dettaglio resta
+            // su un incidente che non e' piu' in elenco.
+            if (_selectedId !== null && !_incidents.some(i => i.id === _selectedId)) {
+                _selectedId = null;
+                const detail = document.getElementById('incidentDetail');
+                if (detail) detail.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:12px;">${L('incSelectOne')}</div>`;
+            }
             renderIncidentsList();
         } catch (e) {
             box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incErrLoad')}</div>`;
@@ -614,7 +622,9 @@
                 return;
             }
             await loadIncidentsList();
-            await openIncident(id);
+            // Con il filtro su "Nuovi", prendere in carico un incidente lo toglie
+            // dalla lista: riaprirlo comunque rimetterebbe il dettaglio stantio.
+            if (_incidents.some(i => i.id === id)) await openIncident(id);
         } catch (e) {}
     }
 

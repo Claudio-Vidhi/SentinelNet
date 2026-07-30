@@ -272,7 +272,8 @@ class Agent:
                     with open(hosts_csv, "r", encoding="utf-8") as f:
                         content = f.read()
                 else:
-                    content = "IP,Vendor,Hostname,Tenant\n"
+                    content = ("IP,Vendor,Profile,Username,Password,Enable Secret,"
+                               "Group,Hostname,Site,SSH Port,Transports,SNMP Community\n")
                 return {"status": "done", "result": content}
             except Exception as e:
                 return {"status": "error", "result": f"Errore lettura inventario locale: {e}"}
@@ -280,11 +281,23 @@ class Agent:
         elif action == "_agent_save_inventory":
             try:
                 from services import inventory_manager
-                hosts_csv = inventory_manager.get_hosts_csv()
-                os.makedirs(os.path.dirname(hosts_csv), exist_ok=True)
-                with open(hosts_csv, "w", encoding="utf-8") as f:
-                    f.write(arg)
-                return {"status": "done", "result": "Inventario locale salvato con successo."}
+                # Scrivere `arg` verbatim significava accettare qualunque cosa:
+                # una colonna 'Tenant' (che il parser chiama 'Group') mandava
+                # ogni apparato nel gruppo sbagliato, un CSV con il punto e
+                # virgola o il BOM di Excel faceva esplodere get_all_devices(),
+                # e un comando senza argomento azzerava il file. Si passa dal
+                # lettore tollerante e si riscrive nelle colonne canoniche.
+                # ponytail: Password/Enable Secret/SNMP Community restano come
+                # arrivano. Cifrarle richiederebbe la chiave Fernet dell'agente,
+                # che la centrale non ha; un valore in chiaro viene ignorato da
+                # get_device_credentials. Documentato in docs/remote-sites.md.
+                rows = [rec for _, rec in inventory_manager._read_inventory_csv(arg)]
+                os.makedirs(os.path.dirname(inventory_manager.get_hosts_csv()), exist_ok=True)
+                inventory_manager.safe_write_hosts_csv(rows)
+                return {"status": "done",
+                        "result": f"Inventario locale salvato con successo ({len(rows)} apparati)."}
+            except ValueError as e:
+                return {"status": "error", "result": f"CSV non valido: {e}"}
             except Exception as e:
                 return {"status": "error", "result": f"Errore salvataggio inventario: {e}"}
 
