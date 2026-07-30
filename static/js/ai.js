@@ -99,10 +99,11 @@
             box.innerHTML = `<div class="ai-conv-empty">${escapeHtml(i18n[currentLang].msgAiNoConversations || 'Nessuna conversazione salvata.')}</div>`;
             return;
         }
+        const untitled = i18n[currentLang].lblAiUntitledChat || 'Nuova conversazione';
         box.innerHTML = aiConversations.map(c => `
             <div class="ai-conv-item${c.id === aiConvId ? ' active' : ''}" onclick="openAiConversation(${Number(c.id)})">
                 <i class="fa-regular fa-comment" style="font-size:11px;"></i>
-                <span class="ai-conv-title" title="${escapeHtml(jsStr(c.title))}">${escapeHtml(jsStr(c.title))}</span>
+                <span class="ai-conv-title" title="${escapeHtml(jsStr(c.title || untitled))}">${escapeHtml(jsStr(c.title || untitled))}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${escapeHtml(fmtAiConvTime(c.updated_ts))}</span>
                 <button class="ai-conv-del" onclick="event.stopPropagation(); deleteAiConversation(${Number(c.id)})"
                         title="${escapeHtml(i18n[currentLang].btnAiDeleteChat || 'Elimina conversazione')}">
@@ -114,7 +115,9 @@
     function setAiChatTitle(title) {
         aiConvTitle = title || '';
         const el = document.getElementById('aiChatTitle');
-        if (el) el.textContent = aiConvTitle || (i18n[currentLang].titleAiChat || 'Conversazione');
+        if (el) el.textContent = aiConvTitle
+            || (aiConvId !== null ? (i18n[currentLang].lblAiUntitledChat || 'Nuova conversazione')
+                                  : (i18n[currentLang].titleAiChat || 'Conversazione'));
     }
 
     async function loadAiConversations() {
@@ -122,6 +125,10 @@
             const res = await apiFetch('/api/ai/conversations');
             if (!res || !res.ok) return;
             aiConversations = (await res.json()).conversations || [];
+            // Il titolo di una conversazione creata vuota lo deriva il server
+            // dal primo messaggio: qui l'intestazione si riallinea.
+            const open = aiConversations.find(c => c.id === aiConvId);
+            if (open) setAiChatTitle(open.title);
             renderAiConvList();
         } catch (e) { /* silenzioso: la chat resta usabile senza cronologia */ }
     }
@@ -141,7 +148,23 @@
         } catch (e) { /* silenzioso */ }
     }
 
-    function newAiConversation() { clearAiChat(); }
+    // Il "+" crea subito la riga lato server, così la conversazione compare in
+    // elenco appena la si apre invece che solo dopo la prima risposta.
+    async function newAiConversation() {
+        // Se quella aperta è già nuova e vuota non serve un doppione.
+        if (aiConvId !== null && !aiHistory.length) return;
+        clearAiChat();
+        try {
+            const res = await apiFetch('/api/ai/conversations', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: [] })
+            });
+            if (!res || !res.ok) return;
+            aiConvId = (await res.json()).id;
+            setAiChatTitle('');
+            await loadAiConversations();
+        } catch (e) { /* silenzioso: la chat resta usabile senza cronologia */ }
+    }
 
     async function deleteAiConversation(id) {
         if (!confirm(i18n[currentLang].confirmAiDeleteChat || 'Eliminare questa conversazione?')) return;
@@ -151,6 +174,10 @@
             if (id === aiConvId) clearAiChat();
             await loadAiConversations();
         } catch (e) { /* silenzioso */ }
+    }
+
+    function deleteCurrentAiConversation() {
+        if (aiConvId !== null) deleteAiConversation(aiConvId);
     }
 
     async function renameAiConversation() {
