@@ -126,6 +126,12 @@
     let _flowsSource = 'all';
     let _flowsSyslogData = [];
     let _flowsHiddenCols = new Set(JSON.parse(localStorage.getItem('sentinelnet_flows_hidden_cols') || '[]'));
+    // Traffico verso i collector (NetFlow/IPFIX/sFlow/Syslog/SNMP): sono flussi
+    // veri ma sono rumore di misura. Default spento: si nasconde solo se lo
+    // chiede l'utente, e resta a un click di distanza.
+    let _flowsHideTelemetry = localStorage.getItem('sentinelnet_flows_hide_telemetry') === '1';
+
+    function telemetryParam() { return _flowsHideTelemetry ? '&exclude_telemetry=true' : ''; }
 
     function flowsColHidden(id) { return _flowsHiddenCols.has(id); }
 
@@ -148,6 +154,13 @@
         _flowsSource = s;
         renderFlowsSourceChips();
         loadTopTalkers();
+    }
+
+    function setFlowsHideTelemetry(hide) {
+        _flowsHideTelemetry = !!hide;
+        localStorage.setItem('sentinelnet_flows_hide_telemetry', _flowsHideTelemetry ? '1' : '0');
+        loadTopTalkers();          // ricarica anche il flowgraph e la KPI strip
+        loadObsProtocolDist();
     }
 
     function toggleFlowsColsDropdown() {
@@ -272,6 +285,8 @@
 
     function flowsTabShown() {
         renderFlowsSourceChips();
+        const teleCb = document.getElementById('flowsHideTelemetry');
+        if (teleCb) teleCb.checked = _flowsHideTelemetry;
         loadTopTalkers();
         loadAnomalies();
         startFlowsAutoRefresh();
@@ -356,7 +371,7 @@
                 return;
             }
             const srcParam = _flowsSource === 'all' ? '' : `&source=${_flowsSource}`;
-            const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}`);
+            const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}${telemetryParam()}`);
             if (!res || !res.ok) {
                 if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">${currentLang === 'en' ? 'Error loading flows.' : 'Errore nel caricamento dei flussi.'}</td></tr>`;
                 return;
@@ -872,7 +887,7 @@
         _fgFetchInFlight = true;
         try {
             const w = window_ || document.getElementById('flowsWindow')?.value || '15m';
-            const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}`);
+            const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}${telemetryParam()}`);
             if (!res || !res.ok) return;
             _fgData = await res.json();
             // Disclosure: qualunque nodo/arco con VLAN non reale (fallback
@@ -993,7 +1008,7 @@
         if (!card) return;
         const winSelect = document.getElementById('obsChartWindow');
         const win = winSelect ? winSelect.value : '24h';
-        const res = await apiFetch(`/api/observability/protocol-distribution?window=${win}`);
+        const res = await apiFetch(`/api/observability/protocol-distribution?window=${win}${telemetryParam()}`);
         if (!res || !res.ok) return;
         _obsProtocolData = await res.json();
         renderObsProtocolChart();

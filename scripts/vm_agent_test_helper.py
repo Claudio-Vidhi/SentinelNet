@@ -38,10 +38,12 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+# Colonne canoniche: le stesse di inventory_manager.safe_write_hosts_csv.
+# Le colonne inventate (Model, Driver, Tenant, Notes...) venivano scartate al
+# primo salvataggio dell'inventario e l'apparato finiva nel gruppo sbagliato.
 CSV_HEADERS = [
-    "IP", "Hostname", "Vendor", "Model", "Driver", "Transport", "Port",
-    "AuthGroup", "Username", "Password", "Secret", "SNMP_Community",
-    "SNMP_Version", "Tenant", "Group", "Site", "Category", "Status", "Notes"
+    "IP", "Vendor", "Profile", "Username", "Password", "Enable Secret",
+    "Group", "Hostname", "Site", "SSH Port", "Transports", "SNMP Community"
 ]
 
 
@@ -90,10 +92,8 @@ def add_device(args):
                     existing_rows.append(row)
 
     new_row = [
-        args.ip, args.hostname, args.vendor, "VM-TestModel", "cisco_ios",
-        "ssh", "22", "", args.username, args.password, args.secret,
-        "public", "2c", "VM-Tenant", args.site_id, args.site_id,
-        "Switch", "active", "VM Lab Test Device"
+        args.ip, args.vendor, "custom", args.username, args.password,
+        args.secret, args.site_id, args.hostname, args.site_id, "22", "", ""
     ]
 
     with open(csv_path, "w", encoding="utf-8", newline="") as f:

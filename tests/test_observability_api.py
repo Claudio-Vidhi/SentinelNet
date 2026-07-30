@@ -84,6 +84,10 @@ class TestTopTalkers(_Base):
                    source="netflow")
         _seed_flow(conn, "sede-a", "10.1.0.9", "8.8.8.8", dport=123,
                    source="sflow")
+        # Export verso il nostro collector NetFlow: flusso vero, ma rumore di
+        # misura. Volume basso per non disturbare test_ordering_by_metric.
+        _seed_flow(conn, "sede-a", "10.1.0.9", "10.1.0.2", dport=2055, proto=17,
+                   nbytes=100)
         _seed_syslog(conn, "sede-a", "link down su Gi1/0/7")
         _seed_syslog(conn, "sede-b", "admin login failed")
         conn.commit()
@@ -134,6 +138,26 @@ class TestTopTalkers(_Base):
         self.assertGreater(len(r.json()["flows"]), len(flows))
         r = c.get("/api/observability/top?window=1h&source=evil")
         self.assertIn(r.status_code, (400, 422))
+
+    def test_telemetry_filter_excludes_collector_ports(self):
+        """Il traffico verso i collector gonfiava i top talker senza modo di
+        toglierlo. Il filtro è opt-in: di default i flussi restano tutti."""
+        c = self._client("adm")
+        ports = {f["dst_port"] for f in
+                 c.get("/api/observability/top?window=1h").json()["flows"]}
+        self.assertIn(2055, ports)
+        kept = c.get("/api/observability/top?window=1h&exclude_telemetry=true").json()
+        self.assertTrue(kept["exclude_telemetry"])
+        self.assertNotIn(2055, {f["dst_port"] for f in kept["flows"]})
+        self.assertIn(443, {f["dst_port"] for f in kept["flows"]})
+
+    def test_telemetry_filter_applies_to_flowgraph(self):
+        """Tabella e grafo devono concordare: filtrare solo la prima lasciava
+        la KPI strip a contare il rumore."""
+        c = self._client("adm")
+        full = c.get("/api/observability/flowgraph?window=1h").json()
+        kept = c.get("/api/observability/flowgraph?window=1h&exclude_telemetry=true").json()
+        self.assertLess(len(kept["edges"]), len(full["edges"]))
 
     def test_syslog_endpoint_scoped(self):
         r = self._client("op_a").get("/api/observability/syslog?window=1h")

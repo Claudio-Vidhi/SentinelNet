@@ -55,17 +55,39 @@ def _tenant_filter(current_user):
     return f" AND tenant IN ({placeholders})", tuple(groups)
 
 
+def _telemetry_filter(exclude: bool):
+    """Ritorna (clausola_sql, params) per escludere i flussi diretti ai
+    collector di telemetria.
+
+    Gli apparati esportano verso i nostri listener, e quel traffico rientra
+    poi come flusso: nei top talker sono conversazioni vere ma sono rumore di
+    misura, non traffico di rete. Le porte arrivano da ``obs_config()``, non
+    da costanti: se l'utente sposta un listener il filtro lo segue.
+    161/162 sono SNMP, che qui non ha un listener ma genera lo stesso rumore.
+    """
+    if not exclude:
+        return "", ()
+    cfg = data_config.obs_config()
+    ports = sorted({int(cfg[k]["port"])
+                    for k in ("ipfix", "sflow", "syslog", "netflow")} | {161, 162})
+    placeholders = ",".join("?" * len(ports))
+    return (f" AND (dst_port IS NULL OR dst_port NOT IN ({placeholders}))",
+            tuple(ports))
+
+
 @router.get("/api/observability/top")
 async def obs_top_talkers(
     window: str = Query("15m"),
     limit: int = Query(50, ge=1, le=MAX_LIMIT),
     metric: str = Query("bytes", pattern="^(bytes|packets)$"),
     source: str = Query("all", pattern="^(all|ipfix|netflow|sflow)$"),
+    exclude_telemetry: bool = Query(False),
     current_user = Depends(get_current_user),
 ):
     """Top talker aggregati sulla finestra richiesta, scoped per tenant.
     ``source`` filtra per listener di origine (le righe legacy senza source
-    compaiono solo con 'all')."""
+    compaiono solo con 'all'); ``exclude_telemetry`` toglie i flussi diretti
+    ai collector (vedi ``_telemetry_filter``)."""
     import time as _time
     seconds = _parse_window(window)
     cutoff = int(_time.time()) - seconds
@@ -73,24 +95,27 @@ async def obs_top_talkers(
     clause, params = _tenant_filter(current_user)
     source_clause = "" if source == "all" else " AND source = ?"
     source_params = () if source == "all" else (source,)
+    tele_clause, tele_params = _telemetry_filter(exclude_telemetry)
     rows = await db.read(
         f"""SELECT tenant, src_ip, dst_ip, protocol, dst_port, source,
                    SUM(total_bytes) AS total_bytes,
                    SUM(total_packets) AS total_packets,
                    SUM(flow_count) AS flow_count
             FROM flow_aggregates
-            WHERE window_start >= ?{clause}{source_clause}
+            WHERE window_start >= ?{clause}{source_clause}{tele_clause}
             GROUP BY tenant, src_ip, dst_ip, protocol, dst_port, source
             ORDER BY SUM({order_col}) DESC
             LIMIT ?""",
-        (cutoff, *params, *source_params, limit))
+        (cutoff, *params, *source_params, *tele_params, limit))
     return {"window": window, "metric": metric, "source": source,
+            "exclude_telemetry": exclude_telemetry,
             "flows": [dict(r) for r in rows]}
 
 
 @router.get("/api/observability/protocol-distribution")
 async def obs_protocol_distribution(
     window: str = Query("15m"),
+    exclude_telemetry: bool = Query(False),
     current_user = Depends(get_current_user),
 ):
     """Ripartizione traffico e volumi per protocollo (NetFlow, IPFIX, sFlow, Syslog)
@@ -100,6 +125,9 @@ async def obs_protocol_distribution(
     now = int(_time.time())
     cutoff = now - seconds
     clause, params = _tenant_filter(current_user)
+    # Solo i flussi: il conteggio syslog non ha una dst_port ed e' il payload
+    # della telemetria, non il rumore che genera nei flussi.
+    tele_clause, tele_params = _telemetry_filter(exclude_telemetry)
 
     # 1. Flow aggregates per source (netflow, ipfix, sflow)
     flow_rows = await db.read(
@@ -108,9 +136,9 @@ async def obs_protocol_distribution(
                    SUM(total_packets) AS total_packets,
                    SUM(flow_count) AS flow_count
             FROM flow_aggregates
-            WHERE window_start >= ?{clause}
+            WHERE window_start >= ?{clause}{tele_clause}
             GROUP BY COALESCE(source, 'netflow')""",
-        (cutoff, *params))
+        (cutoff, *params, *tele_params))
 
     # 2. Syslog events count
     syslog_rows = await db.read(
@@ -129,10 +157,10 @@ async def obs_protocol_distribution(
                    SUM(total_packets) AS total_packets,
                    SUM(flow_count) AS flow_count
             FROM flow_aggregates
-            WHERE window_start >= ?{clause}
+            WHERE window_start >= ?{clause}{tele_clause}
             GROUP BY bucket_ts, COALESCE(source, 'netflow')
             ORDER BY bucket_ts ASC""",
-        (bucket_size, bucket_size, cutoff, *params))
+        (bucket_size, bucket_size, cutoff, *params, *tele_params))
 
     trend_syslog_rows = await db.read(
         f"""SELECT (ts / ?) * ? AS bucket_ts,
@@ -420,6 +448,7 @@ def _synthetic_vlan(tenant: str) -> int:
 @router.get("/api/observability/flowgraph")
 async def obs_flowgraph(
     window: str = Query("5m"),
+    exclude_telemetry: bool = Query(False),
     current_user = Depends(get_current_user),
 ):
     """Grafo dei flussi aggregato (Task 3, Live Flows): nodi/archi con tassi,
@@ -436,17 +465,18 @@ async def obs_flowgraph(
     seconds = _parse_window(window)
     cutoff = int(_time.time()) - seconds
     clause, params = _tenant_filter(current_user)
+    tele_clause, tele_params = _telemetry_filter(exclude_telemetry)
 
     flow_rows = await db.read(
         f"""SELECT tenant, src_ip, dst_ip, protocol, dst_port,
                    SUM(total_bytes) AS total_bytes,
                    SUM(total_packets) AS total_packets
             FROM flow_aggregates
-            WHERE window_start >= ?{clause}
+            WHERE window_start >= ?{clause}{tele_clause}
             GROUP BY tenant, src_ip, dst_ip, protocol, dst_port
             ORDER BY SUM(total_bytes) DESC
             LIMIT 50""",
-        (cutoff, *params))
+        (cutoff, *params, *tele_params))
 
     spike_rows = await db.read(
         f"""SELECT COUNT(*) AS n FROM incidents

@@ -308,6 +308,49 @@ class RemoteSiteE2E(unittest.TestCase):
         rpc_inv_save = agent_inst._execute_agent_rpc("_agent_save_inventory IP,Vendor\n10.0.1.1,cisco")
         self.assertEqual(rpc_inv_save["status"], "done")
 
+    def test_agent_saved_inventory_is_readable_by_the_parser(self):
+        """L'editor remoto scriveva il CSV verbatim: nessuno verificava che il
+        file risultante fosse poi leggibile. Un foglio Excel italiano (punto e
+        virgola) e una colonna 'Tenant' al posto di 'Group' bastavano a mandare
+        ogni apparato nel gruppo sbagliato o a far esplodere get_all_devices()
+        con KeyError: 'IP'."""
+        from services import inventory_manager, site_manager
+        from services.site_agent import Agent
+
+        site_obj, token = site_manager.create_site("Conformita Sede", "agent")
+        agent_inst = Agent({"central_url": "http://127.0.0.1:8765",
+                            "site_id": site_obj["id"], "token": token,
+                            "syslog_enabled": False})
+
+        out = agent_inst._execute_agent_rpc(
+            "_agent_save_inventory ﻿Indirizzo;Marca;Nome;Tenant\n"
+            "192.0.2.77;cisco;switch-77;Tenant_Milano\n")
+        self.assertEqual("done", out["status"], out["result"])
+
+        devices = inventory_manager.get_all_devices()
+        row = next((d for d in devices if d.get("IP") == "192.0.2.77"), None)
+        self.assertIsNotNone(row, devices)
+        self.assertEqual("switch-77", row["Hostname"])
+        self.assertEqual("Tenant_Milano", row["Group"])   # non 'Generale'
+        self.assertEqual("cisco", row["Vendor"])
+
+        # Un salvataggio senza contenuto azzerava il file: ora e' un errore e
+        # l'inventario resta quello di prima.
+        empty = agent_inst._execute_agent_rpc("_agent_save_inventory")
+        self.assertEqual("error", empty["status"])
+        self.assertEqual(len(devices), len(inventory_manager.get_all_devices()))
+
+    def test_inventory_save_endpoint_rejects_unreadable_csv(self):
+        """Il 400 arriva subito: prima il CSV illeggibile veniva accodato e
+        falliva sull'agente, dentro il risultato di un job."""
+        from services import site_manager
+        site_obj, _ = site_manager.create_site("Validazione Sede", "agent")
+        res = self.client.post(
+            f"/api/sites/{site_obj['id']}/agent/inventory/save",
+            json={"content": "Nome,Vendor\nswitch-01,cisco"}, headers=self.admin_h)
+        self.assertEqual(400, res.status_code)
+        self.assertIn("IP", res.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()
