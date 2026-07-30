@@ -305,3 +305,20 @@ CREATE TABLE IF NOT EXISTS audit_engagement_history (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_hist_eng ON audit_engagement_history(engagement_id);
 
+
+-- 13. CONVERSAZIONI AI (v9): la chat dell'assistente perdeva tutto al cambio
+-- tab. I messaggi stanno in un'unica colonna JSON perché la conversazione si
+-- legge e si riscrive sempre intera (ogni turno rispedisce la storia completa
+-- al provider): una tabella di messaggi non servirebbe a nessuna query.
+-- ``username`` è il proprietario: ogni lettura e ogni scrittura filtrano su
+-- di esso, una conversazione non è mai visibile a un altro utente.
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    messages_json TEXT NOT NULL,
+    created_ts    INTEGER NOT NULL,
+    updated_ts    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_conv_user
+    ON ai_conversations(username, updated_ts DESC);

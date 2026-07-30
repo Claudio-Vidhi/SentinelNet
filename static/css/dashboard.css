@@ -837,3 +837,49 @@
         .ti-subtab.active { border-color:var(--primary) !important; color:var(--primary) !important; }
         #tab-config .ca-chip { display:inline-flex; align-items:center; gap:4px; font-size:10px; border-radius:5px; padding:1px 6px; border:1px solid var(--border); color:var(--text-muted); margin:2px 4px 2px 0; }
         #tab-config .ca-route-map { height:220px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-top:8px; }
+
+/* ===== templates/dashboard.html #tab-ai scoped style ===== */
+        /* Chat a due colonne: elenco conversazioni + thread. Altezza fissata
+           al viewport perche' una chat che allunga la pagina costringe a
+           scorrere due volte, il thread e poi il tab. */
+        #tab-ai .ai-chat-shell { display:grid; grid-template-columns:260px 1fr; height:calc(100vh - 260px); min-height:460px; }
+        #tab-ai .ai-conv-sidebar { display:flex; flex-direction:column; gap:10px; padding:14px; border-right:1px solid var(--border); background:var(--surface-2); overflow:hidden; }
+        #tab-ai .ai-conv-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin:0 -6px; padding:0 6px; }
+        #tab-ai .ai-conv-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; border:1px solid transparent; cursor:pointer; font-size:13px; color:var(--text-muted); transition:var(--transition); }
+        #tab-ai .ai-conv-item:hover { background:var(--surface-3); color:var(--text); }
+        #tab-ai .ai-conv-item.active { background:var(--surface-3); border-color:var(--primary); color:var(--text); }
+        #tab-ai .ai-conv-item .ai-conv-title { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        #tab-ai .ai-conv-item .ai-conv-del { opacity:0; border:0; background:none; color:var(--text-muted); cursor:pointer; padding:2px 4px; font-size:12px; }
+        #tab-ai .ai-conv-item:hover .ai-conv-del { opacity:1; }
+        #tab-ai .ai-conv-item .ai-conv-del:hover { color:var(--danger, #d9534f); }
+        #tab-ai .ai-conv-empty { font-size:12px; color:var(--text-muted); padding:10px 4px; }
+
+        #tab-ai .ai-chat-main { display:flex; flex-direction:column; min-width:0; }
+        #tab-ai .ai-chat-header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); }
+        #tab-ai .ai-chat-header h3 { flex:1; min-width:0; }
+        #tab-ai .ai-chat-context { padding:10px 16px; border-bottom:1px solid var(--border); align-items:center; background:var(--surface-2); }
+        #tab-ai .ai-chat-composer { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); background:var(--surface-2); }
+
+        /* Profili: la lista a card sostituisce le due <select>, che restano
+           nascoste nel DOM come stato (vedi il commento nel markup). */
+        #tab-ai .ai-profile-layout { display:grid; grid-template-columns:230px 1fr; gap:16px; align-items:start; }
+        #tab-ai .ai-profile-form { border-left:1px solid var(--border); padding-left:16px; }
+        #tab-ai .ai-profile-card { display:flex; flex-direction:column; gap:3px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); cursor:pointer; transition:var(--transition); }
+        #tab-ai .ai-profile-card:hover { background:var(--surface-3); }
+        #tab-ai .ai-profile-card.editing { border-color:var(--primary); background:var(--surface-3); }
+        #tab-ai .ai-profile-card .ai-prof-top { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; }
+        #tab-ai .ai-profile-card .ai-prof-meta { font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+        #tab-ai .ai-profile-card .ai-prof-activate { border:0; background:none; color:var(--text-muted); font-size:11px; cursor:pointer; padding:0; text-decoration:underline; align-self:flex-start; }
+        #tab-ai .ai-profile-card .ai-prof-activate:hover { color:var(--primary); }
+
+        #tab-ai details > summary::-webkit-details-marker { display:none; }
+        #tab-ai details > summary { list-style:none; }
+        #tab-ai details > summary:hover { background:var(--surface-3); }
+
+        @media (max-width: 900px) {
+          #tab-ai .ai-chat-shell { grid-template-columns:1fr; height:auto; }
+          #tab-ai .ai-conv-sidebar { border-right:0; border-bottom:1px solid var(--border); max-height:220px; }
+          #tab-ai .ai-chat-messages { min-height:320px; }
+          #tab-ai .ai-profile-layout { grid-template-columns:1fr; }
+          #tab-ai .ai-profile-form { border-left:0; padding-left:0; border-top:1px solid var(--border); padding-top:14px; }
+        }

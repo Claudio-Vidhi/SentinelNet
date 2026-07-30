@@ -2,6 +2,9 @@
     let aiHistory = [];  // {role, content} inviato al backend (senza system: aggiunto server-side)
     let aiProfilesCache = [];   // ultima lista di profili (mascherati) caricata dal server
     let aiActiveProfileId = ''; // id del profilo attivo lato server
+    let aiConversations = [];   // elenco (senza messaggi) delle conversazioni salvate
+    let aiConvId = null;        // id della conversazione aperta (null = non ancora salvata)
+    let aiConvTitle = '';       // titolo della conversazione aperta
 
     // Popola la select dei dispositivi allegabili, filtrata per il tenant
     // selezionato: la config allegata deve appartenere al tenant scelto.
@@ -72,7 +75,123 @@
         if (document.body.classList.contains('role-admin')) {
             loadAiProfiles();
         }
+        loadAiConversations();
         populateGenCfgTenants();
+    }
+
+    // ===== Conversazioni salvate =====
+    // La chat viveva solo in `aiHistory`: cambiare tab la buttava via. Ora ogni
+    // scambio viene persistito lato server (POST alla prima risposta, PUT alle
+    // successive) e la sidebar elenca le conversazioni dell'utente.
+
+    function fmtAiConvTime(ts) {
+        const d = new Date((ts || 0) * 1000);
+        const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+        if (days <= 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (days === 1) return i18n[currentLang].lblAiYesterday || 'ieri';
+        return d.toLocaleDateString();
+    }
+
+    function renderAiConvList() {
+        const box = document.getElementById('aiConvList');
+        if (!box) return;
+        if (!aiConversations.length) {
+            box.innerHTML = `<div class="ai-conv-empty">${escapeHtml(i18n[currentLang].msgAiNoConversations || 'Nessuna conversazione salvata.')}</div>`;
+            return;
+        }
+        box.innerHTML = aiConversations.map(c => `
+            <div class="ai-conv-item${c.id === aiConvId ? ' active' : ''}" onclick="openAiConversation(${Number(c.id)})">
+                <i class="fa-regular fa-comment" style="font-size:11px;"></i>
+                <span class="ai-conv-title" title="${escapeHtml(jsStr(c.title))}">${escapeHtml(jsStr(c.title))}</span>
+                <span style="font-size:10px; color:var(--text-muted);">${escapeHtml(fmtAiConvTime(c.updated_ts))}</span>
+                <button class="ai-conv-del" onclick="event.stopPropagation(); deleteAiConversation(${Number(c.id)})"
+                        title="${escapeHtml(i18n[currentLang].btnAiDeleteChat || 'Elimina conversazione')}">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>`).join('');
+    }
+
+    function setAiChatTitle(title) {
+        aiConvTitle = title || '';
+        const el = document.getElementById('aiChatTitle');
+        if (el) el.textContent = aiConvTitle || (i18n[currentLang].titleAiChat || 'Conversazione');
+    }
+
+    async function loadAiConversations() {
+        try {
+            const res = await apiFetch('/api/ai/conversations');
+            if (!res || !res.ok) return;
+            aiConversations = (await res.json()).conversations || [];
+            renderAiConvList();
+        } catch (e) { /* silenzioso: la chat resta usabile senza cronologia */ }
+    }
+
+    async function openAiConversation(id) {
+        try {
+            const res = await apiFetch(`/api/ai/conversations/${Number(id)}`);
+            if (!res || !res.ok) return;
+            const data = await res.json();
+            aiConvId = data.id;
+            aiHistory = data.messages || [];
+            const box = document.getElementById('aiChatMessages');
+            if (box) box.innerHTML = '';
+            aiHistory.forEach(m => appendAiMessage(m.role, m.content));
+            setAiChatTitle(data.title);
+            renderAiConvList();
+        } catch (e) { /* silenzioso */ }
+    }
+
+    function newAiConversation() { clearAiChat(); }
+
+    async function deleteAiConversation(id) {
+        if (!confirm(i18n[currentLang].confirmAiDeleteChat || 'Eliminare questa conversazione?')) return;
+        try {
+            const res = await apiFetch(`/api/ai/conversations/${Number(id)}`, { method: 'DELETE' });
+            if (!res || !res.ok) return;
+            if (id === aiConvId) clearAiChat();
+            await loadAiConversations();
+        } catch (e) { /* silenzioso */ }
+    }
+
+    async function renameAiConversation() {
+        if (aiConvId === null) return;
+        const next = prompt(i18n[currentLang].promptAiRenameChat || 'Nuovo titolo:', aiConvTitle);
+        if (next === null) return;
+        const title = next.trim();
+        if (!title) return;
+        try {
+            const res = await apiFetch(`/api/ai/conversations/${Number(aiConvId)}`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title })
+            });
+            if (!res || !res.ok) return;
+            setAiChatTitle(title);
+            await loadAiConversations();
+        } catch (e) { /* silenzioso */ }
+    }
+
+    // Persiste la conversazione corrente. Alla prima risposta crea la riga e
+    // ne memorizza l'id, poi aggiorna sempre la stessa.
+    async function persistAiConversation() {
+        if (!aiHistory.length) return;
+        try {
+            if (aiConvId === null) {
+                const res = await apiFetch('/api/ai/conversations', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: aiHistory })
+                });
+                if (!res || !res.ok) return;
+                const data = await res.json();
+                aiConvId = data.id;
+                setAiChatTitle(data.title);
+            } else {
+                await apiFetch(`/api/ai/conversations/${Number(aiConvId)}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: aiHistory })
+                });
+            }
+            await loadAiConversations();
+        } catch (e) { /* silenzioso: la chat non deve rompersi se il salvataggio fallisce */ }
     }
 
     // ===== Generazione config nuovo switch (AI) =====
@@ -181,7 +300,7 @@
             const badge = document.getElementById('aiActiveProfileBadge');
             if (badge) {
                 const active = aiProfilesCache.find(p => p.id === aiActiveProfileId);
-                badge.textContent = active ? `${active.model || i18n[currentLang].optAiModelCustom}` : '';
+                badge.textContent = active ? `${active.name} · ${active.model || i18n[currentLang].optAiModelCustom}` : '';
             }
 
             const editSel = document.getElementById('aiProfileEditSelect');
@@ -194,8 +313,66 @@
                 editSel.value = [...editSel.options].some(o => o.value === curEdit) ? curEdit : '__new__';
                 onAiProfileEditSelectChange();
             }
+            renderAiProfileCards();
             if (statusEl) statusEl.textContent = '';
         } catch (e) { /* silenzioso: pannello opzionale per admin */ }
+    }
+
+    // Le card sono una VISTA sulle due <select> nascoste: cliccarne una scrive
+    // nella select e lascia partire l'onchange esistente. Nessuna logica di
+    // profilo duplicata qui.
+    const AI_PROVIDER_ICONS = {
+        anthropic: 'fa-solid fa-a', openai: 'fa-solid fa-o',
+        gemini: 'fa-solid fa-gem', ollama: 'fa-solid fa-server',
+    };
+
+    function renderAiProfileCards() {
+        const box = document.getElementById('aiProfileCards');
+        if (!box) return;
+        const L = i18n[currentLang];
+        const editing = document.getElementById('aiProfileEditSelect')?.value || '__new__';
+        if (!aiProfilesCache.length) {
+            box.innerHTML = `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${escapeHtml(L.optAiNoProfile || 'Nessun profilo')}</div>`;
+            return;
+        }
+        box.innerHTML = aiProfilesCache.map(p => {
+            const active = p.id === aiActiveProfileId;
+            // Ollama gira in locale e non usa chiave: segnalarla "mancante"
+            // sarebbe un falso allarme.
+            const needsKey = p.provider !== 'ollama';
+            const keyChip = !needsKey
+                ? `<span title="${escapeHtml(L.lblAiLocalLlm || 'LLM locale')}"><i class="fa-solid fa-house-laptop"></i></span>`
+                : (p.api_key_set
+                    ? `<span style="color:var(--success, #4caf50);" title="${escapeHtml(L.lblAiKeySet || 'API key impostata')}"><i class="fa-solid fa-key"></i></span>`
+                    : `<span style="color:var(--warning, #e0a800);" title="${escapeHtml(L.lblAiKeyMissing || 'API key mancante')}"><i class="fa-solid fa-triangle-exclamation"></i></span>`);
+            return `<div class="ai-profile-card${p.id === editing ? ' editing' : ''}" onclick="selectAiProfileCard('${escapeHtml(jsStr(p.id))}')">
+                <div class="ai-prof-top">
+                    <i class="${AI_PROVIDER_ICONS[p.provider] || 'fa-solid fa-robot'}" style="color:var(--primary); width:14px;"></i>
+                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(jsStr(p.name))}</span>
+                    ${active ? `<span class="chip" style="font-size:9px; padding:2px 6px;">${escapeHtml(L.lblAiProfileActive || 'ATTIVO')}</span>` : ''}
+                </div>
+                <div class="ai-prof-meta">
+                    ${keyChip}
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(jsStr(p.model || L.optAiModelCustom || '—'))}</span>
+                </div>
+                ${active ? '' : `<button type="button" class="ai-prof-activate" onclick="event.stopPropagation(); activateAiProfileCard('${escapeHtml(jsStr(p.id))}')">${escapeHtml(L.btnAiActivateProfile || 'Rendi attivo')}</button>`}
+            </div>`;
+        }).join('');
+    }
+
+    function selectAiProfileCard(id) {
+        const editSel = document.getElementById('aiProfileEditSelect');
+        if (!editSel) return;
+        editSel.value = id;
+        onAiProfileEditSelectChange();   // rirenderizza anche le card
+    }
+
+    async function activateAiProfileCard(id) {
+        const activeSel = document.getElementById('aiProfileSelect');
+        if (!activeSel) return;
+        activeSel.value = id;
+        await onAiProfileSelectChange();
+        renderAiProfileCards();
     }
 
     // L'utente ha cambiato il "profilo attivo" in cima alla chat: attiva
@@ -210,7 +387,7 @@
                 aiActiveProfileId = profileId;
                 const badge = document.getElementById('aiActiveProfileBadge');
                 const active = aiProfilesCache.find(p => p.id === profileId);
-                if (badge) badge.textContent = active ? `${active.model || i18n[currentLang].optAiModelCustom}` : '';
+                if (badge) badge.textContent = active ? `${active.name} · ${active.model || i18n[currentLang].optAiModelCustom}` : '';
             }
         } catch (e) { /* silenzioso */ }
     }
@@ -254,6 +431,7 @@
         // col pulsante dedicato. Qui si svuota soltanto la lista locale, che
         // altrimenti mostrerebbe i modelli di un altro provider/profilo.
         resetAiModelList();
+        renderAiProfileCards();   // sposta l'evidenziazione sulla card in modifica
     }
 
     // Svuota la select dei modelli (nessuna chiamata di rete). Usata quando
@@ -369,10 +547,15 @@
         }
     }
 
+    // Non cancella nulla lato server: chiude la conversazione corrente e ne
+    // apre una nuova. Quella di prima resta nella sidebar.
     function clearAiChat() {
         aiHistory = [];
+        aiConvId = null;
         const box = document.getElementById('aiChatMessages');
         if (box) box.innerHTML = '';
+        setAiChatTitle('');
+        renderAiConvList();
     }
 
     // --- Config push proposto dall'AI (§10.2): il modello PROPONE in un blocco
@@ -561,5 +744,6 @@
             if (sendBtn) sendBtn.disabled = false;
             if (wasTopFlows) aiAttachTopFlowsOnce = false; // allegato una sola volta
             if (wasFlowKeys) aiAttachFlowKeysOnce = null;  // allegato una sola volta
+            await persistAiConversation();
         }
     }

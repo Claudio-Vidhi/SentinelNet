@@ -865,13 +865,14 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
 
     def test_chat_container_untouched(self):
         html = _html()
-        # The chat render target keeps its exact id + scroll/overflow inline
-        # style that appendAiMessage()/renderAiConfigProposal() depend on for
-        # box.scrollTop = box.scrollHeight. Assert the div is byte-identical.
+        # Il thread non è più un riquadro alto 480px in fondo alla pagina: è la
+        # colonna destra di una chat a tutta altezza, quindi cresce con `flex:1`
+        # invece che con una max-height fissa. Ciò che DEVE restare è l'id e il
+        # contenitore di scorrimento su cui appendAiMessage() e
+        # renderAiConfigProposal() fanno box.scrollTop = box.scrollHeight.
         self.assertIn(
-            '<div id="aiChatMessages" style="border:1px solid var(--border); '
-            'border-radius:10px; background:var(--surface); min-height:280px; '
-            'max-height:480px; overflow-y:auto; padding:14px; margin-bottom:12px;"></div>',
+            '<div id="aiChatMessages" style="flex:1; min-height:280px; '
+            'overflow-y:auto; padding:16px; background:var(--surface);"></div>',
             html)
 
     def test_device_multiselect_preserved(self):
@@ -894,16 +895,43 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
                     'class="filterbar"', 'class="panel'):
             self.assertIn(cls, tab_html)
-        # three panel cards: profile controls, context/device selector, chat
-        self.assertGreaterEqual(tab_html.count('class="panel"'), 3)
+        # tre panel card: profili, generatore di config, chat (quest'ultima
+        # porta anche .ai-chat-shell, quindi si conta il prefisso della classe)
+        self.assertGreaterEqual(tab_html.count('class="panel'), 3)
         # active-profile badge reclassed to the .chip state-badge component
         self.assertIn('id="aiActiveProfileBadge" class="chip"', tab_html)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
-        for key in ('aiEyebrow:', 'titleAiContext:', 'titleAiChat:',
-                    'titleAiAssistant:', 'descAiAssistant:'):
+        for key in ('aiEyebrow:', 'titleAiChat:',
+                    'titleAiAssistant:', 'descAiAssistant:',
+                    'msgAiNoConversations:', 'lblAiProfileActive:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
+
+    def test_conversation_sidebar_wired(self):
+        """La cronologia conversazioni: elenco a sinistra + CRUD verso
+        /api/ai/conversations. Senza il contenitore la sidebar non renderizza."""
+        html = _html()
+        self.assertIn('id="aiConvList"', html)
+        self.assertIn('id="aiChatTitle"', html)
+        for hook in ('newAiConversation()', 'renameAiConversation()'):
+            self.assertIn(hook, html)
+        js = frontend_source()
+        self.assertIn("apiFetch('/api/ai/conversations')", js)
+        self.assertIn('`/api/ai/conversations/${Number(id)}`', js)
+        self.assertIn('`/api/ai/conversations/${Number(aiConvId)}`', js)
+
+    def test_profile_cards_drive_the_hidden_selects(self):
+        """Le card sono una vista sulle due <select>, che restano la sorgente
+        di verità: se sparissero, saveAiSettings()/onAiProfileEditSelectChange()
+        leggerebbero il vuoto."""
+        html = _html()
+        self.assertIn('id="aiProfileCards"', html)
+        self.assertIn('id="aiProfileSelect"', html)
+        self.assertIn('id="aiProfileEditSelect"', html)
+        js = frontend_source()
+        self.assertIn("editSel.value = id;", js)
+        self.assertIn("activeSel.value = id;", js)
 
 
 class TestProvisionerTabRestyle(unittest.TestCase):

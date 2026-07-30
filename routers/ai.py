@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from core import db
 from core.app_settings import get_app_settings, save_app_settings
 from security import crypto_vault
 from security.security_manager import log_audit
@@ -318,6 +319,154 @@ def activate_ai_profile(profile_id: str, current_user = Depends(require_admin)):
     save_app_settings({"ai_profiles": profiles, "ai_active_profile": profile_id})
     log_audit(f"Profilo AI attivo impostato su '{profile['name']}' dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "active_profile": profile_id}
+
+# --- Conversazioni salvate ---------------------------------------------------
+# La chat viveva solo in memoria del browser: cambiare tab la cancellava. Le
+# conversazioni stanno su observability.db, di proprietà dell'utente che le ha
+# create: OGNI query filtra per username, non esiste un endpoint che legga
+# quelle di un altro. Le scritture usano una connessione sincrona dentro
+# ``asyncio.to_thread`` (come la transizione di stato degli incidenti): la coda
+# di ``enqueue_write`` è fire-and-forget e qui serve rileggere l'id appena
+# creato.
+
+# ponytail: tetto per utente, non retention a tempo. Una conversazione vecchia
+# resta utile, una centesima no; se qualcuno vorrà archiviarle, questo diventa
+# un parametro.
+MAX_CONVERSATIONS_PER_USER = 100
+
+
+class AiConversationSchema(BaseModel):
+    title: str = ""
+    messages: List[AiChatMessage] = []
+
+
+class AiConversationUpdateSchema(BaseModel):
+    """``None`` = non modificare. Rinominare non deve riscrivere i messaggi."""
+    title: Optional[str] = None
+    messages: Optional[List[AiChatMessage]] = None
+
+
+def _conversation_title(title: str, messages) -> str:
+    """Titolo esplicito se c'è, altrimenti l'inizio del primo messaggio utente:
+    una lista di 'Nuova conversazione' non aiuta a ritrovare niente."""
+    title = (title or "").strip()
+    if title:
+        return title[:120]
+    first = next((m for m in messages if m.role == "user"), None)
+    text = " ".join((first.content if first else "").split())
+    return (text[:60] or "Nuova conversazione")
+
+
+@router.get("/api/ai/conversations")
+async def list_ai_conversations(current_user = Depends(get_current_user)):
+    """Elenco delle conversazioni dell'utente, più recenti prima. Senza i
+    messaggi: la sidebar mostra solo i titoli."""
+    rows = await db.read(
+        "SELECT id, title, created_ts, updated_ts, "
+        "       json_array_length(messages_json) AS message_count "
+        "FROM ai_conversations WHERE username = ? "
+        "ORDER BY updated_ts DESC",
+        (current_user.get("sub"),))
+    return {"conversations": [dict(r) for r in rows]}
+
+
+@router.get("/api/ai/conversations/{conversation_id}")
+async def get_ai_conversation(conversation_id: int, current_user = Depends(get_current_user)):
+    rows = await db.read(
+        "SELECT id, title, messages_json, created_ts, updated_ts "
+        "FROM ai_conversations WHERE id = ? AND username = ?",
+        (conversation_id, current_user.get("sub")))
+    if not rows:
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    row = dict(rows[0])
+    row["messages"] = json.loads(row.pop("messages_json"))
+    return row
+
+
+@router.post("/api/ai/conversations")
+async def create_ai_conversation(payload: AiConversationSchema,
+                                 current_user = Depends(get_current_user)):
+    import asyncio
+    import time as _time
+    user = current_user.get("sub")
+    now = int(_time.time())
+    title = _conversation_title(payload.title, payload.messages)
+    body = json.dumps([m.model_dump() for m in payload.messages], ensure_ascii=False)
+
+    def _insert():
+        conn = db.get_observability_connection()
+        try:
+            cur = conn.execute(
+                "INSERT INTO ai_conversations (username, title, messages_json, "
+                "created_ts, updated_ts) VALUES (?, ?, ?, ?, ?)",
+                (user, title, body, now, now))
+            conn.execute(
+                "DELETE FROM ai_conversations WHERE username = ? AND id NOT IN "
+                "(SELECT id FROM ai_conversations WHERE username = ? "
+                " ORDER BY updated_ts DESC LIMIT ?)",
+                (user, user, MAX_CONVERSATIONS_PER_USER))
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    new_id = await asyncio.to_thread(_insert)
+    return {"id": new_id, "title": title, "created_ts": now, "updated_ts": now}
+
+
+@router.put("/api/ai/conversations/{conversation_id}")
+async def update_ai_conversation(conversation_id: int,
+                                 payload: AiConversationUpdateSchema,
+                                 current_user = Depends(get_current_user)):
+    import asyncio
+    import time as _time
+    user = current_user.get("sub")
+    now = int(_time.time())
+    title = payload.title.strip()[:120] if payload.title is not None else None
+    body = (json.dumps([m.model_dump() for m in payload.messages], ensure_ascii=False)
+            if payload.messages is not None else None)
+
+    def _update():
+        conn = db.get_observability_connection()
+        try:
+            cur = conn.execute(
+                "UPDATE ai_conversations SET "
+                "    title = COALESCE(?, title), "
+                "    messages_json = COALESCE(?, messages_json), "
+                "    updated_ts = ? "
+                "WHERE id = ? AND username = ?",
+                (title or None, body, now, conversation_id, user))
+            conn.commit()
+            return cur.rowcount
+        finally:
+            conn.close()
+
+    if await asyncio.to_thread(_update) != 1:
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return {"status": "success", "id": conversation_id, "updated_ts": now}
+
+
+@router.delete("/api/ai/conversations/{conversation_id}")
+async def delete_ai_conversation(conversation_id: int,
+                                 current_user = Depends(get_current_user)):
+    import asyncio
+    user = current_user.get("sub")
+
+    def _delete():
+        conn = db.get_observability_connection()
+        try:
+            cur = conn.execute(
+                "DELETE FROM ai_conversations WHERE id = ? AND username = ?",
+                (conversation_id, user))
+            conn.commit()
+            return cur.rowcount
+        finally:
+            conn.close()
+
+    if await asyncio.to_thread(_delete) != 1:
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return {"status": "success", "id": conversation_id}
+
 
 @router.get("/api/ai/models")
 def list_ai_models(provider: Optional[str] = None, profile_id: Optional[str] = None,

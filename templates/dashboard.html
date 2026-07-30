@@ -1457,29 +1457,37 @@
         </div>
       </div>
 
-      <!-- Panel: profilo attivo + configurazione provider (admin) -->
-      <div class="panel" style="margin-bottom:18px;">
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-          <div class="form-group" style="min-width:220px; margin-bottom:0;">
-            <label data-i18n="lblAiActiveProfile">Profilo attivo</label>
-            <select id="aiProfileSelect" onchange="onAiProfileSelectChange()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+      <!-- Panel: profilo attivo + configurazione provider (admin).
+           Le due <select> restano nel DOM (nascoste) e continuano a essere la
+           sorgente di verità che legge tutta la logica di ai.js: le card sono
+           una VISTA su di esse, non una seconda macchina a stati. -->
+      <div class="panel" style="margin-bottom:14px; padding:0;">
+      <details class="requires-admin" id="aiSettingsPanel" style="border:0; border-radius:12px; padding:0; margin-bottom:0; background:transparent; overflow:hidden;">
+        <summary style="cursor:pointer; padding:14px 16px; font-weight:600; display:flex; align-items:center; gap:10px;">
+          <i class="fa-solid fa-sliders" style="color:var(--primary);"></i>
+          <span data-i18n="titleAiSettings">Configurazione Provider (Profili)</span>
+          <span id="aiActiveProfileBadge" class="chip" style="font-size:11px; margin-left:auto;"></span>
+        </summary>
+        <div style="padding:0 16px 16px 16px;">
+          <div style="display:none;">
+            <select id="aiProfileSelect" onchange="onAiProfileSelectChange()">
               <option value="" data-i18n="optAiNoProfile">Nessun profilo</option>
             </select>
+            <select id="aiProfileEditSelect" onchange="onAiProfileEditSelectChange()">
+              <option value="__new__" data-i18n="optAiNewProfile">-- nuovo profilo --</option>
+            </select>
           </div>
-          <span id="aiActiveProfileBadge" class="chip" style="font-size:11px;"></span>
-        </div>
-
-      <details class="requires-admin" id="aiSettingsPanel" style="border:1px solid var(--border); border-radius:10px; padding:0; margin-bottom:0; background:var(--surface-2); overflow:hidden;">
-        <summary style="cursor:pointer; padding:12px 14px; font-weight:600;" data-i18n="titleAiSettings">Configurazione Provider (Profili)</summary>
-        <div style="padding:0 14px 14px 14px;">
-          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
-            <div class="form-group" style="min-width:180px;">
-              <label data-i18n="lblAiEditProfile">Profilo in modifica</label>
-              <select id="aiProfileEditSelect" onchange="onAiProfileEditSelectChange()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
-                <option value="__new__" data-i18n="optAiNewProfile">-- nuovo profilo --</option>
-              </select>
+          <div class="ai-profile-layout">
+            <div>
+              <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblAiProfileList">Profili</div>
+              <div id="aiProfileCards" style="display:flex; flex-direction:column; gap:8px;"></div>
+              <button type="button" class="btn btn-secondary btn-small ai-profile-new" style="width:100%; margin-top:8px;" onclick="selectAiProfileCard('__new__')">
+                <i class="fa-solid fa-plus"></i> <span data-i18n="optAiNewProfile">-- nuovo profilo --</span>
+              </button>
             </div>
-            <div class="form-group" style="min-width:160px;">
+            <div class="ai-profile-form">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+            <div class="form-group" style="min-width:160px; flex:1;">
               <label data-i18n="lblAiProfileName">Nome profilo</label>
               <input id="aiProfileName" type="text" placeholder="es. Claude prod" style="padding-left:12px;">
             </div>
@@ -1539,43 +1547,20 @@
             </button>
           </div>
           <div id="aiSettingsStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+            </div>
+          </div>
         </div>
       </details>
       </div>
 
-      <!-- Panel: contesto allegato (inventario / tenant / dispositivi) + nuova conversazione -->
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleAiContext">Contesto &amp; Conversazione</h3>
-        <div class="filterbar" style="margin-top:0; align-items:center;">
-          <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
-            <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
-          </label>
-          <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
-            <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
-          </select>
-          <div style="position:relative; display:inline-block;">
-            <button id="aiAttachDeviceBtn" class="btn" onclick="toggleAiDeviceDropdown()" style="padding:6px 12px;">
-              <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
-            </button>
-            <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
-              <div style="padding:8px;">
-                <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
-                  <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
-                  <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
-                </div>
-                <div id="aiAttachDeviceList" style="font-size:13px;"></div>
-              </div>
-            </div>
-          </div>
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0 0 0 auto;" onclick="clearAiChat()" data-i18n="btnAiClear">
-            <i class="fa-solid fa-trash"></i> Nuova conversazione
-          </button>
-        </div>
-      </div>
-
       <!-- Panel: generazione config per un NUOVO switch (template o parametri comuni tenant) -->
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleAiGenConfig">Genera configurazione nuovo switch</h3>
+      <div class="panel" style="margin-bottom:14px; padding:0;">
+        <details style="border:0; border-radius:12px; overflow:hidden;">
+        <summary style="cursor:pointer; padding:14px 16px; font-weight:600; display:flex; align-items:center; gap:10px;">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--primary);"></i>
+          <span data-i18n="titleAiGenConfig">Genera configurazione nuovo switch</span>
+        </summary>
+        <div style="padding:0 16px 16px 16px;">
         <p style="margin:0 0 10px; color:var(--text-muted); font-size:13px;" data-i18n="descAiGenConfig">
           Genera con l'AI una proposta di configurazione per un nuovo switch: da un dispositivo template oppure dai parametri comuni dell'ambiente del tenant (VLAN, VTP, NTP, syslog, AAA...).
         </p>
@@ -1615,20 +1600,66 @@
           </div>
           <pre id="genCfgOutput" style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px; max-height:420px; overflow:auto; font-size:12px; white-space:pre-wrap; margin:0;"></pre>
         </div>
+        </div>
+        </details>
       </div>
 
-      <!-- Panel: conversazione. #aiChatMessages e la logica di append/scroll
-           NON vengono toccati: solo il contenitore attorno viene ristilizzato. -->
-      <div class="panel">
-        <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleAiChat">Conversazione</h3>
-        <div id="aiChatMessages" style="border:1px solid var(--border); border-radius:10px; background:var(--surface); min-height:280px; max-height:480px; overflow-y:auto; padding:14px; margin-bottom:12px;"></div>
-
-        <div style="display:flex; gap:8px;">
-          <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
-          <button class="btn btn-primary" id="btnAiSend" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
-            <i class="fa-solid fa-paper-plane"></i> Invia
+      <!-- Panel: conversazione. Due colonne: elenco conversazioni salvate a
+           sinistra, thread + composer a destra. #aiChatMessages resta il
+           bersaglio di append/scroll di appendAiMessage(). -->
+      <div class="panel ai-chat-shell" style="padding:0; overflow:hidden;">
+        <aside class="ai-conv-sidebar">
+          <button class="btn btn-primary btn-small" style="width:100%;" onclick="newAiConversation()" data-i18n="btnAiNewChat">
+            <i class="fa-solid fa-plus"></i> Nuova conversazione
           </button>
-        </div>
+          <div id="aiConvList" class="ai-conv-list"></div>
+        </aside>
+
+        <section class="ai-chat-main">
+          <header class="ai-chat-header">
+            <h3 id="aiChatTitle" style="margin:0; font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" data-i18n="titleAiChat">Conversazione</h3>
+            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="renameAiConversation()" id="btnAiRenameChat" data-i18n-title="btnAiRenameChat" title="Rinomina conversazione">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="clearAiChat()" data-i18n="btnAiClear">
+              <i class="fa-solid fa-trash"></i> Nuova conversazione
+            </button>
+          </header>
+
+          <!-- Contesto allegato: era un pannello separato in cima alla pagina,
+               ma si sceglie mentre si scrive, non prima. -->
+          <div class="filterbar ai-chat-context" style="margin:0;">
+            <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
+            </label>
+            <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
+            </select>
+            <div style="position:relative; display:inline-block;">
+              <button id="aiAttachDeviceBtn" class="btn" onclick="toggleAiDeviceDropdown()" style="padding:6px 12px;">
+                <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
+              </button>
+              <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
+                <div style="padding:8px;">
+                  <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
+                    <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
+                    <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
+                  </div>
+                  <div id="aiAttachDeviceList" style="font-size:13px;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="aiChatMessages" style="flex:1; min-height:280px; overflow-y:auto; padding:16px; background:var(--surface);"></div>
+
+          <div class="ai-chat-composer">
+            <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
+            <button class="btn btn-primary" id="btnAiSend" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
+              <i class="fa-solid fa-paper-plane"></i> Invia
+            </button>
+          </div>
+        </section>
       </div>
     </div>
 
