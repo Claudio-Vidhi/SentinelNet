@@ -842,8 +842,8 @@
         /* Chat a due colonne: elenco conversazioni + thread. Altezza fissata
            al viewport perche' una chat che allunga la pagina costringe a
            scorrere due volte, il thread e poi il tab. */
-        #tab-ai .ai-chat-shell { display:grid; grid-template-columns:260px 1fr; height:calc(100vh - 260px); min-height:460px; }
-        #tab-ai .ai-conv-sidebar { display:flex; flex-direction:column; gap:10px; padding:14px; border-right:1px solid var(--border); background:var(--surface-2); overflow:hidden; }
+        #tab-ai .ai-chat-shell { display:grid; grid-template-columns:260px 1fr; height:min(calc(100vh - 240px), 760px); min-height:520px; }
+        #tab-ai .ai-conv-sidebar { display:flex; flex-direction:column; gap:10px; padding:14px; border-right:1px solid var(--border); background:var(--surface-2); overflow:hidden; min-height:0; }
         #tab-ai .ai-conv-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin:0 -6px; padding:0 6px; }
         #tab-ai .ai-conv-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; border:1px solid transparent; cursor:pointer; font-size:13px; color:var(--text-muted); transition:var(--transition); }
         #tab-ai .ai-conv-item:hover { background:var(--surface-3); color:var(--text); }
@@ -854,11 +854,16 @@
         #tab-ai .ai-conv-item .ai-conv-del:hover { color:var(--danger, #d9534f); }
         #tab-ai .ai-conv-empty { font-size:12px; color:var(--text-muted); padding:10px 4px; }
 
-        #tab-ai .ai-chat-main { display:flex; flex-direction:column; min-width:0; }
-        #tab-ai .ai-chat-header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); }
+        /* min-height:0 e flex:0 0 auto non sono decorativi: senza, l'area
+           messaggi si rifiuta di scendere sotto la propria altezza minima,
+           spinge il composer fuori dal riquadro e l'overflow:hidden del panel
+           lo taglia via — la casella di testo sparisce e non si scrive più. */
+        #tab-ai .ai-chat-main { display:flex; flex-direction:column; min-width:0; min-height:0; }
+        #tab-ai .ai-chat-header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); flex:0 0 auto; }
         #tab-ai .ai-chat-header h3 { flex:1; min-width:0; }
-        #tab-ai .ai-chat-context { padding:10px 16px; border-bottom:1px solid var(--border); align-items:center; background:var(--surface-2); }
-        #tab-ai .ai-chat-composer { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); background:var(--surface-2); }
+        #tab-ai .ai-chat-context { padding:10px 16px; border-bottom:1px solid var(--border); align-items:center; background:var(--surface-2); flex:0 0 auto; }
+        #tab-ai #aiChatMessages { flex:1 1 0; min-height:0; }
+        #tab-ai .ai-chat-composer { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); background:var(--surface-2); flex:0 0 auto; }
 
         /* Profili: la lista a card sostituisce le due <select>, che restano
            nascoste nel DOM come stato (vedi il commento nel markup). */

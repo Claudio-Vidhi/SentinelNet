@@ -827,7 +827,7 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
                      'resetAiModelList()', 'refreshAiModels()', 'saveAiSettings()',
                      'deleteAiProfile()', 'populateAiAttachDevices()',
                      'toggleAiDeviceDropdown()', 'setAllAiAttachDevices(true)',
-                     'setAllAiAttachDevices(false)', 'clearAiChat()', 'sendAiChat()'):
+                     'setAllAiAttachDevices(false)', 'sendAiChat()'):
             self.assertIn(hook, html)
 
     def test_rbac_admin_gating_on_provider_config(self):
@@ -871,9 +871,17 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         # contenitore di scorrimento su cui appendAiMessage() e
         # renderAiConfigProposal() fanno box.scrollTop = box.scrollHeight.
         self.assertIn(
-            '<div id="aiChatMessages" style="flex:1; min-height:280px; '
+            '<div id="aiChatMessages" style="flex:1 1 0; min-height:0; '
             'overflow-y:auto; padding:16px; background:var(--surface);"></div>',
             html)
+        # `min-height:0` inline non è cosmetico e non va rimesso a un valore
+        # fisso: con una min-height l'area messaggi non si comprime, spinge il
+        # composer oltre il fondo del panel e l'overflow:hidden lo taglia —
+        # la casella di testo sparisce e la chat diventa inutilizzabile.
+        css = frontend_source()   # concatena anche static/css/dashboard.css
+        self.assertIn('#tab-ai .ai-chat-composer', css)
+        composer = css[css.index('#tab-ai .ai-chat-composer'):]
+        self.assertIn('flex:0 0 auto', composer[:composer.index('}')])
 
     def test_device_multiselect_preserved(self):
         # populateAiAttachDevices()/getAiAttachDeviceIps() moved to
@@ -914,7 +922,8 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         html = _html()
         self.assertIn('id="aiConvList"', html)
         self.assertIn('id="aiChatTitle"', html)
-        for hook in ('newAiConversation()', 'renameAiConversation()'):
+        for hook in ('newAiConversation()', 'renameAiConversation()',
+                     'deleteCurrentAiConversation()'):
             self.assertIn(hook, html)
         js = frontend_source()
         self.assertIn("apiFetch('/api/ai/conversations')", js)

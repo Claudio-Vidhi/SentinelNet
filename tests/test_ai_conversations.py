@@ -61,6 +61,39 @@ class TestAiConversations(unittest.TestCase):
         row = next(x for x in listed if x["id"] == conv_id)
         self.assertEqual(2, row["message_count"])
 
+    def test_new_conversation_button_creates_it_immediately(self):
+        """Il pulsante '+' crea una conversazione VUOTA: deve comparire subito
+        in elenco, non solo dopo la prima risposta dell'AI — era il difetto
+        segnalato. Titolo vuoto finché non c'è un messaggio da cui ricavarlo."""
+        c = self._client("alice")
+        r = c.post("/api/ai/conversations", json={"messages": []})
+        self.assertEqual(200, r.status_code, r.text)
+        conv_id = r.json()["id"]
+        self.assertEqual("", r.json()["title"])
+
+        row = next(x for x in c.get("/api/ai/conversations").json()["conversations"]
+                   if x["id"] == conv_id)
+        self.assertEqual(0, row["message_count"])
+
+        # Il primo messaggio dà il titolo alla conversazione già esistente.
+        c.put(f"/api/ai/conversations/{conv_id}", json={
+            "messages": [{"role": "user", "content": "quali vlan sul core?"}]})
+        row = next(x for x in c.get("/api/ai/conversations").json()["conversations"]
+                   if x["id"] == conv_id)
+        self.assertEqual("quali vlan sul core?", row["title"])
+
+    def test_manual_title_survives_later_messages(self):
+        """Chi rinomina una conversazione non deve vedersela ribattezzare dal
+        messaggio successivo."""
+        c = self._client("alice")
+        conv_id = c.post("/api/ai/conversations", json={"messages": []}).json()["id"]
+        c.put(f"/api/ai/conversations/{conv_id}", json={"title": "VLAN core Milano"})
+        c.put(f"/api/ai/conversations/{conv_id}", json={
+            "messages": [{"role": "user", "content": "e i trunk?"}]})
+        got = c.get(f"/api/ai/conversations/{conv_id}").json()
+        self.assertEqual("VLAN core Milano", got["title"])
+        self.assertEqual(1, len(got["messages"]))
+
     def test_rename_does_not_touch_messages(self):
         c = self._client("alice")
         msgs = [{"role": "user", "content": "elenco vlan"}]

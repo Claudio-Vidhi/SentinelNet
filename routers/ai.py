@@ -348,13 +348,16 @@ class AiConversationUpdateSchema(BaseModel):
 
 def _conversation_title(title: str, messages) -> str:
     """Titolo esplicito se c'è, altrimenti l'inizio del primo messaggio utente:
-    una lista di 'Nuova conversazione' non aiuta a ritrovare niente."""
+    una lista di 'Nuova conversazione' non aiuta a ritrovare niente.
+
+    Stringa vuota quando non c'è ancora niente da cui ricavarlo (conversazione
+    appena creata e ancora senza messaggi): il titolo verrà derivato al primo
+    salvataggio utile, e intanto la UI mostra il proprio segnaposto."""
     title = (title or "").strip()
     if title:
         return title[:120]
     first = next((m for m in messages if m.role == "user"), None)
-    text = " ".join((first.content if first else "").split())
-    return (text[:60] or "Nuova conversazione")
+    return " ".join((first.content if first else "").split())[:60]
 
 
 @router.get("/api/ai/conversations")
@@ -425,17 +428,21 @@ async def update_ai_conversation(conversation_id: int,
     title = payload.title.strip()[:120] if payload.title is not None else None
     body = (json.dumps([m.model_dump() for m in payload.messages], ensure_ascii=False)
             if payload.messages is not None else None)
+    # Una conversazione creata vuota dal pulsante "+" non ha ancora un titolo:
+    # lo prende dal primo messaggio utente che arriva, ma senza mai sovrascrivere
+    # un titolo scelto a mano.
+    derived = _conversation_title("", payload.messages or [])
 
     def _update():
         conn = db.get_observability_connection()
         try:
             cur = conn.execute(
                 "UPDATE ai_conversations SET "
-                "    title = COALESCE(?, title), "
+                "    title = COALESCE(?, CASE WHEN title = '' THEN ? ELSE title END), "
                 "    messages_json = COALESCE(?, messages_json), "
                 "    updated_ts = ? "
                 "WHERE id = ? AND username = ?",
-                (title or None, body, now, conversation_id, user))
+                (title or None, derived, body, now, conversation_id, user))
             conn.commit()
             return cur.rowcount
         finally:

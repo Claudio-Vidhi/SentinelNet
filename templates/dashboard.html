@@ -1621,8 +1621,8 @@
             <button class="btn btn-secondary btn-small" style="width:auto;" onclick="renameAiConversation()" id="btnAiRenameChat" data-i18n-title="btnAiRenameChat" title="Rinomina conversazione">
               <i class="fa-solid fa-pen"></i>
             </button>
-            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="clearAiChat()" data-i18n="btnAiClear">
-              <i class="fa-solid fa-trash"></i> Nuova conversazione
+            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="deleteCurrentAiConversation()" id="btnAiDeleteChat" data-i18n-title="btnAiDeleteChat" title="Elimina conversazione">
+              <i class="fa-solid fa-trash"></i>
             </button>
           </header>
 
@@ -1651,7 +1651,7 @@
             </div>
           </div>
 
-          <div id="aiChatMessages" style="flex:1; min-height:280px; overflow-y:auto; padding:16px; background:var(--surface);"></div>
+          <div id="aiChatMessages" style="flex:1 1 0; min-height:0; overflow-y:auto; padding:16px; background:var(--surface);"></div>
 
           <div class="ai-chat-composer">
             <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
