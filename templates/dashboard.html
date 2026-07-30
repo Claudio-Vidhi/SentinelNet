@@ -1608,12 +1608,16 @@
            sinistra, thread + composer a destra. #aiChatMessages resta il
            bersaglio di append/scroll di appendAiMessage(). -->
       <div class="panel ai-chat-shell" style="padding:0; overflow:hidden;">
-        <aside class="ai-conv-sidebar">
+        <!-- Deve restare un div: un elemento "aside" erediterebbe la regola
+             globale della sidebar del form (position:sticky, height:calc(100vh
+             - 40px)), diventerebbe alto quanto il viewport e sfonderebbe la
+             griglia della chat, spingendo il composer fuori dal riquadro. -->
+        <div class="ai-conv-sidebar">
           <button class="btn btn-primary btn-small" style="width:100%;" onclick="newAiConversation()" data-i18n="btnAiNewChat">
             <i class="fa-solid fa-plus"></i> Nuova conversazione
           </button>
           <div id="aiConvList" class="ai-conv-list"></div>
-        </aside>
+        </div>
 
         <section class="ai-chat-main">
           <header class="ai-chat-header">

@@ -925,6 +925,14 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         for hook in ('newAiConversation()', 'renameAiConversation()',
                      'deleteCurrentAiConversation()'):
             self.assertIn(hook, html)
+        # La sidebar della chat NON deve essere un <aside>: la regola globale
+        # `aside { position:sticky; height:calc(100vh - 40px) }` la renderebbe
+        # alta quanto il viewport, sfondando la griglia della chat e spingendo
+        # il composer sotto il bordo del panel, dove l'overflow lo taglia via.
+        tab = html[html.index('<div id="tab-ai"'):
+                   html.index('<!-- TAB: Switch da Zero (Provisioner) -->')]
+        self.assertNotIn('<aside', tab)
+        self.assertIn('<div class="ai-conv-sidebar">', tab)
         js = frontend_source()
         self.assertIn("apiFetch('/api/ai/conversations')", js)
         self.assertIn('`/api/ai/conversations/${Number(id)}`', js)
