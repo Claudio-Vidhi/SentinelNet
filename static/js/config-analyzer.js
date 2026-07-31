@@ -52,6 +52,36 @@
         renderCaResults();
     }
 
+    // Triage per-apparato dalla scheda del Config Analyzer. Il bottone e' lo
+    // stesso dell'inventario (icona, colore, endpoint): e' la stessa azione, e
+    // due controlli diversi per la stessa cosa si imparano due volte.
+    function caTriageButton(dev, L) {
+        return `<button type="button" class="btn btn-secondary btn-small"
+            style="margin:0 0 0 8px; padding:4px 8px; color:var(--warning);"
+            title="${escapeHtml(L.titleCaTriage)}"
+            onclick="caTriageDevice('${jsStr(dev.ip)}', this, event)"><i class="fa-solid fa-bolt-lightning"></i></button>`;
+    }
+
+    // Il bottone vive dentro <summary>: senza preventDefault il click aprirebbe
+    // e chiuderebbe anche l'accordion.
+    async function caTriageDevice(ip, btnEl, ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        // triageSingleDevice() e' quello dell'inventario. Fuori da una tabella
+        // le sue letture di riga sono tutte opzionali e protette, quindi gira
+        // qui senza modifiche: disabilita il bottone, gira, e lo ripristina con
+        // la stessa icona che questo bottone usa.
+        await triageSingleDevice(ip, btnEl);
+        // Il triage ha riscritto il backup: quello a schermo e' il vecchio.
+        await fetchConfigAnalyzer();
+        // caView e' stato di modulo e sopravvive al refetch: si riapre solo la
+        // scheda su cui si stava lavorando.
+        const card = document.querySelector(`details[data-ca-ip="${CSS.escape(ip)}"]`);
+        if (card) {
+            card.open = true;
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
     function destroyCaNetworks() {
         Object.keys(caNetworks).forEach(k => { try { caNetworks[k].destroy(); } catch (e) {} });
         caNetworks = {};
@@ -148,13 +178,14 @@
                        : caView === 'routing' ? caRenderRouting(dev, L, en, idx)
                        : caView === 'acl' ? caRenderAcls(dev, L, en)
                        : caRenderIfaces(dev, L, en);
-            return `<details class="mac-switch" data-ca-idx="${idx}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''} ontoggle="caOnToggle(this, ${idx})">
+            return `<details class="mac-switch" data-ca-idx="${idx}" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''} ontoggle="caOnToggle(this, ${idx})">
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenant}
                     <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${count}</span>
+                    ${caTriageButton(dev, L)}
                 </summary>
                 <div style="padding:0 14px 14px;">${body}</div>
             </details>`;
@@ -480,10 +511,22 @@
         const hostname = dev.hostname || dev.ip;
         const nodeFont = { color: '#ffffff', size: 13, face: 'Rubik, sans-serif' };
         const hopFont = { color: '#ffffff', size: 12, face: 'Rubik, sans-serif' };
+        // Senza un 'highlight' esplicito vis.js usa il proprio: sfondo #D2E5FF,
+        // quasi bianco. L'etichetta resta bianca e il nodo selezionato diventa
+        // illeggibile. Il selezionato tiene quindi il fondo scuro — e' li' che
+        // sta il contrasto del testo — e si distingue con un anello chiaro.
+        const centerColor = {
+            background: '#6a5fc1', border: '#a99ff2',
+            highlight: { background: '#5a4fb0', border: '#ffffff' }
+        };
+        const hopColor = {
+            background: '#2b2144', border: '#a99ff2',
+            highlight: { background: '#241b3a', border: '#ffffff' }
+        };
         const nodes = [{
             id: 'center', label: hostname, shape: 'box',
-            color: { background: '#6a5fc1', border: '#a99ff2' },
-            font: nodeFont, borderWidth: 2, margin: 8
+            color: centerColor,
+            font: nodeFont, borderWidth: 2, borderWidthSelected: 4, margin: 8
         }];
         const edges = [];
         const hopCounts = {};
@@ -497,13 +540,17 @@
             const nid = 'hop_' + hop;
             nodes.push({
                 id: nid, label: hop, shape: 'ellipse',
-                color: { background: '#2b2144', border: '#a99ff2' },
-                font: hopFont, borderWidth: 1.5
+                color: hopColor,
+                font: hopFont, borderWidth: 1.5, borderWidthSelected: 3
             });
             edges.push({
                 from: 'center', to: nid,
                 label: `${hopCounts[hop]} ${i18n[currentLang].lblCaRouteMapEdge}`,
-                color: hopHasDefault[hop] ? { color: '#ffb84d' } : { color: 'rgba(169,159,242,0.65)' },
+                // Anche l'arco selezionato ha un default vis.js fuori palette
+                // (#2B7CE9): si tiene la tinta dell'arco, schiarita.
+                color: hopHasDefault[hop]
+                    ? { color: '#ffb84d', highlight: '#ffd479' }
+                    : { color: 'rgba(169,159,242,0.65)', highlight: '#d9d2ff' },
                 width: hopHasDefault[hop] ? 3 : 2,
                 font: { color: '#ffffff', size: 12, strokeWidth: 0, background: '#150f23' }
             });
@@ -631,13 +678,14 @@
         if (dev.config_type === 'fortios' || dev.config_type === 'wlc-aireos') {
             const mv = caRenderMvValidationBody(dev, L, en);
             const tenantMv = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
-            return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenantMv}
                     <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${mv.total}</span>
+                    ${caTriageButton(dev, L)}
                 </summary>
                 <div style="padding:0 14px 14px;">${mv.body}</div>
             </details>`;
@@ -664,13 +712,14 @@
             if (routeAclRefs.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--primary);">${L.titleCaRouteAclRefs}</h4><div>${routeAclRefs.map(r => `<span class="ca-chip">${escapeHtml(r.context)} → ${escapeHtml(r.acl)}</span>`).join('')}</div>`);
             body = sections.join('');
         }
-        return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+        return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
             <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                 <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                 <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                 <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                 ${tenant}
                 <span style="margin-left:auto; color:var(--text-muted); font-size:12px;">${total}</span>
+                ${caTriageButton(dev, L)}
             </summary>
             <div style="padding:0 14px 14px;">${body}</div>
         </details>`;
@@ -903,12 +952,13 @@
                 const sec = sections.find(s => s.id === activeId);
                 inner = sec ? caRenderFwSection(sec, L) : caMvEmpty();
             }
-            return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
+            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
                     <span style="color:var(--text-muted); font-family:var(--font-code); font-size:12px;">${escapeHtml(dev.ip)}</span>
                     ${tenant}
+                    <span style="margin-left:auto;">${caTriageButton(dev, L)}</span>
                 </summary>
                 <div style="padding:0 14px 14px;">${inner}</div>
             </details>`;
