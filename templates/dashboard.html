@@ -542,10 +542,10 @@
                 <label id="devPassLabel" data-i18n="lblPass">Password</label>
                 <input id="devPass" type="password" placeholder="admin" style="padding-left:12px;">
               </div>
-              <div class="form-group">
+              <div class="form-group" id="devSecretGroup">
                 <label id="devSecretLabel" data-i18n="lblSecret">Enable Secret</label>
                 <input id="devSecret" type="password" placeholder="admin" style="padding-left:12px;">
-                <small id="devSecretHint" style="display:none; color:var(--text-muted); font-size:11px;" data-i18n="hintSecretLinux">Su un host Linux vale come password sudo: se compilato, il triage esegue anche i comandi che richiedono root. Lasciandolo vuoto la sessione resta non privilegiata.</small>
+                <small id="devSecretHint" style="display:none; color:var(--text-muted); font-size:11px;" data-i18n="hintSecretLinux">Se compilata, il triage esegue anche i comandi che richiedono root. Lasciandola vuota la sessione resta non privilegiata.</small>
               </div>
             </div>
 
