@@ -47,15 +47,9 @@
                 return;
             }
             const toText = currentLang==='en' ? 'to' : 'verso';
-            // L'eta' del backup va detta: un "2/2 UP" di due settimane fa e uno
-            // di tre minuti fa altrimenti si leggono uguali.
-            const age = ts => {
-                if (!ts) return '';
-                const h = (Date.now() / 1000 - ts) / 3600;
-                const txt = h < 1 ? `${Math.max(1, Math.round(h * 60))} min`
-                    : (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} g`);
-                return `<span style="font-size:11px; color:${h > 168 ? 'var(--warning)' : 'var(--text-muted)'};" title="${currentLang==='en'?'backup age':'eta del backup'}"> · backup ${escapeHtml(txt)} fa</span>`;
-            };
+            // backupAgeLabel() sta in core.js: lo stesso dato lo mostra anche il
+            // Config Analyzer, e una seconda copia della formula divergerebbe.
+            const age = ts => ts ? ` · ${backupAgeLabel(ts)}` : '';
             box.innerHTML = devices.map(d => {
                 const pcs = (d.portchannels || []).slice().sort((a,b)=>{
                     const na=parseInt(String(a.name).replace(/\D/g,''))||0, nb=parseInt(String(b.name).replace(/\D/g,''))||0; return na-nb;
