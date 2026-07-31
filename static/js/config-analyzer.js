@@ -7,6 +7,14 @@
     let caSrvView = null; // idem per il pill "Server" (envelope ai/linux_analyzer)
     let caRouteGroupMode = 'flat'; // 'flat' | 'byhop' — ricordato per la sessione
     let caNetworks = {};   // ip -> vis.Network istanza mappa route (lazy, per device aperto)
+    // Lista EFFETTIVAMENTE renderizzata negli accordion per-apparato. Non e'
+    // caData: le viste VLAN/Routing/ACL/Interfacce escludono firewall e server,
+    // e ``data-ca-idx`` e' l'indice in QUESTA lista. Cercare quell'indice in
+    // caData restituisce un altro apparato ogni volta che un firewall o un
+    // server lo precede — la mappa route finiva sul device sbagliato.
+    // ponytail: indice posizionale, non chiave. Se un giorno una vista ordina
+    // o filtra la lista dopo il render, si passa a data-ca-ip.
+    let caList = [];
 
     function loadConfigAnalyzer(forceRefresh) {
         const sel = document.getElementById('configGroupSelect');
@@ -122,6 +130,7 @@
         if (['vlan', 'routing', 'acl', 'iface'].includes(caView)) {
             list = caData.filter(dev => !isFirewallDevice(dev) && !isServerDevice(dev));
         }
+        caList = list;
         if (!list.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
             return;
@@ -161,15 +170,19 @@
     // Deep-link dal modale "Config porta": apre il device e evidenzia l'interfaccia.
     function caApplyFocus() {
         if (!caFocusIp || !caData || !caData.length) return;
-        const idx = caData.findIndex(d => d.ip === caFocusIp);
-        if (idx === -1) { caFocusIp = caFocusPort = null; return; }
+        // Esistenza nel dataset COMPLETO: decide solo se vale la pena cambiare
+        // vista, e va cercata prima che caList sia stata popolata.
+        if (!caData.some(d => d.ip === caFocusIp)) { caFocusIp = caFocusPort = null; return; }
         if (caView !== 'iface') {
             // caSwitchView richiama renderCaResults, che a sua volta rientra qui con la vista giusta.
             caSwitchView('iface');
             return;
         }
+        // L'indice del DOM e' quello della lista renderizzata, non di caData.
+        const idx = caList.findIndex(d => d.ip === caFocusIp);
         const port = caFocusPort;
         caFocusIp = caFocusPort = null;
+        if (idx === -1) return;
         const detailsEl = document.querySelector(`details[data-ca-idx="${idx}"]`);
         if (!detailsEl) return;
         detailsEl.open = true;
@@ -310,7 +323,7 @@
     // aperto e vengono distrutte alla chiusura, per evitare leak di canvas.
     function caOnToggle(detailsEl, idx) {
         if (caView !== 'routing') return;
-        const dev = caData[idx];
+        const dev = caList[idx];
         if (!dev) return;
         if (detailsEl.open) {
             caBuildRouteMap(dev, idx);
@@ -359,7 +372,6 @@
     function caSwitchRouteGroupMode(mode, idx) {
         caRouteGroupMode = mode;
         renderCaResults();
-        const dev = caData[idx];
         const detailsEl = document.querySelector(`details[data-ca-idx="${idx}"]`);
         if (detailsEl) {
             detailsEl.open = true;
