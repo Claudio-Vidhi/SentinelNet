@@ -646,6 +646,13 @@ _TYPE_ORDER = ("firewall", "wlc", "ap", "router", "phone", "server", "pc")
 # nell'hostname: un hostname come "sw-wifi-floor2" non deve confondersi con un
 # AP). Questa evidenza ha precedenza sulle keyword "ap" basate su hostname.
 _SWITCH_SUBSTRINGS = ("catalyst", "ws-c", "c9200", "c9300", "c9500", "switch")
+# Evidenza diretta di access point da description/platform. Gli AP Cisco
+# lightweight annunciano Capabilities CDP "Router Trans-Bridge": senza questo
+# controllo le Capabilities (che hanno la precedenza) li classificano "router".
+# "ap software" arriva dalla System Description LLDP; il pattern sui modelli
+# copre il caso solo-CDP, dove l'unico segnale e' la Platform.
+_AP_SUBSTRINGS = ("ap software", "air-ap", "air-cap", "aironet")
+_AP_MODEL_RE = re.compile(r'\b(?:c9\d{3}ax|cw91\d{2})')
 
 
 def _has_token(text: str, token: str) -> bool:
@@ -666,6 +673,12 @@ def classify_device_type(hostname: str = "", description: str = "",
     # (es. hostname con "wifi" o segmento "AP").
     if "switch" in caps and "access point" not in caps and "wlan" not in caps:
         return "switch"
+    # Modello/software AP in Platform o System Description: evidenza piu'
+    # specifica delle Capabilities, che per un AP lightweight riportano
+    # "Router Trans-Bridge" e lo farebbero classificare "router".
+    _dp = " ".join(filter(None, [description, platform])).lower()
+    if any(s in _dp for s in _AP_SUBSTRINGS) or _AP_MODEL_RE.search(_dp):
+        return "ap"
     # Le Capabilities hanno precedenza assoluta su hostname/description/platform:
     # es. Capabilities "Router" non deve perdere contro un hostname con token
     # debole tipo "srv-core-01" (convenzione di naming del sito), che altrimenti

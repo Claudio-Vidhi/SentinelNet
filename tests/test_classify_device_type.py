@@ -101,6 +101,32 @@ class TestClassifyDeviceType(unittest.TestCase):
             "router",
         )
 
+    def test_ap_software_description_beats_router_capability(self):
+        # Bug reale: un AP Cisco lightweight annuncia Capabilities CDP
+        # "Router Trans-Bridge". Le capabilities avevano precedenza assoluta,
+        # quindi l'AP finiva classificato "router" nonostante la System
+        # Description LLDP dicesse esplicitamente "Cisco AP Software".
+        self.assertEqual(
+            classify_device_type(
+                "site-ap-01",
+                description="Cisco AP Software, ap1g7-k9w8 Version: 1.2.3",
+                capabilities="Router Trans-Bridge",
+            ),
+            "ap",
+        )
+
+    def test_ap_platform_model_beats_router_capability(self):
+        # Stesso bug con il solo CDP (nessuna System Description LLDP): il
+        # modello nella Platform e' l'unica evidenza di AP disponibile.
+        self.assertEqual(
+            classify_device_type(
+                "node-42",
+                platform="cisco C9105AXI-E",
+                capabilities="Router Trans-Bridge",
+            ),
+            "ap",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
