@@ -17,7 +17,7 @@ from drivers.aruba_os import ArubaOsDriver
 from drivers.fortinet import FortinetDriver
 from drivers.cisco_wlc import CiscoWlcDriver
 from drivers.paloalto_panos import PaloAltoDriver
-from drivers.linux import LinuxDriver
+from drivers.linux import LinuxDriver, sanitize_session
 from security.crypto_vault import decrypt_password
 from security.security_manager import log_audit
 from core import data_config
@@ -32,7 +32,20 @@ DEFAULT_USERNAME = os.getenv("SENTINELNET_ADMIN_USER", "Admin")
 DEFAULT_PASSWORD = os.getenv("SENTINELNET_ADMIN_PASS", "admin")
 DEFAULT_SECRET   = os.getenv("SENTINELNET_ADMIN_SECRET", "admin")
 
-DANGEROUS_COMMANDS = ["write erase", "reload", "delete", "format", "no boot", "erase"]
+# Blacklist per sottostringa applicata ai comandi inviati da un operatore.
+# Non e' una sandbox — e' un paracadute contro il comando distruttivo digitato
+# per errore su venti apparati insieme; un admin la puo' scavalcare.
+# ponytail: confronto per sottostringa, quindi non copre le varianti ('rm -fr',
+# '--recursive'). Se servisse una copertura vera la strada e' una allowlist per
+# vendor, non una blacklist piu' lunga.
+DANGEROUS_COMMANDS = [
+    # CLI di rete
+    "write erase", "reload", "delete", "format", "no boot", "erase",
+    # Linux: senza queste, un host gestito non ha alcuna rete di protezione.
+    # 'shutdown' NON entra: su Cisco e' il comando normale per spegnere una
+    # porta, e bloccarlo romperebbe l'uso quotidiano.
+    "rm -rf", "mkfs", "dd if=", "shred ", "reboot", "poweroff", ":(){",
+]
 
 def sanitize_filename(filename: str) -> str:
     sanitized = ''.join(
@@ -292,7 +305,9 @@ def run_backup_and_triage(device):
 
     try:
         with ConnectHandler(**device_params) as net_connect:
-            # Linux non ha enable mode: netmiko traduce enable() in `sudo su`. Ha
+            if netmiko_type == 'linux':
+                sanitize_session(net_connect)
+            # Linux non ha enable mode: netmiko traduce enable() in `sudo -s`. Ha
             # senso solo se l'operatore ha messo la password sudo in Enable
             # Secret; altrimenti la sessione resta non privilegiata e i comandi
             # non-root bastano.
@@ -442,7 +457,10 @@ def send_custom_command(device, command: str, bypass_blacklist: bool = False):
     }
     try:
         with ConnectHandler(**device_params) as net_connect:
-            net_connect.enable()
+            if netmiko_type == 'linux':
+                sanitize_session(net_connect)
+            if netmiko_type != 'linux' or secret:
+                net_connect.enable()
             output = net_connect.send_command(command)
             log_audit(f"Comando CLI '{command}' eseguito con successo sul dispositivo '{device['IP']}'.")
             return {"status": "success", "output": output}
@@ -486,7 +504,10 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
 
     try:
         with ConnectHandler(**device_params) as net_connect:
-            net_connect.enable()
+            if netmiko_type == 'linux':
+                sanitize_session(net_connect)
+            if netmiko_type != 'linux' or secret:
+                net_connect.enable()
             if config_mode:
                 output = net_connect.send_config_set(commands)
                 if save_after:

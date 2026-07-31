@@ -2669,7 +2669,7 @@
             <div>
               <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label>
               <select id="auditBenchmarkSelect" onchange="renderBenchmarkRequirements()" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-                <option value="cis" data-i18n="nsaBenchCis">CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x)</option>
+                <option value="cis" data-i18n="nsaBenchCis">CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x / Ubuntu 24.04 LTS)</option>
                 <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
                 <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
               </select>
@@ -2971,15 +2971,17 @@
               <option value="exec" data-i18n="bulkModeExec">Operativo (show / exec)</option>
               <option value="config" data-i18n="bulkModeConfig">Configurazione (config mode)</option>
             </select>
+            <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintBulkMode">Su un host Linux non esiste una config mode: la modalità Configurazione eleva la sessione a root con «sudo -s» e richiede la password sudo nel campo Enable Secret.</small>
           </div>
           <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:12px; user-select:none;">
             <input type="checkbox" id="bulkSave" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
-            <span data-i18n="lblBulkSave">Salva configurazione dopo l'invio (write memory)</span>
+            <span data-i18n="lblBulkSave">Salva configurazione dopo l'invio (dove supportato)</span>
           </label>
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblBulkCommands">Comandi (uno per riga)</label>
             <textarea id="bulkCommands" rows="8"
-              placeholder="interface Gi1/0/1&#10; description UPLINK&#10; switchport mode trunk"
+              placeholder="Un comando per riga, nella sintassi del vendore selezionato.&#10;Cisco:  show version&#10;Linux:  uptime -p"
+              data-i18n-placeholder="phBulkCommands"
               style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
           </div>
         </div>

@@ -148,6 +148,7 @@ def _poll_device(device: dict) -> list:
     """[(kind, summary_json)] per un host. Lista vuota se non risponde."""
     from netmiko import ConnectHandler
     from core import core_engine
+    from drivers.linux import sanitize_session
 
     ip = str(device.get("IP") or "")
     cli_kind, port = core_engine.get_cli_transport(device)
@@ -159,6 +160,7 @@ def _poll_device(device: dict) -> list:
                             host=ip, port=port, username=username,
                             password=password, timeout=15, auth_timeout=10,
                             banner_timeout=10) as conn:
+            sanitize_session(conn)
             output = conn.send_command(PROBE_COMMAND, read_timeout=30)
     except Exception as e:
         logger.debug("Linux %s: giro fallito (%s)", ip, e)

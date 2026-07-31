@@ -18,7 +18,15 @@ from core import data_config  # noqa: E402
 data_config.DATA_DIR = _TMP_DATA_DIR
 
 from core import core_engine  # noqa: E402
-from drivers.linux import LinuxDriver  # noqa: E402
+from drivers.linux import LinuxDriver, sanitize_session  # noqa: E402
+
+# Prompt di una Fedora recente: le sequenze OSC di shell integration portano un
+# UUID diverso a ogni comando.
+FEDORA_PROMPT = (
+    "\x1b]8003;end=1dac7fb8-162d-41d8-8d01-0bf492df9163;exit=success\x1b\\"
+    "\x1b]8003;start=d1419595-5e27-460f-88db-bf4a08af4564;user=admin;"
+    "hostname=fedora;pid=5374;type=shell;cwd=/home/admin\x1b\\"
+    "[admin@fedora ~]$ ")
 
 OS_RELEASE = """\
 PRETTY_NAME="Ubuntu 24.04.2 LTS"
@@ -93,6 +101,78 @@ class DriverResolutionTest(unittest.TestCase):
     def test_canonical_vendor_resolves_too(self):
         self.assertEqual(core_engine.resolve_driver("linux"),
                          (LinuxDriver, "linux"))
+
+
+class ShellIntegrationTest(unittest.TestCase):
+    """Il prompt di Fedora porta un UUID diverso a ogni comando.
+
+    netmiko costruisce il pattern di fine comando dal prompt: se l'UUID resta
+    dentro, il pattern del comando N non corrisponde mai al prompt del comando
+    N+1 e ogni lettura va in timeout ("Pattern not detected").
+    """
+
+    def _patched(self):
+        conn = MagicMock()
+        conn.strip_ansi_escape_codes = lambda text: text   # nessuna CSI qui
+        sanitize_session(conn)
+        return conn
+
+    def test_the_prompt_survives_without_its_escape_sequences(self):
+        conn = self._patched()
+        self.assertEqual(conn.strip_ansi_escape_codes(FEDORA_PROMPT),
+                         "[admin@fedora ~]$ ")
+
+    def test_two_consecutive_prompts_become_identical(self):
+        """Il punto: e' l'UUID che cambia a rompere tutto, non l'escape."""
+        conn = self._patched()
+        second = FEDORA_PROMPT.replace("d1419595", "9f2e01aa") \
+                              .replace("1dac7fb8", "77c0be31")
+        self.assertNotEqual(FEDORA_PROMPT, second)
+        self.assertEqual(conn.strip_ansi_escape_codes(FEDORA_PROMPT),
+                         conn.strip_ansi_escape_codes(second))
+
+    def test_the_base_prompt_is_recomputed_after_patching(self):
+        # Quello calcolato alla connessione contiene ancora le sequenze.
+        conn = self._patched()
+        conn.set_base_prompt.assert_called_once()
+
+    def test_normal_output_is_untouched(self):
+        conn = self._patched()
+        text = "PermitRootLogin no\n--- /etc/fstab ---\n/dev/sda1 / ext4 x 0 1\n"
+        self.assertEqual(conn.strip_ansi_escape_codes(text), text)
+
+
+class BlacklistTest(unittest.TestCase):
+    """La blacklist era solo CLI di rete: su un host Linux non proteggeva nulla."""
+
+    def _blocked(self, command):
+        device = {"IP": "192.0.2.10", "Vendor": "linux"}
+        # La blacklist decide PRIMA di connettersi: la sessione non deve mai
+        # aprirsi davvero, altrimenti il test aspetta un timeout di rete.
+        with patch.object(core_engine, "ConnectHandler",
+                          side_effect=OSError("nessuna sessione nei test")), \
+                patch.object(core_engine, "get_device_credentials",
+                             return_value=("operatore", "pw", "")), \
+                patch.object(core_engine, "log_audit"):
+            res = core_engine.send_custom_command(device, command)
+        return res["status"] == "error" and "Blacklisted" in res["message"]
+
+    def test_destructive_linux_commands_are_refused(self):
+        for command in ("rm -rf /var/log", "mkfs.ext4 /dev/sdb1",
+                        "dd if=/dev/zero of=/dev/sda", "reboot",
+                        "poweroff", "shred -u /etc/shadow"):
+            self.assertTrue(self._blocked(command), command)
+
+    def test_ordinary_linux_commands_are_not(self):
+        for command in ("uptime -p", "systemctl status sshd", "df -hT",
+                        "ip -br a"):
+            self.assertFalse(self._blocked(command), command)
+
+    def test_cisco_shutdown_is_still_allowed(self):
+        """Spegnere una porta e' l'uso quotidiano di 'shutdown': bloccarlo per
+        via di Linux romperebbe il caso principale del prodotto."""
+        self.assertFalse(self._blocked("shutdown"))
+        self.assertFalse(self._blocked("interface Gi1/0/1"))
 
 
 class EnableGuardTest(unittest.TestCase):
