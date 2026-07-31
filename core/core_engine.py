@@ -395,6 +395,19 @@ def run_backup_and_triage(device):
                     ("systemctl list-unit-files --state=enabled --no-legend --no-pager",
                      "--- SYSTEMCTL ENABLED ---"),
                     ("ss -tuln",           "--- LISTENING SOCKETS ---"),
+                    # Container: restano nel tier non privilegiato perche' un
+                    # operatore nel gruppo 'docker' li vede senza sudo, e col
+                    # tier privilegiato la sessione e' gia' root. Se docker non
+                    # c'e', 2>/dev/null lascia semplicemente la sezione vuota.
+                    ("docker ps --format "
+                     "'{{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null",
+                     "--- CONTAINERS ---"),
+                    ("docker version --format '{{.Server.Version}}' 2>/dev/null",
+                     "--- DOCKER VERSION ---"),
+                    # kubelet e' installato su ogni nodo del cluster, control
+                    # plane o worker: risponde anche dove kubectl non ha un
+                    # kubeconfig utilizzabile da questa sessione.
+                    ("kubelet --version 2>/dev/null", "--- KUBELET VERSION ---"),
                     ("lldpctl",            "--- SHOW LLDP NEIGHBORS ---"),
                 ]
                 if secret:

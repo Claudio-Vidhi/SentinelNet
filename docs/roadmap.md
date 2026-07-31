@@ -116,15 +116,24 @@ just an implementation. See [remote-sites.md](remote-sites.md).
 
 ## 3. Server integrations (Linux / Windows)
 
-Proposals, none implemented. Ordered by value-to-effort ratio.
+**Linux shipped**; Windows is still a proposal. Ordered by value-to-effort ratio.
+
+### Done
+
+1. ~~**Servers as inventory devices.**~~ **Linux: shipped.** `drivers/linux.py`
+   plus a `linux` branch in the extra-command chain make a Linux host a normal
+   managed device — backup, triage, Config Analyzer, CIS audit, health poller.
+   What it collects and which view each command feeds:
+   [server-collection.md](server-collection.md).
+   **Windows over WinRM (`pywinrm`) is still open** and would follow the same
+   shape: a driver, an artefact with the same `--- <section> ---` markers, and
+   an analyzer that turns it into the existing envelope.
+
+6. ~~**Config backup for servers.**~~ **Shipped for Linux** as part of item 1 —
+   the artefact *is* the backup: a dump of critical `/etc` files plus command
+   output, in `backup-config/` like any switch.
 
 ### High value, low effort
-
-1. **Servers as inventory devices.** Linux over SSH (already in `core_engine`) →
-   hostname, OS, kernel, interfaces, IPs, uptime, critical packages. Windows
-   over WinRM (`pywinrm`) → the same via remote PowerShell. Servers appear in
-   the inventory and on the map as endpoint nodes, correlated to their switch
-   port through MAC history, which is already collected.
 
 2. **MAC → server correlation.** Automatically match server MACs against
    `mac_history`, so the map can say "this server is on SW-X Gi1/0/12". No new
@@ -145,20 +154,24 @@ Proposals, none implemented. Ordered by value-to-effort ratio.
    network vendors (`inventory_manager.resolve_euvd_term`); extending it to
    server operating systems needs only the version from SSH/WinRM inventory.
 
-6. **Config backup for servers.** Same shape as `backup-config` for switches: a
-   scheduled dump of critical files (`/etc`, a minimal registry/GPO export).
-
 ### Larger efforts
 
 7. **Unified remote agent** — the same site agent also collects local server
    data: one deployment per site.
 8. **AD/LDAP integration** — SentinelNet login with domain credentials, and the
    AD computer list as an inventory source.
-9. **SNMP against servers** — Linux (net-snmp) and Windows (SNMP service) for
-   CPU/RAM/disk metrics.
+9. **SNMP against servers.** Note the transport is *not* missing: the SNMP
+   poller ([collectors.md](collectors.md) §6) already polls any inventory device
+   with a community set, vendor-agnostically, so a server running net-snmp is
+   collected today with no new code — sysDescr/sysName/sysLocation/uptime plus
+   full IF-MIB per interface. What is genuinely absent is `sysContact`
+   (one scalar OID) and the CPU/RAM/storage/sensor MIBs
+   (HOST-RESOURCES, UCD-SNMP, ENTITY-SENSOR). For Linux the first three are
+   already covered over SSH by the health poller, so this only pays off for
+   Windows and for appliances where SSH is not an option.
 
-**Suggested entry point:** items 1 and 2. They reuse almost all existing code
-and make the map immediately more useful. Then 3 and 4.
+**Suggested entry point:** item 2. It reuses almost all existing code and makes
+the map immediately more useful. Then 3 and 4.
 
 ---
 

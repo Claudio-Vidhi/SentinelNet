@@ -36,7 +36,8 @@ for user-facing strings, logs and comments, English for identifiers — see
 
 | Document | Contents |
 |---|---|
-| [collectors.md](collectors.md) | Sources: IPFIX, NetFlow, sFlow, syslog, FortiGate REST, SNMP, site agents |
+| [collectors.md](collectors.md) | Sources: IPFIX, NetFlow, sFlow, syslog, FortiGate REST, SNMP, Linux health, site agents |
+| [server-collection.md](server-collection.md) | Linux hosts: what the backup collects, which view each command feeds, what needs sudo |
 | [live-flows-and-siem.md](live-flows-and-siem.md) | The two flow tabs in depth: ingest, endpoints, frontend, past mistakes |
 | [remote-sites.md](remote-sites.md) | Multi-site: central poll and site agent, deployment, CLI relay |
 

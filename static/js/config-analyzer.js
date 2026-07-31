@@ -871,6 +871,14 @@
             return `<button class="ca-pill${activeId === id ? ' active' : ''}" onclick="${switchFn}('${jsStr(id)}')">${escapeHtml(lbl)}</button>`;
         }).join('');
         const subBar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">${subPills}</div>`;
+        // Riga di aiuto della sezione attiva. La chiave si ricava da quella
+        // dell'etichetta (srv.sec.X -> srv.help.X): le sezioni che non hanno un
+        // testo non mostrano niente, quindi l'envelope firewall resta invariato
+        // finche' non gli si scrivono le sue.
+        const helpText = L[(sectionMap[activeId] || '').replace('.sec.', '.help.')] || '';
+        const helpBar = helpText
+            ? `<div style="margin:-6px 0 14px; padding:9px 12px; border-left:2px solid var(--primary); background:var(--surface-2); border-radius:0 8px 8px 0; font-size:12px; line-height:1.5; color:var(--text-muted);">${escapeHtml(helpText)}</div>`
+            : '';
 
         const openAll = devices.length === 1;
         const body = devices.map(dev => {
@@ -893,7 +901,7 @@
                 <div style="padding:0 14px 14px;">${inner}</div>
             </details>`;
         }).join('');
-        return { view: activeId, html: subBar + body };
+        return { view: activeId, html: subBar + helpBar + body };
     }
 
     function caRenderFirewallView(L, en) {

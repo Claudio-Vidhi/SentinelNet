@@ -20,6 +20,7 @@ No collector is enabled by default. Configuration and exposure:
 | syslog | UDP | **5514** | [ingesters/syslog.py](../observability/ingesters/syslog.py) | `syslog_events` |
 | FortiGate REST | outbound HTTPS | — | [ingesters/api_poller.py](../observability/ingesters/api_poller.py) | `api_observations` |
 | SNMP v2c | outbound UDP 161 | — | [ingesters/snmp_poller.py](../observability/ingesters/snmp_poller.py) | `api_observations` |
+| Linux health | outbound SSH | 22 | [ingesters/linux_poller.py](../observability/ingesters/linux_poller.py) | `api_observations` |
 | Site agent | inbound HTTPS | 8765 | [services/site_agent.py](../services/site_agent.py) | inventory, MAC, syslog |
 | ARP / MAC tables | SSH · NETCONF · RESTCONF | — | [collectors/](../collectors/) | `mac_history.db`, `arp_entries` |
 
@@ -198,6 +199,41 @@ The normalization adapter turns these snapshots into both `device.state` /
 consecutive snapshots. Fields that are volatile by construction (counters,
 uptime, sessions) are excluded from the comparison via a substring filter —
 without it, every round would produce a "change" on every port of every device.
+
+---
+
+## 7b. Linux health
+
+A Linux server exposes neither a REST API like a FortiGate nor, as a rule, an
+SNMP agent: without this poller it would be a device you can query by hand but
+that contributes nothing to incident reasoning.
+
+One SSH session per host, one command
+([`PROBE_COMMAND`](../observability/ingesters/linux_poller.py)), snapshots into
+the same `api_observations` with `kind` `linux_health`. Nothing downstream
+changes: `normalize._from_api_observations` already projects them into
+`device.state`, and `DEVICE_LOAD_001` already reads `cpu_pct` / `memory_pct` /
+`disk_pct` from `events.metrics_json` without knowing where they came from.
+
+| Branch | Fields |
+|---|---|
+| `results` (compared) | `kernel`, `uptime_s`, `failed_units` |
+| `metrics` (never compared) | `cpu_pct`, `memory_pct`, `disk_pct`, `load1`, `load5`, `load15`, `zombies`, `pending_updates` |
+
+- **CPU is a delta**, not an average: `/proc/stat` is read twice a second apart,
+  because the raw file is a counter since boot.
+- **Memory uses `available`**, not `used`: buffers and page cache are reclaimable,
+  and counting them as used would make any host that read a large file look full.
+- **The `metrics` branch is excluded from change detection**
+  ([`_stable_fields`](../observability/normalize.py)). A measurement changes on
+  every read — that's its job. Comparing it would report a "configuration change"
+  every polling round.
+- **Absent ≠ zero.** A missing section yields no field at all: a threshold rule
+  reading zero would stay silent exactly where it isn't looking.
+- **No sudo.** Every metric here is readable by an unprivileged account, so the
+  session never calls `enable()`. The privileged tier exists only in triage.
+- **Central sites only.** Hosts behind a site agent in `mode == 'agent'` are not
+  polled; supporting them means adding the round to `services/site_agent.py`.
 
 ---
 

@@ -46,6 +46,9 @@ _S_FAILED = "SYSTEMCTL FAILED"
 _S_ENABLED = "SYSTEMCTL ENABLED"
 _S_SUDOERS = "SUDOERS"
 _S_FIREWALL = "FIREWALL RULES"
+_S_CONTAINERS = "CONTAINERS"
+_S_DOCKER = "DOCKER VERSION"
+_S_KUBELET = "KUBELET VERSION"
 
 _F_OS_RELEASE = "/etc/os-release"
 _F_FSTAB = "/etc/fstab"
@@ -124,6 +127,15 @@ def _system_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
     dns = [l.split(None, 1)[1] for l in _lines(cfg, "/etc/resolv.conf")
            if l.lower().startswith("nameserver") and len(l.split()) > 1]
     add("dns", ", ".join(dns))
+
+    # Runtime dei container: righe di sistema, non una tabella a se'. Se il
+    # comando non esiste la sezione e' vuota e la riga non compare, che e' la
+    # risposta giusta: su questo host non c'e'.
+    add("docker", " ".join(_lines(cfg, _S_DOCKER)[:1]))
+    # ``kubelet --version`` -> "Kubernetes v1.29.0": interessa la versione.
+    kubelet = _lines(cfg, _S_KUBELET)[:1]
+    if kubelet:
+        add("kubernetes", kubelet[0].split()[-1])
     return rows
 
 
@@ -410,6 +422,23 @@ def _sudoers_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
     return rows
 
 
+def _container_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
+    """``docker ps``, campi separati da TAB.
+
+    Il separatore non e' lo spazio perche' STATUS lo contiene ("Up 3 hours") e
+    PORTS pure: dividere sugli spazi spezzerebbe due colonne su quattro.
+    """
+    rows = []
+    for line in _lines(cfg, _S_CONTAINERS):
+        fields = line.split("\t")
+        if len(fields) < 2:
+            continue
+        rows.append({"name": fields[0].strip(), "image": fields[1].strip(),
+                     "status": fields[2].strip() if len(fields) > 2 else "",
+                     "ports": fields[3].strip() if len(fields) > 3 else ""})
+    return rows
+
+
 def _firewall_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
     """``nft list ruleset`` o ``iptables -S``: firewall dell'host.
 
@@ -548,6 +577,8 @@ def _analyze(text) -> Dict[str, Any]:
         _section("disks", ["name", "model", "serial", "size"], _disk_rows(cfg)),
         _section("dimms", ["locator", "size", "type", "speed", "manufacturer",
                            "part_number"], _dimm_rows(cfg)),
+        _section("containers", ["name", "image", "status", "ports"],
+                 _container_rows(cfg)),
         _section("services", ["unit", "load", "active", "sub", "description"],
                  _service_rows(cfg)),
         _section("enabled_units", ["unit", "preset"], _enabled_rows(cfg)),
