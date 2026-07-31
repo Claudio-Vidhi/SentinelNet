@@ -2568,6 +2568,37 @@ class TestCaSearch(unittest.TestCase):
         self.assertIn("caApplySearch()", block[:200])
 
 
+class TestCaRenderedListIndex(unittest.TestCase):
+    """``data-ca-idx`` indicizza la lista RENDERIZZATA, non ``caData``.
+
+    Bug reale: le viste VLAN/Routing/ACL/Interfacce filtrano via firewall e
+    server, ma ``caOnToggle``/``caApplyFocus`` risolvevano il device con
+    ``caData[idx]``. Con un FortiGate o un server prima in elenco, l'indice
+    puntava a un altro apparato: la mappa route di uno switch disegnava le
+    rotte del device precedente, e il deep-link "Config porta" apriva la
+    scheda sbagliata.
+    """
+
+    def _source(self):
+        return frontend_source()
+
+    def test_the_rendered_list_is_captured_for_index_lookups(self):
+        js = self._source()
+        self.assertIn("caList = list;", js)
+
+    def test_no_lookup_resolves_an_index_against_the_full_dataset(self):
+        js = self._source()
+        # L'indice viene dalla lista filtrata: cercarlo in caData e' il bug.
+        self.assertNotIn("caData[idx]", js)
+
+    def test_toggle_and_focus_read_the_rendered_list(self):
+        js = self._source()
+        toggle = js[js.index("function caOnToggle"):]
+        self.assertIn("caList[idx]", toggle[:400])
+        focus = js[js.index("function caApplyFocus"):]
+        self.assertIn("caList.findIndex", focus[:900])
+
+
 class TestRedundancyUi(unittest.TestCase):
     def test_redundancy_ui_uses_existing_payload_and_never_creates_vip_node(self):
         source = frontend_source()
