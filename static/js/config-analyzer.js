@@ -4,6 +4,7 @@
     let caData = null;
     let caView = 'home';
     let caFwView = null; // sub-menu del pill "Firewall": id sezione vendor-driven (fw_analyzers envelope), auto-inizializzato al primo render
+    let caSrvView = null; // idem per il pill "Server" (envelope ai/linux_analyzer)
     let caRouteGroupMode = 'flat'; // 'flat' | 'byhop' — ricordato per la sessione
     let caNetworks = {};   // ip -> vis.Network istanza mappa route (lazy, per device aperto)
 
@@ -49,6 +50,10 @@
     }
 
     function caDeviceCount(dev) {
+        if (dev.config_type === 'linux') {
+            const secs = ((dev.server || {}).sections) || [];
+            return secs.reduce((n, s) => n + ((s.rows || []).length), 0);
+        }
         if (dev.config_type === 'fortios') return (dev.policies || []).length;
         if (dev.config_type === 'wlc-aireos') return (dev.wlans || []).length;
         if (caView === 'vlan') return (dev.vlans || []).length;
@@ -87,6 +92,12 @@
         return !!(dev.is_firewall || ct === 'fortios' || ct === 'panos' || vendor === 'fortigate' || vendor === 'paloalto' || vendor === 'fortinet' || cat === 'firewall');
     }
 
+    // Un host Linux non ha VLAN, ACL o interfacce in senso Cisco: sta solo nel
+    // pill "Server", e viene escluso dalle viste che descrivono uno switch.
+    function isServerDevice(dev) {
+        return !!(dev && (dev.config_type || '').toLowerCase() === 'linux');
+    }
+
     function caRenderResultsInner() {
         const box = document.getElementById('caResults');
         if (!box) return;
@@ -102,13 +113,14 @@
         }
         if (caView === 'convert') { box.innerHTML = caRenderConvert(L); return; }
         if (caView === 'firewall') { box.innerHTML = caRenderFirewallView(L, en); return; }
+        if (caView === 'server') { box.innerHTML = caRenderServerView(L, en); return; }
         if (!caData || !caData.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
             return;
         }
         let list = caData;
         if (['vlan', 'routing', 'acl', 'iface'].includes(caView)) {
-            list = caData.filter(dev => !isFirewallDevice(dev));
+            list = caData.filter(dev => !isFirewallDevice(dev) && !isServerDevice(dev));
         }
         if (!list.length) {
             box.innerHTML = `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
@@ -685,7 +697,7 @@
                 <td>${escapeHtml(i.name)}</td>
                 <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
                 <td>${escapeHtml(i.vlanid != null ? String(i.vlanid) : '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((i.allowaccess || []).join(', ') || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(i.allowaccess || [])}</td>
                 <td>${state}</td>
             </tr>`;
         }).join('');
@@ -700,15 +712,17 @@
         const polRows = policies.map(p => {
             const act = (p.action || '').toLowerCase();
             const actColor = act === 'accept' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
-            const disabled = (p.status || '').toLowerCase() === 'disable';
-            return `<tr${disabled ? ' style="opacity:0.5;"' : ''}>
+            // Stessa resa del pill Firewall: la riga disattivata si attenua e
+            // prende una barra neutra a sinistra, senza il rosso che in questa
+            // stessa tabella significa gia' azione "deny".
+            return `<tr${caRowIsDisabled(p) ? ' class="ca-row-off"' : ''}>
                 <td>${escapeHtml(p.id != null ? String(p.id) : '—')}</td>
-                <td>${escapeHtml(p.name || '—')}${disabled ? ` <span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">disable</span>` : ''}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcintf || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstintf || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.srcaddr || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.dstaddr || []).join(', ') || '—')}</td>
-                <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml((p.service || []).join(', ') || '—')}</td>
+                <td>${escapeHtml(p.name || '—')}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.srcintf || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.dstintf || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.srcaddr || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.dstaddr || [])}</td>
+                <td style="font-family:var(--font-code); font-size:12px;">${caMultiCell(p.service || [])}</td>
                 <td style="color:${actColor}; font-weight:700;">${escapeHtml(p.action || '—')}</td>
                 <td>${escapeHtml(p.nat || '—')}</td>
                 <td>${escapeHtml(p.logtraffic || '—')}</td>
@@ -768,7 +782,48 @@
         renderCaResults();
     }
 
-    // Renderer generico di una sezione firewall (envelope vendor-driven: {id, label_key, columns, rows}).
+    function caSwitchSrvView(view) {
+        caSrvView = view;
+        renderCaResults();
+    }
+
+    // Valori mostrati in chiaro prima di collassare il resto dietro un "+N".
+    const CA_CELL_PREVIEW = 2;
+
+    // Cella multi-valore: una policy puo' citare decine di oggetti indirizzo, e
+    // stamparli tutti rende la colonna piu' larga dello schermo. L'elenco intero
+    // resta nel DOM (ricerca del browser, copia-incolla), solo nascosto.
+    function caMultiCell(values) {
+        const all = values.map(v => escapeHtml(jsStr(v)));
+        if (!all.length) return '—';
+        // Nascondere un solo valore non fa guadagnare spazio: costa un clic e basta.
+        if (all.length <= CA_CELL_PREVIEW + 1) return all.join(', ');
+        const head = all.slice(0, CA_CELL_PREVIEW).join(', ');
+        return `<span class="ca-cell-short">${head}<button type="button" class="ca-more" onclick="caToggleCell(this)">+${all.length - CA_CELL_PREVIEW}</button></span>`
+             + `<span class="ca-cell-full" style="display:none;">${all.join(', ')}<button type="button" class="ca-more" onclick="caToggleCell(this)">&minus;</button></span>`;
+    }
+
+    function caToggleCell(btn) {
+        const td = btn.closest('td');
+        if (!td) return;
+        const short = td.querySelector('.ca-cell-short');
+        const full = td.querySelector('.ca-cell-full');
+        if (!short || !full) return;
+        const expanded = full.style.display !== 'none';
+        short.style.display = expanded ? '' : 'none';
+        full.style.display = expanded ? 'none' : '';
+    }
+
+    // Una regola disattivata è ancora scritta nella configurazione ma non filtra
+    // niente: leggerla come attiva è il modo più facile di sbagliare una analisi.
+    function caRowIsDisabled(r) {
+        const status = String(r.status == null ? '' : r.status).toLowerCase();
+        if (status === 'disable' || status === 'disabled' || status === 'off') return true;
+        return r.disabled === true || String(r.disabled || '').toLowerCase() === 'yes';
+    }
+
+    // Renderer generico di una sezione firewall/server (envelope vendor-driven:
+    // {id, label_key, columns, rows}).
     function caRenderFwSection(sec, L) {
         const cols = sec.columns || [];
         const rows = sec.rows || [];
@@ -776,47 +831,56 @@
         const thead = cols.map(c => `<th>${escapeHtml(L[c.label_key] || c.label_key)}</th>`).join('');
         const trs = rows.map(r => {
             const tds = cols.map(c => {
-                let v = r[c.key];
-                if (Array.isArray(v)) v = v.join(', ');
-                if (c.key === 'trusthost' && (v === null || v === undefined || v === '')) v = L.lblCaTrusthostAny;
-                else if (v === null || v === undefined || v === '') v = '—';
-                return `<td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(v))}</td>`;
+                const v = r[c.key];
+                let cell;
+                if (Array.isArray(v)) {
+                    // trusthost vuoto non è "nessuno": è "da qualunque IP".
+                    cell = (!v.length && c.key === 'trusthost')
+                        ? escapeHtml(L.lblCaTrusthostAny) : caMultiCell(v);
+                } else if (c.key === 'trusthost' && (v === null || v === undefined || v === '')) {
+                    cell = escapeHtml(L.lblCaTrusthostAny);
+                } else {
+                    cell = (v === null || v === undefined || v === '') ? '—' : escapeHtml(jsStr(v));
+                }
+                return `<td style="font-family:var(--font-code); font-size:12px;">${cell}</td>`;
             }).join('');
-            return `<tr>${tds}</tr>`;
+            return `<tr${caRowIsDisabled(r) ? ' class="ca-row-off"' : ''}>${tds}</tr>`;
         }).join('');
         return `<div class="table-container"><table><thead><tr>${thead}</tr></thead><tbody>${trs}</tbody></table></div>`;
     }
 
-    function caRenderFirewallView(L, en) {
-        const fwDevices = (caData || []).filter(isFirewallDevice);
-        // Unione delle sezioni (per id, prima occorrenza vince) su tutti i device firewall mostrati:
-        // i pill sono comuni, ma ogni device renderizza solo le proprie sezioni (vendor-driven).
+    // Vista a sotto-pill guidata dall'envelope. Firewall e Server condividono
+    // la stessa forma dei dati ({vendor, sections}), quindi anche il renderer:
+    // cambia solo dove sta l'envelope sul device e quale variabile ricorda il
+    // sotto-pill attivo.
+    function caRenderEnvelopeView(devices, envelopeKey, activeId, switchFn,
+                                  unsupportedMsg, L) {
         const sectionMap = {};
-        fwDevices.forEach(dev => {
-            ((dev.firewall && dev.firewall.sections) || []).forEach(s => {
+        devices.forEach(dev => {
+            (((dev[envelopeKey] || {}).sections) || []).forEach(s => {
                 if (!(s.id in sectionMap)) sectionMap[s.id] = s.label_key;
             });
         });
         const sectionIds = Object.keys(sectionMap);
         if (!sectionIds.length) {
-            return `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>`;
+            return { view: activeId, html: `<div style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.msgCaNoDevices)}</div>` };
         }
-        if (!sectionIds.includes(caFwView)) caFwView = sectionIds[0];
+        if (!sectionIds.includes(activeId)) activeId = sectionIds[0];
         const subPills = sectionIds.map(id => {
             const lbl = L[sectionMap[id]] || sectionMap[id];
-            return `<button class="ca-pill${caFwView === id ? ' active' : ''}" onclick="caSwitchFwView('${jsStr(id)}')">${escapeHtml(lbl)}</button>`;
+            return `<button class="ca-pill${activeId === id ? ' active' : ''}" onclick="${switchFn}('${jsStr(id)}')">${escapeHtml(lbl)}</button>`;
         }).join('');
         const subBar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">${subPills}</div>`;
 
-        const openAll = fwDevices.length === 1;
-        const body = fwDevices.map(dev => {
+        const openAll = devices.length === 1;
+        const body = devices.map(dev => {
             const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
+            const sections = ((dev[envelopeKey] || {}).sections) || [];
             let inner;
-            const sections = (dev.firewall && dev.firewall.sections) || [];
-            if (!dev.firewall || !sections.length) {
-                inner = `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(L.msgCaFwUnsupportedVendor)}</div>`;
+            if (!sections.length) {
+                inner = `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(unsupportedMsg)}</div>`;
             } else {
-                const sec = sections.find(s => s.id === caFwView);
+                const sec = sections.find(s => s.id === activeId);
                 inner = sec ? caRenderFwSection(sec, L) : caMvEmpty();
             }
             return `<details class="mac-switch" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
@@ -829,7 +893,21 @@
                 <div style="padding:0 14px 14px;">${inner}</div>
             </details>`;
         }).join('');
-        return subBar + body;
+        return { view: activeId, html: subBar + body };
+    }
+
+    function caRenderFirewallView(L, en) {
+        const res = caRenderEnvelopeView((caData || []).filter(isFirewallDevice),
+            'firewall', caFwView, 'caSwitchFwView', L.msgCaFwUnsupportedVendor, L);
+        caFwView = res.view;
+        return res.html;
+    }
+
+    function caRenderServerView(L, en) {
+        const res = caRenderEnvelopeView((caData || []).filter(isServerDevice),
+            'server', caSrvView, 'caSwitchSrvView', L.msgCaSrvNoBackup, L);
+        caSrvView = res.view;
+        return res.html;
     }
 
     function caRenderWlc(dev, L, en) {

@@ -92,6 +92,20 @@ def _join(vals):
     return ', '.join(vals) if isinstance(vals, (list, tuple)) else (vals or '')
 
 
+def _multi(vals):
+    """Valore multi-elemento tenuto come LISTA fino alla UI.
+
+    Una policy puo' citare decine di oggetti indirizzo: appiattirli qui in una
+    stringa costringe la tabella a una cella enorme, e il client non ha piu' il
+    modo di espanderla su richiesta perche' la struttura non c'e' piu'.
+    Ricomporla lato browser separando su ", " non e' equivalente: il nome di un
+    oggetto puo' contenere una virgola.
+    """
+    if isinstance(vals, (list, tuple)):
+        return [str(v) for v in vals]
+    return [str(vals)] if vals else []
+
+
 def _section(sid, columns, rows):
     return {
         "id": sid,
@@ -124,11 +138,11 @@ def _analyze(text):
         rows.append({
             "id": pid,
             "name": _forti_set1(n, 'name'),
-            "srcintf": _join(n["sets"].get('srcintf', [])),
-            "dstintf": _join(n["sets"].get('dstintf', [])),
-            "srcaddr": _join(n["sets"].get('srcaddr', [])),
-            "dstaddr": _join(n["sets"].get('dstaddr', [])),
-            "service": _join(n["sets"].get('service', [])),
+            "srcintf": _multi(n["sets"].get('srcintf', [])),
+            "dstintf": _multi(n["sets"].get('dstintf', [])),
+            "srcaddr": _multi(n["sets"].get('srcaddr', [])),
+            "dstaddr": _multi(n["sets"].get('dstaddr', [])),
+            "service": _multi(n["sets"].get('service', [])),
             "action": _forti_set1(n, 'action', 'deny'),
             "nat": _forti_set1(n, 'nat', 'disable'),
             "status": _forti_set1(n, 'status', 'enable'),
@@ -155,7 +169,7 @@ def _analyze(text):
     sections.append(_section("addresses", ["name", "type", "subnet", "comment"], rows))
 
     # 3) Address groups
-    rows = [{"name": name, "members": _join(n["sets"].get('member', []))}
+    rows = [{"name": name, "members": _multi(n["sets"].get('member', []))}
             for name, n in _children(root, 'firewall addrgrp')]
     sections.append(_section("address_groups", ["name", "members"], rows))
 
@@ -165,8 +179,8 @@ def _analyze(text):
         rows.append({
             "name": name,
             "protocol": _forti_set1(n, 'protocol'),
-            "tcp_portrange": _join(n["sets"].get('tcp-portrange', [])),
-            "udp_portrange": _join(n["sets"].get('udp-portrange', [])),
+            "tcp_portrange": _multi(n["sets"].get('tcp-portrange', [])),
+            "udp_portrange": _multi(n["sets"].get('udp-portrange', [])),
         })
     sections.append(_section(
         "services", ["name", "protocol", "tcp_portrange", "udp_portrange"], rows))
@@ -179,7 +193,7 @@ def _analyze(text):
             rows.append({
                 "name": name,
                 "type": kind,
-                "day": _join(n["sets"].get('day', [])),
+                "day": _multi(n["sets"].get('day', [])),
                 "start": _forti_set1(n, 'start'),
                 "end": _forti_set1(n, 'end'),
             })
@@ -222,7 +236,7 @@ def _analyze(text):
             "ip": _forti_ip_cidr(n),
             "zone": zone_of_iface.get(name, ''),
             "vdom": _forti_set1(n, 'vdom'),
-            "allowaccess": _join(n["sets"].get('allowaccess', [])),
+            "allowaccess": _multi(n["sets"].get('allowaccess', [])),
             "status": _forti_set1(n, 'status', 'up'),
         })
     sections.append(_section(
@@ -241,8 +255,8 @@ def _analyze(text):
                 "name": name,
                 "remote_gw": _forti_set1(n, 'remote-gw'),
                 "interface": _forti_set1(n, 'interface'),
-                "proposal": _join(n["sets"].get('proposal', [])),
-                "phase2": _join(p2_by_p1.get(name, [])),
+                "proposal": _multi(n["sets"].get('proposal', [])),
+                "phase2": _multi(p2_by_p1.get(name, [])),
             })
     sections.append(_section(
         "vpn_ipsec", ["name", "remote_gw", "interface", "proposal", "phase2"], rows))
@@ -265,7 +279,7 @@ def _analyze(text):
         rows.append({
             "name": name,
             "accprofile": _forti_set1(n, 'accprofile'),
-            "trusthost": _join(trusthosts),
+            "trusthost": _multi(trusthosts),
             "remote_auth": _forti_set1(n, 'remote-auth', 'disable'),
         })
     sections.append(_section(
@@ -281,9 +295,12 @@ def _analyze(text):
             rows.append({
                 "name": name,
                 "kind": kind,
-                "server": (_forti_set1(n, 'server')
-                           or _forti_set1(n, 'primary-server')
-                           or _forti_set1(n, 'host')),
+                # Lista anche quando il valore e' uno solo: la stessa colonna
+                # ospita i membri di un gruppo, e due tipi diversi nella stessa
+                # colonna sono un errore che aspetta il dato giusto.
+                "server": _multi(_forti_set1(n, 'server')
+                                 or _forti_set1(n, 'primary-server')
+                                 or _forti_set1(n, 'host')),
                 "sso": "yes" if kind == 'fsso' else "",
             })
     for name, n in _children(root, 'user group'):
@@ -291,7 +308,7 @@ def _analyze(text):
         rows.append({
             "name": name,
             "kind": "group",
-            "server": _join(n["sets"].get('member', [])),
+            "server": _multi(n["sets"].get('member', [])),
             "sso": "yes" if 'fsso' in gtype.lower() else "",
         })
     sections.append(_section(
