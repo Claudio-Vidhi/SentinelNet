@@ -1356,6 +1356,13 @@ def analyze_device(ip):
     result["ip"] = ip
     result["hostname"] = hostname
     result["tenant"] = tenant
+    # Eta' del dato mostrato. Il backup e' gia' stato scelto per mtime da
+    # _find_freshest_backup: qui si rilegge invece di allargarne la firma, che
+    # ha tre chiamanti che spacchettano due valori.
+    try:
+        result["backup_ts"] = int(os.path.getmtime(path))
+    except OSError:
+        result["backup_ts"] = None
     result["config_type"] = config_type
     result["is_firewall"] = is_firewall
     result["firewall"] = firewall

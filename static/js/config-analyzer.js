@@ -55,11 +55,18 @@
     // Triage per-apparato dalla scheda del Config Analyzer. Il bottone e' lo
     // stesso dell'inventario (icona, colore, endpoint): e' la stessa azione, e
     // due controlli diversi per la stessa cosa si imparano due volte.
+    // L'eta' del backup sta accanto al bottone perche' e' cio' che rende il
+    // bottone una decisione: e' il dato vecchio che si vuole rinfrescare.
+    // 'requires-write' e' il gancio gia' in uso (body.role-viewer lo nasconde):
+    // il triage e' operator-only e a un viewer il bottone non serve.
     function caTriageButton(dev, L) {
-        return `<button type="button" class="btn btn-secondary btn-small"
-            style="margin:0 0 0 8px; padding:4px 8px; color:var(--warning);"
-            title="${escapeHtml(L.titleCaTriage)}"
-            onclick="caTriageDevice('${jsStr(dev.ip)}', this, event)"><i class="fa-solid fa-bolt-lightning"></i></button>`;
+        return `<span style="display:inline-flex; align-items:center; gap:8px; margin-left:8px;">
+            ${backupAgeLabel(dev.backup_ts)}
+            <button type="button" class="btn btn-secondary btn-small requires-write"
+                style="margin:0; padding:4px 8px; color:var(--warning);"
+                title="${escapeHtml(L.titleCaTriage)}"
+                onclick="caTriageDevice('${jsStr(dev.ip)}', this, event)"><i class="fa-solid fa-bolt-lightning"></i></button>
+        </span>`;
     }
 
     // Il bottone vive dentro <summary>: senza preventDefault il click aprirebbe

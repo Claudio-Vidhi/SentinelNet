@@ -348,6 +348,24 @@ async function logout() {
     checkAuthRequirements();
 }
 
+// --- ETA' DEL BACKUP ---
+
+// Quanto e' vecchio il dato che si sta guardando. Va detto ovunque si mostri
+// config letta da un backup: un "2/2 UP" di due settimane fa e uno di tre
+// minuti fa altrimenti si leggono uguali.
+// Oltre una settimana il testo passa a var(--warning): e' il punto in cui il
+// dato smette di descrivere la rete di adesso.
+function backupAgeLabel(ts) {
+    if (!ts) return '';
+    const en = currentLang === 'en';
+    const h = (Date.now() / 1000 - ts) / 3600;
+    const txt = h < 1 ? `${Math.max(1, Math.round(h * 60))} min`
+        : (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} ${en ? 'd' : 'g'}`);
+    const label = en ? `backup ${txt} ago` : `backup ${txt} fa`;
+    return `<span style="font-size:11px; color:${h > 168 ? 'var(--warning)' : 'var(--text-muted)'};"`
+        + ` title="${en ? 'backup age' : 'eta del backup'}">${escapeHtml(label)}</span>`;
+}
+
 // --- RUOLI / PRIVILEGI ---
 
 function roleLabel(role) {

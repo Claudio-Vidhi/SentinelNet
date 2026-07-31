@@ -2653,6 +2653,51 @@ class TestCaTriageButton(unittest.TestCase):
         self.assertIn("var(--warning)", btn)
         self.assertIn("titleCaTriage", btn)
 
+    def test_the_button_is_hidden_from_viewers(self):
+        # Il triage e' operator-only lato API: 'requires-write' e' il gancio
+        # gia' esistente (body.role-viewer lo nasconde in dashboard.css).
+        js = self._js()
+        btn = js[js.index("function caTriageButton"):]
+        btn = btn[:btn.index("async function caTriageDevice")]
+        self.assertIn("requires-write", btn)
+        self.assertIn("body.role-viewer .requires-write", js)
+
+    def test_the_age_of_the_data_sits_next_to_the_button(self):
+        # E' l'eta' del dato che rende il bottone una decisione.
+        js = self._js()
+        btn = js[js.index("function caTriageButton"):]
+        btn = btn[:btn.index("async function caTriageDevice")]
+        self.assertIn("backupAgeLabel(dev.backup_ts)", btn)
+
+
+class TestBackupAgeLabelShared(unittest.TestCase):
+    """Una sola formula per l'eta' del backup, in core.js.
+
+    La mappa Port-Channel e il Config Analyzer mostrano lo stesso fatto: due
+    copie divergerebbero, ed e' gia' successo — quella locale di topology.js
+    diceva "fa" anche in inglese.
+    """
+
+    def test_the_helper_lives_in_core_and_is_language_aware(self):
+        js = frontend_source()
+        fn = js[js.index("function backupAgeLabel"):]
+        fn = fn[:fn.index("// --- RUOLI / PRIVILEGI ---")]
+        self.assertIn("ago", fn)
+        self.assertIn("fa`", fn)
+        # Oltre una settimana il dato non descrive piu' la rete di adesso.
+        self.assertIn("var(--warning)", fn)
+
+    def test_both_call_sites_use_it_and_no_copy_survives(self):
+        # assertTrue e non assertIn: su un fallimento assertIn stamperebbe
+        # l'intero sorgente frontend concatenato (oltre 1 MB).
+        js = frontend_source()
+        self.assertTrue("backupAgeLabel(ts)" in js,
+                        "topology.js non delega a backupAgeLabel")
+        self.assertTrue("backupAgeLabel(dev.backup_ts)" in js,
+                        "config-analyzer.js non usa backupAgeLabel")
+        # La formula compare una volta sola.
+        self.assertEqual(1, js.count("Math.round(h * 60)"))
+
 
 class TestRedundancyUi(unittest.TestCase):
     def test_redundancy_ui_uses_existing_payload_and_never_creates_vip_node(self):
