@@ -479,6 +479,7 @@ BUILTIN_CATEGORIES = {
     "switch":   "Switch",
     "server":   "Server",
     "phone":    "Telefono IP",
+    "camera":   "Telecamera IP",
     "pc":       "PC / Workstation",
     "other":    "Altro",
 }

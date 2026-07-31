@@ -127,6 +127,41 @@ class TestClassifyDeviceType(unittest.TestCase):
             "ap",
         )
 
+    def test_router_platform_beats_switch_capability(self):
+        # Bug reale: un router L3 annuncia Capabilities CDP "Router Switch IGMP"
+        # come qualsiasi switch multilayer, e il ramo "switch in caps" chiudeva
+        # la classificazione prima di leggere il modello nella Platform.
+        self.assertEqual(
+            classify_device_type(
+                "site-gw-01",
+                platform="cisco ISR4321/K9",
+                capabilities="Router Switch IGMP",
+            ),
+            "router",
+        )
+
+    def test_multilayer_switch_still_switch_with_router_capability(self):
+        # Contro-prova: stesse Capabilities, ma Platform di switch -> switch.
+        self.assertEqual(
+            classify_device_type(
+                "site-sw-01",
+                platform="cisco WS-C3850-12XS",
+                capabilities="Router Switch IGMP",
+            ),
+            "switch",
+        )
+
+    def test_network_camera_description_is_camera(self):
+        # Le telecamere IP si annunciano solo via LLDP (nessuna Capability CDP)
+        # e prima finivano nel generico "client".
+        self.assertEqual(
+            classify_device_type(
+                "site-cam-01",
+                description="ACME M1234 Fixed Dome Network Camera 1.2.3",
+            ),
+            "camera",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

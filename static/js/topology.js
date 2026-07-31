@@ -131,6 +131,7 @@
         switch:   { color: "#4f8ef7", it: "Switch",        en: "Switch" },
         server:   { color: "#f7b84f", it: "Server",        en: "Server" },
         phone:    { color: "#38d9c0", it: "Telefono IP",   en: "IP Phone" },
+        camera:   { color: "#e8a33d", it: "Telecamera IP", en: "IP Camera" },
         pc:       { color: "#a3a3a3", it: "PC",            en: "PC" },
         other:    { color: "#8d9bb0", it: "Altro",         en: "Other" },
     };
@@ -322,6 +323,9 @@
         } else if (deviceType === "phone") {
             // Icona Telefono IP
             iconSvg = `<path d="M20 15.5c-1.2 0-2.4-.2-3.6-.6-.3-.1-.7 0-1 .2l-2.2 2.2c-2.8-1.4-5.1-3.8-6.6-6.6l2.2-2.2c.3-.3.4-.7.2-1-.4-1.2-.6-2.4-.6-3.6 0-.6-.4-1-1-1H3.5c-.6 0-1 .4-1 1C2.5 17 7 21.5 16.5 21.5c.6 0 1-.4 1-1V16.5c0-.6-.4-1-1-1z" fill="${typeColor}"/>`;
+        } else if (deviceType === "camera") {
+            // Icona Telecamera IP (corpo + obiettivo)
+            iconSvg = `<path d="M4 6h11a2 2 0 0 1 2 2v1.6l4-2.4v9.6l-4-2.4V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm5.5 3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="${typeColor}"/>`;
         } else if (deviceType === "pc") {
             // Icona Workstation PC
             iconSvg = `<path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z" fill="${typeColor}"/>`;
@@ -862,6 +866,7 @@
                 ap:       '#e0ecfb',
                 server:   '#fdf3d5',
                 phone:    '#dcf5ef',
+                camera:   '#fbecd6',
                 pc:       '#ededed',
                 other:    '#f4f4f4'
             }

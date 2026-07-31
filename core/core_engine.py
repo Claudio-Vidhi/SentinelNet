@@ -628,6 +628,7 @@ _TYPE_SUBSTRINGS = {
                  "wifi", "wlan"),
     "router":   ("router", "isr", "asr", "csr"),
     "phone":    ("ipphone", "ip phone", "phone", "voip"),
+    "camera":   ("camera", "nvr", "videosorveglianza"),
     "server":   ("server", "esxi", "vmware", "nas", "ubuntu", "debian",
                  "linux", "windows server", "proxmox"),
     "pc":       ("workstation", "desktop", "laptop", "client"),
@@ -641,7 +642,7 @@ _TYPE_TOKENS = {
     "server":   ("srv", "host"),
     "pc":       ("pc",),
 }
-_TYPE_ORDER = ("firewall", "wlc", "ap", "router", "phone", "server", "pc")
+_TYPE_ORDER = ("firewall", "wlc", "ap", "router", "phone", "camera", "server", "pc")
 # Keyword positivi per "switch", cercati SOLO in description/platform (mai
 # nell'hostname: un hostname come "sw-wifi-floor2" non deve confondersi con un
 # AP). Questa evidenza ha precedenza sulle keyword "ap" basate su hostname.
@@ -653,6 +654,10 @@ _SWITCH_SUBSTRINGS = ("catalyst", "ws-c", "c9200", "c9300", "c9500", "switch")
 # copre il caso solo-CDP, dove l'unico segnale e' la Platform.
 _AP_SUBSTRINGS = ("ap software", "air-ap", "air-cap", "aironet")
 _AP_MODEL_RE = re.compile(r'\b(?:c9\d{3}ax|cw91\d{2})')
+# Modelli di router: un router L3 annuncia Capabilities CDP "Router Switch IGMP"
+# esattamente come uno switch multilayer, quindi le Capabilities da sole lo
+# classificherebbero "switch". Il modello nella Platform e' piu' specifico.
+_ROUTER_MODEL_RE = re.compile(r'\b(?:isr|asr|csr)\d')
 
 
 def _has_token(text: str, token: str) -> bool:
@@ -662,21 +667,22 @@ def _has_token(text: str, token: str) -> bool:
 def classify_device_type(hostname: str = "", description: str = "",
                          platform: str = "", capabilities: str = "") -> str:
     """Deduce il tipo di apparato combinando hostname, System Description (LLDP),
-    Platform e Capabilities (CDP). Ritorna: firewall|wlc|ap|router|phone|server|
-    pc|switch."""
+    Platform e Capabilities (CDP). Ritorna: firewall|wlc|ap|router|phone|camera|
+    server|pc|switch."""
     text = " ".join(filter(None, [hostname, description, platform])).lower()
     caps = (capabilities or "").lower()
     if not text.strip() and not caps.strip():
         return "client"
+    # Un modello preciso in Platform/System Description batte le Capabilities:
+    # i bit CDP sono grossolani (un AP lightweight dichiara "Router Trans-Bridge",
+    # un router L3 "Router Switch IGMP" come qualsiasi switch multilayer).
+    _dp = " ".join(filter(None, [description, platform])).lower()
     # Le Capabilities CDP/LLDP sono il segnale più affidabile: un dispositivo che
     # si dichiara "Switch" non va riclassificato per una keyword nel nome
     # (es. hostname con "wifi" o segmento "AP").
-    if "switch" in caps and "access point" not in caps and "wlan" not in caps:
+    if ("switch" in caps and "access point" not in caps and "wlan" not in caps
+            and not _ROUTER_MODEL_RE.search(_dp)):
         return "switch"
-    # Modello/software AP in Platform o System Description: evidenza piu'
-    # specifica delle Capabilities, che per un AP lightweight riportano
-    # "Router Trans-Bridge" e lo farebbero classificare "router".
-    _dp = " ".join(filter(None, [description, platform])).lower()
     if any(s in _dp for s in _AP_SUBSTRINGS) or _AP_MODEL_RE.search(_dp):
         return "ap"
     # Le Capabilities hanno precedenza assoluta su hostname/description/platform:
