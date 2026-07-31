@@ -95,8 +95,10 @@ Memory Device
 	Size: No Module Installed
 	Locator: DIMM_A2
 --- SYSTEMCTL ENABLED ---
-ssh.service                            enabled
-cron.service                           enabled
+ssh.service                            enabled         enabled
+cron.service                           enabled         enabled
+docker.service                         enabled         disabled
+snap-core24-1643.mount                 enabled         enabled
 --- SUDOERS ---
 Defaults        env_reset
 root    ALL=(ALL:ALL) ALL
@@ -296,10 +298,21 @@ class TestEnvelope(unittest.TestCase):
         self.assertIn("-P INPUT DROP", rows)
         self.assertIn("-A INPUT -p tcp --dport 22 -j ACCEPT", rows)
 
-    def test_enabled_units(self):
-        rows = {r["unit"]: r["state"] for r in _rows(self.env, "enabled_units")}
+    def test_enabled_units_show_the_preset_not_a_constant_state(self):
+        # Con --state=enabled la colonna stato direbbe "enabled" su ogni riga:
+        # il preset e' l'unica che distingua una unita' dall'altra.
+        rows = {r["unit"]: r["preset"] for r in _rows(self.env, "enabled_units")}
         self.assertEqual("enabled", rows["ssh.service"])
-        self.assertEqual("enabled", rows["cron.service"])
+        # Abilitata a mano: la distribuzione la lascerebbe spenta.
+        self.assertEqual("disabled", rows["docker.service"])
+        self.assertNotIn("state", _rows(self.env, "enabled_units")[0])
+
+    def test_enabled_units_drop_the_snap_mount_noise(self):
+        # Ogni snap installato genera una .mount abilitata: decine di righe che
+        # sommergono i pochi servizi che dicono cosa gira davvero sull'host.
+        units = [r["unit"] for r in _rows(self.env, "enabled_units")]
+        self.assertNotIn("snap-core24-1643.mount", units)
+        self.assertEqual(3, len(units))
 
     def test_garbage_yields_empty_sections_not_an_error(self):
         for text in (None, "", "spazzatura\n\x00"):

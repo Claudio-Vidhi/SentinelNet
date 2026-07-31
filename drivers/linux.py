@@ -9,9 +9,15 @@ from drivers.base_driver import BaseDriver
 # piu' e ogni lettura va in timeout.
 _SHELL_INTEGRATION = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
 
+# Sequenze CSI generiche (colore, grassetto, movimento cursore). Netmiko ne
+# rimuove solo un elenco chiuso, non la forma generale: i codici colore di
+# systemd (ESC[0;1;32m attorno a "enabled") non sono in quell'elenco e
+# finivano dentro l'artefatto, e da li' nelle tabelle della UI.
+_ANSI_CSI = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]')
+
 
 def sanitize_session(net_connect):
-    """Toglie le sequenze OSC da tutto cio' che netmiko legge sulla sessione.
+    """Toglie le sequenze di escape da tutto cio' che netmiko legge sulla sessione.
 
     ``strip_ansi_escape_codes`` e' gia' il punto in cui netmiko ripulisce
     l'output (LinuxSSH attiva ``ansi_escape_codes``): lo si estende invece di
@@ -21,7 +27,7 @@ def sanitize_session(net_connect):
     """
     original = net_connect.strip_ansi_escape_codes
     net_connect.strip_ansi_escape_codes = \
-        lambda text: _SHELL_INTEGRATION.sub("", original(text))
+        lambda text: _ANSI_CSI.sub("", _SHELL_INTEGRATION.sub("", original(text)))
     net_connect.set_base_prompt()
 
 # File di configurazione leggibili da un account NON privilegiato. Sono anche
