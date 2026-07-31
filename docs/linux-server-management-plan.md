@@ -49,7 +49,9 @@ Implements the existing 2-method contract:
 - `get_backup_command()` → the *unprivileged* config artifact, one command:
   a `for f in …; do echo "--- $f ---"; cat "$f"; done` over world-readable config files
   (`/etc/os-release`, `/etc/ssh/sshd_config`, `/etc/login.defs`, `/etc/sysctl.conf`,
-  `/etc/fstab`, `/etc/hosts`, `/etc/resolv.conf`).
+  `/etc/fstab`, `/etc/hosts`, `/etc/resolv.conf`, `/etc/passwd`, `/etc/group`).
+  `/etc/shadow` is deliberately excluded: password hashes must not enter an
+  artefact that is archived and re-read.
 
 The `--- <path> ---` markers are deliberately the same shape `_backup_section()`
 already parses ([core_engine.py:714](core/core_engine.py#L714)), and they become the
@@ -93,8 +95,12 @@ the existing flow is genuinely wrong for a Linux host:
 
    | Tier | Gate | Commands |
    |---|---|---|
-   | always | — | `hostname`, `uptime -p`, `ip -br a`, `ip route`, `lsblk`, `df -hT`, `systemctl --failed`, `ss -tuln`, `lldpctl` |
-   | privileged | `if secret:` | `ss -tulpn`, `stat -c '%a %U %G %n' /etc/shadow /etc/passwd /etc/group`, `sshd -T` |
+   | always | — | `hostname`, `uname -srm`, `uptime -p`, `uptime -s`, `ip -br a`, `ip -s link`, sysfs speed/duplex loop, `ip route`, `lsblk`, `lsblk -dno …`, `lscpu`, `df -hT`, `systemctl --failed`, `systemctl list-unit-files --state=enabled`, `ss -tuln`, `docker ps`, `docker version`, `kubelet --version`, `lldpctl` |
+   | privileged | `if secret:` | `ss -tulpn`, `stat -c '%a %U %G %n' /etc/shadow /etc/passwd /etc/group`, `sshd -T`, `cat /etc/sudoers /etc/sudoers.d/*`, `dmidecode -s …`, `dmidecode -t 17`, `nft list ruleset \|\| iptables -S` |
+
+   The list grew past this plan; the current one, with the Config Analyzer
+   section each command feeds, is in
+   [server-collection.md](server-collection.md).
 
    Same `try/except: pass` per command as the existing branches — a missing binary on a
    minimal distro must not fail the whole triage.

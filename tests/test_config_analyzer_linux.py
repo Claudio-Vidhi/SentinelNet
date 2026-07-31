@@ -99,6 +99,13 @@ ssh.service                            enabled         enabled
 cron.service                           enabled         enabled
 docker.service                         enabled         disabled
 snap-core24-1643.mount                 enabled         enabled
+--- CONTAINERS ---
+web\tnginx:1.27\tUp 3 hours\t0.0.0.0:8080->80/tcp, :::8080->80/tcp
+db\tpostgres:16\tUp 2 days (healthy)\t
+--- DOCKER VERSION ---
+27.5.1
+--- KUBELET VERSION ---
+Kubernetes v1.29.0
 --- SUDOERS ---
 Defaults        env_reset
 root    ALL=(ALL:ALL) ALL
@@ -313,6 +320,33 @@ class TestEnvelope(unittest.TestCase):
         units = [r["unit"] for r in _rows(self.env, "enabled_units")]
         self.assertNotIn("snap-core24-1643.mount", units)
         self.assertEqual(3, len(units))
+
+    def test_containers_split_on_tabs_not_spaces(self):
+        # STATUS ("Up 3 hours") e PORTS contengono spazi: dividere sugli spazi
+        # spezzerebbe due colonne su quattro.
+        rows = {r["name"]: r for r in _rows(self.env, "containers")}
+        self.assertEqual("nginx:1.27", rows["web"]["image"])
+        self.assertEqual("Up 3 hours", rows["web"]["status"])
+        self.assertEqual("0.0.0.0:8080->80/tcp, :::8080->80/tcp",
+                         rows["web"]["ports"])
+        # Container senza porte pubblicate: campo vuoto, non riga scartata.
+        self.assertEqual("Up 2 days (healthy)", rows["db"]["status"])
+        self.assertEqual("", rows["db"]["ports"])
+
+    def test_container_runtimes_are_system_properties(self):
+        rows = {r["property"]: r["value"] for r in _rows(self.env, "system")}
+        self.assertEqual("27.5.1", rows["docker"])
+        self.assertEqual("v1.29.0", rows["kubernetes"])
+
+    def test_a_host_without_containers_says_nothing_about_them(self):
+        # Comando assente -> sezione vuota: l'assenza e' la risposta giusta,
+        # non una riga "docker: " senza valore.
+        env = linux_analyzer.analyze(
+            "--- /etc/os-release ---\nID=ubuntu\n--- HOSTNAME ---\nhostname h\n")
+        rows = {r["property"] for r in _rows(env, "system")}
+        self.assertNotIn("docker", rows)
+        self.assertNotIn("kubernetes", rows)
+        self.assertEqual([], _rows(env, "containers"))
 
     def test_garbage_yields_empty_sections_not_an_error(self):
         for text in (None, "", "spazzatura\n\x00"):
