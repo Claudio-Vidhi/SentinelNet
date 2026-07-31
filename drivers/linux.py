@@ -35,6 +35,10 @@ BACKUP_FILES = (
     "/etc/fstab",
     "/etc/hosts",
     "/etc/resolv.conf",
+    # Utenti e gruppi locali. /etc/shadow resta fuori di proposito: gli hash
+    # delle password non vanno in un artefatto che viene archiviato e riletto.
+    "/etc/passwd",
+    "/etc/group",
 )
 
 
