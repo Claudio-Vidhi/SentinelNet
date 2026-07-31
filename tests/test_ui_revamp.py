@@ -2591,12 +2591,67 @@ class TestCaRenderedListIndex(unittest.TestCase):
         # L'indice viene dalla lista filtrata: cercarlo in caData e' il bug.
         self.assertNotIn("caData[idx]", js)
 
+    def test_route_map_defines_its_own_selected_colours(self):
+        """Senza 'highlight' vis.js seleziona con sfondo #D2E5FF quasi bianco,
+        e l'etichetta bianca del nodo diventa illeggibile."""
+        js = self._source()
+        block = js[js.index("function caBuildRouteMap"):]
+        block = block[:block.index("function caRenderAcls")]
+        # Il selezionato resta scuro: e' li' che sta il contrasto del testo.
+        self.assertIn("highlight: { background: '#5a4fb0'", block)
+        self.assertIn("highlight: { background: '#241b3a'", block)
+
     def test_toggle_and_focus_read_the_rendered_list(self):
         js = self._source()
         toggle = js[js.index("function caOnToggle"):]
         self.assertIn("caList[idx]", toggle[:400])
         focus = js[js.index("function caApplyFocus"):]
         self.assertIn("caList.findIndex", focus[:900])
+
+
+class TestCaTriageButton(unittest.TestCase):
+    """Triage per-apparato dalla scheda del Config Analyzer.
+
+    Riusa l'endpoint e il controllo dell'inventario: la stessa azione non deve
+    avere due bottoni diversi da imparare. Dopo il triage il backup su disco e'
+    cambiato, quindi i dati a schermo sono vecchi e vanno ricaricati.
+    """
+
+    def _js(self):
+        return frontend_source()
+
+    def test_it_delegates_to_the_inventory_triage_and_reloads(self):
+        js = self._js()
+        fn = js[js.index("async function caTriageDevice"):]
+        fn = fn[:fn.index("function destroyCaNetworks")]
+        self.assertIn("triageSingleDevice(ip, btnEl)", fn)
+        # Senza il refetch il bottone sembrerebbe non fare niente.
+        self.assertIn("fetchConfigAnalyzer()", fn)
+        self.assertIn("data-ca-ip", fn)
+
+    def test_the_click_does_not_toggle_the_accordion(self):
+        # Il bottone sta dentro <summary>: senza preventDefault il click
+        # aprirebbe e chiuderebbe la scheda mentre parte il triage.
+        js = self._js()
+        fn = js[js.index("async function caTriageDevice"):]
+        self.assertIn("ev.preventDefault()", fn[:400])
+        self.assertIn("ev.stopPropagation()", fn[:400])
+
+    def test_every_device_card_carries_the_button_and_its_ip(self):
+        js = self._js()
+        # Un data-ca-ip per ogni <details> di apparato: accordion per-vista,
+        # envelope firewall/server, e le due schede di validazione.
+        self.assertEqual(4, js.count('data-ca-ip="${escapeHtml(dev.ip)}"'))
+        # Solo le interpolazioni: la definizione della funzione non e' un uso.
+        self.assertEqual(4, js.count("${caTriageButton(dev, L)}"))
+
+    def test_the_button_matches_the_inventory_control(self):
+        js = self._js()
+        btn = js[js.index("function caTriageButton"):]
+        btn = btn[:btn.index("async function caTriageDevice")]
+        self.assertIn("fa-bolt-lightning", btn)
+        self.assertIn("var(--warning)", btn)
+        self.assertIn("titleCaTriage", btn)
 
 
 class TestRedundancyUi(unittest.TestCase):
