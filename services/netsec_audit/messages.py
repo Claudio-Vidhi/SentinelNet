@@ -1254,6 +1254,301 @@ MESSAGES: Dict[str, Dict[str, str]] = {
               "they are an egress path that bypasses perimeter controls.",
     },
 
+    # --- Linux: non valutabile --------------------------------------------
+    "lnx.empty": {
+        "it": "Artefatto vuoto o illeggibile: non c'e' nulla da valutare.",
+        "en": "Empty or unreadable artifact: there is nothing to assess.",
+    },
+    "lnx.sshd.not_assessable": {
+        "it": "«{what}» non compare in sshd_config, che pero' include "
+              "«sshd_config.d/»: l'impostazione effettiva non e' nel backup. "
+              "Serve un triage con password sudo, che raccoglie «sshd -T».",
+        "en": "«{what}» does not appear in sshd_config, which however includes "
+              "«sshd_config.d/»: the effective setting is not in the backup. "
+              "A triage with the sudo password collects «sshd -T».",
+    },
+    "lnx.login_defs.absent": {
+        "it": "«/etc/login.defs» assente dal backup: politica delle password "
+              "non valutabile.",
+        "en": "«/etc/login.defs» missing from the backup: the password policy "
+              "cannot be assessed.",
+    },
+    "lnx.fstab.absent": {
+        "it": "«/etc/fstab» assente dal backup: opzioni di mount non valutabili.",
+        "en": "«/etc/fstab» missing from the backup: mount options cannot be "
+              "assessed.",
+    },
+    "lnx.sysctl.absent": {
+        "it": "«/etc/sysctl.conf» assente dal backup: parametri di rete non "
+              "valutabili.",
+        "en": "«/etc/sysctl.conf» missing from the backup: network parameters "
+              "cannot be assessed.",
+    },
+    "lnx.sysctl.not_declared": {
+        "it": "«{what}» non e' dichiarato in sysctl.conf: puo' essere "
+              "impostato in «/etc/sysctl.d/» o a runtime, che il backup non "
+              "contiene.",
+        "en": "«{what}» is not declared in sysctl.conf: it may be set under "
+              "«/etc/sysctl.d/» or at runtime, which the backup does not cover.",
+    },
+    "lnx.mount.not_separate": {
+        "it": "Nessuna riga in fstab per «{mount}»: non e' una partizione "
+              "separata, oppure e' montata altrove (es. tmpfs da systemd). "
+              "Le opzioni effettive non si vedono da fstab.",
+        "en": "No fstab entry for «{mount}»: it is not a separate partition, "
+              "or it is mounted elsewhere (e.g. a systemd tmpfs). The "
+              "effective options are not visible from fstab.",
+    },
+
+    # --- Linux: SSH -------------------------------------------------------
+    "lnx.sshd_root.ok": {
+        "it": "Login diretto di root via SSH disabilitato.",
+        "en": "Direct root login over SSH is disabled.",
+    },
+    "lnx.sshd_root.allowed": {
+        "it": "Login di root via SSH ammesso («{value}»): un attaccante che "
+              "indovina una sola password ottiene subito il massimo privilegio.",
+        "en": "Root login over SSH allowed («{value}»): guessing a single "
+              "password hands over full privilege immediately.",
+    },
+    "lnx.sshd_empty.ok": {
+        "it": "Nessun accesso SSH con password vuota.",
+        "en": "No SSH access with an empty password.",
+    },
+    "lnx.sshd_empty.allowed": {
+        "it": "Accesso SSH con password vuota ammesso («{value}»).",
+        "en": "SSH access with an empty password is allowed («{value}»).",
+    },
+    "lnx.sshd_hostbased.ok": {
+        "it": "Autenticazione basata sull'host disabilitata.",
+        "en": "Host-based authentication is disabled.",
+    },
+    "lnx.sshd_hostbased.enabled": {
+        "it": "Autenticazione basata sull'host attiva («{value}»): la fiducia "
+              "si sposta dal singolo account alla macchina di origine.",
+        "en": "Host-based authentication enabled («{value}»): trust moves from "
+              "the individual account to the originating machine.",
+    },
+    "lnx.sshd_rhosts.ok": {
+        "it": "I file «.rhosts» non partecipano all'autenticazione.",
+        "en": "«.rhosts» files play no part in authentication.",
+    },
+    "lnx.sshd_rhosts.honored": {
+        "it": "I file «.rhosts» sono onorati («{value}»): un utente puo' "
+              "dichiarare da solo di quali host fidarsi.",
+        "en": "«.rhosts» files are honoured («{value}»): a user can declare "
+              "on their own which hosts to trust.",
+    },
+    "lnx.sshd_forwarding.ok": {
+        "it": "Inoltro TCP/X11 attraverso la sessione SSH disattivato.",
+        "en": "TCP/X11 forwarding through the SSH session is disabled.",
+    },
+    "lnx.sshd_forwarding.allowed": {
+        "it": "Inoltro TCP/X11 consentito («{value}»): la sessione puo' essere "
+              "usata come tunnel verso reti che l'host raggiunge e il client no.",
+        "en": "TCP/X11 forwarding allowed («{value}»): the session can be used "
+              "as a tunnel into networks the host reaches and the client does not.",
+    },
+    "lnx.sshd_authtries.ok": {
+        "it": "Tentativi di autenticazione per connessione limitati a {value}.",
+        "en": "Authentication attempts per connection limited to {value}.",
+    },
+    "lnx.sshd_authtries.high": {
+        "it": "{value} tentativi di autenticazione per connessione (massimo "
+              "raccomandato {max}).",
+        "en": "{value} authentication attempts per connection (recommended "
+              "maximum {max}).",
+    },
+    "lnx.sshd_authtries.unreadable": {
+        "it": "«MaxAuthTries» presente ma con un valore non numerico.",
+        "en": "«MaxAuthTries» present but with a non-numeric value.",
+    },
+    "lnx.sshd_grace.ok": {
+        "it": "Finestra di autenticazione di {value} secondi.",
+        "en": "Authentication window of {value} seconds.",
+    },
+    "lnx.sshd_grace.high": {
+        "it": "Finestra di autenticazione di {value} secondi (massimo "
+              "raccomandato {max}; 0 significa nessun limite).",
+        "en": "Authentication window of {value} seconds (recommended maximum "
+              "{max}; 0 means no limit at all).",
+    },
+    "lnx.sshd_grace.unreadable": {
+        "it": "«LoginGraceTime» presente ma con un valore non numerico.",
+        "en": "«LoginGraceTime» present but with a non-numeric value.",
+    },
+    "lnx.sshd_alive.ok": {
+        "it": "Sessione inattiva chiusa dal server (intervallo {interval}s, "
+              "{count} tentativi).",
+        "en": "Idle sessions are closed by the server (interval {interval}s, "
+              "{count} probes).",
+    },
+    "lnx.sshd_alive.disabled": {
+        "it": "Il server non chiude le sessioni inattive (intervallo "
+              "{interval}, conteggio {count}): una sessione abbandonata resta "
+              "aperta finche' non cade la rete.",
+        "en": "The server never closes idle sessions (interval {interval}, "
+              "count {count}): an abandoned session stays open until the "
+              "network drops it.",
+    },
+    "lnx.sshd_loglevel.ok": {
+        "it": "Livello di log SSH adeguato («{value}»).",
+        "en": "SSH log level is adequate («{value}»).",
+    },
+    "lnx.sshd_loglevel.weak": {
+        "it": "Livello di log SSH «{value}»: sotto INFO gli accessi non "
+              "lasciano traccia utilizzabile.",
+        "en": "SSH log level «{value}»: below INFO logins leave no usable "
+              "trace.",
+    },
+    "lnx.sshd_banner.ok": {
+        "it": "Avviso pre-autenticazione configurato («{value}»).",
+        "en": "Pre-authentication banner configured («{value}»).",
+    },
+    "lnx.sshd_banner.absent": {
+        "it": "Nessun avviso pre-autenticazione: manca la dichiarazione che "
+              "l'accesso e' riservato e monitorato.",
+        "en": "No pre-authentication banner: the notice that access is "
+              "restricted and monitored is missing.",
+    },
+
+    # --- Linux: politica delle password -----------------------------------
+    "lnx.pass_policy.undeclared": {
+        "it": "«{what}» non dichiarato in login.defs: nessuna politica per "
+              "questo parametro.",
+        "en": "«{what}» not declared in login.defs: no policy for this "
+              "parameter.",
+    },
+    "lnx.pass_policy.unreadable": {
+        "it": "«{what}» presente ma con un valore non numerico.",
+        "en": "«{what}» present but with a non-numeric value.",
+    },
+    "lnx.pass_max.ok": {
+        "it": "Scadenza della password a {value} giorni.",
+        "en": "Password expires after {value} days.",
+    },
+    "lnx.pass_max.too_long": {
+        "it": "Scadenza della password a {value} giorni (massimo raccomandato "
+              "{limit}; 0 o assente significa nessuna scadenza).",
+        "en": "Password expires after {value} days (recommended maximum "
+              "{limit}; 0 or missing means it never expires).",
+    },
+    "lnx.pass_min.ok": {
+        "it": "Intervallo minimo fra due cambi password: {value} giorni.",
+        "en": "Minimum interval between password changes: {value} days.",
+    },
+    "lnx.pass_min.too_short": {
+        "it": "Intervallo minimo fra due cambi password di {value} giorni "
+              "(minimo raccomandato {limit}): senza attesa, un utente puo' "
+              "aggirare lo storico ricambiando la password piu' volte di fila.",
+        "en": "Minimum interval between password changes of {value} days "
+              "(recommended minimum {limit}): with no wait a user can cycle "
+              "through the history and return to the old password.",
+    },
+    "lnx.pass_warn.ok": {
+        "it": "Preavviso di scadenza: {value} giorni.",
+        "en": "Expiry warning: {value} days.",
+    },
+    "lnx.pass_warn.too_short": {
+        "it": "Preavviso di scadenza di {value} giorni (minimo raccomandato "
+              "{limit}).",
+        "en": "Expiry warning of {value} days (recommended minimum {limit}).",
+    },
+    "lnx.encrypt.ok": {
+        "it": "Hashing delle password con «{value}».",
+        "en": "Password hashing uses «{value}».",
+    },
+    "lnx.encrypt.weak": {
+        "it": "Hashing delle password con «{value}»: un algoritmo veloce rende "
+              "praticabile la ricerca esaustiva su uno «/etc/shadow» rubato.",
+        "en": "Password hashing uses «{value}»: a fast algorithm makes brute "
+              "force practical against a stolen «/etc/shadow».",
+    },
+    "lnx.encrypt.undeclared": {
+        "it": "«ENCRYPT_METHOD» non dichiarato in login.defs: vale il default "
+              "della distribuzione, che non e' garantito nel tempo.",
+        "en": "«ENCRYPT_METHOD» not declared in login.defs: the distribution "
+              "default applies, and that is not guaranteed to stay the same.",
+    },
+
+    # --- Linux: mount -----------------------------------------------------
+    "lnx.mount.ok": {
+        "it": "«{mount}» montato con le opzioni di restrizione raccomandate.",
+        "en": "«{mount}» is mounted with the recommended restriction options.",
+    },
+    "lnx.mount.missing_options": {
+        "it": "«{mount}» montato senza «{missing}»: una directory scrivibile da "
+              "tutti puo' ospitare eseguibili o file setuid.",
+        "en": "«{mount}» mounted without «{missing}»: a world-writable "
+              "directory can then host executables or setuid files.",
+    },
+
+    # --- Linux: parametri di rete ------------------------------------------
+    "lnx.sysctl_forward.ok": {
+        "it": "Inoltro di pacchetti IP disattivato.",
+        "en": "IP packet forwarding is disabled.",
+    },
+    "lnx.sysctl_forward.enabled": {
+        "it": "Inoltro di pacchetti IP attivo: l'host puo' fare da ponte fra "
+              "due reti che il perimetro tiene separate.",
+        "en": "IP packet forwarding is enabled: the host can bridge two "
+              "networks the perimeter keeps apart.",
+    },
+    "lnx.sysctl_accept_redirects.ok": {
+        "it": "Gli ICMP redirect in ingresso vengono ignorati.",
+        "en": "Incoming ICMP redirects are ignored.",
+    },
+    "lnx.sysctl_accept_redirects.enabled": {
+        "it": "Gli ICMP redirect in ingresso vengono accettati ({count} "
+              "parametro/i): chiunque sul segmento puo' riscrivere la tabella "
+              "di routing dell'host.",
+        "en": "Incoming ICMP redirects are accepted ({count} parameter(s)): "
+              "anyone on the segment can rewrite the host routing table.",
+    },
+    "lnx.sysctl_send_redirects.ok": {
+        "it": "L'host non emette ICMP redirect.",
+        "en": "The host does not emit ICMP redirects.",
+    },
+    "lnx.sysctl_send_redirects.enabled": {
+        "it": "L'host emette ICMP redirect ({count} parametro/i): rivela la "
+              "topologia di routing a chiunque lo interroghi.",
+        "en": "The host emits ICMP redirects ({count} parameter(s)): it "
+              "discloses the routing topology to anyone who probes it.",
+    },
+    "lnx.sysctl_source_route.ok": {
+        "it": "I pacchetti con source routing vengono scartati.",
+        "en": "Source-routed packets are dropped.",
+    },
+    "lnx.sysctl_source_route.enabled": {
+        "it": "I pacchetti con source routing vengono accettati ({count} "
+              "parametro/i): il mittente sceglie il percorso e puo' aggirare i "
+              "controlli di rete.",
+        "en": "Source-routed packets are accepted ({count} parameter(s)): the "
+              "sender picks the path and can bypass network controls.",
+    },
+    "lnx.sysctl_syncookies.ok": {
+        "it": "Protezione contro il SYN flood attiva.",
+        "en": "SYN flood protection is active.",
+    },
+    "lnx.sysctl_syncookies.disabled": {
+        "it": "Protezione contro il SYN flood disattivata: la coda delle "
+              "connessioni mezze aperte si riempie con poco traffico.",
+        "en": "SYN flood protection is disabled: the half-open connection "
+              "queue fills up with very little traffic.",
+    },
+    "lnx.sysctl_martians.ok": {
+        "it": "I pacchetti con indirizzo di origine impossibile vengono "
+              "registrati.",
+        "en": "Packets with an impossible source address are logged.",
+    },
+    "lnx.sysctl_martians.disabled": {
+        "it": "I pacchetti con indirizzo di origine impossibile non vengono "
+              "registrati ({count} parametro/i): uno spoofing in corso non "
+              "lascia traccia.",
+        "en": "Packets with an impossible source address are not logged "
+              "({count} parameter(s)): spoofing in progress leaves no trace.",
+    },
+
     # --- motore -----------------------------------------------------------
     "engine.nothing_to_assess": {
         "it": "Nessuna configurazione da valutare: il testo fornito e' vuoto "

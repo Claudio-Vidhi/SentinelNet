@@ -432,6 +432,15 @@ TOOLS = {
             "window": a.get("window", "24h"),
             "limit": 50}),
     ),
+    "linux_health": (
+        "Get the latest health snapshot of a managed Linux host: uptime, "
+        "kernel, failed systemd units and the measured CPU / memory / disk "
+        "usage. Read-only, tenant-scoped.",
+        _obj({"ip": {**_S, "description": "Management IP of the Linux host"}},
+             ["ip"]),
+        lambda a: api("GET", "/api/observability/api-context",
+                      params={"device_ip": a["ip"]}),
+    ),
 }
 
 

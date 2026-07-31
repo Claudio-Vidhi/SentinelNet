@@ -1573,6 +1573,538 @@ GUIDANCE: Dict[str, Dict[str, Dict[str, str]]] = {
                   "verify, not to delete on sight.",
         },
     },
+
+    # =========================================================================
+    # Linux
+    # =========================================================================
+    "check_linux_sshd_permit_root_login": {
+        "why": {
+            "it": "Root non e' un account, e' l'esito finale di ogni attacco: "
+                  "ammetterlo al login SSH toglie il passaggio intermedio "
+                  "(entrare come utente, poi scalare) e rende una sola "
+                  "password indovinata sufficiente. In piu' un accesso diretto "
+                  "come root non lascia traccia di CHI era: nei log c'e' "
+                  "«root», non la persona.",
+            "en": "Root is not an account, it is the end state of every "
+                  "attack: allowing it at the SSH prompt removes the middle "
+                  "step (log in as a user, then escalate) and makes one "
+                  "guessed password enough. A direct root login also loses "
+                  "WHO it was: the logs say «root», not the person.",
+        },
+        "impact": {
+            "it": "Chi amministra collegandosi direttamente come root deve "
+                  "passare a un account nominale con «sudo». Verificare prima "
+                  "gli script e i job di backup che si collegano come root, e "
+                  "che almeno un account non privilegiato possa gia' entrare.",
+            "en": "Anyone administering by logging straight in as root must "
+                  "switch to a named account with «sudo». Check backup jobs "
+                  "and scripts that connect as root first, and that at least "
+                  "one unprivileged account can already get in.",
+        },
+        "default": {
+            "it": "OpenSSH usa «prohibit-password»: root non entra con "
+                  "password ma entra con chiave. Il benchmark chiede «no».",
+            "en": "OpenSSH uses «prohibit-password»: root cannot use a "
+                  "password but can still use a key. The benchmark asks for "
+                  "«no».",
+        },
+    },
+    "check_linux_sshd_permit_empty_passwords": {
+        "why": {
+            "it": "Un account con password vuota e' un account senza "
+                  "autenticazione. Capita per errore su utenti di servizio "
+                  "creati da script, e nessuno se ne accorge finche' non lo "
+                  "trova qualcun altro.",
+            "en": "An account with an empty password is an account with no "
+                  "authentication at all. It happens by accident on service "
+                  "users created by scripts, and nobody notices until someone "
+                  "else finds it.",
+        },
+        "impact": {
+            "it": "Nessuno: un accesso senza password non e' un caso d'uso "
+                  "legittimo. Se qualcosa smette di funzionare, quel qualcosa "
+                  "era la vulnerabilita'.",
+            "en": "None: password-less access is not a legitimate use case. "
+                  "If something breaks, that something was the vulnerability.",
+        },
+        "default": {
+            "it": "OpenSSH lo tiene gia' a «no».",
+            "en": "OpenSSH already keeps it at «no».",
+        },
+    },
+    "check_linux_sshd_hostbased_auth": {
+        "why": {
+            "it": "L'autenticazione basata sull'host sposta la fiducia dalla "
+                  "credenziale alla macchina di origine: chi compromette un "
+                  "host della lista entra su tutti gli altri senza sapere "
+                  "nessuna password.",
+            "en": "Host-based authentication moves trust from the credential "
+                  "to the originating machine: whoever compromises one listed "
+                  "host gets into all the others without knowing a single "
+                  "password.",
+        },
+        "impact": {
+            "it": "Si rompono gli automatismi che si appoggiano a "
+                  "«.shosts»/«shosts.equiv». La sostituzione e' una chiave "
+                  "dedicata per automazione, con comando forzato.",
+            "en": "Automation relying on «.shosts»/«shosts.equiv» breaks. The "
+                  "replacement is a dedicated automation key with a forced "
+                  "command.",
+        },
+    },
+    "check_linux_sshd_ignore_rhosts": {
+        "why": {
+            "it": "Con i file «.rhosts» onorati, e' l'utente stesso a "
+                  "dichiarare da quali host ci si puo' collegare al suo "
+                  "account: una decisione di sicurezza presa fuori dal "
+                  "controllo di chi amministra, in un file che l'utente puo' "
+                  "riscrivere quando vuole.",
+            "en": "With «.rhosts» files honoured, it is the user who declares "
+                  "which hosts may connect to their account: a security "
+                  "decision taken outside the administrator's control, in a "
+                  "file the user can rewrite at will.",
+        },
+        "impact": {
+            "it": "Nullo su un sistema moderno: nessuna procedura corrente "
+                  "usa piu' i file «.rhosts».",
+            "en": "None on a modern system: no current procedure still uses "
+                  "«.rhosts» files.",
+        },
+        "default": {
+            "it": "OpenSSH li ignora gia' («IgnoreRhosts yes»).",
+            "en": "OpenSSH already ignores them («IgnoreRhosts yes»).",
+        },
+    },
+    "check_linux_sshd_disable_forwarding": {
+        "why": {
+            "it": "Un tunnel SSH e' una via di rete che nessun firewall vede: "
+                  "chi ha una shell sull'host puo' raggiungere, dal proprio "
+                  "portatile, qualunque cosa l'host raggiunga. Su un server in "
+                  "DMZ e' esattamente il ponte che la DMZ dovrebbe impedire.",
+            "en": "An SSH tunnel is a network path no firewall sees: whoever "
+                  "has a shell on the host can reach, from their own laptop, "
+                  "anything the host reaches. On a DMZ server that is exactly "
+                  "the bridge the DMZ is meant to prevent.",
+        },
+        "impact": {
+            "it": "Si rompono gli usi legittimi del forwarding: X11 remoto, "
+                  "port forwarding verso un database, i jump host. Da "
+                  "applicare dove il server non e' un punto di transito — di "
+                  "qui il livello 2 del benchmark.",
+            "en": "Legitimate uses of forwarding break: remote X11, port "
+                  "forwarding to a database, jump hosts. Apply it where the "
+                  "server is not a transit point — hence the benchmark's "
+                  "level 2.",
+        },
+    },
+    "check_linux_sshd_max_auth_tries": {
+        "why": {
+            "it": "Ogni connessione concede N tentativi, e le connessioni si "
+                  "possono riaprire all'infinito: il limite non ferma un "
+                  "attacco a forza bruta, lo rende costoso e — soprattutto — "
+                  "lo rende VISIBILE, perche' ogni fallimento oltre la meta' "
+                  "del limite viene registrato.",
+            "en": "Every connection grants N attempts, and connections can be "
+                  "reopened forever: the limit does not stop a brute-force "
+                  "attack, it makes it expensive and — above all — VISIBLE, "
+                  "because every failure past half the limit is logged.",
+        },
+        "impact": {
+            "it": "Chi sbaglia password piu' volte di seguito deve riaprire "
+                  "la connessione. Attenzione ai client con molte chiavi in "
+                  "agent: ogni chiave offerta consuma un tentativo.",
+            "en": "Anyone mistyping the password repeatedly has to reopen the "
+                  "connection. Watch out for clients with many keys in their "
+                  "agent: each offered key consumes an attempt.",
+        },
+        "default": {
+            "it": "OpenSSH concede 6 tentativi.",
+            "en": "OpenSSH grants 6 attempts.",
+        },
+    },
+    "check_linux_sshd_login_grace_time": {
+        "why": {
+            "it": "E' il tempo in cui una connessione occupa uno slot senza "
+                  "essersi ancora autenticata. Tenerlo alto permette di "
+                  "saturare i pochi slot disponibili aprendo connessioni che "
+                  "non completano mai: un blocco del servizio che non richiede "
+                  "banda ne' credenziali.",
+            "en": "It is how long a connection can hold a slot without having "
+                  "authenticated yet. Keeping it high lets someone exhaust the "
+                  "few available slots by opening connections that never "
+                  "complete: a denial of service needing neither bandwidth nor "
+                  "credentials.",
+        },
+        "impact": {
+            "it": "Su un collegamento molto lento, o con autenticazione a due "
+                  "fattori che richiede un'azione manuale, 60 secondi possono "
+                  "essere pochi: e' il valore da tarare, non da copiare.",
+            "en": "Over a very slow link, or with two-factor authentication "
+                  "requiring a manual step, 60 seconds may be tight: this is "
+                  "a value to tune, not to copy.",
+        },
+        "default": {
+            "it": "OpenSSH usa 120 secondi.",
+            "en": "OpenSSH uses 120 seconds.",
+        },
+    },
+    "check_linux_sshd_client_alive": {
+        "why": {
+            "it": "Senza questi due parametri il server non chiude mai una "
+                  "sessione per inattivita': una console lasciata aperta su "
+                  "una postazione non presidiata resta autenticata finche' "
+                  "qualcosa non fa cadere la rete. E' il controllo che rende "
+                  "reale il blocco schermo, non un suo duplicato.",
+            "en": "Without these two settings the server never closes an idle "
+                  "session: a console left open on an unattended workstation "
+                  "stays authenticated until something drops the network. This "
+                  "is what makes a screen lock real, not a duplicate of it.",
+        },
+        "impact": {
+            "it": "Le sessioni lunghe e silenziose — un «tail -f» dimenticato, "
+                  "un compilatore che gira per ore — vengono chiuse. Chi ne ha "
+                  "bisogno usa «tmux» o «screen», che sopravvivono alla "
+                  "disconnessione.",
+            "en": "Long, quiet sessions — a forgotten «tail -f», a compiler "
+                  "running for hours — get closed. Anyone needing them uses "
+                  "«tmux» or «screen», which survive a disconnect.",
+        },
+        "default": {
+            "it": "«ClientAliveInterval» vale 0, cioe' nessun controllo.",
+            "en": "«ClientAliveInterval» is 0, meaning no check at all.",
+        },
+    },
+    "check_linux_sshd_log_level": {
+        "why": {
+            "it": "Sotto INFO il demone non registra piu' quale account e' "
+                  "entrato e da dove: dopo un incidente non si ricostruisce "
+                  "nulla. VERBOSE aggiunge l'impronta della chiave usata, che "
+                  "e' l'unico modo di distinguere due accessi fatti con lo "
+                  "stesso utente ma chiavi diverse.",
+            "en": "Below INFO the daemon stops recording which account logged "
+                  "in and from where: after an incident nothing can be "
+                  "reconstructed. VERBOSE adds the fingerprint of the key "
+                  "used, the only way to tell apart two logins by the same "
+                  "user with different keys.",
+        },
+        "impact": {
+            "it": "VERBOSE aumenta il volume di log: su un host con molte "
+                  "connessioni va considerato nella rotazione.",
+            "en": "VERBOSE increases log volume: on a host with many "
+                  "connections, account for it in log rotation.",
+        },
+        "default": {
+            "it": "OpenSSH usa INFO.",
+            "en": "OpenSSH uses INFO.",
+        },
+    },
+    "check_linux_sshd_banner": {
+        "why": {
+            "it": "Non e' un controllo tecnico: e' la dichiarazione, mostrata "
+                  "PRIMA dell'autenticazione, che l'accesso e' riservato e "
+                  "monitorato. In diverse giurisdizioni la sua assenza indebolisce "
+                  "l'azione contro chi e' entrato senza titolo, ed e' richiesta "
+                  "da quasi tutti i quadri normativi.",
+            "en": "It is not a technical control: it is the notice, shown "
+                  "BEFORE authentication, that access is restricted and "
+                  "monitored. In several jurisdictions its absence weakens "
+                  "action against an intruder, and nearly every regulatory "
+                  "framework requires it.",
+        },
+        "impact": {
+            "it": "Nessuno funzionale. Il testo non deve rivelare sistema "
+                  "operativo, versione o ruolo dell'host: sarebbe "
+                  "ricognizione regalata.",
+            "en": "No functional impact. The text must not disclose the "
+                  "operating system, its version or the host's role: that "
+                  "would be free reconnaissance.",
+        },
+    },
+    "check_linux_pass_max_days": {
+        "why": {
+            "it": "Una password che non scade mai resta valida anche dopo che "
+                  "e' finita in una fuga di dati o sul portatile di un ex "
+                  "dipendente. La scadenza non serve a difendersi da un "
+                  "attacco in corso: serve a mettere un tetto a quanto a lungo "
+                  "una credenziale gia' persa continua a funzionare.",
+            "en": "A password that never expires stays valid long after it "
+                  "leaked, or after it left on a former employee's laptop. "
+                  "Expiry does not defend against an attack in progress: it "
+                  "caps how long an already-lost credential keeps working.",
+        },
+        "impact": {
+            "it": "Gli account di servizio che si autenticano con password "
+                  "smettono di funzionare alla scadenza, spesso di notte. "
+                  "Vanno spostati su chiave prima di applicare la politica.",
+            "en": "Service accounts authenticating with a password stop "
+                  "working when it expires, usually at night. Move them to "
+                  "keys before applying the policy.",
+        },
+        "default": {
+            "it": "«PASS_MAX_DAYS 99999» — in pratica mai.",
+            "en": "«PASS_MAX_DAYS 99999» — effectively never.",
+        },
+    },
+    "check_linux_pass_min_days": {
+        "why": {
+            "it": "Senza un'attesa minima, un utente a cui viene imposto il "
+                  "cambio password puo' cambiarla piu' volte di fila fino a "
+                  "esaurire lo storico e tornare a quella di prima: la "
+                  "politica di scadenza diventa una formalita'.",
+            "en": "With no minimum wait, a user forced to change their "
+                  "password can change it repeatedly until the history is "
+                  "exhausted and then return to the old one: the expiry policy "
+                  "becomes a formality.",
+        },
+        "impact": {
+            "it": "Chi cambia password per errore non puo' rimetterla subito "
+                  "a posto da solo e deve chiedere all'amministratore. Per lo "
+                  "stesso motivo, dopo un reset assistito il parametro va "
+                  "azzerato temporaneamente sull'utente.",
+            "en": "Someone who changes their password by mistake cannot undo "
+                  "it themselves and has to ask an administrator. For the same "
+                  "reason, after an assisted reset the parameter must be "
+                  "temporarily cleared on that user.",
+        },
+    },
+    "check_linux_pass_warn_age": {
+        "why": {
+            "it": "Senza preavviso la password scade durante un accesso "
+                  "remoto, spesso quando serve di piu'. L'effetto pratico non "
+                  "e' un rischio di sicurezza ma la scorciatoia che ne segue: "
+                  "password prevedibili scelte di fretta, o richieste di "
+                  "disattivare la scadenza.",
+            "en": "With no warning, the password expires mid-session, usually "
+                  "at the worst moment. The practical effect is not a security "
+                  "risk but the shortcut that follows: predictable passwords "
+                  "chosen in a hurry, or requests to disable expiry.",
+        },
+        "impact": {
+            "it": "Nessuno: e' solo un avviso in piu' al login.",
+            "en": "None: it is just one more notice at login.",
+        },
+    },
+    "check_linux_encrypt_method": {
+        "why": {
+            "it": "Determina quanto costa provare una password contro uno "
+                  "«/etc/shadow» rubato. Con un algoritmo veloce (MD5, DES) un "
+                  "dizionario da miliardi di voci si esaurisce in ore su una "
+                  "GPU; con yescrypt o SHA-512 lo stesso lavoro diventa "
+                  "impraticabile. Non protegge il file: protegge le password "
+                  "DOPO che il file e' uscito.",
+            "en": "It decides how expensive it is to try passwords against a "
+                  "stolen «/etc/shadow». With a fast algorithm (MD5, DES) a "
+                  "billion-entry dictionary is exhausted in hours on a GPU; "
+                  "with yescrypt or SHA-512 the same work becomes "
+                  "impractical. It does not protect the file: it protects the "
+                  "passwords AFTER the file has left.",
+        },
+        "impact": {
+            "it": "Il parametro vale per le password impostate da qui in "
+                  "avanti: gli hash esistenti restano com'erano finche' "
+                  "l'utente non cambia password.",
+            "en": "The setting applies to passwords set from now on: existing "
+                  "hashes stay as they are until the user changes password.",
+        },
+        "default": {
+            "it": "Ubuntu 24.04 usa yescrypt; distribuzioni piu' vecchie "
+                  "SHA-512, e alcune immagini minimali non dichiarano nulla.",
+            "en": "Ubuntu 24.04 uses yescrypt; older distributions SHA-512, "
+                  "and some minimal images declare nothing at all.",
+        },
+    },
+    "check_linux_tmp_mount_options": {
+        "why": {
+            "it": "«/tmp» e' scrivibile da chiunque: e' il posto dove atterra "
+                  "il payload di quasi ogni exploit. Con «noexec» il file "
+                  "scaricato non parte, con «nosuid» un binario setuid "
+                  "depositato li' non concede privilegi, con «nodev» non si "
+                  "puo' fabbricare un device per leggere il disco crudo. Non "
+                  "impedisce l'intrusione: le toglie il passo successivo.",
+            "en": "«/tmp» is world-writable: it is where the payload of "
+                  "almost every exploit lands. With «noexec» the downloaded "
+                  "file will not run, with «nosuid» a setuid binary dropped "
+                  "there grants nothing, with «nodev» no device node can be "
+                  "forged to read the raw disk. It does not prevent the "
+                  "intrusion: it removes its next step.",
+        },
+        "impact": {
+            "it": "«noexec» rompe gli installer e i compilatori che estraggono "
+                  "ed eseguono in «/tmp» — capita con pacchetti di terze parti "
+                  "e con alcuni runtime che compilano a caldo. Da verificare "
+                  "prima su un host di prova.",
+            "en": "«noexec» breaks installers and build tools that extract and "
+                  "execute inside «/tmp» — common with third-party packages "
+                  "and with some just-in-time runtimes. Try it on a test host "
+                  "first.",
+        },
+        "default": {
+            "it": "Su molte installazioni «/tmp» non e' una partizione "
+                  "separata e nessuna opzione si applica.",
+            "en": "On many installations «/tmp» is not a separate partition "
+                  "and no option applies at all.",
+        },
+    },
+    "check_linux_var_mount_options": {
+        "why": {
+            "it": "«/var» contiene dati scritti dai servizi — code di posta, "
+                  "cache, upload — cioe' contenuto che arriva dall'esterno. "
+                  "«nodev» e «nosuid» impediscono che un file depositato li' "
+                  "diventi un device o un eseguibile privilegiato.",
+            "en": "«/var» holds data written by services — mail queues, "
+                  "caches, uploads — that is, content arriving from outside. "
+                  "«nodev» and «nosuid» stop a file dropped there from "
+                  "becoming a device node or a privileged executable.",
+        },
+        "impact": {
+            "it": "Trascurabile: nessun servizio normale ha bisogno di device "
+                  "o binari setuid dentro «/var». «noexec» invece NON va messo "
+                  "— diversi gestori di pacchetti eseguono script da li'.",
+            "en": "Negligible: no normal service needs device nodes or setuid "
+                  "binaries under «/var». «noexec» however must NOT be added — "
+                  "several package managers run scripts from there.",
+        },
+    },
+    "check_linux_ip_forward": {
+        "why": {
+            "it": "Un host che inoltra pacchetti e' un router, e un router "
+                  "collegato a due segmenti li unisce: il traffico passa "
+                  "aggirando il firewall che li teneva separati. Su un server "
+                  "con una gamba in DMZ e una in LAN e' la scorciatoia che "
+                  "annulla la DMZ.",
+            "en": "A host that forwards packets is a router, and a router "
+                  "attached to two segments joins them: traffic crosses over, "
+                  "bypassing the firewall that kept them apart. On a server "
+                  "with one leg in the DMZ and one in the LAN it is the "
+                  "shortcut that cancels the DMZ.",
+        },
+        "impact": {
+            "it": "Da NON applicare dove l'inoltro serve davvero: host "
+                  "container (Docker, Kubernetes), terminatori VPN, macchine "
+                  "con reti virtuali. Di qui il livello 2 del benchmark: "
+                  "l'impostazione dipende dal ruolo dell'host.",
+            "en": "Do NOT apply it where forwarding is genuinely needed: "
+                  "container hosts (Docker, Kubernetes), VPN terminators, "
+                  "machines with virtual networks. Hence the benchmark's level "
+                  "2: the setting depends on the host's role.",
+        },
+    },
+    "check_linux_accept_redirects": {
+        "why": {
+            "it": "Un ICMP redirect dice all'host «per quella rete passa da "
+                  "me». Accettarlo significa che chiunque sia sullo stesso "
+                  "segmento puo' riscrivere la tabella di routing e mettersi "
+                  "in mezzo al traffico, senza compromettere nulla e senza "
+                  "lasciare tracce nei log dell'host.",
+            "en": "An ICMP redirect tells the host «for that network, go "
+                  "through me». Accepting it means anyone on the same segment "
+                  "can rewrite the routing table and put themselves in the "
+                  "middle of the traffic, without compromising anything and "
+                  "without leaving a trace in the host's logs.",
+        },
+        "impact": {
+            "it": "Trascurabile in una rete con routing statico o dinamico "
+                  "gestito: i redirect sono un ripiego per topologie con piu' "
+                  "gateway sullo stesso segmento e un default route "
+                  "approssimativo.",
+            "en": "Negligible on a network with managed static or dynamic "
+                  "routing: redirects are a stopgap for topologies with "
+                  "several gateways on one segment and a rough default route.",
+        },
+    },
+    "check_linux_send_redirects": {
+        "why": {
+            "it": "Emettere redirect rivela a chi sonda l'host come e' fatta "
+                  "la rete dietro di lui — quali reti conosce e attraverso "
+                  "quali gateway. E' ricognizione che l'host regala senza che "
+                  "nessuno debba autenticarsi.",
+            "en": "Emitting redirects tells whoever probes the host how the "
+                  "network behind it is laid out — which networks it knows and "
+                  "through which gateways. It is reconnaissance the host gives "
+                  "away with no authentication required.",
+        },
+        "impact": {
+            "it": "Nessuno su un host che non instrada: se «ip_forward» e' "
+                  "gia' a 0 non ha nulla da ridirigere. Su un router "
+                  "intenzionale va valutato caso per caso.",
+            "en": "None on a host that does not route: with «ip_forward» "
+                  "already 0 it has nothing to redirect. On an intentional "
+                  "router, judge case by case.",
+        },
+    },
+    "check_linux_source_route": {
+        "why": {
+            "it": "Con il source routing e' il MITTENTE a scegliere il "
+                  "percorso del pacchetto: puo' farlo passare per rotte che "
+                  "aggirano i controlli, e far tornare la risposta a se' anche "
+                  "da un indirizzo che non e' il suo. E' un meccanismo senza "
+                  "usi legittimi rimasti.",
+            "en": "With source routing it is the SENDER who picks the "
+                  "packet's path: it can be steered around controls, and the "
+                  "reply can be sent back even from an address that is not the "
+                  "sender's. The mechanism has no legitimate uses left.",
+        },
+        "impact": {
+            "it": "Nessuno: le reti moderne lo bloccano gia' sui router di "
+                  "confine.",
+            "en": "None: modern networks already block it at the border "
+                  "routers.",
+        },
+    },
+    "check_linux_tcp_syncookies": {
+        "why": {
+            "it": "La coda delle connessioni mezze aperte e' piccola e si "
+                  "riempie con pochissimo traffico: senza syncookies bastano "
+                  "poche migliaia di SYN al secondo — una singola linea "
+                  "domestica — per rendere irraggiungibile un servizio. Con "
+                  "essi il server non tiene stato finche' la connessione non "
+                  "e' completa, e la coda non si riempie.",
+            "en": "The half-open connection queue is small and fills with "
+                  "very little traffic: without syncookies a few thousand SYNs "
+                  "per second — one domestic line — make a service "
+                  "unreachable. With them the server keeps no state until the "
+                  "connection completes, and the queue never fills.",
+        },
+        "impact": {
+            "it": "Sotto attacco alcune opzioni TCP negoziate (window scaling, "
+                  "timestamp) possono andare perse, con un calo di prestazioni "
+                  "sulle connessioni accettate via cookie. Fuori attacco il "
+                  "meccanismo non entra in gioco.",
+            "en": "Under attack some negotiated TCP options (window scaling, "
+                  "timestamps) can be lost, costing performance on the "
+                  "connections accepted via cookies. Outside an attack the "
+                  "mechanism never kicks in.",
+        },
+        "default": {
+            "it": "I kernel recenti lo tengono gia' attivo, ma un file di "
+                  "tuning ereditato puo' averlo spento.",
+            "en": "Recent kernels keep it on already, but an inherited tuning "
+                  "file may have turned it off.",
+        },
+    },
+    "check_linux_log_martians": {
+        "why": {
+            "it": "Un pacchetto «marziano» ha un indirizzo di origine che non "
+                  "puo' arrivare dall'interfaccia da cui e' arrivato: e' la "
+                  "firma di uno spoofing o di un errore di routing. Senza "
+                  "questo parametro il pacchetto viene scartato in silenzio, e "
+                  "il fatto che qualcuno stia falsificando indirizzi non "
+                  "compare da nessuna parte.",
+            "en": "A «martian» packet carries a source address that cannot "
+                  "arrive on the interface it arrived on: the signature of "
+                  "spoofing or of a routing mistake. Without this setting the "
+                  "packet is dropped silently, and the fact that someone is "
+                  "forging addresses shows up nowhere.",
+        },
+        "impact": {
+            "it": "Su una rete con asimmetrie di routing il log puo' "
+                  "riempirsi di righe legittime: conviene attivarlo insieme a "
+                  "una rotazione adeguata e verificare i primi giorni.",
+            "en": "On a network with routing asymmetries the log can fill "
+                  "with legitimate lines: enable it together with adequate "
+                  "rotation and watch the first few days.",
+        },
+    },
 }
 
 

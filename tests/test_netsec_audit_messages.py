@@ -18,14 +18,15 @@ import re
 import unittest
 
 from services import netsec_audit
-from services.netsec_audit import guidance, ios_rules, messages, rules
+from services.netsec_audit import (guidance, ios_rules, linux_rules, messages,
+                                   rules)
 from services.netsec_audit.messages import LANGS, MESSAGES, render
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 SERVICE_DIR = os.path.dirname(os.path.abspath(rules.__file__))
 
 # Chiave di catalogo citata come stringa letterale, es. "fos.dns.no_section".
-_KEY_LITERAL = re.compile(r'"((?:fos|ios|ev|engine)\.[a-z0-9_.]+)"')
+_KEY_LITERAL = re.compile(r'"((?:fos|ios|lnx|ev|engine)\.[a-z0-9_.]+)"')
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
 # Una frase resa che invece e' rimasta una chiave: nessuno spazio, un punto in
 # mezzo, tutta minuscola.
@@ -33,7 +34,8 @@ _LOOKS_LIKE_KEY = re.compile(r"^[a-z0-9_]+(?:\.[a-z0-9_]+)+$")
 
 FIXTURE_FILES = ("fortigate_clean.conf", "fortigate_violations.conf",
                  "fortigate_partial.conf", "ios_clean.conf",
-                 "ios_violations.conf")
+                 "ios_violations.conf", "linux_clean.conf",
+                 "linux_violations.conf")
 
 
 def _fixture(name):
@@ -49,7 +51,7 @@ def _keys_cited_in_source():
     eseguita in test.
     """
     found = set()
-    for module in (rules, ios_rules):
+    for module in (rules, ios_rules, linux_rules):
         path = os.path.abspath(module.__file__)
         with open(path, encoding="utf-8") as fh:
             found.update(_KEY_LITERAL.findall(fh.read()))

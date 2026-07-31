@@ -607,15 +607,15 @@ async def obs_set_config(payload: dict, current_user = Depends(require_admin)):
     subito la nuova config ai listener UDP e ai task di background (nessun
     riavvio del processo necessario).
     Chiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},
-    api_poll_s, snmp_poll_s."""
-    allowed = {"enabled", "bind", "api_poll_s", "snmp_poll_s"} | {
+    api_poll_s, snmp_poll_s, linux_poll_s."""
+    allowed = {"enabled", "bind", "api_poll_s", "snmp_poll_s", "linux_poll_s"} | {
         f"{l}_{k}" for l in ("ipfix", "sflow", "syslog", "netflow")
         for k in ("enabled", "port")}
     clean = {}
     for k, v in (payload or {}).items():
         if k not in allowed:
             raise HTTPException(status_code=400, detail=f"Invalid key: '{k}'.")
-        if k.endswith("_port") or k in ("api_poll_s", "snmp_poll_s"):
+        if k.endswith("_port") or k in ("api_poll_s", "snmp_poll_s", "linux_poll_s"):
             if k.endswith("_port") and v in (None, "") \
                     and not (payload or {}).get(f"{k[:-5]}_enabled"):
                 continue  # listener disabilitato senza porta: mantieni il valore salvato

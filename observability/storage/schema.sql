@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS events (
     ts           INTEGER NOT NULL,       -- quando è successo
     ingested_ts  INTEGER NOT NULL,       -- quando è stato normalizzato
     tenant       TEXT NOT NULL,
-    source       TEXT NOT NULL,          -- netflow|ipfix|sflow|syslog|fortigate_api|platform
+    source       TEXT NOT NULL,          -- netflow|ipfix|sflow|syslog|fortigate_api|snmp|linux|platform
     source_id    INTEGER,                -- id nella tabella d'origine (provenienza)
     event_type   TEXT NOT NULL,          -- flow.aggregate|log.security|log.event|device.state|device.change|platform.exporter_unknown
     entity_type  TEXT NOT NULL,          -- flow|device|interface|exporter

@@ -17,6 +17,7 @@ from drivers.aruba_os import ArubaOsDriver
 from drivers.fortinet import FortinetDriver
 from drivers.cisco_wlc import CiscoWlcDriver
 from drivers.paloalto_panos import PaloAltoDriver
+from drivers.linux import LinuxDriver
 from security.crypto_vault import decrypt_password
 from security.security_manager import log_audit
 from core import data_config
@@ -107,6 +108,7 @@ DRIVER_REGISTRY = {
     'paloalto_panos': (PaloAltoDriver,   'paloalto_panos'),
     'cisco_wlc':      (CiscoWlcDriver,   'cisco_wlc_ssh'),   # AireOS
     'cisco_9800':     (CiscoIosDriver,   'cisco_xe'),        # Catalyst 9800 (IOS-XE)
+    'linux':          (LinuxDriver,      'linux'),
 }
 
 # Fallback nome-vendor → nome-driver, usato quando il registro vendor non
@@ -122,6 +124,7 @@ VENDOR_DRIVER_DEFAULTS = {
     'paloalto': 'paloalto_panos',
     'cisco_wlc': 'cisco_wlc',
     'cisco_9800': 'cisco_9800',
+    'linux':    'linux',
 }
 
 def resolve_driver(vendor):
@@ -289,7 +292,12 @@ def run_backup_and_triage(device):
 
     try:
         with ConnectHandler(**device_params) as net_connect:
-            net_connect.enable()
+            # Linux non ha enable mode: netmiko traduce enable() in `sudo su`. Ha
+            # senso solo se l'operatore ha messo la password sudo in Enable
+            # Secret; altrimenti la sessione resta non privilegiata e i comandi
+            # non-root bastano.
+            if netmiko_type != 'linux' or secret:
+                net_connect.enable()
             live_hostname = net_connect.find_prompt().strip().rstrip('#>').strip()
 
             driver = driver_cls(net_connect)
@@ -340,6 +348,40 @@ def run_backup_and_triage(device):
                     try:
                         out = net_connect.send_command(cmd, read_timeout=30)
                         out_str = out if isinstance(out, str) else str(out or "")
+                        config_out += f"\n{tag}\n{out_str}"
+                    except Exception:
+                        pass
+            elif vendor == 'linux':
+                # `hostname` esce come nome nudo: si scrive nella forma
+                # `hostname <nome>` cosi' extract_hostname_from_config lo
+                # riconosce senza un parser dedicato (il prompt Linux
+                # 'utente@host:~$' non e' utilizzabile).
+                linux_cmds = [
+                    ("hostname",           "--- HOSTNAME ---"),
+                    ("uptime -p",          "--- UPTIME ---"),
+                    ("ip -br a",           "--- IP ADDRESS ---"),
+                    ("ip route",           "--- IP ROUTE ---"),
+                    ("lsblk",              "--- LSBLK ---"),
+                    ("df -hT",             "--- DF ---"),
+                    ("systemctl --failed", "--- SYSTEMCTL FAILED ---"),
+                    ("ss -tuln",           "--- LISTENING SOCKETS ---"),
+                    ("lldpctl",            "--- SHOW LLDP NEIGHBORS ---"),
+                ]
+                if secret:
+                    # Tier privilegiato: disponibile solo se l'operatore ha
+                    # dichiarato la password sudo (Enable Secret).
+                    linux_cmds += [
+                        ("ss -tulpn",       "--- LISTENING SOCKETS PID ---"),
+                        ("stat -c '%a %U %G %n' /etc/shadow /etc/passwd /etc/group",
+                         "--- FILE PERMISSIONS ---"),
+                        ("sshd -T",         "--- SSHD EFFECTIVE CONFIG ---"),
+                    ]
+                for cmd, tag in linux_cmds:
+                    try:
+                        out = net_connect.send_command(cmd)
+                        out_str = out if isinstance(out, str) else str(out or "")
+                        if tag == "--- HOSTNAME ---":
+                            out_str = f"hostname {out_str.strip()}"
                         config_out += f"\n{tag}\n{out_str}"
                     except Exception:
                         pass

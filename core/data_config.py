@@ -121,6 +121,9 @@ def obs_config() -> dict:
         # interroga apparati con una credenziale — non deve partire da solo
         # solo perché l'observability è attiva.
         "snmp_poll_s": _port("SENTINELNET_OBS_SNMP_POLL_S", "snmp_poll_s", 0),
+        # Poller di salute degli host Linux: default 0 (spento), stessa ragione
+        # del poller SNMP — apre una sessione SSH con una credenziale.
+        "linux_poll_s": _port("SENTINELNET_OBS_LINUX_POLL_S", "linux_poll_s", 0),
         "retention_days": {
             "flow_aggregates": int(os.environ.get("SENTINELNET_OBS_RETENTION_FLOWS_DAYS")
                                    or _app_adv("retention_flows_days") or 30),

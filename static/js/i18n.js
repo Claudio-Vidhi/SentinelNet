@@ -543,6 +543,7 @@
         chipVendorFortigate: "Firewall FortiGate (FortiOS)",
         msgProvCiscoNoToken: "Nessun token API richiesto per gli switch Cisco: la consegna avviene via SSH o console/seriale.",
         lblSecret: "Enable Secret",
+        hintSecretLinux: "Su un host Linux vale come password sudo: se compilato, il triage esegue anche i comandi che richiedono root. Lasciandolo vuoto la sessione resta non privilegiata.",
         btnMapClassic: "Classica",
         btnMapMinimal: "Nuova",
 
@@ -692,6 +693,8 @@
         lblObsApiPoll: "Intervallo polling API (s)",
         lblObsSnmpPoll: "Intervallo polling SNMP (s)",
         hintObsSnmpPoll: "0 = spento. Interroga solo gli apparati che hanno una community configurata nella loro scheda.",
+        lblObsLinuxPoll: "Intervallo polling host Linux (s)",
+        hintObsLinuxPoll: "0 = spento. Apre una sessione SSH non privilegiata verso gli host con vendor «linux» e ne rileva CPU, memoria e disco.",
         lblSnmpCommunity: "Community SNMP (sola lettura)",
         lblSnmpClear: "Rimuovi la community e ferma il polling",
         hintSnmpCommunity: "Solo v2c e sola lettura: abilita il polling di stato e contatori sugli apparati senza API REST. La community viaggia in chiaro — usare solo su rete di management. Vuoto in modifica = invariata.",
@@ -1599,6 +1602,7 @@
         chipVendorFortigate: "FortiGate Firewall (FortiOS)",
         msgProvCiscoNoToken: "No API token is required for Cisco switches: delivery happens over SSH or console/serial.",
         lblSecret: "Enable Secret",
+        hintSecretLinux: "On a Linux host this doubles as the sudo password: when set, triage also runs the commands that need root. Leave it empty and the session stays unprivileged.",
         btnMapClassic: "Classic",
         btnMapMinimal: "New",
 
@@ -1749,6 +1753,8 @@
         lblObsApiPoll: "API poll interval (s)",
         lblObsSnmpPoll: "SNMP poll interval (s)",
         hintObsSnmpPoll: "0 = off. Only polls devices that have a community configured on their card.",
+        lblObsLinuxPoll: "Linux host poll interval (s)",
+        hintObsLinuxPoll: "0 = off. Opens an unprivileged SSH session to hosts with vendor «linux» and reads their CPU, memory and disk.",
         lblSnmpCommunity: "SNMP community (read-only)",
         lblSnmpClear: "Remove the community and stop polling",
         hintSnmpCommunity: "v2c and read-only: enables state and counter polling on devices without a REST API. The community travels in clear text — use on a management network only. Blank when editing = unchanged.",

@@ -23,15 +23,16 @@ sta lavorando — per questo ``lang`` e' un parametro, non una preferenza global
 
 from typing import Any, Dict, List, Optional
 
-from .benchmarks import BENCHMARK_TITLES, BENCHMARKS, FORTIOS, IOS
+from .benchmarks import BENCHMARK_TITLES, BENCHMARKS, FORTIOS, IOS, LINUX
 from .guidance import guidance_for
 from .ios_parser import parse_ios
+from .linux_parser import parse_linux
 from .messages import DEFAULT_LANG, LANGS, normalize_lang, render
 from .model import UNKNOWN, RuleOutcome, score_rules
 from .parser import parse_with_lines
 
 __all__ = ["run_netsec_audit", "detect_vendor", "BENCHMARKS",
-           "BENCHMARK_TITLES", "FORTIOS", "IOS", "LANGS"]
+           "BENCHMARK_TITLES", "FORTIOS", "IOS", "LINUX", "LANGS"]
 
 _DEFAULT_BENCHMARK = "cis"
 
@@ -44,23 +45,29 @@ _FORTIOS_MARKERS = ("config system global", "config firewall policy",
 _IOS_MARKERS = ("line vty", "line con 0", "interface gigabitethernet",
                 "ip http server", "aaa new-model", "boot system flash",
                 "service password-encryption", "interface vlan")
+# I marcatori Linux sono i separatori che l'artefatto di backup si scrive da
+# solo (``drivers/linux.py``): non si indovina una grammatica, si riconosce un
+# formato che abbiamo generato noi.
+_LINUX_MARKERS = ("--- /etc/ssh/sshd_config ---", "--- /etc/login.defs ---",
+                  "--- /etc/fstab ---", "--- /etc/os-release ---",
+                  "--- /etc/sysctl.conf ---")
 
 
 def detect_vendor(config_text: Optional[str]) -> Optional[str]:
     """Vendor riconosciuto, o ``None`` se il testo non e' attribuibile.
 
     Conta i marcatori invece di fermarsi al primo: un backup puo' contenere
-    entrambe le grammatiche (un file concatenato, un incolla parziale) e in
-    quel caso vince la piu' rappresentata.
+    piu' grammatiche (un file concatenato, un incolla parziale) e in quel caso
+    vince la piu' rappresentata.
     """
     if not config_text:
         return None
     low = config_text.lower()
-    forti = sum(low.count(m) for m in _FORTIOS_MARKERS)
-    ios = sum(low.count(m) for m in _IOS_MARKERS)
-    if forti == 0 and ios == 0:
-        return None
-    return FORTIOS if forti >= ios else IOS
+    counts = ((FORTIOS, sum(low.count(m) for m in _FORTIOS_MARKERS)),
+              (IOS, sum(low.count(m) for m in _IOS_MARKERS)),
+              (LINUX, sum(low.count(m) for m in _LINUX_MARKERS)))
+    vendor, best = max(counts, key=lambda vc: vc[1])
+    return vendor if best else None
 
 
 def _localized(value: Any, lang: str) -> str:
@@ -96,8 +103,12 @@ def run_netsec_audit(config_text: Optional[str] = None,
     vendor = detect_vendor(config_text)
     # Vendor non riconosciuto: si tenta comunque FortiOS, che e' la piattaforma
     # storica di questo motore, ma il payload lo dichiara e la UI puo' dirlo.
-    cfg = (parse_ios(config_text) if vendor == IOS
-           else parse_with_lines(config_text))
+    if vendor == IOS:
+        cfg = parse_ios(config_text)
+    elif vendor == LINUX:
+        cfg = parse_linux(config_text)
+    else:
+        cfg = parse_with_lines(config_text)
     device = device_name or "-"
 
     applicable = [t for t in BENCHMARKS[key]

@@ -12,7 +12,7 @@ from core.app_settings import get_app_settings, save_app_settings
 from routers.deps import get_current_user, require_admin
 from ai import mcp_server
 
-_MCP_DEFAULT_DISABLED = {"get_top_talkers", "get_anomalies"}
+_MCP_DEFAULT_DISABLED = {"get_top_talkers", "get_anomalies", "linux_health"}
 
 router = APIRouter(tags=["MCP"])
 
