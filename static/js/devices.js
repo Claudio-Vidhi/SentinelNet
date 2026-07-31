@@ -360,6 +360,7 @@
         try { devTransports = dev.Transports ? JSON.parse(dev.Transports) : null; } catch (e) { devTransports = null; }
         setTransportsForm(devTransports, dev['SSH Port']);
         document.getElementById('devVendor').value = (dev.Vendor || '').toLowerCase();
+        updateDevSecretHint();
         // Il segreto non torna dal server: il placeholder dice solo SE c'è.
         document.getElementById('devSnmp').value = '';
         document.getElementById('devSnmp').placeholder = dev.snmp_enabled

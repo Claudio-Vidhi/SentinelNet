@@ -417,6 +417,17 @@ VENDOR_ALIASES = {
     "junos": "juniper",
     "juniper_junos": "juniper",
     "cisco_ios": "cisco",
+    # Un CSV scritto a mano dice "Ubuntu", non "linux": le distro convergono
+    # tutte sullo stesso driver, perche' cambia il packaging, non la CLI.
+    "ubuntu": "linux",
+    "debian": "linux",
+    "rhel": "linux",
+    "redhat": "linux",
+    "centos": "linux",
+    "rocky": "linux",
+    "almalinux": "linux",
+    "suse": "linux",
+    "proxmox": "linux",
 }
 
 def normalize_vendor(raw_vendor: str) -> str:
@@ -436,6 +447,7 @@ def get_all_vendors() -> dict:
         "paloalto":{"euvd_term": "palo alto networks",        "driver": "paloalto_panos"},
         "cisco_wlc":{"euvd_term": "cisco",                    "driver": "cisco_wlc"},
         "cisco_9800":{"euvd_term": "cisco",                   "driver": "cisco_9800"},
+        "linux":   {"euvd_term": "linux kernel",              "driver": "linux"},
     }
     vendors_file = get_vendors_file()
     if not os.path.exists(vendors_file):

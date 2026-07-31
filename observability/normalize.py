@@ -272,7 +272,11 @@ def _source_of(kind: str) -> str:
     """Da quale trasporto arriva lo snapshot. ``api_observations`` raccoglie
     snapshot di apparato, non solo REST: l'evento deve dire quale sorgente lo
     ha prodotto, altrimenti la provenienza mente."""
-    return "snmp" if str(kind).startswith("snmp_") else "fortigate_api"
+    if str(kind).startswith("snmp_"):
+        return "snmp"
+    if str(kind).startswith("linux_"):
+        return "linux"
+    return "fortigate_api"
 
 
 def _from_api_observations(conn, now: int) -> int:

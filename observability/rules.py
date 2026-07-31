@@ -317,7 +317,7 @@ def _interface_flapping(events: list, p: dict) -> list:
 
 
 def _device_load(events: list, p: dict) -> list:
-    """Carico dell'apparato oltre soglia: CPU o memoria.
+    """Carico dell'apparato oltre soglia: CPU, memoria o disco.
 
     Prima regola che legge uno STATO invece di un cambiamento. Tutte le altre
     aspettano una transizione — un log, una porta caduta, una configurazione
@@ -336,7 +336,8 @@ def _device_load(events: list, p: dict) -> list:
             continue
         m = json.loads(ev["metrics_json"] or "{}")
         for field, limit, label in (("cpu_pct", p["max_cpu_pct"], "CPU"),
-                                    ("memory_pct", p["max_memory_pct"], "Memoria")):
+                                    ("memory_pct", p["max_memory_pct"], "Memoria"),
+                                    ("disk_pct", p["max_disk_pct"], "Disco")):
             value = m.get(field)
             # Assente ≠ zero: un apparato che non espone il carico non deve
             # sembrare scarico.
@@ -829,7 +830,7 @@ RULES = {
     "DEVICE_LOAD_001": {
         "version": "1.0.0",
         "title": "Carico dell'apparato oltre soglia",
-        "description": "CPU o memoria sopra la soglia dichiarata. È un "
+        "description": "CPU, memoria o disco sopra la soglia dichiarata. È un "
                        "sintomo da spiegare, non una causa: da solo dice che "
                        "l'apparato è sotto sforzo, non perché.",
         "inputs": ["device.state"],
@@ -842,6 +843,10 @@ RULES = {
             {"name": "max_memory_pct", "default": 90, "min": 1, "max": 100,
              "description": "Percentuale di memoria occupata oltre la quale "
                             "segnalare."},
+            {"name": "max_disk_pct", "default": 90, "min": 1, "max": 100,
+             "description": "Percentuale di occupazione del filesystem di "
+                            "radice oltre la quale segnalare. La misura arriva "
+                            "dagli host Linux interrogati dal poller."},
         ],
         "base_confidence": 50,
         "investigation": "Cercare nella stessa finestra un innesco sulla "

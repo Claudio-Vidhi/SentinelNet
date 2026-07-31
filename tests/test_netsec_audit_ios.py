@@ -174,7 +174,8 @@ class TestIosBenchmarkIntegration(unittest.TestCase):
                               "remediation", "check"):
                     self.assertIn(field, tmpl, "%s / %s" % (key, tmpl["id"]))
                 self.assertIn(tmpl["vendor"],
-                              (netsec_audit.FORTIOS, netsec_audit.IOS))
+                              (netsec_audit.FORTIOS, netsec_audit.IOS,
+                               netsec_audit.LINUX))
                 self.assertIn(tmpl["level"], (1, 2))
                 self.assertTrue((tmpl["check"].__doc__ or "").strip(),
                                 "%s senza docstring" % tmpl["id"])

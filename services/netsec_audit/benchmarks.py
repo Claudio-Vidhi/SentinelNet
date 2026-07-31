@@ -10,10 +10,12 @@ Benchmark v4.0" globale. Le voci ``ref`` citano:
 
   - *CIS Fortinet FortiGate Benchmark v1.0.1* (vendor ``fortios``)
   - *CIS Cisco IOS XE 17.x Benchmark v2.2.1* (vendor ``ios``)
+  - *CIS Ubuntu Linux 24.04 LTS Benchmark v2.0.0* (vendor ``linux``)
 
 Campi di ogni voce:
 
-  ``vendor``      piattaforma a cui la regola si applica: ``fortios`` o ``ios``.
+  ``vendor``      piattaforma a cui la regola si applica: ``fortios``, ``ios``
+                  o ``linux``.
                   Il motore scarta le regole di un vendor diverso da quello
                   riconosciuto nella configurazione, invece di valutarle e
                   produrre un UNKNOWN che non significa niente.
@@ -38,10 +40,11 @@ un'impostazione non cambia con lo standard che la cita.
 
 from typing import Any, Dict, List
 
-from . import ios_rules, rules
+from . import ios_rules, linux_rules, rules
 
 FORTIOS = "fortios"
 IOS = "ios"
+LINUX = "linux"
 
 # --- CIS Fortinet FortiGate ---------------------------------------------------
 
@@ -925,15 +928,206 @@ _PCI: List[Dict[str, Any]] = [
                     "<password>"},
 ]
 
+# --- CIS Ubuntu Linux 24.04 LTS ----------------------------------------------
+#
+# Valutate sull'artefatto di backup prodotto da ``drivers/linux.py``, che
+# raccoglie i file leggibili SENZA privilegi. Le raccomandazioni che richiedono
+# root (permessi di /etc/shadow, moduli del kernel, auditd, regole firewall) non
+# hanno una regola qui, invece di averne una che indovina.
+
+_CIS_LINUX: List[Dict[str, Any]] = [
+    {"id": "AUD-LNX-01", "vendor": LINUX, "ref": "5.1.20", "level": 1,
+     "automated": True,
+     "title": {"it": "Login diretto di root via SSH",
+               "en": "Direct root login over SSH"},
+     "severity": "CRITICAL", "category": "Identity",
+     "check": linux_rules.check_linux_sshd_permit_root_login,
+     "audit": "sshd -T | grep -i permitrootlogin",
+     "remediation": "PermitRootLogin no"},
+    {"id": "AUD-LNX-02", "vendor": LINUX, "ref": "5.1.19", "level": 1,
+     "automated": True,
+     "title": {"it": "Accesso SSH con password vuota",
+               "en": "SSH access with an empty password"},
+     "severity": "CRITICAL", "category": "Identity",
+     "check": linux_rules.check_linux_sshd_permit_empty_passwords,
+     "audit": "sshd -T | grep -i permitemptypasswords",
+     "remediation": "PermitEmptyPasswords no"},
+    {"id": "AUD-LNX-03", "vendor": LINUX, "ref": "5.1.16", "level": 1,
+     "automated": True,
+     "title": {"it": "Tentativi di autenticazione per connessione SSH",
+               "en": "Authentication attempts per SSH connection"},
+     "severity": "MEDIUM", "category": "Hardening",
+     "check": linux_rules.check_linux_sshd_max_auth_tries,
+     "audit": "sshd -T | grep -i maxauthtries",
+     "remediation": "MaxAuthTries 4"},
+    {"id": "AUD-LNX-04", "vendor": LINUX, "ref": "5.1.13", "level": 1,
+     "automated": True,
+     "title": {"it": "Finestra di autenticazione SSH",
+               "en": "SSH authentication window"},
+     "severity": "MEDIUM", "category": "Hardening",
+     "check": linux_rules.check_linux_sshd_login_grace_time,
+     "audit": "sshd -T | grep -i logingracetime",
+     "remediation": "LoginGraceTime 60"},
+    {"id": "AUD-LNX-05", "vendor": LINUX, "ref": "5.1.7", "level": 1,
+     "automated": True,
+     "title": {"it": "Chiusura delle sessioni SSH inattive",
+               "en": "Idle SSH sessions are closed"},
+     "severity": "MEDIUM", "category": "Hardening",
+     "check": linux_rules.check_linux_sshd_client_alive,
+     "audit": "sshd -T | grep -Ei 'clientalive(interval|countmax)'",
+     "remediation": "ClientAliveInterval 15 / ClientAliveCountMax 3"},
+    {"id": "AUD-LNX-06", "vendor": LINUX, "ref": "5.1.10", "level": 1,
+     "automated": True,
+     "title": {"it": "Autenticazione SSH basata sull'host",
+               "en": "Host-based SSH authentication"},
+     "severity": "HIGH", "category": "Identity",
+     "check": linux_rules.check_linux_sshd_hostbased_auth,
+     "audit": "sshd -T | grep -i hostbasedauthentication",
+     "remediation": "HostbasedAuthentication no"},
+    {"id": "AUD-LNX-07", "vendor": LINUX, "ref": "5.1.11", "level": 1,
+     "automated": True,
+     "title": {"it": "File «.rhosts» onorati da SSH",
+               "en": "«.rhosts» files honoured by SSH"},
+     "severity": "HIGH", "category": "Identity",
+     "check": linux_rules.check_linux_sshd_ignore_rhosts,
+     "audit": "sshd -T | grep -i ignorerhosts",
+     "remediation": "IgnoreRhosts yes"},
+    {"id": "AUD-LNX-08", "vendor": LINUX, "ref": "5.1.8", "level": 2,
+     "automated": True,
+     "title": {"it": "Inoltro TCP/X11 attraverso la sessione SSH",
+               "en": "TCP/X11 forwarding through the SSH session"},
+     "severity": "MEDIUM", "category": "Hardening",
+     "check": linux_rules.check_linux_sshd_disable_forwarding,
+     "audit": "sshd -T | grep -i disableforwarding",
+     "remediation": "DisableForwarding yes"},
+    {"id": "AUD-LNX-09", "vendor": LINUX, "ref": "5.1.14", "level": 1,
+     "automated": True,
+     "title": {"it": "Livello di log del servizio SSH",
+               "en": "SSH service log level"},
+     "severity": "LOW", "category": "Logging",
+     "check": linux_rules.check_linux_sshd_log_level,
+     "audit": "sshd -T | grep -i loglevel",
+     "remediation": "LogLevel VERBOSE"},
+    {"id": "AUD-LNX-10", "vendor": LINUX, "ref": "5.1.5", "level": 1,
+     "automated": True,
+     "title": {"it": "Avviso pre-autenticazione SSH",
+               "en": "SSH pre-authentication banner"},
+     "severity": "LOW", "category": "Hardening",
+     "check": linux_rules.check_linux_sshd_banner,
+     "audit": "sshd -T | grep -i banner",
+     "remediation": "Banner /etc/issue.net"},
+    {"id": "AUD-LNX-11", "vendor": LINUX, "ref": "5.4.1.1", "level": 1,
+     "automated": True,
+     "title": {"it": "Scadenza massima della password",
+               "en": "Maximum password age"},
+     "severity": "MEDIUM", "category": "Identity",
+     "check": linux_rules.check_linux_pass_max_days,
+     "audit": "grep -i '^PASS_MAX_DAYS' /etc/login.defs",
+     "remediation": "PASS_MAX_DAYS 365"},
+    {"id": "AUD-LNX-12", "vendor": LINUX, "ref": "5.4.1.2", "level": 2,
+     "automated": False,
+     "title": {"it": "Intervallo minimo fra due cambi password",
+               "en": "Minimum interval between password changes"},
+     "severity": "LOW", "category": "Identity",
+     "check": linux_rules.check_linux_pass_min_days,
+     "audit": "grep -i '^PASS_MIN_DAYS' /etc/login.defs",
+     "remediation": "PASS_MIN_DAYS 1"},
+    {"id": "AUD-LNX-13", "vendor": LINUX, "ref": "5.4.1.3", "level": 1,
+     "automated": True,
+     "title": {"it": "Preavviso di scadenza della password",
+               "en": "Password expiry warning"},
+     "severity": "LOW", "category": "Identity",
+     "check": linux_rules.check_linux_pass_warn_age,
+     "audit": "grep -i '^PASS_WARN_AGE' /etc/login.defs",
+     "remediation": "PASS_WARN_AGE 7"},
+    {"id": "AUD-LNX-14", "vendor": LINUX, "ref": "5.4.1.4", "level": 1,
+     "automated": True,
+     "title": {"it": "Algoritmo di hashing delle password",
+               "en": "Password hashing algorithm"},
+     "severity": "HIGH", "category": "Encryption",
+     "check": linux_rules.check_linux_encrypt_method,
+     "audit": "grep -i '^ENCRYPT_METHOD' /etc/login.defs",
+     "remediation": "ENCRYPT_METHOD YESCRYPT"},
+    {"id": "AUD-LNX-15", "vendor": LINUX,
+     "ref": "1.1.2.1.2 / 1.1.2.1.3 / 1.1.2.1.4", "level": 1,
+     "automated": True,
+     "title": {"it": "Opzioni di mount di «/tmp»",
+               "en": "Mount options for «/tmp»"},
+     "severity": "MEDIUM", "category": "Hardening",
+     "check": linux_rules.check_linux_tmp_mount_options,
+     "audit": "findmnt -kn /tmp",
+     "remediation": "/etc/fstab: nodev,nosuid,noexec su /tmp"},
+    {"id": "AUD-LNX-16", "vendor": LINUX, "ref": "1.1.2.4.2 / 1.1.2.4.3",
+     "level": 1, "automated": True,
+     "title": {"it": "Opzioni di mount di «/var»",
+               "en": "Mount options for «/var»"},
+     "severity": "LOW", "category": "Hardening",
+     "check": linux_rules.check_linux_var_mount_options,
+     "audit": "findmnt -kn /var",
+     "remediation": "/etc/fstab: nodev,nosuid su /var"},
+    {"id": "AUD-LNX-17", "vendor": LINUX, "ref": "3.3.1.1", "level": 2,
+     "automated": True,
+     "title": {"it": "Inoltro di pacchetti IP su un host non router",
+               "en": "IP forwarding on a non-router host"},
+     "severity": "HIGH", "category": "Access Rules",
+     "check": linux_rules.check_linux_ip_forward,
+     "audit": "sysctl net.ipv4.ip_forward",
+     "remediation": "net.ipv4.ip_forward = 0"},
+    {"id": "AUD-LNX-18", "vendor": LINUX, "ref": "3.3.1.8 / 3.3.1.9", "level": 1,
+     "automated": True,
+     "title": {"it": "ICMP redirect accettati",
+               "en": "ICMP redirects accepted"},
+     "severity": "HIGH", "category": "Access Rules",
+     "check": linux_rules.check_linux_accept_redirects,
+     "audit": "sysctl net.ipv4.conf.all.accept_redirects",
+     "remediation": "net.ipv4.conf.all.accept_redirects = 0 / "
+                    "net.ipv4.conf.default.accept_redirects = 0"},
+    {"id": "AUD-LNX-19", "vendor": LINUX, "ref": "3.3.1.4 / 3.3.1.5", "level": 1,
+     "automated": True,
+     "title": {"it": "ICMP redirect emessi dall'host",
+               "en": "ICMP redirects emitted by the host"},
+     "severity": "MEDIUM", "category": "Hardening",
+     "check": linux_rules.check_linux_send_redirects,
+     "audit": "sysctl net.ipv4.conf.all.send_redirects",
+     "remediation": "net.ipv4.conf.all.send_redirects = 0 / "
+                    "net.ipv4.conf.default.send_redirects = 0"},
+    {"id": "AUD-LNX-20", "vendor": LINUX, "ref": "3.3.1.14 / 3.3.1.15",
+     "level": 1, "automated": True,
+     "title": {"it": "Pacchetti con source routing",
+               "en": "Source-routed packets"},
+     "severity": "HIGH", "category": "Access Rules",
+     "check": linux_rules.check_linux_source_route,
+     "audit": "sysctl net.ipv4.conf.all.accept_source_route",
+     "remediation": "net.ipv4.conf.all.accept_source_route = 0 / "
+                    "net.ipv4.conf.default.accept_source_route = 0"},
+    {"id": "AUD-LNX-21", "vendor": LINUX, "ref": "3.3.1.18", "level": 1,
+     "automated": True,
+     "title": {"it": "Protezione contro il SYN flood",
+               "en": "SYN flood protection"},
+     "severity": "MEDIUM", "category": "Hardening",
+     "check": linux_rules.check_linux_tcp_syncookies,
+     "audit": "sysctl net.ipv4.tcp_syncookies",
+     "remediation": "net.ipv4.tcp_syncookies = 1"},
+    {"id": "AUD-LNX-22", "vendor": LINUX, "ref": "3.3.1.16 / 3.3.1.17",
+     "level": 1, "automated": True,
+     "title": {"it": "Registrazione dei pacchetti con origine impossibile",
+               "en": "Logging of packets with an impossible source"},
+     "severity": "LOW", "category": "Logging",
+     "check": linux_rules.check_linux_log_martians,
+     "audit": "sysctl net.ipv4.conf.all.log_martians",
+     "remediation": "net.ipv4.conf.all.log_martians = 1 / "
+                    "net.ipv4.conf.default.log_martians = 1"},
+]
+
 BENCHMARKS: Dict[str, List[Dict[str, Any]]] = {
-    "cis": _CIS_FORTIOS + _CIS_IOS,
+    "cis": _CIS_FORTIOS + _CIS_IOS + _CIS_LINUX,
     "nist": _NIST,
     "pci": _PCI,
 }
 
 # Titoli mostrati in interfaccia, cosi' la UI non deve conoscere le sigle.
 BENCHMARK_TITLES: Dict[str, str] = {
-    "cis": "CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x)",
+    "cis": "CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x / Ubuntu 24.04 LTS)",
     "nist": "NIST SP 800-53 Rev. 5",
     "pci": "PCI-DSS v4.0",
 }

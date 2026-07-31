@@ -258,6 +258,9 @@ function provInitToggles() {
     wireAaaToggle('provAaaProtocol', 'provAaaServerGroup', 'provAaaKeyGroup', 'provAaaHint');
     wireAaaToggle('fgtAaaProtocol', 'fgtAaaServerGroup', 'fgtAaaKeyGroup', 'fgtAaaHint');
 
+    const devVendorSel = document.getElementById('devVendor');
+    if (devVendorSel) devVendorSel.addEventListener('change', updateDevSecretHint);
+
     roleSel.addEventListener('change', () => {
         const isDist = roleSel.value === 'distribution';
         document.getElementById('provSvisGroup').style.display = isDist ? 'block' : 'none';
@@ -358,6 +361,15 @@ function provInitToggles() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', provInitToggles);
 else provInitToggles();
 
+// Linux non ha enable mode: lo stesso campo vale come password sudo, ed è
+// l'unica cosa che sblocca il tier privilegiato del triage. Il suggerimento
+// compare solo dove significa qualcosa.
+function updateDevSecretHint() {
+    const hint = document.getElementById('devSecretHint');
+    const vendorSel = document.getElementById('devVendor');
+    if (hint && vendorSel) hint.style.display = vendorSel.value === 'linux' ? 'block' : 'none';
+}
+
 // Popola le select del form di Provisioning Apparato (devVendor, scanVendorSelect,
 // devGroupSelect). Estratto da appInit() perché ora serve anche quando si apre
 // la tab dedicata tab-provisioning senza passare da un reload completo.
@@ -366,6 +378,7 @@ function populateProvisioningFormSelects() {
     if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
     const scanVendorSel = document.getElementById('scanVendorSelect');
     if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
+    updateDevSecretHint();
     renderVendorTable();
 
     const groupSelect = document.getElementById('devGroupSelect');
