@@ -1,6 +1,29 @@
 import re
 from drivers.base_driver import BaseDriver
 
+# Sequenze OSC di "shell integration" (Fedora, e sempre piu' distro, le emettono
+# attorno al prompt: ESC ] 8003 ; start=<uuid> ... ESC \). Netmiko ripulisce solo
+# le sequenze CSI, quindi queste finiscono dentro find_prompt() — e con esse un
+# UUID DIVERSO A OGNI COMANDO. send_command costruisce il pattern di terminazione
+# proprio dal prompt, quindi dopo il primo comando il pattern non corrisponde mai
+# piu' e ogni lettura va in timeout.
+_SHELL_INTEGRATION = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
+
+
+def sanitize_session(net_connect):
+    """Toglie le sequenze OSC da tutto cio' che netmiko legge sulla sessione.
+
+    ``strip_ansi_escape_codes`` e' gia' il punto in cui netmiko ripulisce
+    l'output (LinuxSSH attiva ``ansi_escape_codes``): lo si estende invece di
+    filtrare a valle, cosi' anche il prompt che netmiko usa per riconoscere la
+    fine di un comando nasce pulito. ``set_base_prompt`` viene rifatto perche'
+    quello calcolato alla connessione contiene ancora le sequenze.
+    """
+    original = net_connect.strip_ansi_escape_codes
+    net_connect.strip_ansi_escape_codes = \
+        lambda text: _SHELL_INTEGRATION.sub("", original(text))
+    net_connect.set_base_prompt()
+
 # File di configurazione leggibili da un account NON privilegiato. Sono anche
 # l'input dell'audit CIS Linux: i marcatori '--- <path> ---' che li separano
 # sono la stessa forma che _backup_section() gia' riconosce.

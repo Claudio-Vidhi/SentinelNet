@@ -35,8 +35,8 @@
         "euvd_term": "cisco",
         "driver": "cisco_9800"
     },
-    "ubuntu": {
-        "euvd_term": "ubuntu",
-        "driver": null
+    "linux": {
+        "euvd_term": "linux kernel",
+        "driver": "linux"
     }
 }
