@@ -806,7 +806,40 @@ def extract_model(platform: str = "", description: str = "") -> str | None:
 
 
 # Modello dal backup dell'apparato stesso (best-effort, multi-vendor).
+# dmidecode restituisce questi segnaposto quando il produttore non ha scritto
+# niente nella SMBIOS: sono stringhe letterali, non modelli.
+_DMI_PLACEHOLDERS = ("not specified", "to be filled by o.e.m.", "system product name",
+                     "default string", "unknown", "none", "n/a")
+
+
+def _linux_model(content: str) -> str | None:
+    """Modello di un host Linux: il prodotto hardware, o l'hypervisor se e' una VM.
+
+    Su una VM non esiste un modello di macchina, e lasciare vuota la colonna
+    dice meno del nome dell'hypervisor: "VM (VMware)" e' cio' che l'operatore
+    vede anche nella console di virtualizzazione.
+    """
+    dmi = _backup_section(content, 'DMIDECODE') or ""
+    m = re.search(r'^system-product-name:\s*(.+)$', dmi, re.IGNORECASE | re.MULTILINE)
+    if m:
+        value = m.group(1).strip()
+        if value and value.lower() not in _DMI_PLACEHOLDERS:
+            return value
+    # Senza tier privilegiato dmidecode non gira: lscpu dichiara comunque
+    # l'hypervisor, che su una VM e' l'unica identita' hardware che esista.
+    lscpu = _backup_section(content, 'LSCPU') or ""
+    m = re.search(r'^Hypervisor vendor:\s*(.+)$', lscpu, re.IGNORECASE | re.MULTILINE)
+    if m and m.group(1).strip():
+        return f"VM ({m.group(1).strip()})"
+    return None
+
+
 def extract_model_from_backup(content: str) -> str | None:
+    # Un artefatto Linux si riconosce dai file che il driver ci scrive dentro.
+    # Va intercettato PRIMA dei pattern Cisco: 'Model:' in lscpu e' il numero di
+    # modello della CPU (es. "186"), e finiva in colonna al posto della macchina.
+    if _backup_section(content, '/etc/os-release') is not None:
+        return _linux_model(content)
     for pat in (
         r'Model [Nn]umber\s*:\s*(\S+)',
         r'^\s*Model\s*:\s*(\S+)',

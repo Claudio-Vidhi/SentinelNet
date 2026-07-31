@@ -334,13 +334,28 @@ def _service_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
     return rows
 
 
+# Tipi di unita' che rappresentano qualcosa che qualcuno ha deciso di far
+# partire. Le .mount le genera automaticamente ogni snap installato: sono
+# decine, sono tutte "enabled" per costruzione, e sommergono le poche righe che
+# dicono davvero cosa gira su questa macchina.
+_ENABLED_UNIT_TYPES = (".service", ".socket", ".timer", ".path")
+
+
 def _enabled_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``systemctl list-unit-files --state=enabled``: cosa parte da solo al boot."""
+    """``systemctl list-unit-files --state=enabled``: cosa parte da solo al boot.
+
+    Lo stato non si mostra: la query filtra gia' su ``--state=enabled``, quindi
+    la colonna direbbe "enabled" su ogni riga. Si mostra il PRESET, cioe' cosa
+    prevedeva la distribuzione: ``preset=disabled`` su una unita' abilitata
+    significa che qualcuno l'ha accesa a mano, ed e' l'unica informazione della
+    tabella che distingua una riga dall'altra.
+    """
     rows = []
     for line in _lines(cfg, _S_ENABLED):
         parts = line.split()
-        if len(parts) >= 2 and "." in parts[0]:
-            rows.append({"unit": parts[0], "state": parts[1]})
+        if len(parts) >= 2 and parts[0].endswith(_ENABLED_UNIT_TYPES):
+            rows.append({"unit": parts[0],
+                         "preset": parts[2] if len(parts) > 2 else ""})
     return rows
 
 
@@ -535,7 +550,7 @@ def _analyze(text) -> Dict[str, Any]:
                            "part_number"], _dimm_rows(cfg)),
         _section("services", ["unit", "load", "active", "sub", "description"],
                  _service_rows(cfg)),
-        _section("enabled_units", ["unit", "state"], _enabled_rows(cfg)),
+        _section("enabled_units", ["unit", "preset"], _enabled_rows(cfg)),
         _section("ssh", ["setting", "value"], _sshd_rows(cfg)),
         _section("accounts", ["setting", "value"],
                  _keyed_rows(_lines(cfg, _F_LOGIN_DEFS), _LOGIN_DEFS_KEYS)),

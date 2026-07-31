@@ -92,6 +92,44 @@ class HostnameTest(unittest.TestCase):
                          "web-01")
 
 
+class ModelTest(unittest.TestCase):
+    """Il modello di un host Linux non e' il "Model:" di lscpu.
+
+    Bug reale: quel campo e' il numero di modello della CPU (es. "186") e il
+    pattern Cisco ``^\\s*Model\\s*:`` lo pescava, mettendolo in colonna al posto
+    della macchina.
+    """
+
+    def _artifact(self, extra):
+        return "--- /etc/os-release ---\nID=ubuntu\n" + extra
+
+    def test_lscpu_cpu_model_number_is_not_the_machine_model(self):
+        art = self._artifact("--- LSCPU ---\nModel:  186\nCPU(s):  4\n")
+        self.assertIsNone(core_engine.extract_model_from_backup(art))
+
+    def test_hypervisor_names_the_machine_when_dmidecode_is_unavailable(self):
+        art = self._artifact(
+            "--- LSCPU ---\nModel:  186\nHypervisor vendor:  VMware\n")
+        self.assertEqual("VM (VMware)",
+                         core_engine.extract_model_from_backup(art))
+
+    def test_dmidecode_product_name_wins(self):
+        art = self._artifact(
+            "--- LSCPU ---\nHypervisor vendor:  KVM\n"
+            "--- DMIDECODE ---\nsystem-product-name: ACME Server X1\n")
+        self.assertEqual("ACME Server X1",
+                         core_engine.extract_model_from_backup(art))
+
+    def test_smbios_placeholders_are_not_models(self):
+        art = self._artifact(
+            "--- DMIDECODE ---\nsystem-product-name: To Be Filled By O.E.M.\n")
+        self.assertIsNone(core_engine.extract_model_from_backup(art))
+
+    def test_cisco_backups_are_unaffected(self):
+        self.assertEqual("WS-C2960X-48FPD-L", core_engine.extract_model_from_backup(
+            "hostname switch-01\nModel Number: WS-C2960X-48FPD-L\n"))
+
+
 class DriverResolutionTest(unittest.TestCase):
 
     def test_alias_ubuntu_resolves_to_the_linux_driver(self):
@@ -140,6 +178,17 @@ class ShellIntegrationTest(unittest.TestCase):
         conn = self._patched()
         text = "PermitRootLogin no\n--- /etc/fstab ---\n/dev/sda1 / ext4 x 0 1\n"
         self.assertEqual(conn.strip_ansi_escape_codes(text), text)
+
+    def test_systemd_colour_codes_do_not_reach_the_artefact(self):
+        """Bug reale: systemctl colora "enabled" e netmiko rimuove solo un
+        elenco chiuso di sequenze, non la forma generale. I codici finivano
+        nell'artefatto e da li' nelle celle della tabella."""
+        conn = self._patched()
+        self.assertEqual(
+            conn.strip_ansi_escape_codes(
+                "apparmor.service \x1b[0;1;32menabled\x1b[0m "
+                "\x1b[0;1;32menabled\x1b[0m\n"),
+            "apparmor.service enabled enabled\n")
 
 
 class BlacklistTest(unittest.TestCase):
