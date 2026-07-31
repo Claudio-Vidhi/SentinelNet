@@ -259,7 +259,7 @@ function provInitToggles() {
     wireAaaToggle('fgtAaaProtocol', 'fgtAaaServerGroup', 'fgtAaaKeyGroup', 'fgtAaaHint');
 
     const devVendorSel = document.getElementById('devVendor');
-    if (devVendorSel) devVendorSel.addEventListener('change', updateDevSecretHint);
+    if (devVendorSel) devVendorSel.addEventListener('change', updateDevSecretField);
 
     roleSel.addEventListener('change', () => {
         const isDist = roleSel.value === 'distribution';
@@ -361,13 +361,36 @@ function provInitToggles() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', provInitToggles);
 else provInitToggles();
 
-// Linux non ha enable mode: lo stesso campo vale come password sudo, ed è
-// l'unica cosa che sblocca il tier privilegiato del triage. Il suggerimento
-// compare solo dove significa qualcosa.
-function updateDevSecretHint() {
+// "Enable Secret" non vuol dire la stessa cosa su ogni piattaforma: su Linux è
+// la password sudo, e su FortiOS, JunOS e PAN-OS non esiste proprio un livello
+// privilegiato da sbloccare (netmiko le marca NoEnable). Un campo che chiede
+// una cosa che l'apparato non ha è un invito a inventarsi un valore, quindi lì
+// sparisce invece di restare vuoto e ambiguo.
+const DEV_SECRET_LABELS = { linux: 'lblSecretSudo' };
+const DEV_SECRET_NOT_APPLICABLE = ['fortinet', 'juniper', 'paloalto'];
+
+function updateDevSecretField() {
+    const group = document.getElementById('devSecretGroup');
+    const label = document.getElementById('devSecretLabel');
+    const input = document.getElementById('devSecret');
     const hint = document.getElementById('devSecretHint');
     const vendorSel = document.getElementById('devVendor');
-    if (hint && vendorSel) hint.style.display = vendorSel.value === 'linux' ? 'block' : 'none';
+    if (!group || !label || !input || !vendorSel) return;
+
+    const vendor = vendorSel.value;
+    // Vendor sconosciuto (custom da vendors.json): il campo resta, è il verso
+    // sicuro dell'errore.
+    const applicable = !DEV_SECRET_NOT_APPLICABLE.includes(vendor);
+    group.style.display = applicable ? '' : 'none';
+    if (!applicable) input.value = '';
+
+    // Si riscrive l'attributo, non solo il testo: al cambio di lingua è
+    // applyI18n a rileggerlo, e con la chiave vecchia rimetterebbe l'etichetta
+    // sbagliata.
+    const key = DEV_SECRET_LABELS[vendor] || 'lblSecret';
+    label.setAttribute('data-i18n', key);
+    if (i18n[currentLang] && i18n[currentLang][key]) label.textContent = i18n[currentLang][key];
+    if (hint) hint.style.display = vendor === 'linux' ? 'block' : 'none';
 }
 
 // Popola le select del form di Provisioning Apparato (devVendor, scanVendorSelect,
@@ -378,7 +401,7 @@ function populateProvisioningFormSelects() {
     if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
     const scanVendorSel = document.getElementById('scanVendorSelect');
     if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
-    updateDevSecretHint();
+    updateDevSecretField();
     renderVendorTable();
 
     const groupSelect = document.getElementById('devGroupSelect');

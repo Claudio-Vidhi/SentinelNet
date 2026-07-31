@@ -543,7 +543,8 @@
         chipVendorFortigate: "Firewall FortiGate (FortiOS)",
         msgProvCiscoNoToken: "Nessun token API richiesto per gli switch Cisco: la consegna avviene via SSH o console/seriale.",
         lblSecret: "Enable Secret",
-        hintSecretLinux: "Su un host Linux vale come password sudo: se compilato, il triage esegue anche i comandi che richiedono root. Lasciandolo vuoto la sessione resta non privilegiata.",
+        lblSecretSudo: "Password root (sudo)",
+        hintSecretLinux: "Se compilata, il triage esegue anche i comandi che richiedono root. Lasciandola vuota la sessione resta non privilegiata.",
         btnMapClassic: "Classica",
         btnMapMinimal: "Nuova",
 
@@ -1604,7 +1605,8 @@
         chipVendorFortigate: "FortiGate Firewall (FortiOS)",
         msgProvCiscoNoToken: "No API token is required for Cisco switches: delivery happens over SSH or console/serial.",
         lblSecret: "Enable Secret",
-        hintSecretLinux: "On a Linux host this doubles as the sudo password: when set, triage also runs the commands that need root. Leave it empty and the session stays unprivileged.",
+        lblSecretSudo: "Root (sudo) password",
+        hintSecretLinux: "When set, triage also runs the commands that need root. Leave it empty and the session stays unprivileged.",
         btnMapClassic: "Classic",
         btnMapMinimal: "New",
 
