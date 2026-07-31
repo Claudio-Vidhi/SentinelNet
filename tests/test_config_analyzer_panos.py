@@ -69,7 +69,7 @@ class TestPanosEnvelope(unittest.TestCase):
     def test_address_group_members(self):
         grp = _rows(self.env, "address_groups")[0]
         self.assertEqual(grp["name"], "GRP-WEB")
-        self.assertEqual(grp["members"], "SRV-WEB, DMZ-NET")
+        self.assertEqual(grp["members"], ["SRV-WEB", "DMZ-NET"])
 
     def test_services_and_group(self):
         svc = {r["name"]: r for r in _rows(self.env, "services")}
@@ -77,27 +77,27 @@ class TestPanosEnvelope(unittest.TestCase):
         self.assertEqual(svc["SVC-HTTPS"]["port"], "8443")
         self.assertEqual(svc["SVC-DNS"]["protocol"], "udp")
         sg = _rows(self.env, "service_groups")[0]
-        self.assertEqual(sg["members"], "SVC-HTTPS, SVC-DNS")
+        self.assertEqual(sg["members"], ["SVC-HTTPS", "SVC-DNS"])
 
     def test_security_rules(self):
         rows = {r["name"]: r for r in _rows(self.env, "security_rules")}
-        self.assertEqual(rows["allow-web"]["from"], "trust")
-        self.assertEqual(rows["allow-web"]["to"], "untrust")
-        self.assertEqual(rows["allow-web"]["source"], "SRV-WEB")
-        self.assertEqual(rows["allow-web"]["application"], "web-browsing")
+        self.assertEqual(rows["allow-web"]["from"], ["trust"])
+        self.assertEqual(rows["allow-web"]["to"], ["untrust"])
+        self.assertEqual(rows["allow-web"]["source"], ["SRV-WEB"])
+        self.assertEqual(rows["allow-web"]["application"], ["web-browsing"])
         self.assertEqual(rows["allow-web"]["action"], "allow")
         self.assertEqual(rows["deny-all"]["action"], "deny")
 
     def test_nat_rules(self):
         nat = _rows(self.env, "nat_rules")[0]
         self.assertEqual(nat["name"], "snat-out")
-        self.assertEqual(nat["source"], "DMZ-NET")
+        self.assertEqual(nat["source"], ["DMZ-NET"])
         self.assertEqual(nat["translation"], "ethernet1/3")
 
     def test_zones(self):
         zones = {r["name"]: r for r in _rows(self.env, "zones")}
-        self.assertEqual(zones["trust"]["interfaces"], "ethernet1/1, ethernet1/2")
-        self.assertEqual(zones["untrust"]["interfaces"], "ethernet1/3")
+        self.assertEqual(zones["trust"]["interfaces"], ["ethernet1/1", "ethernet1/2"])
+        self.assertEqual(zones["untrust"]["interfaces"], ["ethernet1/3"])
 
     def test_vpn(self):
         rows = {r["name"]: r for r in _rows(self.env, "vpn_ipsec")}

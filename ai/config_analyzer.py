@@ -537,6 +537,8 @@ def analyze_config(content):
 _FORTIOS_VENDORS = {'fortinet', 'fortigate', 'fortios'}
 _WLC_AIREOS_VENDORS = {'cisco_wlc'}
 _PANOS_VENDORS = {'palo_alto', 'paloalto', 'panos', 'pan-os', 'palo alto'}
+_LINUX_VENDORS = {'linux', 'ubuntu', 'debian', 'rhel', 'redhat', 'centos',
+                  'rocky', 'almalinux', 'suse', 'proxmox'}
 
 
 def detect_config_type(content, device=None):
@@ -552,6 +554,8 @@ def detect_config_type(content, device=None):
                 return 'wlc-aireos'
             if vendor in _PANOS_VENDORS:
                 return 'panos'
+            if vendor in _LINUX_VENDORS:
+                return 'linux'
             if vendor:
                 # cisco_9800 (IOS-XE) e altri: formato IOS
                 return 'ios'
@@ -573,6 +577,10 @@ def detect_config_type(content, device=None):
         # AireOS 'show run-config' tabellare
         if re.search(r'^System Name\.{3,}', text, re.MULTILINE):
             return 'wlc-aireos'
+        # Linux: i marcatori li scrive drivers/linux.py, quindi sono esatti.
+        if re.search(r'^--- /etc/(os-release|ssh/sshd_config|fstab) ---',
+                     text, re.MULTILINE):
+            return 'linux'
     except Exception:
         pass
     return 'ios'
@@ -1293,6 +1301,7 @@ def analyze_device(ip):
 
     is_firewall = False
     firewall = None
+    server = None
     result: Dict[str, Any]
     if config_type == 'fortios':
         result = dict(analyze_fortios_config(content))
@@ -1312,6 +1321,21 @@ def analyze_device(ip):
     elif config_type == 'wlc-aireos':
         result = dict(analyze_wlc_config(content))
         hostname = result.pop("hostname", "")
+    elif config_type == 'linux':
+        # Nessuna VLAN, nessuna ACL, nessuna interfaccia in senso Cisco: il
+        # risultato "generico" resta vuoto di proposito e tutto il contenuto
+        # sta nell'envelope ``server``.
+        from ai import linux_analyzer
+        result = {
+            "vlans": [], "interfaces": [], "acls": [], "vpn": [],
+            "routing": {"static": [], "protocols": [], "vrfs": []},
+            "validation": {"unused_acls": [], "missing_acls": [],
+                           "unused_vlans": [], "undefined_vlans": [],
+                           "route_acl_refs": []},
+        }
+        server = linux_analyzer.analyze(content)
+        m = re.search(r'^\s*hostname (\S+)', content, re.MULTILINE)
+        hostname = m.group(1) if m else ""
     else:
         result = dict(analyze_config(content))
         hostname = ""
@@ -1335,6 +1359,7 @@ def analyze_device(ip):
     result["config_type"] = config_type
     result["is_firewall"] = is_firewall
     result["firewall"] = firewall
+    result["server"] = server
     return result
 
 

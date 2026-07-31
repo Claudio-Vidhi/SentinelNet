@@ -105,6 +105,20 @@ def _join(vals):
     return ', '.join(vals) if isinstance(vals, (list, tuple)) else (vals or '')
 
 
+def _multi(vals):
+    """Valore multi-elemento tenuto come LISTA fino alla UI.
+
+    Una policy puo' citare decine di oggetti indirizzo: appiattirli qui in una
+    stringa costringe la tabella a una cella enorme, e il client non ha piu' il
+    modo di espanderla su richiesta perche' la struttura non c'e' piu'.
+    Ricomporla lato browser separando su ", " non e' equivalente: il nome di un
+    oggetto puo' contenere una virgola.
+    """
+    if isinstance(vals, (list, tuple)):
+        return [str(v) for v in vals]
+    return [str(vals)] if vals else []
+
+
 def _section(sid, columns, rows):
     return {
         "id": sid,
@@ -143,7 +157,7 @@ def _analyze(text):
     rows = []
     for name, e in _panos_collect(lines, ('address-group',)).items():
         members = _values(e, 'static') or _values(e, 'dynamic', 'filter')
-        rows.append({"name": name, "members": _join(members)})
+        rows.append({"name": name, "members": _multi(members)})
     sections.append(_section("address_groups", ["name", "members"], rows))
 
     # 3) Services
@@ -158,7 +172,7 @@ def _analyze(text):
     # 4) Service groups
     rows = []
     for name, e in _panos_collect(lines, ('service-group',)).items():
-        rows.append({"name": name, "members": _join(_values(e, 'members'))})
+        rows.append({"name": name, "members": _multi(_values(e, 'members'))})
     sections.append(_section("service_groups", ["name", "members"], rows))
 
     # 5) Security rules
@@ -166,12 +180,12 @@ def _analyze(text):
     for name, e in _panos_collect(lines, ('rulebase', 'security', 'rules')).items():
         rows.append({
             "name": name,
-            "from": _join(_values(e, 'from')),
-            "to": _join(_values(e, 'to')),
-            "source": _join(_values(e, 'source')),
-            "destination": _join(_values(e, 'destination')),
-            "application": _join(_values(e, 'application')),
-            "service": _join(_values(e, 'service')),
+            "from": _multi(_values(e, 'from')),
+            "to": _multi(_values(e, 'to')),
+            "source": _multi(_values(e, 'source')),
+            "destination": _multi(_values(e, 'destination')),
+            "application": _multi(_values(e, 'application')),
+            "service": _multi(_values(e, 'service')),
             "action": _first(e, 'action'),
         })
     sections.append(_section(
@@ -187,10 +201,10 @@ def _analyze(text):
                        or _first(e, 'destination-translation', 'translated-address'))
         rows.append({
             "name": name,
-            "from": _join(_values(e, 'from')),
-            "to": _join(_values(e, 'to')),
-            "source": _join(_values(e, 'source')),
-            "destination": _join(_values(e, 'destination')),
+            "from": _multi(_values(e, 'from')),
+            "to": _multi(_values(e, 'to')),
+            "source": _multi(_values(e, 'source')),
+            "destination": _multi(_values(e, 'destination')),
             "service": _first(e, 'service'),
             "translation": translation,
         })
@@ -204,7 +218,7 @@ def _analyze(text):
     for name, e in _panos_collect(lines, ('zone',)).items():
         ifaces = (_values(e, 'network', 'layer3') or _values(e, 'network', 'layer2')
                   or _values(e, 'network', 'tap'))
-        rows.append({"name": name, "interfaces": _join(ifaces)})
+        rows.append({"name": name, "interfaces": _multi(ifaces)})
     sections.append(_section("zones", ["name", "interfaces"], rows))
 
     # 8) VPN (IKE gateway + tunnel IPsec)

@@ -166,7 +166,7 @@ class TestFortiosEnvelope(unittest.TestCase):
         rows = {r["id"]: r for r in _rows(self.env, "policies")}
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows["1"]["name"], "outbound")
-        self.assertEqual(rows["1"]["srcaddr"], "lan-net")
+        self.assertEqual(rows["1"]["srcaddr"], ["lan-net"])
         self.assertEqual(rows["1"]["action"], "accept")
         self.assertEqual(rows["1"]["nat"], "enable")
         self.assertEqual(rows["2"]["action"], "deny")
@@ -176,17 +176,17 @@ class TestFortiosEnvelope(unittest.TestCase):
         addr = {r["name"]: r for r in _rows(self.env, "addresses")}
         self.assertEqual(addr["lan-net"]["subnet"], "192.168.1.0/24")
         grp = _rows(self.env, "address_groups")
-        self.assertEqual(grp[0]["members"], "lan-net")
+        self.assertEqual(grp[0]["members"], ["lan-net"])
 
     def test_services(self):
         svc = {r["name"]: r for r in _rows(self.env, "services")}
-        self.assertEqual(svc["HTTPS-8443"]["tcp_portrange"], "8443")
+        self.assertEqual(svc["HTTPS-8443"]["tcp_portrange"], ["8443"])
 
     def test_schedules(self):
         sch = _rows(self.env, "schedules")[0]
         self.assertEqual(sch["name"], "worktime")
         self.assertEqual(sch["type"], "recurring")
-        self.assertEqual(sch["day"], "monday, tuesday")
+        self.assertEqual(sch["day"], ["monday", "tuesday"])
         self.assertEqual(sch["start"], "08:00")
 
     def test_vips_and_ippools(self):
@@ -201,13 +201,13 @@ class TestFortiosEnvelope(unittest.TestCase):
         ifs = {r["name"]: r for r in _rows(self.env, "interfaces")}
         self.assertEqual(ifs["port1"]["ip"], "10.0.0.1/24")
         self.assertEqual(ifs["port2"]["zone"], "lan")
-        self.assertEqual(ifs["port1"]["allowaccess"], "ping, https, ssh")
+        self.assertEqual(ifs["port1"]["allowaccess"], ["ping", "https", "ssh"])
 
     def test_vpn_ipsec_joins_phase2(self):
         vpn = _rows(self.env, "vpn_ipsec")[0]
         self.assertEqual(vpn["name"], "vpn-hub")
         self.assertEqual(vpn["remote_gw"], "198.51.100.1")
-        self.assertEqual(vpn["phase2"], "vpn-hub-p2")
+        self.assertEqual(vpn["phase2"], ["vpn-hub-p2"])
 
     def test_vpn_ssl_redacts_secret(self):
         ssl = {r["key"]: r["value"] for r in _rows(self.env, "vpn_ssl")}
@@ -218,7 +218,7 @@ class TestFortiosEnvelope(unittest.TestCase):
         rows = {r["name"]: r for r in _rows(self.env, "administrators")}
         adm = rows["admin"]
         self.assertEqual(adm["accprofile"], "super_admin")
-        self.assertIn("10.0.0.0", adm["trusthost"])
+        self.assertEqual(["10.0.0.0 255.255.255.0"], adm["trusthost"])
 
     def test_administrators_unrestricted_trusthost_filtered_out(self):
         # trusthost1/2 = 0.0.0.0 0.0.0.0 and ip6-trusthost1 = ::/0 mean "any host"
@@ -226,14 +226,13 @@ class TestFortiosEnvelope(unittest.TestCase):
         # appear in the rendered trusthost list.
         rows = {r["name"]: r for r in _rows(self.env, "administrators")}
         unrestricted = rows["unrestricted"]
-        self.assertEqual(unrestricted["trusthost"], "")
-        self.assertNotIn("0.0.0.0", unrestricted["trusthost"])
-        self.assertNotIn("::/0", unrestricted["trusthost"])
+        # Lista vuota, non stringa vuota: la UI la rende come "qualunque IP".
+        self.assertEqual(unrestricted["trusthost"], [])
 
     def test_authentication_flags_sso(self):
         rows = {r["name"]: r for r in _rows(self.env, "authentication")}
         self.assertEqual(rows["corp-radius"]["kind"], "radius")
-        self.assertEqual(rows["corp-radius"]["server"], "10.0.0.50")
+        self.assertEqual(rows["corp-radius"]["server"], ["10.0.0.50"])
         self.assertEqual(rows["sso-group"]["kind"], "group")
         self.assertEqual(rows["sso-group"]["sso"], "yes")
 
