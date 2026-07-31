@@ -373,12 +373,27 @@ def run_backup_and_triage(device):
                 # 'utente@host:~$' non e' utilizzabile).
                 linux_cmds = [
                     ("hostname",           "--- HOSTNAME ---"),
+                    ("uname -srm",         "--- UNAME ---"),
                     ("uptime -p",          "--- UPTIME ---"),
+                    ("uptime -s",          "--- BOOT TIME ---"),
                     ("ip -br a",           "--- IP ADDRESS ---"),
+                    # Contatori e MTU per interfaccia in un colpo solo: stato,
+                    # byte/pacchetti RX-TX, errori e scarti.
+                    ("ip -s link",         "--- LINK STATS ---"),
+                    # Velocita'/duplex da sysfs invece che da ethtool: stessi
+                    # dati, nessuna dipendenza da installare e nessun privilegio
+                    # (su lo e le virtuali i file non esistono, da qui 2>/dev/null).
+                    ('for i in /sys/class/net/*; do echo "$(basename $i)'
+                     ' $(cat $i/speed 2>/dev/null) $(cat $i/duplex 2>/dev/null)"; done',
+                     "--- LINK SPEED ---"),
                     ("ip route",           "--- IP ROUTE ---"),
                     ("lsblk",              "--- LSBLK ---"),
+                    ("lsblk -dno NAME,MODEL,SERIAL,SIZE", "--- DISKS ---"),
+                    ("lscpu",              "--- LSCPU ---"),
                     ("df -hT",             "--- DF ---"),
                     ("systemctl --failed", "--- SYSTEMCTL FAILED ---"),
+                    ("systemctl list-unit-files --state=enabled --no-legend --no-pager",
+                     "--- SYSTEMCTL ENABLED ---"),
                     ("ss -tuln",           "--- LISTENING SOCKETS ---"),
                     ("lldpctl",            "--- SHOW LLDP NEIGHBORS ---"),
                 ]
@@ -390,6 +405,17 @@ def run_backup_and_triage(device):
                         ("stat -c '%a %U %G %n' /etc/shadow /etc/passwd /etc/group",
                          "--- FILE PERMISSIONS ---"),
                         ("sshd -T",         "--- SSHD EFFECTIVE CONFIG ---"),
+                        ("cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null",
+                         "--- SUDOERS ---"),
+                        # dmidecode -s una chiave alla volta: l'output diventa
+                        # "chiave: valore", stessa forma di lscpu, un parser solo.
+                        ('for k in system-manufacturer system-product-name'
+                         ' system-serial-number bios-version bios-release-date;'
+                         ' do echo "$k: $(dmidecode -s $k 2>/dev/null)"; done',
+                         "--- DMIDECODE ---"),
+                        ("dmidecode -t 17", "--- MEMORY DEVICES ---"),
+                        ("nft list ruleset 2>/dev/null || iptables -S 2>/dev/null",
+                         "--- FIREWALL RULES ---"),
                     ]
                 for cmd, tag in linux_cmds:
                     try:

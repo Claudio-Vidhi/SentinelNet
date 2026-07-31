@@ -47,7 +47,19 @@ PROBE_COMMAND = (
     'echo "--- DISK ---"; df -P /; '
     'echo "--- UPTIME ---"; cat /proc/uptime; '
     'echo "--- KERNEL ---"; uname -r; '
-    'echo "--- FAILED ---"; systemctl --failed --no-legend --plain 2>/dev/null'
+    'echo "--- FAILED ---"; systemctl --failed --no-legend --plain 2>/dev/null; '
+    'echo "--- LOAD ---"; cat /proc/loadavg; '
+    'echo "--- ZOMBIE ---"; ps -eo stat= | grep -c "^Z"; '
+    # Due conteggi, uno per famiglia di distribuzione: il gestore assente non
+    # stampa nulla e grep -c risponde 0, quindi vince il maggiore dei due.
+    # ``timeout`` limita il danno se apt resta appeso su una rete lenta: senza,
+    # un solo host lento farebbe scadere l'INTERA lettura e si perderebbero
+    # anche CPU, memoria e disco.
+    # ponytail: nessun aggiornamento e nessun gestore pacchetti danno entrambi
+    # 0; distinguerli richiede un sentinella in piu' e finora non serve.
+    'echo "--- UPDATES ---"; '
+    'timeout 5 apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | grep -c "^Inst"; '
+    'timeout 5 dnf -q list --upgrades 2>/dev/null | grep -c "^[[:alnum:]]"'
 )
 
 
@@ -109,6 +121,24 @@ def _disk_pct(output: str):
     return None
 
 
+def _load_avg(output: str):
+    """I tre carichi medi da ``/proc/loadavg``, ``None`` se la riga non c'e'."""
+    for line in _section(output, "LOAD"):
+        fields = line.split()
+        if len(fields) >= 3:
+            try:
+                return [float(f) for f in fields[:3]]
+            except ValueError:
+                return None
+    return None
+
+
+def _counter(output: str, tag: str):
+    """Sezione che contiene solo numeri: il maggiore, ``None`` se nessuno."""
+    values = [int(l) for l in _section(output, tag) if l.isdigit()]
+    return max(values) if values else None
+
+
 def parse_health(output: str) -> tuple:
     """(results, metrics) dallo snapshot grezzo di ``PROBE_COMMAND``."""
     uptime = _section(output, "UPTIME")
@@ -122,10 +152,16 @@ def parse_health(output: str) -> tuple:
     if kernel:
         results["kernel"] = kernel[0]
 
+    load = _load_avg(output)
     metrics = {}
     for field, value in (("cpu_pct", _cpu_pct(output)),
                          ("memory_pct", _memory_pct(output)),
-                         ("disk_pct", _disk_pct(output))):
+                         ("disk_pct", _disk_pct(output)),
+                         ("load1", load[0] if load else None),
+                         ("load5", load[1] if load else None),
+                         ("load15", load[2] if load else None),
+                         ("zombies", _counter(output, "ZOMBIE")),
+                         ("pending_updates", _counter(output, "UPDATES"))):
         if value is not None:
             metrics[field] = value
     return results, metrics

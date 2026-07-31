@@ -46,6 +46,13 @@ Filesystem     1024-blocks     Used Available Capacity Mounted on
 --- FAILED ---
   nginx.service loaded failed failed A high performance web server
   cron.service  loaded failed failed Regular background program processing daemon
+--- LOAD ---
+0.52 0.31 0.18 2/456 7890
+--- ZOMBIE ---
+3
+--- UPDATES ---
+12
+0
 """
 
 
@@ -73,7 +80,22 @@ class TestParsing(unittest.TestCase):
         self.assertEqual(results["uptime_s"], 987654)
         self.assertEqual(results["failed_units"], 2)
         self.assertEqual(metrics, {"cpu_pct": 80.0, "memory_pct": 75.0,
-                                   "disk_pct": 92})
+                                   "disk_pct": 92, "load1": 0.52,
+                                   "load5": 0.31, "load15": 0.18,
+                                   "zombies": 3, "pending_updates": 12})
+
+    def test_pending_updates_takes_the_package_manager_that_answered(self):
+        # apt e dnf vengono interrogati entrambi: quello assente non stampa
+        # niente e grep -c risponde 0, quindi il conteggio buono e' il maggiore.
+        self.assertEqual(linux_poller._counter(PROBE_OUTPUT, "UPDATES"), 12)
+        self.assertEqual(
+            linux_poller._counter("--- UPDATES ---\n0\n7\n", "UPDATES"), 7)
+
+    def test_load_absent_is_not_zero(self):
+        # Una soglia che legge zero tacerebbe proprio dove non sta guardando.
+        _, metrics = linux_poller.parse_health("--- KERNEL ---\n6.1.0\n")
+        self.assertNotIn("load1", metrics)
+        self.assertNotIn("zombies", metrics)
 
     def test_a_missing_section_is_omitted_not_invented(self):
         results, metrics = linux_poller.parse_health("--- KERNEL ---\n6.1.0\n")
@@ -152,7 +174,9 @@ class TestSnapshotsReachTheEngine(unittest.TestCase):
         ev = self._rows("SELECT * FROM events WHERE event_type = 'device.state'")[0]
         self.assertEqual(ev["source"], "linux")
         self.assertEqual(json.loads(ev["metrics_json"]),
-                         {"cpu_pct": 80.0, "memory_pct": 75.0, "disk_pct": 92})
+                         {"cpu_pct": 80.0, "memory_pct": 75.0, "disk_pct": 92,
+                          "load1": 0.52, "load5": 0.31, "load15": 0.18,
+                          "zombies": 3, "pending_updates": 12})
 
     def test_uptime_does_not_invent_a_change_every_poll(self):
         # uptime cresce a ogni giro per costruzione: se entrasse nel confronto,
