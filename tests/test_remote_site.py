@@ -161,6 +161,34 @@ class RemoteSiteE2E(unittest.TestCase):
         r = self.client.get("/api/agent/jobs", headers=ah)
         self.assertEqual(r.json()["jobs"], [])
 
+    def test_csv_import_assigns_the_site(self):
+        """La colonna Site veniva letta e buttata via: un inventario esportato
+        e reimportato perdeva l'assegnazione alle sedi con agente."""
+        sid, _token = self._create_agent_site("Bologna-Remota")
+        csv = ("IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor\n"
+               f"192.0.2.77,admin,Pw1!,,sw-bologna,Generale,{sid},cisco\n")
+        r = self.client.post("/api/import-csv", headers=self.admin_h,
+                             json={"csv_data": csv})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["failed"], [])
+        from services import inventory_manager
+        dev = next(d for d in inventory_manager.get_all_devices()
+                   if d["IP"] == "192.0.2.77")
+        self.assertEqual(dev["Site"], sid)
+        # E il tenant NON e' stato sovrascritto dalla sede.
+        self.assertEqual(dev["Group"], "Generale")
+
+    def test_csv_import_refuses_an_unknown_site(self):
+        """Una sede si inventa con modalita' e token: crearla al volo qui
+        produrrebbe un apparato che nessun agente raccogliera' mai."""
+        csv = ("IP,Hostname,Group,Site,Vendor\n"
+               "192.0.2.78,sw-fantasma,Generale,sede-inesistente,cisco\n")
+        r = self.client.post("/api/import-csv", headers=self.admin_h,
+                             json={"csv_data": csv})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(len(r.json()["failed"]), 1)
+        self.assertIn("inesistente", r.json()["failed"][0]["error"])
+
     def test_bad_site_token_rejected(self):
         r = self.client.post("/api/agent/heartbeat",
                             headers={"X-Site-Token": "token-inesistente"})

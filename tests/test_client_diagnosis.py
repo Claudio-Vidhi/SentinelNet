@@ -78,7 +78,12 @@ class _Base(unittest.TestCase):
         conn.close()
 
     def _iface_sample(self, ts, in_errors, out_errors, link="up",
-                      interface="Gi1/0/5", device_ip="192.0.2.20"):
+                      interface="Gi1/0/5", device_ip="192.0.2.20",
+                      port_vlan=None):
+        attrs = {"link": link, "admin_status": "up",
+                 "in_errors": in_errors, "out_errors": out_errors}
+        if port_vlan is not None:
+            attrs["port_vlan"] = port_vlan
         conn = db.get_observability_connection()
         conn.execute(
             """INSERT INTO events (ts, ingested_ts, tenant, source, event_type,
@@ -87,9 +92,7 @@ class _Base(unittest.TestCase):
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (ts, ts, "sede-a", "snmp", "interface.state", "interface",
              f"{device_ip}:{interface}", device_ip, interface,
-             json.dumps({"link": link, "admin_status": "up",
-                         "in_errors": in_errors, "out_errors": out_errors}),
-             f"t:{device_ip}:{interface}:{ts}"))
+             json.dumps(attrs), f"t:{device_ip}:{interface}:{ts}"))
         conn.commit()
         conn.close()
 
@@ -173,6 +176,52 @@ class TestInterfaceHealth(_Base):
         h = client_diagnosis._interface_health("192.0.2.20", "GigabitEthernet1/0/5")
         self.assertFalse(h["known"])
         self.assertIn("SNMP", h["reason"])
+
+
+class TestVlanMismatch(_Base):
+    """La VLAN arriva da due fonti con eta' diverse: la MAC table (scansione
+    manuale) e SNMP (poll automatico). Se non coincidono, la porta e' stata
+    spostata dopo l'ultima scansione — il caso in cui il client 'e' ancora
+    li'' ma non e' piu' nella rete di prima."""
+
+    def _analysis(self, trunk_allowed):
+        return patch("ai.config_analyzer.analyze_device",
+                     return_value={"interfaces": [
+                         {"name": "Gi1/0/24", "mode": "trunk",
+                          "trunk_allowed": trunk_allowed}]})
+
+    def test_moved_port_is_flagged(self):
+        self._iface_sample(NOW - 600, 0, 0, port_vlan=20)
+        self._iface_sample(NOW - 60, 0, 0, port_vlan=20)
+        with self._analysis("10,20"):
+            h = client_diagnosis._l2_health(dict(CLIENT, known=True))
+        self.assertEqual(h["vlan_mismatch"]["live"], "20")
+        self.assertEqual(h["vlan_mismatch"]["mac_table"], "10")
+        self.assertIn("MAC scan", h["vlan_mismatch"]["note"])
+
+    def test_the_live_vlan_drives_the_trunk_check(self):
+        """Controllare la VLAN vecchia risponderebbe alla domanda di ieri: la
+        porta ora e' in VLAN 20, ed e' la 20 che deve passare sul trunk."""
+        self._iface_sample(NOW - 600, 0, 0, port_vlan=20)
+        self._iface_sample(NOW - 60, 0, 0, port_vlan=20)
+        with self._analysis("10,30"):          # la 20 NON passa
+            h = client_diagnosis._l2_health(dict(CLIENT, known=True))
+        self.assertFalse(h["trunk"]["ok"])
+        self.assertEqual(h["trunk"]["vlan"], "20")
+
+    def test_agreement_raises_nothing(self):
+        self._iface_sample(NOW - 600, 0, 0, port_vlan=10)
+        self._iface_sample(NOW - 60, 0, 0, port_vlan=10)
+        with self._analysis("10,20"):
+            h = client_diagnosis._l2_health(dict(CLIENT, known=True))
+        self.assertNotIn("vlan_mismatch", h)
+
+    def test_without_snmp_vlan_the_mac_table_still_drives_the_check(self):
+        """Un apparato senza SNMP non deve perdere il controllo sui trunk."""
+        with self._analysis("10,20"):
+            h = client_diagnosis._l2_health(dict(CLIENT, known=True))
+        self.assertNotIn("vlan_mismatch", h)
+        self.assertEqual(h["trunk"]["vlan"], "10")
 
 
 class TestTrunkCheck(unittest.TestCase):

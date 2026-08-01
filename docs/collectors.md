@@ -176,6 +176,18 @@ the reasoning.
   device, and `ifIndex` changes across reboots on several vendors.
 - 200 interfaces per device cap: one large chassis must not stall the round for
   everyone else.
+- **The access VLAN is collected too, and IF-MIB has no column for it.** Without
+  it, moving a port to another VLAN produced *nothing*: the VLAN wasn't in the
+  snapshot, so it couldn't change, so `CFG_CHANGE_001` — which fires on
+  `interface.change` — had nothing to see. A port that is up in the wrong VLAN
+  is indistinguishable from a port that is up, and to whoever is plugged into
+  it that is exactly an outage. Two sources, same "whoever answers wins" pattern
+  as the CPU OIDs: `vmVlan` (CISCO-VLAN-MEMBERSHIP-MIB, indexed by `ifIndex` —
+  what Cisco switches actually populate for access ports), falling back to
+  `dot1qPvid` (Q-BRIDGE, vendor-neutral but indexed by `dot1dBasePort`, hence
+  the extra `dot1dBasePortIfIndex` walk to translate it). A device that answers
+  neither — a router, a firewall — simply carries no `port_vlan` field, rather
+  than a zero that would read as a real VLAN.
 
 Snapshots land in the **same** `api_observations` as the REST poller, with
 `kind` `snmp_system` / `snmp_interfaces` and the same

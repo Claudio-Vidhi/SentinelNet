@@ -63,6 +63,51 @@ class TestInterfaceAssembly(unittest.TestCase):
         self.assertEqual(sorted(snmp_poller._interfaces(columns)), ["Gi1"])
 
 
+class TestPortVlan(unittest.IsolatedAsyncioTestCase):
+    """La VLAN di accesso non esiste in IF-MIB. Senza di lei, spostare una
+    porta di VLAN non produceva alcun evento: lo snapshot non conteneva la
+    VLAN, quindi non poteva cambiare."""
+
+    def _walks(self, mapping):
+        """Sostituisce _walk_column: risponde per OID, {} per gli altri."""
+        async def fake(engine, auth, target, context, oid):
+            return dict(mapping.get(oid, {}))
+        return patch.object(snmp_poller, "_walk_column", side_effect=fake)
+
+    async def test_cisco_vmvlan_is_used_when_it_answers(self):
+        with self._walks({snmp_poller._VLAN_OID_CISCO: {"1": 10, "2": 20}}):
+            vlans = await snmp_poller._port_vlans(None, None, None, None)
+        self.assertEqual(vlans, {"1": 10, "2": 20})
+
+    async def test_qbridge_pvid_is_translated_to_ifindex(self):
+        """dot1qPvid è indicizzata per dot1dBasePort: senza la traduzione le
+        VLAN finirebbero sulle porte sbagliate, che è peggio di non averle."""
+        with self._walks({
+                snmp_poller._VLAN_OID_QBRIDGE: {"3": 10, "4": 20},
+                snmp_poller._BRIDGE_PORT_IFINDEX: {"3": 101, "4": 102}}):
+            vlans = await snmp_poller._port_vlans(None, None, None, None)
+        self.assertEqual(vlans, {"101": 10, "102": 20})
+
+    async def test_a_bridge_port_without_a_mapping_is_dropped(self):
+        with self._walks({
+                snmp_poller._VLAN_OID_QBRIDGE: {"3": 10, "9": 99},
+                snmp_poller._BRIDGE_PORT_IFINDEX: {"3": 101}}):
+            vlans = await snmp_poller._port_vlans(None, None, None, None)
+        self.assertEqual(vlans, {"101": 10})
+
+    async def test_a_non_switch_reports_nothing_rather_than_zero(self):
+        """Un router o un firewall non risponde a nessuna delle due: la porta
+        non porta il campo, invece di uno zero che sembrerebbe una VLAN."""
+        with self._walks({}):
+            vlans = await snmp_poller._port_vlans(None, None, None, None)
+        self.assertEqual(vlans, {})
+
+    async def test_the_vlan_lands_on_the_interface(self):
+        ifaces = snmp_poller._interfaces({**COLUMNS, "port_vlan": {"1": 10}})
+        self.assertEqual(ifaces["GigabitEthernet1/0/1"]["port_vlan"], 10)
+        self.assertNotIn("port_vlan", ifaces["GigabitEthernet1/0/2"])
+
+
 class TestDeviceSelection(unittest.TestCase):
 
     def _devices(self, rows):

@@ -286,6 +286,44 @@ class TestInterfaceEntities(_Base):
         port1 = next(r for r in rows if r["interface"] == "port1")
         self.assertEqual(json.loads(port1["attrs_json"])["link"], "up")
 
+    def test_access_port_vlan_change_raises_an_event(self):
+        """Il caso reale che non produceva NULLA: si sposta di VLAN una porta
+        di accesso e l'apparato non lo dice a nessuno. La VLAN non stava nello
+        snapshot (IF-MIB non ce l'ha), quindi non poteva cambiare, quindi
+        CFG_CHANGE_001 non aveva niente da vedere. Una porta su nella VLAN
+        sbagliata è indistinguibile da una porta su."""
+        conn = db.get_observability_connection()
+        self._snapshot(conn, {"results": {"Gi1/0/5": {"link": "up", "port_vlan": 10}}},
+                       NOW - 600)
+        self._snapshot(conn, {"results": {"Gi1/0/5": {"link": "up", "port_vlan": 20}}},
+                       NOW - 300)
+        conn.commit()
+        conn.close()
+
+        normalize.normalize_once(NOW)
+        changes = self._events("event_type = 'interface.change'")
+        self.assertEqual(len(changes), 1)
+        attrs = json.loads(changes[0]["attrs_json"])
+        self.assertEqual(attrs["field"], "results.Gi1/0/5.port_vlan")
+        self.assertEqual((attrs["before"], attrs["after"]), (10, 20))
+        self.assertEqual(changes[0]["interface"], "Gi1/0/5")
+
+        # E la regola che sorveglia i cambiamenti la vede: nessuna regola nuova
+        # serviva, mancava solo il dato.
+        findings = [f for _r, _v, _p, f in
+                    rules.evaluate(self._events(), only=["CFG_CHANGE_001"])]
+        self.assertTrue(any("port_vlan" in (f.summary or "") or
+                            "port_vlan" in json.dumps(f.attrs) for f in findings))
+
+    def test_port_vlan_is_not_treated_as_a_volatile_counter(self):
+        """Se finisse fra i campi volatili tornerebbe invisibile, e questo
+        test sarebbe l'unico avviso."""
+        from observability.normalize import _stable_fields
+        stable = _stable_fields(json.dumps(
+            {"results": {"Gi1/0/5": {"port_vlan": 10, "in_errors": 3}}}))
+        self.assertIn("results.Gi1/0/5.port_vlan", stable)
+        self.assertNotIn("results.Gi1/0/5.in_errors", stable)
+
     def test_link_down_becomes_an_interface_change_not_a_device_change(self):
         conn = db.get_observability_connection()
         self._snapshot(conn, {"results": {"port1": {"link": "up"}}}, NOW - 600)

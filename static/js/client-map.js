@@ -848,6 +848,14 @@
             } else {
                 out += `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(i.reason || i.error || '')}</div>`;
             }
+            if (i.known && i.port_vlan) out += _kv(en ? 'VLAN on the switch now' : 'VLAN sull’apparato adesso', i.port_vlan);
+            // Due fonti, età diverse: la porta è stata spostata dopo l'ultima
+            // MAC scan. È il caso in cui il client "è ancora lì" ma non è più
+            // nella rete di prima.
+            if (h.vlan_mismatch) out += `<div style="color:var(--warning); font-size:12px; margin-top:6px;">
+                <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${en ? 'Port moved VLAN' : 'Porta spostata di VLAN'}:
+                ${escapeHtml(h.vlan_mismatch.mac_table)} → <b>${escapeHtml(h.vlan_mismatch.live)}</b>.
+                ${escapeHtml(h.vlan_mismatch.note)}</div>`;
             const t = h.trunk || {};
             out += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);"></div>`;
             if (t.known) {

@@ -9,7 +9,7 @@ from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from services import inventory_manager
+from services import inventory_manager, site_manager
 from security.security_manager import log_audit
 from routers.deps import (
     get_current_user, require_operator, user_group_scope,
@@ -203,11 +203,22 @@ def import_csv(payload: CSVImportRequest, current_user = Depends(require_operato
 
             vendor = (row.get('Vendor') or '').strip() or 'cisco'
 
+            # Site (sede fisica) è cosa diversa da Group (tenant): la colonna
+            # veniva letta e buttata via, quindi un inventario esportato e
+            # reimportato perdeva l'assegnazione alle sedi con agente.
+            # Non si crea al volo come si fa con il tenant: una sede ha una
+            # modalità e un token, inventarla qui produrrebbe un apparato che
+            # nessun agente raccoglierà mai. Meglio un errore sulla riga.
+            site_name = (row.get('Site') or '').strip()
+            if site_name and site_name not in {s['id'] for s in site_manager.list_sites()}:
+                raise ValueError(f"Sede '{site_name}' inesistente: creala nella "
+                                 f"scheda Sedi prima di importare")
+
             # Rimozione Profile: passa forzatamente il valore "custom" come parametro profile
             inventory_manager.add_or_update_device(
                 ip, vendor, "custom",
                 username, password, enable_secret,
-                group_name
+                group_name, site=site_name or None
             )
             # L'hostname del CSV veniva letto e buttato via: chi compilava la
             # colonna vedeva l'inventario restare senza nomi e non capiva

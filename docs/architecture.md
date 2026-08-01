@@ -207,6 +207,13 @@ Same contract as `flowpath`: every section carries `known` or `error`, the
 report carries `complete`. A section that cannot answer says why instead of
 being omitted — the reader is about to go and touch the network.
 
+The VLAN deserves a note: it arrives from **two sources with different ages** —
+the MAC table (a manual scan) and SNMP (an automatic poll, §6 of
+[collectors.md](collectors.md)). When they disagree, the port was moved to
+another VLAN after the last scan: the client is still in the same hole but no
+longer on the same network. The report says so, and uses the **live** VLAN for
+the trunk check — testing the stale one would answer yesterday's question.
+
 Two things it resolves that nothing else did:
 
 - **Which FortiGate is on this client's path.** The ARP responder in

@@ -220,11 +220,22 @@ Example Claude Desktop configuration (`claude_desktop_config.json`):
 }
 ```
 
-The central server must be running. Available tools: `list_devices`,
-`get_network_map`, `get_port_channels`, `locate_mac`, `search_mac`,
-`analyze_config`, `get_triage_status`, `send_cli_command`, `list_sites`,
-`generate_switch_config`. Write tools require an *operator* account; use a
-*viewer* account for read-only access.
+The central server must be running. Available tools, by area:
+
+| Area | Tools |
+|---|---|
+| **Diagnosis** | `diagnose_client` — the L2+L3 report for one client; prefer it over the per-device tools when the question is about a client rather than about one box |
+| Inventory & topology | `list_devices`, `get_network_map`, `get_port_channels`, `list_sites` |
+| Identity & location | `locate_mac`, `search_mac`, `mac_to_ip`, `client_map`, `arp_scan` |
+| FortiGate | `fortigate_status`, `_interfaces`, `_arp`, `_dhcp_leases`, `_device_inventory`, `_policies`, `_policy_stats`, `_firewall_addresses`, `_firewall_policy_objects`, `_firewall_services`, `_policy_lookup`, `_sessions`, `_routes`, `_traffic_logs`, `_wifi_clients`, `_managed_aps`, `_full_config`, `_diagnose_client` |
+| Cisco WLC | `wlc_status`, `_ap_summary`, `_client_summary`, `_client_detail`, `_wlan_summary`, `_rogue_aps`, `wlc_diagnose_client` |
+| Config & ops | `analyze_config`, `get_triage_status`, `send_cli_command` |
+| Provisioning | `generate_fortigate_config`, `generate_switch_config` |
+| Observability | `get_top_talkers`, `get_anomalies`, `linux_health` — **disabled by default**, enable them in the MCP Server tab |
+
+Write tools require an *operator* account; use a *viewer* account for read-only
+access. The list above is the catalogue — what a given client actually sees is
+whatever the MCP Server tab leaves enabled.
 
 The dashboard's **MCP Server** tab (admin) provides setup guidance, a
 ready-to-copy JSON snippet, and control over which tools are exposed to clients —

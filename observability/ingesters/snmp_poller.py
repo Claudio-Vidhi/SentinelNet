@@ -59,6 +59,23 @@ _IF_COLUMNS = {
     "1.3.6.1.2.1.31.1.1.1.15": "speed_mbps",  # ifHighSpeed
 }
 
+# VLAN di accesso della porta. NON esiste in IF-MIB, ed è il motivo per cui
+# cambiare VLAN a una porta di accesso non produceva alcun evento: lo snapshot
+# non conteneva la VLAN, quindi non poteva cambiare, quindi CFG_CHANGE_001 —
+# che scatta su ``interface.change`` — non aveva nulla da vedere. Una porta su
+# nella VLAN sbagliata è indistinguibile da una porta su, e per chi la usa è
+# esattamente un guasto.
+#
+# Due sorgenti, stessa logica dei CPU OID sopra: vince chi risponde.
+#   - vmVlan (CISCO-VLAN-MEMBERSHIP-MIB): indicizzata per ifIndex, è quella
+#     che gli switch Cisco popolano davvero per le porte di accesso;
+#   - dot1qPvid (Q-BRIDGE): standard e multi-vendor, ma indicizzata per
+#     dot1dBasePort — va ricondotta a ifIndex con dot1dBasePortIfIndex, che è
+#     il motivo della terza query.
+_VLAN_OID_CISCO = "1.3.6.1.4.1.9.9.68.1.2.2.1.2"     # vmVlan (per ifIndex)
+_VLAN_OID_QBRIDGE = "1.3.6.1.2.1.17.7.1.4.5.1.1"     # dot1qPvid (per dot1dBasePort)
+_BRIDGE_PORT_IFINDEX = "1.3.6.1.2.1.17.1.4.1.2"      # dot1dBasePortIfIndex
+
 # ifAdminStatus/ifOperStatus sono interi: tradotti in parole perché le regole
 # confrontano 'up'/'down' (IFACE_DOWN_001) e un 2 nel summary non spiega nulla.
 _IF_STATUS = {1: "up", 2: "down", 3: "testing", 4: "unknown",
@@ -145,6 +162,29 @@ async def _load(engine, auth, target, context) -> dict:
     return out
 
 
+async def _port_vlans(engine, auth, target, context) -> dict:
+    """{ifIndex: vlan} — VLAN di accesso per porta, keyed come le altre colonne.
+
+    Un apparato che non è uno switch (router, firewall) non risponde a nessuna
+    delle due: si ritorna vuoto e la porta semplicemente non porta il campo,
+    invece di scrivere uno zero che poi sembrerebbe una VLAN vera.
+    """
+    vlans = await _walk_column(engine, auth, target, context, _VLAN_OID_CISCO)
+    if vlans:
+        return vlans
+
+    pvid = await _walk_column(engine, auth, target, context, _VLAN_OID_QBRIDGE)
+    if not pvid:
+        return {}
+    # dot1qPvid è indicizzata per dot1dBasePort: senza questa traduzione le
+    # VLAN finirebbero appiccicate alle porte sbagliate, che è peggio di non
+    # averle.
+    bridge_to_if = await _walk_column(engine, auth, target, context,
+                                      _BRIDGE_PORT_IFINDEX)
+    return {str(bridge_to_if[bp]): vlan
+            for bp, vlan in pvid.items() if bp in bridge_to_if}
+
+
 def _interfaces(columns: dict) -> dict:
     """{ifName: {campo: valore}} dalle colonne percorse.
 
@@ -201,6 +241,7 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
         columns = {}
         for oid, field in _IF_COLUMNS.items():
             columns[field] = await _walk_column(engine, auth, target, context, oid)
+        columns["port_vlan"] = await _port_vlans(engine, auth, target, context)
 
         interfaces = _interfaces(columns)
     except Exception as e:

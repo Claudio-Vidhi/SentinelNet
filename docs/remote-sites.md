@@ -147,9 +147,16 @@ EOF
 ```
 
 These twelve columns are the canonical schema — the same ones
-`inventory_manager.safe_write_hosts_csv` writes. Any other column is dropped
-the first time the inventory is rewritten, so a `Tenant` column silently moves
-the device to the `Generale` group: the tenant is `Group`.
+`inventory_manager.safe_write_hosts_csv` writes. Unrecognised columns are
+dropped the first time the inventory is rewritten.
+
+**`Group` and `Site` are two different things, and conflating them is the
+classic multi-site mistake.** `Group` is the **tenant**: the visibility
+boundary that RBAC filters on and that every observability row carries.
+`Site` is the **physical location**: `central` (the server reaches the device
+directly) or an agent site id. One tenant can span several sites; one site can
+host devices from several tenants. On import, `group`/`gruppo`/`tenant` all
+mean `Group`, and `site`/`sede` mean `Site`.
 
 Only `IP` is required. `Site` defaults to `central`, `SSH Port` to `22`.
 `Transports` is a JSON map (`{"ssh": 22}`) — leave it empty for plain SSH.
