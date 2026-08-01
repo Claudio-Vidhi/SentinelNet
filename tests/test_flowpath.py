@@ -66,6 +66,46 @@ class TestEastWest(unittest.TestCase):
         self.assertEqual(gateways, ["SW1", "FGT"])
 
 
+class TestAcrossTenants(unittest.TestCase):
+    """Un server in datacenter non sta nel tenant del client: cercarlo con
+    quello della sorgente lo darebbe per ignoto sempre — un buco prodotto
+    dalla domanda, non dai dati."""
+
+    def _per_tenant(self, mapping):
+        """client_map che rispetta il tenant chiesto, come il vero."""
+        def fake(ip=None, mac=None, tenants=None, limit=500, source_ip=None):
+            entry = mapping.get(ip)
+            if not entry:
+                return []
+            if tenants is not None and entry["tenant"] not in tenants:
+                return []
+            return [entry]
+        return patch("collectors.mac_history.client_map", side_effect=fake)
+
+    def test_destination_in_another_tenant_is_found_when_declared(self):
+        src = dict(CLIENT_A, tenant="sede-a")
+        dst = dict(CLIENT_B, tenant="datacenter")
+        with self._per_tenant({"10.1.0.5": src, "10.1.0.9": dst}):
+            path = flowpath.build("10.1.0.5", "10.1.0.9", "sede-a",
+                                  dst_tenant="datacenter")
+        self.assertTrue(path["complete"])
+        self.assertIn("ACC-SW2", path["hops"][3]["label"])
+
+    def test_without_it_the_far_end_stays_unknown(self):
+        src = dict(CLIENT_A, tenant="sede-a")
+        dst = dict(CLIENT_B, tenant="datacenter")
+        with self._per_tenant({"10.1.0.5": src, "10.1.0.9": dst}):
+            path = flowpath.build("10.1.0.5", "10.1.0.9", "sede-a")
+        self.assertFalse(path["complete"])
+
+    def test_existing_callers_are_unaffected(self):
+        """Omesso, dst_tenant vale il tenant della sorgente."""
+        with _lookup({"10.1.0.5": CLIENT_A, "10.1.0.9": CLIENT_B}):
+            a = flowpath.build("10.1.0.5", "10.1.0.9", "sede-a")
+            b = flowpath.build("10.1.0.5", "10.1.0.9", "sede-a", None)
+        self.assertEqual(a, b)
+
+
 class TestHonestGaps(unittest.TestCase):
 
     def test_a_missing_access_port_is_declared_not_skipped(self):

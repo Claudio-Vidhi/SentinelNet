@@ -79,6 +79,41 @@ class TestFieldmap(unittest.TestCase):
         self.assertIsNone(fields["src_ip"])
         self.assertIsNone(fields["bytes"])
 
+    def test_policy_id_and_subtype_are_extracted(self):
+        """Senza policyid un DENY dice 'qualcuno ha bloccato' ma mai QUALE
+        regola: il campo serve ad attribuire il blocco."""
+        fields = fieldmap.extract(
+            'type="traffic" subtype="forward" action="deny" policyid=12 '
+            'srcip=192.0.2.10 dstip=198.51.100.20 dstport=443 proto=6')
+        self.assertEqual(fields["policy_id"], "12")
+        self.assertEqual(fields["subtype"], "forward")
+        self.assertEqual(fields["action"], "deny")
+
+    def test_utmaction_is_read_as_the_verdict(self):
+        """Un log UTM porta il verdetto in utmaction, non in action. Il ``\\b``
+        del regex non lo aggancia da solo: se la voce esplicita sparisse,
+        questo tornerebbe None mentre l'ingester syslog lo leggerebbe."""
+        fields = fieldmap.extract(
+            'type="utm" subtype="webfilter" utmaction="blocked" '
+            'srcip=192.0.2.10 dstip=198.51.100.20')
+        self.assertEqual(fields["action"], "blocked")
+        self.assertEqual(fields["subtype"], "webfilter")
+        self.assertTrue(fieldmap.is_security_action(fields["action"]))
+
+    def test_utm_block_verbs_count_as_security(self):
+        """Un drop IPS o un redirect del DNS filter fermano il traffico quanto
+        un deny di policy: se restano 'log.event' non raggiungono mai
+        BLOCKED_TRAFFIC_001."""
+        for verb in ("dropped", "redirect", "reset", "clear_session"):
+            self.assertTrue(fieldmap.is_security_action(verb), verb)
+
+    def test_permissive_verbs_are_not_security(self):
+        """'passthrough' e 'bypass' significano lasciato passare SENZA
+        ispezione, 'detected' è IPS in sola rilevazione: classificarli come
+        blocchi inventerebbe incidenti su traffico consentito."""
+        for verb in ("passthrough", "bypass", "detected", "pass", "accept"):
+            self.assertFalse(fieldmap.is_security_action(verb), verb)
+
 
 class TestAdapters(_Base):
 

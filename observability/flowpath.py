@@ -72,12 +72,18 @@ def _gateway_hop(info: Optional[dict]) -> Optional[dict]:
 
 
 def build(src_ip: Optional[str], dst_ip: Optional[str],
-          tenant: str) -> dict:
+          tenant: str, dst_tenant: Optional[str] = None) -> dict:
     """{direction, hops[], complete} per una conversazione.
 
     ``complete`` è falso appena un salto è sconosciuto: chi legge deve poter
     distinguere "il percorso è questo" da "il percorso è questo per quanto ne
     sappiamo".
+
+    ``dst_tenant`` serve alle conversazioni fra sedi: un server in datacenter
+    sta in un tenant diverso da quello del client, e cercarlo con il tenant
+    della sorgente non lo troverebbe mai — il salto risulterebbe sconosciuto
+    per un difetto della domanda, non per una lacuna dei dati. Omesso, vale
+    ``tenant``: ogni chiamante esistente si comporta come prima.
     """
     direction = endpoints.traffic_direction(src_ip, dst_ip)
     if direction is None or not src_ip or not dst_ip:
@@ -94,7 +100,7 @@ def build(src_ip: Optional[str], dst_ip: Optional[str],
         hops.append(gateway)
 
     if direction == "east_west":
-        target = _client(dst_ip, tenant)
+        target = _client(dst_ip, dst_tenant or tenant)
         target_gateway = _gateway_hop(target)
         # Stesso gateway per entrambi: il traffico non lo attraversa due volte.
         if target_gateway and (not gateway

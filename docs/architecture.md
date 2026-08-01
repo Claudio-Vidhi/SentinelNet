@@ -193,6 +193,45 @@ readable:
 | [flowpath.py](../observability/flowpath.py) | *which way did it go?* | The **logical** path (host → access port → gateway), not packet-by-packet. An unknown hop is marked `known: False`, never silently skipped. |
 | [timeline.py](../observability/timeline.py) | *in what order did it happen?* | Merges evidence, raw syslog, per-minute volumes, REST snapshots and physical location. Careful: `observability.db` uses unix integers, `mac_history.db` uses ISO-8601 text — conversion happens there, at the boundary. |
 
+### 5.1 Client diagnosis
+
+[services/client_diagnosis.py](../services/client_diagnosis.py) is the one place
+where the L2 and L3 halves meet. It **collects nothing new** — it composes
+`client_map()` (switch, port, VLAN, ARP gateway), `flowpath.build()` (logical
+path), the stored `interface.state` events (link and error-counter delta), the
+backup config via `config_analyzer._parse_interface` (is the client VLAN on the
+trunks?), `fortigate_service.diagnose_client()` (policy, sessions, logs) and a
+`syslog_events` count grouped by `policyid`.
+
+Same contract as `flowpath`: every section carries `known` or `error`, the
+report carries `complete`. A section that cannot answer says why instead of
+being omitted — the reader is about to go and touch the network.
+
+Two things it resolves that nothing else did:
+
+- **Which FortiGate is on this client's path.** The ARP responder in
+  `client_map` *is* the VLAN's gateway. Failing that, a single configured
+  FortiGate is used; with several and no match it reports that it cannot tell,
+  rather than guessing and sending someone to read the wrong policy table.
+- **Which site an arbitrary address belongs to** (`resolve_endpoint`): first
+  observed ARP, then the `subnets` declared on the site — a field that existed
+  since the beginning and was read by nobody. The declared answer is marked
+  `derived: "declared-subnet"`. This does not contradict
+  [ADR-0005](adr/0005-strict-tenant-attribution.md): that forbids *guessing a
+  tenant at ingest*, this is a read-time lookup of an operator-declared fact,
+  labelled as derived — the same contract as `vlan_real: false`.
+
+Across sites the report adds a section of its own: the far end's policy (a flow
+between two sites crosses **two** firewalls and either can deny it), live IPsec
+tunnel state, and a longest-prefix route lookup — because a permitted policy
+and a missing route produce the same symptom and need different fixes. At
+agent-mode sites the firewall half goes through the REST relay
+([ADR-0008](adr/0008-agent-rest-relay.md)), which is asynchronous: the report
+queues the request and says so, and the next run collects the answer.
+
+Exposed as `POST /api/diagnose/client`, the MCP tool `diagnose_client`, and a
+per-row button on the Client Map tab.
+
 One principle recurs: **what isn't known is stated**. A synthetic VLAN in the
 flow graph is marked `vlan_real: false` and the UI shows an asterisk; an
 incomplete path says which hop is missing. Never an invented value passed off as

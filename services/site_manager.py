@@ -251,6 +251,50 @@ def _connect():
     return conn
 
 
+VALID_JOB_KINDS = ("cli", "rest")
+
+# Percorsi REST che l'agente può eseguire per conto del centrale.
+#
+# Il relay esiste perché in modalità agent il centrale non raggiunge gli
+# apparati, e le domande più utili di una diagnosi (quale policy matcherebbe,
+# quali sessioni, quale rotta, il tunnel è su?) non hanno un equivalente CLI
+# affidabile — ``policy_lookup`` non ne ha proprio uno.
+#
+# La lista è il confine di autorità: senza, un token di sede diventerebbe
+# accesso arbitrario alle API di ogni apparato della sede, e la separazione fra
+# piano agente e piano apparato (roadmap §2) sparirebbe. Sola LETTURA:
+# ``monitor/`` e ``log/``. Mai ``cmdb/`` (scrive configurazione), mai
+# ``config-script/upload``. Vedi ADR-0008.
+REST_RELAY_ALLOWLIST = (
+    "monitor/firewall/policy-lookup",
+    "monitor/firewall/session",
+    "monitor/firewall/policy",
+    "monitor/router/ipv4",
+    "monitor/vpn/ipsec",
+    "monitor/network/arp",
+    "monitor/system/interface",
+    "monitor/system/status",
+    "log/*/traffic/forward",
+)
+
+
+def rest_path_allowed(path: str) -> bool:
+    """Il percorso REST è fra quelli che l'agente può eseguire.
+
+    Applicata DUE volte di proposito: dal centrale quando accoda il job, e
+    dall'agente prima di eseguirlo. La seconda non è ridondante — il modello
+    della modalità agent è che le credenziali restino nella sede anche se il
+    centrale viene compromesso, e un centrale compromesso che detta percorsi
+    arbitrari annullerebbe proprio quella garanzia.
+    """
+    import fnmatch
+
+    p = (path or "").strip().lstrip("/")
+    if not p or ".." in p or "://" in p:
+        return False
+    return any(fnmatch.fnmatchcase(p, pat) for pat in REST_RELAY_ALLOWLIST)
+
+
 def _init_jobs():
     global _jobs_init_done
     with _jobs_lock:
@@ -271,18 +315,42 @@ def _init_jobs():
                 )
             """)
             c.execute("CREATE INDEX IF NOT EXISTS ix_jobs_site ON command_jobs(site_id, status)")
+            # Migrazione in avanti: i job esistenti sono tutti CLI, ed è il
+            # default giusto — un agente vecchio che riceve solo 'cli' continua
+            # a funzionare senza sapere che 'rest' esiste.
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(command_jobs)")}
+            if "kind" not in cols:
+                c.execute("ALTER TABLE command_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'cli'")
         _jobs_init_done = True
 
 
-def enqueue_job(site_id: str, device_ip: str, command: str, requested_by: str = "") -> dict:
+def enqueue_job(site_id: str, device_ip: str, command: str,
+                requested_by: str = "", kind: str = "cli") -> dict:
+    """Accoda un lavoro per l'agente della sede.
+
+    ``kind='cli'``: ``command`` è il comando da eseguire in SSH.
+    ``kind='rest'``: ``command`` è un JSON ``{"path": ..., "params": {...}}``
+    e il percorso deve stare nell'allowlist.
+    """
+    if kind not in VALID_JOB_KINDS:
+        raise ValueError(f"Tipo di job non valido: {kind}")
+    if kind == "rest":
+        try:
+            spec = json.loads(command)
+        except (TypeError, ValueError):
+            raise ValueError("Job REST: 'command' deve essere un JSON valido.")
+        if not rest_path_allowed(spec.get("path", "")):
+            raise ValueError(
+                f"Percorso REST non consentito nel relay: {spec.get('path')!r}. "
+                f"Consentiti (sola lettura): {', '.join(REST_RELAY_ALLOWLIST)}")
     _init_jobs()
     job_id = uuid.uuid4().hex
     now = time.time()
     with _jobs_lock, _connect() as c:
         c.execute("""INSERT INTO command_jobs
-                     (id, site_id, device_ip, command, status, result, requested_by, created, updated)
-                     VALUES (?,?,?,?, 'pending', '', ?, ?, ?)""",
-                   (job_id, site_id, device_ip, command, requested_by, now, now))
+                     (id, site_id, device_ip, command, kind, status, result, requested_by, created, updated)
+                     VALUES (?,?,?,?,?, 'pending', '', ?, ?, ?)""",
+                   (job_id, site_id, device_ip, command, kind, requested_by, now, now))
     res = get_job(job_id)
     return res if res is not None else {}
 
@@ -323,6 +391,54 @@ def complete_job(job_id: str, site_id: str, status: str, result: str) -> bool:
             "UPDATE command_jobs SET status=?, result=?, updated=? WHERE id=? AND site_id=?",
             (status, result or "", now, job_id, site_id))
         return cur.rowcount > 0
+
+
+def find_recent_rest_result(site_id: str, device_ip: str, path: str,
+                            max_age_s: int = 300):
+    """Ultimo job REST concluso per quell'apparato e quel percorso, se recente.
+
+    L'agente esegue in polling (default 60s): una richiesta sincrona non può
+    aspettarlo. Il referto quindi accoda e torna subito; alla chiamata
+    successiva questo recupera il risultato ormai pronto. ``max_age_s`` evita
+    di spacciare per attuale la risposta di mezz'ora fa.
+
+    Ritorna il job (dict) oppure ``None``.
+    """
+    _init_jobs()
+    cutoff = time.time() - max_age_s
+    with _jobs_lock, _connect() as c:
+        rows = c.execute(
+            """SELECT * FROM command_jobs
+               WHERE site_id=? AND device_ip=? AND kind='rest'
+                 AND status IN ('done','error') AND updated >= ?
+               ORDER BY updated DESC LIMIT 20""",
+            (site_id, device_ip, cutoff)).fetchall()
+    for row in rows:
+        try:
+            if json.loads(row["command"]).get("path") == path:
+                return dict(row)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def has_pending_rest_job(site_id: str, device_ip: str, path: str) -> bool:
+    """Un job identico è già in coda o in esecuzione: non se ne accoda un
+    altro a ogni apertura del referto."""
+    _init_jobs()
+    with _jobs_lock, _connect() as c:
+        rows = c.execute(
+            """SELECT command FROM command_jobs
+               WHERE site_id=? AND device_ip=? AND kind='rest'
+                 AND status IN ('pending','running')""",
+            (site_id, device_ip)).fetchall()
+    for row in rows:
+        try:
+            if json.loads(row["command"]).get("path") == path:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def list_jobs(site_id: Optional[str] = None, limit: int = 100) -> list:

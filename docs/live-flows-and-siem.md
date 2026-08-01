@@ -336,9 +336,33 @@ Prefix `/api/flow-siem`, all scoped.
 | `src_port`/`dst_port` | kv `srcport`/`dstport` |
 | `proto` | kv `proto`\|`service`, numeric values mapped (6→TCP, 17→UDP, 1→ICMP) |
 | `bytes` | `sentbyte + rcvdbyte`, `None` if absent |
-| `action` | The `action` column, or kv `action` |
-| `is_deny` | `action` ∈ `_SECURITY_ACTIONS` (imported from the correlator) |
+| `action` | The `action` column, or kv `action`, or kv `utmaction` |
+| `policy_id` | kv `policyid` — **which rule produced the verdict** |
+| `subtype` | kv `subtype`\|`eventtype` — tells a web-filter block from a policy deny |
+| `is_deny` | `action` ∈ `SECURITY_ACTIONS` ([fieldmap.py](../observability/fieldmap.py)) |
 | `threat_flag` | Derived: see below |
+
+Two notes on that table, both learned the hard way:
+
+**`utmaction` is listed separately from `action` on purpose.** `_KV_RE` starts
+with `\b`, and there is no word boundary between the `m` and the `a` of
+`utmaction=` — so the `action` alternative does *not* match it. Before the key
+was added explicitly, `fieldmap` returned `action=None` for a web-filter log
+while the syslog ingester read it fine, and the module whose docstring calls
+itself the single source of truth disagreed with the ingester.
+
+**`SECURITY_ACTIONS` covers the UTM verbs, not just the policy ones.** IPS
+writes `dropped` / `reset` / `clear_session` and the DNS filter writes
+`redirect`; none of them is `drop`. While they were missing, an IPS drop
+normalized to `log.event` rather than `log.security`, never reached
+`BLOCKED_TRAFFIC_001`, and never raised an incident — and an IPS drop is one of
+the commonest reasons a page loads half way. Deliberately **excluded**:
+`passthrough` and `bypass` (SSL, traffic *allowed* without inspection),
+`detected` (IPS in monitor mode) and `pass`. Those are consent verbs; counting
+them as blocks would invent incidents on permitted traffic.
+
+Because extraction happens **at read time** from the stored raw message, adding
+a key to that regex improves history retroactively — no re-ingest, no migration.
 
 `_threat_flag()` derives **only from real data**, in priority order:
 `BLOCKED_TRAFFIC` (deny) → `HIGH_SEVERITY` (sev ≤ 3) → `HIGH_VOLUME_TRANSFER`

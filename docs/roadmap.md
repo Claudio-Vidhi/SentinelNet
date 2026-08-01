@@ -112,6 +112,18 @@ site.
 If this gets built, it belongs in an ADR — it changes an authority boundary, not
 just an implementation. See [remote-sites.md](remote-sites.md).
 
+**Partially addressed, deliberately narrowly.** The job queue now also carries
+read-only REST calls, so client diagnosis works at agent sites
+([ADR-0008](adr/0008-agent-rest-relay.md)). That *widened* what an agent may do,
+which is the opposite direction from this item — so it was bounded by an
+allowlist (`monitor/` and `log/` only, never `cmdb/`) enforced both at central
+and, independently, at the agent. The agent trusts central for scheduling, not
+for authorisation. The plane separation itself is still unbuilt: an
+authenticated agent still receives every pending job for its site. The signal
+that this can no longer be deferred is the allowlist growing to cover writes, or
+a second consumer wanting the relay — at that point the separate device-plane
+credential ADR-0008 declined is the right answer.
+
 ---
 
 ## 3. Server integrations (Linux / Windows)

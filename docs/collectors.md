@@ -262,6 +262,18 @@ IP plugged in".
 - [mac_history.py](../collectors/mac_history.py) — sighting history,
   reclassification, uplink detection, manual overrides.
 
+Both are pushed by remote site agents too (`POST /api/agent/mac`,
+`POST /api/agent/arp`). ARP in particular is not optional at a remote site:
+`arp_entries` holds the only MAC↔IP binding, so without it a remote client has
+a switch port but no address — and Client Map, flow path and client diagnosis
+all start from the IP.
+
+**Both are collected on demand, not on a schedule.** Nothing in
+`listener_manager` triggers them; they run from the ARP/MAC scan buttons or
+from a site agent's cycle. Anything reading this data should surface
+`last_seen` / `port_last_seen` rather than presenting a three-week-old port as
+current — which is why the client diagnosis carries both dates into its report.
+
 **Mind the timestamps**: `mac_history.db` uses ISO-8601 text while
 `observability.db` uses unix integers. Conversion happens at the boundary, in
 [timeline.py](../observability/timeline.py). Never compare them directly.

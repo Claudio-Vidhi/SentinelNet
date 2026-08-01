@@ -446,11 +446,91 @@ def get_routes(device):
                        "get router info routing-table all")
 
 
+def get_vpn_tunnels(device):
+    """Stato VIVO dei tunnel IPsec: phase1 su/giù, phase2 e selettori.
+
+    La configurazione statica diceva quali tunnel ESISTONO; questo dice quali
+    stanno in piedi adesso. Per una diagnosi fra due sedi è la differenza fra
+    "il tunnel c'è" e "il tunnel funziona"."""
+    return _api_or_ssh(device, "monitor/vpn/ipsec", None,
+                       "get vpn ipsec tunnel summary")
+
+
+def get_route_for(device, dst_ip: str):
+    """La rotta che il FortiGate userebbe per ``dst_ip``: prefisso più
+    specifico che lo contiene, con gateway e interfaccia di uscita.
+
+    Risponde a "non c'è rotta verso la subnet del datacenter", che nessuna
+    ispezione delle policy può rivelare: una policy che permette il traffico
+    e una rotta che non esiste danno lo stesso sintomo e richiedono due
+    interventi diversi.
+
+    Solo REST, come ``policy_lookup``: l'uscita CLI è testo libero che varia
+    per versione, e un parser che sbaglia qui manderebbe a cercare un guasto
+    di routing che non c'è.
+    """
+    import ipaddress
+
+    ip = device["IP"]
+    try:
+        addr = ipaddress.ip_address(dst_ip)
+    except ValueError:
+        raise FortiGateError(f"'{dst_ip}' non è un indirizzo IP valido.")
+    try:
+        data = api_get(ip, "monitor/router/ipv4")
+    except FortiGateError as e:
+        raise FortiGateError(f"tabella di routing disponibile solo via REST API: {e}")
+
+    best = None
+    best_len = -1
+    for r in (data.get("results") or []):
+        if not isinstance(r, dict):
+            continue
+        raw = r.get("ip_mask") or r.get("dst") or ""
+        try:
+            net = ipaddress.ip_network(str(raw), strict=False)
+        except ValueError:
+            continue
+        if addr in net and net.prefixlen > best_len:
+            best, best_len = r, net.prefixlen
+
+    if best is None:
+        return {"source": "api", "data": {"matched": False, "dst_ip": dst_ip}}
+    return {"source": "api", "data": {
+        "matched": True, "dst_ip": dst_ip,
+        "destination": best.get("ip_mask") or best.get("dst"),
+        "gateway": best.get("gateway"),
+        "interface": best.get("interface"),
+        "distance": best.get("distance"), "metric": best.get("metric"),
+        "type": best.get("type")}}
+
+
 def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
                      action: Optional[str] = None, count: int = 100,
-                     log_device: str = "disk"):
-    """Log di traffico forward (disk o memory), filtrabili. Risponde a
-    'cosa dicono i log del firewall per questo client?'."""
+                     log_device: str = "disk", log_type: str = "traffic",
+                     log_subtype: str = "forward", cli_category: str = "traffic"):
+    """Log del firewall (disk o memory), filtrabili. Risponde a 'cosa dicono i
+    log per questo client?'.
+
+    ``log_type``/``log_subtype`` compongono il percorso REST
+    ``log/{device}/{type}/{subtype}``; ``cli_category`` è la categoria per il
+    fallback ``execute log filter category``. I default danno il traffico
+    forward, cioè il comportamento storico invariato.
+
+    Perché parametri e non un elenco di categorie UTM predefinite: un sito che
+    "si carica a metà" di solito è web filter, application control o SSL deep
+    inspection, non un deny di policy — ma i sottotipi REST esatti variano per
+    versione di FortiOS, e non sono stati verificati contro un apparato con
+    profili di sicurezza attivi (licenza eval: nessun profilo attivabile).
+    Codificare qui una lista indovinata produrrebbe 404 travestiti da "nessun
+    log", che in diagnosi è peggio di un buco dichiarato. Il chiamante passa
+    la coppia che il suo FortiOS espone; l'unica verificata è quella di
+    default.
+
+    Nota: chi inoltra i syslog al collector integrato vede comunque i verdetti
+    UTM, perché ``observability/fieldmap.py`` legge ``utmaction`` e ``subtype``
+    dal messaggio grezzo — quella strada non dipende da questi percorsi REST.
+    """
     params: Dict[str, Any] = {"rows": int(count)}
     filters = []
     if src_ip:
@@ -465,13 +545,15 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
     api_err = None
     for dev in (log_device, "memory" if log_device == "disk" else "disk"):
         try:
-            data = api_get(ip, f"log/{dev}/traffic/forward", params)
+            data = api_get(ip, f"log/{dev}/{log_type}/{log_subtype}", params)
             return {"source": "api", "log_device": dev,
+                    "log_type": log_type, "log_subtype": log_subtype,
                     "data": data.get("results", data)}
         except FortiGateError as e:
             api_err = str(e)
     # Fallback CLI: execute log filter + display.
-    lines = ["execute log filter reset", "execute log filter category traffic"]
+    lines = ["execute log filter reset",
+             f"execute log filter category {cli_category}"]
     ssh_filters = []
     if src_ip:
         ssh_filters.append(f"execute log filter field srcip {src_ip}")
