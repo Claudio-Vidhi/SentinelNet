@@ -262,6 +262,35 @@ nssm start SentinelNetAgent
 
 - Commands on the security blacklist are blocked during relay too.
 
+### 5.1 REST relay (read-only)
+
+Jobs carry a `kind`: `cli` (the default, and what every existing job is) or
+`rest`. A `rest` job's `command` column holds `{"path": ..., "params": {...}}`
+and the agent executes it against the local device's REST API.
+
+It exists because the questions a client diagnosis needs to ask have no
+reliable CLI equivalent — `monitor/firewall/policy-lookup` ("which policy would
+match this flow?") has none at all. Without it, branch sites answer
+"unavailable" to precisely the questions the feature is for.
+
+The path must match `site_manager.REST_RELAY_ALLOWLIST`: **`monitor/` and
+`log/` only**, never `cmdb/` (which writes configuration), never
+`config-script/upload`. `rest_path_allowed()` is checked **twice** — by central
+when the job is queued, and by the agent before it touches the device. The
+second check is deliberate: the point of agent mode is that credentials stay in
+the site even if central is compromised, and an agent that runs whatever path
+central dictates gives that away. See
+[ADR-0008](adr/0008-agent-rest-relay.md).
+
+Unlike the CLI relay, this path does **not** wait: the diagnosis queues the
+request, reports it as pending, and picks up the answer on a later run (the
+agent polls every `interval` seconds, 60 by default).
+
+Also pushed by the agent, alongside inventory and MAC tables: **ARP tables**
+(`POST /api/agent/arp`). Without them a remote client has a switch port but no
+IP address — `arp_entries` holds the only MAC↔IP binding, and every view
+downstream starts from the IP.
+
 ---
 
 ## 6. Troubleshooting

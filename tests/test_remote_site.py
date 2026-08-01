@@ -112,6 +112,26 @@ class RemoteSiteE2E(unittest.TestCase):
         sightings = mac_history.search(switch_ip="10.9.0.2")
         self.assertTrue(any(s["site"] == sid for s in sightings))
 
+        # 4b. push ARP -> e' cio' che da' un IP ai client della sede. Senza,
+        # la MAC table dice a quale porta stanno ma non chi sono, e ogni vista
+        # a valle (Client Map, flow path, diagnosi) parte dall'IP.
+        r = self.client.post("/api/agent/arp", headers=ah, json={"collections": [{
+            "source_ip": "10.9.0.3", "source_name": "fgt-milano",
+            "source_type": "firewall",
+            "entries": [{"mac": "aa:bb:cc:00:09:02", "ip": "10.9.0.50",
+                         "vlan": "10", "interface": "port1"}],
+        }]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertGreaterEqual(r.json()["recorded"], 1)
+        bindings = mac_history.search_arp(ip="10.9.0.50")
+        self.assertTrue(bindings)
+        self.assertEqual(bindings[0]["site"], sid)
+        self.assertEqual(bindings[0]["source_type"], "firewall")
+        # Il binding e la posizione fisica si incontrano: e' il join su cui
+        # poggia tutta la Client Map.
+        cm = mac_history.client_map(ip="10.9.0.50")
+        self.assertEqual(cm[0]["switch_ip"], "10.9.0.2")
+
         # 5. l'admin accoda un comando CLI per il device della sede
         r = self.client.post(f"/api/sites/{sid}/command", headers=self.admin_h,
                             json={"ip": "10.9.0.2", "command": "show version"})
@@ -173,6 +193,58 @@ class RemoteSiteE2E(unittest.TestCase):
                             json={"ip": "10.9.0.9", "command": "write erase"})
         self.assertEqual(r.status_code, 400, r.text)
         self.assertIn("blacklist", r.json()["detail"].lower())
+
+    def test_rest_relay_allowlist(self):
+        """L'allowlist E' il confine di autorita': senza, un token di sede
+        diventa accesso arbitrario alle API di ogni apparato della sede."""
+        from services import site_manager
+        for ok in ("monitor/firewall/policy-lookup", "monitor/vpn/ipsec",
+                   "monitor/router/ipv4", "log/disk/traffic/forward",
+                   "log/memory/traffic/forward"):
+            self.assertTrue(site_manager.rest_path_allowed(ok), ok)
+        for bad in (
+                "cmdb/firewall/policy",              # scrive configurazione
+                "monitor/system/config-script/upload",
+                "monitor/firewall/../../cmdb/system/admin",
+                "https://altrove.example/api/v2/cmdb/system/admin",
+                "monitor/system/config/backup",      # esfiltrerebbe la config
+                "", "log/disk/traffic/forward/../../cmdb/system/admin"):
+            self.assertFalse(site_manager.rest_path_allowed(bad), bad)
+
+    def test_rest_job_outside_allowlist_is_refused_at_enqueue(self):
+        from services import site_manager
+        sid, _token = self._create_agent_site("Torino-Remota")
+        with self.assertRaises(ValueError):
+            site_manager.enqueue_job(sid, "10.9.0.3",
+                                     '{"path": "cmdb/system/admin"}',
+                                     kind="rest")
+        # E nessun job resta accodato.
+        self.assertEqual(site_manager.list_jobs(sid), [])
+
+    def test_rest_job_reaches_the_agent_with_its_kind(self):
+        from services import site_manager
+        sid, token = self._create_agent_site("Genova-Remota")
+        ah = self._agent_headers(sid, token)
+        job = site_manager.enqueue_job(
+            sid, "10.9.0.3",
+            '{"path": "monitor/firewall/policy-lookup", "params": {"srcip": "10.9.0.50"}}',
+            kind="rest")
+        r = self.client.get("/api/agent/jobs", headers=ah)
+        self.assertEqual(r.status_code, 200, r.text)
+        jobs = [j for j in r.json()["jobs"] if j["id"] == job["id"]]
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["kind"], "rest")
+
+    def test_agent_refuses_a_path_central_should_not_have_sent(self):
+        """Doppio controllo voluto: le credenziali restano nella sede anche se
+        il centrale e' compromesso, quindi l'agente non si fida di cio' che
+        gli viene dettato."""
+        from services.site_agent import Agent
+        agent = Agent.__new__(Agent)   # nessuna connessione, nessuna config
+        out = agent._execute_rest_job({"IP": "10.9.0.3"},
+                                      '{"path": "cmdb/system/admin"}')
+        self.assertEqual(out["status"], "error")
+        self.assertIn("non consentito", out["result"])
 
     def test_job_of_other_site_cannot_be_completed(self):
         sid_a, tok_a = self._create_agent_site("SedeA")

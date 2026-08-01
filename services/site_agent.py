@@ -42,7 +42,7 @@ if _ROOT not in sys.path:
 
 from services import inventory_manager
 from core import core_engine
-from collectors import mac_collector
+from collectors import arp_collector, mac_collector
 
 
 
@@ -239,6 +239,44 @@ class Agent:
         r.raise_for_status()
         return r.json()
 
+    def push_arp(self, devices):
+        """Spinge i binding MAC<->IP letti dalle tabelle ARP dei gateway locali.
+
+        Senza questo, un client di una sede remota ha una porta di switch ma
+        NESSUN indirizzo IP: ``arp_entries`` e' l'unico posto dove vive il
+        legame MAC<->IP, e tutto cio' che sta a valle (Client Map, flow path,
+        diagnosi) parte dall'IP. La MAC table da sola non basta.
+
+        Solo i gateway L3 hanno una tabella ARP utile: uno switch di accesso
+        risponde 'vuoto' e la sua raccolta viene saltata dal chiamante.
+        """
+        collections = []
+        for d in devices:
+            if not isinstance(d, dict) or not d.get("IP"):
+                continue
+            ip = d["IP"]
+            try:
+                res = arp_collector.collect_from_device(d)
+            except Exception as e:
+                print(f"[arp] {ip}: errore raccolta: {e}")
+                continue
+            if res.get("status") != "success":
+                print(f"[arp] {ip}: {res.get('message', 'errore')}")
+                continue
+            if not res.get("entries"):
+                continue          # non ruota VLAN: non e' un errore
+            collections.append({
+                "source_ip": ip,
+                "source_name": d.get("Hostname", ""),
+                "source_type": res.get("source_type", ""),
+                "entries": res["entries"],
+            })
+        if not collections:
+            return {"recorded": 0}
+        r = self._post("/api/agent/arp", {"collections": collections})
+        r.raise_for_status()
+        return r.json()
+
     def _execute_agent_rpc(self, cmd: str) -> dict:
         """Esegue comandi di gestione remota dell'agente (_agent_self_update, _agent_restart, _agent_config)."""
         import subprocess
@@ -341,6 +379,36 @@ class Agent:
 
         return {"status": "error", "result": f"Comando RPC sconosciuto: {action}"}
 
+    def _execute_rest_job(self, device, spec_json: str) -> dict:
+        """Esegue una chiamata REST di sola lettura verso un apparato locale.
+
+        Il centrale non raggiunge gli apparati di una sede agent, e le domande
+        che contano per una diagnosi (quale policy matcherebbe, quale rotta,
+        il tunnel è su?) non hanno un equivalente CLI affidabile.
+
+        L'allowlist viene RIVERIFICATA qui, non solo dal centrale che ha
+        accodato il job. Non è ridondanza: il modello della modalità agent è
+        che le credenziali restino nella sede anche se il centrale viene
+        compromesso, e accettare qualunque percorso arrivi dal centrale
+        annullerebbe proprio quella garanzia.
+        """
+        from services import fortigate_service, site_manager
+        try:
+            spec = json.loads(spec_json)
+        except (TypeError, ValueError):
+            return {"status": "error", "result": "Job REST malformato."}
+        path = spec.get("path", "")
+        if not site_manager.rest_path_allowed(path):
+            print(f"[job] percorso REST rifiutato dall'agente: {path!r}")
+            return {"status": "error",
+                    "result": f"Percorso REST non consentito: {path!r}"}
+        try:
+            data = fortigate_service.api_get(device["IP"], path,
+                                             spec.get("params") or None)
+            return {"status": "done", "result": json.dumps(data)}
+        except Exception as e:
+            return {"status": "error", "result": str(e)}
+
     def run_jobs(self, devices):
         r = self._get("/api/agent/jobs")
         r.raise_for_status()
@@ -349,7 +417,12 @@ class Agent:
         for job in jobs:
             ip = job.get("device_ip")
             cmd = job.get("command", "")
-            if cmd.startswith("_agent_"):
+            if job.get("kind") == "rest":
+                device = by_ip.get(ip)
+                out = ({"status": "error",
+                        "result": f"Dispositivo {ip} non in inventario locale."}
+                       if not device else self._execute_rest_job(device, cmd))
+            elif cmd.startswith("_agent_"):
                 out = self._execute_agent_rpc(cmd)
             else:
                 device = by_ip.get(ip)
@@ -391,6 +464,10 @@ class Agent:
             self.push_mac(devices)
         except Exception as e:
             print(f"[mac] errore: {e}")
+        try:
+            self.push_arp(devices)
+        except Exception as e:
+            print(f"[arp] errore: {e}")
         try:
             self.push_syslog()
         except Exception as e:

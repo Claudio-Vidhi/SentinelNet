@@ -16,6 +16,7 @@ a new ADR that supersedes it and mark the old one.
 | [0005](0005-strict-tenant-attribution.md) | Unattributable records are dropped, never given a fallback tenant | Accepted |
 | [0006](0006-deterministic-correlation.md) | Correlation is deterministic; the AI narrates, it doesn't decide | Accepted |
 | [0007](0007-numeric-snmp-oids.md) | SNMP uses numeric OIDs, no MIB resolution | Accepted |
+| [0008](0008-agent-rest-relay.md) | The site agent relays read-only REST calls, restricted by an allowlist checked at both ends | Accepted |
 
 ## Template
 

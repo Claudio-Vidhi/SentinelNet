@@ -27,6 +27,13 @@ browser console.
 - **Network observability** — passive collectors for IPFIX, NetFlow, sFlow and
   syslog, plus active FortiGate REST and SNMP polling, feeding a deterministic
   correlation engine that produces evidence-backed incidents.
+- **Client diagnosis (L2 + L3)** — one report for a single client: access
+  switch and port, port VLAN, link state and error-counter delta, whether its
+  VLAN is allowed on the switch trunks, the logical traffic path, the firewall
+  policy that would match a given destination, and blocks in the last hour
+  grouped by policy. Across sites it also checks the far end's policy, live
+  IPsec tunnel state and whether a route to the destination exists at all.
+  Sections that cannot be answered say why rather than being omitted.
 - **Subnet scanning** — automatic host discovery (ping + SSH probe) with
   optional triage and inventory registration.
 - **Interactive topology map** — generates the 2D network map from CDP/LLDP

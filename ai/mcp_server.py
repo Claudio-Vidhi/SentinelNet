@@ -320,6 +320,35 @@ TOOLS = {
                       body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol")
                             if a.get(k) is not None}),
     ),
+    "fortigate_policy_stats": (
+        "Runtime counters per firewall policy: hit count, bytes, active "
+        "sessions, first/last used. Answers 'which rules are dead' (zero hits "
+        "over the counters' lifetime, so candidates for removal) and 'which "
+        "rule is actually carrying this traffic'. Pair with fortigate_policies "
+        "to map policy id to name and to what it permits.",
+        _obj({"ip": {**_S, "description": "FortiGate IP"}}, ["ip"]),
+        lambda a: api("GET", f"/api/fortigate/{a['ip']}/policy-stats"),
+    ),
+    "diagnose_client": (
+        "End-to-end L2+L3 diagnosis of ONE client (IP or MAC), across switch "
+        "and firewall in a single report: access switch and port, port VLAN, "
+        "link state and error-counter delta, whether the client VLAN is "
+        "allowed on the switch trunks, the logical traffic path, the matching "
+        "firewall policy toward an optional destination, and how many blocks "
+        "it suffered in the last hour grouped by policy. Prefer this over "
+        "fortigate_diagnose_client when the question is about a client rather "
+        "than about one firewall: it picks the right FortiGate itself and adds "
+        "the switch-side half. Sections that cannot be answered say so "
+        "('known': false with a reason) instead of being omitted.",
+        _obj({"client": {**_S, "description": "Client IP or MAC address"},
+              "dest": {**_S, "description": "Optional destination IP/FQDN: enables policy lookup and the path"},
+              "dest_port": {"type": "integer", "description": "Default 443"},
+              "protocol": {**_S, "description": "TCP | UDP | ICMP (default TCP)"}},
+             ["client"]),
+        lambda a: api("POST", "/api/diagnose/client",
+                      body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol")
+                            if a.get(k) is not None}),
+    ),
     "wlc_status": (
         "Get status of a Cisco wireless LAN controller (AireOS or Catalyst "
         "9800): version, uptime, AP/client counts.",

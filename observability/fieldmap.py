@@ -16,14 +16,33 @@ import re
 from typing import Optional
 
 _KV_RE = re.compile(
-    r'\b(srcip|dstip|srcport|dstport|proto|service|action|'
-    r'sentbyte|rcvdbyte)=(?:"([^"]*)"|(\S+))')
+    r'\b(srcip|dstip|srcport|dstport|proto|service|utmaction|action|'
+    r'policyid|subtype|eventtype|sentbyte|rcvdbyte)=(?:"([^"]*)"|(\S+))')
 _IP_RE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
+# ``utmaction`` è elencato a parte e non è coperto da ``action``: il ``\b``
+# iniziale impedisce di agganciare la coda di 'utmaction=' (fra 'm' e 'a' non
+# c'è confine di parola). Senza la voce esplicita un log UTM che porta SOLO
+# utmaction restituiva action=None qui, mentre l'ingester syslog lo leggeva
+# (syslog.py: ``kv.get("action") or kv.get("utmaction")``): due verità diverse
+# sullo stesso messaggio, esattamente ciò che questo modulo esiste per evitare.
 
 PROTO_NUM = {"6": "TCP", "17": "UDP", "1": "ICMP"}
 
-SECURITY_ACTIONS = ("deny", "denied", "blocked", "block", "drop",
-                    "reset-both", "reset-client", "reset-server", "sinkhole")
+# Verbi che significano "il traffico è stato fermato". Oltre ai verdetti di
+# policy ci sono quelli UTM: IPS scrive 'dropped'/'reset'/'clear_session', il
+# DNS filter 'redirect' (dirottato su sinkhole: il client NON raggiunge il
+# sito). Senza di loro normalize.py li classificava 'log.event' invece di
+# 'log.security', quindi non arrivavano a BLOCKED_TRAFFIC_001 — e un drop IPS
+# è una delle cause più comuni di "il sito si carica a metà".
+#
+# DELIBERATAMENTE ASSENTI: 'passthrough' e 'bypass' (SSL: traffico lasciato
+# passare SENZA ispezione, è un permesso), 'detected' (IPS in sola rilevazione)
+# e 'pass' (application control). Sono verbi di consenso: classificarli come
+# blocchi produrrebbe falsi positivi in Flow SIEM e incidenti inventati, che
+# è peggio di un blocco non visto.
+SECURITY_ACTIONS = ("deny", "denied", "blocked", "block", "drop", "dropped",
+                    "reset", "reset-both", "reset-client", "reset-server",
+                    "clear_session", "redirect", "sinkhole")
 
 
 def kv(message: str) -> dict:
@@ -63,7 +82,13 @@ def extract(message: str) -> dict:
         "src_port": int_or_none(pairs.get("srcport")),
         "dst_port": int_or_none(pairs.get("dstport")),
         "protocol": PROTO_NUM.get(str(proto), str(proto).upper()) if proto else None,
-        "action": pairs.get("action"),
+        # Stesso ordine di precedenza dell'ingester: su un log UTM il verdetto
+        # sta in utmaction, su un log di traffico in action.
+        "action": pairs.get("action") or pairs.get("utmaction"),
+        "policy_id": pairs.get("policyid"),
+        # Distingue "policy 12 ha negato" da "il web filter ha bloccato": senza
+        # il sottotipo i due casi sono lo stesso DENY nella vista.
+        "subtype": pairs.get("subtype") or pairs.get("eventtype"),
         "bytes": (sent + rcvd) or None,
     }
 

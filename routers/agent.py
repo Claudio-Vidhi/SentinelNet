@@ -32,6 +32,15 @@ class AgentMacCollection(BaseModel):
 class AgentMacSchema(BaseModel):
     collections: List[AgentMacCollection] = []
 
+class AgentArpCollection(BaseModel):
+    source_ip: str                 # gateway L3 che ha risposto l'ARP
+    source_name: str = ""
+    source_type: str = ""          # firewall | switch
+    entries: List[dict] = []
+
+class AgentArpSchema(BaseModel):
+    collections: List[AgentArpCollection] = []
+
 class AgentJobResultSchema(BaseModel):
     status: str = "done"           # "done" | "error"
     result: str = ""
@@ -107,6 +116,27 @@ def agent_push_mac(payload: AgentMacSchema, site = Depends(get_agent_site)):
     log_audit(f"Agente sede '{site_id}': {len(payload.collections)} MAC-table ricevute "
               f"({total} avvistamenti, pruned {pruned}).")
     return {"status": "success", "recorded": total, "pruned": pruned}
+
+@router.post("/api/agent/arp")
+def agent_push_arp(payload: AgentArpSchema, site = Depends(get_agent_site)):
+    """L'agente spinge le tabelle ARP raccolte localmente: e' cio' che da' un
+    IP ai client della sede remota. Senza, la MAC table dice a quale porta
+    stanno ma non chi sono, e ogni vista a valle parte dall'IP."""
+    site_id = site["id"]
+    groups_by_ip = {d.get("IP"): d.get("Group") for d in inventory_manager.get_all_devices()}
+    total = 0
+    for col in payload.collections:
+        summ = mac_history.record_arp_entries(
+            col.entries, source_ip=col.source_ip,
+            source_name=col.source_name, source_type=col.source_type,
+            # Stessa attribuzione della MAC table: il tenant e' quello
+            # dell'apparato che ha raccolto, la sede e' quella dell'agente
+            # autenticato — mai un valore scelto dall'agente stesso.
+            tenant=groups_by_ip.get(col.source_ip) or "Generale", site=site_id)
+        total += summ.get("new", 0) + summ.get("updated", 0)
+    log_audit(f"Agente sede '{site_id}': {len(payload.collections)} tabelle ARP "
+              f"ricevute ({total} binding).")
+    return {"status": "success", "recorded": total}
 
 @router.get("/api/agent/jobs")
 def agent_poll_jobs(site = Depends(get_agent_site)):

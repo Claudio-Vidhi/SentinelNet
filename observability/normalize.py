@@ -174,6 +174,8 @@ def _from_syslog(conn, now: int) -> int:
               metrics={"bytes": fields["bytes"]} if fields["bytes"] else {},
               attrs={"action": action, "message": (r["message"] or "")[:1024],
                      "src_port": fields["src_port"],
+                     "policy_id": fields["policy_id"],
+                     "subtype": fields["subtype"],
                      "exporter_ip": r["exporter_ip"]},
               dedup_key=f"syslog:{r['id']}")
         last_id = max(last_id, r["id"])
