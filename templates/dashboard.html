@@ -1889,14 +1889,30 @@
 
       <div class="panel" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin:0 0 14px;"><i class="fa-solid fa-upload" style="color:var(--primary); margin-right:8px;"></i><span data-i18n="importPanelUpload">Carica file CSV</span></h3>
-        <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Vendor
-192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,cisco
-198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,hpe</div>
+        <div class="template-box">IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor
+192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,central,cisco
+198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,sede-roma,hpe</div>
         <p style="margin:10px 0 0; font-size:12px; color:var(--text-muted); line-height:1.55;" data-i18n="importFlexNote">
           Solo la colonna <code>IP</code> è obbligatoria. Maiuscole, underscore e nomi in italiano
-          (<code>indirizzo</code>, <code>utente</code>, <code>sede</code>) sono riconosciuti, così come
+          (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>) sono riconosciuti, così come
           il punto e virgola come separatore e i file salvati da Excel.
         </p>
+        <div style="margin-top:12px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px;">
+          <div style="font-size:12px; font-weight:600; margin-bottom:8px;">
+            <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="importTenantVsSiteTitle">Group e Site sono due cose diverse</span>
+          </div>
+          <div style="font-size:12px; color:var(--text-muted); line-height:1.6;" data-i18n="importTenantVsSiteBody">
+            <b>Group</b> è il <b>tenant</b>: il confine di visibilità. Decide chi vede l'apparato
+            e filtra ogni scheda, ed è il valore che accompagna ogni riga di osservabilità.
+            Alias riconosciuti: <code>group</code>, <code>gruppo</code>, <code>tenant</code>.<br>
+            <b>Site</b> è la <b>sede fisica</b>: da dove l'apparato viene raggiunto —
+            <code>central</code> (il server lo interroga direttamente) oppure l'id di una sede
+            con agente. Alias: <code>site</code>, <code>sede</code>. Se la ometti vale
+            <code>central</code>.<br>
+            Un tenant può contenere più sedi, e una sede può ospitare apparati di tenant diversi:
+            per questo sono due colonne e non una.
+          </div>
+        </div>
         <div style="margin-top:14px;">
           <button class="btn btn-secondary" id="btnDownloadCsvTemplate" style="width:auto; margin:0;" data-i18n="btnDownloadCsvTemplate">
             <i class="fa-solid fa-download"></i> Scarica modello CSV

@@ -107,7 +107,10 @@
             mcpServers: {
                 sentinelnet: {
                     command: "python",
-                    args: ["/percorso/SentinelNet/mcp_server.py"],
+                    // Il modulo sta in ai/, non nella radice: lo snippet è
+                    // fatto per essere incollato, quindi il percorso deve
+                    // essere quello vero.
+                    args: ["/percorso/SentinelNet/ai/mcp_server.py"],
                     env: {
                         SENTINELNET_URL: window.location.origin,
                         SENTINELNET_USERNAME: "<utente-dedicato>",

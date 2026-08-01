@@ -174,8 +174,20 @@ _CSV_ALIASES: Dict[str, str] = {
     "secret": "Enable Secret", "enablepassword": "Enable Secret",
     "hostname": "Hostname", "nome": "Hostname", "name": "Hostname",
     "device": "Hostname", "nomeapparato": "Hostname",
-    "group": "Group", "gruppo": "Group", "sede": "Group", "site": "Group",
-    "tenant": "Group",
+    # DUE concetti distinti, non sinonimi — vedi il riquadro della scheda
+    # Import, che li spiega all'utente con le stesse parole:
+    #   Group  = TENANT. Il confine RBAC: chi vede cosa. E' la colonna su cui
+    #            filtra ogni vista, ed e' il `tenant` di ogni riga di
+    #            osservabilita'.
+    #   Site   = SEDE FISICA. Da dove si raggiunge l'apparato: 'central'
+    #            (polling diretto) oppure l'id di una sede con agente.
+    #
+    # Prima 'site' e 'sede' finivano su Group, mentre l'export scriveva
+    # ENTRAMBE le colonne: reimportare un file esportato riscriveva il tenant
+    # di ogni apparato con il suo id di sede, in silenzio. Un round-trip deve
+    # restituire l'inventario che ha esportato.
+    "group": "Group", "gruppo": "Group", "tenant": "Group",
+    "site": "Site", "sede": "Site",
     "vendor": "Vendor", "marca": "Vendor", "produttore": "Vendor",
     "brand": "Vendor",
     # Colonne canoniche restanti: senza questi alias un round-trip

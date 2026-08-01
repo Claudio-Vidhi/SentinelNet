@@ -31,8 +31,30 @@ class TestHeaderRecognition(unittest.TestCase):
     def test_italian_column_names(self):
         self.assertEqual("IP", _canonical_header("Indirizzo"))
         self.assertEqual("Username", _canonical_header("Utente"))
-        self.assertEqual("Group", _canonical_header("Sede"))
+        self.assertEqual("Group", _canonical_header("Gruppo"))
         self.assertEqual("Vendor", _canonical_header("Marca"))
+
+    def test_tenant_and_site_are_two_columns_not_one(self):
+        """Prima 'Site' e 'Sede' finivano su Group mentre l'export scriveva
+        entrambe le colonne: reimportare un file esportato riscriveva il
+        tenant di ogni apparato con il suo id di sede, in silenzio."""
+        for spelling in ("Group", "Gruppo", "Tenant"):
+            self.assertEqual("Group", _canonical_header(spelling), spelling)
+        for spelling in ("Site", "Sede"):
+            self.assertEqual("Site", _canonical_header(spelling), spelling)
+
+    def test_exported_file_round_trips_without_losing_the_tenant(self):
+        """Il caso che rompeva l'onboarding multi-sede: esporta, reimporta,
+        e ogni apparato aveva il tenant sovrascritto dalla sede."""
+        exported = ("IP,Vendor,Profile,Username,Password,Enable Secret,Group,"
+                    "Hostname,Site,SSH Port,Transports,SNMP Community\n"
+                    "192.0.2.1,cisco,,admin,Pw1!,,Tenant_Milano,switch-01,"
+                    "sede-milano,22,,\n")
+        rows = _read_inventory_csv(exported)
+        self.assertEqual(1, len(rows))
+        _line, rec = rows[0]
+        self.assertEqual("Tenant_Milano", rec["Group"])
+        self.assertEqual("sede-milano", rec["Site"])
 
     def test_unknown_column_is_none_not_an_error(self):
         self.assertIsNone(_canonical_header("Note"))
@@ -72,7 +94,7 @@ class TestCsvReading(unittest.TestCase):
         self.assertEqual("192.0.2.1", rec["IP"])
 
     def test_mixed_spelling_header(self):
-        _, rec = self._one("indirizzo;utente;password;enable_secret;nome;sede;marca\n"
+        _, rec = self._one("indirizzo;utente;password;enable_secret;nome;gruppo;marca\n"
                            "192.0.2.9;op;Pw2!;ena;switch-09;Tenant_Roma;hpe\n")
         self.assertEqual("192.0.2.9", rec["IP"])
         self.assertEqual("op", rec["Username"])

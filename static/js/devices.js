@@ -852,10 +852,13 @@
 
     // Modello scaricabile: il riquadro di esempio andava ricopiato a mano, ed
     // e' li' che nascevano le intestazioni sbagliate.
+    // 'Site' e' nel modello anche se opzionale: Group (tenant) e Site (sede
+    // fisica) sono due cose diverse, e vederle affiancate con valori diversi
+    // le distingue meglio di qualunque nota. Omessa, Site vale 'central'.
     const CSV_TEMPLATE = [
-        'IP,Username,Password,Enable Secret,Hostname,Group,Vendor',
-        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,cisco',
-        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,hpe',
+        'IP,Username,Password,Enable Secret,Hostname,Group,Site,Vendor',
+        '192.0.2.1,admin,Mypass123!,enablepass,switch-01,Tenant_Milano,central,cisco',
+        '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,sede-roma,hpe',
         ''
     ].join('\n');
 

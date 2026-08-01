@@ -153,6 +153,10 @@ def _interface_health(switch_ip: str, port: str) -> dict:
                  "observed_ts": ts_new,
                  "link": newest.get("link"),
                  "admin_status": newest.get("admin_status"),
+                 # VLAN letta dall'apparato adesso, non quella della MAC table:
+                 # è il confronto fra le due che smaschera una porta spostata
+                 # di VLAN dopo l'ultima scansione.
+                 "port_vlan": newest.get("port_vlan"),
                  "speed": newest.get("speed")}
 
     if len(parsed) > 1:
@@ -258,9 +262,25 @@ def _l2_health(position: dict) -> dict:
         out["interface"] = _interface_health(switch_ip, position["switch_port"])
     except Exception as e:
         out["interface"] = {"known": False, "error": str(e)}
+
+    # La VLAN arriva da due fonti con età diverse: la MAC table (l'ultima
+    # scansione, manuale) e SNMP (l'ultimo poll, automatico). Se non
+    # coincidono la porta è stata spostata di VLAN dopo la scansione — il caso
+    # in cui il client "è ancora lì" ma non è più nella rete di prima. Si usa
+    # la VLAN VIVA per il controllo sui trunk: controllare quella vecchia
+    # risponderebbe alla domanda di ieri.
+    live_vlan = (out["interface"].get("port_vlan")
+                 if isinstance(out.get("interface"), dict) else None)
+    table_vlan = position.get("port_vlan") or position.get("vlan")
+    if live_vlan and table_vlan and str(live_vlan) != str(table_vlan):
+        out["vlan_mismatch"] = {
+            "live": str(live_vlan), "mac_table": str(table_vlan),
+            "note": "la porta è stata spostata di VLAN dopo l'ultima scansione "
+                    "MAC: rilancia una MAC scan per riallineare la Client Map"}
+    vlan = live_vlan or table_vlan
+
     try:
-        out["trunk"] = _trunk_check(switch_ip,
-                                    position.get("port_vlan") or position.get("vlan"))
+        out["trunk"] = _trunk_check(switch_ip, vlan)
     except Exception as e:
         out["trunk"] = {"known": False, "error": str(e)}
     return out
