@@ -97,3 +97,4 @@ checklist_x_c.docx
 # Security findings: never public while issues are open (see CLAUDE.md)
 data/security/
 data/vendors.json
+HANDOFF.md
