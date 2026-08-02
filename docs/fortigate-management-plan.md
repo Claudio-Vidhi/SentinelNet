@@ -73,14 +73,22 @@ addition is optional-with-defaults and therefore backwards compatible.
 ### 1.2 Merge hit counters into the policy view
 
 `get_policy_stats` returns runtime counters keyed by policy id; `get_firewall_policy_objects`
-returns the config rows. The UI joins them client-side on `policyid` and shows
-hits / bytes / active sessions as columns on the Firewall → Policies table, with a
-"never hit" marker for zero-hit enabled policies. No new backend, no new endpoint —
-the join is three lines in the renderer.
+returns the config rows. A new service function `get_policies_with_stats(device)` calls both
+and joins on `policyid`, so the Firewall → Policies table shows hits / bytes / active
+sessions as columns with a "never hit" marker on zero-hit enabled policies.
+
+The join is **server-side, not in the renderer**: this repo has no JS test runner — the
+frontend is checked grep-style through `frontend_source()`
+([test_helpers_frontend.py](../tests/test_helpers_frontend.py)) — so logic put in JS cannot
+carry a real test. In Python it gets one. It also halves the browser's requests and drops
+into the dataset registry as a single entry.
+
+Route `GET /api/fortigate/{ip}/firewall/policies-with-stats` sits under the already
+allowlisted `/api/fortigate/{ip}/firewall` prefix, so it needs **no parity change**.
 
 Zero-hit detection is the point of the feature (dead policies are audit findings), so it
-gets the phase's runnable check: a unit test over the join function with a policy present
-in config but absent from stats, and one present in both with `hit_count: 0`.
+carries the phase's runnable check: a policy present in config but absent from stats, and
+one present in both with `hit_count: 0`.
 
 ---
 
