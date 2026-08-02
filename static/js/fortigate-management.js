@@ -159,7 +159,8 @@ async function loadFgtDataset(key) {
                 // distinguere "il firewall non ha quei log" da "abbiamo
                 // chiesto un'altra cosa".
                 query: { log_device: body.log_device, log_type: body.log_type,
-                         log_subtype: body.log_subtype },
+                         log_subtype: body.log_subtype,
+                         subtype_enforced: body.subtype_enforced },
             };
         } else {
             const err = res ? await res.json().catch(() => ({})) : {};
@@ -206,6 +207,8 @@ function renderFgtDataset(key) {
         ? `<div style="margin-bottom:8px; font-size:11px; color:var(--text-muted);">
              ${escapeHtml(L.lblFgtLogEffective || (en ? 'Executed query' : 'Query eseguita'))}:
              <code style="font-family:var(--font-code);">log/${escapeHtml(jsStr(eq.log_device || '?'))}/${escapeHtml(jsStr(eq.log_type || '?'))}/${escapeHtml(jsStr(eq.log_subtype || '?'))}</code>
+             ${eq.subtype_enforced ? `<span class="status warn" style="margin-left:8px;"
+                  title="${escapeHtml(L.msgFgtSubtypeEnforcedHint || (en ? 'FortiOS returned other subtypes for this path; rows were filtered on the log subtype field so the view matches the FortiGate GUI 1:1.' : 'FortiOS ha restituito altri sottotipi per questo percorso; le righe sono state filtrate sul campo subtype perché la vista corrisponda 1:1 alla GUI del FortiGate.'))}">${escapeHtml(L.badgeFgtSubtypeEnforced || (en ? 'subtype filtered' : 'sottotipo filtrato'))}</span>` : ''}
            </div>`
         : '';
     const head = badge + qEcho;

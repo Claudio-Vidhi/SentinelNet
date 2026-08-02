@@ -225,6 +225,51 @@ class TrafficLogCategoryTest(unittest.TestCase):
         fgs.get_traffic_logs(DEVICE)
         self.assertEqual(mock_api_get.call_args[0][1], "log/disk/traffic/forward")
 
+    @mock.patch("services.fortigate_service.api_get")
+    def test_forward_view_drops_local_rows(self, mock_api_get):
+        # La GUI del FortiGate separa Forward Traffic (transito, policy
+        # normali) da Local Traffic (verso/da gli IP del FortiGate, local-in
+        # policy). Entrambi possono avere policyid 0, quindi l'id non li
+        # distingue: il campo che lo fa è `subtype`. Chiedendo forward non
+        # deve comparire una riga local.
+        mock_api_get.return_value = {"results": [
+            {"subtype": "forward", "srcip": "198.51.100.10", "policyid": 2},
+            {"subtype": "local", "srcip": "192.0.2.1", "policyid": 0},
+            {"subtype": "forward", "srcip": "198.51.100.11", "policyid": 0},
+        ]}
+        res = fgs.get_traffic_logs(DEVICE, log_subtype="forward")
+        self.assertEqual([r["subtype"] for r in res["data"]], ["forward", "forward"])
+        self.assertTrue(res["subtype_enforced"])
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_local_view_keeps_only_local_rows(self, mock_api_get):
+        mock_api_get.return_value = {"results": [
+            {"subtype": "forward", "srcip": "198.51.100.10"},
+            {"subtype": "local", "srcip": "192.0.2.1"},
+        ]}
+        res = fgs.get_traffic_logs(DEVICE, log_subtype="local")
+        self.assertEqual([r["srcip"] for r in res["data"]], ["192.0.2.1"])
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_rows_without_subtype_are_never_dropped(self, mock_api_get):
+        # Se le righe non dichiarano il sottotipo, filtrare svuoterebbe la
+        # vista: "nessun log" è una diagnosi peggiore del problema.
+        mock_api_get.return_value = {"results": [
+            {"srcip": "198.51.100.10"}, {"srcip": "198.51.100.11"},
+        ]}
+        res = fgs.get_traffic_logs(DEVICE, log_subtype="forward")
+        self.assertEqual(len(res["data"]), 2)
+        self.assertFalse(res["subtype_enforced"])
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_enforced_flag_is_false_when_fortios_honoured_the_path(self, mock_api_get):
+        mock_api_get.return_value = {"results": [
+            {"subtype": "forward"}, {"subtype": "forward"},
+        ]}
+        res = fgs.get_traffic_logs(DEVICE, log_subtype="forward")
+        self.assertEqual(len(res["data"]), 2)
+        self.assertFalse(res["subtype_enforced"])
+
     @mock.patch("services.fortigate_service.ssh_command")
     @mock.patch("services.fortigate_service.api_get")
     def test_cli_fallback_filters_the_subtype_too(self, mock_api_get, mock_ssh):

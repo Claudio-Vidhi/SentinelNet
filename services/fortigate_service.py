@@ -660,6 +660,34 @@ def get_route_for(device, dst_ip: str):
         "type": best.get("type")}}
 
 
+def _enforce_log_subtype(rows, log_subtype: str):
+    """Tiene solo le righe del sottotipo richiesto, se le righe lo dichiarano.
+
+    Perché serve: la GUI del FortiGate separa *Forward Traffic* (traffico che
+    ATTRAVERSA il firewall, gestito dalle policy normali) da *Local Traffic*
+    (traffico verso gli IP del FortiGate stesso o da lui generato, gestito
+    dalle local-in policy). Entrambi possono mostrare policy id 0 — l'implicit
+    deny nel forward, la local-in di default nel local — quindi l'id della
+    policy NON basta a distinguerli. Il campo che li distingue è ``subtype``.
+
+    Su alcune versioni di FortiOS il percorso ``log/{dev}/traffic/{subtype}``
+    non restringe davvero il risultato e torna traffico locale a chi ha
+    chiesto forward. Qui si riallinea la risposta alla domanda.
+
+    Il filtro si applica SOLO se almeno una riga porta ``subtype``: filtrare
+    su un campo che non esiste svuoterebbe la vista e sembrerebbe "nessun
+    log", che in diagnosi è peggio del problema che risolve. Ritorna
+    ``(righe, filtrato)`` così il chiamante può dire se è stato necessario.
+    """
+    if not isinstance(rows, list):
+        return rows, False
+    if not any(isinstance(r, dict) and r.get("subtype") for r in rows):
+        return rows, False
+    kept = [r for r in rows
+            if not isinstance(r, dict) or r.get("subtype") == log_subtype]
+    return kept, len(kept) != len(rows)
+
+
 def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
                      action: Optional[str] = None, count: int = 100,
                      log_device: str = "disk", log_type: str = "traffic",
@@ -713,9 +741,12 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
     for dev in (log_device, "memory" if log_device == "disk" else "disk"):
         try:
             data = api_get(ip, f"log/{dev}/{log_type}/{log_subtype}", params)
+            rows = data.get("results", data)
+            rows, enforced = _enforce_log_subtype(rows, log_subtype)
             return {"source": "api", "log_device": dev,
                     "log_type": log_type, "log_subtype": log_subtype,
-                    "data": data.get("results", data)}
+                    "subtype_enforced": enforced,
+                    "data": rows}
         except FortiGateError as e:
             api_err = str(e)
     # Fallback CLI: execute log filter + display.
