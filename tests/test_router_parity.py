@@ -98,7 +98,13 @@ class TestRouterParity(unittest.TestCase):
     # Schemi con estensioni volute dopo lo snapshot golden (nuovi campi opzionali,
     # retrocompatibili): FgtTokenSchema ha guadagnato `name` per il multi-target
     # manager (Task 2, FortiGate LIVE).
-    ALLOWED_CHANGED_SCHEMAS = ("FgtTokenSchema", "AgentDeviceSchema", "DeviceSchema")
+    # FgtLogQuerySchema ha guadagnato log_type/log_subtype/cli_category: i
+    # parametri esistevano già in get_traffic_logs ma nessuno schema li
+    # trasportava, quindi la categoria di log era irraggiungibile via HTTP.
+    # Aggiunta puramente additiva (campi opzionali con i default storici):
+    # nessun client esistente cambia comportamento.
+    ALLOWED_CHANGED_SCHEMAS = ("FgtTokenSchema", "AgentDeviceSchema", "DeviceSchema",
+                               "FgtLogQuerySchema")
 
     def test_migrated_schemas_identical(self):
         golden_schemas = self.golden.get("components", {}).get("schemas", {})
@@ -159,7 +165,8 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/observability/flowgraph"),
     )
 
-    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema")
+    # FgtLogQuerySchema: vedi TestRouterParity.ALLOWED_CHANGED_SCHEMAS.
+    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema")
 
     @classmethod
     def setUpClass(cls):
