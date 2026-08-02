@@ -206,5 +206,25 @@ class DiagnoseClientTest(unittest.TestCase):
         self.assertEqual(out["sections"]["policy_lookup"]["data"]["policy_id"], 3)
 
 
+class TrafficLogCategoryTest(unittest.TestCase):
+    """Il router deve poter scegliere la categoria di log: i parametri
+    esistevano nel service ma nessuno schema li trasportava."""
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_log_type_and_subtype_reach_the_api_path(self, mock_api_get):
+        mock_api_get.return_value = {"results": []}
+        fgs.get_traffic_logs(DEVICE, log_device="memory",
+                             log_type="utm", log_subtype="virus",
+                             cli_category="virus")
+        path = mock_api_get.call_args[0][1]
+        self.assertEqual(path, "log/memory/utm/virus")
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_defaults_are_the_historic_traffic_forward(self, mock_api_get):
+        mock_api_get.return_value = {"results": []}
+        fgs.get_traffic_logs(DEVICE)
+        self.assertEqual(mock_api_get.call_args[0][1], "log/disk/traffic/forward")
+
+
 if __name__ == "__main__":
     unittest.main()

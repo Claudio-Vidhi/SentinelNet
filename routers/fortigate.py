@@ -63,6 +63,12 @@ class FgtLogQuerySchema(BaseModel):
     action: Optional[str] = None   # accept | deny | ...
     count: int = 100
     log_device: str = "disk"       # disk | memory
+    # Categoria del log. Il service costruisce log/{device}/{type}/{subtype}
+    # e usa cli_category per il fallback CLI; i default riproducono il
+    # traffico forward, cioè il comportamento storico di questo endpoint.
+    log_type: str = "traffic"      # traffic | event | utm
+    log_subtype: str = "forward"   # forward | local | virus | webfilter | ips | ...
+    cli_category: str = "traffic"
 
 class FgtDiagnoseClientSchema(BaseModel):
     client: str                    # IP o MAC del client da diagnosticare
@@ -211,7 +217,9 @@ def fgt_logs(ip: str, payload: FgtLogQuerySchema,
     return _fgt_call(fortigate_service.get_traffic_logs, _fgt_device(ip, current_user),
                      src_ip=payload.src_ip, dst_ip=payload.dst_ip,
                      action=payload.action, count=payload.count,
-                     log_device=payload.log_device)
+                     log_device=payload.log_device, log_type=payload.log_type,
+                     log_subtype=payload.log_subtype,
+                     cli_category=payload.cli_category)
 
 @router.get("/api/fortigate/{ip}/wifi/clients")
 def fgt_wifi_clients(ip: str, current_user = Depends(get_current_user)):
