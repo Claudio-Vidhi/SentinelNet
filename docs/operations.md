@@ -127,6 +127,30 @@ In order:
    inventory** under that IP. Check `quarantined_exporters` and the audit log.
    This is the most common case: export gets configured on the device before the
    device is registered.
+
+   **Before adding it to inventory, look at the IP itself.** If the quarantined
+   address is the *server's own* address, or a router's, it is not the exporter
+   — a NAT rewrote the source address in transit. The give-away: the device is
+   already in inventory under its real IP, and a second, different IP keeps
+   getting quarantined. Typical setup that produces it — a hypervisor NAT
+   network:
+
+   | | |
+   |---|---|
+   | Host (SentinelNet) | `192.0.2.10` on the LAN, `198.51.100.1` on the NAT network |
+   | Exporter VM | `198.51.100.20`, in inventory |
+   | Listeners bound to | `192.0.2.10` only |
+
+   The VM has to send to `192.0.2.10`, so its packets cross the NAT device,
+   which rewrites the source to the host's own address — and that is what gets
+   quarantined. Fix by removing the NAT from the path: bind the listeners to
+   `0.0.0.0` and point the device's export at `198.51.100.1`, the interface it
+   reaches directly. The source IP then stays `198.51.100.20`.
+
+   **Never register the NAT-rewritten address as a device.** It would attribute
+   the flows of everything behind that NAT to a device that does not exist, and
+   expose them to the wrong tenant — precisely the damage the drop prevents
+   ([ADR-0005](adr/0005-strict-tenant-attribution.md)).
 3. Is `parse_errors` climbing? Unsupported protocol version or vendor.
 4. `listener_bind_failed`? Port busy (another instance, or the exe running while
    you run tests) or privileged.
