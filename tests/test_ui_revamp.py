@@ -960,7 +960,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
     W2 restructure: the FortiGate token UI was moved out of the top-level
     `<details id="fgtTokenPanel">` accordion and into an inline section.
     That inline section was later removed entirely (it duplicated the
-    dedicated "FortiGate LIVE (preview)" tab, static/js/fortigate-preview.js,
+    dedicated Fortigate Management tab, static/js/fortigate-management.js,
     which is now the sole owner of the token/live-objects UI). Device Type
     remains a chip selector skinning the still-authoritative
     `<select id="provVendor">`. Assertions below pin the current structure;
@@ -982,9 +982,9 @@ class TestProvisionerTabRestyle(unittest.TestCase):
 
     def test_token_ui_removed_duplicate(self):
         """The inline FortiGate token/objects UI that used to live in
-        #tab-provisioner was a duplicate of the "FortiGate LIVE (preview)"
-        tab (static/js/fortigate-preview.js) and has been removed. Only the
-        preview tab owns that UI now."""
+        #tab-provisioner was a duplicate of the Fortigate Management
+        tab (static/js/fortigate-management.js) and has been removed. Only
+        the Fortigate Management tab owns that UI now."""
         html = _html()
         tab = self._tab(html)
         self.assertNotIn('id="fgtTokenPanel"', html)
@@ -1082,7 +1082,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
             self.assertIn('apiFetch(`${base}/%s`' % suffix, html,
                           f"lost the {suffix} call site")
         self.assertIn("apiFetch('/api/provisioner/serial-ports')", html)
-        # FortiGate token model: now owned solely by static/js/fortigate-preview.js.
+        # FortiGate token model: now owned solely by static/js/fortigate-management.js.
         self.assertIn("apiFetch('/api/fortigate/tokens')", html)
         self.assertIn("apiFetch('/api/fortigate/token'", html)
 
@@ -1098,7 +1098,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         html = _html()
         tab = self._tab(html)
         # table-wrap left with the removed inline token/objects section -- that
-        # UI now lives solely in #tab-fortigate-preview.
+        # UI now lives solely in #tab-fortigate (Fortigate Management tab).
         for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
             self.assertIn(cls, tab)
         # device/params card + generate/deliver card.
@@ -1444,10 +1444,10 @@ class TestMcpTabRestyle(unittest.TestCase):
         for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
                     'class="panel"'):
             self.assertIn(cls, tab)
-        # client-config panel + tool-list panel + MCP Client preview-toggle panel
-        # + FortiGate LIVE preview-toggle panel. La Checklist Audit Firewall non
-        # e' piu' in preview: il suo toggle e' stato rimosso.
-        self.assertEqual(tab.count('class="panel"'), 4)
+        # client-config panel + tool-list panel + MCP Client preview-toggle panel.
+        # La Checklist Audit Firewall e Fortigate Management non sono piu' in
+        # preview: i loro toggle sono stati rimossi.
+        self.assertEqual(tab.count('class="panel"'), 3)
 
     def test_status_chip_classes_present_in_render_fn(self):
         # loadMcpTab() moved to static/js/settings.js.

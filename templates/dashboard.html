@@ -185,9 +185,8 @@
         <button class="nav-item" onclick="switchTab('tab-categories', this)">
           <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
         </button>
-        <button id="navFortigatePreview" class="nav-item requires-admin" style="display:none;" onclick="switchTab('tab-fortigate-preview', this)">
-          <span class="nav-left" data-i18n="tabFgtPreview"><i class="fa-solid fa-shield-halved"></i> FortiGate LIVE</span>
-          <span class="preview-badge">preview</span>
+        <button id="navFortigate" class="nav-item requires-admin" onclick="switchTab('tab-fortigate', this)">
+          <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navAssess">Valuta</h3>
@@ -2104,18 +2103,6 @@
         <span id="mcpPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
 
-      <div class="panel" style="margin-top:18px;">
-        <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-flask" style="color:var(--primary);"></i> <span data-i18n="titleFgtPreview">FortiGate LIVE (anteprima)</span></h3>
-        <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;" data-i18n="descFgtPreview">
-          Abilita la tab sperimentale "FortiGate LIVE": gestione token API e visualizzazione degli oggetti firewall (indirizzi, policy, servizi) in tempo reale. Funzionalita' in anteprima.
-        </p>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
-          <input type="checkbox" id="fgtPreviewToggle" onchange="setFgtPreview(this.checked)">
-          <span data-i18n="lblFgtPreviewToggle">Abilita la tab FortiGate LIVE (preview)</span>
-        </label>
-        <span id="fgtPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
-      </div>
-
     </div>
 
     <div id="tab-mcp-client" class="tab-content">
@@ -2157,13 +2144,13 @@
       </div>
     </div>
 
-    <div id="tab-fortigate-preview" class="tab-content">
+    <div id="tab-fortigate" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="fgtPreviewEyebrow"><i class="fa-solid fa-shield-halved"></i> Integrazioni · <span class="preview-badge">preview</span></span>
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleFgtPreviewTab">FortiGate LIVE — token e oggetti firewall</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descFgtPreviewTab">
-            Gestisci i token API dei FortiGate e consulta gli oggetti firewall (indirizzi, policy, servizi) in tempo reale. Anteprima: sola lettura, i token non vengono mai restituiti al browser.
+          <span class="eyebrow" data-i18n="fgtEyebrow"><i class="fa-solid fa-shield-halved"></i> Integrazioni</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleFgtTab">Fortigate Management</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descFgtTab">
+            Stato, rete, policy, traffico e WiFi dei FortiGate in tempo reale. Sola lettura: nessuna modifica viene scritta sul firewall, e i token non vengono mai restituiti al browser.
           </p>
         </div>
       </div>
@@ -2183,92 +2170,309 @@
         </div>
       </div>
 
-      <!-- Token API FortiGate (admin-only) -->
-      <div class="panel requires-admin" style="margin-bottom:18px;">
-        <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-key" style="color:var(--primary);"></i> <span data-i18n="titleFgtApiToken">Token API FortiGate</span></h3>
-        <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
-          <div class="table-wrap" style="margin-top:0;">
-            <table id="fgtPrevTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
-              <thead>
-                <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenIp">IP</th>
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenPort">Porta</th>
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenTls">Verifica TLS</th>
-                  <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenStatus">Stato</th>
-                </tr>
-              </thead>
-              <tbody id="fgtPrevTokensTableBody"></tbody>
-            </table>
-          </div>
-          <div id="fgtPrevTokensEmpty" style="text-align:center; padding:20px; color:var(--text-muted); display:none;" data-i18n="msgFgtTokensEmpty">
-            Nessun token configurato
-          </div>
+      <!-- Sotto-tab Fortigate Management -->
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" id="fgtSub-overview" onclick="fgtSwitchView('overview')" data-i18n="fgtSubOverview">Panoramica</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-network" onclick="fgtSwitchView('network')" data-i18n="fgtSubNetwork">Rete</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-firewall" onclick="fgtSwitchView('firewall')" data-i18n="fgtSubFirewall">Firewall</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-traffic" onclick="fgtSwitchView('traffic')" data-i18n="fgtSubTraffic">Traffico</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-security" onclick="fgtSwitchView('security')" data-i18n="fgtSubSecurity">Sicurezza</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-wifi" onclick="fgtSwitchView('wifi')" data-i18n="fgtSubWifi">WiFi</button>
+        <button class="btn btn-secondary ti-subtab requires-admin" id="fgtSub-settings" onclick="fgtSwitchView('settings')" data-i18n="fgtSubSettings">Impostazioni</button>
+      </div>
+
+      <!-- Panoramica: tile di stato + risorse + HA. Nessuna pill, guidato da renderFgtOverview() (Task 10). -->
+      <div id="fgtPane-overview" class="fgt-pane">
+        <div id="fgtOverviewTiles" style="margin-bottom:18px;"></div>
+        <div class="panel" style="margin-bottom:18px;">
+          <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-gauge-high" style="color:var(--primary);"></i> <span data-i18n="titleFgtResources">Risorse di sistema</span></h3>
+          <div id="fgtView-resources"></div>
         </div>
-        <div style="border-top:1px solid var(--border); padding-top:14px;">
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="fgtPrevTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
-              <select id="fgtPrevTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-                <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
-              </select>
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="fgtPrevTokenValue" data-i18n="lblFgtTokenValue">Token API (password)</label>
-              <input id="fgtPrevTokenValue" type="password" autocomplete="new-password" placeholder="••••••••" style="padding-left:12px; font-size:13px;">
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label for="fgtPrevTokenPort" data-i18n="lblFgtTokenPort">Porta</label>
-              <input id="fgtPrevTokenPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
-            </div>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-            <input type="checkbox" id="fgtPrevTokenVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
-            <label for="fgtPrevTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
-          </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn btn-primary" style="width:auto;" onclick="saveFgtPrevToken()" data-i18n="btnFgtTokenSave">
-              <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
-            </button>
-            <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtPrevToken()" data-i18n="btnFgtTokenRemove">
-              <i class="fa-solid fa-trash"></i> Rimuovi
-            </button>
-            <button class="btn btn-secondary" style="width:auto;" onclick="testFgtPrevToken()" data-i18n="btnFgtTokenTest">
-              <i class="fa-solid fa-plug"></i> Test
-            </button>
-          </div>
-          <div id="fgtPrevTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+        <div class="panel">
+          <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-link" style="color:var(--primary);"></i> <span data-i18n="titleFgtHa">Cluster HA</span></h3>
+          <div id="fgtView-ha"></div>
         </div>
       </div>
 
-      <!-- Oggetti Firewall FortiGate (live, sola lettura) -->
-      <div class="panel">
-        <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> <span data-i18n="titleFgtObjects">Oggetti Firewall FortiGate (live)</span></h3>
-        <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="fgtPrevObjDevice" data-i18n="lblFgtObjDevice">Dispositivo FortiGate</label>
-            <select id="fgtPrevObjDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-              <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
-            </select>
+      <!-- Rete: interfacce, ARP, DHCP, routing, VPN, SD-WAN -->
+      <div id="fgtPane-network" class="fgt-pane" style="display:none;">
+        <div class="panel">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-interfaces" onclick="fgtPickView('network','interfaces')" data-i18n="fgtPillInterfaces">Interfacce</button>
+            <button type="button" class="ca-pill" id="fgtPill-arp" onclick="fgtPickView('network','arp')" data-i18n="fgtPillArp">ARP</button>
+            <button type="button" class="ca-pill" id="fgtPill-dhcp" onclick="fgtPickView('network','dhcp')" data-i18n="fgtPillDhcp">DHCP</button>
+            <button type="button" class="ca-pill" id="fgtPill-routes" onclick="fgtPickView('network','routes')" data-i18n="fgtPillRoutes">Routing</button>
+            <button type="button" class="ca-pill" id="fgtPill-vpn" onclick="fgtPickView('network','vpn')" data-i18n="fgtPillVpn">VPN</button>
+            <button type="button" class="ca-pill" id="fgtPill-sdwan" onclick="fgtPickView('network','sdwan')" data-i18n="fgtPillSdwan">SD-WAN</button>
           </div>
-          <button class="btn btn-secondary" style="width:auto;" onclick="loadFgtPrevObjects()" data-i18n="btnFgtObjLoad">
-            <i class="fa-solid fa-rotate"></i> Carica
+          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-interfaces" type="text" oninput="renderFgtDataset('interfaces')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-arp" type="text" oninput="renderFgtDataset('arp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-dhcp" type="text" oninput="renderFgtDataset('dhcp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-routes" type="text" oninput="renderFgtDataset('routes')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-vpn" type="text" oninput="renderFgtDataset('vpn')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-sdwan" type="text" oninput="renderFgtDataset('sdwan')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <div id="fgtView-interfaces"></div>
+          <div id="fgtView-arp" style="display:none;"></div>
+          <div id="fgtView-dhcp" style="display:none;"></div>
+          <div id="fgtView-routes" style="display:none;"></div>
+          <div id="fgtView-vpn" style="display:none;"></div>
+          <div id="fgtView-sdwan" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Firewall: indirizzi, gruppi, servizi, VIP, IP pool, policy, verifica policy -->
+      <div id="fgtPane-firewall" class="fgt-pane" style="display:none;">
+        <div class="panel">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-addresses" onclick="fgtPickView('firewall','addresses')" data-i18n="fgtPillAddresses">Indirizzi</button>
+            <button type="button" class="ca-pill" id="fgtPill-addressGroups" onclick="fgtPickView('firewall','addressGroups')" data-i18n="fgtPillAddressGroups">Gruppi Indirizzi</button>
+            <button type="button" class="ca-pill" id="fgtPill-services" onclick="fgtPickView('firewall','services')" data-i18n="fgtPillServices">Servizi</button>
+            <button type="button" class="ca-pill" id="fgtPill-serviceGroups" onclick="fgtPickView('firewall','serviceGroups')" data-i18n="fgtPillServiceGroups">Gruppi Servizi</button>
+            <button type="button" class="ca-pill" id="fgtPill-vips" onclick="fgtPickView('firewall','vips')" data-i18n="fgtPillVips">VIP</button>
+            <button type="button" class="ca-pill" id="fgtPill-ipPools" onclick="fgtPickView('firewall','ipPools')" data-i18n="fgtPillIpPools">IP Pool</button>
+            <button type="button" class="ca-pill" id="fgtPill-policies" onclick="fgtPickView('firewall','policies')" data-i18n="fgtPillPolicies">Policy</button>
+            <button type="button" class="ca-pill" id="fgtPill-policyLookup" onclick="fgtPickView('firewall','policyLookup')" data-i18n="fgtPillPolicyLookup">Verifica Policy</button>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-addresses" type="text" oninput="renderFgtDataset('addresses')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-addressGroups" type="text" oninput="renderFgtDataset('addressGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-services" type="text" oninput="renderFgtDataset('services')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-serviceGroups" type="text" oninput="renderFgtDataset('serviceGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-vips" type="text" oninput="renderFgtDataset('vips')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-ipPools" type="text" oninput="renderFgtDataset('ipPools')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-policies" type="text" oninput="renderFgtDataset('policies')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <div id="fgtForm-policyLookup" style="display:none; margin-bottom:12px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLookupSrc" data-i18n="colFgtSessSrc">Sorgente</label>
+                <input id="fgtLookupSrc" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLookupDst" data-i18n="colFgtSessDst">Destinazione</label>
+                <input id="fgtLookupDst" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLookupProto" data-i18n="lblFgtProto">Protocollo</label>
+                <select id="fgtLookupProto" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="TCP">TCP</option>
+                  <option value="UDP">UDP</option>
+                  <option value="ICMP">ICMP</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLookupPort" data-i18n="colFgtSessDport">Porta dest.</label>
+                <input id="fgtLookupPort" type="number" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLookupIntf" data-i18n="colFgtRouteIntf">Interfaccia</label>
+                <input id="fgtLookupIntf" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('policyLookup')" data-i18n="btnFgtLookupRun">
+              <i class="fa-solid fa-magnifying-glass"></i> Verifica policy
+            </button>
+          </div>
+          <div id="fgtView-addresses"></div>
+          <div id="fgtView-addressGroups" style="display:none;"></div>
+          <div id="fgtView-services" style="display:none;"></div>
+          <div id="fgtView-serviceGroups" style="display:none;"></div>
+          <div id="fgtView-vips" style="display:none;"></div>
+          <div id="fgtView-ipPools" style="display:none;"></div>
+          <div id="fgtView-policies" style="display:none;"></div>
+          <div id="fgtView-policyLookup" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Traffico: sessioni attive, log, inventario dispositivi -->
+      <div id="fgtPane-traffic" class="fgt-pane" style="display:none;">
+        <div class="panel">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-sessions" onclick="fgtPickView('traffic','sessions')" data-i18n="fgtPillSessions">Sessioni</button>
+            <button type="button" class="ca-pill" id="fgtPill-logs" onclick="fgtPickView('traffic','logs')" data-i18n="fgtPillLogs">Log</button>
+            <button type="button" class="ca-pill" id="fgtPill-deviceInventory" onclick="fgtPickView('traffic','deviceInventory')" data-i18n="fgtPillDeviceInventory">Inventario Dispositivi</button>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <div id="fgtForm-sessions" style="margin-bottom:12px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtSessSrc" data-i18n="colFgtSessSrc">Sorgente</label>
+                <input id="fgtSessSrc" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtSessDst" data-i18n="colFgtSessDst">Destinazione</label>
+                <input id="fgtSessDst" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtSessPort" data-i18n="colFgtSessDport">Porta dest.</label>
+                <input id="fgtSessPort" type="number" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('sessions')" data-i18n="btnFgtSessLoad">
+              <i class="fa-solid fa-rotate"></i> Carica sessioni
+            </button>
+          </div>
+          <div id="fgtForm-logs" style="display:none; margin-bottom:12px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogSrc" data-i18n="colFgtLogSrc">Sorgente</label>
+                <input id="fgtLogSrc" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogDst" data-i18n="colFgtLogDst">Destinazione</label>
+                <input id="fgtLogDst" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogAction" data-i18n="colFgtLogAction">Azione</label>
+                <input id="fgtLogAction" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogDevice" data-i18n="lblFgtLogDevice">Dispositivo log</label>
+                <select id="fgtLogDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="disk">disk</option>
+                  <option value="memory">memory</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogType" data-i18n="lblFgtLogType">Tipo log</label>
+                <select id="fgtLogType" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="traffic">traffic</option>
+                  <option value="event">event</option>
+                  <option value="utm">utm</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogSubtype" data-i18n="lblFgtLogSubtype">Sottotipo log</label>
+                <select id="fgtLogSubtype" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="forward">forward</option>
+                  <option value="local">local</option>
+                  <option value="virus">virus</option>
+                  <option value="webfilter">webfilter</option>
+                  <option value="ips">ips</option>
+                </select>
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('logs')" data-i18n="btnFgtLogLoad">
+              <i class="fa-solid fa-rotate"></i> Carica log
+            </button>
+          </div>
+          <input id="fgtFilter-sessions" type="text" oninput="renderFgtDataset('sessions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-logs" type="text" oninput="renderFgtDataset('logs')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-deviceInventory" type="text" oninput="renderFgtDataset('deviceInventory')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <div id="fgtView-sessions"></div>
+          <div id="fgtView-logs" style="display:none;"></div>
+          <div id="fgtView-deviceInventory" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Sicurezza: amministratori, utenti bannati, certificati, revisioni config, profili -->
+      <div id="fgtPane-security" class="fgt-pane" style="display:none;">
+        <div class="panel">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-admins" onclick="fgtPickView('security','admins')" data-i18n="fgtPillAdmins">Amministratori</button>
+            <button type="button" class="ca-pill" id="fgtPill-bannedUsers" onclick="fgtPickView('security','bannedUsers')" data-i18n="fgtPillBannedUsers">Utenti Bannati</button>
+            <button type="button" class="ca-pill" id="fgtPill-certificates" onclick="fgtPickView('security','certificates')" data-i18n="fgtPillCertificates">Certificati</button>
+            <button type="button" class="ca-pill" id="fgtPill-configRevisions" onclick="fgtPickView('security','configRevisions')" data-i18n="fgtPillConfigRevisions">Revisioni Config</button>
+            <button type="button" class="ca-pill" id="fgtPill-securityProfiles" onclick="fgtPickView('security','securityProfiles')" data-i18n="fgtPillSecurityProfiles">Profili Sicurezza</button>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-admins" type="text" oninput="renderFgtDataset('admins')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-bannedUsers" type="text" oninput="renderFgtDataset('bannedUsers')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-certificates" type="text" oninput="renderFgtDataset('certificates')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-configRevisions" type="text" oninput="renderFgtDataset('configRevisions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <div id="fgtView-admins"></div>
+          <div id="fgtView-bannedUsers" style="display:none;"></div>
+          <div id="fgtView-certificates" style="display:none;"></div>
+          <div id="fgtView-configRevisions" style="display:none;"></div>
+          <div id="fgtView-securityProfiles" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- WiFi: access point e client associati -->
+      <div id="fgtPane-wifi" class="fgt-pane" style="display:none;">
+        <div class="panel">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-wifiAps" onclick="fgtPickView('wifi','wifiAps')" data-i18n="fgtPillWifiAps">Access Point</button>
+            <button type="button" class="ca-pill" id="fgtPill-wifiClients" onclick="fgtPickView('wifi','wifiClients')" data-i18n="fgtPillWifiClients">Client WiFi</button>
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-wifiAps" type="text" oninput="renderFgtDataset('wifiAps')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-wifiClients" type="text" oninput="renderFgtDataset('wifiClients')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <div id="fgtView-wifiAps"></div>
+          <div id="fgtView-wifiClients" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Impostazioni: token API + configurazione completa (operator+) -->
+      <div id="fgtPane-settings" class="fgt-pane" style="display:none;">
+        <!-- Token API FortiGate (admin-only) -->
+        <div class="panel requires-admin" style="margin-bottom:18px;">
+          <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-key" style="color:var(--primary);"></i> <span data-i18n="titleFgtApiToken">Token API FortiGate</span></h3>
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblFgtTokensConfigured">Token configurati</label>
+            <div class="table-wrap" style="margin-top:0;">
+              <table id="fgtPrevTokensTable" style="width:100%; font-size:13px; border-collapse:collapse;">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenIp">IP</th>
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenPort">Porta</th>
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenTls">Verifica TLS</th>
+                    <th style="padding:8px 12px; text-align:left;" data-i18n="colFgtTokenStatus">Stato</th>
+                  </tr>
+                </thead>
+                <tbody id="fgtPrevTokensTableBody"></tbody>
+              </table>
+            </div>
+            <div id="fgtPrevTokensEmpty" style="text-align:center; padding:20px; color:var(--text-muted); display:none;" data-i18n="msgFgtTokensEmpty">
+              Nessun token configurato
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border); padding-top:14px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtPrevTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
+                <select id="fgtPrevTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtPrevTokenValue" data-i18n="lblFgtTokenValue">Token API (password)</label>
+                <input id="fgtPrevTokenValue" type="password" autocomplete="new-password" placeholder="••••••••" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtPrevTokenPort" data-i18n="lblFgtTokenPort">Porta</label>
+                <input id="fgtPrevTokenPort" type="number" value="443" min="1" max="65535" style="padding-left:12px; font-size:13px;">
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+              <input type="checkbox" id="fgtPrevTokenVerifyTls" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+              <label for="fgtPrevTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-primary" style="width:auto;" onclick="saveFgtPrevToken()" data-i18n="btnFgtTokenSave">
+                <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
+              </button>
+              <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtPrevToken()" data-i18n="btnFgtTokenRemove">
+                <i class="fa-solid fa-trash"></i> Rimuovi
+              </button>
+              <button class="btn btn-secondary" style="width:auto;" onclick="testFgtPrevToken()" data-i18n="btnFgtTokenTest">
+                <i class="fa-solid fa-plug"></i> Test
+              </button>
+            </div>
+            <div id="fgtPrevTokenStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <!-- Configurazione completa (operator+, contiene segreti, mai auto-caricata) -->
+        <div class="panel requires-admin">
+          <h3 style="font-size:15px; margin-bottom:12px;"><i class="fa-solid fa-lock" style="color:var(--primary);"></i> <span data-i18n="titleFgtFullConfig">Configurazione completa</span></h3>
+          <p style="margin:0 0 12px; color:var(--text-muted); font-size:12px;" data-i18n="descFgtFullConfig">
+            Contiene segreti: non viene mai caricata automaticamente.
+          </p>
+          <button type="button" class="btn btn-secondary" style="width:auto; margin-bottom:12px;" onclick="loadFgtDataset('fullConfig')" data-i18n="btnFgtFullConfigLoad">
+            <i class="fa-solid fa-rotate"></i> Carica configurazione completa
           </button>
-        </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-          <button type="button" class="ca-pill active" id="fgtPrevObjTabAddresses" onclick="switchFgtPrevObjView('addresses')" data-i18n="tabFgtObjAddresses">Indirizzi</button>
-          <button type="button" class="ca-pill" id="fgtPrevObjTabPolicies" onclick="switchFgtPrevObjView('policy-objects')" data-i18n="tabFgtObjPolicies">Policy</button>
-          <button type="button" class="ca-pill" id="fgtPrevObjTabServices" onclick="switchFgtPrevObjView('services')" data-i18n="tabFgtObjServices">Servizi</button>
-        </div>
-        <input id="fgtPrevObjFilter" type="text" oninput="renderFgtPrevObjTable()" placeholder="Filtra..." data-i18n-placeholder="phFgtObjFilter" style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-        <div class="table-wrap" id="fgtPrevObjTableWrap" style="margin-top:0;">
-          <table id="fgtPrevObjTable" style="width:100%; font-size:13px; border-collapse:collapse; display:none;">
-            <thead id="fgtPrevObjTableHead"></thead>
-            <tbody id="fgtPrevObjTableBody"></tbody>
-          </table>
-          <div id="fgtPrevObjEmpty" style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="msgFgtObjEmpty">
-            Nessun dato. Seleziona un dispositivo e premi Carica.
-          </div>
+          <div id="fgtView-fullConfig"></div>
         </div>
       </div>
     </div>
@@ -3094,7 +3298,7 @@
   <script src="/static/js/ai.js"></script>
   <script src="/static/js/settings.js"></script>
   <script src="/static/js/mcp-client.js"></script>
-  <script src="/static/js/fortigate-preview.js"></script>
+  <script src="/static/js/fortigate-management.js"></script>
   <script src="/static/js/site-agent.js"></script>
   <script src="/static/js/flow-analytics.js"></script>
   <script src="/static/js/netsec-audit.js"></script>

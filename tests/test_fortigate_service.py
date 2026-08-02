@@ -226,5 +226,133 @@ class TrafficLogCategoryTest(unittest.TestCase):
         self.assertEqual(mock_api_get.call_args[0][1], "log/disk/traffic/forward")
 
 
+class PoliciesWithStatsTest(unittest.TestCase):
+    """Le policy mai colpite sono un rilievo d'audit: il join deve
+    distinguere 'zero hit' da 'contatore assente'."""
+
+    CONFIG = [
+        {"policyid": 1, "name": "allow-web", "action": "accept", "status": "enable"},
+        {"policyid": 2, "name": "dead-rule", "action": "accept", "status": "enable"},
+        {"policyid": 3, "name": "no-counter", "action": "deny", "status": "enable"},
+    ]
+    STATS = [
+        {"policyid": 1, "hit_count": 42, "bytes": 1024,
+         "active_sessions": 3, "last_used": "2026-08-01 10:00:00"},
+        {"policyid": 2, "hit_count": 0, "bytes": 0, "active_sessions": 0},
+    ]
+
+    def _run(self, stats_side_effect=None):
+        with mock.patch.object(fgs, "get_firewall_policy_objects",
+                               return_value={"source": "api", "data": self.CONFIG}), \
+             mock.patch.object(fgs, "get_policy_stats",
+                               side_effect=stats_side_effect,
+                               return_value={"source": "api", "data": self.STATS}):
+            return fgs.get_policies_with_stats(DEVICE)
+
+    def test_counters_are_joined_on_policyid(self):
+        rows = {r["policyid"]: r for r in self._run()["data"]}
+        self.assertEqual(rows[1]["hit_count"], 42)
+        self.assertEqual(rows[1]["active_sessions"], 3)
+        self.assertFalse(rows[1]["never_hit"])
+
+    def test_zero_hit_policy_is_flagged(self):
+        rows = {r["policyid"]: r for r in self._run()["data"]}
+        self.assertEqual(rows[2]["hit_count"], 0)
+        self.assertTrue(rows[2]["never_hit"], "una policy con hit_count 0 è morta")
+
+    def test_policy_absent_from_stats_is_not_flagged_as_dead(self):
+        # Nessun contatore != contatore a zero: senza dato non si può dire
+        # che la regola sia morta, e marcarla sarebbe un falso positivo.
+        rows = {r["policyid"]: r for r in self._run()["data"]}
+        self.assertEqual(rows[3]["hit_count"], 0)
+        self.assertFalse(rows[3]["never_hit"])
+
+    def test_config_survives_a_stats_failure(self):
+        res = self._run(stats_side_effect=fgs.FortiGateError("monitor down"))
+        self.assertEqual(len(res["data"]), 3)
+        self.assertIn("monitor down", res["stats_error"])
+        self.assertFalse(any(r["never_hit"] for r in res["data"]))
+
+
+class SystemGroupTest(unittest.TestCase):
+    @mock.patch("services.fortigate_service.api_get")
+    def test_resources_merges_usage_and_time(self, mock_api_get):
+        mock_api_get.side_effect = [{"results": {"cpu": 7}}, {"results": {"time": 1}}]
+        res = fgs.get_system_resources(DEVICE)
+        self.assertEqual([c[0][1] for c in mock_api_get.call_args_list],
+                         ["monitor/system/resource/usage", "monitor/system/time"])
+        self.assertEqual(res["data"]["usage"], {"cpu": 7})
+        self.assertEqual(res["data"]["time"], {"time": 1})
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_ha_merges_status_and_checksums(self, mock_api_get):
+        mock_api_get.side_effect = [{"results": {"mode": "a-p"}}, {"results": {"cs": "x"}}]
+        res = fgs.get_ha(DEVICE)
+        self.assertEqual(res["data"]["status"], {"mode": "a-p"})
+        self.assertEqual(res["data"]["checksums"], {"cs": "x"})
+
+    @mock.patch("services.fortigate_service.api_get_cmdb")
+    def test_admins_are_projected(self, mock_cmdb):
+        mock_cmdb.return_value = {"results": [{"name": "admin"}]}
+        fgs.get_admins(DEVICE)
+        self.assertEqual(mock_cmdb.call_args[0][1], "cmdb/system/admin")
+        self.assertEqual(mock_cmdb.call_args[1]["fmt"], fgs.ADMIN_FIELDS)
+
+    def test_admin_projection_carries_no_secret(self):
+        # La proiezione è l'unica barriera fra gli account admin del
+        # FortiGate e il browser: nessun campo che possa contenere una
+        # credenziale deve comparirci.
+        for banned in ("password", "passwd", "secret", "key", "hash"):
+            self.assertNotIn(banned, fgs.ADMIN_FIELDS.lower())
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_simple_monitor_getters_hit_the_right_paths(self, mock_api_get):
+        mock_api_get.return_value = {"results": []}
+        for fn, path in ((fgs.get_banned_users, "monitor/user/banned"),
+                         (fgs.get_config_revisions, "monitor/system/config-revision"),
+                         (fgs.get_certificates, "monitor/system/available-certificates")):
+            fn(DEVICE)
+            self.assertEqual(mock_api_get.call_args[0][1], path)
+
+
+class SdwanHealthTest(unittest.TestCase):
+    @mock.patch("services.fortigate_service.api_get")
+    def test_hits_the_documented_health_check_path(self, mock_api_get):
+        # Percorso confermato da docs/reference/fortios/rest-api.md.
+        mock_api_get.return_value = {"results": {}}
+        fgs.get_sdwan_health(DEVICE)
+        self.assertEqual(mock_api_get.call_args[0][1], "monitor/virtual-wan/health-check")
+
+
+class FirewallObjectsTest(unittest.TestCase):
+    @mock.patch("services.fortigate_service.api_get_cmdb")
+    def test_each_getter_hits_its_cmdb_path(self, mock_cmdb):
+        mock_cmdb.return_value = {"results": []}
+        for fn, path in ((fgs.get_address_groups, "cmdb/firewall/addrgrp"),
+                         (fgs.get_service_groups, "cmdb/firewall.service/group"),
+                         (fgs.get_vips, "cmdb/firewall/vip"),
+                         (fgs.get_ip_pools, "cmdb/firewall/ippool")):
+            fn(DEVICE)
+            self.assertEqual(mock_cmdb.call_args[0][1], path)
+
+    @mock.patch("services.fortigate_service.api_get_cmdb")
+    def test_security_profiles_aggregate_four_families(self, mock_cmdb):
+        mock_cmdb.return_value = {"results": [{"name": "default"}]}
+        res = fgs.get_security_profiles(DEVICE)
+        self.assertEqual(set(res["data"]), {"antivirus", "ips", "webfilter", "application"})
+        self.assertEqual(res["data"]["antivirus"], [{"name": "default"}])
+
+    @mock.patch("services.fortigate_service.api_get_cmdb")
+    def test_a_missing_profile_family_does_not_sink_the_others(self, mock_cmdb):
+        # Una licenza senza IPS non deve svuotare antivirus e webfilter.
+        mock_cmdb.side_effect = [{"results": [{"name": "av"}]},
+                                 fgs.FortiGateError("404 ips"),
+                                 {"results": []}, {"results": []}]
+        res = fgs.get_security_profiles(DEVICE)
+        self.assertEqual(res["data"]["antivirus"], [{"name": "av"}])
+        self.assertEqual(res["data"]["ips"], [])
+        self.assertIn("ips", res["errors"])
+
+
 if __name__ == "__main__":
     unittest.main()

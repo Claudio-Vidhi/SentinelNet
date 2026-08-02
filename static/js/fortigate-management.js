@@ -1,67 +1,259 @@
-// ===== FortiGate LIVE (PREVIEW) tab — token API + oggetti firewall live =====
-// Gating: la tab e il flag sono admin-only (mirror del pattern MCP Client,
-// vedi mcp-client.js). Questa è l'unica proprietaria della UI token/oggetti
-// FortiGate: il duplicato che viveva in tab-provisioner (provisioning.js) è
-// stato rimosso. Le stringhe derivate dal FortiGate passano sempre da
+// ===== Fortigate Management tab — token API + oggetti firewall live =====
+// La tab e' admin-only (nav-item requires-admin), non piu' dietro un flag di
+// preview. Questa è l'unica proprietaria della UI token/oggetti FortiGate:
+// il duplicato che viveva in tab-provisioner (provisioning.js) è stato
+// rimosso. Le stringhe derivate dal FortiGate passano sempre da
 // escapeHtml(jsStr(x)) (jsStr definito in mcp-client.js).
 
-const FGT_OBJ_COLUMNS = {
-    'addresses': [
-        ['name', 'colFgtAddrName'], ['type', 'colFgtAddrType'],
-        ['subnet', 'colFgtAddrSubnet'], ['fqdn', 'colFgtAddrFqdn'],
-        ['comment', 'colFgtAddrComment'],
-    ],
-    'policy-objects': [
-        ['policyid', 'colFgtPolId'], ['name', 'colFgtPolName'],
-        ['srcintf', 'colFgtPolSrcIntf'], ['dstintf', 'colFgtPolDstIntf'],
-        ['srcaddr', 'colFgtPolSrcAddr'], ['dstaddr', 'colFgtPolDstAddr'],
-        ['service', 'colFgtPolService'], ['action', 'colFgtPolAction'],
-        ['status', 'colFgtPolStatus'], ['logtraffic', 'colFgtPolLog'],
-    ],
-    'services': [
-        ['name', 'colFgtSvcName'], ['tcp-portrange', 'colFgtSvcTcp'],
-        ['udp-portrange', 'colFgtSvcUdp'], ['comment', 'colFgtSvcComment'],
-    ],
-};
-const FGT_OBJ_ENDPOINT = {
-    'addresses': 'addresses', 'policy-objects': 'policy-objects', 'services': 'services',
+// Registro delle viste di sola lettura. Ogni voce dice DOVE prendere i dati
+// e QUALI colonne mostrarne: un solo loader e un solo renderer li servono
+// tutte, aggiungerne una costa tre righe. `pick` estrae il ramo giusto per
+// le risposte annidate (risorse, HA, profili).
+const FGT_DATASETS = {
+    // --- Overview ---
+    // pick assente: si tiene l'intero {status, checksums} (Finding 3 —
+    // un cluster "in sync" con checksum divergenti è il caso che conta).
+    ha:        { url: ip => `/api/fortigate/${ip}/system/ha`, cols: [] },
+    resources: { url: ip => `/api/fortigate/${ip}/system/resources`, pick: d => (d || {}).usage, cols: [] },
+    // --- Network ---
+    interfaces:   { url: ip => `/api/fortigate/${ip}/interfaces`,
+                    cols: [['name','colFgtIfName'], ['ip','colFgtIfIp'], ['status','colFgtIfStatus'],
+                           ['speed','colFgtIfSpeed'], ['duplex','colFgtIfDuplex'], ['alias','colFgtIfAlias']] },
+    arp:          { url: ip => `/api/fortigate/${ip}/arp`,
+                    cols: [['ip','colFgtArpIp'], ['mac','colFgtArpMac'], ['interface','colFgtArpIntf'], ['age','colFgtArpAge']] },
+    dhcp:         { url: ip => `/api/fortigate/${ip}/dhcp-leases`,
+                    cols: [['ip','colFgtDhcpIp'], ['mac','colFgtDhcpMac'], ['hostname','colFgtDhcpHost'],
+                           ['expire_time','colFgtDhcpExpire'], ['interface','colFgtDhcpIntf']] },
+    routes:       { url: ip => `/api/fortigate/${ip}/routes`,
+                    cols: [['ip_mask','colFgtRouteDest'], ['gateway','colFgtRouteGw'], ['interface','colFgtRouteIntf'],
+                           ['type','colFgtRouteType'], ['distance','colFgtRouteDist'], ['metric','colFgtRouteMetric']] },
+    vpn:          { url: ip => `/api/fortigate/${ip}/vpn/tunnels`,
+                    cols: [['name','colFgtVpnName'], ['rgwy','colFgtVpnPeer'], ['status','colFgtVpnStatus'],
+                           ['incoming_bytes','colFgtVpnIn'], ['outgoing_bytes','colFgtVpnOut']] },
+    sdwan:        { url: ip => `/api/fortigate/${ip}/sdwan/health`,
+                    cols: [['name','colFgtSdwanName'], ['status','colFgtSdwanStatus'], ['latency','colFgtSdwanLatency'],
+                           ['jitter','colFgtSdwanJitter'], ['packet_loss','colFgtSdwanLoss']] },
+    // --- Firewall ---
+    addresses:    { url: ip => `/api/fortigate/${ip}/firewall/addresses`,
+                    cols: [['name','colFgtAddrName'], ['type','colFgtAddrType'], ['subnet','colFgtAddrSubnet'],
+                           ['fqdn','colFgtAddrFqdn'], ['comment','colFgtAddrComment']] },
+    addressGroups:{ url: ip => `/api/fortigate/${ip}/firewall/address-groups`,
+                    cols: [['name','colFgtGrpName'], ['member','colFgtGrpMembers'], ['comment','colFgtGrpComment']] },
+    services:     { url: ip => `/api/fortigate/${ip}/firewall/services`,
+                    cols: [['name','colFgtSvcName'], ['tcp-portrange','colFgtSvcTcp'],
+                           ['udp-portrange','colFgtSvcUdp'], ['comment','colFgtSvcComment']] },
+    serviceGroups:{ url: ip => `/api/fortigate/${ip}/firewall/service-groups`,
+                    cols: [['name','colFgtGrpName'], ['member','colFgtGrpMembers'], ['comment','colFgtGrpComment']] },
+    vips:         { url: ip => `/api/fortigate/${ip}/firewall/vips`,
+                    cols: [['name','colFgtVipName'], ['extip','colFgtVipExt'], ['mappedip','colFgtVipMapped'],
+                           ['extintf','colFgtVipIntf'], ['portforward','colFgtVipPf'], ['comment','colFgtVipComment']] },
+    ipPools:      { url: ip => `/api/fortigate/${ip}/firewall/ip-pools`,
+                    cols: [['name','colFgtPoolName'], ['type','colFgtPoolType'],
+                           ['startip','colFgtPoolStart'], ['endip','colFgtPoolEnd']] },
+    policies:     { url: ip => `/api/fortigate/${ip}/firewall/policies-with-stats`,
+                    cols: [['policyid','colFgtPolId'], ['name','colFgtPolName'],
+                           ['srcintf','colFgtPolSrcIntf'], ['dstintf','colFgtPolDstIntf'],
+                           ['srcaddr','colFgtPolSrcAddr'], ['dstaddr','colFgtPolDstAddr'],
+                           ['service','colFgtPolService'], ['action','colFgtPolAction'],
+                           ['status','colFgtPolStatus'], ['hit_count','colFgtPolHits'],
+                           ['active_sessions','colFgtPolSessions'], ['last_used','colFgtPolLastUsed']] },
+    // Quale policy matcherebbe un flusso: risposta a oggetto singolo, resa
+    // come tabella chiave/valore (cols vuoto -> ramo isKv del renderer).
+    policyLookup: { url: ip => `/api/fortigate/${ip}/policy-lookup`, method: 'POST',
+                    body: () => ({ src_ip: _fgtVal('fgtLookupSrc'), dest: _fgtVal('fgtLookupDst'),
+                                   protocol: _fgtVal('fgtLookupProto') || 'TCP',
+                                   dest_port: parseInt(_fgtVal('fgtLookupPort')) || 443,
+                                   srcintf: _fgtVal('fgtLookupIntf') || null }),
+                    cols: [] },
+    securityProfiles: { url: ip => `/api/fortigate/${ip}/firewall/security-profiles`, cols: [] },
+    // --- Traffic ---
+    deviceInventory:{ url: ip => `/api/fortigate/${ip}/device-inventory`,
+                    cols: [['hostname','colFgtDevHost'], ['mac','colFgtDevMac'], ['ipv4_address','colFgtDevIp'],
+                           ['os_name','colFgtDevOs'], ['detected_interface','colFgtDevIntf'], ['is_online','colFgtDevOnline']] },
+    sessions:     { url: ip => `/api/fortigate/${ip}/sessions`, method: 'POST',
+                    body: () => ({ src_ip: _fgtVal('fgtSessSrc') || null, dst_ip: _fgtVal('fgtSessDst') || null,
+                                   dst_port: parseInt(_fgtVal('fgtSessPort')) || null, count: 100 }),
+                    cols: [['protocol','colFgtSessProto'], ['source','colFgtSessSrc'], ['source_port','colFgtSessSport'],
+                           ['destination','colFgtSessDst'], ['destination_port','colFgtSessDport'],
+                           ['policy_id','colFgtSessPolicy'], ['duration','colFgtSessDuration']] },
+    logs:         { url: ip => `/api/fortigate/${ip}/logs`, method: 'POST',
+                    body: () => ({ src_ip: _fgtVal('fgtLogSrc') || null, dst_ip: _fgtVal('fgtLogDst') || null,
+                                   action: _fgtVal('fgtLogAction') || null, count: 100,
+                                   log_device: _fgtVal('fgtLogDevice') || 'disk',
+                                   log_type: _fgtVal('fgtLogType') || 'traffic',
+                                   log_subtype: _fgtVal('fgtLogSubtype') || 'forward',
+                                   cli_category: _fgtVal('fgtLogType') || 'traffic' }),
+                    cols: [['date','colFgtLogDate'], ['time','colFgtLogTime'], ['srcip','colFgtLogSrc'],
+                           ['dstip','colFgtLogDst'], ['dstport','colFgtLogDport'], ['action','colFgtLogAction'],
+                           ['policyid','colFgtLogPolicy'], ['service','colFgtLogService']] },
+    // --- Security ---
+    admins:       { url: ip => `/api/fortigate/${ip}/system/admins`,
+                    cols: [['name','colFgtAdminName'], ['accprofile','colFgtAdminProfile'],
+                           ['trusthost1','colFgtAdminTrust'], ['two-factor','colFgtAdmin2fa'], ['comments','colFgtAdminComment']] },
+    bannedUsers:  { url: ip => `/api/fortigate/${ip}/system/banned-users`,
+                    cols: [['ip_address','colFgtBanIp'], ['cause','colFgtBanCause'], ['expires','colFgtBanExpires']] },
+    certificates: { url: ip => `/api/fortigate/${ip}/system/certificates`,
+                    cols: [['name','colFgtCertName'], ['type','colFgtCertType'], ['status','colFgtCertStatus'],
+                           ['valid_to','colFgtCertExpiry'], ['issuer','colFgtCertIssuer']] },
+    configRevisions:{ url: ip => `/api/fortigate/${ip}/system/config-revisions`,
+                    cols: [['id','colFgtRevId'], ['date','colFgtRevDate'], ['admin','colFgtRevAdmin'], ['comment','colFgtRevComment']] },
+    // --- WiFi ---
+    wifiAps:      { url: ip => `/api/fortigate/${ip}/wifi/aps`,
+                    cols: [['name','colFgtApName'], ['status','colFgtApStatus'], ['ip','colFgtApIp'],
+                           ['os_version','colFgtApVersion'], ['clients','colFgtApClients']] },
+    wifiClients:  { url: ip => `/api/fortigate/${ip}/wifi/clients`,
+                    cols: [['hostname','colFgtWcHost'], ['mac','colFgtWcMac'], ['ip','colFgtWcIp'],
+                           ['ssid','colFgtWcSsid'], ['signal','colFgtWcSignal'], ['channel','colFgtWcChannel']] },
+    // --- Settings ---
+    // Contiene segreti (operator+ lato rotta): mai caricata di default, solo
+    // dietro al pulsante esplicito in Impostazioni.
+    fullConfig:   { url: ip => `/api/fortigate/${ip}/full-config`, cols: [] },
 };
 
-// --- Gating: mostra la tab solo se il flag preview e' attivo (chiamata in appInit) ---
-async function applyFgtPreviewGating() {
-    const res = await apiFetch('/api/settings/fortigate-preview');
-    if (!res || !res.ok) return;
-    const data = await res.json();
-    const nav = document.getElementById('navFortigatePreview');
-    if (nav) nav.style.display = data.fortigate_preview ? '' : 'none';
-    const toggle = document.getElementById('fgtPreviewToggle');
-    if (toggle) toggle.checked = !!data.fortigate_preview;
+// Valore di un input, stringa vuota se l'elemento non c'è ancora.
+function _fgtVal(id) {
+    const el = document.getElementById(id);
+    return el ? String(el.value || '').trim() : '';
 }
 
-// --- Toggle preview (nella tab MCP Server) ---
-async function setFgtPreview(enabled) {
-    const st = document.getElementById('fgtPreviewStatus');
-    const res = await apiFetch('/api/settings/fortigate-preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !!enabled })
-    });
-    const L = i18n[currentLang];
-    if (res && res.ok) {
-        if (st) st.textContent = L.mcpPreviewSaved || 'Salvato.';
-        await applyFgtPreviewGating();
-    } else {
-        const e = res ? await res.json().catch(() => ({})) : {};
-        if (st) st.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '');
+let fgtDatasetRows = {};   // key -> { rows, source, apiError, error }
+
+// Un solo loader per tutte le viste. Un dataset che fallisce non è un
+// errore della tab: su un FortiGate senza SD-WAN o senza controller WiFi
+// il 502 è la risposta giusta, e la vista si rende vuota con il motivo nel
+// title invece di sparare un toast rosso.
+async function loadFgtDataset(key) {
+    const spec = FGT_DATASETS[key];
+    if (!spec) return;
+    const ip = fgtCurrentTarget();
+    if (!ip) {
+        const host = document.getElementById('fgtView-' + key);
+        if (host) {
+            const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+            const en = currentLang === 'en';
+            host.innerHTML = _fgtEmpty(L.msgFgtNoTarget || (en ? 'No target selected.' : 'Nessun target selezionato.'));
+        }
+        return;
     }
+    const opts = spec.method === 'POST'
+        ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(spec.body ? spec.body() : {}) }
+        : undefined;
+    try {
+        const res = await apiFetch(spec.url(encodeURIComponent(ip)), opts);
+        if (res && res.ok) {
+            const body = await res.json();
+            const data = spec.pick ? spec.pick(body.data) : body.data;
+            fgtDatasetRows[key] = {
+                rows: Array.isArray(data) ? data : (data == null ? [] : [data]),
+                raw: data, source: body.source, apiError: body.api_error || null,
+                errors: body.errors || null, error: null,
+            };
+        } else {
+            const err = res ? await res.json().catch(() => ({})) : {};
+            fgtDatasetRows[key] = { rows: [], raw: null, source: null, apiError: null,
+                                    error: err.detail || 'HTTP ' + (res ? res.status : '?') };
+        }
+    } catch (e) {
+        fgtDatasetRows[key] = { rows: [], raw: null, source: null, apiError: null, error: String(e) };
+    }
+    renderFgtDataset(key);
+}
+
+// Le risposte del service sono {source, data, api_error?} e `data` può
+// essere lista, dict o testo CLI grezzo quando è scattato il fallback SSH.
+// Il vecchio renderer conosceva solo il primo caso.
+function renderFgtDataset(key) {
+    const host = document.getElementById('fgtView-' + key);
+    if (!host) return;
+    const spec = FGT_DATASETS[key];
+    const st = fgtDatasetRows[key];
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    const en = currentLang === 'en';
+
+    if (!st) { host.innerHTML = _fgtEmpty(L.msgFgtNotLoaded || (en ? 'Not loaded.' : 'Non caricato.')); return; }
+    if (st.error) {
+        host.innerHTML = _fgtEmpty(en ? 'Not available on this device.' : 'Non disponibile su questo dispositivo.', st.error);
+        return;
+    }
+
+    // Fallback SSH: dirlo. "REST non ha risposto e stiamo leggendo la CLI"
+    // non è la stessa cosa di "il firewall ha risposto", e finora la UI lo
+    // nascondeva.
+    const badge = st.source === 'ssh'
+        ? `<div style="margin-bottom:8px;"><span class="status warn" title="${escapeHtml(jsStr(st.apiError || ''))}">
+             <i class="fa-solid fa-terminal"></i> ${escapeHtml(L.badgeFgtSshFallback || (en ? 'CLI fallback — REST failed' : 'Fallback CLI — REST fallita'))}</span></div>`
+        : '';
+
+    if (typeof st.raw === 'string') {
+        host.innerHTML = badge + `<pre style="font-family:var(--font-code); font-size:12px; background:var(--surface);
+            border:1px solid var(--border); border-radius:8px; padding:12px; margin:0;
+            white-space:pre-wrap; max-height:420px; overflow:auto;">${escapeHtml(jsStr(st.raw))}</pre>`;
+        return;
+    }
+    if (!st.rows.length) { host.innerHTML = badge + _fgtEmpty(L.msgFgtObjEmpty || (en ? 'No data.' : 'Nessun dato.')); return; }
+
+    // Un dict singolo (risorse, HA) diventa una tabella chiave/valore.
+    const isKv = st.rows.length === 1 && !spec.cols.some(([k]) => k in (st.rows[0] || {}));
+    const filter = (_fgtVal('fgtFilter-' + key) || '').toLowerCase();
+    const html = isKv ? _fgtKvTable(st.rows[0], st.errors) : _fgtColTable(spec.cols, st.rows, filter, L);
+    host.innerHTML = badge + html;
+}
+
+function _fgtEmpty(msg, title) {
+    return `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;"
+        ${title ? `title="${escapeHtml(jsStr(title))}"` : ''}>${escapeHtml(msg)}</div>`;
+}
+
+function _fgtCell(v) {
+    if (Array.isArray(v)) v = v.map(x => (x && typeof x === 'object') ? (x.name || JSON.stringify(x)) : x).join(', ');
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+}
+
+// `errors` (opzionale): mappa chiave->motivo per i rami che sono falliti
+// senza far fallire l'intero dataset (es. security-profiles per famiglia
+// senza licenza). Si evidenzia la riga col motivo nel title.
+function _fgtKvTable(obj, errors) {
+    const rows = Object.entries(obj || {}).map(([k, v]) => {
+        const err = errors && errors[k];
+        const warn = err ? 'color:var(--warning);' : '';
+        const title = err ? ` title="${escapeHtml(jsStr(err))}"` : '';
+        return `<tr style="border-bottom:1px solid var(--border);">
+           <td style="padding:8px 12px; font-weight:600; width:32%;">${escapeHtml(jsStr(k))}</td>
+           <td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${warn}"${title}>${escapeHtml(jsStr(_fgtCell(v)))}</td>
+         </tr>`;
+    }).join('');
+    return `<div class="table-wrap" style="margin-top:0;"><table style="width:100%; font-size:13px; border-collapse:collapse;"><tbody>${rows}</tbody></table></div>`;
+}
+
+function _fgtColTable(cols, rows, filter, L) {
+    const text = r => cols.map(([k]) => _fgtCell(r ? r[k] : undefined)).join(' ').toLowerCase();
+    const shown = filter ? rows.filter(r => text(r).includes(filter)) : rows;
+    const head = cols.map(([, lk]) => `<th style="padding:8px 12px; text-align:left;">${escapeHtml(L[lk] || lk)}</th>`).join('');
+    const body = shown.map(r => {
+        // Una policy con contatore a zero è un rilievo d'audit, non una riga
+        // qualunque: si evidenzia.
+        const dead = r && r.never_hit ? 'color:var(--warning);' : '';
+        const tds = cols.map(([k]) =>
+            `<td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${dead}">${escapeHtml(jsStr(_fgtCell(r ? r[k] : undefined)))}</td>`).join('');
+        return `<tr style="border-bottom:1px solid var(--border);">${tds}</tr>`;
+    }).join('');
+    return `<div class="table-wrap" style="margin-top:0;">
+        <table style="width:100%; font-size:13px; border-collapse:collapse;">
+          <thead><tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">${head}</tr></thead>
+          <tbody>${body}</tbody>
+        </table></div>`;
 }
 
 // --- Caricamento tab ---
-function loadFgtPreviewTab() {
+function loadFgtTab() {
     populateFgtPrevDeviceSelects();
-    loadFgtPrevTokens();
-    loadFgtTargets();
-    fgtPrevObjRows = [];
-    renderFgtPrevObjTable();
+    loadFgtTargets().then(() => {
+        fgtDatasetRows = {};   // target può essere cambiato: niente dati stantii
+        fgtSwitchView(fgtPane);
+    });
 }
 
 function populateFgtPrevDeviceSelects() {
@@ -72,7 +264,7 @@ function populateFgtPrevDeviceSelects() {
         fgtDevices.map(dev =>
             `<option value="${escapeHtml(dev.IP)}" title="${escapeHtml(dev.Hostname || dev.IP)}">${escapeHtml(dev.IP)} (${escapeHtml(dev.Hostname || 'unknown')})</option>`
         ).join('');
-    ['fgtPrevTokenDevice', 'fgtPrevObjDevice'].forEach(id => {
+    ['fgtPrevTokenDevice'].forEach(id => {
         const select = document.getElementById(id);
         if (!select) return;
         const currentValue = select.value;
@@ -93,7 +285,7 @@ async function loadFgtPrevTokens() {
         }
         renderFgtPrevTokensTable(await res.json());
     } catch (e) {
-        console.error('Errore caricamento token FortiGate (preview):', e);
+        console.error('Errore caricamento token FortiGate:', e);
     }
 }
 
@@ -209,86 +401,6 @@ async function testFgtPrevToken() {
     }
 }
 
-// --- Oggetti Firewall FortiGate (live, sola lettura) ---
-// Usa FGT_OBJ_COLUMNS/FGT_OBJ_ENDPOINT definiti in cima a questo file.
-
-let fgtPrevObjView = 'addresses';   // 'addresses' | 'policy-objects' | 'services'
-let fgtPrevObjRows = [];
-
-function switchFgtPrevObjView(view) {
-    fgtPrevObjView = view;
-    ['addresses', 'policy-objects', 'services'].forEach(v => {
-        const id = v === 'addresses' ? 'fgtPrevObjTabAddresses' : v === 'policy-objects' ? 'fgtPrevObjTabPolicies' : 'fgtPrevObjTabServices';
-        const el = document.getElementById(id);
-        if (el) el.classList.toggle('active', v === view);
-    });
-    loadFgtPrevObjects();
-}
-
-async function loadFgtPrevObjects() {
-    const ip = document.getElementById('fgtPrevObjDevice')?.value.trim();
-    if (!ip) { showToast(currentLang === 'en' ? 'Select a FortiGate device' : 'Selezionare un dispositivo FortiGate', 'warning'); return; }
-    try {
-        const res = await apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/firewall/${FGT_OBJ_ENDPOINT[fgtPrevObjView]}`);
-        if (res && res.ok) {
-            const body = await res.json();
-            const data = body && body.data;
-            fgtPrevObjRows = Array.isArray(data) ? data : (data ? [data] : []);
-        } else {
-            const err = res ? await res.json().catch(() => ({})) : {};
-            showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || (currentLang === 'en' ? 'Load failed' : 'Caricamento fallito')}`, 'error');
-            fgtPrevObjRows = [];
-        }
-    } catch (e) {
-        console.error('Errore loadFgtPrevObjects:', e);
-        showToast(currentLang === 'en' ? 'Network error' : 'Errore di rete', 'error');
-        fgtPrevObjRows = [];
-    }
-    renderFgtPrevObjTable();
-}
-
-function renderFgtPrevObjTable() {
-    const table = document.getElementById('fgtPrevObjTable');
-    const thead = document.getElementById('fgtPrevObjTableHead');
-    const tbody = document.getElementById('fgtPrevObjTableBody');
-    const emptyMsg = document.getElementById('fgtPrevObjEmpty');
-    if (!table || !thead || !tbody) return;
-
-    const cols = FGT_OBJ_COLUMNS[fgtPrevObjView] || [];
-    const filterVal = (document.getElementById('fgtPrevObjFilter')?.value || '').trim().toLowerCase();
-
-    const rowText = row => cols.map(([key]) => {
-        const v = row ? row[key] : undefined;
-        return Array.isArray(v) ? v.map(x => (x && x.name) || x).join(' ') : (v == null ? '' : String(v));
-    }).join(' ').toLowerCase();
-
-    const rows = filterVal ? fgtPrevObjRows.filter(r => rowText(r).includes(filterVal)) : fgtPrevObjRows;
-
-    if (!rows.length) {
-        table.style.display = 'none';
-        emptyMsg.style.display = '';
-        thead.innerHTML = '';
-        tbody.innerHTML = '';
-        return;
-    }
-
-    table.style.display = '';
-    emptyMsg.style.display = 'none';
-    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    thead.innerHTML = '<tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">' +
-        cols.map(([, labelKey]) => `<th style="padding:8px 12px; text-align:left;">${escapeHtml(L[labelKey] || labelKey)}</th>`).join('') +
-        '</tr>';
-    tbody.innerHTML = rows.map(row => {
-        const tds = cols.map(([key]) => {
-            let v = row ? row[key] : undefined;
-            if (Array.isArray(v)) v = v.map(x => (x && x.name) || x).join(', ');
-            if (v === null || v === undefined || v === '') v = '—';
-            return `<td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(v))}</td>`;
-        }).join('');
-        return `<tr style="border-bottom:1px solid var(--border);">${tds}</tr>`;
-    }).join('');
-}
-
 // --- Multi-target FortiGate: selettore + modale di gestione ---------------
 // Ogni FortiGate configurato (services/fortigate_service.py, JSON con
 // "_active" per il target corrente) può avere un nome descrittivo. Il
@@ -296,6 +408,11 @@ function renderFgtPrevObjTable() {
 // modale "Gestisci FortiGate" elenca/aggiunge/modifica/rimuove i target e
 // ne testa la connessione. Stringhe derivate dal FortiGate/inventario
 // passano sempre da escapeHtml(jsStr(x)).
+
+// L'IP su cui operano tutte le viste: il target attivo scelto in testa alla tab.
+function fgtCurrentTarget() {
+    return _fgtVal('fgtTargetSelect');
+}
 
 let fgtTargetsCache = [];
 
@@ -335,9 +452,8 @@ async function onFgtTargetSelectChange() {
     if (res && res.ok) {
         showToast(L.msgFgtTargetActivated || 'Target FortiGate attivo aggiornato.', 'success');
         await loadFgtTargets();
-        // Allinea i selettori "dispositivo" del pannello token/oggetti e ricarica gli oggetti live.
-        const objSel = document.getElementById('fgtPrevObjDevice');
-        if (objSel) { objSel.value = ip; loadFgtPrevObjects(); }
+        fgtDatasetRows = {};
+        fgtSwitchView(fgtPane);
     } else {
         const err = res ? await res.json().catch(() => ({})) : {};
         showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
@@ -530,4 +646,100 @@ async function deleteFgtMgrTarget(ip) {
         const err = res ? await res.json().catch(() => ({})) : {};
         showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
     }
+}
+
+// --- Sotto-tab -------------------------------------------------------------
+// Panes locali, non tab-content separate: condividono un solo target e un
+// solo contesto di dispositivo, quindi switchTab() non c'entra.
+const FGT_PANES = ['overview', 'network', 'firewall', 'traffic', 'security', 'wifi', 'settings'];
+// Prima vista di ogni pane: si carica da sola quando il pane si apre.
+const FGT_PANE_DEFAULT = {
+    network: 'interfaces', firewall: 'addresses', traffic: 'sessions',
+    security: 'admins', wifi: 'wifiAps',
+};
+let fgtPane = 'overview';
+
+function fgtSwitchView(pane) {
+    fgtPane = pane;
+    FGT_PANES.forEach(p => {
+        const el = document.getElementById('fgtPane-' + p);
+        if (el) el.style.display = p === pane ? '' : 'none';
+        const btn = document.getElementById('fgtSub-' + p);
+        if (btn) btn.classList.toggle('active', p === pane);
+    });
+    if (pane === 'overview') { renderFgtOverview(); return; }
+    if (pane === 'settings') { loadFgtPrevTokens(); loadFgtTargets(); return; }
+    const key = FGT_PANE_DEFAULT[pane];
+    if (key) fgtPickView(pane, key);
+}
+
+// Sceglie la vista dentro un pane. Carica solo alla prima apertura: i dati
+// restano finché non si preme Aggiorna, altrimenti ogni click rifà una
+// chiamata REST al firewall.
+function fgtPickView(pane, key) {
+    Object.keys(FGT_DATASETS).forEach(k => {
+        const view = document.getElementById('fgtView-' + k);
+        const pill = document.getElementById('fgtPill-' + k);
+        const filter = document.getElementById('fgtFilter-' + k);
+        const form = document.getElementById('fgtForm-' + k);
+        if (view && pill) {  // solo le viste del pane corrente hanno una pill
+            if (k === key) {
+                view.style.display = ''; pill.classList.add('active');
+                if (filter) filter.style.display = '';
+                if (form) form.style.display = '';
+            } else if (pill.closest('#fgtPane-' + pane)) {
+                view.style.display = 'none'; pill.classList.remove('active');
+                if (filter) filter.style.display = 'none';
+                if (form) form.style.display = 'none';
+            }
+        }
+    });
+    if (!fgtDatasetRows[key]) loadFgtDataset(key); else renderFgtDataset(key);
+}
+
+// Ricarica esplicita della vista aperta nel pane corrente.
+function refreshFgtView() {
+    const open = Object.keys(FGT_DATASETS).find(k => {
+        const v = document.getElementById('fgtView-' + k);
+        return v && v.style.display !== 'none' && v.closest('#fgtPane-' + fgtPane);
+    });
+    if (open) loadFgtDataset(open);
+}
+
+// --- Panoramica ------------------------------------------------------------
+// Bespoke: quattro numeri in evidenza, non una tabella. Il resto della tab
+// passa dal registro.
+async function renderFgtOverview() {
+    const ip = fgtCurrentTarget();
+    const host = document.getElementById('fgtOverviewTiles');
+    const en = currentLang === 'en';
+    if (!host) return;
+    if (!ip) { host.innerHTML = _fgtEmpty(en ? 'No target selected.' : 'Nessun target selezionato.'); return; }
+
+    const [status, resources] = await Promise.all([
+        apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/status`).then(r => r && r.ok ? r.json() : null).catch(() => null),
+        apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/system/resources`).then(r => r && r.ok ? r.json() : null).catch(() => null),
+    ]);
+
+    const s = (status && status.data) || {};
+    const u = (resources && resources.data && resources.data.usage) || {};
+    const num = v => (Array.isArray(v) ? (v[0] || {}).current : v);
+    const tile = (label, value, suffix) => `<div class="panel" style="margin:0; text-align:center; padding:14px;">
+        <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700; letter-spacing:.04em;">${escapeHtml(label)}</div>
+        <div style="font-family:var(--font-display); font-size:24px; margin-top:6px;">${escapeHtml(jsStr(value == null || value === '' ? '—' : String(value) + (suffix || '')))}</div>
+      </div>`;
+
+    host.style.display = 'grid';
+    host.style.gridTemplateColumns = 'repeat(auto-fit, minmax(160px, 1fr))';
+    host.style.gap = '12px';
+    host.innerHTML =
+        tile(en ? 'Hostname' : 'Hostname', s.hostname) +
+        tile(en ? 'FortiOS' : 'FortiOS', s.version) +
+        tile('CPU', num(u.cpu), '%') +
+        tile(en ? 'Memory' : 'Memoria', num(u.mem), '%') +
+        tile(en ? 'Sessions' : 'Sessioni', num(u.session)) +
+        tile(en ? 'Disk' : 'Disco', num(u.disk), '%');
+
+    loadFgtDataset('resources');
+    loadFgtDataset('ha');
 }

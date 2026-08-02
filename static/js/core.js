@@ -458,13 +458,9 @@ async function appInit() {
         try { await applyMcpClientGating(); } catch (e) { /* non bloccante */ }
     }
 
-    // Gating tab FortiGate LIVE (preview): visibile solo ad admin col flag attivo.
-    if (currentRole === 'admin' && typeof applyFgtPreviewGating === 'function') {
-        try { await applyFgtPreviewGating(); } catch (e) { /* non bloccante */ }
-    }
-
-    // Flow SIEM, NetSec Audit e Incidenti non sono piu' dietro un flag: le tab
-    // sono sempre presenti, gated solo dalla RBAC di nav come ogni altra voce.
+    // Flow SIEM, NetSec Audit, Incidenti e Fortigate Management non sono piu'
+    // dietro un flag: le tab sono sempre presenti, gated solo dalla RBAC di
+    // nav come ogni altra voce.
 
     try {
         const res = await apiFetch('/api/local-devices');
@@ -581,7 +577,7 @@ function switchTab(tabId, clickedBtn) {
     else if(tabId === 'tab-sites') loadSites();
     else if(tabId === 'tab-mcp') loadMcpTab();
     else if(tabId === 'tab-mcp-client') loadMcpClientTab();
-    else if(tabId === 'tab-fortigate-preview') loadFgtPreviewTab();
+    else if(tabId === 'tab-fortigate') loadFgtTab();
     else if(tabId === 'tab-audit-checklist') loadAuditChecklistTab();
     else if(tabId === 'tab-settings') loadAppSettings();
 }

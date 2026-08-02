@@ -831,9 +831,9 @@
         #tab-config details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
         #tab-config details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
         #tab-config details.mac-switch > summary:hover { background: var(--surface-3); }
-        #tab-config .ca-pill { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; transition:var(--transition); }
-        #tab-config .ca-pill.active { background:var(--primary); color:#fff; border-color:var(--primary); }
-        #tab-config .ca-pill:hover:not(.active) { background:var(--surface-3); }
+        #tab-config .ca-pill, #tab-fortigate .ca-pill { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; transition:var(--transition); }
+        #tab-config .ca-pill.active, #tab-fortigate .ca-pill.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+        #tab-config .ca-pill:hover:not(.active), #tab-fortigate .ca-pill:hover:not(.active) { background:var(--surface-3); }
         .ti-subtab.active { border-color:var(--primary) !important; color:var(--primary) !important; }
         #tab-config .ca-chip { display:inline-flex; align-items:center; gap:4px; font-size:10px; border-radius:5px; padding:1px 6px; border:1px solid var(--border); color:var(--text-muted); margin:2px 4px 2px 0; }
         #tab-config .ca-route-map { height:220px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-top:8px; }

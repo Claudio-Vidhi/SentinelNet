@@ -321,6 +321,60 @@ def get_system_status(device):
         raise FortiGateError(f"API: {api_err} | SSH: {ssh_err}")
 
 
+# --- Sistema: risorse, HA, account, revisioni, certificati -------------------
+# Sola REST: nessuno di questi ha un equivalente CLI 1:1 affidabile, quindi
+# niente fallback SSH (stessa scelta di policy_lookup e dell'inventario cmdb).
+
+# Proiezione degli account amministrativi. È l'unica barriera fra gli account
+# del FortiGate e il browser: elencare i campi voluti, mai filtrare quelli
+# indesiderati dalla risposta, perché una versione futura di FortiOS potrebbe
+# aggiungerne uno nuovo che nessuno ha pensato di escludere.
+ADMIN_FIELDS = "name|accprofile|trusthost1|trusthost2|two-factor|comments"
+
+
+def get_system_resources(device):
+    """Uso CPU/memoria/disco/sessioni più l'ora di sistema, in una risposta
+    sola: la Overview ne fa una card, non quattro richieste."""
+    ip = device["IP"]
+    return {"source": "api",
+            "data": {"usage": api_get(ip, "monitor/system/resource/usage").get("results"),
+                     "time": api_get(ip, "monitor/system/time").get("results")}}
+
+
+def get_ha(device):
+    """Stato HA e checksum di sincronizzazione insieme: due cluster allineati
+    ma con checksum diversi sono il caso che conta, e serve vederli vicini."""
+    return {"source": "api",
+            "data": {"status": get_ha_status(device).get("results"),
+                     "checksums": get_ha_checksums(device).get("results")}}
+
+
+def get_admins(device):
+    """Account amministrativi (cmdb/system/admin), proiettati su ADMIN_FIELDS:
+    nessuna credenziale lascia questa funzione."""
+    data = api_get_cmdb(device["IP"], "cmdb/system/admin", fmt=ADMIN_FIELDS)
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_banned_users(device):
+    """Utenti/IP bannati dalle azioni di quarantena FortiOS."""
+    data = api_get(device["IP"], "monitor/user/banned")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_config_revisions(device):
+    """Revisioni di configurazione salvate a bordo (config-revision)."""
+    data = api_get(device["IP"], "monitor/system/config-revision")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_certificates(device):
+    """Certificati disponibili con scadenza. Endpoint monitor: metadati e
+    scadenza, mai il materiale della chiave privata."""
+    data = api_get(device["IP"], "monitor/system/available-certificates")
+    return {"source": "api", "data": data.get("results", data)}
+
+
 def get_interfaces(device):
     """Stato interfacce con IP, link, contatori."""
     return _api_or_ssh(device, "monitor/system/interface",
@@ -389,6 +443,41 @@ def get_firewall_policy_objects(device):
         raise FortiGateError(f"firewall/policy (slim) disponibile solo via REST API: {e}")
 
 
+def get_policies_with_stats(device):
+    """Policy (cmdb, slim) unite ai contatori runtime, join su ``policyid``.
+
+    ``never_hit`` è vero solo per le policy che HANNO un contatore e vale
+    zero: senza contatore non si può dire che la regola sia morta, e
+    marcarla produrrebbe un falso positivo in audit. Se i contatori non
+    arrivano la configurazione viene restituita comunque, con l'errore in
+    ``stats_error``: metà risposta è meglio di un 502."""
+    policies = get_firewall_policy_objects(device)
+    rows = policies.get("data") or []
+    stats_error = None
+    by_id = {}
+    try:
+        stats = get_policy_stats(device)
+        data = stats.get("data")
+        if isinstance(data, list):
+            by_id = {s.get("policyid"): s for s in data if isinstance(s, dict)}
+    except FortiGateError as e:
+        stats_error = str(e)
+
+    merged = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        s = by_id.get(row.get("policyid"))
+        merged.append({**row,
+                       "hit_count": (s or {}).get("hit_count", 0),
+                       "bytes": (s or {}).get("bytes", 0),
+                       "active_sessions": (s or {}).get("active_sessions", 0),
+                       "last_used": (s or {}).get("last_used"),
+                       "never_hit": bool(s) and not (s or {}).get("hit_count")})
+    return {"source": policies.get("source", "api"), "data": merged,
+            "stats_error": stats_error}
+
+
 def get_firewall_custom_services(device):
     """Servizi custom (firewall.service/custom): nome, range porte TCP/UDP,
     commento."""
@@ -399,6 +488,62 @@ def get_firewall_custom_services(device):
         return {"source": "api", "data": data.get("results", data)}
     except FortiGateError as e:
         raise FortiGateError(f"firewall.service/custom disponibile solo via REST API: {e}")
+
+
+def get_address_groups(device):
+    """Gruppi di indirizzi: nome, membri, commento."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall/addrgrp",
+                        fmt="name|member|comment")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_service_groups(device):
+    """Gruppi di servizi."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall.service/group",
+                        fmt="name|member|comment")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_vips(device):
+    """Virtual IP (DNAT): da quale indirizzo esterno a quale interno."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall/vip",
+                        fmt="name|extip|extintf|mappedip|portforward|"
+                            "extport|mappedport|protocol|comment")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+def get_ip_pools(device):
+    """IP pool (SNAT)."""
+    data = api_get_cmdb(device["IP"], "cmdb/firewall/ippool",
+                        fmt="name|type|startip|endip|comments")
+    return {"source": "api", "data": data.get("results", data)}
+
+
+# Famiglie di profili di sicurezza: chiave usata dalla UI -> percorso cmdb.
+_SECURITY_PROFILES = {
+    "antivirus": "cmdb/antivirus/profile",
+    "ips": "cmdb/ips/sensor",
+    "webfilter": "cmdb/webfilter/profile",
+    "application": "cmdb/application/list",
+}
+
+
+def get_security_profiles(device):
+    """Profili di sicurezza per famiglia.
+
+    Una famiglia che manca (licenza senza IPS, feature non abilitata)
+    risponde 404: si registra in ``errors`` e le altre passano comunque.
+    Fallire tutto perché una sola manca renderebbe il pannello inutile
+    sulla metà dei FortiGate."""
+    out, errors = {}, {}
+    for key, path in _SECURITY_PROFILES.items():
+        try:
+            data = api_get_cmdb(device["IP"], path, fmt="name|comment")
+            out[key] = data.get("results", data)
+        except FortiGateError as e:
+            out[key] = []
+            errors[key] = str(e)
+    return {"source": "api", "data": out, "errors": errors}
 
 
 def policy_lookup(device, src_ip: str, dest: str, protocol: str = "TCP",
@@ -454,6 +599,16 @@ def get_vpn_tunnels(device):
     "il tunnel c'è" e "il tunnel funziona"."""
     return _api_or_ssh(device, "monitor/vpn/ipsec", None,
                        "get vpn ipsec tunnel summary")
+
+
+def get_sdwan_health(device):
+    """Qualità dei link SD-WAN (latenza, jitter, packet loss per SLA).
+
+    Un FortiGate senza SD-WAN configurata risponde 404 e questa solleva
+    FortiGateError: è corretto, la tab lo rende come pannello vuoto invece
+    che come errore."""
+    data = api_get(device["IP"], "monitor/virtual-wan/health-check")
+    return {"source": "api", "data": data.get("results", data)}
 
 
 def get_route_for(device, dst_ip: str):

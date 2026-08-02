@@ -36,10 +36,6 @@ class NetworkSettingsSchema(BaseModel):
 class CliBlacklistSchema(BaseModel):
     cli_blacklist_operators: bool
 
-class FortigatePreviewSchema(BaseModel):
-    enabled: bool
-
-
 # --- ROTTE ---
 
 @router.get("/api/settings/network")
@@ -82,24 +78,11 @@ def set_cli_blacklist_settings(payload: CliBlacklistSchema, current_user = Depen
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "cli_blacklist_operators": payload.cli_blacklist_operators}
 
-@router.get("/api/settings/fortigate-preview")
-def get_fortigate_preview_settings(current_user = Depends(require_admin)):
-    """Stato del flag preview per la tab 'FortiGate LIVE' (default: disattivo)."""
-    return {"fortigate_preview": bool(get_app_settings().get("fortigate_preview_enabled", False))}
-
-@router.post("/api/settings/fortigate-preview")
-def set_fortigate_preview_settings(payload: FortigatePreviewSchema, current_user = Depends(require_admin)):
-    save_app_settings({"fortigate_preview_enabled": payload.enabled})
-    log_audit(f"Tab FortiGate LIVE (preview) "
-              f"{'attivata' if payload.enabled else 'disattivata'} "
-              f"dall'utente '{current_user.get('sub')}'.")
-    return {"status": "success", "fortigate_preview": payload.enabled}
-
-# NetSec Audit, Incidenti e Flow SIEM non hanno piu' un flag di attivazione:
-# le tab sono sempre presenti (restano gated dalla sola RBAC di nav). Le vecchie
-# chiavi `netsec_audit_preview_enabled` / `incidents_preview_enabled` /
-# `flow_siem_preview_enabled` eventualmente rimaste in app_settings.json sono
-# semplicemente ignorate: nessuna migrazione necessaria.
+# NetSec Audit, Incidenti, Flow SIEM e Fortigate Management non hanno piu' un
+# flag di attivazione: le tab sono sempre presenti (restano gated dalla sola
+# RBAC di nav). Le vecchie chiavi di app_settings.json per questi flag,
+# eventualmente rimaste da installazioni precedenti, sono semplicemente
+# ignorate: nessuna migrazione necessaria.
 
 
 @router.get("/api/settings/app")

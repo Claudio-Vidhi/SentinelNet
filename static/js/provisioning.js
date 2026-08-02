@@ -3,7 +3,7 @@
 // apparato + pannello Identità, parte tab-owned) e tab-provisioner (wizard ZTP
 // switch/FortiGate). La gestione del token API FortiGate e la vista live degli
 // oggetti firewall sono state rimosse da qui: erano un duplicato della tab
-// "FortiGate LIVE (preview)" (static/js/fortigate-preview.js), che ora è
+// Fortigate Management (static/js/fortigate-management.js), che ora è
 // l'unica proprietaria di quella UI.
 //
 // refreshIdentityOptions/renderIdentitiesPanel e buildVendorOptions/
