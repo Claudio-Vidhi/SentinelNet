@@ -707,7 +707,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `api_get_cmdb(ip, path, fmt=None)`, `FortiGateError`.
-- Produces: `get_address_groups`, `get_service_groups`, `get_vips`, `get_ip_pools`, `get_security_profiles` — each `(device) -> {"source": "api", "data": ...}`. Routes under `GET /api/fortigate/{ip}/firewall/{address-groups,service-groups,vips,ip-pools,security-profiles}`. No parity edit: the prefix is already allowlisted.
+- Produces: `get_address_groups`, `get_service_groups`, `get_vips`, `get_ip_pools`, `get_security_profiles` — each `(device) -> {"source": "api", "data": ...}`. Routes under `GET /api/fortigate/{ip}/firewall/{address-groups,service-groups,vips,ip-pools,security-profiles}`.
+
+**Parity correction (found during Task 2, this plan was wrong):** `/api/fortigate/{ip}/firewall` is in `TestRouterParity.ALLOWED_NEW_PREFIXES` but **not** in `TestFullParity.NEW_PREFIXES`. The pre-existing `/firewall/*` routes pass `TestFullParity` only because they are already in the `openapi_pre_destructure.json` snapshot. Every genuinely new `/firewall/*` path must therefore be listed individually in `TestFullParity.NEW_PREFIXES`, following that list's per-endpoint convention (Task 2 added `/api/fortigate/{ip}/firewall/policies-with-stats` there). Add all five of this task's paths.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -855,7 +857,7 @@ uv run pyrefly check
 uv run python -m unittest discover -s tests
 ```
 
-Expected: all green, including parity — these paths need no allowlist edit.
+Expected: all green. If `TestFullParity.test_path_set_identical` fails, add the five new paths to `TestFullParity.NEW_PREFIXES` as described in the Interfaces block above.
 
 - [ ] **Step 7: Commit**
 

@@ -55,7 +55,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/fortigate-preview", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose")
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -133,8 +133,15 @@ PRE_DESTRUCTURE = os.path.join(_REPO_ROOT, "tests_data", "openapi_pre_destructur
 
 class TestFullParity(unittest.TestCase):
 
-    NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit/scan", "/api/netsec-audit/benchmarks", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp")
-    NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection")
+    # NEW_PREFIXES filtra entrambi i lati del confronto, quindi copre anche
+    # i percorsi RIMOSSI: /api/settings/fortigate-preview era il flag della
+    # tab FortiGate in anteprima, sparito quando la tab è diventata normale.
+    NEW_PREFIXES = ("/api/redundancy", "/api/agent/syslog", "/api/observability/protocol-distribution", "/api/sites/{site_id}/agent", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/settings/fortigate-preview", "/api/flow-siem", "/api/wlc/{ip}/diagnose-client", "/api/ws-token", "/api/wlc/{ip}/wlan-summary", "/api/netsec-audit/scan", "/api/netsec-audit/benchmarks", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/observability/events", "/api/ai/conversations", "/api/diagnose", "/api/agent/arp",
+                    "/api/fortigate/{ip}/firewall/policies-with-stats", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan",
+                    "/api/fortigate/{ip}/firewall/address-groups", "/api/fortigate/{ip}/firewall/service-groups", "/api/fortigate/{ip}/firewall/vips", "/api/fortigate/{ip}/firewall/ip-pools", "/api/fortigate/{ip}/firewall/security-profiles")
+    # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
+    # rimosso insieme al flag di preview /api/settings/fortigate-preview.
+    NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
