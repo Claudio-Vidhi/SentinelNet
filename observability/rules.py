@@ -738,11 +738,33 @@ RULES = {
                          "legittimo non ancora censito, a un apparato che ha "
                          "cambiato indirizzo, oppure a un dispositivo che non "
                          "dovrebbe esportare nulla. Controllare `first_seen` "
-                         "per capire se coincide con un intervento recente.",
-        "remediation": "Se l'exporter è legittimo, aggiungerlo all'inventario: "
-                       "i flussi vengono accettati dal primo pacchetto "
-                       "successivo, senza recuperare quelli già persi. Se non "
-                       "lo è, bloccarne il traffico verso i listener.",
+                         "per capire se coincide con un intervento recente.\n"
+                         "PRIMA DI TUTTO: l'IP segnalato è quello del SERVER "
+                         "stesso, o di un router/gateway? Allora non è "
+                         "l'exporter — è un NAT che ne ha riscritto l'indirizzo "
+                         "sorgente lungo il percorso. Succede sempre quando "
+                         "l'apparato sta dietro un NAT (una VM su rete NAT che "
+                         "invia all'IP esterno dell'host, o una sede dietro un "
+                         "router che fa masquerade): l'IP vero non arriva mai al "
+                         "collector. Confrontare l'IP con gli indirizzi locali "
+                         "del server e con l'indirizzo di bind dei listener.",
+        "remediation": "Se l'IP segnalato è il risultato di un NAT, la "
+                       "soluzione è far arrivare i pacchetti SENZA attraversarlo: "
+                       "mettere i listener in ascolto sull'interfaccia che "
+                       "l'apparato raggiunge direttamente (bind su tutte le "
+                       "interfacce, se ce n'è più di una) e puntare l'export a "
+                       "QUELL'indirizzo. Solo così l'IP sorgente resta quello "
+                       "dell'apparato.\n"
+                       "NON aggiungere l'IP riscritto dal NAT all'inventario: "
+                       "attribuirebbe i flussi di tutti gli apparati dietro quel "
+                       "NAT a un dispositivo che non esiste, e li renderebbe "
+                       "visibili al tenant sbagliato — è esattamente il danno che "
+                       "lo scarto serve a evitare (ADR-0005).\n"
+                       "Se invece l'exporter è legittimo e semplicemente non "
+                       "censito, aggiungerlo all'inventario: i flussi vengono "
+                       "accettati dal primo pacchetto successivo, senza "
+                       "recuperare quelli già persi. Se non lo è, bloccarne il "
+                       "traffico verso i listener.",
         "check": _unknown_exporter,
     },
     "TOP_TALKER_001": {
