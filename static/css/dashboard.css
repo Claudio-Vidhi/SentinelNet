@@ -854,6 +854,11 @@
         /* Barra 0-100 usata dal formattatore `meter` della tab Fortigate: un
            numero nudo non dice se 62 sia molto o poco, la barra sì. Le soglie
            (75/90) vivono nel JS, qui solo i colori semantici già esistenti. */
+        /* Riga espandibile: il dettaglio mostra il record grezzo, come il
+           pannello Details della GUI del FortiGate. Va segnalato che la riga
+           è cliccabile, altrimenti la funzione non si scopre. */
+        #tab-fortigate .fgt-row:hover { background:var(--surface-2); }
+        #tab-fortigate .fgt-row-detail > td { background:var(--surface-2); }
         .fgt-meter { display:inline-flex; align-items:center; gap:8px; min-width:120px; }
         .fgt-meter-bar { flex:1; height:6px; border-radius:999px; background:var(--surface-3); overflow:hidden; }
         .fgt-meter-fill { display:block; height:100%; border-radius:999px; background:var(--success); }

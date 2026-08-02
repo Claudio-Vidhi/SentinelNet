@@ -91,8 +91,11 @@ const FGT_DATASETS = {
                                    since: _fgtVal('fgtLogSince') || null,
                                    until: _fgtVal('fgtLogUntil') || null }),
                     cols: [['date','colFgtLogDate'], ['time','colFgtLogTime'], ['srcip','colFgtLogSrc'],
-                           ['dstip','colFgtLogDst'], ['dstport','colFgtLogDport'], ['action','colFgtLogAction','badge'],
-                           ['policyid','colFgtLogPolicy'], ['service','colFgtLogService']] },
+                           ['srcport','colFgtLogSport'], ['dstip','colFgtLogDst'], ['dstport','colFgtLogDport'],
+                           ['proto','colFgtLogProto'], ['action','colFgtLogAction','badge'],
+                           ['policyid','colFgtLogPolicy'], ['service','colFgtLogService'],
+                           ['app','colFgtLogApp'], ['sentbyte','colFgtLogSent','bytes'],
+                           ['rcvdbyte','colFgtLogRcvd','bytes']] },
     // --- Security ---
     admins:       { url: ip => `/api/fortigate/${ip}/system/admins`,
                     cols: [['name','colFgtAdminName'], ['accprofile','colFgtAdminProfile'],
@@ -242,7 +245,7 @@ function renderFgtDataset(key) {
     // Un dict singolo (HA, policy lookup) diventa una tabella chiave/valore.
     const isKv = st.rows.length === 1 && !spec.cols.some(([k]) => k in (st.rows[0] || {}));
     const filter = (_fgtVal('fgtFilter-' + key) || '').toLowerCase();
-    const html = isKv ? _fgtKvTable(st.rows[0], st.errors) : _fgtColTable(spec.cols, st.rows, filter, L);
+    const html = isKv ? _fgtKvTable(st.rows[0], st.errors) : _fgtColTable(spec.cols, st.rows, filter, L, key);
     host.innerHTML = head + html;
 }
 
@@ -477,23 +480,61 @@ function _fgtKvTable(obj, errors) {
     return `<div class="table-wrap" style="margin-top:0;"><table style="width:100%; font-size:13px; border-collapse:collapse;"><tbody>${rows}</tbody></table></div>`;
 }
 
-function _fgtColTable(cols, rows, filter, L) {
+// `key` serve al dettaglio riga: la riga cliccata è ritrovata per indice
+// nell'array ORIGINALE (non in quello filtrato), altrimenti con un filtro
+// attivo si aprirebbe il dettaglio di un'altra riga.
+function _fgtColTable(cols, rows, filter, L, key) {
     const text = r => cols.map(([k]) => _fgtCell(r ? r[k] : undefined)).join(' ').toLowerCase();
-    const shown = filter ? rows.filter(r => text(r).includes(filter)) : rows;
-    const head = cols.map(([, lk]) => `<th style="padding:8px 12px; text-align:left;">${escapeHtml(L[lk] || lk)}</th>`).join('');
-    const body = shown.map(r => {
+    const idx = rows.map((r, i) => i);
+    const shown = filter ? idx.filter(i => text(rows[i]).includes(filter)) : idx;
+    const head = `<th style="padding:8px 6px; width:22px;"></th>` +
+        cols.map(([, lk]) => `<th style="padding:8px 12px; text-align:left;">${escapeHtml(L[lk] || lk)}</th>`).join('');
+    const body = shown.map(i => {
+        const r = rows[i];
         // Una policy con contatore a zero è un rilievo d'audit, non una riga
         // qualunque: si evidenzia.
         const dead = r && r.never_hit ? 'color:var(--warning);' : '';
         const tds = cols.map(([k, , fmt]) =>
             `<td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${dead}">${_fgtFmtCell(r, k, fmt)}</td>`).join('');
-        return `<tr style="border-bottom:1px solid var(--border);">${tds}</tr>`;
+        // Le colonne mostrano una manciata di campi; un log di traffico ne ha
+        // decine (porte, interfacce, byte, app, country, sessionid...). Il
+        // dettaglio apre la riga GREZZA, come il pannello Details della GUI
+        // del FortiGate, invece di allargare la tabella a 40 colonne.
+        return `<tr class="fgt-row" style="border-bottom:1px solid var(--border); cursor:pointer;"
+                    onclick="fgtToggleRow('${escapeHtml(key)}',${i},this)"
+                    title="${escapeHtml(L.lblFgtRowDetails || 'Dettagli')}">
+              <td style="padding:8px 6px; color:var(--text-muted);"><i class="fa-solid fa-chevron-right" style="font-size:10px;"></i></td>
+              ${tds}</tr>
+            <tr class="fgt-row-detail" style="display:none;"><td colspan="${cols.length + 1}" style="padding:0 12px 12px;"></td></tr>`;
     }).join('');
     return `<div class="table-wrap" style="margin-top:0;">
         <table style="width:100%; font-size:13px; border-collapse:collapse;">
           <thead><tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">${head}</tr></thead>
           <tbody>${body}</tbody>
         </table></div>`;
+}
+
+// Apre/chiude il dettaglio di una riga. Costruito alla prima apertura: con
+// 100 log da ~40 campi, renderli tutti in anticipo sarebbe 4000 righe di DOM
+// che nessuno guarda.
+function fgtToggleRow(key, idx, tr) {
+    const detail = tr.nextElementSibling;
+    if (!detail || !detail.classList.contains('fgt-row-detail')) return;
+    const open = detail.style.display !== 'none';
+    const chevron = tr.querySelector('i');
+    if (open) {
+        detail.style.display = 'none';
+        if (chevron) chevron.className = 'fa-solid fa-chevron-right';
+        return;
+    }
+    const cell = detail.firstElementChild;
+    if (cell && !cell.dataset.built) {
+        const row = ((fgtDatasetRows[key] || {}).rows || [])[idx] || {};
+        cell.innerHTML = _fgtKvTable(row);
+        cell.dataset.built = '1';
+    }
+    detail.style.display = '';
+    if (chevron) chevron.className = 'fa-solid fa-chevron-down';
 }
 
 // --- Caricamento tab ---
