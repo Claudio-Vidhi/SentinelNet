@@ -270,6 +270,40 @@ class TrafficLogCategoryTest(unittest.TestCase):
         self.assertEqual(len(res["data"]), 2)
         self.assertFalse(res["subtype_enforced"])
 
+    @mock.patch("services.fortigate_service.api_get")
+    def test_subtype_is_also_asked_as_a_filter(self, mock_api_get):
+        # `rows` limita le righe che il FortiGate restituisce PRIMA del filtro
+        # locale: senza filtro sul sottotipo, chiedere 100 righe forward su un
+        # apparato pieno di traffico locale ne restituiva zero.
+        mock_api_get.return_value = {"results": [{"subtype": "forward"}]}
+        fgs.get_traffic_logs(DEVICE, log_subtype="forward")
+        self.assertIn("subtype==forward", mock_api_get.call_args[0][2]["filter"])
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_sterile_subtype_filter_falls_back_to_the_unfiltered_query(self, mock_api_get):
+        # Versione che accetta il filtro ma non lo capisce: zero righe. Deve
+        # ritentare senza, altrimenti il filtro costa i log che doveva salvare.
+        mock_api_get.side_effect = [
+            {"results": []},
+            {"results": [{"subtype": "forward"}, {"subtype": "local"}]},
+        ]
+        res = fgs.get_traffic_logs(DEVICE, log_subtype="forward")
+        self.assertNotIn("filter", mock_api_get.call_args[0][2])
+        self.assertEqual([r["subtype"] for r in res["data"]], ["forward"])
+        self.assertTrue(res["subtype_enforced"])
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_rejected_subtype_filter_falls_back_before_changing_log_device(self, mock_api_get):
+        # Filtro rifiutato su disk: si ritenta disk senza filtro, non si passa
+        # subito a memory (che ha una finestra di log molto più corta).
+        mock_api_get.side_effect = [
+            fgs.FortiGateError("filtro non supportato"),
+            {"results": [{"subtype": "forward"}]},
+        ]
+        res = fgs.get_traffic_logs(DEVICE, log_subtype="forward")
+        self.assertEqual(res["log_device"], "disk")
+        self.assertEqual(len(res["data"]), 1)
+
     @mock.patch("services.fortigate_service.ssh_command")
     @mock.patch("services.fortigate_service.api_get")
     def test_cli_fallback_filters_the_subtype_too(self, mock_api_get, mock_ssh):

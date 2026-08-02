@@ -722,7 +722,7 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
     indovinarla darebbe zero righe travestite da "nessun log" — lo stesso
     rischio che questa funzione documenta già per i sottotipi UTM.
     """
-    params: Dict[str, Any] = {"rows": int(count)}
+    base_params: Dict[str, Any] = {"rows": int(count)}
     filters = []
     if src_ip:
         filters.append(f"srcip=={src_ip}")
@@ -734,21 +734,35 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
         filters.append(f"date>={since}")
     if until:
         filters.append(f"date<={until}")
-    if filters:
-        params["filter"] = filters
     ip = device["IP"]
     api_err = None
+    # Il sottotipo va chiesto anche come filtro, non solo nel percorso: dove
+    # FortiOS ignora `log/{dev}/{type}/{subtype}` (vedi _enforce_log_subtype)
+    # `rows` conta righe di TUTTI i sottotipi, quindi chiedere 100 righe
+    # forward su un apparato pieno di traffico locale ne restituisce zero e
+    # sembra "nessun log". Col filtro le `count` righe sono già quelle giuste.
+    # Failsafe: se la versione rifiuta il filtro (errore) o lo accetta ma
+    # svuota il risultato (nome/valore di campo diverso), si ritenta senza —
+    # lì _enforce_log_subtype fa lo stesso lavoro a valle, sul campione più
+    # ampio possibile. Un filtro non supportato non deve costare i log.
     for dev in (log_device, "memory" if log_device == "disk" else "disk"):
-        try:
-            data = api_get(ip, f"log/{dev}/{log_type}/{log_subtype}", params)
+        for extra in ([f"subtype=={log_subtype}"], []):
+            params = dict(base_params)
+            if filters + extra:
+                params["filter"] = filters + extra
+            try:
+                data = api_get(ip, f"log/{dev}/{log_type}/{log_subtype}", params)
+            except FortiGateError as e:
+                api_err = str(e)
+                continue
             rows = data.get("results", data)
+            if extra and not rows:
+                continue
             rows, enforced = _enforce_log_subtype(rows, log_subtype)
             return {"source": "api", "log_device": dev,
                     "log_type": log_type, "log_subtype": log_subtype,
                     "subtype_enforced": enforced,
                     "data": rows}
-        except FortiGateError as e:
-            api_err = str(e)
     # Fallback CLI: execute log filter + display.
     # ``category`` da solo NON restringe il sottotipo: con category=traffic la
     # CLI restituisce forward, local e multicast mescolati, così il fallback
