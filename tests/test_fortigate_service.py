@@ -225,6 +225,31 @@ class TrafficLogCategoryTest(unittest.TestCase):
         fgs.get_traffic_logs(DEVICE)
         self.assertEqual(mock_api_get.call_args[0][1], "log/disk/traffic/forward")
 
+    @mock.patch("services.fortigate_service.ssh_command")
+    @mock.patch("services.fortigate_service.api_get")
+    def test_cli_fallback_filters_the_subtype_too(self, mock_api_get, mock_ssh):
+        # `execute log filter category traffic` da solo mescola forward, local
+        # e multicast: chi chiedeva forward si vedeva il traffico locale. Il
+        # percorso REST distingue i due, il fallback deve farlo anche lui.
+        mock_api_get.side_effect = fgs.FortiGateError("log REST non disponibile")
+        mock_ssh.return_value = "date=2026-08-02 time=10:00:00 srcip=192.0.2.10"
+        res = fgs.get_traffic_logs(DEVICE, log_subtype="forward")
+        script = mock_ssh.call_args[0][1]
+        self.assertIn("execute log filter field subtype forward", script)
+        self.assertEqual(res["source"], "ssh")
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_date_range_becomes_a_filter_and_is_absent_by_default(self, mock_api_get):
+        mock_api_get.return_value = {"results": []}
+        fgs.get_traffic_logs(DEVICE, since="2026-08-01", until="2026-08-02")
+        flt = mock_api_get.call_args[0][2]["filter"]
+        self.assertIn("date>=2026-08-01", flt)
+        self.assertIn("date<=2026-08-02", flt)
+        # Omesse, nessun filtro sulla data: il comportamento storico resta.
+        mock_api_get.reset_mock()
+        fgs.get_traffic_logs(DEVICE)
+        self.assertNotIn("filter", mock_api_get.call_args[0][2] or {})
+
 
 class PoliciesWithStatsTest(unittest.TestCase):
     """Le policy mai colpite sono un rilievo d'audit: il join deve

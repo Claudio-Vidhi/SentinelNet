@@ -69,6 +69,10 @@ class FgtLogQuerySchema(BaseModel):
     log_type: str = "traffic"      # traffic | event | utm
     log_subtype: str = "forward"   # forward | local | virus | webfilter | ips | ...
     cli_category: str = "traffic"
+    # Intervallo di date YYYY-MM-DD, entrambi opzionali. Omessi = ultime
+    # `count` righe, cioè il comportamento storico.
+    since: Optional[str] = None
+    until: Optional[str] = None
 
 class FgtDiagnoseClientSchema(BaseModel):
     client: str                    # IP o MAC del client da diagnosticare
@@ -295,7 +299,8 @@ def fgt_logs(ip: str, payload: FgtLogQuerySchema,
                      action=payload.action, count=payload.count,
                      log_device=payload.log_device, log_type=payload.log_type,
                      log_subtype=payload.log_subtype,
-                     cli_category=payload.cli_category)
+                     cli_category=payload.cli_category,
+                     since=payload.since, until=payload.until)
 
 @router.get("/api/fortigate/{ip}/wifi/clients")
 def fgt_wifi_clients(ip: str, current_user = Depends(get_current_user)):

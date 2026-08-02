@@ -663,7 +663,8 @@ def get_route_for(device, dst_ip: str):
 def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
                      action: Optional[str] = None, count: int = 100,
                      log_device: str = "disk", log_type: str = "traffic",
-                     log_subtype: str = "forward", cli_category: str = "traffic"):
+                     log_subtype: str = "forward", cli_category: str = "traffic",
+                     since: Optional[str] = None, until: Optional[str] = None):
     """Log del firewall (disk o memory), filtrabili. Risponde a 'cosa dicono i
     log per questo client?'.
 
@@ -685,6 +686,13 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
     Nota: chi inoltra i syslog al collector integrato vede comunque i verdetti
     UTM, perché ``observability/fieldmap.py`` legge ``utmaction`` e ``subtype``
     dal messaggio grezzo — quella strada non dipende da questi percorsi REST.
+
+    ``since``/``until`` sono date ``YYYY-MM-DD`` e diventano un filtro sul
+    campo ``date``. Omesse, il comportamento è quello storico (le ultime
+    ``count`` righe). Sono applicate solo al percorso REST: la sintassi di
+    ``execute log filter`` per gli intervalli varia per versione di FortiOS e
+    indovinarla darebbe zero righe travestite da "nessun log" — lo stesso
+    rischio che questa funzione documenta già per i sottotipi UTM.
     """
     params: Dict[str, Any] = {"rows": int(count)}
     filters = []
@@ -694,6 +702,10 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
         filters.append(f"dstip=={dst_ip}")
     if action:
         filters.append(f"action=={action}")
+    if since:
+        filters.append(f"date>={since}")
+    if until:
+        filters.append(f"date<={until}")
     if filters:
         params["filter"] = filters
     ip = device["IP"]
@@ -707,8 +719,15 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
         except FortiGateError as e:
             api_err = str(e)
     # Fallback CLI: execute log filter + display.
+    # ``category`` da solo NON restringe il sottotipo: con category=traffic la
+    # CLI restituisce forward, local e multicast mescolati, così il fallback
+    # mostrava traffico locale a chi aveva chiesto forward. Il percorso REST
+    # sopra distingue i due (log/{dev}/{type}/{subtype}); qui serve il filtro
+    # esplicito sul campo, altrimenti REST e SSH rispondono a due domande
+    # diverse senza dirlo.
     lines = ["execute log filter reset",
-             f"execute log filter category {cli_category}"]
+             f"execute log filter category {cli_category}",
+             f"execute log filter field subtype {log_subtype}"]
     ssh_filters = []
     if src_ip:
         ssh_filters.append(f"execute log filter field srcip {src_ip}")

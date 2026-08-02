@@ -17,7 +17,7 @@ const FGT_DATASETS = {
     resources: { url: ip => `/api/fortigate/${ip}/system/resources`, pick: d => (d || {}).usage, cols: [] },
     // --- Network ---
     interfaces:   { url: ip => `/api/fortigate/${ip}/interfaces`,
-                    cols: [['name','colFgtIfName'], ['ip','colFgtIfIp'], ['status','colFgtIfStatus'],
+                    cols: [['name','colFgtIfName'], ['ip','colFgtIfIp'], ['status','colFgtIfStatus','badge'],
                            ['speed','colFgtIfSpeed'], ['duplex','colFgtIfDuplex'], ['alias','colFgtIfAlias']] },
     arp:          { url: ip => `/api/fortigate/${ip}/arp`,
                     cols: [['ip','colFgtArpIp'], ['mac','colFgtArpMac'], ['interface','colFgtArpIntf'], ['age','colFgtArpAge']] },
@@ -28,11 +28,11 @@ const FGT_DATASETS = {
                     cols: [['ip_mask','colFgtRouteDest'], ['gateway','colFgtRouteGw'], ['interface','colFgtRouteIntf'],
                            ['type','colFgtRouteType'], ['distance','colFgtRouteDist'], ['metric','colFgtRouteMetric']] },
     vpn:          { url: ip => `/api/fortigate/${ip}/vpn/tunnels`,
-                    cols: [['name','colFgtVpnName'], ['rgwy','colFgtVpnPeer'], ['status','colFgtVpnStatus'],
-                           ['incoming_bytes','colFgtVpnIn'], ['outgoing_bytes','colFgtVpnOut']] },
+                    cols: [['name','colFgtVpnName'], ['rgwy','colFgtVpnPeer'], ['status','colFgtVpnStatus','badge'],
+                           ['incoming_bytes','colFgtVpnIn','bytes'], ['outgoing_bytes','colFgtVpnOut','bytes']] },
     sdwan:        { url: ip => `/api/fortigate/${ip}/sdwan/health`,
-                    cols: [['name','colFgtSdwanName'], ['status','colFgtSdwanStatus'], ['latency','colFgtSdwanLatency'],
-                           ['jitter','colFgtSdwanJitter'], ['packet_loss','colFgtSdwanLoss']] },
+                    cols: [['name','colFgtSdwanName'], ['status','colFgtSdwanStatus','badge'], ['latency','colFgtSdwanLatency'],
+                           ['jitter','colFgtSdwanJitter'], ['packet_loss','colFgtSdwanLoss','meter']] },
     // --- Firewall ---
     addresses:    { url: ip => `/api/fortigate/${ip}/firewall/addresses`,
                     cols: [['name','colFgtAddrName'], ['type','colFgtAddrType'], ['subnet','colFgtAddrSubnet'],
@@ -46,7 +46,7 @@ const FGT_DATASETS = {
                     cols: [['name','colFgtGrpName'], ['member','colFgtGrpMembers'], ['comment','colFgtGrpComment']] },
     vips:         { url: ip => `/api/fortigate/${ip}/firewall/vips`,
                     cols: [['name','colFgtVipName'], ['extip','colFgtVipExt'], ['mappedip','colFgtVipMapped'],
-                           ['extintf','colFgtVipIntf'], ['portforward','colFgtVipPf'], ['comment','colFgtVipComment']] },
+                           ['extintf','colFgtVipIntf'], ['portforward','colFgtVipPf','badge'], ['comment','colFgtVipComment']] },
     ipPools:      { url: ip => `/api/fortigate/${ip}/firewall/ip-pools`,
                     cols: [['name','colFgtPoolName'], ['type','colFgtPoolType'],
                            ['startip','colFgtPoolStart'], ['endip','colFgtPoolEnd']] },
@@ -54,8 +54,8 @@ const FGT_DATASETS = {
                     cols: [['policyid','colFgtPolId'], ['name','colFgtPolName'],
                            ['srcintf','colFgtPolSrcIntf'], ['dstintf','colFgtPolDstIntf'],
                            ['srcaddr','colFgtPolSrcAddr'], ['dstaddr','colFgtPolDstAddr'],
-                           ['service','colFgtPolService'], ['action','colFgtPolAction'],
-                           ['status','colFgtPolStatus'], ['hit_count','colFgtPolHits'],
+                           ['service','colFgtPolService'], ['action','colFgtPolAction','badge'],
+                           ['status','colFgtPolStatus','badge'], ['hit_count','colFgtPolHits'],
                            ['active_sessions','colFgtPolSessions'], ['last_used','colFgtPolLastUsed']] },
     // Quale policy matcherebbe un flusso: risposta a oggetto singolo, resa
     // come tabella chiave/valore (cols vuoto -> ramo isKv del renderer).
@@ -69,7 +69,7 @@ const FGT_DATASETS = {
     // --- Traffic ---
     deviceInventory:{ url: ip => `/api/fortigate/${ip}/device-inventory`,
                     cols: [['hostname','colFgtDevHost'], ['mac','colFgtDevMac'], ['ipv4_address','colFgtDevIp'],
-                           ['os_name','colFgtDevOs'], ['detected_interface','colFgtDevIntf'], ['is_online','colFgtDevOnline']] },
+                           ['os_name','colFgtDevOs'], ['detected_interface','colFgtDevIntf'], ['is_online','colFgtDevOnline','badge']] },
     sessions:     { url: ip => `/api/fortigate/${ip}/sessions`, method: 'POST',
                     body: () => ({ src_ip: _fgtVal('fgtSessSrc') || null, dst_ip: _fgtVal('fgtSessDst') || null,
                                    dst_port: parseInt(_fgtVal('fgtSessPort')) || null, count: 100 }),
@@ -78,28 +78,31 @@ const FGT_DATASETS = {
                            ['policy_id','colFgtSessPolicy'], ['duration','colFgtSessDuration']] },
     logs:         { url: ip => `/api/fortigate/${ip}/logs`, method: 'POST',
                     body: () => ({ src_ip: _fgtVal('fgtLogSrc') || null, dst_ip: _fgtVal('fgtLogDst') || null,
-                                   action: _fgtVal('fgtLogAction') || null, count: 100,
+                                   action: _fgtVal('fgtLogAction') || null,
+                                   count: parseInt(_fgtVal('fgtLogCount')) || 100,
                                    log_device: _fgtVal('fgtLogDevice') || 'disk',
                                    log_type: _fgtVal('fgtLogType') || 'traffic',
                                    log_subtype: _fgtVal('fgtLogSubtype') || 'forward',
-                                   cli_category: _fgtVal('fgtLogType') || 'traffic' }),
+                                   cli_category: _fgtVal('fgtLogType') || 'traffic',
+                                   since: _fgtVal('fgtLogSince') || null,
+                                   until: _fgtVal('fgtLogUntil') || null }),
                     cols: [['date','colFgtLogDate'], ['time','colFgtLogTime'], ['srcip','colFgtLogSrc'],
-                           ['dstip','colFgtLogDst'], ['dstport','colFgtLogDport'], ['action','colFgtLogAction'],
+                           ['dstip','colFgtLogDst'], ['dstport','colFgtLogDport'], ['action','colFgtLogAction','badge'],
                            ['policyid','colFgtLogPolicy'], ['service','colFgtLogService']] },
     // --- Security ---
     admins:       { url: ip => `/api/fortigate/${ip}/system/admins`,
                     cols: [['name','colFgtAdminName'], ['accprofile','colFgtAdminProfile'],
-                           ['trusthost1','colFgtAdminTrust'], ['two-factor','colFgtAdmin2fa'], ['comments','colFgtAdminComment']] },
+                           ['trusthost1','colFgtAdminTrust'], ['two-factor','colFgtAdmin2fa','badge'], ['comments','colFgtAdminComment']] },
     bannedUsers:  { url: ip => `/api/fortigate/${ip}/system/banned-users`,
                     cols: [['ip_address','colFgtBanIp'], ['cause','colFgtBanCause'], ['expires','colFgtBanExpires']] },
     certificates: { url: ip => `/api/fortigate/${ip}/system/certificates`,
-                    cols: [['name','colFgtCertName'], ['type','colFgtCertType'], ['status','colFgtCertStatus'],
+                    cols: [['name','colFgtCertName'], ['type','colFgtCertType'], ['status','colFgtCertStatus','badge'],
                            ['valid_to','colFgtCertExpiry'], ['issuer','colFgtCertIssuer']] },
     configRevisions:{ url: ip => `/api/fortigate/${ip}/system/config-revisions`,
                     cols: [['id','colFgtRevId'], ['date','colFgtRevDate'], ['admin','colFgtRevAdmin'], ['comment','colFgtRevComment']] },
     // --- WiFi ---
     wifiAps:      { url: ip => `/api/fortigate/${ip}/wifi/aps`,
-                    cols: [['name','colFgtApName'], ['status','colFgtApStatus'], ['ip','colFgtApIp'],
+                    cols: [['name','colFgtApName'], ['status','colFgtApStatus','badge'], ['ip','colFgtApIp'],
                            ['os_version','colFgtApVersion'], ['clients','colFgtApClients']] },
     wifiClients:  { url: ip => `/api/fortigate/${ip}/wifi/clients`,
                     cols: [['hostname','colFgtWcHost'], ['mac','colFgtWcMac'], ['ip','colFgtWcIp'],
@@ -185,10 +188,24 @@ function renderFgtDataset(key) {
              <i class="fa-solid fa-terminal"></i> ${escapeHtml(L.badgeFgtSshFallback || (en ? 'CLI fallback — REST failed' : 'Fallback CLI — REST fallita'))}</span></div>`
         : '';
 
+    // Testo grezzo: configurazione completa, oppure l'uscita CLI di un
+    // dataset che è caduto sul fallback SSH. In entrambi i casi sono migliaia
+    // di righe, e un blocco unico senza ricerca non si consulta: si filtra per
+    // riga e si racchiude in <details> (nativo: nessun toggle da scrivere).
     if (typeof st.raw === 'string') {
-        host.innerHTML = badge + `<pre style="font-family:var(--font-code); font-size:12px; background:var(--surface);
+        const fi = document.getElementById('fgtFilter-' + key);
+        if (fi) fi.style.display = '';          // c'è qualcosa da cercare, ora
+        const q = (_fgtVal('fgtFilter-' + key) || '').toLowerCase();
+        const all = st.raw.split('\n');
+        const lines = q ? all.filter(l => l.toLowerCase().includes(q)) : all;
+        const counter = q ? `${lines.length} / ${all.length}` : `${all.length}`;
+        host.innerHTML = badge + `<details open>
+            <summary style="cursor:pointer; font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+              ${escapeHtml(counter)} ${escapeHtml(L.lblFgtLines || (en ? 'lines' : 'righe'))}</summary>
+            <pre style="font-family:var(--font-code); font-size:12px; background:var(--surface);
             border:1px solid var(--border); border-radius:8px; padding:12px; margin:0;
-            white-space:pre-wrap; max-height:420px; overflow:auto;">${escapeHtml(jsStr(st.raw))}</pre>`;
+            white-space:pre-wrap; max-height:420px; overflow:auto;">${escapeHtml(jsStr(lines.join('\n')))}</pre>
+          </details>`;
         return;
     }
     if (!st.rows.length) { host.innerHTML = badge + _fgtEmpty(L.msgFgtObjEmpty || (en ? 'No data.' : 'Nessun dato.')); return; }
@@ -210,6 +227,54 @@ function _fgtCell(v) {
     if (v === null || v === undefined || v === '') return '—';
     if (typeof v === 'object') return JSON.stringify(v);
     return String(v);
+}
+
+// --- Formattatori di colonna -----------------------------------------------
+// Terzo elemento opzionale di una voce `cols`. Ricevono il valore GREZZO del
+// dispositivo e restituiscono HTML: sono l'unico punto della tab in cui si
+// costruisce markup attorno a un dato del FortiGate, quindi ognuno DEVE far
+// passare il valore da escapeHtml(jsStr(...)) prima di interpolarlo. Un
+// formattatore che dimentica di farlo è una XSS con sorgente il firewall.
+
+// Stati che il FortiOS scrive in mille modi diversi per dire la stessa cosa.
+const _FGT_OK = ['up', 'enable', 'enabled', 'online', 'accept', 'in-sync', 'insync', 'true', 'ok', 'valid'];
+const _FGT_BAD = ['down', 'disable', 'disabled', 'offline', 'deny', 'out-of-sync', 'false', 'expired', 'blocked'];
+
+const FGT_FMT = {
+    // Pastiglia verde/rossa/gialla. Riusa .status del design system invece di
+    // inventare colori: gli stessi tre stati compaiono già altrove nell'app.
+    badge(v) {
+        if (v === null || v === undefined || v === '') return '—';
+        const raw = String(typeof v === 'boolean' ? v : v).toLowerCase().trim();
+        const kind = _FGT_OK.includes(raw) ? 'ok' : _FGT_BAD.includes(raw) ? 'bad' : 'warn';
+        return `<span class="status ${kind}">${escapeHtml(jsStr(String(v)))}</span>`;
+    },
+    // Barra 0-100. FortiOS restituisce spesso [{current: N}] invece di N.
+    meter(v) {
+        const n = Number(Array.isArray(v) ? (v[0] || {}).current : v);
+        if (!isFinite(n)) return '—';
+        const pct = Math.max(0, Math.min(100, n));
+        const kind = pct >= 90 ? 'bad' : pct >= 75 ? 'warn' : 'ok';
+        return `<span class="fgt-meter"><span class="fgt-meter-bar"><span class="fgt-meter-fill ${kind}"
+            style="width:${pct}%"></span></span><span class="fgt-meter-num">${escapeHtml(jsStr(pct.toFixed(0)))}%</span></span>`;
+    },
+    // Contatori di byte: 14680064 non si legge, 14.0 MB sì.
+    bytes(v) {
+        const n = Number(v);
+        if (!isFinite(n)) return _fgtCell(v) === '—' ? '—' : escapeHtml(jsStr(_fgtCell(v)));
+        const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0, x = n;
+        while (x >= 1024 && i < u.length - 1) { x /= 1024; i++; }
+        return escapeHtml(jsStr((i ? x.toFixed(1) : String(x)) + ' ' + u[i]));
+    },
+};
+
+// Valore di cella già pronto per il DOM: col formattatore se la colonna ne
+// dichiara uno, altrimenti testo escapato come sempre.
+function _fgtFmtCell(row, key, fmt) {
+    const v = row ? row[key] : undefined;
+    if (fmt && FGT_FMT[fmt]) return FGT_FMT[fmt](v);
+    return escapeHtml(jsStr(_fgtCell(v)));
 }
 
 // `errors` (opzionale): mappa chiave->motivo per i rami che sono falliti
@@ -236,8 +301,8 @@ function _fgtColTable(cols, rows, filter, L) {
         // Una policy con contatore a zero è un rilievo d'audit, non una riga
         // qualunque: si evidenzia.
         const dead = r && r.never_hit ? 'color:var(--warning);' : '';
-        const tds = cols.map(([k]) =>
-            `<td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${dead}">${escapeHtml(jsStr(_fgtCell(r ? r[k] : undefined)))}</td>`).join('');
+        const tds = cols.map(([k, , fmt]) =>
+            `<td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${dead}">${_fgtFmtCell(r, k, fmt)}</td>`).join('');
         return `<tr style="border-bottom:1px solid var(--border);">${tds}</tr>`;
     }).join('');
     return `<div class="table-wrap" style="margin-top:0;">
@@ -716,29 +781,51 @@ async function renderFgtOverview() {
     if (!host) return;
     if (!ip) { host.innerHTML = _fgtEmpty(en ? 'No target selected.' : 'Nessun target selezionato.'); return; }
 
-    const [status, resources] = await Promise.all([
+    const [status, resources, ha] = await Promise.all([
         apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/status`).then(r => r && r.ok ? r.json() : null).catch(() => null),
         apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/system/resources`).then(r => r && r.ok ? r.json() : null).catch(() => null),
+        apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/system/ha`).then(r => r && r.ok ? r.json() : null).catch(() => null),
     ]);
 
     const s = (status && status.data) || {};
     const u = (resources && resources.data && resources.data.usage) || {};
     const num = v => (Array.isArray(v) ? (v[0] || {}).current : v);
-    const tile = (label, value, suffix) => `<div class="panel" style="margin:0; text-align:center; padding:14px;">
+
+    // Tessera "valore": il corpo è già HTML, quindi chi la chiama passa o una
+    // stringa escapata o l'uscita di un formattatore (che escapa da sé).
+    const tile = (label, bodyHtml) => `<div class="panel" style="margin:0; padding:14px;">
         <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700; letter-spacing:.04em;">${escapeHtml(label)}</div>
-        <div style="font-family:var(--font-display); font-size:24px; margin-top:6px;">${escapeHtml(jsStr(value == null || value === '' ? '—' : String(value) + (suffix || '')))}</div>
+        <div style="margin-top:8px; font-family:var(--font-display); font-size:22px; line-height:1.2;">${bodyHtml}</div>
       </div>`;
+    const plain = v => escapeHtml(jsStr(v == null || v === '' ? '—' : String(v)));
+    // Una percentuale come barra: 62 da solo non dice se sia molto o poco.
+    const gauge = v => `<div style="font-size:13px;">${FGT_FMT.meter(v)}</div>`;
+
+    // HA: lo stato del cluster E l'allineamento dei checksum. Un cluster che
+    // si dichiara in sync ma ha checksum divergenti è il caso che conta, ed è
+    // il motivo per cui il service li chiede insieme.
+    const h = (ha && ha.data) || {};
+    const hstat = (h.status && (h.status.mode || h.status.group_name)) || null;
+    const csums = Array.isArray(h.checksums) ? h.checksums : null;
+    const inSync = csums && csums.length > 1
+        ? csums.every(c => JSON.stringify((c || {}).checksum) === JSON.stringify((csums[0] || {}).checksum))
+        : null;
+    const haBody = !hstat
+        ? plain(null)
+        : FGT_FMT.badge(hstat) + (inSync === null ? '' :
+            ` ${FGT_FMT.badge(inSync ? (en ? 'in-sync' : 'in-sync') : 'out-of-sync')}`);
 
     host.style.display = 'grid';
-    host.style.gridTemplateColumns = 'repeat(auto-fit, minmax(160px, 1fr))';
+    host.style.gridTemplateColumns = 'repeat(auto-fit, minmax(190px, 1fr))';
     host.style.gap = '12px';
     host.innerHTML =
-        tile(en ? 'Hostname' : 'Hostname', s.hostname) +
-        tile(en ? 'FortiOS' : 'FortiOS', s.version) +
-        tile('CPU', num(u.cpu), '%') +
-        tile(en ? 'Memory' : 'Memoria', num(u.mem), '%') +
-        tile(en ? 'Sessions' : 'Sessioni', num(u.session)) +
-        tile(en ? 'Disk' : 'Disco', num(u.disk), '%');
+        tile('Hostname', plain(s.hostname)) +
+        tile('FortiOS', plain(s.version)) +
+        tile('HA', haBody) +
+        tile('CPU', gauge(u.cpu)) +
+        tile(en ? 'Memory' : 'Memoria', gauge(u.mem)) +
+        tile(en ? 'Disk' : 'Disco', gauge(u.disk)) +
+        tile(en ? 'Sessions' : 'Sessioni', plain(num(u.session)));
 
     loadFgtDataset('resources');
     loadFgtDataset('ha');

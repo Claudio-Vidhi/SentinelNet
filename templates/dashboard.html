@@ -2351,6 +2351,18 @@
                   <option value="ips">ips</option>
                 </select>
               </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogSince" data-i18n="lblFgtLogSince">Dal</label>
+                <input id="fgtLogSince" type="date" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogUntil" data-i18n="lblFgtLogUntil">Al</label>
+                <input id="fgtLogUntil" type="date" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtLogCount" data-i18n="lblFgtLogCount">Righe</label>
+                <input id="fgtLogCount" type="number" value="100" min="1" max="1000" style="padding-left:12px; font-size:13px;">
+              </div>
             </div>
             <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('logs')" data-i18n="btnFgtLogLoad">
               <i class="fa-solid fa-rotate"></i> Carica log
@@ -2472,6 +2484,9 @@
           <button type="button" class="btn btn-secondary" style="width:auto; margin-bottom:12px;" onclick="loadFgtDataset('fullConfig')" data-i18n="btnFgtFullConfigLoad">
             <i class="fa-solid fa-rotate"></i> Carica configurazione completa
           </button>
+          <input id="fgtFilter-fullConfig" type="text" oninput="renderFgtDataset('fullConfig')"
+                 data-i18n-placeholder="phFgtConfigSearch" placeholder="Cerca nella configurazione..."
+                 style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-fullConfig"></div>
         </div>
       </div>
