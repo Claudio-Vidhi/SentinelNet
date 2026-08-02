@@ -210,7 +210,11 @@ function renderFgtDataset(key) {
     }
     if (!st.rows.length) { host.innerHTML = badge + _fgtEmpty(L.msgFgtObjEmpty || (en ? 'No data.' : 'Nessun dato.')); return; }
 
-    // Un dict singolo (risorse, HA) diventa una tabella chiave/valore.
+    // Le risorse sono serie storiche, non un dict piatto: hanno un renderer
+    // proprio (piccoli multipli + sparkline). Vedi renderFgtResources.
+    if (key === 'resources') { renderFgtResources(host, st.rows[0] || {}, badge); return; }
+
+    // Un dict singolo (HA, policy lookup) diventa una tabella chiave/valore.
     const isKv = st.rows.length === 1 && !spec.cols.some(([k]) => k in (st.rows[0] || {}));
     const filter = (_fgtVal('fgtFilter-' + key) || '').toLowerCase();
     const html = isKv ? _fgtKvTable(st.rows[0], st.errors) : _fgtColTable(spec.cols, st.rows, filter, L);
@@ -275,6 +279,136 @@ function _fgtFmtCell(row, key, fmt) {
     const v = row ? row[key] : undefined;
     if (fmt && FGT_FMT[fmt]) return FGT_FMT[fmt](v);
     return escapeHtml(jsStr(_fgtCell(v)));
+}
+
+// --- Risorse di sistema: piccoli multipli con sparkline ---------------------
+// monitor/system/resource/usage NON è un valore puntuale: ogni metrica porta
+// `current` più `historical` con finestre 1-min ... 24-hour, ognuna una lista
+// di coppie [timestamp_ms, valore]. Renderla come dump chiave/valore
+// significava incollare a schermo migliaia di numeri.
+//
+// Quattro metriche con unità diverse (percentuali contro un conteggio di
+// sessioni) non vanno su un grafico solo: sarebbero due scale y sullo stesso
+// piano, cioè una correlazione inventata. Una card per metrica.
+
+const FGT_RES_WINDOWS = ['1-min', '10-min', '30-min', '1-hour', '12-hour', '24-hour'];
+const FGT_RES_METRICS = [
+    // chiave API, etichetta, unità ('pct' = soglie di stato, 'num' = neutro)
+    ['cpu', 'CPU', 'pct'],
+    ['mem', 'Memory|Memoria', 'pct'],
+    ['disk', 'Disk|Disco', 'pct'],
+    ['session', 'Sessions|Sessioni', 'num'],
+];
+let fgtResWindow = '1-hour';
+
+function fgtSetResWindow(w) {
+    fgtResWindow = w;
+    renderFgtDataset('resources');
+}
+
+// FortiOS annida la metrica in un array di un elemento su alcune versioni.
+function _fgtResEntry(v) { return Array.isArray(v) ? (v[0] || {}) : (v || {}); }
+
+function _fgtSparkline(points, kind, w, h) {
+    // Percentuali con scala fissa 0-100: auto-scalare farebbe sembrare una
+    // salita drammatica un passaggio dal 5% al 6%.
+    const vals = points.map(p => p[1]);
+    const top = kind === 'pct' ? 100 : Math.max(1, ...vals);
+    const n = points.length;
+    const x = i => (n < 2 ? 0 : (i / (n - 1)) * w);
+    const y = v => h - (Math.max(0, Math.min(top, v)) / top) * h;
+    const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p[1]).toFixed(1)}`).join(' ');
+    const avg = vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
+    const last = points[n - 1];
+    const stroke = kind !== 'pct' ? 'var(--primary)'
+        : last && last[1] >= 90 ? 'var(--danger)'
+        : last && last[1] >= 75 ? 'var(--warning)' : 'var(--success)';
+    // ponytail: tooltip nativo via <title> invece di un crosshair su misura.
+    // I valori sono comunque leggibili (attuale + min/media/max sotto la card
+    // e la vista tabellare), quindi il crosshair aggiungerebbe JS senza
+    // sbloccare un dato. Se servirà leggere il singolo campione, il passo
+    // successivo è un layer nearest-point sul mousemove dell'svg.
+    const when = t => { try { return new Date(t).toLocaleString(); } catch (e) { return String(t); } };
+    const unit = kind === 'pct' ? '%' : '';
+    const tip = last ? `${when(last[0])} — ${last[1]}${unit}` : '';
+    return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" width="100%" height="${h}"
+        style="display:block; overflow:visible;" role="img"
+        aria-label="${escapeHtml(jsStr(`${vals.length} campioni, min ${Math.min(...vals)}${unit}, max ${Math.max(...vals)}${unit}`))}">
+        <title>${escapeHtml(jsStr(tip))}</title>
+        <line x1="0" y1="${y(avg).toFixed(1)}" x2="${w}" y2="${y(avg).toFixed(1)}"
+              stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+        <polyline points="${line}" fill="none" stroke="${stroke}" stroke-width="2"
+              stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        ${last ? `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(last[1]).toFixed(1)}" r="3"
+              fill="${stroke}" stroke="var(--surface)" stroke-width="2" vector-effect="non-scaling-stroke"/>` : ''}
+      </svg>`;
+}
+
+function renderFgtResources(host, usage, badge) {
+    const en = currentLang === 'en';
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    const lbl = s => { const [e, i] = s.split('|'); return i && !en ? i : e; };
+
+    // Una sola riga di filtro sopra TUTTE le card: un selettore per card
+    // rispondrebbe a domande diverse in grafici affiancati.
+    const bar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">` +
+        FGT_RES_WINDOWS.map(w =>
+            `<button type="button" class="ca-pill${w === fgtResWindow ? ' active' : ''}"
+                 onclick="fgtSetResWindow('${escapeHtml(w)}')">${escapeHtml(w)}</button>`).join('') +
+        `</div>`;
+
+    const cards = FGT_RES_METRICS.map(([k, label, kind]) => {
+        const e = _fgtResEntry(usage[k]);
+        const hist = (e.historical || {})[fgtResWindow] || {};
+        // FortiOS elenca i campioni dal più recente: si ordina per tempo
+        // crescente, altrimenti la sparkline scorre all'indietro.
+        const pts = (Array.isArray(hist.values) ? hist.values : [])
+            .filter(p => Array.isArray(p) && p.length >= 2)
+            .slice().sort((a, b) => a[0] - b[0]);
+        const unit = kind === 'pct' ? '%' : '';
+        const cur = e.current;
+        const stat = (name, v) => `<span style="color:var(--text-muted);">${escapeHtml(name)}
+            <strong style="color:var(--text); font-variant-numeric:tabular-nums;">${escapeHtml(jsStr(
+                v == null ? '—' : String(v) + unit))}</strong></span>`;
+        return `<div class="panel" style="margin:0; padding:14px;">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px;">
+              <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700; letter-spacing:.04em;">${escapeHtml(lbl(label))}</span>
+              <span style="font-family:var(--font-display); font-size:22px;">${escapeHtml(jsStr(cur == null ? '—' : String(cur) + unit))}</span>
+            </div>
+            <div style="margin:10px 0 8px; min-height:48px;">${pts.length
+                ? _fgtSparkline(pts, kind, 240, 48)
+                : `<div style="font-size:12px; color:var(--text-muted); padding:14px 0;">${escapeHtml(L.msgFgtNoHistory || (en ? 'No history in this window.' : 'Nessuno storico in questa finestra.'))}</div>`}</div>
+            <div style="display:flex; gap:12px; font-size:11px; flex-wrap:wrap;">
+              ${stat(en ? 'min' : 'min', hist.min)}${stat(en ? 'avg' : 'media', hist.average)}${stat('max', hist.max)}
+            </div>
+          </div>`;
+    }).join('');
+
+    // Gemello tabellare: i valori restano leggibili senza passare dal grafico.
+    const rows = FGT_RES_METRICS.map(([k, label, kind]) => {
+        const e = _fgtResEntry(usage[k]);
+        const h = (e.historical || {})[fgtResWindow] || {};
+        const u = kind === 'pct' ? '%' : '';
+        const c = v => `<td style="padding:6px 12px; font-family:var(--font-code); font-size:12px; font-variant-numeric:tabular-nums;">${escapeHtml(jsStr(v == null ? '—' : String(v) + u))}</td>`;
+        return `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:6px 12px; font-weight:600;">${escapeHtml(lbl(label))}</td>
+            ${c(e.current)}${c(h.min)}${c(h.average)}${c(h.max)}</tr>`;
+    }).join('');
+    const table = `<details style="margin-top:12px;">
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-muted);">${escapeHtml(L.lblFgtTableView || (en ? 'Table view' : 'Vista tabellare'))}</summary>
+        <div class="table-wrap" style="margin-top:8px;"><table style="width:100%; font-size:13px; border-collapse:collapse;">
+          <thead><tr style="border-bottom:1px solid var(--border); background:var(--surface-3);">
+            <th style="padding:6px 12px; text-align:left;"></th>
+            <th style="padding:6px 12px; text-align:left;">${escapeHtml(en ? 'current' : 'attuale')}</th>
+            <th style="padding:6px 12px; text-align:left;">min</th>
+            <th style="padding:6px 12px; text-align:left;">${escapeHtml(en ? 'avg' : 'media')}</th>
+            <th style="padding:6px 12px; text-align:left;">max</th>
+          </tr></thead><tbody>${rows}</tbody></table></div>
+      </details>`;
+
+    host.innerHTML = badge + bar +
+        `<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px;">${cards}</div>` +
+        table;
 }
 
 // `errors` (opzionale): mappa chiave->motivo per i rami che sono falliti
