@@ -96,13 +96,26 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
                               "apparato non gestito")
     else:
         out["port_known"] = True
-    if len(entries) > 1:
-        # Stesso IP su più binding: o è cambiato MAC, o due host se lo
-        # contendono. Non lo si risolve qui, ma tacerlo sarebbe peggio.
-        out["ambiguous"] = [{"mac": x.get("mac"), "ip": x.get("ip"),
-                             "gateway_ip": x.get("source_ip"),
-                             "last_seen": x.get("last_seen")}
-                            for x in entries[1:6]]
+    # Ambiguo è un ALTRO MAC sullo stesso indirizzo: o il MAC è cambiato, o due
+    # host se lo contendono. Non lo si risolve qui, ma tacerlo sarebbe peggio.
+    #
+    # Lo stesso MAC che ricompare NON è ambiguità: la chiave di ``arp_entries``
+    # è (mac, ip, source_ip), quindi un host visto da due gateway — normale
+    # dove più apparati fronteggiano la stessa VLAN — produce due righe dello
+    # stesso binding. Elencarle mostrava lo stesso MAC due volte sotto il
+    # titolo "altri binding", cioè un allarme per la configurazione normale.
+    others, seen_macs = [], {e.get("mac")}
+    for x in entries[1:]:
+        if x.get("mac") in seen_macs:
+            continue
+        seen_macs.add(x.get("mac"))
+        others.append({"mac": x.get("mac"), "ip": x.get("ip"),
+                       "gateway_ip": x.get("source_ip"),
+                       "last_seen": x.get("last_seen")})
+        if len(others) >= 5:
+            break
+    if others:
+        out["ambiguous"] = others
     return out
 
 
