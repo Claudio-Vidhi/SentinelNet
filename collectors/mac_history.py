@@ -605,6 +605,191 @@ def arp_stats(tenants=None) -> dict:
     return {"bindings": total, "unique_macs": macs, "sources": sources}
 
 
+# --- Inventario endpoint (derivato, mai memorizzato) -------------------------
+
+# Interfacce in cui non si infila un cavo: restano visibili, ma fuori dal
+# conteggio delle porte libere.
+_NON_PHYSICAL_IF = ("vlan", "loopback", "null", "port-channel", "tunnel", "bdi")
+
+
+def _is_physical_iface(name: str) -> bool:
+    return not (name or "").lower().startswith(_NON_PHYSICAL_IF)
+
+
+def _age_days(iso: str, now=None):
+    """Giorni trascorsi da un timestamp ISO, None se non interpretabile.
+
+    I timestamp scritti da questo modulo portano il fuso; quelli che arrivano
+    da un import piu' vecchio possono essere ingenui. Un valore illeggibile
+    non e' "vecchio zero giorni": e' None, e chi lo legge non marca nulla.
+    """
+    if not iso:
+        return None
+    try:
+        ts = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ((now or datetime.now(timezone.utc)) - ts).total_seconds() / 86400.0
+
+
+def endpoint_inventory(tenants=None, site: Optional[str] = None,
+                       switch_ip: Optional[str] = None, vlan: Optional[str] = None,
+                       q: Optional[str] = None, stale_days: int = 7,
+                       limit: int = 2000) -> dict:
+    """Un endpoint per (MAC, tenant), dal dato gia' raccolto.
+
+    Parte da ``mac_sightings`` — la verita' L2, ogni MAC mai visto — e aggancia
+    ``arp_entries`` a sinistra per gli IP. Il contrario, cioe' partire dai
+    binding come fa ``client_map()``, perderebbe ogni endpoint di una VLAN il
+    cui gateway non e' interrogabile: proprio quelli che un inventario deve
+    elencare.
+
+    La chiave e' (MAC, tenant), la stessa di ``_access_positions_for()``: un
+    tenant e' una rete a se', e lo stesso MAC in due sedi e' legittimamente due
+    righe.
+
+    Tutto e' DERIVATO e niente viene salvato, per la stessa ragione scritta in
+    ``observability/endpoints.py``: il giorno in cui la classificazione impara
+    qualcosa di nuovo, migliora anche cio' che e' stato raccolto ieri.
+    """
+    from observability import endpoints as ep_kb
+    from services import inventory_manager
+
+    init_db()
+    tenant_list = list(tenants) if tenants is not None else None
+    empty = {"results": [], "total": 0, "truncated": False,
+             "counts": {"endpoints": 0, "switches": 0, "vlans": 0,
+                        "stale": 0, "new": 0, "no_ip": 0, "random": 0}}
+    # [] = "nessun tenant visibile", che non e' None = "nessuna restrizione".
+    if tenant_list is not None and not tenant_list:
+        return empty
+
+    where, args = [], []
+    if tenant_list is not None:
+        where.append("tenant IN (%s)" % ",".join("?" * len(tenant_list)))
+        args.extend(tenant_list)
+    if site:
+        where.append("site = ?")
+        args.append(site)
+    if switch_ip:
+        where.append("switch_ip = ?")
+        args.append(switch_ip)
+    if vlan:
+        where.append("vlan = ?")
+        args.append(vlan)
+    if q:
+        where.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
+                     "OR interface LIKE ?)")
+        args.extend(["%" + q + "%"] * 4)
+    clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+    with _lock, _connect() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT mac, oui_vendor, vlan, switch_ip, switch_name, interface, "
+            "port_channel, is_uplink, uplink_to, tenant, site, first_seen, "
+            "last_seen, seen_count FROM mac_sightings" + clause, args).fetchall()]
+        infra = {r["mac"] for r in c.execute(
+            "SELECT DISTINCT mac FROM switch_if_macs").fetchall()}
+
+    # Il valore grezzo non riconosce i Port-channel: fidarsene qui farebbe
+    # passare per porta di accesso un'interfaccia aggregata verso un altro
+    # switch, cioe' un punto di transito.
+    reclassify_sightings(rows)
+    rows = [r for r in rows if r["mac"] not in infra]
+    if not rows:
+        return empty
+
+    macs = list(dict.fromkeys(r["mac"] for r in rows))
+    arp: dict = {}
+    CHUNK = 400                                   # < limite ~999 parametri SQLite
+    with _lock, _connect() as c:
+        for i in range(0, len(macs), CHUNK):
+            batch = macs[i:i + CHUNK]
+            sql = ("SELECT mac, ip, tenant FROM arp_entries WHERE mac IN (%s)"
+                   % ",".join("?" * len(batch)))
+            a = list(batch)
+            if tenant_list is not None:
+                sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
+                a.extend(tenant_list)
+            for r in c.execute(sql, a).fetchall():
+                arp.setdefault((r["mac"], r["tenant"] or ""), []).append(dict(r))
+
+    assignments = inventory_manager.get_category_assignments()
+    now = datetime.now(timezone.utc)
+    groups: dict = {}
+    for r in rows:
+        groups.setdefault((r["mac"], r["tenant"] or ""), []).append(r)
+
+    results: List[dict] = []
+    for (mac, tenant), grp in groups.items():
+        access = [s for s in grp if not s.get("is_uplink")]
+        access.sort(key=lambda s: s.get("last_seen") or "", reverse=True)
+        distinct = {(s["switch_ip"], (s.get("interface") or "").lower())
+                    for s in access}
+        best = access[0] if access else {}
+
+        ips = sorted({b["ip"] for b in arp.get((mac, tenant), []) if b.get("ip")})
+        first_seen = min(s["first_seen"] for s in grp)
+        last_seen = max(s["last_seen"] for s in grp)
+        info = ep_kb.classify_mac(mac) or {}
+
+        flags = []
+        if len(distinct) > 1:
+            flags.append("AMBIGUOUS")
+        if info.get("vendor_kind"):
+            flags.append("VM")
+        elif not ep_kb.is_stable_identity(mac):
+            flags.append("RANDOM")
+        if len(ips) > 1:
+            flags.append("MULTI-IP")
+        if not ips:
+            flags.append("NO-IP")
+        if not access:
+            flags.append("TRANSIT-ONLY")
+        age = _age_days(last_seen, now)
+        born = _age_days(first_seen, now)
+        if age is not None and age > stale_days:
+            flags.append("STALE")
+        if born is not None and born <= stale_days:
+            flags.append("NEW")
+
+        # Tipo del client: certo SOLO se assegnato a mano nella scheda
+        # "Dispositivi e categorie". Mai ereditare il tipo del gateway.
+        assigned = next((assignments[ip] for ip in ips if assignments.get(ip)), {})
+        results.append({
+            "mac": mac, "tenant": tenant,
+            "oui_vendor": next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), ""),
+            "site": grp[0].get("site") or "",
+            "ips": ips,
+            "switch_ip": best.get("switch_ip", ""),
+            "switch_name": best.get("switch_name", ""),
+            "interface": best.get("interface", ""),
+            "vlan": best.get("vlan", ""),
+            "first_seen": first_seen, "last_seen": last_seen,
+            "seen_count": sum(s.get("seen_count") or 0 for s in grp),
+            "access_port_count": len(distinct),
+            "client_type": assigned.get("category") or "client",
+            "flags": flags,
+        })
+
+    results.sort(key=lambda e: e["last_seen"], reverse=True)
+    total = len(results)
+    counts = {
+        "endpoints": total,
+        "switches": len({e["switch_ip"] for e in results if e["switch_ip"]}),
+        "vlans": len({e["vlan"] for e in results if e["vlan"]}),
+        "stale": sum(1 for e in results if "STALE" in e["flags"]),
+        "new": sum(1 for e in results if "NEW" in e["flags"]),
+        "no_ip": sum(1 for e in results if "NO-IP" in e["flags"]),
+        "random": sum(1 for e in results if "RANDOM" in e["flags"]),
+    }
+    cap = max(1, min(20000, limit))
+    return {"results": results[:cap], "total": total,
+            "truncated": total > cap, "counts": counts}
+
+
 # --- Ricerca storica ---
 
 def _row_to_dict(row) -> dict:
