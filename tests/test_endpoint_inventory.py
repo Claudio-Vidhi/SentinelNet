@@ -267,3 +267,86 @@ class TestFiltriEScoping(_Base):
         self.assertEqual(counts["switches"], 2)
         self.assertEqual(counts["vlans"], 2)
         self.assertEqual(counts["no_ip"], 1)
+
+
+class TestOccupazionePorte(_Base):
+    """L'elenco interfacce viene da switch_if_macs, popolata a ogni scansione
+    MAC da collect_interface_macs(). Quando manca, si dice che manca."""
+
+    def setUp(self):
+        super().setUp()
+        self._porta_n = 0
+
+    def _porta(self, interface, switch_ip="192.0.2.1"):
+        """Una porta nell'elenco interfacce dello switch. Il MAC e' quello
+        DELL'INTERFACCIA (infrastruttura): un contatore basta, purche' sia
+        deterministico — un hash di stringa cambia a ogni processo."""
+        self._porta_n += 1
+        self._infra_mac(mac=f"aa:bb:cc:00:00:{self._porta_n:02d}",
+                        switch_ip=switch_ip, interface=interface)
+
+    def test_porta_occupata_e_porta_libera(self):
+        self._porta("GigabitEthernet1/0/1")
+        self._porta("GigabitEthernet1/0/2")
+        self._sighting(switch_ip="192.0.2.1", interface="GigabitEthernet1/0/1")
+
+        out = mac_history.port_occupancy("192.0.2.1")
+        stati = {p["interface"]: p["state"] for p in out["ports"]}
+
+        self.assertTrue(out["port_list_known"])
+        self.assertEqual(stati["GigabitEthernet1/0/1"], "occupied")
+        self.assertEqual(stati["GigabitEthernet1/0/2"], "free")
+
+    def test_elenco_assente_non_e_zero_porte_libere(self):
+        """Se la raccolta if_macs e' fallita — non e' fatale — rispondere
+        'zero porte libere' manderebbe a cercare nel posto sbagliato."""
+        self._sighting(switch_ip="192.0.2.7", interface="GigabitEthernet1/0/1")
+
+        out = mac_history.port_occupancy("192.0.2.7")
+
+        self.assertFalse(out["port_list_known"])
+        self.assertEqual(out["ports"], [])
+
+    def test_un_uplink_noto_alla_topologia_non_e_libero(self):
+        """Una porta di trunk momentaneamente muta non e' una porta libera:
+        proporla come tale manda a infilare un cavo in un uplink.
+
+        La chiave della mappa e' il nome NORMALIZZATO da
+        ``core_engine._normalize_iface()``: alias sul prefisso ('gigabit...'
+        -> 'gi') e numerazione con le barre invariata, quindi
+        'GigabitEthernet1/0/24' diventa 'gi1/0/24'.
+        Un patch annidato sullo stesso bersaglio ripristina il mock esterno
+        all'uscita: non serve fermare quello di setUp.
+        """
+        self._porta("GigabitEthernet1/0/24")
+        with patch("collectors.mac_history.topology_uplinks",
+                   return_value=({"192.0.2.1": {"gi1/0/24": "switch-02"}},
+                                 {"192.0.2.1"})):
+            out = mac_history.port_occupancy("192.0.2.1")
+
+        porta = next(p for p in out["ports"]
+                     if p["interface"] == "GigabitEthernet1/0/24")
+        self.assertEqual(porta["state"], "uplink")
+        self.assertEqual(porta["uplink_to"], "switch-02")
+
+    def test_le_interfacce_non_fisiche_non_contano_come_libere(self):
+        """Vlan10 resta visibile, ma non e' una porta in cui infilare un cavo."""
+        self._porta("GigabitEthernet1/0/1")
+        self._porta("Vlan10")
+
+        out = mac_history.port_occupancy("192.0.2.1")
+        vlan_port = next(p for p in out["ports"] if p["interface"] == "Vlan10")
+
+        self.assertFalse(vlan_port["physical"])
+        self.assertEqual(out["counts"]["free"], 1)      # solo la Gi, non la Vlan
+
+    def test_scoping_per_tenant(self):
+        self._porta("GigabitEthernet1/0/1")
+        self._sighting(switch_ip="192.0.2.1", interface="GigabitEthernet1/0/1",
+                       tenant="sede-b")
+
+        out = mac_history.port_occupancy("192.0.2.1", tenants=["sede-a"])
+        porta = next(p for p in out["ports"]
+                     if p["interface"] == "GigabitEthernet1/0/1")
+
+        self.assertEqual(porta["state"], "free", "il MAC di sede-b non e' visibile")

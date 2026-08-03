@@ -964,3 +964,84 @@ def reclassify_sightings(rows, uplink_map=None, known_switches=None):
         else:
             r["origin_type"] = "endpoint"
     return rows
+
+
+def port_occupancy(switch_ip: str, tenants=None) -> dict:
+    """Stato di ogni porta di uno switch: occupata, uplink, o libera.
+
+    L'elenco delle interfacce esiste gia': ``switch_if_macs`` viene popolata a
+    ogni scansione MAC da ``collect_interface_macs()`` (``show interfaces``, o
+    ``ietf-interfaces`` via NETCONF/RESTCONF). Quando quella raccolta e'
+    fallita — non e' fatale, la lista resta vuota — lo si DICE con
+    ``port_list_known: False`` invece di rispondere "zero porte libere": zero
+    righe travestite da "nessun dato" sono peggio di un buco dichiarato.
+
+    ``free`` significa "nessun MAC imparato", NON "nessun cavo": un
+    dispositivo silenzioso legge come porta libera. Sta scritto nella UI.
+    """
+    from core.core_engine import _normalize_iface
+
+    init_db()
+    tenant_list = list(tenants) if tenants is not None else None
+    unknown = {"switch": switch_ip, "port_list_known": False,
+               "if_list_age_s": None, "ports": [],
+               "counts": {"total": 0, "occupied": 0, "uplink": 0, "free": 0}}
+    if tenant_list is not None and not tenant_list:
+        return unknown
+
+    with _lock, _connect() as c:
+        ifaces = [dict(r) for r in c.execute(
+            "SELECT interface, MAX(last_seen) AS last_seen FROM switch_if_macs "
+            "WHERE switch_ip=? GROUP BY interface ORDER BY interface",
+            (switch_ip,)).fetchall()]
+        sql = ("SELECT mac, tenant, switch_ip, switch_name, interface, "
+               "port_channel, vlan, is_uplink, last_seen FROM mac_sightings "
+               "WHERE switch_ip=?")
+        args = [switch_ip]
+        if tenant_list is not None:
+            sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
+            args.extend(tenant_list)
+        sightings = [dict(r) for r in c.execute(sql, args).fetchall()]
+
+    if not ifaces:
+        return unknown
+
+    reclassify_sightings(sightings)
+    uplink_map, _known = topology_uplinks()
+    ups = {k: v for k, v in (uplink_map.get(switch_ip) or {}).items()}
+
+    by_port: dict = {}
+    for s in sightings:
+        by_port.setdefault(_normalize_iface(s.get("interface") or ""), []).append(s)
+
+    ports, counts = [], {"total": 0, "occupied": 0, "uplink": 0, "free": 0}
+    for row in ifaces:
+        name = row["interface"]
+        norm = _normalize_iface(name)
+        physical = _is_physical_iface(name)
+        neigh = ups.get(norm)
+        seen = by_port.get(norm, [])
+        access = [s for s in seen if not s.get("is_uplink")]
+        if neigh or (seen and not access):
+            state = "uplink"
+        elif access:
+            state = "occupied"
+        else:
+            state = "free"
+        ports.append({"interface": name, "state": state, "physical": physical,
+                      "uplink_to": neigh or "",
+                      "macs": sorted({s["mac"] for s in access}),
+                      "last_seen": row["last_seen"]})
+        # Il conteggio riguarda le porte in cui si infila un cavo: una Vlan10
+        # fra le "libere" sarebbe una porta che non esiste.
+        if physical:
+            counts["total"] += 1
+            counts[state] += 1
+
+    # Eta' dell'elenco interfacce: quanto e' vecchia la scansione MAC piu'
+    # recente di QUESTO switch. None se il timestamp non e' interpretabile —
+    # che non e' "aggiornato adesso".
+    age_days = _age_days(max(r["last_seen"] for r in ifaces))
+    return {"switch": switch_ip, "port_list_known": True,
+            "if_list_age_s": None if age_days is None else age_days * 86400.0,
+            "ports": ports, "counts": counts}
