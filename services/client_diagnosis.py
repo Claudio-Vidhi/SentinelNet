@@ -56,99 +56,129 @@ def _section(result: dict, name: str, fn, *args, **kw) -> None:
 
 # --- L2: dove sta il client, e come sta la sua porta -------------------------
 
-def _position_l2_only(mac: str, tenants) -> dict:
-    """Posizione ricavata dalla sola MAC table, quando l'ARP non c'è.
+def _pos_candidates(entries: list, l2rows: list, prefer_ip=None) -> list:
+    """Le posizioni possibili del client, una per tenant, dalla più recente.
 
-    Quello che si perde è dichiarato, non lasciato a zero: senza binding non
-    c'è IP e non c'è gateway, quindi le sezioni che dipendono dal firewall
-    diranno di non sapere — correttamente, perché nessuno sa quale firewall
-    fronteggi un client di cui non si conosce l'indirizzo. Quello che resta —
-    switch, porta, VLAN, salute del collegamento, catena di trunk, cronologia,
-    e il bounce della porta — è esattamente ciò che serve a chi sta cercando
-    un cavo.
+    Due sorgenti, due domande diverse. I binding ARP dicono che IP ha il client
+    e chi lo fronteggia, ma esistono solo dove il gateway è interrogabile. Gli
+    avvistamenti nelle MAC table dicono a quale porta è attaccato, e ci sono
+    ovunque ci sia uno switch gestito.
+
+    Prima si guardava SOLO l'ARP quando c'era, e la MAC table solo se l'ARP
+    mancava del tutto. Così un portatile con un binding vecchio in una sede
+    vinceva su un avvistamento di stamattina in un'altra: il referto descriveva
+    dove il PC ERA STATO, non dove è.
+
+    L'ordinamento è sul tempo della POSIZIONE (``port_last_seen``), non su
+    quello del binding: la domanda è "dov'è attaccato adesso", e un ARP
+    rinfrescato non sposta un cavo.
+
+    ``prefer_ip``: chi ha cercato un INDIRIZZO ha chiesto di quell'indirizzo,
+    non della macchina. Le posizioni che lo portano vanno prima, e solo fra
+    quelle vale la recency — altrimenti cercare un IP risponderebbe su una
+    sede dove quell'IP non esiste nemmeno.
     """
-    from collectors import mac_history
-
-    rows = mac_history.positions_for_mac(mac, tenants=tenants)
-    if not rows:
-        return {"known": False,
-                "reason": "MAC mai visto: né un binding ARP né un avvistamento "
-                          "nelle MAC table raccolte. Serve una scansione MAC "
-                          "degli switch di accesso"}
-    r = rows[0]
-    out = {
-        "known": True, "l2_only": True,
-        "mac": r.get("mac"), "ip": None,
-        "tenant": r.get("tenant"), "site": r.get("site"),
-        "switch_ip": r.get("switch_ip"), "switch_name": r.get("switch_name"),
-        "switch_port": r.get("interface"), "port_vlan": r.get("vlan"),
-        "gateway_ip": None, "gateway_name": None, "gateway_type": None,
-        "binding_last_seen": None, "port_last_seen": r.get("last_seen"),
-        "port_known": True,
-        "binding_reason": ("nessun binding ARP per questo MAC: IP e gateway "
-                           "restano ignoti, la posizione fisica arriva dalla "
-                           "MAC table. Le sezioni che dipendono dal firewall "
-                           "non hanno un indirizzo su cui lavorare"),
-    }
-    if len(rows) > 1:
-        out["tenants_available"] = [{
-            "tenant": x.get("tenant"), "site": x.get("site"), "ip": None,
-            "mac": x.get("mac"),
-            "switch_name": x.get("switch_name") or x.get("switch_ip"),
-            "switch_port": x.get("interface"), "last_seen": x.get("last_seen"),
-        } for x in rows]
+    out, seen = [], set()
+    for e in entries:
+        t = e.get("tenant")
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append({
+            "tenant": t, "site": e.get("site"),
+            "mac": e.get("mac"), "ip": e.get("ip"),
+            "client_type": e.get("client_type"),
+            "switch_ip": e.get("switch_ip"), "switch_name": e.get("switch_name"),
+            "switch_port": e.get("switch_port"), "port_vlan": e.get("port_vlan"),
+            "gateway_ip": e.get("source_ip"), "gateway_name": e.get("source_name"),
+            "gateway_type": e.get("source_type"),
+            "binding_last_seen": e.get("last_seen"),
+            "port_last_seen": e.get("port_last_seen"),
+            "l2_only": False,
+        })
+    # Tenant che la MAC table conosce e l'ARP no: senza questi, una sede senza
+    # visibilità L3 resterebbe invisibile anche quando è quella giusta.
+    for r in l2rows:
+        t = r.get("tenant")
+        if t in seen:
+            continue
+        seen.add(t)
+        out.append({
+            "tenant": t, "site": r.get("site"),
+            "mac": r.get("mac"), "ip": None, "client_type": None,
+            "switch_ip": r.get("switch_ip"), "switch_name": r.get("switch_name"),
+            "switch_port": r.get("interface"), "port_vlan": r.get("vlan"),
+            "gateway_ip": None, "gateway_name": None, "gateway_type": None,
+            "binding_last_seen": None, "port_last_seen": r.get("last_seen"),
+            "l2_only": True,
+        })
+    out.sort(key=lambda c: (c.get("ip") == prefer_ip if prefer_ip else False,
+                           c.get("port_last_seen") or c.get("binding_last_seen") or ""),
+             reverse=True)
     return out
 
 
 def _position(client: str, is_mac: bool, tenants) -> dict:
     """Posizione fisica del client: MAC, IP, switch, porta, VLAN, e il gateway
-    che ne ha risposto l'ARP."""
+    che ne ha risposto l'ARP.
+
+    Quando lo stesso client risulta in più tenant si sceglie la posizione più
+    RECENTE e si espongono tutte le altre in ``tenants_available``: un
+    portatile che gira fra sedi è il caso normale, non l'anomalia, e il
+    referto deve partire da dov'è adesso lasciando raggiungibili le altre.
+    """
     from collectors import mac_history
     kw = {"mac": client} if is_mac else {"ip": client}
-    entries = mac_history.client_map(tenants=tenants, limit=20, **kw)
+    entries = mac_history.client_map(tenants=tenants, limit=50, **kw)
     if not is_mac:
         # ``search_arp`` filtra con LIKE 'ip%': cercando 192.0.2.1 tornano
         # anche 192.0.2.10 e 192.0.2.100. Per una diagnosi l'indirizzo deve
         # essere quello e basta.
         entries = [e for e in entries if e.get("ip") == client]
-    if not entries:
-        # Senza binding ARP la domanda L3 ("che IP ha") non ha risposta, ma
-        # quella L2 ("a quale porta è attaccato") sì: la MAC table basta. Chi
-        # non ha visibilità sul gateway — non gestito, di terzi, VLAN che ruota
-        # altrove — deve poter localizzare comunque il client, non ricevere un
-        # "sconosciuto" che parla di una scansione che non può fare.
+
+    # La MAC table si interroga per MAC: cercando per IP lo si ricava dal
+    # binding, e se non c'è nemmeno quello non c'è niente da cui partire.
+    mac = client if is_mac else (entries[0].get("mac") if entries else None)
+    l2rows = mac_history.positions_for_mac(mac, tenants=tenants) if mac else []
+
+    candidates = _pos_candidates(entries, l2rows, None if is_mac else client)
+    if not candidates:
         if is_mac:
-            return _position_l2_only(client, tenants)
+            return {"known": False,
+                    "reason": "MAC mai visto: né un binding ARP né un "
+                              "avvistamento nelle MAC table raccolte. Serve "
+                              "una scansione MAC degli switch di accesso"}
         return {"known": False,
                 "reason": "nessun binding ARP noto per questo IP: serve una "
                           "scansione ARP del gateway che ruota la VLAN di "
                           "questo client, oppure cerca per MAC — la posizione "
                           "fisica si ricava dalla sola MAC table"}
 
-    e = entries[0]
-    out = {
-        "known": True,
-        "mac": e.get("mac"), "ip": e.get("ip"),
-        "tenant": e.get("tenant"), "site": e.get("site"),
-        "client_type": e.get("client_type"),
-        "switch_ip": e.get("switch_ip"), "switch_name": e.get("switch_name"),
-        "switch_port": e.get("switch_port"), "port_vlan": e.get("port_vlan"),
-        "gateway_ip": e.get("source_ip"), "gateway_name": e.get("source_name"),
-        "gateway_type": e.get("source_type"),
-        # La raccolta ARP/MAC è manuale (niente in listener_manager la
-        # schedula): senza queste due date il referto indicherebbe con la
-        # stessa sicurezza una porta vista un minuto fa e una di tre settimane
-        # fa. Vanno mostrate.
-        "binding_last_seen": e.get("last_seen"),
-        "port_last_seen": e.get("port_last_seen"),
-    }
-    if not e.get("switch_port"):
+    best = candidates[0]
+    out = {"known": True, **{k: v for k, v in best.items() if k != "l2_only"}}
+    if best["l2_only"]:
+        # Quello che si perde è dichiarato, non lasciato a zero: senza binding
+        # non c'è IP e non c'è gateway, quindi le sezioni che dipendono dal
+        # firewall diranno di non sapere — correttamente, perché nessuno sa
+        # quale firewall fronteggi un client di cui non si conosce
+        # l'indirizzo. Quello che resta — switch, porta, VLAN, salute del
+        # collegamento, catena di trunk, cronologia, bounce della porta — è
+        # esattamente ciò che serve a chi sta cercando un cavo.
+        out["l2_only"] = True
+        out["binding_reason"] = (
+            "nessun binding ARP per questo MAC in questo tenant: IP e gateway "
+            "restano ignoti, la posizione fisica arriva dalla MAC table. Le "
+            "sezioni che dipendono dal firewall non hanno un indirizzo su cui "
+            "lavorare")
+
+    if not best.get("switch_port"):
         out["port_known"] = False
         out["port_reason"] = ("MAC mai visto su una porta di accesso: manca "
                               "una scansione MAC, o il client è dietro un "
                               "apparato non gestito")
     else:
         out["port_known"] = True
+
     # Ambiguo è un ALTRO MAC sullo stesso indirizzo: o il MAC è cambiato, o due
     # host se lo contendono. Non lo si risolve qui, ma tacerlo sarebbe peggio.
     #
@@ -157,8 +187,8 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
     # dove più apparati fronteggiano la stessa VLAN — produce due righe dello
     # stesso binding. Elencarle mostrava lo stesso MAC due volte sotto il
     # titolo "altri binding", cioè un allarme per la configurazione normale.
-    others, seen_macs = [], {e.get("mac")}
-    for x in entries[1:]:
+    others, seen_macs = [], {best.get("mac")}
+    for x in entries:
         if x.get("mac") in seen_macs:
             continue
         seen_macs.add(x.get("mac"))
@@ -170,27 +200,13 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
     if others:
         out["ambiguous"] = others
 
-    # Stesso indirizzo registrato in PIÙ TENANT. Non è un conflitto da
-    # risolvere qui: 192.168.1.50 esiste in ogni sede del mondo, e un MAC
-    # riusato in due laboratori pure. Sceglierne uno in silenzio — il più
-    # recente — significa diagnosticare la rete sbagliata senza dirlo, e
-    # scoprirlo solo quando la porta indicata non è quella.
-    #
-    # Si elencano le alternative con il minimo che serve a riconoscerle, e il
-    # chiamante rilancia sul tenant che gli interessa.
-    per_tenant: dict = {}
-    for x in entries:
-        t = x.get("tenant")
-        if t and t not in per_tenant:
-            per_tenant[t] = {
-                "tenant": t, "site": x.get("site"), "ip": x.get("ip"),
-                "mac": x.get("mac"),
-                "switch_name": x.get("switch_name") or x.get("switch_ip"),
-                "switch_port": x.get("switch_port"),
-                "last_seen": x.get("last_seen"),
-            }
-    if len(per_tenant) > 1:
-        out["tenants_available"] = list(per_tenant.values())
+    if len(candidates) > 1:
+        out["tenants_available"] = [{
+            "tenant": c["tenant"], "site": c["site"], "ip": c["ip"],
+            "mac": c["mac"], "switch_name": c["switch_name"] or c["switch_ip"],
+            "switch_port": c["switch_port"], "last_seen": c["port_last_seen"],
+            "l2_only": c["l2_only"],
+        } for c in candidates]
     return out
 
 

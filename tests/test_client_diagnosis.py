@@ -224,6 +224,64 @@ class TestVlanMismatch(_Base):
         self.assertEqual(h["trunk"]["vlan"], "10")
 
 
+class TestPositionRecency(unittest.TestCase):
+    """Un portatile che gira fra sedi e' il caso normale. Prima l'ARP vinceva
+    sempre quando c'era, quindi un binding vecchio in una sede batteva un
+    avvistamento di stamattina in un'altra: il referto diceva dove il PC ERA
+    STATO, non dove e'."""
+
+    OLD_ARP = dict(CLIENT, tenant="casa", ip="192.0.2.111",
+                   switch_name="SW-CASA", switch_port="Ethernet0/0",
+                   last_seen="2026-08-01T20:00:00+00:00",
+                   port_last_seen="2026-08-01T20:00:00+00:00")
+    NEW_L2 = {"mac": CLIENT["mac"], "tenant": "ufficio", "site": "central",
+              "switch_ip": "192.0.2.30", "switch_name": "SW-UFF",
+              "interface": "GigabitEthernet2/0/25", "vlan": "31",
+              "last_seen": "2026-08-03T12:30:00+00:00"}
+
+    def _sources(self, entries, l2):
+        return (_client_map(entries),
+                patch("collectors.mac_history.positions_for_mac", return_value=l2))
+
+    def test_the_most_recent_position_wins_even_without_arp(self):
+        cm, l2 = self._sources([self.OLD_ARP], [self.NEW_L2])
+        with cm, l2:
+            p = client_diagnosis._position(CLIENT["mac"], True, None)
+        self.assertEqual(p["tenant"], "ufficio")
+        self.assertEqual(p["switch_port"], "GigabitEthernet2/0/25")
+        self.assertTrue(p["l2_only"])
+
+    def test_every_tenant_is_listed_newest_first(self):
+        cm, l2 = self._sources([self.OLD_ARP], [self.NEW_L2])
+        with cm, l2:
+            p = client_diagnosis._position(CLIENT["mac"], True, None)
+        self.assertEqual([t["tenant"] for t in p["tenants_available"]],
+                         ["ufficio", "casa"])
+
+    def test_searching_an_ip_answers_about_that_ip(self):
+        # Chi cerca un indirizzo ha chiesto di quell'indirizzo, non della
+        # macchina: rispondere sulla sede piu' recente, dove quell'IP non
+        # esiste, risponderebbe a un'altra domanda.
+        cm, l2 = self._sources([self.OLD_ARP], [self.NEW_L2])
+        with cm, l2:
+            p = client_diagnosis._position("192.0.2.111", False, None)
+        self.assertEqual(p["tenant"], "casa")
+        self.assertEqual(p["ip"], "192.0.2.111")
+        # L'altra resta raggiungibile con un clic.
+        self.assertIn("ufficio", [t["tenant"] for t in p["tenants_available"]])
+
+    def test_recency_uses_the_port_not_the_binding(self):
+        # Un ARP rinfrescato non sposta un cavo: conta quando il MAC e' stato
+        # visto sulla PORTA.
+        fresh_binding_old_port = dict(self.OLD_ARP,
+                                      last_seen="2026-08-04T09:00:00+00:00",
+                                      port_last_seen="2026-08-01T20:00:00+00:00")
+        cm, l2 = self._sources([fresh_binding_old_port], [self.NEW_L2])
+        with cm, l2:
+            p = client_diagnosis._position(CLIENT["mac"], True, None)
+        self.assertEqual(p["tenant"], "ufficio")
+
+
 class TestPositionWithoutArp(unittest.TestCase):
     """"A quale porta e' attaccato" e' una domanda di livello 2: la MAC table
     da sola la soddisfa. Prima serviva comunque un binding ARP, quindi chi non

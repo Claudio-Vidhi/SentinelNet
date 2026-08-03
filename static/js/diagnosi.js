@@ -277,21 +277,28 @@ function _diagTenantChoice(p) {
     const list = p.tenants_available || [];
     if (list.length < 2) return '';
     const en = currentLang === 'en';
-    const chips = list.map(t => {
+    // Le posizioni arrivano gia' ordinate dalla piu' recente: la prima e' la
+    // scelta di default, e la data va mostrata perche' e' il dato su cui si
+    // decide — un portatile e' dove e' stato visto per ULTIMO.
+    const chips = list.map((t, i) => {
         const active = t.tenant === p.tenant;
         const where = [t.switch_name, t.switch_port].filter(Boolean).join(' ');
         return `<button onclick="diagnosiPickTenant('${escapeHtml(jsStr(t.tenant))}')"
-            class="btn btn-secondary btn-small" style="width:auto; margin:0; ${active ? 'border-color:var(--primary); color:var(--primary);' : ''}"
+            class="btn btn-secondary btn-small" style="width:auto; margin:0; text-align:left; ${active ? 'border-color:var(--primary); color:var(--primary);' : ''}"
             title="${escapeHtml(jsStr(`${t.ip || ''} ${where}`.trim()))}">
             ${active ? '<i class="fa-solid fa-circle-dot"></i> ' : ''}${escapeHtml(jsStr(t.tenant))}
-            <span style="color:var(--text-muted); font-weight:400;">${escapeHtml(jsStr(t.ip || ''))}${where ? ' · ' + escapeHtml(jsStr(where)) : ''}</span>
+            ${i === 0 ? `<span class="badge" style="font-size:9px; margin-left:4px;">${escapeHtml(en ? 'latest' : 'piu recente')}</span>` : ''}
+            <span style="color:var(--text-muted); font-weight:400;">
+                ${escapeHtml(jsStr(t.ip || (en ? 'no IP' : 'senza IP')))}${where ? ' · ' + escapeHtml(jsStr(where)) : ''}
+                · ${escapeHtml(jsStr(String(t.last_seen || '').replace('T', ' ').slice(0, 16)))}
+            </span>
         </button>`;
     }).join('');
     return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
         <div style="font-size:12px; color:var(--warning); margin-bottom:6px;">
             <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
-                en ? 'This address exists in more than one tenant — the report below covers the one marked. Pick another to diagnose that one instead.'
-                   : 'Questo indirizzo esiste in piu\' tenant — il referto qui sotto riguarda quello segnato. Scegline un altro per diagnosticare quello.')}
+                en ? 'This client appears in more than one tenant — the report covers the one marked, which is where it was seen most recently. Pick another to diagnose that one instead.'
+                   : 'Questo client compare in piu\' tenant — il referto riguarda quello segnato, cioe\' dove e\' stato visto per ultimo. Scegline un altro per diagnosticare quello.')}
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">${chips}</div>
     </div>`;
