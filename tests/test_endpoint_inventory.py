@@ -340,7 +340,14 @@ class TestOccupazionePorte(_Base):
         self.assertFalse(vlan_port["physical"])
         self.assertEqual(out["counts"]["free"], 1)      # solo la Gi, non la Vlan
 
-    def test_scoping_per_tenant(self):
+    def test_gli_avvistamenti_sono_scopati_per_tenant(self):
+        """Questo livello (``port_occupancy``) scopa solo gli AVVISTAMENTI: un
+        MAC di un tenant non visibile non compare fra quelli occupanti la
+        porta. Non prova — e non deve provare — che l'intero switch sia
+        raggiungibile da chi chiama: quel controllo sta nel router
+        (``assert_device_allowed`` in ``endpoints_ports()``), perche'
+        ``switch_if_macs`` non ha una colonna tenant e questa funzione non sa
+        a chi appartiene lo switch."""
         self._porta("GigabitEthernet1/0/1")
         self._sighting(switch_ip="192.0.2.1", interface="GigabitEthernet1/0/1",
                        tenant="sede-b")
@@ -349,7 +356,8 @@ class TestOccupazionePorte(_Base):
         porta = next(p for p in out["ports"]
                      if p["interface"] == "GigabitEthernet1/0/1")
 
-        self.assertEqual(porta["state"], "free", "il MAC di sede-b non e' visibile")
+        self.assertEqual(porta["state"], "free",
+                         "il MAC di sede-b non e' fra gli avvistamenti visibili")
 
 
 class TestRotte(_Base):
@@ -396,6 +404,30 @@ class TestRotte(_Base):
             self.router.endpoints_ports(switch="  ",
                                         current_user={"sub": "a", "role": "admin"})
         self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_ports_e_403_per_uno_switch_fuori_dal_tenant(self):
+        """``switch_if_macs`` non ha colonna tenant: senza un controllo
+        sull'apparato stesso, un operatore di sede-a poteva chiedere le porte
+        di uno switch di sede-b e riceverne comunque l'elenco completo — con
+        una porta occupata da sede-b che tornava pure "free"."""
+        from fastapi import HTTPException
+        with patch("services.inventory_manager.get_all_devices",
+                   return_value=[{"IP": "198.51.100.1", "Group": "sede-b"}]), \
+             patch("routers.deps.user_group_scope", return_value={"sede-a"}):
+            with self.assertRaises(HTTPException) as ctx:
+                self.router.endpoints_ports(
+                    switch="198.51.100.1",
+                    current_user={"sub": "op", "role": "operator"})
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_ports_e_404_per_switch_non_in_inventario(self):
+        from fastapi import HTTPException
+        with patch("services.inventory_manager.get_all_devices", return_value=[]):
+            with self.assertRaises(HTTPException) as ctx:
+                self.router.endpoints_ports(
+                    switch="192.0.2.250",
+                    current_user={"sub": "a", "role": "admin"})
+        self.assertEqual(ctx.exception.status_code, 404)
 
 
 class TestRotteRegistrate(unittest.TestCase):
@@ -491,3 +523,29 @@ class TestTabFrontend(unittest.TestCase):
 
     def test_le_porte_non_fisiche_sono_visibili_ma_marcate(self):
         self.assertIn("p.physical", self.src)
+
+    def test_il_filtro_tenant_viene_popolato_al_caricamento_della_tab(self):
+        """La select epFilterTenant restava vuota per sempre: nessuno la
+        popolava, quindi il parametro tenant non veniva mai spedito."""
+        start = self.src.index("function loadEndpointsTab(")
+        body = self.src[start:start + 200]
+        self.assertIn("populateEndpointsTenantFilter()", body)
+        self.assertIn("function populateEndpointsTenantFilter(", self.src)
+        self.assertIn("getElementById('epFilterTenant')", self.src)
+
+    def test_i_kpi_si_svuotano_in_modalita_porte(self):
+        """Sei numeri validi per l'intero inventario non possono restare a
+        schermo sopra la tabella di UN solo switch: leggerebbero come fatti
+        su quello switch."""
+        start = self.src.index("function endpointsMode(")
+        body = self.src[start:start + 1600]
+        self.assertLess(body.index("epKpis"), body.index("endpointsPorts()"))
+
+    def test_ports_in_errore_mostra_un_messaggio_non_la_tabella_vecchia(self):
+        """Stesso schema di endpointsSearch() per la stessa condizione: un
+        fetch fallito non deve lasciare a schermo l'elenco endpoint della
+        modalita' precedente spacciato per occupazione porte."""
+        start = self.src.index("async function endpointsPorts(")
+        body = self.src[start:start + 900]
+        self.assertIn("host.innerHTML", body)
+        self.assertIn("!res || !res.ok", body)

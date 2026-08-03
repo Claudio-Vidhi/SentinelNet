@@ -122,10 +122,12 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
     """Posizione fisica del client: MAC, IP, switch, porta, VLAN, e il gateway
     che ne ha risposto l'ARP.
 
-    Quando lo stesso client risulta in più tenant si sceglie la posizione più
-    RECENTE e si espongono tutte le altre in ``tenants_available``: un
-    portatile che gira fra sedi è il caso normale, non l'anomalia, e il
-    referto deve partire da dov'è adesso lasciando raggiungibili le altre.
+    Quando lo stesso client risulta in più tenant, questa funzione non sceglie:
+    ritorna tutti i candidati (il più recente in cima, gli altri in
+    ``tenants_available``). La scelta — o il rifiuto di scegliere — spetta a
+    ``diagnose()``, che con più di un candidato restituisce ``status:
+    "ambiguous"`` invece di un referto completo e definitivo su una sede
+    decisa dal programma anziché dal chiamante.
     """
     from collectors import mac_history
     kw = {"mac": client} if is_mac else {"ip": client}

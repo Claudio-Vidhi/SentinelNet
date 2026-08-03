@@ -9,7 +9,22 @@ let _epRows = [];          // righe a schermo: sono queste che l'export porta vi
 let _epTruncated = false;
 
 function loadEndpointsTab() {
+    populateEndpointsTenantFilter();
     endpointsSearch();
+}
+
+// Stesso schema di loadThreatIntel() in threat-intel.js: "all" per default,
+// poi un'opzione per ogni tenant noto. Senza questo la select restava vuota
+// per sempre e il filtro tenant non spediva mai il parametro.
+function populateEndpointsTenantFilter() {
+    const sel = document.getElementById('epFilterTenant');
+    if (!sel) return;
+    const L = i18n[currentLang];
+    const cur = sel.value;
+    const groups = Object.keys(globalGroups || {});
+    sel.innerHTML = `<option value="all">${escapeHtml(L.optArpAllTenants)}</option>` +
+        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+    sel.value = groups.includes(cur) ? cur : 'all';
 }
 
 async function endpointsSearch() {
@@ -185,6 +200,11 @@ function endpointsMode(mode) {
     if (picker) picker.style.display = mode === 'ports' ? '' : 'none';
 
     if (mode === 'list') { endpointsSearch(); return; }
+    // I KPI sono un riassunto dell'INTERO elenco: in modalita' porte non
+    // descrivono piu' cio' che e' a schermo (le porte di un solo switch), e
+    // lasciarli visibili li fa leggere come fatti su quello switch.
+    const kpis = document.getElementById('epKpis');
+    if (kpis) kpis.innerHTML = '';
     // Gli switch li conosce gia' l'elenco caricato: nessuna chiamata in piu'.
     if (picker) {
         const seen = {};
@@ -199,6 +219,7 @@ async function endpointsPorts() {
     const host = document.getElementById('epResults');
     const picker = document.getElementById('epPortsSwitch');
     const L = i18n[currentLang];
+    const en = currentLang === 'en';
     if (!host) return;
     const sw = picker ? picker.value : '';
     if (!sw) {
@@ -206,7 +227,10 @@ async function endpointsPorts() {
         return;
     }
     const res = await apiFetch('/api/endpoints/ports?switch=' + encodeURIComponent(sw));
-    if (!res || !res.ok) return;
+    if (!res || !res.ok) {
+        host.innerHTML = `<div class="panel" style="padding:22px; text-align:center; color:var(--danger); font-size:13px;">${escapeHtml(en ? 'Could not load port occupancy.' : 'Occupazione porte non caricabile.')}</div>`;
+        return;
+    }
     endpointsPortsRender(await res.json());
 }
 
