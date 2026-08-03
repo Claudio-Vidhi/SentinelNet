@@ -439,6 +439,29 @@ def vlans_for_ips(ip_tenant_map: dict) -> dict:
     return out
 
 
+def positions_for_mac(mac: str, tenants=None) -> list:
+    """Dove è attaccato questo MAC, dalla sola MAC table — senza ARP.
+
+    ``client_map`` parte dai binding ARP: risponde a "che IP ha questo MAC e
+    dov'è", e senza un gateway interrogabile non risponde affatto. Ma "a quale
+    porta di quale switch è attaccato" è una domanda di livello 2, e la MAC
+    table da sola la soddisfa. Chi non ha visibilità L3 — gateway non gestito,
+    VLAN che ruota su un apparato di terzi — deve poter localizzare comunque
+    un MAC, senza IP e senza gateway.
+
+    Una posizione per tenant, la più recente, uplink esclusi: stessa regola di
+    ``client_map``, stessa funzione (``_access_positions_for``).
+    """
+    init_db()
+    norm = normalize_mac(mac)
+    if not norm:
+        return []
+    best = _access_positions_for([norm], tenants=tenants)
+    out = [dict(v) for k, v in best.items() if k[0] == norm]
+    out.sort(key=lambda r: r.get("last_seen") or "", reverse=True)
+    return out
+
+
 def client_history(mac: str, tenants=None, limit: int = 50) -> dict:
     """Dove è stato questo MAC e che IP ha avuto, dal dato già raccolto.
 

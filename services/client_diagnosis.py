@@ -56,6 +56,50 @@ def _section(result: dict, name: str, fn, *args, **kw) -> None:
 
 # --- L2: dove sta il client, e come sta la sua porta -------------------------
 
+def _position_l2_only(mac: str, tenants) -> dict:
+    """Posizione ricavata dalla sola MAC table, quando l'ARP non c'è.
+
+    Quello che si perde è dichiarato, non lasciato a zero: senza binding non
+    c'è IP e non c'è gateway, quindi le sezioni che dipendono dal firewall
+    diranno di non sapere — correttamente, perché nessuno sa quale firewall
+    fronteggi un client di cui non si conosce l'indirizzo. Quello che resta —
+    switch, porta, VLAN, salute del collegamento, catena di trunk, cronologia,
+    e il bounce della porta — è esattamente ciò che serve a chi sta cercando
+    un cavo.
+    """
+    from collectors import mac_history
+
+    rows = mac_history.positions_for_mac(mac, tenants=tenants)
+    if not rows:
+        return {"known": False,
+                "reason": "MAC mai visto: né un binding ARP né un avvistamento "
+                          "nelle MAC table raccolte. Serve una scansione MAC "
+                          "degli switch di accesso"}
+    r = rows[0]
+    out = {
+        "known": True, "l2_only": True,
+        "mac": r.get("mac"), "ip": None,
+        "tenant": r.get("tenant"), "site": r.get("site"),
+        "switch_ip": r.get("switch_ip"), "switch_name": r.get("switch_name"),
+        "switch_port": r.get("interface"), "port_vlan": r.get("vlan"),
+        "gateway_ip": None, "gateway_name": None, "gateway_type": None,
+        "binding_last_seen": None, "port_last_seen": r.get("last_seen"),
+        "port_known": True,
+        "binding_reason": ("nessun binding ARP per questo MAC: IP e gateway "
+                           "restano ignoti, la posizione fisica arriva dalla "
+                           "MAC table. Le sezioni che dipendono dal firewall "
+                           "non hanno un indirizzo su cui lavorare"),
+    }
+    if len(rows) > 1:
+        out["tenants_available"] = [{
+            "tenant": x.get("tenant"), "site": x.get("site"), "ip": None,
+            "mac": x.get("mac"),
+            "switch_name": x.get("switch_name") or x.get("switch_ip"),
+            "switch_port": x.get("interface"), "last_seen": x.get("last_seen"),
+        } for x in rows]
+    return out
+
+
 def _position(client: str, is_mac: bool, tenants) -> dict:
     """Posizione fisica del client: MAC, IP, switch, porta, VLAN, e il gateway
     che ne ha risposto l'ARP."""
@@ -68,9 +112,18 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
         # essere quello e basta.
         entries = [e for e in entries if e.get("ip") == client]
     if not entries:
+        # Senza binding ARP la domanda L3 ("che IP ha") non ha risposta, ma
+        # quella L2 ("a quale porta è attaccato") sì: la MAC table basta. Chi
+        # non ha visibilità sul gateway — non gestito, di terzi, VLAN che ruota
+        # altrove — deve poter localizzare comunque il client, non ricevere un
+        # "sconosciuto" che parla di una scansione che non può fare.
+        if is_mac:
+            return _position_l2_only(client, tenants)
         return {"known": False,
-                "reason": "nessun binding ARP noto: serve una scansione ARP "
-                          "del gateway che ruota la VLAN di questo client"}
+                "reason": "nessun binding ARP noto per questo IP: serve una "
+                          "scansione ARP del gateway che ruota la VLAN di "
+                          "questo client, oppure cerca per MAC — la posizione "
+                          "fisica si ricava dalla sola MAC table"}
 
     e = entries[0]
     out = {
@@ -345,9 +398,13 @@ def _trunk_chain(access_switch_ip: str, gateway_ip: Optional[str], vlan,
     chain = _hop_path(access_switch_ip, gateway_ip, tenant) if gateway_ip else []
     if not chain:
         single = _trunk_check(access_switch_ip, vlan)
-        single["scope"] = ("solo i trunk dello switch di accesso: la topologia "
-                           "non collega quell'apparato al gateway (servono i "
-                           "backup con CDP/LLDP dei salti intermedi)")
+        single["scope"] = (
+            "solo i trunk dello switch di accesso: nessun gateway noto per "
+            "questo client, quindi non c'è una catena da percorrere"
+            if not gateway_ip else
+            "solo i trunk dello switch di accesso: la topologia non collega "
+            "quell'apparato al gateway (servono i backup con CDP/LLDP dei "
+            "salti intermedi)")
         single["chain_known"] = False
         return single
 
