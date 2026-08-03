@@ -1245,6 +1245,14 @@
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
         <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
       </div>
+      <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
+        <button id="epModeListBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0; border-color:var(--primary); color:var(--primary);"
+                onclick="endpointsMode('list')" data-i18n="epModeList"></button>
+        <button id="epModePortsBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0;"
+                onclick="endpointsMode('ports')" data-i18n="epModePorts"></button>
+        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"
+                onchange="endpointsPorts()"></select>
+      </div>
       <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
       <div class="panel" style="margin-bottom:16px;">
         <h3 style="font-size:15px; margin-bottom:12px;">

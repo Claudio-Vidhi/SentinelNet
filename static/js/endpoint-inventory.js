@@ -168,3 +168,87 @@ function endpointsDiagnose(mac, tenant) {
     switchTab('tab-diagnosi');
     runDiagnosi();
 }
+
+// Seconda modalita' della stessa tab. L'elenco delle interfacce arriva da
+// switch_if_macs, popolata a ogni scansione MAC: e' fresco quanto l'ultima
+// scansione di QUELLO switch, e la sua eta' si mostra sempre.
+let _epMode = 'list';
+
+function endpointsMode(mode) {
+    _epMode = mode;
+    const listBtn = document.getElementById('epModeListBtn');
+    const portsBtn = document.getElementById('epModePortsBtn');
+    const picker = document.getElementById('epPortsSwitch');
+    const active = 'border-color:var(--primary); color:var(--primary);';
+    if (listBtn) listBtn.style.cssText = 'width:auto; margin:0;' + (mode === 'list' ? active : '');
+    if (portsBtn) portsBtn.style.cssText = 'width:auto; margin:0;' + (mode === 'ports' ? active : '');
+    if (picker) picker.style.display = mode === 'ports' ? '' : 'none';
+
+    if (mode === 'list') { endpointsSearch(); return; }
+    // Gli switch li conosce gia' l'elenco caricato: nessuna chiamata in piu'.
+    if (picker) {
+        const seen = {};
+        _epRows.forEach(r => { if (r.switch_ip) seen[r.switch_ip] = r.switch_name || r.switch_ip; });
+        picker.innerHTML = Object.keys(seen).sort().map(ip =>
+            `<option value="${escapeHtml(jsStr(ip))}">${escapeHtml(jsStr(seen[ip]))} — ${escapeHtml(jsStr(ip))}</option>`).join('');
+    }
+    endpointsPorts();
+}
+
+async function endpointsPorts() {
+    const host = document.getElementById('epResults');
+    const picker = document.getElementById('epPortsSwitch');
+    const L = i18n[currentLang];
+    if (!host) return;
+    const sw = picker ? picker.value : '';
+    if (!sw) {
+        host.innerHTML = `<div class="panel" style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;">${escapeHtml(L.epPortsPick)}</div>`;
+        return;
+    }
+    const res = await apiFetch('/api/endpoints/ports?switch=' + encodeURIComponent(sw));
+    if (!res || !res.ok) return;
+    endpointsPortsRender(await res.json());
+}
+
+function endpointsPortsRender(d) {
+    const host = document.getElementById('epResults');
+    const L = i18n[currentLang];
+    if (!host) return;
+
+    // Elenco assente: si DICE, e si esce prima di qualunque conteggio. "0
+    // porte libere su 0 porte" e' un'informazione falsa travestita da dato.
+    if (!d.port_list_known) {
+        host.innerHTML = `<div class="panel" style="padding:22px; font-size:13px; color:var(--warning);">
+            <i class="fa-solid fa-triangle-exclamation" style="margin-right:8px;"></i>${escapeHtml(L.epPortsUnknown)}</div>`;
+        return;
+    }
+
+    const c = d.counts || {};
+    const ageDays = d.if_list_age_s === null || d.if_list_age_s === undefined
+        ? null : Math.round(d.if_list_age_s / 86400);
+    const stateColor = { occupied: 'var(--success)', uplink: 'var(--warning)', free: 'var(--text-muted)' };
+    const stateLabel = { occupied: L.epStateOccupied, uplink: L.epStateUplink, free: L.epStateFree };
+
+    const rows = (d.ports || []).map(p => `<tr>
+        <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(p.interface))}${
+            p.physical ? '' : ' <span style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:4px; padding:0 4px;">virt</span>'}</td>
+        <td><span style="font-size:10px; color:${stateColor[p.state]}; border:1px solid ${stateColor[p.state]}; border-radius:4px; padding:1px 5px;">${escapeHtml(jsStr(stateLabel[p.state] || p.state))}</span></td>
+        <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml(jsStr((p.macs || []).join(', ') || (p.uplink_to ? '→ ' + p.uplink_to : '—')))}</td>
+    </tr>`).join('');
+
+    host.innerHTML = `
+        <div style="padding:10px 12px; margin-bottom:10px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px;">
+            <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.epPortsFreeWarn)}
+            ${ageDays === null ? '' : `<div style="margin-top:4px; color:var(--text-muted);">${escapeHtml(L.epPortsAge)} — ${escapeHtml(String(ageDays))}g</div>`}
+        </div>
+        <div class="panel" style="padding:12px 14px; margin-bottom:10px; font-size:13px;">
+            <b>${escapeHtml(String(c.free ?? 0))}</b> ${escapeHtml(L.epStateFree)} ·
+            <b>${escapeHtml(String(c.occupied ?? 0))}</b> ${escapeHtml(L.epStateOccupied)} ·
+            <b>${escapeHtml(String(c.uplink ?? 0))}</b> ${escapeHtml(L.epStateUplink)}
+            <span style="color:var(--text-muted);">/ ${escapeHtml(String(c.total ?? 0))}</span>
+        </div>
+        <div class="panel" style="padding:0;"><div class="table-container"><table>
+            <thead><tr><th>${escapeHtml(L.epThWhere)}</th><th></th><th>${escapeHtml(L.epThMac)}</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div></div>`;
+}

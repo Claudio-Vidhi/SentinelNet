@@ -468,3 +468,20 @@ class TestTabFrontend(unittest.TestCase):
         start = self.src.index("function endpointsDiagnose(mac, tenant)")
         body = self.src[start:start + 600]
         self.assertLess(body.index("_diagClient = mac"), body.index("runDiagnosi()"))
+
+    def test_le_avvertenze_sulle_porte_sono_a_schermo(self):
+        """Le quattro avvertenze della spec vivono nella UI, non nei commenti:
+        chi legge sta per andare a infilare un cavo."""
+        self.assertIn("epPortsFreeWarn", self.src)      # libera != nessun cavo
+        self.assertIn("epPortsUnknown", self.src)       # elenco assente != 0 libere
+        self.assertIn("epPortsAge", self.src)           # eta' dell'elenco
+
+    def test_elenco_porte_assente_non_mostra_zero_libere(self):
+        """Il ramo dell'elenco mancante deve uscire PRIMA di qualunque
+        conteggio, altrimenti mostrerebbe 0 libere su 0 porte."""
+        start = self.src.index("function endpointsPortsRender(")
+        body = self.src[start:start + 900]
+        self.assertLess(body.index("port_list_known"), body.index("counts"))
+
+    def test_le_porte_non_fisiche_sono_visibili_ma_marcate(self):
+        self.assertIn("p.physical", self.src)
