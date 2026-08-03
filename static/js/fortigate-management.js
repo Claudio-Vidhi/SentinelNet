@@ -163,7 +163,8 @@ async function loadFgtDataset(key) {
                 // chiesto un'altra cosa".
                 query: { log_device: body.log_device, log_type: body.log_type,
                          log_subtype: body.log_subtype,
-                         subtype_enforced: body.subtype_enforced },
+                         subtype_enforced: body.subtype_enforced,
+                         days_queried: body.days_queried },
             };
         } else {
             const err = res ? await res.json().catch(() => ({})) : {};
@@ -212,6 +213,12 @@ function renderFgtDataset(key) {
              <code style="font-family:var(--font-code);">log/${escapeHtml(jsStr(eq.log_device || '?'))}/${escapeHtml(jsStr(eq.log_type || '?'))}/${escapeHtml(jsStr(eq.log_subtype || '?'))}</code>
              ${eq.subtype_enforced ? `<span class="status warn" style="margin-left:8px;"
                   title="${escapeHtml(L.msgFgtSubtypeEnforcedHint || (en ? 'FortiOS returned other subtypes for this path; rows were filtered on the log subtype field so the view matches the FortiGate GUI 1:1.' : 'FortiOS ha restituito altri sottotipi per questo percorso; le righe sono state filtrate sul campo subtype perché la vista corrisponda 1:1 alla GUI del FortiGate.'))}">${escapeHtml(L.badgeFgtSubtypeEnforced || (en ? 'subtype filtered' : 'sottotipo filtrato'))}</span>` : ''}
+             ${eq.days_queried ? `<span style="margin-left:8px;">${escapeHtml(
+                  (L.lblFgtLogDaysQueried || (en ? '{n} day(s) queried' : '{n} giorno/i interrogato/i'))
+                      .replace('{n}', String(eq.days_queried)))}${
+                  eq.days_queried >= 31 ? ' — ' + escapeHtml(L.msgFgtLogRangeCapped
+                      || (en ? 'range capped at 31 days, older days not queried'
+                            : 'intervallo limitato a 31 giorni, i giorni più vecchi non sono stati interrogati')) : ''}</span>` : ''}
            </div>`
         : '';
     const head = badge + qEcho;

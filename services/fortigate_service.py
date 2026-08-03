@@ -16,10 +16,12 @@ e ritornano sempre {"source": "api"|"ssh", "data": ...} oppure sollevano
 FortiGateError con il dettaglio di entrambi i tentativi.
 """
 
+import datetime
 import json
 import os
 import re
 import threading
+import time
 from typing import Optional, Any, Dict
 
 import requests
@@ -688,6 +690,72 @@ def _enforce_log_subtype(rows, log_subtype: str):
     return kept, len(kept) != len(rows)
 
 
+def _log_search(ip: str, path: str, params: dict, deadline: float = 10.0):
+    """Una ricerca sui log portata a termine, non la sua prima risposta.
+
+    La ricerca log del FortiGate è ASINCRONA: la prima chiamata avvia un
+    motore che scorre il file e può tornare subito con ``ready: False``,
+    ``total_lines: 0`` e zero righe mentre il lavoro è appena cominciato.
+    Prendere quella risposta per buona mostra "nessun log" a una query che
+    ha migliaia di match — misurato: ``date==<giorno>`` tornava 0 righe al
+    primo colpo e 2761 righe un secondo dopo.
+
+    Si ripete con lo stesso ``session_id`` finché ``ready``. Il tetto di
+    tempo serve perché una ricerca su un log grande non blocchi la pagina:
+    scaduto, si restituisce il parziale, che resta la risposta migliore
+    disponibile.
+
+    Nota sui campi: ``completed`` e ``percent_logs_processed`` sono
+    percentuali (2, 30, 35...), non booleani. L'unico flag è ``ready``.
+    """
+    sid = None
+    stop_at = time.monotonic() + deadline
+    while True:
+        p = dict(params)
+        if sid:
+            p["session_id"] = sid
+        data = api_get(ip, path, p)
+        if not isinstance(data, dict):
+            return data
+        sid = data.get("session_id", sid)
+        # `ready` assente = risposta non asincrona (altra versione, altro
+        # endpoint): è già il risultato, non c'è niente da attendere.
+        if data.get("ready", True) or time.monotonic() >= stop_at:
+            return data
+        time.sleep(0.4)
+
+
+def _log_range_days(since: Optional[str], until: Optional[str], cap: int = 31):
+    """I giorni da interrogare per un intervallo, dal più recente al più vecchio.
+
+    Perché un giorno alla volta invece di un filtro di intervallo: su FortiOS
+    7.4 il log API rifiuta gli operatori ``>=`` e ``<=`` con HTTP 500 (provato
+    su ``date`` e su ``eventtime``), e ripetere lo stesso campo non produce un
+    OR — vince l'ultimo filtro. ``date==<giorno>`` invece funziona ed è esatto,
+    quindi l'intervallo si copre enumerando le giornate. Campi diversi sono
+    in AND, così il filtro sul sottotipo resta valido dentro ogni giornata.
+
+    Il chiamante si ferma appena ha le righe che gli servono, perciò di solito
+    parte una sola richiesta. ``cap`` limita il caso patologico (intervallo di
+    un anno su un log vuoto = una richiesta per giorno).
+    """
+    if not since and not until:
+        return []
+    fmt = "%Y-%m-%d"
+    end = datetime.datetime.strptime(until, fmt).date() if until \
+        else datetime.date.today()
+    start = datetime.datetime.strptime(since, fmt).date() if since \
+        else end - datetime.timedelta(days=cap - 1)
+    if start > end:
+        return []
+    days = []
+    d = end
+    while d >= start and len(days) < cap:
+        days.append(d.strftime(fmt))
+        d -= datetime.timedelta(days=1)
+    return days
+
+
 def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
                      action: Optional[str] = None, count: int = 100,
                      log_device: str = "disk", log_type: str = "traffic",
@@ -715,9 +783,11 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
     UTM, perché ``observability/fieldmap.py`` legge ``utmaction`` e ``subtype``
     dal messaggio grezzo — quella strada non dipende da questi percorsi REST.
 
-    ``since``/``until`` sono date ``YYYY-MM-DD`` e diventano un filtro sul
-    campo ``date``. Omesse, il comportamento è quello storico (le ultime
-    ``count`` righe). Sono applicate solo al percorso REST: la sintassi di
+    ``since``/``until`` sono date ``YYYY-MM-DD``. Diventano una richiesta per
+    giornata (``date==<giorno>``), dalla più recente alla più vecchia, perché
+    gli operatori di intervallo non esistono su questo API — vedi
+    ``_log_range_days``. Omesse, il comportamento è quello storico (le ultime
+    ``count`` righe). Restano applicate solo al percorso REST: la sintassi di
     ``execute log filter`` per gli intervalli varia per versione di FortiOS e
     indovinarla darebbe zero righe travestite da "nessun log" — lo stesso
     rischio che questa funzione documenta già per i sottotipi UTM.
@@ -730,10 +800,7 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
         filters.append(f"dstip=={dst_ip}")
     if action:
         filters.append(f"action=={action}")
-    if since:
-        filters.append(f"date>={since}")
-    if until:
-        filters.append(f"date<={until}")
+    days = _log_range_days(since, until)
     ip = device["IP"]
     api_err = None
     # Il sottotipo va chiesto anche come filtro, non solo nel percorso: dove
@@ -746,22 +813,36 @@ def get_traffic_logs(device, src_ip: Optional[str] = None, dst_ip: Optional[str]
     # lì _enforce_log_subtype fa lo stesso lavoro a valle, sul campione più
     # ampio possibile. Un filtro non supportato non deve costare i log.
     for dev in (log_device, "memory" if log_device == "disk" else "disk"):
+        path = f"log/{dev}/{log_type}/{log_subtype}"
         for extra in ([f"subtype=={log_subtype}"], []):
-            params = dict(base_params)
-            if filters + extra:
-                params["filter"] = filters + extra
             try:
-                data = api_get(ip, f"log/{dev}/{log_type}/{log_subtype}", params)
+                rows = []
+                # Senza intervallo è una sola ricerca; con l'intervallo una per
+                # giornata, e ci si ferma appena `count` righe sono raccolte.
+                for day in (days or [None]):
+                    params = dict(base_params)
+                    flt = filters + extra + ([f"date=={day}"] if day else [])
+                    if flt:
+                        params["filter"] = flt
+                    data = _log_search(ip, path, params)
+                    got = data.get("results", data) if isinstance(data, dict) else data
+                    if not isinstance(got, list):
+                        rows = got
+                        break
+                    rows += got
+                    if len(rows) >= count:
+                        rows = rows[:count]
+                        break
             except FortiGateError as e:
                 api_err = str(e)
                 continue
-            rows = data.get("results", data)
             if extra and not rows:
                 continue
             rows, enforced = _enforce_log_subtype(rows, log_subtype)
             return {"source": "api", "log_device": dev,
                     "log_type": log_type, "log_subtype": log_subtype,
                     "subtype_enforced": enforced,
+                    "days_queried": len(days) or None,
                     "data": rows}
     # Fallback CLI: execute log filter + display.
     # ``category`` da solo NON restringe il sottotipo: con category=traffic la

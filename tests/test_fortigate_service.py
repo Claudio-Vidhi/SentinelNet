@@ -318,16 +318,68 @@ class TrafficLogCategoryTest(unittest.TestCase):
         self.assertEqual(res["source"], "ssh")
 
     @mock.patch("services.fortigate_service.api_get")
-    def test_date_range_becomes_a_filter_and_is_absent_by_default(self, mock_api_get):
+    def test_date_range_is_walked_one_day_at_a_time(self, mock_api_get):
+        # FortiOS 7.4 risponde HTTP 500 a `date>=`/`date<=` e ripetendo lo
+        # stesso campo vince l'ultimo filtro (nessun OR): l'unica forma
+        # esatta è `date==<giorno>`, una richiesta per giornata.
+        mock_api_get.return_value = {"results": [{"subtype": "forward"}]}
+        res = fgs.get_traffic_logs(DEVICE, since="2026-08-01", until="2026-08-03")
+        self.assertEqual(res["days_queried"], 3)
+        asked = [f for c in mock_api_get.call_args_list
+                 for f in c[0][2].get("filter", [])]
+        self.assertEqual([f for f in asked if f.startswith("date")],
+                         ["date==2026-08-03", "date==2026-08-02", "date==2026-08-01"])
+        self.assertFalse([f for f in asked if ">=" in f or "<=" in f])
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_day_walk_stops_as_soon_as_count_is_reached(self, mock_api_get):
+        # Camminare tutto l'intervallo quando le righe chieste ci sono già
+        # sarebbe una richiesta per giorno senza motivo.
+        mock_api_get.return_value = {"results": [{"subtype": "forward"}] * 100}
+        res = fgs.get_traffic_logs(DEVICE, count=100,
+                                   since="2026-07-01", until="2026-08-03")
+        self.assertEqual(len(res["data"]), 100)
+        self.assertEqual(mock_api_get.call_count, 1)
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_no_date_filter_by_default(self, mock_api_get):
         mock_api_get.return_value = {"results": []}
-        fgs.get_traffic_logs(DEVICE, since="2026-08-01", until="2026-08-02")
-        flt = mock_api_get.call_args[0][2]["filter"]
-        self.assertIn("date>=2026-08-01", flt)
-        self.assertIn("date<=2026-08-02", flt)
-        # Omesse, nessun filtro sulla data: il comportamento storico resta.
-        mock_api_get.reset_mock()
         fgs.get_traffic_logs(DEVICE)
         self.assertNotIn("filter", mock_api_get.call_args[0][2] or {})
+
+    def test_open_ended_range_is_capped(self):
+        # since senza until arriva a oggi; un intervallo assurdo non deve
+        # diventare una richiesta per giorno all'infinito.
+        self.assertEqual(fgs._log_range_days(None, None), [])
+        self.assertEqual(fgs._log_range_days("2026-08-03", "2026-08-01"), [])
+        self.assertEqual(len(fgs._log_range_days("2020-01-01", "2026-08-03")), 31)
+        self.assertEqual(fgs._log_range_days("2026-08-02", "2026-08-03"),
+                         ["2026-08-03", "2026-08-02"])
+
+    @mock.patch("services.fortigate_service.time.sleep", lambda _: None)
+    @mock.patch("services.fortigate_service.api_get")
+    def test_partial_search_is_polled_until_ready(self, mock_api_get):
+        # La ricerca log è asincrona: la prima risposta può essere
+        # `ready: False` con zero righe mentre il motore sta ancora
+        # scorrendo. Fermarsi lì mostra "nessun log" a una query piena.
+        mock_api_get.side_effect = [
+            {"session_id": 7, "ready": False, "total_lines": 0, "results": []},
+            {"session_id": 7, "ready": False, "total_lines": 0, "results": []},
+            {"session_id": 7, "ready": True, "total_lines": 2, "results": [
+                {"subtype": "forward"}, {"subtype": "forward"}]},
+        ]
+        res = fgs.get_traffic_logs(DEVICE)
+        self.assertEqual(len(res["data"]), 2)
+        # i poll successivi riprendono la stessa ricerca, non ne aprono altre
+        self.assertEqual(mock_api_get.call_args[0][2]["session_id"], 7)
+
+    @mock.patch("services.fortigate_service.api_get")
+    def test_response_without_ready_is_not_polled(self, mock_api_get):
+        # `ready` assente = risposta non asincrona: attenderla bloccherebbe
+        # la pagina per il deadline intero a ogni query.
+        mock_api_get.return_value = {"results": [{"subtype": "forward"}]}
+        fgs.get_traffic_logs(DEVICE)
+        self.assertEqual(mock_api_get.call_count, 1)
 
 
 class PoliciesWithStatsTest(unittest.TestCase):
