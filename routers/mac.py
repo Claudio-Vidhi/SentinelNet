@@ -38,79 +38,12 @@ _MAC_INFRA_TYPES = {"switch", "router"}
 
 # --- ENDPOINTS E HELPERS ---
 
-def _mac_topology_uplinks():
-    """Ritorna (uplink_map, known_switches).
-
-    uplink_map: { switch_ip: { porta_normalizzata: etichetta_vicino } } — solo le
-                porte che vanno verso un altro apparato di rete (infrastruttura).
-    known_switches: insieme degli IP inventariati presenti in mappa (per cui la
-                topologia è autorevole: assenza di una porta = porta di accesso).
-    """
-    from collections import defaultdict
-    uplink_map: dict = defaultdict(dict)
-    known_switches: set = set()
-    try:
-        data = core_engine.generate_network_map(group_filter="all")
-    except Exception:
-        return uplink_map, known_switches
-
-    nodes = data.get("nodes", [])
-    node_type = {n["id"]: n.get("device_type") for n in nodes}
-    node_label = {n["id"]: (n.get("label") or n["id"]) for n in nodes}
-    known_switches = {n["id"] for n in nodes if n.get("group") != "Discovered"}
-
-    def add(sw, port, neigh_id):
-        if not port:
-            return
-        uplink_map[sw][core_engine._normalize_iface(port)] = node_label.get(neigh_id, neigh_id)
-
-    for l in data.get("links", []):
-        src, tgt = l.get("source"), l.get("target")
-        tgt_infra = node_type.get(tgt) in _MAC_INFRA_TYPES
-        src_infra = node_type.get(src) in _MAC_INFRA_TYPES
-        pc = l.get("pc_name")
-        # Le porte locali di src vanno verso tgt: sono uplink solo se tgt è infra.
-        if tgt_infra:
-            for p in l.get("local_ports", []):
-                add(src, p, tgt)
-            if pc:
-                add(src, pc, tgt)
-        if src_infra:
-            for p in l.get("remote_ports", []):
-                add(tgt, p, src)
-            if pc:
-                add(tgt, pc, src)
-    return uplink_map, known_switches
-
-def _reclassify_sightings(rows, uplink_map=None, known_switches=None):
-    """Ricalcola is_uplink/uplink_to di ogni avvistamento contro la topologia
-    globale. Per gli switch noti la topologia è autorevole; per gli switch senza
-    dati topologici si conserva il valore rilevato in raccolta (fallback)."""
-    if uplink_map is None or known_switches is None:
-        uplink_map, known_switches = _mac_topology_uplinks()
-    # MAC delle interfacce proprie degli switch: tali MAC sono infrastruttura
-    # ("switch-interface"), non endpoint. Si taggano, non si scartano.
-    if_macs = mac_history.get_switch_if_macs()
-    norm = core_engine._normalize_iface
-    for r in rows:
-        sw = r.get("switch_ip")
-        if sw in known_switches:
-            ups = uplink_map.get(sw, {})
-            ni = norm(r.get("interface") or "")
-            npc = norm(r.get("port_channel") or "") if r.get("port_channel") else ""
-            neigh = ups.get(ni) or (ups.get(npc) if npc else None)
-            r["is_uplink"] = bool(neigh)
-            r["uplink_to"] = neigh or ""
-        # else: switch senza topologia nota → mantiene is_uplink/uplink_to raccolti
-        r["is_uplink"] = bool(r.get("is_uplink"))
-        info = if_macs.get(r.get("mac"))
-        if info:
-            r["origin_type"] = "switch-interface"
-            r["origin_switch"] = info.get("switch_name") or info.get("switch_ip") or ""
-            r["origin_interface"] = info.get("interface") or ""
-        else:
-            r["origin_type"] = "endpoint"
-    return rows
+# Classificazione uplink/accesso: vive in collectors/mac_history.py perche'
+# la leggono in due — questa tab e la diagnosi client — e finche' stava qui
+# la diagnosi usava il valore grezzo, con i Port-channel scambiati per porte
+# di accesso. Stessa riga, due verdetti diversi a seconda di chi la leggeva.
+_mac_topology_uplinks = mac_history.topology_uplinks
+_reclassify_sightings = mac_history.reclassify_sightings
 
 def _mac_group(rows):
     """Raggruppa gli avvistamenti (già riclassificati) per MAC in

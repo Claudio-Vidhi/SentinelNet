@@ -504,24 +504,35 @@ def _access_positions_for(macs, tenants=None) -> dict:
     macs = [m for m in dict.fromkeys(macs) if m]      # unici, ordine preservato
     if not macs:
         return {}
-    best = {}
+    rows = []
     tenant_list = list(tenants) if tenants is not None else None
     CHUNK = 400                                       # < limite ~999 parametri SQLite
     with _lock, _connect() as c:
         for i in range(0, len(macs), CHUNK):
             batch = macs[i:i + CHUNK]
-            q = ("SELECT mac, tenant, switch_ip, switch_name, interface, vlan, last_seen "
-                 "FROM mac_sightings WHERE is_uplink=0 "
-                 "AND mac IN (%s)" % ",".join("?" * len(batch)))
+            # NON si filtra su is_uplink in SQL: il valore scritto in raccolta
+            # non riconosce i Port-channel (vedi reclassify_sightings), e
+            # fidarsene qui faceva passare per porta di accesso un'interfaccia
+            # aggregata verso un altro switch — cioè indicava come "posizione
+            # del client" un punto di transito.
+            q = ("SELECT mac, tenant, switch_ip, switch_name, interface, "
+                 "port_channel, vlan, is_uplink, last_seen "
+                 "FROM mac_sightings WHERE mac IN (%s)" % ",".join("?" * len(batch)))
             args = list(batch)
             if tenant_list is not None:
                 q += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
                 args.extend(tenant_list)
             q += " ORDER BY last_seen DESC"           # il primo per (MAC, tenant) = più recente
-            for r in c.execute(q, args).fetchall():
-                key = (r["mac"], r["tenant"])
-                if key not in best:
-                    best[key] = dict(r)
+            rows.extend(dict(r) for r in c.execute(q, args).fetchall())
+
+    reclassify_sightings(rows)
+    best = {}
+    for r in rows:
+        if r.get("is_uplink"):
+            continue
+        key = (r["mac"], r["tenant"])
+        if key not in best:
+            best[key] = r
     return best
 
 
@@ -656,3 +667,92 @@ def stats(tenants=None) -> dict:
         switches = c.execute("SELECT COUNT(DISTINCT switch_ip) n FROM mac_sightings" + where, args).fetchone()["n"]
     return {"sightings": total, "unique_macs": macs, "switches": switches,
             "retention_days": get_retention_days()}
+
+
+# --- Accesso o transito? -----------------------------------------------
+# La marcatura fatta in raccolta (mark_uplinks) non riconosce i Port-channel:
+# CDP/LLDP annunciano i vicini sulle porte fisiche membro, mai sull'interfaccia
+# aggregata, quindi un MAC imparato su Po10 resta is_uplink=0 e sembra una
+# porta di accesso. Qui si ricalcola contro la topologia, dove il Port-channel
+# ha un nome (pc_name) e si sa dove va.
+#
+# Import locali di core_engine: e' lui a possedere la mappa di rete, e questo
+# modulo e' storage — a livello di modulo sarebbe una dipendenza al contrario.
+_INFRA_TYPES = {"switch", "router"}
+
+
+def topology_uplinks():
+    """Ritorna (uplink_map, known_switches).
+
+    uplink_map: { switch_ip: { porta_normalizzata: etichetta_vicino } } — solo le
+                porte che vanno verso un altro apparato di rete (infrastruttura).
+    known_switches: insieme degli IP inventariati presenti in mappa (per cui la
+                topologia è autorevole: assenza di una porta = porta di accesso).
+    """
+    from collections import defaultdict
+    from core import core_engine
+    uplink_map: dict = defaultdict(dict)
+    known_switches: set = set()
+    try:
+        data = core_engine.generate_network_map(group_filter="all")
+    except Exception:
+        return uplink_map, known_switches
+
+    nodes = data.get("nodes", [])
+    node_type = {n["id"]: n.get("device_type") for n in nodes}
+    node_label = {n["id"]: (n.get("label") or n["id"]) for n in nodes}
+    known_switches = {n["id"] for n in nodes if n.get("group") != "Discovered"}
+
+    def add(sw, port, neigh_id):
+        if not port:
+            return
+        uplink_map[sw][core_engine._normalize_iface(port)] = node_label.get(neigh_id, neigh_id)
+
+    for l in data.get("links", []):
+        src, tgt = l.get("source"), l.get("target")
+        tgt_infra = node_type.get(tgt) in _INFRA_TYPES
+        src_infra = node_type.get(src) in _INFRA_TYPES
+        pc = l.get("pc_name")
+        # Le porte locali di src vanno verso tgt: sono uplink solo se tgt è infra.
+        if tgt_infra:
+            for p in l.get("local_ports", []):
+                add(src, p, tgt)
+            if pc:
+                add(src, pc, tgt)
+        if src_infra:
+            for p in l.get("remote_ports", []):
+                add(tgt, p, src)
+            if pc:
+                add(tgt, pc, src)
+    return uplink_map, known_switches
+
+def reclassify_sightings(rows, uplink_map=None, known_switches=None):
+    """Ricalcola is_uplink/uplink_to di ogni avvistamento contro la topologia
+    globale. Per gli switch noti la topologia è autorevole; per gli switch senza
+    dati topologici si conserva il valore rilevato in raccolta (fallback)."""
+    from core import core_engine
+    if uplink_map is None or known_switches is None:
+        uplink_map, known_switches = topology_uplinks()
+    # MAC delle interfacce proprie degli switch: tali MAC sono infrastruttura
+    # ("switch-interface"), non endpoint. Si taggano, non si scartano.
+    if_macs = get_switch_if_macs()
+    norm = core_engine._normalize_iface
+    for r in rows:
+        sw = r.get("switch_ip")
+        if sw in known_switches:
+            ups = uplink_map.get(sw, {})
+            ni = norm(r.get("interface") or "")
+            npc = norm(r.get("port_channel") or "") if r.get("port_channel") else ""
+            neigh = ups.get(ni) or (ups.get(npc) if npc else None)
+            r["is_uplink"] = bool(neigh)
+            r["uplink_to"] = neigh or ""
+        # else: switch senza topologia nota → mantiene is_uplink/uplink_to raccolti
+        r["is_uplink"] = bool(r.get("is_uplink"))
+        info = if_macs.get(r.get("mac"))
+        if info:
+            r["origin_type"] = "switch-interface"
+            r["origin_switch"] = info.get("switch_name") or info.get("switch_ip") or ""
+            r["origin_interface"] = info.get("interface") or ""
+        else:
+            r["origin_type"] = "endpoint"
+    return rows

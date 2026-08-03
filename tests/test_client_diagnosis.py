@@ -224,6 +224,30 @@ class TestVlanMismatch(_Base):
         self.assertEqual(h["trunk"]["vlan"], "10")
 
 
+class TestAmbiguousBindings(unittest.TestCase):
+    """La chiave di arp_entries e' (mac, ip, source_ip): un host visto da due
+    gateway produce due righe dello STESSO binding. Elencarle come 'altri
+    binding' segnalava come conflitto la configurazione normale — e mostrava
+    due volte lo stesso MAC."""
+
+    def _entry(self, mac, gw):
+        return dict(CLIENT, mac=mac, source_ip=gw)
+
+    def test_the_same_mac_from_two_gateways_is_not_ambiguous(self):
+        rows = [self._entry("aa:bb:cc:dd:ee:ff", "192.0.2.1"),
+                self._entry("aa:bb:cc:dd:ee:ff", "192.0.2.2")]
+        with _client_map(rows):
+            p = client_diagnosis._position("192.0.2.10", False, None)
+        self.assertNotIn("ambiguous", p)
+
+    def test_a_different_mac_on_the_same_ip_still_is(self):
+        rows = [self._entry("aa:bb:cc:dd:ee:ff", "192.0.2.1"),
+                self._entry("11:22:33:44:55:66", "192.0.2.1")]
+        with _client_map(rows):
+            p = client_diagnosis._position("192.0.2.10", False, None)
+        self.assertEqual([a["mac"] for a in p["ambiguous"]], ["11:22:33:44:55:66"])
+
+
 class TestFreshness(unittest.TestCase):
     """Le scansioni ARP/MAC sono manuali: un referto costruito su un dato di tre
     settimane fa descrive una porta che potrebbe non essere piu' quella, e chi
