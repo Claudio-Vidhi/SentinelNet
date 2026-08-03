@@ -2725,6 +2725,29 @@ class TestRedundancyUi(unittest.TestCase):
         self.assertIn("redundancy_heartbeat", source)
         self.assertIn("dashes: true", source)
 
+    def test_client_diagnosis_endpoints_are_reachable_from_the_ui(self):
+        # Entrambe le rotte esistevano ma nessuna interfaccia le chiamava:
+        # erano diagnosi raggiungibili solo via curl. Se questo test cade,
+        # il pulsante è stato tolto e la rotta è di nuovo orfana.
+        source = frontend_source()
+        # FortiGate: pill nel pane Traffico + voce del registro FGT_DATASETS.
+        self.assertIn("fgtPickView('traffic','clientDiagnosis')", source)
+        self.assertIn("/diagnose-client`", source)
+        self.assertIn("loadFgtDataset('clientDiagnosis')", source)
+        # WLC: card nel referto della Client Map, lanciata a mano.
+        self.assertIn("/api/wlc/${encodeURIComponent(ip)}/diagnose-client/", source)
+        self.assertIn("function diagnoseWifi", source)
+        self.assertIn('onclick="diagnoseWifi()"', source)
+
+    def test_query_views_do_not_fire_with_an_empty_form(self):
+        # Aprire la pill carica la vista: senza il campo obbligatorio partiva
+        # una richiesta con la domanda vuota, e il firewall rispondeva a
+        # un'altra domanda.
+        source = frontend_source()
+        self.assertIn("if (spec.requires && !_fgtVal(spec.requires))", source)
+        self.assertIn("requires: 'fgtDiagClient'", source)
+        self.assertIn("requires: 'fgtLookupSrc'", source)
+
 
 if __name__ == "__main__":
     unittest.main()

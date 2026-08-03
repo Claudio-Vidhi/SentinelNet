@@ -731,6 +731,7 @@
     // cercare nel posto sbagliato.
 
     let _diagClient = null;   // client del referto a schermo, per il "rilancia"
+    let _diagMac = '';        // MAC risolto dal referto: il WLC interroga per MAC
 
     function closeDiagnosisModal() {
         const el = document.getElementById('clientDiagnosisModal');
@@ -782,6 +783,46 @@
         diagnoseClient(_diagClient, el ? el.value.trim() : '');
     }
 
+    // Diagnosi wireless: sta a parte e si lancia a mano perché richiede un
+    // dato che la diagnosi L2/L3 non ha — QUALE controller interrogare. Non si
+    // indovina dall'inventario: il router accetta anche vendor 'cisco'
+    // generico, quindi un elenco filtrato per vendor proporrebbe ogni switch
+    // Cisco come se fosse un WLC.
+    async function diagnoseWifi() {
+        const en = currentLang === 'en';
+        const host = document.getElementById('diagWifiBody');
+        const ipEl = document.getElementById('diagWlcIp');
+        const ip = ipEl ? ipEl.value.trim() : '';
+        if (!host) return;
+        if (!ip || !_diagMac) {
+            host.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">${
+                en ? 'Enter the WLC address; the client MAC comes from the diagnosis above.'
+                   : 'Inserisci l’indirizzo del WLC; il MAC del client arriva dalla diagnosi qui sopra.'}</div>`;
+            return;
+        }
+        host.innerHTML = `<div style="color:var(--text-muted); font-size:12px;"><i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${en ? 'Querying the controller…' : 'Interrogazione del controller…'}</div>`;
+        const res = await apiFetch(`/api/wlc/${encodeURIComponent(ip)}/diagnose-client/${encodeURIComponent(_diagMac)}`);
+        if (!res || !res.ok) {
+            const e = res ? await res.json().catch(() => ({})) : {};
+            host.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(e.detail || (en ? 'WiFi diagnosis failed.' : 'Diagnosi WiFi fallita.'))}</div>`;
+            return;
+        }
+        const d = await res.json();
+        const sections = d.sections || {};
+        // Stessa forma della diagnosi FortiGate: sezioni best-effort, ognuna
+        // con i propri dati o il proprio errore. Si dice quale ha risposto.
+        const rows = Object.keys(sections).map(name => {
+            const s = sections[name] || {};
+            const n = Array.isArray(s.data) ? s.data.length : null;
+            return _kv(name, s.error ? (en ? 'error: ' : 'errore: ') + s.error
+                                     : (n === null ? (en ? 'answered' : 'ha risposto') : String(n)));
+        }).join('');
+        host.innerHTML = _kv('WLC', d.wlc) + _kv(en ? 'Platform' : 'Piattaforma', d.platform) +
+            _kv('MAC', d.client_mac) + rows +
+            `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:11px; color:var(--text-muted);">${en ? 'Raw controller output' : 'Output grezzo del controller'}</summary>
+             <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(JSON.stringify(sections, null, 2))}</pre></details>`;
+    }
+
     // Una sezione: pallino di stato, titolo, corpo. Se non è nota, il corpo è
     // il motivo — che è l'informazione utile, non un ripiego.
     // ``extra`` viene reso in OGNI caso, anche quando la sezione non è nota:
@@ -814,6 +855,7 @@
     function renderDiagnosis(d, dest) {
         const en = currentLang === 'en';
         const s = d.sections || {};
+        _diagMac = (s.position && s.position.mac) || (/^[0-9a-fA-F:.-]{12,17}$/.test(_diagClient) ? _diagClient : '');
 
         const badge = d.complete
             ? `<span class="badge" style="color:var(--success);">${en ? 'complete' : 'completo'}</span>`
@@ -944,6 +986,25 @@
             return out;
         });
 
+        // Card wireless: presente sempre, vuota finché non la si lancia. Una
+        // chiamata SSH al controller a ogni diagnosi sarebbe un costo pagato
+        // da tutti per un client su cavo.
+        const wifi = `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:13px; font-weight:600;">
+                <span style="width:8px; height:8px; border-radius:50%; background:var(--text-muted); flex:none;"></span>
+                <i class="fa-solid fa-wifi" style="color:var(--text-muted);"></i> ${en ? 'Wireless (Cisco WLC)' : 'Wireless (Cisco WLC)'}
+                <div style="flex:1;"></div>
+                <input id="diagWlcIp" placeholder="${en ? 'WLC address' : 'indirizzo WLC'}"
+                       style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:4px 10px; font-size:12px; color:var(--text); width:170px;">
+                <button onclick="diagnoseWifi()" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-stethoscope"></i> ${en ? 'Run' : 'Lancia'}</button>
+            </div>
+            <div id="diagWifiBody"><div style="color:var(--text-muted); font-size:12px;">${
+                _diagMac ? (en ? 'Client detail, AP, WLAN and nearby rogue APs — on demand.'
+                               : 'Dettaglio client, AP, WLAN e rogue AP vicini — su richiesta.')
+                         : (en ? 'No MAC known for this client: the controller is queried by MAC.'
+                               : 'Nessun MAC noto per questo client: il controller si interroga per MAC.')}</div></div>
+        </div>`;
+
         _diagShell(`
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
                 <span style="font-family:var(--font-code); font-size:14px; color:var(--primary);">${escapeHtml(d.client)}</span>
@@ -953,7 +1014,7 @@
                        style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:12px; color:var(--text); width:210px;">
                 <button onclick="rerunDiagnosis()" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> ${en ? 'Re-run' : 'Rilancia'}</button>
             </div>
-            ${position}${l2}${path}${fw}${across}${denies}
+            ${position}${l2}${path}${fw}${across}${denies}${wifi}
             <div style="display:flex; justify-content:flex-end; margin-top:6px;">
                 <button onclick="closeDiagnosisModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en ? 'Close' : 'Chiudi'}</button>
             </div>`);

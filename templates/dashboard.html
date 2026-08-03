@@ -2291,6 +2291,7 @@
             <button type="button" class="ca-pill active" id="fgtPill-sessions" onclick="fgtPickView('traffic','sessions')" data-i18n="fgtPillSessions">Sessioni</button>
             <button type="button" class="ca-pill" id="fgtPill-logs" onclick="fgtPickView('traffic','logs')" data-i18n="fgtPillLogs">Log</button>
             <button type="button" class="ca-pill" id="fgtPill-deviceInventory" onclick="fgtPickView('traffic','deviceInventory')" data-i18n="fgtPillDeviceInventory">Inventario Dispositivi</button>
+            <button type="button" class="ca-pill" id="fgtPill-clientDiagnosis" onclick="fgtPickView('traffic','clientDiagnosis')" data-i18n="fgtPillClientDiagnosis">Diagnosi Client</button>
           </div>
           <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
           <div id="fgtForm-sessions" style="margin-bottom:12px;">
@@ -2371,9 +2372,37 @@
           <input id="fgtFilter-sessions" type="text" oninput="renderFgtDataset('sessions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
           <input id="fgtFilter-logs" type="text" oninput="renderFgtDataset('logs')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <input id="fgtFilter-deviceInventory" type="text" oninput="renderFgtDataset('deviceInventory')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <div id="fgtForm-clientDiagnosis" style="display:none; margin-bottom:12px;">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtDiagClient" data-i18n="lblFgtDiagClient">Client (IP o MAC)</label>
+                <input id="fgtDiagClient" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtDiagDst" data-i18n="colFgtSessDst">Destinazione</label>
+                <input id="fgtDiagDst" type="text" style="padding-left:12px; font-size:13px;">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtDiagProto" data-i18n="lblFgtProto">Protocollo</label>
+                <select id="fgtDiagProto" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="TCP">TCP</option>
+                  <option value="UDP">UDP</option>
+                  <option value="ICMP">ICMP</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label for="fgtDiagPort" data-i18n="colFgtSessDport">Porta dest.</label>
+                <input id="fgtDiagPort" type="number" min="1" max="65535" value="443" style="padding-left:12px; font-size:13px;">
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('clientDiagnosis')" data-i18n="btnFgtDiagRun">
+              <i class="fa-solid fa-stethoscope"></i> Diagnostica
+            </button>
+          </div>
           <div id="fgtView-sessions"></div>
           <div id="fgtView-logs" style="display:none;"></div>
           <div id="fgtView-deviceInventory" style="display:none;"></div>
+          <div id="fgtView-clientDiagnosis" style="display:none;"></div>
         </div>
       </div>
 

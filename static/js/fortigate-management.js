@@ -68,7 +68,7 @@ const FGT_DATASETS = {
                                    protocol: _fgtVal('fgtLookupProto') || 'TCP',
                                    dest_port: parseInt(_fgtVal('fgtLookupPort')) || 443,
                                    srcintf: _fgtVal('fgtLookupIntf') || null }),
-                    cols: [] },
+                    requires: 'fgtLookupSrc', cols: [] },
     securityProfiles: { url: ip => `/api/fortigate/${ip}/firewall/security-profiles`, cols: [] },
     // --- Traffic ---
     deviceInventory:{ url: ip => `/api/fortigate/${ip}/device-inventory`,
@@ -96,6 +96,18 @@ const FGT_DATASETS = {
                            ['policyid','colFgtLogPolicy'], ['service','colFgtLogService'],
                            ['app','colFgtLogApp'], ['sentbyte','colFgtLogSent','bytes'],
                            ['rcvdbyte','colFgtLogRcvd','bytes']] },
+    // Diagnosi client: unica rotta della tab che risponde SENZA l'involucro
+    // {source, data} — torna {client, sections:{...}} perché nasce per l'AI e
+    // per MCP. Per questo `pick` legge il secondo argomento, il corpo intero.
+    clientDiagnosis:{ url: ip => `/api/fortigate/${ip}/diagnose-client`, method: 'POST',
+                    body: () => ({ client: _fgtVal('fgtDiagClient'),
+                                   dest: _fgtVal('fgtDiagDst') || null,
+                                   dest_port: parseInt(_fgtVal('fgtDiagPort')) || 443,
+                                   protocol: _fgtVal('fgtDiagProto') || 'TCP' }),
+                    pick: (_data, body) => _fgtSectionRows(body),
+                    requires: 'fgtDiagClient',
+                    cols: [['section','colFgtDiagSection'], ['outcome','colFgtDiagOutcome','badge'],
+                           ['detail','colFgtDiagDetail']] },
     // --- Security ---
     admins:       { url: ip => `/api/fortigate/${ip}/system/admins`,
                     cols: [['name','colFgtAdminName'], ['accprofile','colFgtAdminProfile'],
@@ -145,6 +157,20 @@ async function loadFgtDataset(key) {
         }
         return;
     }
+    // Viste che interrogano un flusso o un client: aprire la pill le carica,
+    // e senza il campo obbligatorio partirebbe una richiesta con la domanda
+    // vuota. Il firewall risponderebbe pure — a un'altra domanda.
+    if (spec.requires && !_fgtVal(spec.requires)) {
+        const host = document.getElementById('fgtView-' + key);
+        if (host) {
+            const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+            const en = currentLang === 'en';
+            host.innerHTML = _fgtEmpty(L.msgFgtFormRequired
+                || (en ? 'Fill the form above, then run the query.'
+                       : 'Compila il modulo qui sopra, poi lancia la query.'));
+        }
+        return;
+    }
     const opts = spec.method === 'POST'
         ? { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(spec.body ? spec.body() : {}) }
@@ -153,7 +179,9 @@ async function loadFgtDataset(key) {
         const res = await apiFetch(spec.url(encodeURIComponent(ip)), opts);
         if (res && res.ok) {
             const body = await res.json();
-            const data = spec.pick ? spec.pick(body.data) : body.data;
+            // Secondo argomento: il corpo intero, per le rotte che non usano
+            // l'involucro {source, data} (vedi clientDiagnosis).
+            const data = spec.pick ? spec.pick(body.data, body) : body.data;
             fgtDatasetRows[key] = {
                 rows: _fgtRows(data, spec),
                 raw: data, source: body.source, apiError: body.api_error || null,
@@ -268,6 +296,29 @@ function _fgtCell(v) {
     return String(v);
 }
 
+// Una diagnosi risponde a sezioni best-effort: ognuna può portare dati o il
+// proprio errore. Qui diventa una riga per sezione — quale ha risposto e con
+// cosa — invece di un blob JSON. I dati per esteso hanno già la loro vista
+// nella tab (ARP, sessioni, log, inventario): questa dice se sono arrivati.
+function _fgtSectionRows(body) {
+    const sections = (body || {}).sections || {};
+    return Object.entries(sections).map(([name, raw]) => {
+        const s = raw || {};
+        let detail;
+        if (s.error) {
+            detail = s.error;
+        } else if (Array.isArray(s.data)) {
+            detail = `${s.data.length}` + (s.source ? ` (${s.source})` : '');
+        } else {
+            // Oggetto singolo (policy lookup, route): si mostra, ma troncato —
+            // una config intera nel DOM di una cella non serve a nessuno.
+            detail = _fgtCell(s.data === undefined ? s : s.data);
+            if (detail.length > 300) detail = detail.slice(0, 300) + '…';
+        }
+        return { section: name, outcome: s.error ? 'error' : 'ok', detail };
+    });
+}
+
 // --- Formattatori di colonna -----------------------------------------------
 // Terzo elemento opzionale di una voce `cols`. Ricevono il valore GREZZO del
 // dispositivo e restituiscono HTML: sono l'unico punto della tab in cui si
@@ -277,7 +328,7 @@ function _fgtCell(v) {
 
 // Stati che il FortiOS scrive in mille modi diversi per dire la stessa cosa.
 const _FGT_OK = ['up', 'enable', 'enabled', 'online', 'accept', 'in-sync', 'insync', 'true', 'ok', 'valid'];
-const _FGT_BAD = ['down', 'disable', 'disabled', 'offline', 'deny', 'out-of-sync', 'false', 'expired', 'blocked'];
+const _FGT_BAD = ['down', 'disable', 'disabled', 'offline', 'deny', 'out-of-sync', 'false', 'expired', 'blocked', 'error'];
 
 const FGT_FMT = {
     // Pastiglia verde/rossa/gialla. Riusa .status del design system invece di
