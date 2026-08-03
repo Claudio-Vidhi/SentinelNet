@@ -439,6 +439,63 @@ def vlans_for_ips(ip_tenant_map: dict) -> dict:
     return out
 
 
+def client_history(mac: str, tenants=None, limit: int = 50) -> dict:
+    """Dove è stato questo MAC e che IP ha avuto, dal dato già raccolto.
+
+    Le due tabelle sono già storiche e nessuno lo sfruttava: la chiave unica di
+    ``mac_sightings`` è (mac, switch_ip, interface, vlan), quindi un client che
+    cambia porta o VLAN lascia una riga NUOVA e la vecchia resta; quella di
+    ``arp_entries`` è (mac, ip, source_ip), quindi un cambio di IP — o un
+    secondo gateway che lo vede — lascia anch'esso la sua riga. Sommate a
+    ``first_seen``/``last_seen``/``seen_count`` raccontano già la storia del
+    client, fin dove arriva ``retention_days``.
+
+    Limite noto: le righe aggregano, non sono un giornale. Un client che
+    rimbalza A→B→A→B è indistinguibile da uno che si è spostato una volta,
+    ``seen_count`` a parte. Contare il flapping richiederebbe una tabella di
+    eventi, che qui non serve.
+
+    Gli uplink restano fuori dalle posizioni, come in ``client_map``: la porta
+    di un uplink dice dov'è il *cavo*, non dov'è il client.
+    """
+    init_db()
+    norm = normalize_mac(mac)
+    if not norm:
+        return {"mac": mac, "known": False,
+                "reason": "MAC non riconoscibile", "positions": [], "addresses": []}
+    tenant_list = list(tenants) if tenants is not None else None
+    if tenant_list is not None and not tenant_list:
+        return {"mac": norm, "known": False, "reason": "nessun tenant visibile",
+                "positions": [], "addresses": []}
+    cap = max(1, min(500, limit))
+
+    def _q(sql: str, extra_args: list) -> list:
+        args: List[Any] = [norm] + extra_args
+        if tenant_list is not None:
+            sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
+            args.extend(tenant_list)
+        sql += " ORDER BY last_seen DESC LIMIT ?"
+        args.append(cap)
+        with _lock, _connect() as c:
+            return [dict(r) for r in c.execute(sql, args).fetchall()]
+
+    positions = _q(
+        "SELECT switch_ip, switch_name, interface, vlan, tenant, first_seen, "
+        "last_seen, seen_count FROM mac_sightings WHERE mac=? AND is_uplink=0", [])
+    addresses = _q(
+        "SELECT ip, vlan, source_ip, source_name, source_type, tenant, "
+        "first_seen, last_seen, seen_count FROM arp_entries WHERE mac=?", [])
+    # ``known`` = "ho potuto rispondere", non "ho trovato righe". Uno storico
+    # vuoto È una risposta — un client visto per la prima volta oggi — e farlo
+    # passare per sezione ignota trascinerebbe giù il ``complete`` dell'intero
+    # referto. Stessa convenzione della sezione blocchi, dove zero blocchi è
+    # ``known: True`` con ``total: 0``.
+    return {"mac": norm, "known": True,
+            "empty": not (positions or addresses),
+            "positions": positions, "addresses": addresses,
+            "retention_days": get_retention_days()}
+
+
 def _access_positions_for(macs, tenants=None) -> dict:
     """Per un insieme di MAC ritorna { (mac, tenant): sighting_di_accesso_più_recente },
     escludendo gli uplink. La chiave include il tenant per evitare che la posizione

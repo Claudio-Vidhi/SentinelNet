@@ -677,3 +677,116 @@ def collect_mac_table(host, username, password, secret="", device_type="cisco_io
                 "error": "MAC-table non ottenibile (%s)." % scope}
     mark_uplinks(rows, uplink_ports)
     return {"rows": rows, "method": method, "error": None}
+
+
+def uplink_ports_from_backup(ip: str) -> dict:
+    """Porte locali dell'apparato che hanno un vicino CDP/LLDP: sono trunk/uplink,
+    quindi i MAC visti lì sono transito e non 'posizione' reale dell'host. Si
+    ricavano dal backup dell'apparato (già raccolto dal triage)."""
+    import os
+    from core import core_engine
+    try:
+        content = None
+        for root, _dirs, files in os.walk(core_engine.BACKUP_FOLDER):
+            for f in files:
+                if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
+                    with open(os.path.join(root, f), encoding="utf-8", errors="ignore") as fh:
+                        content = fh.read()
+                    break
+            if content:
+                break
+        if not content:
+            return {}
+        out = {}
+        for n in core_engine.parse_cdp_lldp_neighbors(content):
+            lp = n.get("local_port")
+            if lp and lp != "Unknown":
+                name = n.get("neighbor_id") or n.get("neighbor_ip") or "Unknown"
+                out[lp] = name
+        return out
+    except Exception:
+        return {}
+
+
+def collect_one(device: dict, transport=None) -> dict:
+    """MAC-table di UN apparato, con gli uplink già marcati. Non scrive nulla."""
+    from core import core_engine
+    from collectors import mac_history
+    from services import inventory_manager
+
+    ip = device["IP"]
+    vendor = (device.get("Vendor") or "cisco").lower()
+    username, password, secret = core_engine.get_device_credentials(device)
+    try:
+        _, netmiko_type = core_engine.resolve_driver(vendor)
+    except Exception:
+        netmiko_type = "cisco_ios"
+    # Comando ad-hoc configurato per questo apparato (casi non ordinari).
+    ov = mac_history.get_override(ip) or {}
+    dev_transports = inventory_manager.parse_transports(device)
+    res = collect_mac_table(
+        ip, username, password, secret, device_type=netmiko_type,
+        uplink_ports=uplink_ports_from_backup(ip), transport=transport,
+        cli_command=ov.get("command"), cli_format=ov.get("fmt"),
+        transports=dev_transports,
+    )
+    res["device"] = device
+    # Raccogli anche i MAC delle interfacce proprie dello switch (infrastruttura):
+    # servono a classificarli come "switch-interface" invece che endpoint. I
+    # fallimenti sono non fatali (lista vuota).
+    if not res.get("error"):
+        try:
+            ifres = collect_interface_macs(
+                ip, username, password, secret, device_type=netmiko_type,
+                transport=transport, transports=dev_transports,
+            )
+            res["if_macs"] = ifres.get("rows") or []
+        except Exception:
+            res["if_macs"] = []
+    else:
+        res["if_macs"] = []
+    return res
+
+
+def collect_all(devices: list, transport=None) -> dict:
+    """Raccoglie E storicizza la MAC-table di più apparati.
+
+    Gemella di ``arp_collector.collect_all``: raccolta e scrittura nello stesso
+    posto. Prima la sequenza viveva dentro la rotta, quindi chi doveva
+    riscansionare per altri motivi — la diagnosi client che trova il dato
+    vecchio — avrebbe dovuto rifarsela, uplink e override compresi, o importare
+    un router da un service.
+
+    Import locali: ``mac_history`` importa questo modulo, a livello di modulo
+    sarebbe un ciclo.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from functools import partial
+    from collectors import mac_history
+
+    if not devices:
+        return {"scanned": 0, "results": [], "pruned": 0}
+    worker = partial(collect_one, transport=transport)
+    with ThreadPoolExecutor(max_workers=min(8, len(devices))) as ex:
+        collected = list(ex.map(worker, devices))
+
+    results = []
+    for res in collected:
+        d = res["device"]
+        ip = d["IP"]
+        if res.get("error"):
+            results.append({"ip": ip, "error": res["error"], "count": 0})
+            continue
+        summ = mac_history.record_sightings(
+            res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
+            tenant=d.get("Group") or "Generale",
+            site=d.get("Site") or "central",
+        )
+        if res.get("if_macs"):
+            mac_history.record_switch_if_macs(
+                res["if_macs"], switch_ip=ip, switch_name=d.get("Hostname", ""),
+            )
+        results.append({"ip": ip, "method": res["method"],
+                        "count": len(res["rows"]), **summ})
+    return {"scanned": len(devices), "results": results,
+            "pruned": mac_history.prune()}

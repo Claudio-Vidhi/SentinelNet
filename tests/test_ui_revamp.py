@@ -2725,6 +2725,34 @@ class TestRedundancyUi(unittest.TestCase):
         self.assertIn("redundancy_heartbeat", source)
         self.assertIn("dashes: true", source)
 
+    def test_the_diagnosis_report_is_rendered_in_exactly_one_place(self):
+        # Viveva in una modale della Client Map. Due copie dello stesso referto
+        # sarebbero due copie da tenere allineate: il pulsante di riga porta
+        # alla tab, la modale non esiste piu'.
+        source = frontend_source()
+        self.assertIn('id="tab-diagnosi"', source)
+        self.assertIn("function renderDiagnosi", source)
+        self.assertIn("diagnoseClientInTab(", source)
+        self.assertNotIn("closeDiagnosisModal", source)
+        self.assertNotIn("clientDiagnosisModal", source)
+
+    def test_the_new_sections_reach_the_report(self):
+        source = frontend_source()
+        # Cronologia e catena trunk: le due sezioni nuove del referto.
+        self.assertIn("function _diagTrunk", source)
+        self.assertIn("chain_known", source)
+        self.assertIn("fa-clock-rotate-left", source)
+        # Freschezza: dice se il referto descrive la rete di adesso.
+        self.assertIn("function _diagFreshness", source)
+
+    def test_port_bounce_requires_typing_the_port_name(self):
+        # Una conferma che si puo' dare col mouse senza leggere non e' una
+        # conferma: la porta che si sta per staccare va digitata.
+        source = frontend_source()
+        self.assertIn("/api/diagnose/port-bounce", source)
+        self.assertIn("diagBounceConfirm", source)
+        self.assertIn("typed.toLowerCase() !== String(_diagSwitch.port).toLowerCase()", source)
+
     def test_client_diagnosis_endpoints_are_reachable_from_the_ui(self):
         # Entrambe le rotte esistevano ma nessuna interfaccia le chiamava:
         # erano diagnosi raggiungibili solo via curl. Se questo test cade,

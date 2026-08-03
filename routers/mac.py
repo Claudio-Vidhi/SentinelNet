@@ -4,7 +4,6 @@
 import os
 import time
 from typing import Optional, List, Dict
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from pydantic import BaseModel
@@ -38,32 +37,6 @@ class MacOverrideDeleteSchema(BaseModel):
 _MAC_INFRA_TYPES = {"switch", "router"}
 
 # --- ENDPOINTS E HELPERS ---
-
-def _mac_uplink_ports(ip: str) -> dict:
-    """Porte locali dell'apparato che hanno un vicino CDP/LLDP: sono trunk/uplink,
-    quindi i MAC visti lì sono transito e non 'posizione' reale dell'host. Si
-    ricavano dal backup dell'apparato (già raccolto dal triage)."""
-    try:
-        content = None
-        for root, _dirs, files in os.walk(core_engine.BACKUP_FOLDER):
-            for f in files:
-                if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
-                    with open(os.path.join(root, f), encoding="utf-8", errors="ignore") as fh:
-                        content = fh.read()
-                    break
-            if content:
-                break
-        if not content:
-            return {}
-        out = {}
-        for n in core_engine.parse_cdp_lldp_neighbors(content):
-            lp = n.get("local_port")
-            if lp and lp != "Unknown":
-                name = n.get("neighbor_id") or n.get("neighbor_ip") or "Unknown"
-                out[lp] = name
-        return out
-    except Exception:
-        return {}
 
 def _mac_topology_uplinks():
     """Ritorna (uplink_map, known_switches).
@@ -139,40 +112,6 @@ def _reclassify_sightings(rows, uplink_map=None, known_switches=None):
             r["origin_type"] = "endpoint"
     return rows
 
-def _mac_collect_one(device: dict, transport=None) -> dict:
-    ip = device["IP"]
-    vendor = (device.get("Vendor") or "cisco").lower()
-    username, password, secret = core_engine.get_device_credentials(device)
-    try:
-        _, netmiko_type = core_engine.resolve_driver(vendor)
-    except Exception:
-        netmiko_type = "cisco_ios"
-    # Comando ad-hoc configurato per questo apparato (casi non ordinari).
-    ov = mac_history.get_override(ip) or {}
-    dev_transports = inventory_manager.parse_transports(device)
-    res = mac_collector.collect_mac_table(
-        ip, username, password, secret, device_type=netmiko_type,
-        uplink_ports=_mac_uplink_ports(ip), transport=transport,
-        cli_command=ov.get("command"), cli_format=ov.get("fmt"),
-        transports=dev_transports,
-    )
-    res["device"] = device
-    # Raccogli anche i MAC delle interfacce proprie dello switch (infrastruttura):
-    # servono a classificarli come "switch-interface" invece che endpoint. I
-    # fallimenti sono non fatali (lista vuota).
-    if not res.get("error"):
-        try:
-            ifres = mac_collector.collect_interface_macs(
-                ip, username, password, secret, device_type=netmiko_type,
-                transport=transport, transports=dev_transports,
-            )
-            res["if_macs"] = ifres.get("rows") or []
-        except Exception:
-            res["if_macs"] = []
-    else:
-        res["if_macs"] = []
-    return res
-
 def _mac_group(rows):
     """Raggruppa gli avvistamenti (già riclassificati) per MAC in
     {mac, oui_vendor, origin[], transit[], status}. origin ordinato per recency."""
@@ -244,34 +183,13 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     if not targets:
         raise HTTPException(status_code=404, detail="Nessun dispositivo idoneo per la scansione MAC.")
 
-    # Raccolta in parallelo (I/O di rete), scrittura DB serializzata dopo.
-    from functools import partial
-    worker = partial(_mac_collect_one, transport=payload.transport)
-    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as ex:
-        collected = list(ex.map(worker, targets))
-
-    results = []
-    for res in collected:
-        d = res["device"]
-        ip = d["IP"]
-        if res.get("error"):
-            results.append({"ip": ip, "error": res["error"], "count": 0})
-            continue
-        summ = mac_history.record_sightings(
-            res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
-            tenant=d.get("Group") or "Generale",
-            site=d.get("Site") or "central",
-        )
-        # Storicizza i MAC delle interfacce proprie dello switch (infrastruttura).
-        if res.get("if_macs"):
-            mac_history.record_switch_if_macs(
-                res["if_macs"], switch_ip=ip, switch_name=d.get("Hostname", ""),
-            )
-        results.append({"ip": ip, "method": res["method"], "count": len(res["rows"]), **summ})
-
-    pruned = mac_history.prune()
-    log_audit(f"MAC scan eseguita da '{current_user.get('sub')}' su {len(targets)} apparati (pruned: {pruned}).")
-    return {"scanned": len(targets), "results": results, "pruned": pruned}
+    # Raccolta in parallelo e storicizzazione: la sequenza vive nel collector,
+    # così la riscansione mirata della diagnosi client usa la stessa e non una
+    # copia che col tempo diverge (uplink, override, MAC di interfaccia).
+    out = mac_collector.collect_all(targets, transport=payload.transport)
+    log_audit(f"MAC scan eseguita da '{current_user.get('sub')}' su {len(targets)} apparati "
+              f"(pruned: {out['pruned']}).")
+    return out
 
 @router.get("/api/mac/search")
 def mac_search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Optional[str] = None,
