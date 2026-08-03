@@ -361,13 +361,32 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
     # Mappa trasporti esplicita (§11.6): validata; None = deriva da esistente/legacy.
     transports = _validate_transports(transports)
 
-    enc_password = crypto_vault.encrypt_password(password)
-    enc_secret = crypto_vault.encrypt_password(enable_secret)
-
     with _io_lock:
         devices = get_all_devices()
         # Preserva l'hostname già rilevato sul dispositivo esistente
         existing = next((d for d in devices if d['IP'] == ip), None)
+
+        # Credenziali: su un dispositivo GIÀ ESISTENTE un valore vuoto vuole
+        # dire "lascia quelle che ci sono", non "cancellale" — stessa regola
+        # della community SNMP qui sotto. Senza, ogni salvataggio parziale le
+        # azzerava: la modifica da UI obbligava a ridigitare la password per
+        # non perderla, e ogni sync dell'agente di sede (routers/agent.py, che
+        # le credenziali non le conosce e manda stringhe vuote) riportava ai
+        # default i dispositivi che annunciava.
+        # In creazione si scrive quello che arriva: il vuoto è già gestito a
+        # valle da get_device_credentials, che ricade sui default.
+        # ponytail: non c'è modo esplicito di SVUOTARE un enable secret. Se
+        # servisse, la strada è la spunta dedicata che la community SNMP ha
+        # già, non un sentinel diverso da queste due.
+        if existing is not None:
+            username = username or existing.get('Username') or ''
+            enc_password = crypto_vault.encrypt_password(password) if password \
+                else (existing.get('Password') or '')
+            enc_secret = crypto_vault.encrypt_password(enable_secret) if enable_secret \
+                else (existing.get('Enable Secret') or '')
+        else:
+            enc_password = crypto_vault.encrypt_password(password)
+            enc_secret = crypto_vault.encrypt_password(enable_secret)
         existing_hostname = existing.get('Hostname') if existing else None
         # Preserva la sede esistente se non ne viene indicata una nuova.
         resolved_site = site or (existing.get('Site') if existing else None) or 'central'
