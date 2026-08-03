@@ -118,3 +118,53 @@ function _epFlag(f) {
 function _epTime(iso) {
     return String(iso || '').replace('T', ' ').slice(0, 16) || '—';
 }
+
+// Export lato client, come exportCategoriesCsv() in topology.js: il file si
+// costruisce da cio' che la tabella mostra. Una rotta di export sarebbe un
+// secondo formattatore, e i due ordini di colonne divergerebbero.
+const _EP_COLS = ['mac', 'oui_vendor', 'tenant', 'site', 'ips', 'switch_ip',
+                  'switch_name', 'interface', 'vlan', 'client_type',
+                  'first_seen', 'last_seen', 'seen_count', 'access_port_count',
+                  'flags'];
+
+function endpointsExport(format) {
+    const L = i18n[currentLang];
+    if (!_epRows.length) return;
+    // Se l'elenco e' tagliato lo si dice PRIMA di scaricare: un inventario
+    // parziale spacciato per intero e' peggio di un export rifiutato.
+    if (_epTruncated && !confirm(L.epExportPartial)) return;
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    let blob, name;
+    if (format === 'json') {
+        blob = new Blob([JSON.stringify(_epRows, null, 2)], { type: 'application/json' });
+        name = `sentinelnet-endpoints-${stamp}.json`;
+    } else {
+        const cell = v => {
+            const s = Array.isArray(v) ? v.join(' ') : (v === null || v === undefined ? '' : String(v));
+            return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        const lines = [_EP_COLS.join(',')];
+        _epRows.forEach(r => lines.push(_EP_COLS.map(k => cell(r[k])).join(',')));
+        // BOM: senza, Excel legge gli accenti come mojibake.
+        blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        name = `sentinelnet-endpoints-${stamp}.csv`;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+// La riga conosce gia' il proprio tenant — la chiave e' (MAC, tenant) — quindi
+// lo passa alla diagnosi, che percio' non deve chiedere quale sede. La domanda
+// resta per chi digita un indirizzo a mano.
+function endpointsDiagnose(mac, tenant) {
+    const input = document.getElementById('diagClientInput');
+    if (input) input.value = mac;
+    _diagClient = mac;
+    _diagTenant = tenant || null;
+    switchTab('tab-diagnosi');
+    runDiagnosi();
+}
