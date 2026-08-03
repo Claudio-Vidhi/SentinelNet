@@ -46,19 +46,31 @@ _mac_topology_uplinks = mac_history.topology_uplinks
 _reclassify_sightings = mac_history.reclassify_sightings
 
 def _mac_group(rows):
-    """Raggruppa gli avvistamenti (già riclassificati) per MAC in
-    {mac, oui_vendor, origin[], transit[], status}. origin ordinato per recency."""
-    by_mac, order = {}, []
+    """Raggruppa gli avvistamenti (già riclassificati) per (MAC, tenant) in
+    {mac, tenant, oui_vendor, origin[], transit[], status}. origin ordinato per recency.
+
+    Il tenant fa parte della chiave perché un tenant è una rete a sé. Lo stesso
+    MAC in due sedi ha due posizioni ENTRAMBE vere, e contare le porte distinte
+    sull'insieme unito dichiarava "più porte d'accesso possibili" per un client
+    che in ogni sede sta su una porta sola — mandando a rifare una scansione per
+    riparare un problema che non esiste, e facendo attraversare le sedi alla
+    regola "la più recente è la più probabile".
+
+    ``ambiguous`` torna così a significare quello che dice: più porte plausibili
+    NELLA STESSA rete, il caso in cui un dato più fresco serve davvero.
+    """
+    by_key, order = {}, []
     for s in rows:
-        m = s["mac"]
-        if m not in by_mac:
-            order.append(m)
-            by_mac[m] = []
-        by_mac[m].append(s)
+        key = (s["mac"], s.get("tenant") or "")
+        if key not in by_key:
+            order.append(key)
+            by_key[key] = []
+        by_key[key].append(s)
 
     results = []
-    for m in order:
-        grp = by_mac[m]
+    for key in order:
+        m, tenant = key
+        grp = by_key[key]
         origin = [s for s in grp if not s.get("is_uplink")]
         transit = [s for s in grp if s.get("is_uplink")]
         # Ordina per ultimo avvistamento (più recente prima).
@@ -75,7 +87,7 @@ def _mac_group(rows):
         else:
             status = "resolved"
         oui = next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), "")
-        entry = {"mac": m, "oui_vendor": oui, "origin": origin,
+        entry = {"mac": m, "tenant": tenant, "oui_vendor": oui, "origin": origin,
                  "transit": transit, "status": status,
                  "access_count": len(distinct)}
         # MAC di un'interfaccia propria di uno switch: infrastruttura, non endpoint.
@@ -144,10 +156,22 @@ def mac_search(mac: Optional[str] = None, vlan: Optional[str] = None, interface:
     return {"results": rows, "count": len(rows)}
 
 @router.get("/api/mac/locate")
-def mac_locate(mac: str, current_user = Depends(get_current_user)):
+def mac_locate(mac: str, tenant: Optional[str] = None,
+               current_user = Depends(get_current_user)):
+    """Dove è attaccato questo MAC, una risposta per tenant.
+
+    ``tenant`` RESTRINGE lo scoping dell'utente, non lo allarga: chi clicca
+    dentro uno switch di una sede riceve la risposta di quella sede e basta.
+    Un tenant fuori dal profilo è 403 e non un silenzioso "vabbè, glielo
+    mostro" — stessa regola di ``/api/mac/search``.
+    """
     if not mac or not mac.strip():
         raise HTTPException(status_code=400, detail="Parametro mac obbligatorio")
     scope = user_group_scope(current_user)
+    if tenant:
+        if scope is not None and tenant not in scope:
+            raise HTTPException(status_code=403, detail=f"Tenant '{tenant}' non consentito.")
+        scope = [tenant]
     sightings = mac_history.search(mac=mac, tenants=scope, limit=500)
     if not sightings:
         return {"status": "not_found", "origin": [], "transit": [], "results": []}
@@ -155,7 +179,8 @@ def mac_locate(mac: str, current_user = Depends(get_current_user)):
     results = _mac_group(sightings)
     if len(results) == 1:
         r = results[0]
-        return {"mac": r["mac"], "status": r["status"], "access_count": r["access_count"],
+        return {"mac": r["mac"], "tenant": r["tenant"], "status": r["status"],
+                "access_count": r["access_count"],
                 "origin": r["origin"], "transit": r["transit"],
                 "origin_type": r.get("origin_type"), "device_type": r.get("device_type"),
                 "origin_switch": r.get("origin_switch"), "origin_interface": r.get("origin_interface"),

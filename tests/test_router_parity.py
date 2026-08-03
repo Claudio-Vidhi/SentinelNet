@@ -77,6 +77,13 @@ class TestRouterParity(unittest.TestCase):
         # .test_tenant_rename_and_delete_are_admin_only.
         ("post", "/api/groups/rename"),
         ("post", "/api/groups/delete"),
+        # Origine MAC: query param ``tenant`` opzionale (omettendolo il
+        # comportamento resta quello storico) e raggruppamento della risposta
+        # per (MAC, tenant) invece che per MAC. Non e' cosmetico ed e' voluto:
+        # unire gli avvistamenti di tenant diversi contava porte d'accesso
+        # distinte attraverso reti diverse, dichiarando ambiguo un client che
+        # in ogni sede sta su una porta sola. Copertura: test_mac_locate.
+        ("get", "/api/mac/locate"),
     )
 
     def test_migrated_operations_identical(self):
@@ -173,6 +180,10 @@ class TestFullParity(unittest.TestCase):
         # .test_telemetry_filter_excludes_collector_ports.
         ("get", "/api/observability/top"),
         ("get", "/api/observability/flowgraph"),
+        # Origine MAC: query param ``tenant`` opzionale, e la risposta ora ha
+        # una voce per (MAC, tenant) invece che per MAC. Vedi
+        # TestRouterParity.ALLOWED_CHANGED_OPERATIONS per il motivo.
+        ("get", "/api/mac/locate"),
     )
 
     # FgtLogQuerySchema: vedi TestRouterParity.ALLOWED_CHANGED_SCHEMAS.
