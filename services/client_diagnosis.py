@@ -116,6 +116,28 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
             break
     if others:
         out["ambiguous"] = others
+
+    # Stesso indirizzo registrato in PIÙ TENANT. Non è un conflitto da
+    # risolvere qui: 192.168.1.50 esiste in ogni sede del mondo, e un MAC
+    # riusato in due laboratori pure. Sceglierne uno in silenzio — il più
+    # recente — significa diagnosticare la rete sbagliata senza dirlo, e
+    # scoprirlo solo quando la porta indicata non è quella.
+    #
+    # Si elencano le alternative con il minimo che serve a riconoscerle, e il
+    # chiamante rilancia sul tenant che gli interessa.
+    per_tenant: dict = {}
+    for x in entries:
+        t = x.get("tenant")
+        if t and t not in per_tenant:
+            per_tenant[t] = {
+                "tenant": t, "site": x.get("site"), "ip": x.get("ip"),
+                "mac": x.get("mac"),
+                "switch_name": x.get("switch_name") or x.get("switch_ip"),
+                "switch_port": x.get("switch_port"),
+                "last_seen": x.get("last_seen"),
+            }
+    if len(per_tenant) > 1:
+        out["tenants_available"] = list(per_tenant.values())
     return out
 
 
@@ -904,6 +926,11 @@ def diagnose(client: str, dest: Optional[str] = None,
     ``max_age_s``: soglia di freschezza in secondi; oltre quella, gateway e
     switch di accesso vengono riscansionati prima di rispondere. ``None`` usa
     l'impostazione salvata. ``0`` forza sempre la riscansione.
+
+    Quando lo stesso indirizzo risulta in più tenant, la sezione ``position``
+    porta ``tenants_available``: il chiamante sceglie e rilancia restringendo
+    ``tenants``. Restringere è l'unica direzione ammessa — l'insieme che arriva
+    qui è già quello che il router ha concesso all'utente.
     """
     is_mac = bool(_MAC_RE.fullmatch(client or ""))
     result: dict = {"client": client, "client_type": "mac" if is_mac else "ip",

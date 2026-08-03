@@ -2745,6 +2745,15 @@ class TestRedundancyUi(unittest.TestCase):
         # Freschezza: dice se il referto descrive la rete di adesso.
         self.assertIn("function _diagFreshness", source)
 
+    def test_a_multi_tenant_address_lets_the_user_choose(self):
+        # Lo stesso indirizzo esiste in piu' sedi: sceglierne uno in silenzio
+        # diagnostica la rete sbagliata senza dirlo.
+        source = frontend_source()
+        self.assertIn("function _diagTenantChoice", source)
+        self.assertIn("tenants_available", source)
+        self.assertIn("function diagnosiPickTenant", source)
+        self.assertIn("body.tenant = _diagTenant", source)
+
     def test_port_bounce_requires_typing_the_port_name(self):
         # Una conferma che si puo' dare col mouse senza leggere non e' una
         # conferma: la porta che si sta per staccare va digitata.
