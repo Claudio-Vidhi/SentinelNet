@@ -87,6 +87,18 @@ class TestCoreEngineIdentityResolution(unittest.TestCase):
                 {"Profile": "identity:gone"})
         self.assertEqual(u, core_engine.DEFAULT_USERNAME)
 
+    def test_default_username_is_lowercase(self):
+        # Era 'Admin' con la maiuscola mentre password e secret erano
+        # minuscoli. Su un apparato che si aspetta 'admin' l'autenticazione
+        # falliva, e dopo tre tentativi il lockout la mascherava con un
+        # "Error reading SSH protocol banner" che manda a cercare un guasto
+        # di rete inesistente.
+        import os
+        from core import core_engine
+        if os.getenv("SENTINELNET_ADMIN_USER"):
+            self.skipTest("username di default sovrascritto dall'ambiente")
+        self.assertEqual(core_engine.DEFAULT_USERNAME, "admin")
+
 
 if __name__ == "__main__":
     unittest.main()
