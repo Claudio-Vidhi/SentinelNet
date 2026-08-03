@@ -181,20 +181,23 @@ def _interface_health(switch_ip: str, port: str) -> dict:
     return out
 
 
-def _trunk_check(switch_ip: str, vlan) -> dict:
-    """La VLAN del client passa sui trunk dello switch di accesso?
+def _trunk_check(switch_ip: str, vlan, facing: Optional[str] = None) -> dict:
+    """La VLAN del client passa sui trunk di QUESTO apparato?
 
     È il guasto classico di una topologia con trunk: la porta di accesso è
     giusta, la VLAN esiste, e il traffico non esce perché il trunk verso monte
     non la trasporta.
 
-    ponytail: guarda i trunk di QUESTO switch, non l'intera catena CDP fino al
-    firewall. Se un salto solo si rivelasse insufficiente, la strada è
-    iterare i vicini da ``generate_network_map()``.
+    ``facing``: se dato, si guarda SOLO l'interfaccia che punta al salto
+    successivo invece di tutti i trunk. Un trunk che va da un'altra parte non
+    sta sul percorso di questo client, e contarlo come mancante è il falso
+    positivo più facile da produrre qui dentro. Lo usa ``_trunk_chain``, che
+    la catena la conosce; chiamata senza, il comportamento è quello storico.
     """
     if not vlan:
         return {"known": False, "reason": "VLAN della porta sconosciuta"}
     from ai import config_analyzer
+    from core.core_engine import _normalize_iface
 
     analysis = config_analyzer.analyze_device(switch_ip)
     if not analysis:
@@ -202,6 +205,14 @@ def _trunk_check(switch_ip: str, vlan) -> dict:
                 "reason": f"nessun backup di configurazione per {switch_ip}"}
     trunks = [i for i in analysis.get("interfaces", [])
               if i.get("mode") == "trunk"]
+    if facing:
+        want = _normalize_iface(facing)
+        trunks = [i for i in trunks
+                  if _normalize_iface(i.get("name") or "") == want]
+        if not trunks:
+            return {"known": False,
+                    "reason": f"{facing} non risulta in modo trunk nella config "
+                              f"di {switch_ip}"}
     if not trunks:
         return {"known": False,
                 "reason": "nessuna interfaccia in modo trunk nella config"}
@@ -225,6 +236,115 @@ def _trunk_check(switch_ip: str, vlan) -> dict:
             "carrying": carrying, "missing": missing,
             "ok": not missing,
             "scope": "solo i trunk di questo switch, non l'intero percorso"}
+
+
+_TRUNK_CHAIN_MAX_HOPS = 8
+
+
+def _hop_path(access_ip: str, gateway_ip: str, tenant: Optional[str]) -> list:
+    """Catena di apparati dallo switch di accesso al gateway, con le porte.
+
+    Cammina i link di ``generate_network_map()``, che il progetto ricava già dal
+    CDP/LLDP dei backup ed espone in cache. Ritorna una lista di
+    ``{"device", "egress"}``: l'apparato e l'interfaccia con cui guarda il salto
+    dopo. L'ultimo elemento è il gateway, che non ha egress.
+
+    BFS e non DFS perché serve il percorso più corto: in una rete magliata la
+    prima strada trovata a caso può girare per mezza topologia e la catena di
+    trunk da controllare diventa una diversa da quella che il traffico fa
+    davvero. ``visited`` evita i cicli, ``_TRUNK_CHAIN_MAX_HOPS`` evita di
+    camminare all'infinito una topologia malata.
+    """
+    from collections import deque
+    from core import core_engine
+
+    netmap = core_engine.generate_network_map(tenant or None)
+    adj: dict = {}
+    for link in netmap.get("links", []):
+        src, tgt = link.get("source"), link.get("target")
+        if not src or not tgt or src == tgt:
+            continue
+        adj.setdefault(src, []).append((tgt, link.get("local_port")))
+        adj.setdefault(tgt, []).append((src, link.get("remote_port")))
+
+    if access_ip not in adj:
+        return []
+    queue = deque([[(access_ip, None)]])
+    visited = {access_ip}
+    while queue:
+        chain = queue.popleft()
+        node = chain[-1][0]
+        if node == gateway_ip:
+            return [{"device": d, "egress": p} for d, p in chain]
+        if len(chain) > _TRUNK_CHAIN_MAX_HOPS:
+            continue
+        for neighbour, egress in adj.get(node, []):
+            if neighbour in visited:
+                continue
+            visited.add(neighbour)
+            queue.append(chain[:-1] + [(node, egress), (neighbour, None)])
+    return []
+
+
+def _trunk_chain(access_switch_ip: str, gateway_ip: Optional[str], vlan,
+                 tenant: Optional[str] = None) -> dict:
+    """La VLAN del client passa su TUTTA la catena fino al gateway?
+
+    Controllare il solo switch di accesso risponde a metà della domanda: la
+    VLAN può essere ammessa sul suo uplink e cadere due salti più su, e il
+    sintomo per chi sta al PC è identico.
+
+    Un salto senza backup di configurazione è ``unknown``, non un salto
+    promosso: la catena in quel caso non è ``ok`` e ``reason`` dice quale
+    anello manca. È la stessa convenzione di ``_path`` — ``complete``
+    significa "non ci sono buchi nel racconto", non "va tutto bene" — e qui
+    conta il doppio, perché chi legge sta per andare a toccare la rete.
+
+    Senza topologia utilizzabile (nessun backup con CDP/LLDP, gateway non
+    raggiungibile nella mappa) si degrada al controllo del solo switch di
+    accesso, dicendolo: metà risposta dichiarata batte nessuna risposta.
+    """
+    if not vlan:
+        return {"known": False, "reason": "VLAN della porta sconosciuta"}
+
+    chain = _hop_path(access_switch_ip, gateway_ip, tenant) if gateway_ip else []
+    if not chain:
+        single = _trunk_check(access_switch_ip, vlan)
+        single["scope"] = ("solo i trunk dello switch di accesso: la topologia "
+                           "non collega quell'apparato al gateway (servono i "
+                           "backup con CDP/LLDP dei salti intermedi)")
+        single["chain_known"] = False
+        return single
+
+    hops, missing, unknown = [], [], []
+    # L'ultimo anello è il gateway: ci arriva il traffico, non lo attraversa in
+    # trunk verso un salto successivo, quindi non ha un egress da controllare.
+    for hop in chain[:-1]:
+        device, egress = hop["device"], hop["egress"]
+        res = _trunk_check(device, vlan, facing=egress)
+        entry = {"device": device, "egress": egress}
+        if not res.get("known"):
+            entry.update({"verdict": "unknown", "reason": res.get("reason")})
+            unknown.append(device)
+        elif res.get("ok"):
+            entry.update({"verdict": "carrying",
+                          "allowed": (res.get("carrying") or [{}])[0].get("allowed")})
+        else:
+            entry.update({"verdict": "missing",
+                          "allowed": (res.get("missing") or [{}])[0].get("allowed")})
+            missing.append(device)
+        hops.append(entry)
+
+    out = {"known": True, "vlan": str(vlan).strip(), "chain_known": True,
+           "hops": hops, "gateway": chain[-1]["device"],
+           "missing": missing, "unknown": unknown,
+           "ok": not missing and not unknown,
+           "scope": f"catena completa: {len(hops)} salti fino al gateway"}
+    if missing:
+        out["reason"] = "VLAN non ammessa su: " + ", ".join(missing)
+    elif unknown:
+        out["reason"] = "salti senza configurazione nota: " + ", ".join(unknown)
+    return out
 
 
 def _path(src_ip: str, dst_ip: str, tenant: str,
@@ -280,7 +400,8 @@ def _l2_health(position: dict) -> dict:
     vlan = live_vlan or table_vlan
 
     try:
-        out["trunk"] = _trunk_check(switch_ip, vlan)
+        out["trunk"] = _trunk_chain(switch_ip, position.get("gateway_ip"), vlan,
+                                    position.get("tenant"))
     except Exception as e:
         out["trunk"] = {"known": False, "error": str(e)}
     return out
@@ -601,16 +722,175 @@ def _denies(position: dict, client: str, dest, tenants) -> dict:
     }
 
 
+# --- Freschezza del dato -----------------------------------------------------
+
+# Sotto questa età il dato si usa com'è. Quindici minuti: abbastanza per non
+# riscansionare a ogni click, abbastanza poco che una porta cambiata stamattina
+# non passi per buona.
+DEFAULT_MAX_AGE_S = 900
+
+
+def _age_s(ts: Optional[str]) -> Optional[float]:
+    """Secondi da un timestamp ISO delle tabelle di storico, None se illeggibile."""
+    if not ts:
+        return None
+    import datetime
+    try:
+        return max(0.0, time.time()
+                   - datetime.datetime.fromisoformat(str(ts)).timestamp())
+    except (ValueError, TypeError):
+        return None
+
+
+def get_max_age_s() -> int:
+    """Soglia di freschezza, accanto a ``retention_days`` nelle stesse impostazioni."""
+    from collectors import mac_history
+    try:
+        mac_history.init_db()
+        with mac_history._lock, mac_history._connect() as c:
+            row = c.execute("SELECT value FROM mac_settings WHERE key='max_age_s'").fetchone()
+        return int(row["value"]) if row else DEFAULT_MAX_AGE_S
+    except Exception:
+        return DEFAULT_MAX_AGE_S
+
+
+def _rescan_for(position: dict) -> dict:
+    """Riscansiona i DUE apparati che compongono la posizione, non la flotta.
+
+    Il gateway che ha risposto l'ARP dà il binding MAC↔IP, lo switch di accesso
+    dà porta e VLAN: sono gli unici due che possono cambiare la risposta. Una
+    scansione di flotta costerebbe una sessione SSH per apparato per rispondere
+    alla stessa domanda.
+    """
+    from collectors import arp_collector, mac_collector
+    from services import inventory_manager
+
+    devices = {d["IP"]: d for d in inventory_manager.get_all_devices()}
+    done, failed = [], {}
+    for ip, collect_all in ((position.get("gateway_ip"), arp_collector.collect_all),
+                            (position.get("switch_ip"), mac_collector.collect_all)):
+        if not ip or ip not in devices:
+            continue
+        try:
+            collect_all([devices[ip]])
+            done.append(ip)
+        except Exception as e:                      # noqa: BLE001 - best effort
+            failed[ip] = str(e)
+    return {"scanned": done, "failed": failed}
+
+
+def _ensure_fresh(client: str, is_mac: bool, tenants, position: dict,
+                  max_age_s: Optional[int] = None) -> tuple:
+    """Posizione abbastanza fresca da fidarsene, riscansionando solo se serve.
+
+    Ritorna ``(position, freshness)``. Se la riscansione fallisce NON si
+    interrompe: si prosegue col dato vecchio dichiarandolo. Un referto che non
+    esce è peggio di un referto che dice quanto è vecchio — e chi legge sta per
+    andare a toccare la rete, quindi la differenza va scritta, non lasciata
+    intuire dai timestamp.
+    """
+    limit = get_max_age_s() if max_age_s is None else max_age_s
+    ages = {"binding_s": _age_s(position.get("binding_last_seen")),
+            "port_s": _age_s(position.get("port_last_seen"))}
+    if not position.get("known"):
+        return position, {"refreshed": False, "stale": False, "max_age_s": limit,
+                          "ages": ages, "reason": "posizione sconosciuta: "
+                                                  "niente da riaggiornare"}
+    stale = any(a is not None and a > limit for a in ages.values())
+    if not stale:
+        return position, {"refreshed": False, "stale": False, "max_age_s": limit,
+                          "ages": ages, "reason": "dato entro la soglia"}
+
+    scan = _rescan_for(position)
+    if not scan["scanned"]:
+        return position, {"refreshed": False, "stale": True, "max_age_s": limit,
+                          "ages": ages, "failed": scan["failed"],
+                          "reason": "riscansione non riuscita: il referto usa il "
+                                    "dato vecchio"}
+    fresh = _position(client, is_mac, tenants)
+    if not fresh.get("known"):
+        # La riscansione è andata ma il client non si è ripresentato: sparito
+        # dalla rete, oppure spento. Il dato vecchio resta l'unica traccia.
+        return position, {"refreshed": True, "stale": True, "max_age_s": limit,
+                          "ages": ages, "scanned": scan["scanned"],
+                          "failed": scan["failed"],
+                          "reason": "dopo la riscansione il client non risulta "
+                                    "più: posizione precedente, ora storica"}
+    return fresh, {"refreshed": True, "stale": False, "max_age_s": limit,
+                   "ages": {"binding_s": _age_s(fresh.get("binding_last_seen")),
+                            "port_s": _age_s(fresh.get("port_last_seen"))},
+                   "scanned": scan["scanned"], "failed": scan["failed"],
+                   "reason": "dato oltre soglia: riscansionati gateway e switch"}
+
+
+def verify_port(mac: str, switch_ip: str, interface: str, tenants=None,
+                max_age_s: Optional[int] = None) -> dict:
+    """La porta indicata è ANCORA quella di questo client, e il dato è recente?
+
+    Cancello di ogni azione che tocca la porta. Le due condizioni sono
+    separate perché falliscono per motivi diversi e si riparano in due modi
+    diversi: una posizione che non combacia significa che il client si è
+    spostato (rilancia la diagnosi), un dato vecchio significa che non lo
+    sappiamo (rilancia la scansione). Confonderle manderebbe a fare la cosa
+    sbagliata.
+
+    Non è una formalità: la MAC table si scansiona a mano, e su un dato di tre
+    settimane fa la porta di oggi può appartenere a un altro utente. Staccare
+    quello sbagliato è un guasto causato dallo strumento che doveva ripararne
+    uno.
+    """
+    from core.core_engine import _normalize_iface
+
+    limit = get_max_age_s() if max_age_s is None else max_age_s
+    pos = _position(mac, True, tenants)
+    if not pos.get("known"):
+        return {"ok": False, "reason": "posizione del client sconosciuta: "
+                                       "nessun binding noto per questo MAC"}
+    if (pos.get("switch_ip") or "") != switch_ip:
+        return {"ok": False, "position": pos,
+                "reason": f"il client non risulta su {switch_ip} ma su "
+                          f"{pos.get('switch_ip')}: rilancia la diagnosi"}
+    if _normalize_iface(pos.get("switch_port") or "") != _normalize_iface(interface):
+        return {"ok": False, "position": pos,
+                "reason": f"il client non risulta su {interface} ma su "
+                          f"{pos.get('switch_port')}: rilancia la diagnosi"}
+    age = _age_s(pos.get("port_last_seen"))
+    if age is None:
+        return {"ok": False, "position": pos,
+                "reason": "età della posizione non determinabile: "
+                          "rilancia una scansione MAC prima di agire"}
+    if age > limit:
+        return {"ok": False, "position": pos,
+                "reason": f"posizione vecchia di {int(age)}s (soglia {limit}s): "
+                          "rilancia una scansione MAC prima di agire"}
+    return {"ok": True, "position": pos, "age_s": age}
+
+
+def _history(position: dict, client: str, is_mac: bool) -> dict:
+    """Dove è già stato questo client e che indirizzi ha avuto."""
+    from collectors import mac_history
+
+    mac = position.get("mac") if position.get("known") else (client if is_mac else None)
+    if not mac:
+        return {"known": False,
+                "reason": "MAC sconosciuto: lo storico si interroga per MAC"}
+    return mac_history.client_history(mac)
+
+
 # --- Referto -----------------------------------------------------------------
 
 def diagnose(client: str, dest: Optional[str] = None,
              dest_port: Optional[int] = 443, protocol: str = "TCP",
-             tenants=None) -> dict:
+             tenants=None, max_age_s: Optional[int] = None) -> dict:
     """Referto completo su un client (IP o MAC), opzionalmente verso ``dest``.
 
     ``tenants``: lista dei tenant visibili al chiamante, oppure ``None`` per
     nessuna restrizione (amministratore). Lo scoping è deciso dal router, qui
     si applica soltanto.
+
+    ``max_age_s``: soglia di freschezza in secondi; oltre quella, gateway e
+    switch di accesso vengono riscansionati prima di rispondere. ``None`` usa
+    l'impostazione salvata. ``0`` forza sempre la riscansione.
     """
     is_mac = bool(_MAC_RE.fullmatch(client or ""))
     result: dict = {"client": client, "client_type": "mac" if is_mac else "ip",
@@ -618,9 +898,24 @@ def diagnose(client: str, dest: Optional[str] = None,
 
     _section(result, "position", _position, client, is_mac, tenants)
     position = result["sections"]["position"]
+
+    # Le scansioni ARP/MAC sono manuali: senza questo passaggio il referto
+    # descrive una posizione che può essere di settimane fa, e chi legge se ne
+    # accorge solo confrontando i timestamp. Sopra soglia si riscansionano i due
+    # apparati che compongono la posizione, poi si riparte da quella nuova.
+    try:
+        position, freshness = _ensure_fresh(client, is_mac, tenants, position,
+                                            max_age_s)
+        result["sections"]["position"] = position
+    except Exception as e:
+        logger.debug("Controllo freschezza fallito: %s", e)
+        freshness = {"refreshed": False, "error": str(e)}
+    result["freshness"] = freshness
+
     result["resolved_ip"] = position.get("ip") if position.get("known") else None
 
     _section(result, "l2_health", _l2_health, position)
+    _section(result, "history", _history, position, client, is_mac)
 
     src_ip = result["resolved_ip"]
     if src_ip and dest:

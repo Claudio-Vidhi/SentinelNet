@@ -224,6 +224,154 @@ class TestVlanMismatch(_Base):
         self.assertEqual(h["trunk"]["vlan"], "10")
 
 
+class TestFreshness(unittest.TestCase):
+    """Le scansioni ARP/MAC sono manuali: un referto costruito su un dato di tre
+    settimane fa descrive una porta che potrebbe non essere piu' quella, e chi
+    legge se ne accorgeva solo confrontando i timestamp."""
+
+    def _pos(self, age_s):
+        import datetime
+        ts = (datetime.datetime.now() - datetime.timedelta(seconds=age_s)).isoformat()
+        return dict(CLIENT, known=True, gateway_ip="192.0.2.1",
+                    switch_ip="192.0.2.20",
+                    binding_last_seen=ts, port_last_seen=ts)
+
+    def test_fresh_data_is_not_rescanned(self):
+        with patch.object(client_diagnosis, "_rescan_for") as rescan:
+            _, f = client_diagnosis._ensure_fresh(
+                "192.0.2.10", False, None, self._pos(60), max_age_s=900)
+        rescan.assert_not_called()
+        self.assertFalse(f["refreshed"])
+        self.assertFalse(f["stale"])
+
+    def test_stale_data_triggers_a_targeted_rescan(self):
+        fresh = self._pos(1)
+        with patch.object(client_diagnosis, "_rescan_for",
+                          return_value={"scanned": ["192.0.2.1", "192.0.2.20"],
+                                        "failed": {}}) as rescan, \
+             patch.object(client_diagnosis, "_position", return_value=fresh):
+            pos, f = client_diagnosis._ensure_fresh(
+                "192.0.2.10", False, None, self._pos(7200), max_age_s=900)
+        rescan.assert_called_once()
+        self.assertTrue(f["refreshed"])
+        self.assertFalse(f["stale"])
+        self.assertEqual(pos["binding_last_seen"], fresh["binding_last_seen"])
+
+    def test_only_the_gateway_and_the_access_switch_are_rescanned(self):
+        # Una scansione di flotta costerebbe una sessione SSH per apparato per
+        # rispondere alla stessa domanda.
+        seen = []
+        with patch("services.inventory_manager.get_all_devices",
+                   return_value=[{"IP": "192.0.2.1"}, {"IP": "192.0.2.20"},
+                                 {"IP": "192.0.2.99"}]), \
+             patch("collectors.arp_collector.collect_all",
+                   side_effect=lambda ds: seen.append(("arp", ds[0]["IP"]))), \
+             patch("collectors.mac_collector.collect_all",
+                   side_effect=lambda ds: seen.append(("mac", ds[0]["IP"]))):
+            out = client_diagnosis._rescan_for(self._pos(7200))
+        self.assertEqual(seen, [("arp", "192.0.2.1"), ("mac", "192.0.2.20")])
+        self.assertEqual(out["scanned"], ["192.0.2.1", "192.0.2.20"])
+
+    def test_a_failed_rescan_degrades_and_says_so(self):
+        # Un referto che non esce e' peggio di un referto che dice quanto e'
+        # vecchio il dato su cui e' costruito.
+        old = self._pos(7200)
+        with patch.object(client_diagnosis, "_rescan_for",
+                          return_value={"scanned": [],
+                                        "failed": {"192.0.2.20": "timeout"}}):
+            pos, f = client_diagnosis._ensure_fresh(
+                "192.0.2.10", False, None, old, max_age_s=900)
+        self.assertFalse(f["refreshed"])
+        self.assertTrue(f["stale"])
+        self.assertIn("dato vecchio", f["reason"])
+        self.assertEqual(pos, old)
+
+    def test_an_unknown_position_is_not_rescanned(self):
+        with patch.object(client_diagnosis, "_rescan_for") as rescan:
+            _, f = client_diagnosis._ensure_fresh(
+                "192.0.2.10", False, None, {"known": False}, max_age_s=900)
+        rescan.assert_not_called()
+        self.assertFalse(f["stale"])
+
+
+class TestTrunkChain(unittest.TestCase):
+    """Controllare il solo switch di accesso risponde a meta' della domanda: la
+    VLAN puo' essere ammessa sul suo uplink e cadere due salti piu' su, e per
+    chi sta al PC il sintomo e' identico."""
+
+    # accesso -> distribuzione -> gateway
+    LINKS = [{"source": "192.0.2.20", "target": "192.0.2.30",
+              "local_port": "Gi1/0/24", "remote_port": "Gi2/0/1"},
+             {"source": "192.0.2.30", "target": "192.0.2.1",
+              "local_port": "Gi2/0/48", "remote_port": "port1"}]
+
+    def _map(self, links=None):
+        return patch("core.core_engine.generate_network_map",
+                     return_value={"nodes": [], "links": self.LINKS if links is None else links})
+
+    def _configs(self, per_device):
+        """per_device: {ip: [interfacce] | None}. None = nessun backup."""
+        return patch("ai.config_analyzer.analyze_device",
+                     side_effect=lambda ip: (
+                         {"interfaces": per_device[ip]} if per_device.get(ip) else None))
+
+    def test_vlan_carried_end_to_end(self):
+        with self._map(), self._configs({
+                "192.0.2.20": [{"name": "Gi1/0/24", "mode": "trunk", "trunk_allowed": "10,20"}],
+                "192.0.2.30": [{"name": "Gi2/0/48", "mode": "trunk", "trunk_allowed": "10,20"}]}):
+            t = client_diagnosis._trunk_chain("192.0.2.20", "192.0.2.1", "10", "sede-a")
+        self.assertTrue(t["ok"])
+        self.assertTrue(t["chain_known"])
+        self.assertEqual([h["verdict"] for h in t["hops"]], ["carrying", "carrying"])
+
+    def test_vlan_lost_mid_chain_is_caught(self):
+        # Il salto di accesso e' a posto: guardando solo quello si direbbe che
+        # va tutto bene, ed e' esattamente l'errore che questa fase chiude.
+        with self._map(), self._configs({
+                "192.0.2.20": [{"name": "Gi1/0/24", "mode": "trunk", "trunk_allowed": "10,20"}],
+                "192.0.2.30": [{"name": "Gi2/0/48", "mode": "trunk", "trunk_allowed": "20,30"}]}):
+            t = client_diagnosis._trunk_chain("192.0.2.20", "192.0.2.1", "10", "sede-a")
+        self.assertFalse(t["ok"])
+        self.assertEqual(t["missing"], ["192.0.2.30"])
+        self.assertEqual([h["verdict"] for h in t["hops"]], ["carrying", "missing"])
+
+    def test_a_hop_without_a_backup_is_unknown_not_a_pass(self):
+        with self._map(), self._configs({
+                "192.0.2.20": [{"name": "Gi1/0/24", "mode": "trunk", "trunk_allowed": "10,20"}],
+                "192.0.2.30": None}):
+            t = client_diagnosis._trunk_chain("192.0.2.20", "192.0.2.1", "10", "sede-a")
+        self.assertFalse(t["ok"])
+        self.assertEqual(t["unknown"], ["192.0.2.30"])
+        self.assertIn("192.0.2.30", t["reason"])
+
+    def test_only_the_interface_facing_the_next_hop_counts(self):
+        # Un trunk che va da un'altra parte non sta sul percorso di questo
+        # client: contarlo come mancante e' il falso positivo piu' facile.
+        with self._map(), self._configs({
+                "192.0.2.20": [{"name": "Gi1/0/24", "mode": "trunk", "trunk_allowed": "10"},
+                               {"name": "Gi1/0/23", "mode": "trunk", "trunk_allowed": "99"}],
+                "192.0.2.30": [{"name": "Gi2/0/48", "mode": "trunk", "trunk_allowed": "10"}]}):
+            t = client_diagnosis._trunk_chain("192.0.2.20", "192.0.2.1", "10", "sede-a")
+        self.assertTrue(t["ok"])
+
+    def test_without_topology_it_degrades_to_the_access_switch_and_says_so(self):
+        with self._map(links=[]), self._configs({
+                "192.0.2.20": [{"name": "Gi1/0/24", "mode": "trunk", "trunk_allowed": "10"}]}):
+            t = client_diagnosis._trunk_chain("192.0.2.20", "192.0.2.1", "10", "sede-a")
+        self.assertFalse(t["chain_known"])
+        self.assertIn("non collega", t["scope"])
+
+    def test_a_loop_in_the_topology_terminates(self):
+        loop = [{"source": "192.0.2.20", "target": "192.0.2.30",
+                 "local_port": "Gi1/0/24", "remote_port": "Gi2/0/1"},
+                {"source": "192.0.2.30", "target": "192.0.2.20",
+                 "local_port": "Gi2/0/2", "remote_port": "Gi1/0/25"}]
+        with self._map(links=loop), self._configs({"192.0.2.20": None}):
+            t = client_diagnosis._trunk_chain("192.0.2.20", "192.0.2.1", "10", "sede-a")
+        # Gateway irraggiungibile: nessuna catena, si degrada senza girare.
+        self.assertFalse(t["chain_known"])
+
+
 class TestTrunkCheck(unittest.TestCase):
 
     def _analysis(self, interfaces):
@@ -340,6 +488,16 @@ class TestDenies(_Base):
 
 
 class TestReport(_Base):
+    """La diagnosi ora riscansiona da sé quando il dato è vecchio, e il dato di
+    questi test lo è: senza questa patch ogni caso aprirebbe SSH verso indirizzi
+    di esempio e aspetterebbe il timeout. La riscansione ha i suoi test sotto."""
+
+    def setUp(self):
+        super().setUp()
+        p = patch.object(client_diagnosis, "_rescan_for",
+                         return_value={"scanned": [], "failed": {}})
+        p.start()
+        self.addCleanup(p.stop)
 
     def test_full_report_is_complete(self):
         self._iface_sample(NOW - 600, 0, 0)
@@ -354,8 +512,12 @@ class TestReport(_Base):
         self.assertTrue(r["complete"], r["sections"])
         self.assertEqual(r["resolved_ip"], "192.0.2.10")
         self.assertEqual(set(r["sections"]),
-                         {"position", "l2_health", "path", "firewall",
-                          "denies", "across_sites"})
+                         {"position", "l2_health", "history", "path",
+                          "firewall", "denies", "across_sites"})
+        # Storico vuoto NON e' una sezione ignota: e' una risposta ("mai visto
+        # prima"), e come tale non deve trascinare giu' il complete.
+        self.assertTrue(r["sections"]["history"]["known"])
+        self.assertTrue(r["sections"]["history"]["empty"])
 
     def test_unknown_client_still_asks_the_firewall(self):
         """Il client non e' in mac_history, ma il FortiGate potrebbe conoscerlo
@@ -605,8 +767,9 @@ class TestEndpoint(_Base):
     def test_admin_gets_an_unrestricted_report(self):
         seen = {}
 
-        def spy(client, dest, dest_port, protocol, tenants):
+        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None):
             seen["tenants"] = tenants
+            seen["max_age_s"] = max_age_s
             return {"client": client, "sections": {}, "complete": False}
 
         with patch("services.client_diagnosis.diagnose", side_effect=spy):
@@ -618,8 +781,9 @@ class TestEndpoint(_Base):
     def test_operator_is_scoped_to_its_sites(self):
         seen = {}
 
-        def spy(client, dest, dest_port, protocol, tenants):
+        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None):
             seen["tenants"] = tenants
+            seen["max_age_s"] = max_age_s
             return {"client": client, "sections": {}, "complete": False}
 
         with patch("services.client_diagnosis.diagnose", side_effect=spy):

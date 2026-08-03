@@ -168,7 +168,7 @@
         <button class="nav-item" data-tabs="tab-flows tab-flow-siem" onclick="switchTab('tab-flows', this); flowsTabShown();">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
         </button>
-        <button class="nav-item" data-tabs="tab-mac tab-clientmap" onclick="switchTab('tab-mac', this)">
+        <button class="nav-item" data-tabs="tab-mac tab-clientmap tab-diagnosi" onclick="switchTab('tab-mac', this)">
           <span class="nav-left" data-i18n="tabEndpointLoc"><i class="fa-solid fa-map-pin"></i> Localizzazione Endpoint</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-ai', this)">
@@ -953,6 +953,7 @@
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
         <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -1091,6 +1092,7 @@
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
         <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -1186,6 +1188,50 @@
           <div id="arpResults" style="overflow-x:auto;"></div>
         </div>
       </div>
+    </div>
+
+    <!-- TAB: Diagnosi Client — referto L2+L3 su un singolo client -->
+    <div id="tab-diagnosi" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3 style="font-size:15px; margin-bottom:12px;">
+          <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i>
+          <span data-i18n="titleDiagnosi"></span>
+        </h3>
+        <div class="diag-form" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagClientInput" data-i18n="lblDiagClient"></label>
+            <input id="diagClientInput" type="text" placeholder="192.0.2.10 / aa:bb:cc:dd:ee:ff"
+                   style="padding-left:12px; font-size:13px;"
+                   onkeydown="if(event.key==='Enter')runDiagnosi();">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagDestInput" data-i18n="lblDiagDest"></label>
+            <input id="diagDestInput" type="text" style="padding-left:12px; font-size:13px;"
+                   onkeydown="if(event.key==='Enter')runDiagnosi();">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagProtoInput" data-i18n="lblFgtProto"></label>
+            <select id="diagProtoInput" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="TCP">TCP</option>
+              <option value="UDP">UDP</option>
+              <option value="ICMP">ICMP</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagPortInput" data-i18n="colFgtSessDport"></label>
+            <input id="diagPortInput" type="number" min="1" max="65535" value="443"
+                   style="padding-left:12px; font-size:13px;">
+          </div>
+          <button class="btn btn-secondary" style="width:auto;" onclick="runDiagnosi()"
+                  data-i18n="btnDiagRun"></button>
+        </div>
+      </div>
+      <div id="diagResult"></div>
     </div>
 
     <!-- TAB: Live Flows -->
@@ -3339,6 +3385,7 @@
   <script src="/static/js/devices.js"></script>
   <script src="/static/js/topology.js"></script>
   <script src="/static/js/client-map.js"></script>
+  <script src="/static/js/diagnosi.js"></script>
   <script src="/static/js/ai.js"></script>
   <script src="/static/js/settings.js"></script>
   <script src="/static/js/mcp-client.js"></script>
