@@ -594,7 +594,11 @@
                 const portCfgBtn = (g.ip && r.interface)
                     ? `<button onclick="showPortConfig('${escapeHtml(g.ip)}','${escapeHtml(r.interface)}','${escapeHtml(g.name || '')}')" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
                     : '';
-                const locateBtn = `<button onclick="macLocate('${escapeHtml(r.mac)}')" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
+                // Il tenant del gruppo viaggia col MAC: si sta guardando UNO
+                // switch di UNA sede, e la risposta deve essere di quella sede.
+                // Senza, il modale univa gli avvistamenti di tutti i tenant
+                // visibili e dichiarava ambigue porte che ambigue non erano.
+                const locateBtn = `<button onclick="macLocate('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(g.tenant || ''))}')" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
                 // MAC di un'interfaccia propria dello switch: infrastruttura, non endpoint.
                 const isSwitchIf = (r.origin_type || r.device_type) === 'switch-interface';
                 const swName = r.origin_switch || r.switch_name || r.switch_ip;
@@ -632,18 +636,20 @@
         if (m) m.remove();
     }
 
-    async function macLocate(mac) {
-        const res = await apiFetch('/api/mac/locate?mac=' + encodeURIComponent(mac));
+    async function macLocate(mac, tenant) {
+        const q = '/api/mac/locate?mac=' + encodeURIComponent(mac)
+            + (tenant ? '&tenant=' + encodeURIComponent(tenant) : '');
+        const res = await apiFetch(q);
         if (!res || !res.ok) { alert(currentLang==='en'?'Locate failed.':'Localizzazione non riuscita.'); return; }
         const d = await res.json();
         const en = currentLang === 'en';
 
-        // Se la ricerca ha colpito più MAC distinti, localizza il primo del gruppo.
-        const g = (d.results && d.results.length && !d.origin) ? d.results[0] : d;
-        const status = g.status || d.status || 'resolved';
-        const origin = g.origin || [];
-        const transit = g.transit || [];
-        const macStr = g.mac || d.mac || mac;
+        // Una voce per (MAC, tenant). Con più sedi NON si appiattisce e non si
+        // sceglie: un tenant è una rete a sé, e due posizioni in due sedi sono
+        // entrambe vere. Si mostrano separate, ognuna col suo esito.
+        const entries = (d.results && d.results.length) ? d.results : [d];
+        const macStr = d.mac || (entries[0] && entries[0].mac) || mac;
+        const multi = entries.length > 1;
 
         // rank: la porta d'accesso più recente è la più probabile (primo elemento).
         const sightRow = (s, accent, badge) => `
@@ -661,36 +667,70 @@
             </div>`;
 
         const mostRecent = ` <span class="role-pill" style="background:rgba(59,225,136,0.15); color:var(--success); border:1px solid rgba(59,225,136,0.35);">${en?'most recent':'più recente'}</span>`;
-        const originHtml = origin.length
-            ? origin.map((s, i) => sightRow(s, 'var(--success)', (status==='ambiguous' && i===0) ? mostRecent : '')).join('')
-            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
-        const transitHtml = transit.length
-            ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
-            : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
 
-        // Banner di stato: chiarisce all'utente quanto è affidabile l'origine.
-        let banner = '';
-        // MAC di un'interfaccia propria di uno switch: infrastruttura, non endpoint.
-        const isSwitchIf = (g.origin_type || g.device_type || d.origin_type) === 'switch-interface';
-        if (isSwitchIf) {
-            const swName = g.origin_switch || d.origin_switch || '';
-            const swIf = g.origin_interface || d.origin_interface || '';
-            banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:14px;">
-                <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
-                <span>${en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`}</span></div>`;
-        } else if (status === 'ambiguous') {
-            banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
-                <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
-                <span>${en?`Multiple possible access ports (${g.access_count}). The most recent is the likeliest; run a fresh MAC Scan to disambiguate.`:`Più porte d'accesso possibili (${g.access_count}). La più recente è la più probabile; esegui una MAC Scan aggiornata per disambiguare.`}</span></div>`;
-        } else if (status === 'transit_only') {
-            banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
-                <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
-                <span>${en?'Only seen in transit on uplinks – the device is behind an unmanaged/unscanned switch. Scan more switches to find the access port.':'Visto solo in transito sugli uplink – il dispositivo è dietro uno switch non gestito/non scansionato. Scansiona altri switch per trovare la porta di accesso.'}</span></div>`;
-        } else if (status === 'resolved' && origin.length) {
-            banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px; margin-bottom:14px;">
-                <i class="fa-solid fa-circle-check"></i>
-                <span>${en?'Single access port resolved.':'Porta di accesso univoca risolta.'}</span></div>`;
-        }
+        // Una sezione per tenant: stesso renderer, ciclato. Due modali o due
+        // renderer sarebbero due copie da tenere allineate.
+        const entrySection = (g) => {
+            const status = g.status || 'resolved';
+            const origin = g.origin || [];
+            const transit = g.transit || [];
+
+            const originHtml = origin.length
+                ? origin.map((s, i) => sightRow(s, 'var(--success)', (status==='ambiguous' && i===0) ? mostRecent : '')).join('')
+                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'No access port found – the device may be behind an unmanaged switch. Scan more switches.':'Nessuna porta di accesso trovata – il dispositivo potrebbe essere dietro uno switch non gestito. Scansiona altri switch.'}</div>`;
+            const transitHtml = transit.length
+                ? transit.map(s => sightRow(s, 'var(--warning)')).join('')
+                : `<div style="font-size:12px; color:var(--text-muted); padding:6px 2px;">${en?'Not seen in transit elsewhere.':'Non visto in transito altrove.'}</div>`;
+
+            // Banner di stato: chiarisce all'utente quanto è affidabile l'origine.
+            let banner = '';
+            // MAC di un'interfaccia propria di uno switch: infrastruttura, non endpoint.
+            const isSwitchIf = (g.origin_type || g.device_type) === 'switch-interface';
+            if (isSwitchIf) {
+                const swName = g.origin_switch || '';
+                const swIf = g.origin_interface || '';
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:14px;">
+                    <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
+                    <span>${escapeHtml(jsStr(en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`))}</span></div>`;
+            } else if (status === 'ambiguous') {
+                // Ambiguo significa più porte plausibili NELLA STESSA rete: qui
+                // una scansione più fresca serve davvero.
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                    <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
+                    <span>${en?`Multiple possible access ports (${g.access_count}) in this tenant. The most recent is the likeliest; run a fresh MAC Scan to disambiguate.`:`Più porte d'accesso possibili (${g.access_count}) in questo tenant. La più recente è la più probabile; esegui una MAC Scan aggiornata per disambiguare.`}</span></div>`;
+            } else if (status === 'transit_only') {
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                    <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
+                    <span>${en?'Only seen in transit on uplinks – the device is behind an unmanaged/unscanned switch. Scan more switches to find the access port.':'Visto solo in transito sugli uplink – il dispositivo è dietro uno switch non gestito/non scansionato. Scansiona altri switch per trovare la porta di accesso.'}</span></div>`;
+            } else if (status === 'resolved' && origin.length) {
+                banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px; margin-bottom:14px;">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>${en?'Single access port resolved.':'Porta di accesso univoca risolta.'}</span></div>`;
+            }
+
+            // Intestazione di tenant solo quando ce n'è più d'uno: con una sede
+            // sola sarebbe rumore, e la schermata resta quella di sempre.
+            const head = multi && g.tenant
+                ? `<div style="margin:18px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); font-size:13px; font-weight:700; color:var(--primary);">
+                    <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(jsStr(g.tenant))}</div>`
+                : '';
+
+            return `${head}${banner}
+                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
+                ${originHtml}
+                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
+                ${transitHtml}`;
+        };
+
+        // Più sedi: si dice che il MAC esiste in più reti. NON si consiglia una
+        // riscansione — non c'entra niente, e ognuna di queste posizioni è vera.
+        const multiBanner = multi
+            ? `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:4px;">
+                <i class="fa-solid fa-layer-group" style="margin-top:2px;"></i>
+                <span>${en?`This MAC exists in ${entries.length} tenants. Each position below is true for its own network — they are not alternatives to pick from.`:`Questo MAC esiste in ${entries.length} tenant. Ogni posizione qui sotto è vera per la sua rete — non sono alternative fra cui scegliere.`}</span></div>`
+            : '';
+
+        const sectionsHtml = multiBanner + entries.map(entrySection).join('');
 
         const ov = document.createElement('div');
         ov.id = 'macLocateModal';
@@ -701,15 +741,9 @@
                     <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
                     <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
                 </div>
-                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(macStr)}</div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(jsStr(macStr))}</div>
 
-                ${banner}
-
-                <h4 style="font-size:13px; margin-bottom:8px; color:var(--success);"><i class="fa-solid fa-location-crosshairs"></i> ${en?'Access location (origin)':'Posizione di accesso (origine)'}</h4>
-                ${originHtml}
-
-                <h4 style="font-size:13px; margin:16px 0 8px; color:var(--warning);"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${en?'Seen in transit (uplinks)':'Visto in transito (uplink)'}</h4>
-                ${transitHtml}
+                ${sectionsHtml}
 
                 <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
                     <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
