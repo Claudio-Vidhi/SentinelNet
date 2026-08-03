@@ -471,10 +471,16 @@ class TestTabFrontend(unittest.TestCase):
 
     def test_le_avvertenze_sulle_porte_sono_a_schermo(self):
         """Le quattro avvertenze della spec vivono nella UI, non nei commenti:
-        chi legge sta per andare a infilare un cavo."""
-        self.assertIn("epPortsFreeWarn", self.src)      # libera != nessun cavo
-        self.assertIn("epPortsUnknown", self.src)       # elenco assente != 0 libere
-        self.assertIn("epPortsAge", self.src)           # eta' dell'elenco
+        chi legge sta per andare a infilare un cavo.
+
+        Scoped al corpo di endpointsPortsRender: le chiavi i18n esistono gia'
+        in i18n.js da un task precedente, quindi cercarle su self.src intero
+        passerebbe anche se il renderer non le usasse mai."""
+        start = self.src.index("function endpointsPortsRender(")
+        body = self.src[start:start + 3200]
+        self.assertIn("L.epPortsFreeWarn", body)     # libera != nessun cavo
+        self.assertIn("L.epPortsUnknown", body)      # elenco assente != 0 libere
+        self.assertIn("L.epPortsAge", body)          # eta' dell'elenco
 
     def test_elenco_porte_assente_non_mostra_zero_libere(self):
         """Il ramo dell'elenco mancante deve uscire PRIMA di qualunque
