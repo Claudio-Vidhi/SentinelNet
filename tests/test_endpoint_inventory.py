@@ -404,3 +404,36 @@ class TestRotteRegistrate(unittest.TestCase):
         paths = {r.path for r in app_server.app.routes}
         self.assertIn("/api/endpoints/list", paths)
         self.assertIn("/api/endpoints/ports", paths)
+
+
+class TestTabFrontend(unittest.TestCase):
+    """Verifica grep-style: non c'e' un runner JS."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_helpers_frontend import frontend_source
+        cls.src = frontend_source()
+
+    def test_la_tab_esiste_ed_e_raggiungibile(self):
+        self.assertIn('id="tab-endpoints"', self.src)
+        self.assertIn("switchTab('tab-endpoints')", self.src)
+
+    def test_e_la_quarta_sorella_del_gruppo_client(self):
+        """Le altre tre sotto-tab devono puntarle, altrimenti si raggiunge
+        solo da una direzione."""
+        self.assertIn('data-tabs="tab-mac tab-clientmap tab-diagnosi tab-endpoints"',
+                      self.src)
+
+    def test_lo_script_e_incluso(self):
+        self.assertIn('src="/static/js/endpoint-inventory.js"', self.src)
+
+    def test_le_chiavi_i18n_esistono_in_entrambe_le_lingue(self):
+        for key in ("tabEndpoints", "epKpiEndpoints", "epKpiStale", "epThMac",
+                    "epExportCsv", "epPortsFreeWarn"):
+            self.assertGreaterEqual(self.src.count(key + ":"), 2,
+                                    f"chiave {key} assente in una delle due lingue")
+
+    def test_le_icone_stanno_dentro_le_stringhe_i18n(self):
+        """changeLanguage() sostituisce innerHTML in blocco: un'icona fuori
+        dalla stringa sparisce al cambio lingua."""
+        self.assertIn("tabEndpoints: '<i class=", self.src)
