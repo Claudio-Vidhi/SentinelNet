@@ -168,7 +168,7 @@
         <button class="nav-item" data-tabs="tab-flows tab-flow-siem" onclick="switchTab('tab-flows', this); flowsTabShown();">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
         </button>
-        <button class="nav-item" data-tabs="tab-mac tab-clientmap tab-diagnosi" onclick="switchTab('tab-mac', this)">
+        <button class="nav-item" data-tabs="tab-mac tab-clientmap tab-diagnosi tab-endpoints" onclick="switchTab('tab-mac', this)">
           <span class="nav-left" data-i18n="tabEndpointLoc"><i class="fa-solid fa-map-pin"></i> Localizzazione Endpoint</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-ai', this)">
@@ -954,6 +954,7 @@
         <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -1093,6 +1094,7 @@
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
         <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -1196,6 +1198,7 @@
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
         <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
         <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
       </div>
       <div class="panel" style="margin-bottom:16px;">
         <h3 style="font-size:15px; margin-bottom:12px;">
@@ -1232,6 +1235,45 @@
         </div>
       </div>
       <div id="diagResult"></div>
+    </div>
+
+    <!-- TAB: Endpoint Inventory -->
+    <div id="tab-endpoints" class="tab-content">
+      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
+        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
+        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
+      </div>
+      <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3 style="font-size:15px; margin-bottom:12px;">
+          <i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i>
+          <span data-i18n="titleEndpoints"></span>
+        </h3>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterQ" data-i18n="epFilterQ"></label>
+            <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;"
+                   onkeydown="if(event.key==='Enter')endpointsSearch();">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterTenant" data-i18n="epThTenant"></label>
+            <select id="epFilterTenant" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterStale" data-i18n="epFilterStale"></label>
+            <input id="epFilterStale" type="number" min="1" max="3650" value="7"
+                   style="padding-left:12px; font-size:13px;">
+          </div>
+          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsSearch()">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('csv')" data-i18n="epExportCsv"></button>
+          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('json')" data-i18n="epExportJson"></button>
+        </div>
+      </div>
+      <div id="epResults"></div>
     </div>
 
     <!-- TAB: Live Flows -->
@@ -3386,6 +3428,7 @@
   <script src="/static/js/topology.js"></script>
   <script src="/static/js/client-map.js"></script>
   <script src="/static/js/diagnosi.js"></script>
+  <script src="/static/js/endpoint-inventory.js"></script>
   <script src="/static/js/ai.js"></script>
   <script src="/static/js/settings.js"></script>
   <script src="/static/js/mcp-client.js"></script>
