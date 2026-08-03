@@ -314,16 +314,9 @@
 
         if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
 
-        // §11.5b: la password non è preservata se vuota (add_or_update_device la
-        // sovrascrive sempre), quindi in modifica va reinserita per intero --
-        // ma solo per il profilo 'custom': con un profilo 'default'/'identity:<id>'
-        // le credenziali vivono altrove (rete standard o identità salvata) e non
-        // vanno reinserite qui.
-        if (editingDeviceIp && payload.profile === 'custom' && !payload.password) {
-            alert(i18n[currentLang].alertCredsRequiredOnEdit);
-            return;
-        }
-
+        // In modifica i campi credenziali vuoti significano "invariate":
+        // add_or_update_device preserva quelle già salvate. Si compilano solo
+        // per cambiarle.
         const res = await apiFetch('/api/add-device', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -339,9 +332,9 @@
     });
 
     // Pre-compila il form di provisioning con i dati del dispositivo esistente
-    // per la modifica (§11.5b). Password/secret restano vuoti: vanno reinseriti,
-    // perché add_or_update_device sovrascrive sempre le credenziali (nessun
-    // "invariato se vuoto" lato backend).
+    // per la modifica (§11.5b). Password/secret restano vuoti perché il server
+    // non li restituisce mai: lasciarli vuoti ora vuol dire "invariate", si
+    // compilano solo per cambiarle. Stessa regola della community SNMP.
     async function editDevice(ip) {
         const dev = globalDevices.find(d => d.IP === ip);
         if (!dev) return;
@@ -387,8 +380,15 @@
         document.getElementById('customCredsForm').style.display =
             document.getElementById('devProfile').value === 'custom' ? 'block' : 'none';
         document.getElementById('devUser').value = dev.Username || '';
-        document.getElementById('devPass').value = '';
-        document.getElementById('devSecret').value = '';
+        // Il server non restituisce mai password e secret: il placeholder dice
+        // che restano quelle salvate, come già fa la community SNMP.
+        const keepPh = currentLang === 'en' ? 'unchanged — fill in only to change it'
+                                            : 'invariata — compila solo per cambiarla';
+        for (const id of ['devPass', 'devSecret']) {
+            const el = document.getElementById(id);
+            el.value = '';
+            el.placeholder = keepPh;
+        }
 
         document.getElementById('devFormTitle').innerHTML = i18n[currentLang].titleEditDevice;
         document.getElementById('devEditNotice').style.display = 'block';
@@ -409,8 +409,11 @@
         setTransportsForm(null, 22);
         document.getElementById('customCredsForm').style.display = 'none';
         document.getElementById('devUser').value = '';
-        document.getElementById('devPass').value = '';
-        document.getElementById('devSecret').value = '';
+        for (const id of ['devPass', 'devSecret']) {
+            const el = document.getElementById(id);
+            el.value = '';
+            el.placeholder = '';
+        }
         document.getElementById('devSnmp').value = '';
         document.getElementById('devSnmp').placeholder = '—';
         document.getElementById('devSnmpClear').checked = false;

@@ -23,8 +23,11 @@ class DeviceSchema(BaseModel):
     ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
     vendor: str
     profile: str
-    username: str = "Admin"
-    password: str = "admin"
+    # Vuoto su un dispositivo esistente = lascia invariate le credenziali
+    # salvate (vedi add_or_update_device); in creazione i default di
+    # core_engine valgono comunque a runtime via get_device_credentials.
+    username: str = ""
+    password: str = ""
     enable_secret: str = ""
     group: str = "Generale"
     ssh_port: int = Field(22, ge=1, le=65535)

@@ -43,6 +43,55 @@ class TestInventorySshPortRoundTrip(unittest.TestCase):
                 dev = inventory_manager.get_all_devices()[0]
                 self.assertEqual(dev['SSH Port'], '2222')
 
+    def test_empty_credentials_on_an_existing_device_keep_the_saved_ones(self):
+        # Modificare un dispositivo (cambio gruppo, porta, trasporti) non deve
+        # costare le credenziali: i campi vuoti valgono "invariate". Prima
+        # venivano sovrascritte sempre, quindi la UI obbligava a ridigitare la
+        # password e l'agente di sede — che le credenziali non le ha — le
+        # azzerava a ogni sync.
+        from services import inventory_manager
+        from security import crypto_vault
+        with tempfile.TemporaryDirectory() as td:
+            csv_path = os.path.join(td, 'hosts.csv')
+            with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
+                inventory_manager.add_or_update_device(
+                    '10.9.9.7', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale')
+                inventory_manager.add_or_update_device(
+                    '10.9.9.7', 'cisco', 'custom', '', '', '', 'Generale')
+                dev = inventory_manager.get_all_devices()[0]
+                self.assertEqual(dev['Username'], 'u1')
+                self.assertEqual(crypto_vault.decrypt_password(dev['Password']), 'p1')
+                self.assertEqual(crypto_vault.decrypt_password(dev['Enable Secret']), 's1')
+
+    def test_new_credentials_still_overwrite(self):
+        from services import inventory_manager
+        from security import crypto_vault
+        with tempfile.TemporaryDirectory() as td:
+            csv_path = os.path.join(td, 'hosts.csv')
+            with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
+                inventory_manager.add_or_update_device(
+                    '10.9.9.6', 'cisco', 'custom', 'u1', 'p1', 's1', 'Generale')
+                inventory_manager.add_or_update_device(
+                    '10.9.9.6', 'cisco', 'custom', 'u2', 'p2', 's2', 'Generale')
+                dev = inventory_manager.get_all_devices()[0]
+                self.assertEqual(dev['Username'], 'u2')
+                self.assertEqual(crypto_vault.decrypt_password(dev['Password']), 'p2')
+                self.assertEqual(crypto_vault.decrypt_password(dev['Enable Secret']), 's2')
+
+    def test_a_brand_new_device_with_empty_credentials_is_still_created(self):
+        # Chi crea senza credenziali (agente di sede, promozione di un nodo
+        # scoperto) non deve trovare un errore: il vuoto e' gestito a valle da
+        # get_device_credentials, che ricade sui default.
+        from services import inventory_manager
+        with tempfile.TemporaryDirectory() as td:
+            csv_path = os.path.join(td, 'hosts.csv')
+            with mock.patch.object(inventory_manager, 'HOSTS_CSV', csv_path):
+                inventory_manager.add_or_update_device(
+                    '10.9.9.5', 'cisco', 'custom', '', '', '', 'Generale')
+                dev = inventory_manager.get_all_devices()[0]
+                self.assertEqual(dev['IP'], '10.9.9.5')
+                self.assertEqual(dev['Username'], '')
+
     def test_invalid_port_rejected(self):
         from services import inventory_manager
         with self.assertRaises(ValueError):
