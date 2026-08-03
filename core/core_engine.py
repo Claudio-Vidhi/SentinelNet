@@ -28,7 +28,7 @@ logging.basicConfig(filename=data_config.get_path('error_log.txt'), level=loggin
 if not os.path.exists(BACKUP_FOLDER):
     os.makedirs(BACKUP_FOLDER)
 
-DEFAULT_USERNAME = os.getenv("SENTINELNET_ADMIN_USER", "Admin")
+DEFAULT_USERNAME = os.getenv("SENTINELNET_ADMIN_USER", "admin")
 DEFAULT_PASSWORD = os.getenv("SENTINELNET_ADMIN_PASS", "admin")
 DEFAULT_SECRET   = os.getenv("SENTINELNET_ADMIN_SECRET", "admin")
 
