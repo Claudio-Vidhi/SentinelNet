@@ -22,10 +22,18 @@ Nessuna dà **un elenco**, nessuna si esporta. Un inventario è la vista per rig
 = dispositivo, filtrabile e portabile fuori (CSV per il cliente, JSON per uno
 script).
 
-Nello stesso lavoro entra una correzione di comportamento della diagnosi: quando
-lo stesso indirizzo esiste in più tenant, **la scelta della sede non la fa il
-programma**. È la stessa realtà multi-tenant che l'inventario deve modellare, ed
-è il punto in cui le due parti si toccano.
+Nello stesso lavoro entrano due correzioni che condividono un solo principio:
+**un tenant è una rete a sé, e il programma non ne mescola due né ne sceglie una
+per conto dell'utente.**
+
+- **Parte B** — la diagnosi non sceglie più da sé la sede quando l'indirizzo ne
+  ha più d'una: chiede.
+- **Parte C** — il modale `Origine MAC` calcola l'ambiguità *fra* tenant, e
+  produce così un avviso falso ("più porte d'accesso possibili") su un MAC che in
+  ogni sede sta su una porta sola.
+
+È lo stesso principio che l'inventario deve modellare — la sua chiave di riga è
+(MAC, tenant) — e il punto in cui le tre parti si toccano.
 
 ## Decisioni prese con l'utente
 
@@ -296,6 +304,103 @@ combacia e si agisce sulla sede sbagliata.
 La correzione è nota e piccola — `tenant` in `PortBounceSchema`, passato a
 `verify_port()` — ma è **fuori dall'ambito deciso per questo lavoro**. Resta
 scritta qui perché è un cancello di sicurezza che oggi guarda la porta sbagliata.
+
+---
+
+# Parte C — `Origine MAC`: l'ambiguità si calcola dentro un tenant, non fra tenant
+
+## C.1 Il difetto
+
+`_mac_group()` (`routers/mac.py:68`) calcola le posizioni di accesso distinte
+sull'insieme **completo** degli avvistamenti:
+
+```python
+distinct = {(s.get("switch_ip"), (s.get("interface") or "").lower()) for s in origin}
+```
+
+`/api/mac/locate` passa `user_group_scope(current_user)`, cioè TUTTI i tenant
+visibili all'utente. Quindi un MAC attaccato a una porta sola in ciascuna di tre
+sedi risulta con cinque "porte d'accesso possibili", e il modale mostra:
+
+> ⚠ Più porte d'accesso possibili (5). La più recente è la più probabile;
+> esegui una MAC Scan aggiornata per disambiguare.
+
+Tre cose sbagliate in una:
+
+1. **le sedi si mescolano senza etichetta** — le righe di tenant diversi stanno
+   nella stessa lista, ordinate per data, e chi legge non ha modo di vedere che
+   la seconda riga è un'altra rete;
+2. **l'ambiguità è falsa** — dentro ogni tenant la porta è una sola. Il
+   messaggio manda a rifare una scansione per riparare un problema che non
+   esiste;
+3. **"la più recente è la più probabile" attraversa le sedi** — è la stessa
+   euristica che la Parte B toglie alla diagnosi, qui applicata a una domanda
+   ("dov'è attaccato questo MAC") che in due sedi ha due risposte entrambe vere.
+
+Si vede meglio da dove nasce il click: nella tabella per switch, l'utente ha
+aperto **uno switch di un tenant preciso** — il tenant è persino disegnato come
+badge accanto al nome (`client-map.js:583`) — e il modale gli risponde su tutti.
+
+## C.2 La correzione
+
+**Il raggruppamento per tenant sta in `_mac_group()`**, non nei chiamanti.
+`origin`, `transit`, `distinct` e quindi `status`/`access_count` si calcolano
+**per (mac, tenant)**. Tre chiamanti oggi puntano a `/api/mac/locate` — la
+tabella MAC, i link MAC del terminale SSH (`dashboard.html:3536`) e lo strumento
+MCP (`ai/mcp_server.py:123`) — e una guardia nella funzione condivisa è un diff
+più corto di una guardia in ciascuno, oltre che l'unico modo perché anche gli
+altri due smettano di mentire.
+
+La risposta diventa una voce per (mac, tenant):
+
+```json
+{"results": [
+  {"mac": "aa:bb:cc:dd:ee:01", "tenant": "Tenant-A", "status": "resolved",
+   "access_count": 1, "origin": [...], "transit": [...]},
+  {"mac": "aa:bb:cc:dd:ee:01", "tenant": "Tenant-B", "status": "resolved",
+   "access_count": 1, "origin": [...], "transit": [...]}
+]}
+```
+
+`ambiguous` torna a significare quello che dice: **più porte plausibili nella
+stessa rete**, il caso in cui una scansione più fresca serve davvero.
+
+**Più il parametro di scoping**: `/api/mac/locate?tenant=` opzionale, stessa
+regola di `/api/mac/search` — restringe, e un tenant fuori dal profilo è 403, non
+ignorato in silenzio. Il pulsante di `renderMacResults()` passa `g.tenant`, che
+ha già in mano: chi clicca dentro uno switch di una sede riceve la risposta di
+quella sede e basta.
+
+Gli altri due chiamanti non passano nulla e non devono: chi digita un MAC in un
+terminale non ha un contesto di sede. Per loro vale il §C.3.
+
+## C.3 Il modale con più tenant
+
+Senza `tenant`, e con risultati che coprono 2+ sedi, il modale **non li appiattisce**:
+una sezione per tenant, intestata col nome del tenant, ognuna col suo esito.
+L'avviso in cima cambia significato — da "non so quale porta" a "questo MAC
+esiste in più sedi" — e non consiglia più una riscansione, che non c'entra.
+
+Nessun secondo modale e nessun secondo renderer: è lo stesso, che cicla sulle
+voci invece di assumerne una.
+
+## C.4 Test
+
+In `tests/test_mac_locate.py`, file nuovo: `_mac_group()` non è coperto oggi da
+nessun test — `test_router_smoke.py` e `test_ui_revamp.py` toccano la rotta ma
+non la logica di raggruppamento, ed è esattamente lì che sta il difetto.
+
+- stesso MAC, una porta di accesso in ciascuno di due tenant → due voci, ognuna
+  `resolved` con `access_count: 1`. **Mai** una voce `ambiguous`;
+- stesso MAC, due porte di accesso nello stesso tenant → quella voce è
+  `ambiguous` con `access_count: 2`;
+- `tenant=` valorizzato → una sola voce, quella del tenant chiesto;
+- `tenant=` fuori dallo scope dell'utente → 403;
+- un MAC in un tenant solo → risposta invariata (nessuna regressione per il
+  caso normale, che è la maggioranza).
+
+Più un controllo grep in `tests/test_helpers_frontend.py`: il pulsante di
+localizzazione passa il tenant del gruppo.
 
 ---
 
