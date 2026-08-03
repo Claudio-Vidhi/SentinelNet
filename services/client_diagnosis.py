@@ -1012,6 +1012,20 @@ def diagnose(client: str, dest: Optional[str] = None,
     _section(result, "position", _position, client, is_mac, tenants)
     position = result["sections"]["position"]
 
+    # Piu' tenant e nessuno indicato: NON si diagnostica. Un tenant e' una rete
+    # a se', e "la piu' recente" e' una scelta che nessuno ha confermato: il
+    # referto uscirebbe completo e definitivo su una sede scelta dal programma,
+    # con sotto un pulsante che stacca una porta. Nessun apparato viene
+    # interrogato — qui si e' ancora sul solo dato storico.
+    #
+    # Quando il chiamante indica il tenant, il router restringe ``tenants`` e
+    # ``_position`` trova un candidato solo: questa via non scatta.
+    available = position.get("tenants_available") or []
+    if len(available) > 1:
+        return {"client": client, "client_type": result["client_type"],
+                "generated_ts": result["generated_ts"],
+                "status": "ambiguous", "tenants_available": available}
+
     # Le scansioni ARP/MAC sono manuali: senza questo passaggio il referto
     # descrive una posizione che può essere di settimane fa, e chi legge se ne
     # accorge solo confrontando i timestamp. Sopra soglia si riscansionano i due

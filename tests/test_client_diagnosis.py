@@ -988,5 +988,61 @@ class TestEndpoint(_Base):
         self.assertIn(r.status_code, (401, 403))
 
 
+class TestTenantAmbiguo(unittest.TestCase):
+    """Con lo stesso indirizzo in piu' sedi non si diagnostica: si chiede.
+
+    Scegliere la piu' recente e presentare un referto completo dichiara
+    definitiva una scelta che nessuno ha confermato — e la sezione dopo e' un
+    pulsante che tocca la rete.
+    """
+
+    def _due_sedi(self):
+        return [
+            dict(CLIENT, tenant="sede-a",
+                 last_seen="2026-08-03T10:00:00", port_last_seen="2026-08-03T10:00:00"),
+            dict(CLIENT, tenant="sede-b", ip="198.51.100.7",
+                 last_seen="2026-08-01T09:00:00", port_last_seen="2026-08-01T09:00:00"),
+        ]
+
+    def _diagnose(self, entries, tenants=None):
+        """client_map() filtra per tenant come fa quella vera: e' il
+        meccanismo su cui poggia tutto il comportamento."""
+        def fake(ip=None, mac=None, tenants=None, limit=500, source_ip=None):
+            if tenants is None:
+                return list(entries)
+            return [e for e in entries if e["tenant"] in tenants]
+
+        with patch("collectors.mac_history.client_map", side_effect=fake), \
+             patch("collectors.mac_history.positions_for_mac", return_value=[]):
+            return client_diagnosis.diagnose("aa:bb:cc:dd:ee:ff", tenants=tenants)
+
+    def test_due_tenant_nessun_referto(self):
+        out = self._diagnose(self._due_sedi())
+
+        self.assertEqual(out["status"], "ambiguous")
+        self.assertEqual(len(out["tenants_available"]), 2)
+        self.assertNotIn("sections", out)
+        self.assertNotIn("complete", out)
+
+    def test_i_candidati_arrivano_dal_piu_recente(self):
+        out = self._diagnose(self._due_sedi())
+
+        self.assertEqual(out["tenants_available"][0]["tenant"], "sede-a")
+
+    def test_con_il_tenant_indicato_il_referto_si_produce(self):
+        out = self._diagnose(self._due_sedi(), tenants=["sede-b"])
+
+        self.assertNotEqual(out.get("status"), "ambiguous")
+        self.assertIn("sections", out)
+        self.assertEqual(out["sections"]["position"]["tenant"], "sede-b")
+
+    def test_un_solo_tenant_nessuna_domanda(self):
+        """Il caso normale — la maggioranza — non cambia."""
+        out = self._diagnose([dict(CLIENT, tenant="sede-a")])
+
+        self.assertNotEqual(out.get("status"), "ambiguous")
+        self.assertIn("sections", out)
+
+
 if __name__ == "__main__":
     unittest.main()
