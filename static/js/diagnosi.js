@@ -131,6 +131,14 @@ function renderDiagnosi(d, dest) {
     const host = document.getElementById('diagResult');
     if (!host) return;
 
+    // L'indirizzo esiste in piu' sedi e nessuna e' stata scelta: non c'e'
+    // nessun referto da mostrare. Mostrarne uno "provvisorio" sarebbe la
+    // stessa scelta silenziosa con un'etichetta sopra.
+    if (d.status === 'ambiguous') {
+        host.innerHTML = _diagTenantChoice(d);
+        return;
+    }
+
     const pos = s.position || {};
     _diagMac = pos.mac || (/^[0-9a-fA-F:.-]{12,17}$/.test(_diagClient || '') ? _diagClient : '');
     _diagSwitch = (pos.switch_ip && pos.switch_port)
@@ -153,8 +161,7 @@ function renderDiagnosi(d, dest) {
         (p.l2_only ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;">
             <i class="fa-solid fa-layer-group" style="margin-right:6px;"></i>
             <b>${escapeHtml(en ? 'L2 only' : 'Solo L2')}</b> — ${escapeHtml(jsStr(p.binding_reason || ''))}</div>` : '') +
-        (p.ambiguous ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Other bindings for this address' : 'Altri binding per questo indirizzo')}: ${p.ambiguous.map(a => escapeHtml(jsStr(a.mac))).join(', ')}</div>` : '') +
-        _diagTenantChoice(p)
+        (p.ambiguous ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Other bindings for this address' : 'Altri binding per questo indirizzo')}: ${p.ambiguous.map(a => escapeHtml(jsStr(a.mac))).join(', ')}</div>` : '')
     );
 
     const l2 = _diagCard('fa-ethernet', en ? 'L2 link health' : 'Salute del collegamento L2', s.l2_health, h => {
@@ -269,36 +276,40 @@ function renderDiagnosi(d, dest) {
         <div class="diag-cards">${position}${l2}${history}${path}${fw}${across}${denies}${_diagWifiCard()}</div>`;
 }
 
-// Lo stesso indirizzo puo' esistere in piu' tenant: 192.168.1.50 sta in ogni
+// Lo stesso indirizzo puo' esistere in piu' tenant: 192.0.2.50 sta in ogni
 // sede del mondo. Sceglierne uno in silenzio significa diagnosticare la rete
-// sbagliata senza dirlo, quindi si elencano e si lascia scegliere. Il tenant
-// scelto RESTRINGE lo scoping lato server, non lo allarga.
-function _diagTenantChoice(p) {
-    const list = p.tenants_available || [];
+// sbagliata senza dirlo, quindi si elencano e si ASPETTA. Il tenant scelto
+// RESTRINGE lo scoping lato server, non lo allarga.
+function _diagTenantChoice(d) {
+    const list = d.tenants_available || [];
     if (list.length < 2) return '';
     const en = currentLang === 'en';
-    // Le posizioni arrivano gia' ordinate dalla piu' recente: la prima e' la
-    // scelta di default, e la data va mostrata perche' e' il dato su cui si
-    // decide — un portatile e' dove e' stato visto per ULTIMO.
-    const chips = list.map((t, i) => {
-        const active = t.tenant === p.tenant;
+    // Ordinati dal piu' recente, con la data: e' il dato su cui si decide —
+    // un portatile e' dove e' stato visto per ULTIMO. Ma nessuno e'
+    // preselezionato: la scelta e' di chi legge.
+    const chips = list.map(t => {
         const where = [t.switch_name, t.switch_port].filter(Boolean).join(' ');
         return `<button onclick="diagnosiPickTenant('${escapeHtml(jsStr(t.tenant))}')"
-            class="btn btn-secondary btn-small" style="width:auto; margin:0; text-align:left; ${active ? 'border-color:var(--primary); color:var(--primary);' : ''}"
+            class="btn btn-secondary btn-small" style="width:auto; margin:0; text-align:left;"
             title="${escapeHtml(jsStr(`${t.ip || ''} ${where}`.trim()))}">
-            ${active ? '<i class="fa-solid fa-circle-dot"></i> ' : ''}${escapeHtml(jsStr(t.tenant))}
-            ${i === 0 ? `<span class="badge" style="font-size:9px; margin-left:4px;">${escapeHtml(en ? 'latest' : 'piu recente')}</span>` : ''}
+            <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(jsStr(t.tenant))}
             <span style="color:var(--text-muted); font-weight:400;">
                 ${escapeHtml(jsStr(t.ip || (en ? 'no IP' : 'senza IP')))}${where ? ' · ' + escapeHtml(jsStr(where)) : ''}
                 · ${escapeHtml(jsStr(String(t.last_seen || '').replace('T', ' ').slice(0, 16)))}
             </span>
         </button>`;
     }).join('');
-    return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
-        <div style="font-size:12px; color:var(--warning); margin-bottom:6px;">
-            <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
-                en ? 'This client appears in more than one tenant — the report covers the one marked, which is where it was seen most recently. Pick another to diagnose that one instead.'
-                   : 'Questo client compare in piu\' tenant — il referto riguarda quello segnato, cioe\' dove e\' stato visto per ultimo. Scegline un altro per diagnosticare quello.')}
+    return `<div class="panel" style="padding:22px;">
+        <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:14px;">
+            <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning); margin-top:2px;"></i>
+            <div>
+                <div style="font-size:14px; font-weight:700; margin-bottom:4px;">${escapeHtml(
+                    en ? 'This address exists in more than one tenant'
+                       : 'Questo indirizzo esiste in più tenant')}</div>
+                <div style="font-size:12px; color:var(--text-muted);">${escapeHtml(
+                    en ? 'No report was produced: each site is its own network, and diagnosing the wrong one would be wrong in silence. Pick the site.'
+                       : 'Nessun referto è stato prodotto: ogni sede è una rete a sé, e diagnosticare quella sbagliata lo sarebbe in silenzio. Scegli la sede.')}</div>
+            </div>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">${chips}</div>
     </div>`;

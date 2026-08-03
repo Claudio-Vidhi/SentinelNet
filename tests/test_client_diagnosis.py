@@ -1044,5 +1044,28 @@ class TestTenantAmbiguo(unittest.TestCase):
         self.assertIn("sections", out)
 
 
+class TestTenantAmbiguoFrontend(unittest.TestCase):
+    """Verifica grep-style: non c'e' un runner JS."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_helpers_frontend import frontend_source
+        cls.src = frontend_source()
+
+    def test_lo_stato_ambiguous_esce_prima_del_referto(self):
+        self.assertIn("if (d.status === 'ambiguous')", self.src)
+
+    def test_la_scelta_non_e_piu_una_striscia_del_riquadro_posizione(self):
+        """Chiamata una volta sola, dal ramo 'ambiguous'. Se restasse anche
+        dentro il riquadro posizione, il referto tornerebbe a uscire con una
+        sede gia' scelta e i chip sotto."""
+        self.assertEqual(self.src.count("_diagTenantChoice("), 2)  # 1 def + 1 uso
+
+    def test_nessun_tenant_e_preselezionato(self):
+        """Con 'la piu' recente' gia' evidenziata, la domanda avrebbe una
+        risposta suggerita — cioe' la scelta del programma con un altro nome."""
+        self.assertNotIn("t.tenant === p.tenant", self.src)
+
+
 if __name__ == "__main__":
     unittest.main()
