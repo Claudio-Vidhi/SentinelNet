@@ -268,6 +268,62 @@ uv run python -m unittest discover -s tests
 graphify update .
 ```
 
+## Status
+
+Shipped: seven sub-tabs, thirteen read-only service functions, fourteen routes, all
+driven by the `FGT_DATASETS` registry. Read-only throughout — no cmdb writes anywhere.
+
+### Traffico → Log — resolved
+
+Selecting *forward* used to need `RIGHE=10000` to show anything, and a date range
+returned nothing. Three separate FortiOS behaviours, now measured on 7.4 and written up
+in [reference/fortios/logging.md](reference/fortios/logging.md#rest-get-apiv2logdevicetypesubtype):
+the log search is **asynchronous** (a first response can be `ready: false` with zero rows),
+the path subtype does **not** filter (only `filter=subtype==`), and date ranges have **no**
+`>=`/`<=` and **no** OR, so a range is walked one `date==` per day. Handled by
+`_log_search()` and `_log_range_days()` in `services/fortigate_service.py`.
+
+The `sottotipo filtrato` badge means the client-side reconciliation had to fire — on 7.4 it
+should stay hidden, because the server-side filter is honoured. If it appears, that FortiOS
+build ignores `filter=subtype==` too.
+
+### Still unverified against hardware
+
+These paths have never returned a non-empty answer on a real box; a wrong path degrades
+silently into an empty panel. **An empty panel is not automatically a failure** — a box
+without SD-WAN, without a WiFi controller, or on a licence lacking IPS legitimately 404s
+and renders an empty state with the reason in the `title` attribute. Hover it to tell a
+real absence from a typo.
+
+| Sub-tab → view | Path |
+|---|---|
+| Panoramica | `monitor/system/resource/usage`, `monitor/system/time` |
+| Panoramica | `monitor/system/ha-status`, `monitor/system/ha-checksums` |
+| Rete → VPN | `monitor/vpn/ipsec` |
+| Firewall → Gruppi indirizzi | `cmdb/firewall/addrgrp` |
+| Firewall → Gruppi servizi | `cmdb/firewall.service/group` |
+| Firewall → VIP | `cmdb/firewall/vip` |
+| Firewall → IP pool | `cmdb/firewall/ippool` |
+| Firewall → Profili sicurezza | `cmdb/antivirus/profile`, `cmdb/ips/sensor`, `cmdb/webfilter/profile`, `cmdb/application/list` |
+| Sicurezza → Admin | `cmdb/system/admin` |
+| Sicurezza → Utenti bannati | `monitor/user/banned` |
+| Sicurezza → Revisioni config | `monitor/system/config-revision` |
+| Sicurezza → Certificati | `monitor/system/available-certificates` |
+
+Only `monitor/virtual-wan/health-check` and the `log/*` paths above are confirmed.
+
+### Frontend gotchas found the hard way
+
+- **`changeLanguage()` replaces `innerHTML` wholesale.** A Font Awesome icon on a
+  translated element must live *inside* the i18n string value, not in the markup, or it
+  disappears on language switch.
+- **`.btn` is `width: 100%`.** Buttons outside a `.subtab-bar` need an explicit
+  `style="width:auto;"` or they claim a whole row.
+- **No JS test runner exists.** The frontend is checked grep-style through
+  `frontend_source()` in `tests/test_helpers_frontend.py`. Logic that needs a real test
+  belongs in Python — which is why the policy/stats join and the log subtype/date handling
+  live in the service layer rather than the renderer.
+
 ## Skipped, and when to add it
 
 - **Write operations** (policy enable/disable, session clear, object CRUD) — read-only was

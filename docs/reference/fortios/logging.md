@@ -34,6 +34,43 @@ Parsing notes:
 - `vd` = VDOM name (`root`) — filter on this in multi-VDOM deployments.
 - Useful correlation fields: `type`, `subtype`, `level`, `action`, `reason`, `user`, `group`, `remip`, `tunneltype`, `tunnelid`.
 
+## REST: `GET /api/v2/log/{device}/{type}/{subtype}`
+
+Measured against FortiOS 7.4, not taken from the manual. Params: `rows`,
+`start`, `filter` (repeatable), `session_id`.
+
+**The search is asynchronous.** The first response can carry `ready: false`,
+`total_lines: 0` and an empty `results` while the engine is still scanning —
+observed a query answer `0` rows, then `2761` rows one second later. Re-issue
+with the returned `session_id` until `ready: true`.
+
+- `ready` — the only boolean; it means "results usable".
+- `completed` / `percent_logs_processed` — **percentages** (2, 30, 35…), not
+  flags. Treating `completed` as a done-flag reads a partial as final.
+- `total_lines` — matches found so far; grows across polls.
+
+Rows come back **newest first**; `start` offsets into that order.
+
+### Filter operators
+
+| form | result |
+|---|---|
+| `filter=subtype==forward` | works — different fields are ANDed |
+| `filter=date==2026-08-02` | works, exact single day |
+| `filter=date>=…`, `filter=date<=…` | **HTTP 500** |
+| `filter=eventtime>=…`, `<=…` | **HTTP 500** |
+| `filter=date==A&filter=date==B` | **no OR** — last filter of a repeated field wins |
+| `start_time` / `end_time` params | silently ignored |
+
+Consequence: a date **range** cannot be expressed in one request. Enumerate the
+days and issue one `date==` query each, newest day first, stopping once enough
+rows are collected — see `_log_range_days()` in `services/fortigate_service.py`.
+
+The path subtype (`…/traffic/forward`) does **not** restrict results on its own
+on this version; only the `subtype==` filter does. Without it, `rows=N` counts
+rows of every subtype, so asking for 100 forward rows on a box dominated by
+local traffic can legitimately return zero.
+
 ## Related monitor data (SSL VPN sessions — CLI)
 
 ```
