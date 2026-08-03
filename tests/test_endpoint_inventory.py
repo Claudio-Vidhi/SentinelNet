@@ -350,3 +350,57 @@ class TestOccupazionePorte(_Base):
                      if p["interface"] == "GigabitEthernet1/0/1")
 
         self.assertEqual(porta["state"], "free", "il MAC di sede-b non e' visibile")
+
+
+class TestRotte(_Base):
+    """Sola lettura: get_current_user basta, require_operator no."""
+
+    def setUp(self):
+        super().setUp()
+        from routers import endpoint_inventory as ep_router
+        self.router = ep_router
+
+    def test_tenant_indicato_restringe(self):
+        self._sighting(tenant="sede-a")
+        self._sighting(tenant="sede-b", switch_ip="198.51.100.1")
+
+        out = self.router.endpoints_list(tenant="sede-a",
+                                         current_user={"sub": "a", "role": "admin"})
+
+        self.assertEqual(out["total"], 1)
+
+    def test_tenant_fuori_scope_e_403(self):
+        from fastapi import HTTPException
+        with patch("routers.endpoint_inventory.user_group_scope",
+                   return_value={"sede-a"}):
+            with self.assertRaises(HTTPException) as ctx:
+                self.router.endpoints_list(tenant="sede-b",
+                                           current_user={"sub": "v", "role": "viewer"})
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_lo_scope_dell_utente_e_applicato_senza_chiederlo(self):
+        """Il filtro non e' un'opzione: senza parametro vale comunque il
+        profilo dell'utente."""
+        self._sighting(tenant="sede-a")
+        self._sighting(tenant="sede-b", switch_ip="198.51.100.1")
+
+        with patch("routers.endpoint_inventory.user_group_scope",
+                   return_value={"sede-b"}):
+            out = self.router.endpoints_list(current_user={"sub": "v", "role": "viewer"})
+
+        self.assertEqual([r["tenant"] for r in out["results"]], ["sede-b"])
+
+    def test_ports_richiede_lo_switch(self):
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as ctx:
+            self.router.endpoints_ports(switch="  ",
+                                        current_user={"sub": "a", "role": "admin"})
+        self.assertEqual(ctx.exception.status_code, 400)
+
+
+class TestRotteRegistrate(unittest.TestCase):
+    def test_le_rotte_sono_nell_app(self):
+        import app_server
+        paths = {r.path for r in app_server.app.routes}
+        self.assertIn("/api/endpoints/list", paths)
+        self.assertIn("/api/endpoints/ports", paths)
