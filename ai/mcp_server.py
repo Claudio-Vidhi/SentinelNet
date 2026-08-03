@@ -343,10 +343,13 @@ TOOLS = {
         _obj({"client": {**_S, "description": "Client IP or MAC address"},
               "dest": {**_S, "description": "Optional destination IP/FQDN: enables policy lookup and the path"},
               "dest_port": {"type": "integer", "description": "Default 443"},
-              "protocol": {**_S, "description": "TCP | UDP | ICMP (default TCP)"}},
+              "protocol": {**_S, "description": "TCP | UDP | ICMP (default TCP)"},
+              "tenant": {**_S, "description": "Restrict to one tenant/site when the address exists in several "
+                                              "(a prior call returns 'status': 'ambiguous' with the candidate "
+                                              "tenants in that case)"}},
              ["client"]),
         lambda a: api("POST", "/api/diagnose/client",
-                      body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol")
+                      body={k: a.get(k) for k in ("client", "dest", "dest_port", "protocol", "tenant")
                             if a.get(k) is not None}),
     ),
     "wlc_status": (

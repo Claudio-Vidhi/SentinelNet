@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from collectors import mac_history
-from routers.deps import get_current_user, user_group_scope
+from routers.deps import assert_device_allowed, get_current_user, user_group_scope
 
 router = APIRouter(tags=["Endpoint Inventory"])
 
@@ -51,8 +51,20 @@ def endpoints_list(tenant: Optional[str] = None, site: Optional[str] = None,
 
 @router.get("/api/endpoints/ports")
 def endpoints_ports(switch: str, current_user = Depends(get_current_user)):
-    """Stato delle porte di uno switch: occupata, uplink, libera."""
+    """Stato delle porte di uno switch: occupata, uplink, libera.
+
+    Le righe di ``mac_sightings`` sono scopate per tenant, ma lo switch stesso
+    no (``switch_if_macs`` non ha colonna tenant): senza questo controllo un
+    utente della sede A poteva chiedere l'IP di uno switch della sede B e
+    riceverne comunque l'elenco interfacce, la freschezza della scansione e i
+    vicini di uplink — e una porta occupata da un MAC non suo tornava "free",
+    cioe' il referto mentiva oltre a trapelare.
+    """
     if not switch or not switch.strip():
         raise HTTPException(status_code=400, detail="Parametro switch obbligatorio")
-    return mac_history.port_occupancy(switch.strip(),
-                                      tenants=user_group_scope(current_user))
+    switch = switch.strip()
+    device = assert_device_allowed(current_user, switch)
+    if device is None:
+        raise HTTPException(status_code=404,
+                            detail=f"Apparato {switch} non in inventario.")
+    return mac_history.port_occupancy(switch, tenants=user_group_scope(current_user))
