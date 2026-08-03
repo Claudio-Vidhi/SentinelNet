@@ -9,6 +9,7 @@
 let _diagClient = null;    // client a schermo, per il "rilancia"
 let _diagMac = '';         // MAC risolto: il bounce e il WLC lavorano per MAC
 let _diagSwitch = null;    // {ip, port} della porta di accesso trovata
+let _diagTenant = null;    // tenant scelto quando l'indirizzo esiste in piu' sedi
 
 function diagnosiTabShown() {
     const el = document.getElementById('diagClientInput');
@@ -18,6 +19,7 @@ function diagnosiTabShown() {
 // Ingresso dalla Client Map (e da chiunque altro): riempie e lancia.
 function diagnoseClientInTab(client, dest) {
     switchTab('tab-diagnosi');
+    _diagTenant = null;
     const c = document.getElementById('diagClientInput');
     const d = document.getElementById('diagDestInput');
     if (c) c.value = client || '';
@@ -34,6 +36,7 @@ async function runDiagnosi() {
         host.innerHTML = _diagEmpty(en ? 'Enter an IP or MAC.' : 'Inserisci un IP o un MAC.');
         return;
     }
+    if (_diagClient !== client.trim()) _diagTenant = null;
     _diagClient = client.trim();
     const dest = ((document.getElementById('diagDestInput') || {}).value || '').trim();
 
@@ -44,6 +47,7 @@ async function runDiagnosi() {
     </div>`;
 
     const body = { client: _diagClient };
+    if (_diagTenant) body.tenant = _diagTenant;
     if (dest) {
         body.dest = dest;
         body.protocol = (document.getElementById('diagProtoInput') || {}).value || 'TCP';
@@ -143,7 +147,8 @@ function renderDiagnosi(d, dest) {
         _kv(en ? 'Port / VLAN' : 'Porta / VLAN', `${p.switch_port || '—'} / ${p.port_vlan || '—'}`) +
         _kv('Gateway', `${p.gateway_name || ''} ${p.gateway_ip || ''} (${p.gateway_type || '—'})`.trim()) +
         (p.port_known === false ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;">${escapeHtml(jsStr(p.port_reason || ''))}</div>` : '') +
-        (p.ambiguous ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Other bindings for this address' : 'Altri binding per questo indirizzo')}: ${p.ambiguous.map(a => escapeHtml(jsStr(a.mac))).join(', ')}</div>` : '')
+        (p.ambiguous ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Other bindings for this address' : 'Altri binding per questo indirizzo')}: ${p.ambiguous.map(a => escapeHtml(jsStr(a.mac))).join(', ')}</div>` : '') +
+        _diagTenantChoice(p)
     );
 
     const l2 = _diagCard('fa-ethernet', en ? 'L2 link health' : 'Salute del collegamento L2', s.l2_health, h => {
@@ -256,6 +261,39 @@ function renderDiagnosi(d, dest) {
         </div>
         ${_diagFreshness(d.freshness)}
         <div class="diag-cards">${position}${l2}${history}${path}${fw}${across}${denies}${_diagWifiCard()}</div>`;
+}
+
+// Lo stesso indirizzo puo' esistere in piu' tenant: 192.168.1.50 sta in ogni
+// sede del mondo. Sceglierne uno in silenzio significa diagnosticare la rete
+// sbagliata senza dirlo, quindi si elencano e si lascia scegliere. Il tenant
+// scelto RESTRINGE lo scoping lato server, non lo allarga.
+function _diagTenantChoice(p) {
+    const list = p.tenants_available || [];
+    if (list.length < 2) return '';
+    const en = currentLang === 'en';
+    const chips = list.map(t => {
+        const active = t.tenant === p.tenant;
+        const where = [t.switch_name, t.switch_port].filter(Boolean).join(' ');
+        return `<button onclick="diagnosiPickTenant('${escapeHtml(jsStr(t.tenant))}')"
+            class="btn btn-secondary btn-small" style="width:auto; margin:0; ${active ? 'border-color:var(--primary); color:var(--primary);' : ''}"
+            title="${escapeHtml(jsStr(`${t.ip || ''} ${where}`.trim()))}">
+            ${active ? '<i class="fa-solid fa-circle-dot"></i> ' : ''}${escapeHtml(jsStr(t.tenant))}
+            <span style="color:var(--text-muted); font-weight:400;">${escapeHtml(jsStr(t.ip || ''))}${where ? ' · ' + escapeHtml(jsStr(where)) : ''}</span>
+        </button>`;
+    }).join('');
+    return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
+        <div style="font-size:12px; color:var(--warning); margin-bottom:6px;">
+            <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
+                en ? 'This address exists in more than one tenant — the report below covers the one marked. Pick another to diagnose that one instead.'
+                   : 'Questo indirizzo esiste in piu\' tenant — il referto qui sotto riguarda quello segnato. Scegline un altro per diagnosticare quello.')}
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">${chips}</div>
+    </div>`;
+}
+
+function diagnosiPickTenant(tenant) {
+    _diagTenant = tenant;
+    runDiagnosi();
 }
 
 // Catena trunk: un salto per riga. Un salto senza backup e' 'unknown', non un

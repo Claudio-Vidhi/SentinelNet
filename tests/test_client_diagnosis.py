@@ -240,6 +240,25 @@ class TestAmbiguousBindings(unittest.TestCase):
             p = client_diagnosis._position("192.0.2.10", False, None)
         self.assertNotIn("ambiguous", p)
 
+    def test_the_same_address_in_two_tenants_is_offered_as_a_choice(self):
+        # 192.168.1.50 esiste in ogni sede del mondo. Scegliere il piu' recente
+        # in silenzio significa diagnosticare la rete sbagliata senza dirlo.
+        rows = [dict(CLIENT, tenant="sede-a", switch_name="SW-A", switch_port="Gi1/0/5"),
+                dict(CLIENT, tenant="sede-b", switch_name="SW-B", switch_port="Gi1/0/9")]
+        with _client_map(rows):
+            p = client_diagnosis._position("192.0.2.10", False, None)
+        self.assertEqual([t["tenant"] for t in p["tenants_available"]],
+                         ["sede-a", "sede-b"])
+        # Il referto riguarda il primo: va detto quale, non lasciato indovinare.
+        self.assertEqual(p["tenant"], "sede-a")
+
+    def test_a_single_tenant_offers_no_choice(self):
+        rows = [dict(CLIENT, tenant="sede-a", source_ip="192.0.2.1"),
+                dict(CLIENT, tenant="sede-a", source_ip="192.0.2.2")]
+        with _client_map(rows):
+            p = client_diagnosis._position("192.0.2.10", False, None)
+        self.assertNotIn("tenants_available", p)
+
     def test_a_different_mac_on_the_same_ip_still_is(self):
         rows = [self._entry("aa:bb:cc:dd:ee:ff", "192.0.2.1"),
                 self._entry("11:22:33:44:55:66", "192.0.2.1")]
@@ -815,6 +834,29 @@ class TestEndpoint(_Base):
                 "/api/diagnose/client", json={"client": "192.0.2.10"})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(seen["tenants"], ["sede-a"])
+
+    def test_a_chosen_tenant_narrows_the_scope(self):
+        seen = {}
+
+        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None):
+            seen["tenants"] = tenants
+            return {"client": client, "sections": {}, "complete": False}
+
+        with patch("services.client_diagnosis.diagnose", side_effect=spy):
+            r = self._client("adm_diag").post(
+                "/api/diagnose/client",
+                json={"client": "192.0.2.10", "tenant": "sede-a"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(seen["tenants"], ["sede-a"])
+
+    def test_a_tenant_outside_the_profile_is_refused_not_ignored(self):
+        # Ignorarlo risponderebbe su una sede che l'utente non puo' vedere.
+        with patch("services.client_diagnosis.diagnose") as diag:
+            r = self._client("op_diag_a").post(
+                "/api/diagnose/client",
+                json={"client": "192.0.2.10", "tenant": "sede-b"})
+        self.assertEqual(r.status_code, 403)
+        diag.assert_not_called()
 
     def test_anonymous_is_refused(self):
         from fastapi.testclient import TestClient

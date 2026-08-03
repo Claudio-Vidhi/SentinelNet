@@ -27,6 +27,10 @@ class ClientDiagnosisSchema(BaseModel):
     # Soglia di freschezza in secondi: oltre, gateway e switch di accesso
     # vengono riscansionati prima di rispondere. None = impostazione salvata.
     max_age_s: Optional[int] = None
+    # Tenant scelto quando lo stesso indirizzo risulta in più sedi. RESTRINGE
+    # lo scoping dell'utente, non lo allarga: un tenant fuori dal suo profilo
+    # è 403, non "vabbè, glielo mostro".
+    tenant: Optional[str] = None
 
 
 class PortBounceSchema(BaseModel):
@@ -46,6 +50,14 @@ async def diagnose_client(payload: ClientDiagnosisSchema,
     """
     tenants = user_group_scope(current_user)
     scope = sorted(tenants) if tenants is not None else None
+    if payload.tenant:
+        # Stessa regola di /api/mac/search: la scelta restringe, e un tenant
+        # fuori profilo si rifiuta invece di ignorarlo in silenzio — ignorarlo
+        # risponderebbe su una sede che l'utente non può vedere.
+        if scope is not None and payload.tenant not in scope:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail=f"Tenant '{payload.tenant}' non consentito.")
+        scope = [payload.tenant]
     # Il servizio blocca su SSH e REST verso gli apparati: fuori dal loop, come
     # ogni altra chiamata agli apparati in questo progetto.
     result = await asyncio.to_thread(
