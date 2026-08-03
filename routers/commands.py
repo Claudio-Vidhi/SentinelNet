@@ -258,6 +258,28 @@ def get_ws_token(current_user = Depends(require_operator)):
     _ws_tokens[otp] = (current_user.get("sub"), time.time())
     return {"ws_token": otp}
 
+def _ssh_failure_hint(exc) -> str:
+    """Il messaggio che il terminale mostra a video, tradotto in una diagnosi.
+
+    "Error reading SSH protocol banner" è il più fuorviante degli errori di
+    paramiko: il TCP si apre e il dispositivo chiude senza presentarsi, quindi
+    sembra un guasto di rete mentre la rete funziona. Su FortiOS è quasi sempre
+    il lockout dell'amministratore dopo N login falliti
+    (``admin-lockout-threshold``, 3 tentativi e 60 secondi di default): finché
+    dura, ogni connessione dalla stessa sorgente muore così — comprese quelle
+    con le credenziali giuste, il che rende impossibile capire l'accaduto dal
+    solo testo di paramiko.
+    """
+    msg = str(exc) or type(exc).__name__
+    if "banner" in msg.lower():
+        return (msg + "\r\n[Il dispositivo ha accettato la connessione e l'ha "
+                "chiusa senza presentarsi: di norma sta rifiutando nuove "
+                "sessioni SSH dopo una serie di login falliti (su FortiOS "
+                "admin-lockout-threshold, 60s di default). Attendi che la "
+                "finestra scada, poi verifica le credenziali in inventario.]")
+    return msg
+
+
 @router.websocket("/api/ws-terminal/{ip}")
 async def ws_terminal(websocket: WebSocket, ip: str):
     # Leggi l'OTP dal query param
@@ -304,13 +326,27 @@ async def ws_terminal(websocket: WebSocket, ip: str):
 
     username, password, _ = core_engine.get_device_credentials(device)
 
+    # Porta e trasporto dichiarati in inventario, dalla stessa funzione che usa
+    # il triage: qui la porta era fissa a 22 (default di paramiko), quindi un
+    # device su porta non standard era raggiungibile dal triage e non dal
+    # terminale — la stessa credenziale, due esiti diversi.
+    cli_kind, ssh_port = core_engine.get_cli_transport(device)
+    if cli_kind != 'ssh':
+        # Puntare paramiko a una porta Telnet darebbe di nuovo l'errore
+        # "banner", cioè il sintomo meno leggibile per la causa più banale.
+        await websocket.send_text(
+            f"\r\n[Errore] Il dispositivo dichiara il trasporto CLI "
+            f"'{cli_kind}': il terminale interattivo supporta solo SSH.\r\n")
+        await websocket.close()
+        return
+
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     connected = False
 
     try:
         # 2. Primo tentativo di connessione invisibile
-        client.connect(ip, username=username, password=password, look_for_keys=False, allow_agent=False, timeout=10)
+        client.connect(ip, port=ssh_port, username=username, password=password, look_for_keys=False, allow_agent=False, timeout=10)
         connected = True
     except paramiko.AuthenticationException:
         # 3. L'autenticazione è fallita! Chiediamo la password manualmente nel terminale
@@ -334,15 +370,15 @@ async def ws_terminal(websocket: WebSocket, ip: str):
 
         # 4. Secondo tentativo con la password appena digitata
         try:
-            client.connect(ip, username=username, password=manual_password, look_for_keys=False, allow_agent=False, timeout=10)
+            client.connect(ip, port=ssh_port, username=username, password=manual_password, look_for_keys=False, allow_agent=False, timeout=10)
             connected = True
         except Exception as e:
-            await websocket.send_text(f"\r\n[Accesso Negato] {str(e)}\r\n")
+            await websocket.send_text(f"\r\n[Accesso Negato] {_ssh_failure_hint(e)}\r\n")
             await websocket.close()
             return
-            
+
     except Exception as e:
-        await websocket.send_text(f"\r\n[Errore Connessione] {str(e)}\r\n")
+        await websocket.send_text(f"\r\n[Errore Connessione] {_ssh_failure_hint(e)}\r\n")
         await websocket.close()
         return
 
