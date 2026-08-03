@@ -437,3 +437,34 @@ class TestTabFrontend(unittest.TestCase):
         """changeLanguage() sostituisce innerHTML in blocco: un'icona fuori
         dalla stringa sparisce al cambio lingua."""
         self.assertIn("tabEndpoints: '<i class=", self.src)
+
+    def test_l_export_e_lato_client(self):
+        """Stesso schema di topology.js: nessuna rotta di export, nessun
+        secondo formattatore che col tempo diverge dall'ordine di colonne."""
+        self.assertIn("function endpointsExport(", self.src)
+        self.assertIn("new Blob(", self.src)
+        self.assertNotIn("/api/endpoints/export", self.src)
+
+    def test_l_export_avverte_quando_le_righe_sono_tagliate(self):
+        """Esportare 2000 righe di 4711 senza dirlo consegna un inventario
+        parziale spacciato per intero."""
+        self.assertIn("epExportPartial", self.src)
+
+    def test_il_click_di_riga_passa_anche_il_tenant(self):
+        """La riga sa gia' la sede: passarla evita alla diagnosi di dover
+        chiedere quello che qui e' gia' noto."""
+        self.assertIn("function endpointsDiagnose(mac, tenant)", self.src)
+        self.assertIn("_diagTenant = tenant", self.src)
+
+    def test_nessun_secondo_renderer_del_referto(self):
+        """Il referto si rende in un posto solo: due copie sarebbero due
+        copie da tenere allineate."""
+        self.assertEqual(self.src.count("function renderDiagnosi("), 1)
+
+    def test_il_client_e_impostato_prima_di_lanciare_la_diagnosi(self):
+        """runDiagnosi() azzera _diagTenant quando il client cambia: se
+        endpointsDiagnose non impostasse _diagClient prima, il tenant appena
+        passato verrebbe buttato e la diagnosi tornerebbe a chiedere la sede."""
+        start = self.src.index("function endpointsDiagnose(mac, tenant)")
+        body = self.src[start:start + 600]
+        self.assertLess(body.index("_diagClient = mac"), body.index("runDiagnosi()"))
