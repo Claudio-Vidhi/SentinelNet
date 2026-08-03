@@ -64,5 +64,27 @@ class TestRouterSmoke(unittest.TestCase):
             with self.client.websocket_connect("/ws/terminal?token=bogus"):
                 pass
 
+    def test_banner_error_is_translated_into_a_diagnosis(self):
+        # "Error reading SSH protocol banner" da solo manda a cercare un guasto
+        # di rete: il TCP si apre, e' il dispositivo che chiude senza
+        # presentarsi perche' sta rifiutando le sessioni dopo login falliti.
+        import paramiko
+        from routers.commands import _ssh_failure_hint
+
+        hint = _ssh_failure_hint(paramiko.SSHException("Error reading SSH protocol banner"))
+        self.assertIn("Error reading SSH protocol banner", hint)
+        self.assertIn("login falliti", hint)
+        self.assertIn("admin-lockout-threshold", hint)
+
+    def test_other_ssh_errors_are_passed_through_untouched(self):
+        # Solo l'errore illeggibile viene spiegato: annotare anche gli altri
+        # sposterebbe rumore davanti a messaggi gia' chiari.
+        import paramiko
+        from routers.commands import _ssh_failure_hint
+
+        self.assertEqual(_ssh_failure_hint(paramiko.AuthenticationException("Authentication failed.")),
+                         "Authentication failed.")
+        self.assertEqual(_ssh_failure_hint(OSError("No route to host")), "No route to host")
+
 if __name__ == '__main__':
     unittest.main()
