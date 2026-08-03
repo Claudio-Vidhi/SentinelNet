@@ -224,6 +224,70 @@ class TestVlanMismatch(_Base):
         self.assertEqual(h["trunk"]["vlan"], "10")
 
 
+class TestPositionWithoutArp(unittest.TestCase):
+    """"A quale porta e' attaccato" e' una domanda di livello 2: la MAC table
+    da sola la soddisfa. Prima serviva comunque un binding ARP, quindi chi non
+    ha visibilita' sul gateway — non gestito, di terzi, VLAN che ruota altrove
+    — si sentiva rispondere "sconosciuto" su un client perfettamente
+    localizzato dagli switch."""
+
+    SIGHT = {"mac": "aa:bb:cc:dd:ee:ff", "tenant": "sede-a", "site": "central",
+             "switch_ip": "192.0.2.20", "switch_name": "ACC-SW1",
+             "interface": "GigabitEthernet1/0/5", "vlan": "10",
+             "last_seen": "2026-08-01T10:00:00+00:00"}
+
+    def _l2(self, rows):
+        return patch("collectors.mac_history.positions_for_mac", return_value=rows)
+
+    def test_the_mac_table_alone_locates_the_client(self):
+        with _client_map([]), self._l2([self.SIGHT]):
+            p = client_diagnosis._position("aa:bb:cc:dd:ee:ff", True, None)
+        self.assertTrue(p["known"])
+        self.assertTrue(p["l2_only"])
+        self.assertEqual(p["switch_port"], "GigabitEthernet1/0/5")
+        self.assertEqual(p["port_vlan"], "10")
+
+    def test_what_is_missing_is_declared_not_zeroed(self):
+        # IP e gateway ignoti vanno detti: le sezioni del firewall non
+        # risponderanno, e senza spiegazione si legge come un guasto.
+        with _client_map([]), self._l2([self.SIGHT]):
+            p = client_diagnosis._position("aa:bb:cc:dd:ee:ff", True, None)
+        self.assertIsNone(p["ip"])
+        self.assertIsNone(p["gateway_ip"])
+        self.assertIn("nessun binding ARP", p["binding_reason"])
+
+    def test_multi_tenant_choice_works_on_the_l2_path_too(self):
+        other = dict(self.SIGHT, tenant="sede-b", switch_name="ACC-SW2",
+                     interface="GigabitEthernet2/0/25")
+        with _client_map([]), self._l2([self.SIGHT, other]):
+            p = client_diagnosis._position("aa:bb:cc:dd:ee:ff", True, None)
+        self.assertEqual([t["tenant"] for t in p["tenants_available"]],
+                         ["sede-a", "sede-b"])
+
+    def test_a_mac_never_seen_at_all_is_still_unknown(self):
+        with _client_map([]), self._l2([]):
+            p = client_diagnosis._position("aa:bb:cc:dd:ee:ff", True, None)
+        self.assertFalse(p["known"])
+        self.assertIn("scansione MAC", p["reason"])
+
+    def test_an_ip_without_arp_says_to_search_by_mac(self):
+        # Un IP senza binding non e' localizzabile: la MAC table non conosce
+        # gli indirizzi. Ma la strada esiste, e va indicata.
+        with _client_map([]):
+            p = client_diagnosis._position("192.0.2.10", False, None)
+        self.assertFalse(p["known"])
+        self.assertIn("cerca per MAC", p["reason"])
+
+    def test_the_trunk_chain_says_why_it_has_no_chain(self):
+        # Senza gateway non c'e' una catena da percorrere: dire "la topologia
+        # non collega al gateway" manderebbe a cercare backup mancanti.
+        with patch.object(client_diagnosis, "_trunk_check",
+                          return_value={"known": True, "ok": True, "carrying": []}):
+            t = client_diagnosis._trunk_chain("192.0.2.20", None, "10", "sede-a")
+        self.assertFalse(t["chain_known"])
+        self.assertIn("nessun gateway noto", t["scope"])
+
+
 class TestAmbiguousBindings(unittest.TestCase):
     """La chiave di arp_entries e' (mac, ip, source_ip): un host visto da due
     gateway produce due righe dello STESSO binding. Elencarle come 'altri

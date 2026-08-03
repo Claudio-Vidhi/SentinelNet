@@ -147,6 +147,12 @@ function renderDiagnosi(d, dest) {
         _kv(en ? 'Port / VLAN' : 'Porta / VLAN', `${p.switch_port || '—'} / ${p.port_vlan || '—'}`) +
         _kv('Gateway', `${p.gateway_name || ''} ${p.gateway_ip || ''} (${p.gateway_type || '—'})`.trim()) +
         (p.port_known === false ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;">${escapeHtml(jsStr(p.port_reason || ''))}</div>` : '') +
+        // Senza ARP la posizione fisica c'e' lo stesso: va detto cosa manca e
+        // perche' le sezioni del firewall non risponderanno, altrimenti si
+        // legge come un guasto invece che come un limite di visibilita'.
+        (p.l2_only ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;">
+            <i class="fa-solid fa-layer-group" style="margin-right:6px;"></i>
+            <b>${escapeHtml(en ? 'L2 only' : 'Solo L2')}</b> — ${escapeHtml(jsStr(p.binding_reason || ''))}</div>` : '') +
         (p.ambiguous ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Other bindings for this address' : 'Altri binding per questo indirizzo')}: ${p.ambiguous.map(a => escapeHtml(jsStr(a.mac))).join(', ')}</div>` : '') +
         _diagTenantChoice(p)
     );

@@ -2745,6 +2745,14 @@ class TestRedundancyUi(unittest.TestCase):
         # Freschezza: dice se il referto descrive la rete di adesso.
         self.assertIn("function _diagFreshness", source)
 
+    def test_an_l2_only_position_explains_what_is_missing(self):
+        # Senza ARP la posizione fisica c'e' lo stesso: se non si dice perche'
+        # IP e gateway mancano, si legge come un guasto invece che come un
+        # limite di visibilita'.
+        source = frontend_source()
+        self.assertIn("p.l2_only", source)
+        self.assertIn("binding_reason", source)
+
     def test_a_multi_tenant_address_lets_the_user_choose(self):
         # Lo stesso indirizzo esiste in piu' sedi: sceglierne uno in silenzio
         # diagnostica la rete sbagliata senza dirlo.
