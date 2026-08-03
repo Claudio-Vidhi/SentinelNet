@@ -902,14 +902,15 @@ class TestOccupazionePorte(_Base):
         proporla come tale manda a infilare un cavo in un uplink.
 
         La chiave della mappa e' il nome NORMALIZZATO da
-        ``core_engine._normalize_iface()``, che sui nomi con le barre non fa
-        altro che minuscolizzare: 'GigabitEthernet1/0/24' resta intero.
+        ``core_engine._normalize_iface()``, che abbrevia il prefisso e tiene
+        le barre: 'GigabitEthernet1/0/24' -> 'gi1/0/24'. Verificato eseguendo
+        la funzione, non leggendone la regex.
         Un patch annidato sullo stesso bersaglio ripristina il mock esterno
         all'uscita: non serve fermare quello di setUp.
         """
         self._porta("GigabitEthernet1/0/24")
         with patch("collectors.mac_history.topology_uplinks",
-                   return_value=({"192.0.2.1": {"gigabitethernet1/0/24": "switch-02"}},
+                   return_value=({"192.0.2.1": {"gi1/0/24": "switch-02"}},
                                  {"192.0.2.1"})):
             out = mac_history.port_occupancy("192.0.2.1")
 
