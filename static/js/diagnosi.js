@@ -330,10 +330,22 @@ function _diagTrunk(t) {
         return out + `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(jsStr(t.reason || t.error || ''))}</div>`;
     }
     if (!t.chain_known) {
-        return out + `<div style="font-size:12px;">${t.ok
+        out += `<div style="font-size:12px;">${t.ok
             ? escapeHtml(en ? 'allowed on this switch' : 'ammessa su questo switch')
             : `<span style="color:var(--danger);">${escapeHtml(en ? 'MISSING on this switch' : 'MANCANTE su questo switch')}</span>`}</div>
             <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(jsStr(t.scope || ''))}</div>`;
+        if (t.gateway_source && t.gateway_source !== 'arp') {
+            const age = t.gateway_backup_age_s
+                ? ` — ${en ? 'backup' : 'backup di'} ${Math.floor(t.gateway_backup_age_s / 86400)}g`
+                : '';
+            const how = t.gateway_source === 'manual'
+                ? (en ? 'declared by an operator' : 'dichiarato da un operatore')
+                : (en ? 'derived from the configuration' : 'dedotto dalla configurazione');
+            out += `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+                <i class="fa-solid fa-route" style="margin-right:6px;"></i>${escapeHtml(en ? 'VLAN gateway' : 'Gateway della VLAN')}:
+                ${escapeHtml(jsStr(t.gateway_device || ''))}${t.gateway_vlan_ip ? ' (' + escapeHtml(jsStr(t.gateway_vlan_ip)) + ')' : ''} — ${how}${age}</div>`;
+        }
+        return out;
     }
     const icons = { carrying: ['fa-circle-check', 'var(--success)'],
                     missing: ['fa-circle-xmark', 'var(--danger)'],
