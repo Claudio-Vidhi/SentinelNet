@@ -18,7 +18,11 @@ import ipaddress
 import logging
 from typing import Optional
 
+from core import data_config
+
 logger = logging.getLogger(__name__)
+
+VLAN_ROUTING_JSON = data_config.get_path("vlan_routing.json")
 
 
 def tenant_key(value) -> str:
@@ -118,6 +122,12 @@ def route_owner(vlan, tenant, client_ip: Optional[str] = None) -> dict:
                           f"{vlan} e nessuno e' distinguibile dall'indirizzo "
                           "del client: quale sia il suo gateway non si puo' dire"}
 
+    manual = _manual_owner(key, vlan)
+    if manual and manual in in_tenant:
+        return {"known": True, "device_ip": manual, "svi_ip": None,
+                "source": "manual", "backup_age_s": None,
+                "unreadable": unreadable}
+
     if unreadable:
         return {"known": False, "unreadable": unreadable,
                 "reason": f"nessuna interfaccia L3 trovata per la VLAN {vlan}, "
@@ -134,3 +144,24 @@ def _age(analysis) -> Optional[int]:
     import time
     ts = analysis.get("backup_ts")
     return int(time.time()) - int(ts) if ts else None
+
+
+def _manual_owner(tenant_name: str, vlan: str) -> str:
+    """Apparato dichiarato a mano per quella VLAN, o "".
+
+    File scritto a mano: rotto o illeggibile vale come assente. Una riga
+    sbagliata non deve far fallire una diagnosi che senza di lei funzionerebbe
+    comunque - stessa tolleranza di ``snmp_defaults._load``.
+    """
+    import json
+    import os
+    if not os.path.exists(VLAN_ROUTING_JSON):
+        return ""
+    try:
+        with open(VLAN_ROUTING_JSON, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return str(((data.get("tenants") or {}).get(tenant_name) or {}).get(
+            str(vlan)) or "")
+    except Exception as e:
+        logger.warning("vlan_routing.json illeggibile, ignorato: %s", e)
+        return ""
