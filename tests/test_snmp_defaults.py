@@ -156,5 +156,86 @@ class TestPollerUsaLaRisoluzione(_Base):
             self.assertEqual(snmp_poller._snmp_devices(), [])
 
 
+class TestRotte(_Base):
+    """La community non esce MAI da un'API di lettura, nemmeno cifrata."""
+
+    def setUp(self):
+        super().setUp()
+        from routers import settings as settings_router
+        self.router = settings_router
+
+    def test_la_lettura_espone_solo_i_nomi(self):
+        snmp_defaults.set_tenant_community("sede-a", "esempio-community")
+
+        out = self.router.snmp_defaults_get(
+            current_user={"sub": "a", "role": "admin"})
+
+        self.assertEqual(out["tenants"], ["sede-a"])
+        # Ne' in chiaro ne' cifrata: la risposta e' fatta di soli nomi.
+        self.assertNotIn("esempio-community", repr(out))
+        self.assertEqual(set(out.keys()), {"tenants"})
+
+    def test_la_lettura_e_ristretta_ai_tenant_dell_utente(self):
+        from unittest.mock import patch
+        snmp_defaults.set_tenant_community("sede-a", "esempio-community")
+        snmp_defaults.set_tenant_community("sede-b", "altra-community")
+
+        with patch("routers.settings.user_group_scope", return_value={"sede-a"}):
+            out = self.router.snmp_defaults_get(
+                current_user={"sub": "v", "role": "viewer"})
+
+        self.assertEqual(out["tenants"], ["sede-a"])
+
+    def test_la_scrittura_imposta_il_default(self):
+        from routers.settings import SnmpDefaultSchema
+
+        self.router.snmp_defaults_set(
+            SnmpDefaultSchema(tenant="sede-a", community="esempio-community"),
+            current_user={"sub": "a", "role": "admin"})
+
+        self.assertEqual(snmp_defaults.get_tenant_community("sede-a"),
+                         "esempio-community")
+
+    def test_la_scrittura_vuota_rimuove(self):
+        from routers.settings import SnmpDefaultSchema
+        snmp_defaults.set_tenant_community("sede-a", "esempio-community")
+
+        self.router.snmp_defaults_set(
+            SnmpDefaultSchema(tenant="sede-a", community=""),
+            current_user={"sub": "a", "role": "admin"})
+
+        self.assertEqual(snmp_defaults.get_tenant_community("sede-a"), "")
+
+    def test_tenant_fuori_scope_e_403(self):
+        from fastapi import HTTPException
+        from routers.settings import SnmpDefaultSchema
+        from unittest.mock import patch
+
+        with patch("routers.settings.user_group_scope", return_value={"sede-a"}):
+            with self.assertRaises(HTTPException) as ctx:
+                self.router.snmp_defaults_set(
+                    SnmpDefaultSchema(tenant="sede-b", community="x"),
+                    current_user={"sub": "a", "role": "operator"})
+        self.assertEqual(ctx.exception.status_code, 403)
+
+
+class TestRotteSmoke(unittest.TestCase):
+    """Regola di .agents/AGENTS.md: una rotta nuova va colpita DAVVERO via
+    TestClient — chiamare la funzione del handler non esegue i Depends e
+    nasconde NameError/ImportError. 401 basta: prova che il codice gira
+    (precedente: tests/test_ai_conversations.py, stesso pattern)."""
+
+    def test_le_rotte_rispondono_anche_senza_autenticazione(self):
+        from fastapi.testclient import TestClient
+        import app_server
+
+        client = TestClient(app_server.app)
+        self.assertEqual(401, client.get(
+            "/api/settings/snmp-defaults").status_code)
+        self.assertEqual(401, client.post(
+            "/api/settings/snmp-defaults",
+            json={"tenant": "sede-a", "community": "x"}).status_code)
+
+
 if __name__ == "__main__":
     unittest.main()
