@@ -894,35 +894,21 @@ Expected: FAIL con `TypeError: _trunk_chain() takes from 3 to 4 positional argum
 
 - [ ] **Step 3: Implementare**
 
-In `services/client_diagnosis.py`, cambiare la firma e l'inizio di
-`_trunk_chain`:
+Due modifiche sole, in `services/client_diagnosis.py`.
+
+**(a)** La funzione esistente `_trunk_chain` si rinomina in
+`_trunk_chain_inner`, **col corpo invariato** e la firma a quattro parametri:
 
 ```python
-def _trunk_chain(access_switch_ip: str, gateway_ip: Optional[str], vlan,
-                 tenant: Optional[str] = None,
-                 client_ip: Optional[str] = None) -> dict:
+def _trunk_chain_inner(access_switch_ip: str, gateway_ip: Optional[str], vlan,
+                       tenant: Optional[str] = None) -> dict:
 ```
 
-Subito dopo il controllo `if not vlan:`, inserire:
+Non si tocca nient'altro dentro di lei: ha piu' `return`, e aggiungere campi a
+ognuno e' come dimenticarsene uno.
 
-```python
-    # Senza gateway ARP il capolinea manca e la catena non si percorre. La
-    # configurazione pero' sa chi instrada la VLAN: se lo dice, il capolinea
-    # c'e' lo stesso, e la risposta dichiara da dove viene.
-    gateway_source, derived = "arp", None
-    if not gateway_ip:
-        from services import vlan_routing
-        derived = vlan_routing.route_owner(vlan, tenant, client_ip)
-        if derived.get("known"):
-            gateway_ip = derived["device_ip"]
-            gateway_source = derived["source"]
-```
-
-Alla fine della funzione, prima di ogni `return`, i campi vanno aggiunti. Il
-modo piu' semplice e' racchiudere il risultato: sostituire il corpo esistente
-con una chiamata interna e decorare l'esito. Rinominare la funzione esistente in
-`_trunk_chain_inner(access_switch_ip, gateway_ip, vlan, tenant)` (invariata,
-senza il blocco appena aggiunto) e scrivere:
+**(b)** Si scrive `_trunk_chain` nuova, che avvolge la precedente. È l'unica che
+i chiamanti vedono, e i campi si aggiungono in un punto solo:
 
 ```python
 def _trunk_chain(access_switch_ip: str, gateway_ip: Optional[str], vlan,
