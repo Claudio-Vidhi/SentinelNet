@@ -582,7 +582,7 @@ class TestFortigateResolution(unittest.TestCase):
                    return_value=[FGT_DEVICE,
                                  {"IP": "192.0.2.2", "Vendor": "fortinet"}]):
             fgt = client_diagnosis._resolve_fortigate(
-                {"known": True, "gateway_ip": "192.0.2.1"})
+                {"known": True, "tenant": "sede-a", "gateway_ip": "192.0.2.1"})
         self.assertTrue(fgt["known"])
         self.assertEqual(fgt["ip"], "192.0.2.1")
         self.assertIn("ARP", fgt["resolved_by"])
@@ -593,7 +593,7 @@ class TestFortigateResolution(unittest.TestCase):
              patch("services.inventory_manager.get_all_devices",
                    return_value=[FGT_DEVICE, SWITCH_DEVICE]):
             fgt = client_diagnosis._resolve_fortigate(
-                {"known": True, "gateway_ip": "192.0.2.20"})
+                {"known": True, "tenant": "sede-a", "gateway_ip": "192.0.2.20"})
         self.assertTrue(fgt["known"])
         self.assertEqual(fgt["ip"], "192.0.2.1")
 
@@ -604,12 +604,86 @@ class TestFortigateResolution(unittest.TestCase):
                    return_value=[{"ip": "192.0.2.1"}, {"ip": "192.0.2.2"}]), \
              patch("services.inventory_manager.get_all_devices",
                    return_value=[FGT_DEVICE,
-                                 {"IP": "192.0.2.2", "Vendor": "fortinet"},
+                                 {"IP": "192.0.2.2", "Vendor": "fortinet",
+                                  "Group": "sede-a"},
                                  SWITCH_DEVICE]):
             fgt = client_diagnosis._resolve_fortigate(
-                {"known": True, "gateway_ip": "192.0.2.20"})
+                {"known": True, "tenant": "sede-a", "gateway_ip": "192.0.2.20"})
         self.assertFalse(fgt["known"])
         self.assertEqual(sorted(fgt["candidates"]), ["192.0.2.1", "192.0.2.2"])
+
+    # --- il firewall si cerca dentro il tenant del client, non nell'installazione ---
+
+    def test_a_fortigate_of_another_tenant_is_never_queried(self):
+        """Un solo FortiGate configurato, ma di un ALTRO tenant: interrogarlo
+        vuol dire leggere ARP, DHCP, sessioni e policy della rete di qualcun
+        altro e attribuirle a questo client."""
+        with patch("services.fortigate_service.list_targets",
+                   return_value=[{"ip": "198.51.100.1"}]), \
+             patch("services.inventory_manager.get_all_devices",
+                   return_value=[{"IP": "198.51.100.1", "Vendor": "fortinet",
+                                  "Group": "sede-b"}, SWITCH_DEVICE]):
+            fgt = client_diagnosis._resolve_fortigate(
+                {"known": True, "tenant": "sede-a", "gateway_ip": "192.0.2.20"})
+        self.assertFalse(fgt["known"])
+        self.assertIn("sede-a", fgt["reason"])
+
+    def test_the_tenant_picks_one_out_of_several(self):
+        """Lo scoping non toglie soltanto: due firewall in due tenant erano
+        un'ambiguita', mentre uno solo dei due e' quello del client."""
+        with patch("services.fortigate_service.list_targets",
+                   return_value=[{"ip": "192.0.2.1"}, {"ip": "198.51.100.1"}]), \
+             patch("services.inventory_manager.get_all_devices",
+                   return_value=[FGT_DEVICE,
+                                 {"IP": "198.51.100.1", "Vendor": "fortinet",
+                                  "Group": "sede-b"}, SWITCH_DEVICE]):
+            fgt = client_diagnosis._resolve_fortigate(
+                {"known": True, "tenant": "sede-a", "gateway_ip": "192.0.2.20"})
+        self.assertTrue(fgt["known"])
+        self.assertEqual(fgt["ip"], "192.0.2.1")
+
+    def test_an_installation_without_tenants_still_works(self):
+        """Il caso comune: nessun Group impostato da nessuna parte. Le due
+        raccolte scrivono il tenant vuoto in modi diversi ('' da ARP,
+        'Generale' da MAC), quindi vanno considerati lo stesso tenant."""
+        for client_tenant in ("", "Generale", None):
+            with self.subTest(tenant=client_tenant):
+                with patch("services.fortigate_service.list_targets",
+                           return_value=[{"ip": "192.0.2.1"}]), \
+                     patch("services.inventory_manager.get_all_devices",
+                           return_value=[{"IP": "192.0.2.1", "Vendor": "fortinet",
+                                          "Group": ""},
+                                         {"IP": "192.0.2.20", "Vendor": "cisco"}]):
+                    fgt = client_diagnosis._resolve_fortigate(
+                        {"known": True, "tenant": client_tenant,
+                         "gateway_ip": "192.0.2.20"})
+                self.assertTrue(fgt["known"], fgt.get("reason"))
+                self.assertEqual(fgt["ip"], "192.0.2.1")
+
+    def test_without_a_position_the_caller_scope_is_used(self):
+        """Client mai visto: il tenant non c'e'. Se pero' il chiamante e'
+        ristretto a certe sedi, quello e' il confine da rispettare."""
+        with patch("services.fortigate_service.list_targets",
+                   return_value=[{"ip": "198.51.100.1"}]), \
+             patch("services.inventory_manager.get_all_devices",
+                   return_value=[{"IP": "198.51.100.1", "Vendor": "fortinet",
+                                  "Group": "sede-b"}, SWITCH_DEVICE]):
+            fgt = client_diagnosis._resolve_fortigate({"known": False},
+                                                      tenants=["sede-a"])
+        self.assertFalse(fgt["known"])
+
+    def test_an_unknown_client_is_still_asked_of_the_only_firewall(self):
+        """Eccezione deliberata: nessuna posizione E nessuna restrizione sul
+        chiamante vuol dire che non c'e' nessun tenant da violare, e un client
+        che gli switch non hanno mai visto e' proprio quello di cui il firewall
+        puo' essere l'unico a sapere qualcosa."""
+        with patch("services.fortigate_service.list_targets",
+                   return_value=[{"ip": "192.0.2.1"}]), \
+             patch("services.inventory_manager.get_all_devices",
+                   return_value=[FGT_DEVICE, SWITCH_DEVICE]):
+            fgt = client_diagnosis._resolve_fortigate({"known": False})
+        self.assertTrue(fgt["known"])
+        self.assertEqual(fgt["ip"], "192.0.2.1")
 
 
 class TestDenies(_Base):
