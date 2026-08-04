@@ -446,6 +446,20 @@ class TestTabFrontend(unittest.TestCase):
         from tests.test_helpers_frontend import frontend_source
         cls.src = frontend_source()
 
+    def _fn(self, signature):
+        """Il corpo di UNA funzione, dalla sua firma alla successiva.
+
+        Le fette a lunghezza fissa (``src[start:start+900]``) sembrano
+        innocue e si rompono in silenzio: quando la funzione cresce, la
+        riga cercata finisce fuori dalla fetta e il test fallisce (o peggio,
+        passa) per un motivo che non c'entra con cio' che verifica.
+        """
+        start = self.src.index(signature)
+        rest = self.src[start + len(signature):]
+        ends = [i for i in (rest.find("\nfunction "), rest.find("\nasync function "),
+                            rest.find("\nconst "), rest.find("\nlet ")) if i != -1]
+        return self.src[start:start + len(signature) + (min(ends) if ends else len(rest))]
+
     def _file(self, rel):
         """Un file solo. ``frontend_source()`` concatena tutto il frontend,
         quindi non distingue "questa chiamata sta nel markup" da "sta in un
@@ -501,6 +515,16 @@ class TestTabFrontend(unittest.TestCase):
         copie da tenere allineate."""
         self.assertEqual(self.src.count("function renderDiagnosi("), 1)
 
+    def test_il_selettore_switch_viene_dall_inventario_non_dagli_endpoint(self):
+        """Costruirlo da _epRows mostrava solo gli switch che erano la
+        posizione di accesso VINCENTE di almeno un endpoint: uno switch senza
+        endpoint non compariva mai, cioe' proprio quello con piu' porte
+        libere. La domanda della vista e' 'dove ho spazio', non 'dove ho
+        gia' qualcosa'."""
+        body = self._fn("function endpointsMode(mode)")
+        self.assertIn("globalDevices", body)
+        self.assertNotIn("_epRows.forEach", body)
+
     def test_la_select_del_tenant_ricarica_da_sola(self):
         """Senza onchange la select non era agganciata a niente: cambiare
         tenant lasciava a schermo i dispositivi di quello precedente."""
@@ -520,8 +544,7 @@ class TestTabFrontend(unittest.TestCase):
     def test_applica_filtri_ridisegna_nella_modalita_corrente(self):
         """Con il tenant cambiato gli switch sono altri: in modalita' porte il
         selettore va ricostruito, non lasciato a quello di prima."""
-        start = self.src.index("async function endpointsApplyFilters()")
-        body = self.src[start:start + 500]
+        body = self._fn("async function endpointsApplyFilters()")
         self.assertIn("await endpointsSearch()", body)
         self.assertIn("_epMode === 'ports'", body)
         self.assertLess(body.index("await endpointsSearch()"),
@@ -531,8 +554,7 @@ class TestTabFrontend(unittest.TestCase):
         """runDiagnosi() azzera _diagTenant quando il client cambia: se
         endpointsDiagnose non impostasse _diagClient prima, il tenant appena
         passato verrebbe buttato e la diagnosi tornerebbe a chiedere la sede."""
-        start = self.src.index("function endpointsDiagnose(mac, tenant)")
-        body = self.src[start:start + 600]
+        body = self._fn("function endpointsDiagnose(mac, tenant)")
         self.assertLess(body.index("_diagClient = mac"), body.index("runDiagnosi()"))
 
     def test_le_avvertenze_sulle_porte_sono_a_schermo(self):
@@ -542,8 +564,7 @@ class TestTabFrontend(unittest.TestCase):
         Scoped al corpo di endpointsPortsRender: le chiavi i18n esistono gia'
         in i18n.js da un task precedente, quindi cercarle su self.src intero
         passerebbe anche se il renderer non le usasse mai."""
-        start = self.src.index("function endpointsPortsRender(")
-        body = self.src[start:start + 3200]
+        body = self._fn("function endpointsPortsRender(")
         self.assertIn("L.epPortsFreeWarn", body)     # libera != nessun cavo
         self.assertIn("L.epPortsUnknown", body)      # elenco assente != 0 libere
         self.assertIn("L.epPortsAge", body)          # eta' dell'elenco
@@ -551,8 +572,7 @@ class TestTabFrontend(unittest.TestCase):
     def test_elenco_porte_assente_non_mostra_zero_libere(self):
         """Il ramo dell'elenco mancante deve uscire PRIMA di qualunque
         conteggio, altrimenti mostrerebbe 0 libere su 0 porte."""
-        start = self.src.index("function endpointsPortsRender(")
-        body = self.src[start:start + 900]
+        body = self._fn("function endpointsPortsRender(")
         self.assertLess(body.index("port_list_known"), body.index("counts"))
 
     def test_le_porte_non_fisiche_sono_visibili_ma_marcate(self):
@@ -561,8 +581,7 @@ class TestTabFrontend(unittest.TestCase):
     def test_il_filtro_tenant_viene_popolato_al_caricamento_della_tab(self):
         """La select epFilterTenant restava vuota per sempre: nessuno la
         popolava, quindi il parametro tenant non veniva mai spedito."""
-        start = self.src.index("function loadEndpointsTab(")
-        body = self.src[start:start + 200]
+        body = self._fn("function loadEndpointsTab(")
         self.assertIn("populateEndpointsTenantFilter()", body)
         self.assertIn("function populateEndpointsTenantFilter(", self.src)
         self.assertIn("getElementById('epFilterTenant')", self.src)
@@ -571,15 +590,13 @@ class TestTabFrontend(unittest.TestCase):
         """Sei numeri validi per l'intero inventario non possono restare a
         schermo sopra la tabella di UN solo switch: leggerebbero come fatti
         su quello switch."""
-        start = self.src.index("function endpointsMode(")
-        body = self.src[start:start + 1600]
+        body = self._fn("function endpointsMode(")
         self.assertLess(body.index("epKpis"), body.index("endpointsPorts()"))
 
     def test_ports_in_errore_mostra_un_messaggio_non_la_tabella_vecchia(self):
         """Stesso schema di endpointsSearch() per la stessa condizione: un
         fetch fallito non deve lasciare a schermo l'elenco endpoint della
         modalita' precedente spacciato per occupazione porte."""
-        start = self.src.index("async function endpointsPorts(")
-        body = self.src[start:start + 900]
+        body = self._fn("async function endpointsPorts(")
         self.assertIn("host.innerHTML", body)
         self.assertIn("!res || !res.ok", body)

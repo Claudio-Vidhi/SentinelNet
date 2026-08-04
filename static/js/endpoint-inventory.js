@@ -219,12 +219,27 @@ function endpointsMode(mode) {
     // lasciarli visibili li fa leggere come fatti su quello switch.
     const kpis = document.getElementById('epKpis');
     if (kpis) kpis.innerHTML = '';
-    // Gli switch li conosce gia' l'elenco caricato: nessuna chiamata in piu'.
+    // Gli apparati arrivano dall'INVENTARIO del tenant, non dagli endpoint
+    // caricati. Costruire l'elenco da _epRows mostrava solo gli switch che
+    // erano la posizione di accesso VINCENTE di almeno un endpoint: uno
+    // switch visto meno di recente spariva, e soprattutto uno switch SENZA
+    // endpoint non compariva mai — cioe' proprio quello con piu' porte
+    // libere, che e' la domanda per cui questa vista esiste.
+    // Stesso filtro di macFilteredDevices() in client-map.js.
     if (picker) {
-        const seen = {};
-        _epRows.forEach(r => { if (r.switch_ip) seen[r.switch_ip] = r.switch_name || r.switch_ip; });
-        picker.innerHTML = Object.keys(seen).sort().map(ip =>
-            `<option value="${escapeHtml(jsStr(ip))}">${escapeHtml(jsStr(seen[ip]))} — ${escapeHtml(jsStr(ip))}</option>`).join('');
+        const cur = picker.value;
+        const tenant = (document.getElementById('epFilterTenant') || {}).value || 'all';
+        let devs = globalDevices || [];
+        if (tenant && tenant !== 'all') devs = devs.filter(d => d.Group === tenant);
+        const label = d => d.Hostname || d.IP;
+        picker.innerHTML = devs.slice()
+            .sort((a, b) => label(a).localeCompare(label(b)))
+            .map(d => `<option value="${escapeHtml(jsStr(d.IP))}">${escapeHtml(jsStr(label(d)))} — ${escapeHtml(jsStr(d.IP))}</option>`)
+            .join('');
+        // Un apparato senza elenco interfacce risponde comunque, dichiarando
+        // 'elenco porte non disponibile': meglio di non poterlo nemmeno
+        // scegliere.
+        if (devs.some(d => d.IP === cur)) picker.value = cur;
     }
     endpointsPorts();
 }
