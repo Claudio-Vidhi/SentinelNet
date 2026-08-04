@@ -9,6 +9,7 @@ e' quindi facilmente testabile; ``analyze_device``/``analyze_all`` aggiungono la
 lettura del backup piu' recente e lo scoping per sede/tenant.
 """
 
+import functools
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -1370,6 +1371,35 @@ def analyze_device(ip):
     return result
 
 
+def _backup_mtime(ip):
+    """mtime del backup piu' fresco, o None. Chiave di invalidazione del memo."""
+    path, _ = _find_freshest_backup(ip)
+    if not path:
+        return None
+    try:
+        return int(os.path.getmtime(path))
+    except OSError:
+        return None
+
+
+@functools.lru_cache(maxsize=128)
+def _analyze_device_at(ip, _mtime):
+    # _mtime non si usa: sta nella firma perche' un backup nuovo produca una
+    # chiave nuova. Il tetto LRU serve alla rotazione dei backup, che
+    # altrimenti farebbe crescere le chiavi senza fine.
+    return analyze_device(ip)
+
+
+def analyze_device_cached(ip):
+    """``analyze_device`` con memo su (ip, mtime del backup).
+
+    Una singola diagnosi rilegge lo stesso backup a ogni salto della catena e
+    a ogni candidato della derivazione del gateway: il parsing e' la parte
+    cara, e il file non cambia mentre si risponde.
+    """
+    return _analyze_device_at(ip, _backup_mtime(ip))
+
+
 def analyze_all(group_filter=None, allowed_groups=None):
     """Analizza tutti i dispositivi in inventario che hanno un backup, applicando
     lo scoping per sede (allowed_groups) ed un eventuale filtro di gruppo."""
@@ -1385,7 +1415,7 @@ def analyze_all(group_filter=None, allowed_groups=None):
         if group_filter and group_filter != 'all' and group != group_filter:
             continue
         try:
-            res = analyze_device(ip)
+            res = analyze_device_cached(ip)
         except Exception:
             res = None
         if res:
