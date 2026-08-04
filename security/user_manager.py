@@ -129,6 +129,21 @@ def count_active_admins() -> int:
     return sum(1 for d in get_users().values()
                if d.get("role", "admin") == "admin" and not d.get("disabled", False))
 
+def is_last_active_admin(username: str) -> bool:
+    """True se togliere a questo utente il ruolo, l'accesso o l'account intero
+    lascerebbe l'installazione senza un amministratore UTILIZZABILE.
+
+    Il conteggio è sugli amministratori ATTIVI, non su tutti: uno disabilitato
+    non supera ``get_current_user``, quindi tenerlo nel quorum equivale a non
+    avere nessuno e l'applicazione si riapre solo modificando users.json a mano.
+    Per lo stesso motivo un amministratore già disabilitato non è mai "l'ultimo":
+    rimuoverlo non toglie niente a chi può ancora entrare.
+    """
+    user = get_users().get(username)
+    if not user or user.get("role", "admin") != "admin" or user.get("disabled", False):
+        return False
+    return count_active_admins() <= 1
+
 def get_user_groups(username: str):
     """Sedi/gruppi assegnati all'utente. Lista vuota o assente = nessuna
     restrizione (tutte le sedi). Ritorna [] se l'utente non esiste."""
@@ -179,5 +194,3 @@ def set_role(username: str, role: str) -> bool:
     _save_users(users)
     return True
 
-def count_admins() -> int:
-    return sum(1 for d in get_users().values() if d.get("role", "admin") == "admin")
