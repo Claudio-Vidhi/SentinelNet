@@ -10,7 +10,21 @@ let _epTruncated = false;
 
 function loadEndpointsTab() {
     populateEndpointsTenantFilter();
-    endpointsSearch();
+    endpointsApplyFilters();
+}
+
+// UNICO punto d'ingresso dei filtri: ricarica i dati e poi ridisegna nella
+// modalita' CORRENTE. I filtri chiamavano endpointsSearch() direttamente, e
+// questo produceva due difetti dallo stesso errore: la select del tenant non
+// era agganciata a niente (cambiarla non ricaricava nulla, restavano a schermo
+// i dispositivi del tenant precedente), e cercare mentre si era in modalita'
+// porte ridipingeva elenco e KPI sotto la barra delle porte, lasciando due
+// viste diverse sovrapposte.
+async function endpointsApplyFilters() {
+    await endpointsSearch();
+    // In modalita' porte l'elenco appena riletto serve a ricostruire il
+    // selettore degli switch: col tenant cambiato, gli switch sono altri.
+    if (_epMode === 'ports') endpointsMode('ports');
 }
 
 // Stesso schema di loadThreatIntel() in threat-intel.js: "all" per default,
