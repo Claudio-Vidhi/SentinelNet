@@ -146,5 +146,66 @@ class TestUnknownIsNotAbsent(_Base):
         self.assertEqual(out["unreadable"], ["192.0.2.99"])
 
 
+class TestManualOverride(_Base):
+
+    def _with_file(self, content, analyses, devices, **kw):
+        import json
+        path = os.path.join(tempfile.mkdtemp(prefix="vlanroute_ovr_"),
+                            "vlan_routing.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(content if isinstance(content, str) else json.dumps(content))
+        with patch.object(vlan_routing, "VLAN_ROUTING_JSON", path):
+            return self._run(analyses, devices, **kw)
+
+    def test_the_override_answers_when_the_config_is_silent(self):
+        out = self._with_file(
+            {"tenants": {"sede-a": {"226": "192.0.2.254"}}},
+            [], [{"IP": "192.0.2.254", "Group": "sede-a"}])
+        self.assertTrue(out["known"], out.get("reason"))
+        self.assertEqual(out["device_ip"], "192.0.2.254")
+        self.assertEqual(out["source"], "manual")
+        self.assertIsNone(out["svi_ip"])
+        self.assertIsNone(out["backup_age_s"])
+
+    def test_the_override_wins_over_an_unreadable_device_and_says_so(self):
+        # Precedenza decisa nella spec: riempire il vuoto di un backup mancante
+        # e' il motivo per cui l'override esiste. Non nasconde niente pero'.
+        out = self._with_file(
+            {"tenants": {"sede-a": {"226": "192.0.2.254"}}},
+            [], [{"IP": "192.0.2.254", "Group": "sede-a"},
+                 {"IP": "192.0.2.20", "Group": "sede-a"}])
+        self.assertTrue(out["known"], out.get("reason"))
+        self.assertEqual(out["source"], "manual")
+        self.assertEqual(sorted(out["unreadable"]), ["192.0.2.20", "192.0.2.254"])
+
+    def test_the_config_wins_over_the_override(self):
+        out = self._with_file(
+            {"tenants": {"sede-a": {"226": "192.0.2.254"}}},
+            [_ios("192.0.2.20", 226, "192.0.2.1/24")],
+            [{"IP": "192.0.2.20", "Group": "sede-a"}],
+            client_ip="192.0.2.50")
+        self.assertEqual(out["source"], "config")
+        self.assertEqual(out["device_ip"], "192.0.2.20")
+
+    def test_an_override_naming_an_unknown_device_is_not_used(self):
+        out = self._with_file(
+            {"tenants": {"sede-a": {"226": "192.0.2.77"}}},
+            [], [{"IP": "192.0.2.20", "Group": "sede-a"}])
+        self.assertFalse(out["known"])
+
+    def test_a_broken_file_is_treated_as_absent(self):
+        out = self._with_file("{ questo non e' JSON",
+                              [_ios("192.0.2.20", 226, "192.0.2.1/24")],
+                              [{"IP": "192.0.2.20", "Group": "sede-a"}],
+                              client_ip="192.0.2.50")
+        self.assertTrue(out["known"], out.get("reason"))
+
+    def test_the_override_is_read_from_the_client_tenant_only(self):
+        out = self._with_file(
+            {"tenants": {"sede-b": {"226": "192.0.2.254"}}},
+            [], [{"IP": "192.0.2.254", "Group": "sede-a"}])
+        self.assertFalse(out["known"])
+
+
 if __name__ == "__main__":
     unittest.main()
