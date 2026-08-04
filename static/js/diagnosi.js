@@ -329,21 +329,36 @@ function _diagTrunk(t) {
     if (!t.known) {
         return out + `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(jsStr(t.reason || t.error || ''))}</div>`;
     }
+    // Provenienza del gateway dedotto: letta anche a catena riuscita, non
+    // solo nel ramo degradato sotto — e' il caso di successo per cui la
+    // deduzione esiste. Legge solo campi presenti in entrambe le forme.
+    if (t.gateway_source && t.gateway_source !== 'arp') {
+        const age = t.gateway_backup_age_s
+            ? ` — ${en ? 'backup' : 'backup di'} ${Math.floor(t.gateway_backup_age_s / 86400)}g`
+            : '';
+        const how = t.gateway_source === 'manual'
+            ? (en ? 'declared by an operator' : 'dichiarato da un operatore')
+            : (en ? 'derived from the configuration' : 'dedotto dalla configurazione');
+        out += `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+            <i class="fa-solid fa-route" style="margin-right:6px;"></i>${escapeHtml(en ? 'VLAN gateway' : 'Gateway della VLAN')}:
+            ${escapeHtml(jsStr(t.gateway_device || ''))}${t.gateway_vlan_ip ? ' (' + escapeHtml(jsStr(t.gateway_vlan_ip)) + ')' : ''} — ${how}${age}</div>`;
+    }
     if (!t.chain_known) {
         out += `<div style="font-size:12px;">${t.ok
             ? escapeHtml(en ? 'allowed on this switch' : 'ammessa su questo switch')
             : `<span style="color:var(--danger);">${escapeHtml(en ? 'MISSING on this switch' : 'MANCANTE su questo switch')}</span>`}</div>
             <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(jsStr(t.scope || ''))}</div>`;
-        if (t.gateway_source && t.gateway_source !== 'arp') {
-            const age = t.gateway_backup_age_s
-                ? ` — ${en ? 'backup' : 'backup di'} ${Math.floor(t.gateway_backup_age_s / 86400)}g`
-                : '';
-            const how = t.gateway_source === 'manual'
-                ? (en ? 'declared by an operator' : 'dichiarato da un operatore')
-                : (en ? 'derived from the configuration' : 'dedotto dalla configurazione');
-            out += `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
-                <i class="fa-solid fa-route" style="margin-right:6px;"></i>${escapeHtml(en ? 'VLAN gateway' : 'Gateway della VLAN')}:
-                ${escapeHtml(jsStr(t.gateway_device || ''))}${t.gateway_vlan_ip ? ' (' + escapeHtml(jsStr(t.gateway_vlan_ip)) + ')' : ''} — ${how}${age}</div>`;
+        // Ignoto non e' assente: se la deduzione del gateway e' fallita per
+        // apparati non letti, quella e' la ragione da mostrare — non lo
+        // scope generico sopra, che qui direbbe "nessun gateway noto" anche
+        // quando la risposta e' solo ignota.
+        if (t.route_owner_reason) {
+            out += `<div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(jsStr(t.route_owner_reason))}</div>`;
+        }
+        if (t.unreadable_devices && t.unreadable_devices.length) {
+            out += `<div style="color:var(--warning); font-size:11px; margin-top:4px;">${escapeHtml(en
+                ? 'some devices could not be read: ' : 'alcuni apparati non sono stati letti: ')}${
+                t.unreadable_devices.map(d => escapeHtml(jsStr(d))).join(', ')}</div>`;
         }
         return out;
     }

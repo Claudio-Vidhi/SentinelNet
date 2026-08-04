@@ -258,6 +258,11 @@ def _read_inventory_csv(raw: str):
 
 def safe_write_hosts_csv(devices):
     invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
+    from ai import config_analyzer
+    # idem: Vendor/tenant/hostname dell'inventario pilotano analyze_device, e
+    # la chiave del memo e' solo (ip, mtime del backup) — un Vendor corretto
+    # qui non la farebbe decadere da sola. Import locale per evitare un ciclo.
+    config_analyzer._analyze_device_at.cache_clear()
     hosts_csv = get_hosts_csv()
     temp_filename = hosts_csv + ".tmp"
     # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'

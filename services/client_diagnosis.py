@@ -510,8 +510,17 @@ def _path(src_ip: str, dst_ip: str, tenant: str,
     return out
 
 
-def _l2_health(position: dict) -> dict:
-    """Salute del primo salto: la porta di accesso e i trunk dello switch."""
+def _l2_health(position: dict, search_ip: Optional[str] = None) -> dict:
+    """Salute del primo salto: la porta di accesso e i trunk dello switch.
+
+    ``search_ip``: l'indirizzo cercato, solo se chi ha cercato ha cercato un
+    IP. Serve a ``route_owner`` per la restrizione di sottorete quando la
+    posizione e' L2-only — li' ``position["ip"]`` e' sempre ``None`` (nessun
+    binding ARP), quindi senza questo filo la deduzione del gateway non
+    riceve mai un indirizzo in produzione. Stessa idea di ``target`` in
+    ``_firewall``: l'indirizzo risolto vince se c'e', altrimenti quello
+    cercato. Mai un MAC: chi ha cercato per MAC non ha detto nessun IP.
+    """
     if not position.get("known") or not position.get("switch_port"):
         return {"known": False,
                 "reason": "posizione fisica sconosciuta: niente porta da esaminare"}
@@ -545,7 +554,7 @@ def _l2_health(position: dict) -> dict:
     try:
         out["trunk"] = _trunk_chain(switch_ip, position.get("gateway_ip"), vlan,
                                     position.get("tenant"),
-                                    position.get("ip"))
+                                    position.get("ip") or search_ip)
     except Exception as e:
         out["trunk"] = {"known": False, "error": str(e)}
     return out
@@ -1117,7 +1126,9 @@ def diagnose(client: str, dest: Optional[str] = None,
 
     result["resolved_ip"] = position.get("ip") if position.get("known") else None
 
-    _section(result, "l2_health", _l2_health, position)
+    # L'IP cercato, mai un MAC: e' quello che serve a route_owner quando la
+    # posizione e' L2-only e non ha un binding da cui prenderlo da solo.
+    _section(result, "l2_health", _l2_health, position, None if is_mac else client)
     _section(result, "history", _history, position, client, is_mac)
 
     src_ip = result["resolved_ip"]
