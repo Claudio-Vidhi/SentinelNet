@@ -58,14 +58,21 @@ Modulo nuovo `services/vlan_routing.py`, un solo punto d'ingresso:
 ```python
 route_owner(vlan, tenant, client_ip=None) -> {
     "known": bool,
-    "device_ip": str,          # chi instrada
-    "svi_ip": str,             # l'indirizzo L3 su quella VLAN, in CIDR
+    "device_ip": str,                  # chi instrada
+    "svi_ip": Optional[str],           # indirizzo L3 su quella VLAN, in CIDR.
+                                       #   None se source == "manual"
     "source": "config" | "manual",
-    "backup_age_s": int,       # quanto è vecchio il fatto
-    "candidates": [str],       # solo in caso di parità
-    "reason": str,             # solo quando known è False
+    "backup_age_s": Optional[int],     # None se source == "manual"
+    "unreadable": [str],               # apparati del tenant senza backup
+    "candidates": [str],               # solo in caso di parità
+    "reason": str,                     # solo quando known è False
 }
 ```
+
+`svi_ip` e `backup_age_s` sono `Optional` per un motivo solo: una riga scritta
+a mano non ha un backup da datare né una SVI da leggere. Dichiararli `int`/`str`
+costringerebbe a inventare uno zero o una stringa vuota, e uno zero in un campo
+"età" si legge come "freschissimo" — il contrario del vero.
 
 Modulo a parte perché `client_diagnosis.py` sfiora le 1100 righe e questa è una
 domanda autonoma — «chi instrada la VLAN N nel tenant T» — che si prova da sola.
@@ -97,11 +104,28 @@ candidati = SVI (IOS) o interfaccia VLAN (FortiOS) per quella VLAN,
             esclusi shutdown / status down
    |
 1. client_ip dentro la subnet di UN solo candidato   -> vincitore
-2. altrimenti badge per candidato, ruolo active/master, UNO solo -> vincitore
-3. altrimenti parità -> si restituiscono i candidati e si degrada
+2. altrimenti parità -> si restituiscono i candidati e si degrada
    |
 nessun candidato -> override manuale -> altrimenti ignoto/assente (sotto)
 ```
+
+### La parità non si scioglie con l'HA, per ora
+
+Una coppia HSRP/VRRP dà due candidati con la stessa subnet, e il modo ovvio di
+scegliere sarebbe chiedere a `device_redundancy_badge()` chi è `active`. In
+questa base di codice **non funzionerebbe**: `redundancy/parsers/` contiene solo
+`fortios.py` (FGCP), `GroupType.VRRP_HSRP` è un valore di enum senza produttore
+e `classify_virtual_mac()` è chiamata soltanto dai test. Nessun gruppo
+HSRP/VRRP viene mai costruito dai backup, quindi il passo esisterebbe per non
+scattare mai.
+
+Perciò in v1 una coppia è **una parità dichiarata**, come qualunque altra.
+
+Quando arriverà un parser HSRP/VRRP, il passo si aggiunge fra il primo e la
+parità: badge per ciascun candidato, si tiene chi ha ruolo `active`/`master`, e
+se i candidati con quel ruolo non sono esattamente uno si ricade sulla parità.
+Attenzione, per allora: il badge di un indirizzo logico torna il ruolo
+`"logical"`, non `active`, quindi i casi da distinguere sono tre.
 
 ### Il tenant è un confine, non un filtro
 
@@ -164,15 +188,23 @@ colonne sono UI: cambiarle è churn che questo lavoro non richiede).
 
 **Limite dichiarato:** non tutte le interfacce VLAN portano un indirizzo
 analizzabile. Quelle senza corrispondono per solo VLAN id, senza discriminazione
-per subnet, e finiscono al passo 2 o alla parità.
+per subnet, e finiscono alla parità.
 
 ## Assegnazione manuale
 
 `data/vlan_routing.json`:
 
 ```json
-{"tenants": {"<tenant>": {"<vlan>": "192.0.2.1"}}}
+{"tenants": {"sede-a": {"226": "192.0.2.1"}}}
 ```
+
+Schema, esplicito perché il file si scrive a mano:
+
+| Posizione | Tipo | Significato |
+|---|---|---|
+| chiave di `tenants` | stringa | nome del tenant, come il `Group` d'inventario |
+| chiave interna | **stringa**, non numero | VLAN id (`"226"`, non `226`) |
+| valore | stringa | **indirizzo di gestione dell'apparato** che instrada, come compare in inventario. Non è l'indirizzo della SVI, ed è un IP nudo, senza prefisso |
 
 JSON in chiaro: non contiene un segreto, quindi niente Fernet (a differenza di
 `tenant_snmp.json`). `data/` è già in `.gitignore`.
@@ -181,6 +213,11 @@ In v1 è **sola lettura**: nessuna rotta, nessuna UI. Si consulta solo dopo che
 la configurazione non ha dato niente, e la risposta porta sempre
 `source: "manual"`, così una riga scritta a mano non si traveste da fatto
 misurato.
+
+**File illeggibile o JSON rotto ⇒ si tratta come assente**: si logga una volta
+e si prosegue. Un file scritto a mano male non deve far fallire una diagnosi che
+senza di lui funzionerebbe comunque. È la tolleranza già adottata da
+`snmp_defaults._load` per `tenant_snmp.json`.
 
 ## Cache delle analisi
 
@@ -213,13 +250,14 @@ Il percorso "non noto" è già reso dalla card esistente con la sua ragione.
 | Caso | Atteso |
 |---|---|
 | `client_ip` dentro una sola subnet | quel candidato |
-| due candidati, uno con ruolo `active`/`master` | quello attivo |
-| coppia HSRP, nessun ruolo attivo distinguibile | parità, `candidates`, degrado |
+| due candidati sulla stessa subnet (coppia HSRP) | parità, `candidates`, degrado |
 | SVI in `shutdown` | ignorata |
 | un apparato del tenant senza backup | `known: False`, ragione **ignota**, elenco |
 | `tenant=None` | **rifiuto**, nessuna scansione |
 | `tenant=""` | si cerca in `"Generale"`, non si rifiuta |
 | configurazione muta e override presente | `source: "manual"` |
+| override presente **e** un apparato illeggibile | `source: "manual"` **con** `unreadable` valorizzato |
+| `vlan_routing.json` con JSON rotto | trattato come assente, nessuna eccezione |
 | interfaccia VLAN FortiOS con `vlanid` | candidato risolto |
 
 **Parser:** `set vlanid` estratto da una configurazione sintetica (RFC 5737).
@@ -236,11 +274,19 @@ Il percorso "non noto" è già reso dalla card esistente con la sua ragione.
 - Nessun IPv6.
 - PAN-OS non toccato: `panos.py` resta senza VLAN interrogabili.
 - La parità non si scioglie con un'euristica. Si dichiara.
+- Un override non viene verificato: se l'apparato indicato non esiste più in
+  inventario, la risposta lo dice (`known: False`) invece di puntarci.
 
 ## Fuori ambito
 
 - **Vista "chi instrada cosa"** per tenant. `route_owner` la regge già: è una
   rotta di lettura e una tabella, quando servirà.
+- **Rotta e UI per l'assegnazione manuale.** In v1 `vlan_routing.json` si
+  modifica a mano — accettabile finché la configurazione copre la gran parte dei
+  casi e il file resta raggiungibile anche in Docker (volume su `data/`). Il
+  giorno in cui l'override diventa d'uso corrente, servono una GET/POST e un
+  editor: è il momento di rifarlo, non prima.
+- **Tie-break HSRP/VRRP**, in attesa di un parser che produca quei gruppi.
 - **Tracciamento di percorso fra VLAN** (client → L3 → NGFW → destinazione):
   vuole gli archi L3 nella topologia, ed è un lavoro suo.
 - **Ruolo per apparato** (core/distribuzione/accesso) come campo d'inventario.
