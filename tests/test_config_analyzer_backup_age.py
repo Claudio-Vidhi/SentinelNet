@@ -101,5 +101,25 @@ class TestAnalyzeDeviceCache(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
 
+class TestInventoryWriteInvalidatesTheAnalysisCache(unittest.TestCase):
+    """detect_config_type e' Vendor-driven, e tenant/hostname/is_firewall
+    vengono dall'inventario: la chiave del memo e' solo (ip, mtime del
+    backup), quindi correggere un Vendor e ricaricare l'elenco non basta a
+    far ricalcolare l'analisi finche' non arriva un backup nuovo."""
+
+    def setUp(self):
+        config_analyzer._analyze_device_at.cache_clear()
+
+    def test_writing_the_inventory_clears_the_analysis_cache(self):
+        from services import inventory_manager
+        with patch.object(config_analyzer, "analyze_device",
+                          return_value={"ip": "192.0.2.20", "vlans": []}), \
+             patch.object(config_analyzer, "_backup_mtime", lambda ip: 111):
+            config_analyzer.analyze_device_cached("192.0.2.20")
+            self.assertEqual(config_analyzer._analyze_device_at.cache_info().currsize, 1)
+            inventory_manager.safe_write_hosts_csv([{"IP": "192.0.2.20"}])
+        self.assertEqual(config_analyzer._analyze_device_at.cache_info().currsize, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

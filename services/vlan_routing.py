@@ -85,7 +85,7 @@ def route_owner(vlan, tenant, client_ip: Optional[str] = None) -> dict:
                           "ricerca potrebbe restituire l'apparato di un'altra "
                           "rete"}
 
-    vlan = str(vlan)
+    vlan = str(vlan).strip()
     key = tenant_key(tenant)
 
     # Entrambi i gate: allowed_groups regge anche se il controllo di falsy di

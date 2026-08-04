@@ -725,6 +725,37 @@ class TestDerivedGateway(unittest.TestCase):
         self.assertIn("ignota", out["route_owner_reason"])
 
 
+class TestL2HealthThreadsTheSearchedIp(_Base):
+    """route_owner riceve un client_ip solo se qualcuno glielo passa. Prima
+    _l2_health passava sempre position.get('ip'), che per una posizione
+    L2-only e' SEMPRE None (nessun binding ARP): la restrizione di sottorete
+    di route_owner non riceveva mai un indirizzo utilizzabile in produzione."""
+
+    L2_ONLY = {"known": True, "l2_only": True, "ip": None,
+               "switch_ip": "192.0.2.20", "switch_port": "GigabitEthernet1/0/5",
+               "port_vlan": "10", "tenant": "sede-a"}
+
+    def _route_owner_spy(self, seen):
+        def fake(vlan, tenant, client_ip=None):
+            seen["client_ip"] = client_ip
+            return {"known": False, "unreadable": [], "reason": "x"}
+        return patch("services.vlan_routing.route_owner", side_effect=fake)
+
+    def test_an_ip_search_reaches_route_owner_on_an_l2_only_position(self):
+        seen = {}
+        with self._route_owner_spy(seen), \
+             patch("ai.config_analyzer.analyze_device", return_value=None):
+            client_diagnosis._l2_health(self.L2_ONLY, "192.0.2.50")
+        self.assertEqual(seen["client_ip"], "192.0.2.50")
+
+    def test_a_mac_search_never_fabricates_an_ip(self):
+        seen = {}
+        with self._route_owner_spy(seen), \
+             patch("ai.config_analyzer.analyze_device", return_value=None):
+            client_diagnosis._l2_health(self.L2_ONLY, None)
+        self.assertIsNone(seen["client_ip"])
+
+
 class TestDenies(_Base):
 
     def test_blocks_are_attributed_to_a_policy(self):
@@ -1178,6 +1209,29 @@ class TestTenantAmbiguoFrontend(unittest.TestCase):
         """Con 'la piu' recente' gia' evidenziata, la domanda avrebbe una
         risposta suggerita — cioe' la scelta del programma con un altro nome."""
         self.assertNotIn("t.tenant === p.tenant", self.src)
+
+
+class TestDiagTrunkFrontend(unittest.TestCase):
+    """Verifica grep-style: non c'e' un runner JS."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_helpers_frontend import frontend_source
+        cls.src = frontend_source()
+
+    def test_the_derived_gateway_line_is_read_before_the_degraded_branch(self):
+        # Se il blocco restasse dentro il ramo '!chain_known', sparirebbe
+        # proprio nel caso di successo per cui la deduzione esiste.
+        known_idx = self.src.index("if (!t.known)")
+        gateway_idx = self.src.index("t.gateway_source && t.gateway_source !== 'arp'")
+        chain_idx = self.src.index("if (!t.chain_known)")
+        self.assertTrue(known_idx < gateway_idx < chain_idx)
+
+    def test_a_failed_route_owner_reason_is_rendered(self):
+        self.assertIn("t.route_owner_reason", self.src)
+
+    def test_unreadable_devices_are_named_not_swallowed(self):
+        self.assertIn("t.unreadable_devices", self.src)
 
 
 if __name__ == "__main__":

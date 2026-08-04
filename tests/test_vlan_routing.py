@@ -146,6 +146,20 @@ class TestUnknownIsNotAbsent(_Base):
         self.assertEqual(out["unreadable"], ["192.0.2.99"])
 
 
+class TestVlanIsStripped(_Base):
+    """Gli altri consumatori dello stesso valore (client_diagnosis.py) lo
+    strippano; se qui non si facesse, una VLAN con spazi intorno non
+    combacerebbe mai con l'id letto dal backup, e la candidatura sparirebbe
+    in silenzio."""
+
+    def test_whitespace_around_the_vlan_does_not_hide_the_candidate(self):
+        out = self._run([_ios("192.0.2.20", 226, "192.0.2.1/24")],
+                        [{"IP": "192.0.2.20", "Group": "sede-a"}],
+                        vlan=" 226 ", client_ip="192.0.2.50")
+        self.assertTrue(out["known"], out.get("reason"))
+        self.assertEqual(out["device_ip"], "192.0.2.20")
+
+
 class TestManualOverride(_Base):
 
     def _with_file(self, content, analyses, devices, **kw):
