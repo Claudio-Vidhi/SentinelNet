@@ -156,6 +156,26 @@ normalizza da sé; la diagnosi lo chiama solo quando la posizione è nota, quind
 Il tenant è quello **risolto dall'inventario** (`Group`), che sovrascrive la
 cartella del backup: la cartella non è affidabile come confine.
 
+### Precedenza fra override e apparati illeggibili
+
+Caso di confronto: nessun candidato, un apparato del tenant senza backup, e una
+riga di override per quella VLAN. **Vince l'override**, e la risposta porta
+`unreadable` con l'elenco.
+
+L'alternativa — l'ignoto batte il manuale — sopprimerebbe l'override proprio nel
+caso per cui esiste. La decisione presa a monte è che l'assegnazione manuale
+«riempie il vuoto dove il backup non c'è o l'analisi fallisce»: se un apparato
+illeggibile la annullasse, scatterebbe solo quando tutti gli apparati sono
+leggibili e nessuno instrada quella VLAN, cioè quasi mai.
+
+Il rischio vero di quell'alternativa — una riga vecchia che copre in silenzio un
+buco — non si chiude sopprimendo la risposta, si chiude non nascondendo niente:
+`source: "manual"` dice da dove viene, `unreadable` dice cosa non si è potuto
+controllare. Il referto afferma le due cose insieme, e chi legge decide.
+
+`unreadable` si valorizza **sempre** che l'elenco non sia vuoto, qualunque sia
+la sorgente della risposta — anche quando la configurazione ha risposto da sola.
+
 ### Ignoto e assente sono risposte diverse
 
 `analyze_all` scarta in silenzio gli apparati senza backup. Si calcola quindi
