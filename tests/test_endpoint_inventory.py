@@ -446,6 +446,14 @@ class TestTabFrontend(unittest.TestCase):
         from tests.test_helpers_frontend import frontend_source
         cls.src = frontend_source()
 
+    def _file(self, rel):
+        """Un file solo. ``frontend_source()`` concatena tutto il frontend,
+        quindi non distingue "questa chiamata sta nel markup" da "sta in un
+        altro script": per contare i chiamanti serve il file singolo."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, *rel.split("/")), encoding="utf-8") as fh:
+            return fh.read()
+
     def test_la_tab_esiste_ed_e_raggiungibile(self):
         self.assertIn('id="tab-endpoints"', self.src)
         self.assertIn("switchTab('tab-endpoints')", self.src)
@@ -492,6 +500,32 @@ class TestTabFrontend(unittest.TestCase):
         """Il referto si rende in un posto solo: due copie sarebbero due
         copie da tenere allineate."""
         self.assertEqual(self.src.count("function renderDiagnosi("), 1)
+
+    def test_la_select_del_tenant_ricarica_da_sola(self):
+        """Senza onchange la select non era agganciata a niente: cambiare
+        tenant lasciava a schermo i dispositivi di quello precedente."""
+        self.assertIn('id="epFilterTenant" onchange="endpointsApplyFilters()"',
+                      self.src)
+
+    def test_nessun_filtro_scavalca_la_modalita(self):
+        """Un controllo di filtro che chiama endpointsSearch() ridipinge
+        elenco e KPI anche in modalita' porte, sovrapponendo due viste. Il
+        markup deve passare SEMPRE da endpointsApplyFilters()."""
+        dash = self._file("templates/dashboard.html")
+
+        self.assertNotIn("endpointsSearch()", dash)
+        # ricerca (invio), tenant (change), soglia (change e invio), pulsante.
+        self.assertEqual(dash.count("endpointsApplyFilters()"), 5)
+
+    def test_applica_filtri_ridisegna_nella_modalita_corrente(self):
+        """Con il tenant cambiato gli switch sono altri: in modalita' porte il
+        selettore va ricostruito, non lasciato a quello di prima."""
+        start = self.src.index("async function endpointsApplyFilters()")
+        body = self.src[start:start + 500]
+        self.assertIn("await endpointsSearch()", body)
+        self.assertIn("_epMode === 'ports'", body)
+        self.assertLess(body.index("await endpointsSearch()"),
+                        body.index("_epMode === 'ports'"))
 
     def test_il_client_e_impostato_prima_di_lanciare_la_diagnosi(self):
         """runDiagnosi() azzera _diagTenant quando il client cambia: se
