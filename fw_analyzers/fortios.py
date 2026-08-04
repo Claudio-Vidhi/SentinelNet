@@ -125,7 +125,7 @@ def analyze(text):
     try:
         return _analyze(text)
     except Exception:
-        return {"vendor": "fortios", "sections": []}
+        return {"vendor": "fortios", "sections": [], "vlan_interfaces": []}
 
 
 def _analyze(text):
@@ -230,6 +230,7 @@ def _analyze(text):
         for member in n["sets"].get('interface', []):
             zone_of_iface[member] = zname
     rows = []
+    vlan_ifaces = []
     for name, n in _children(root, 'system interface'):
         rows.append({
             "name": name,
@@ -239,6 +240,17 @@ def _analyze(text):
             "allowaccess": _multi(n["sets"].get('allowaccess', [])),
             "status": _forti_set1(n, 'status', 'up'),
         })
+        # Sotto-interfaccia VLAN: e' l'equivalente FortiOS di una SVI, ed e'
+        # cio' che rende deducibile un gateway che sta sul firewall.
+        vlanid = _forti_set1(n, 'vlanid')
+        if vlanid:
+            vlan_ifaces.append({
+                "name": name,
+                "vlan": vlanid,
+                "ip": _forti_ip_cidr(n),
+                "status": _forti_set1(n, 'status', 'up'),
+                "parent": _forti_set1(n, 'interface'),
+            })
     sections.append(_section(
         "interfaces", ["name", "ip", "zone", "vdom", "allowaccess", "status"], rows))
 
@@ -314,4 +326,5 @@ def _analyze(text):
     sections.append(_section(
         "authentication", ["name", "kind", "server", "sso"], rows))
 
-    return {"vendor": "fortios", "sections": sections}
+    return {"vendor": "fortios", "sections": sections,
+            "vlan_interfaces": vlan_ifaces}
