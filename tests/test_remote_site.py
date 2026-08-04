@@ -30,7 +30,11 @@ from fastapi.testclient import TestClient  # noqa: E402
 import app_server  # noqa: E402
 from collectors import mac_history  # noqa: E402
 
-ADMIN = "admin"
+# Mai "admin": questo setUpClass SOVRASCRIVE l'hash dell'account (non usa
+# create_user, che si rifiuterebbe), quindi se l'isolamento della directory
+# dati saltasse chiuderebbe fuori l'amministratore vero. Con un nome dedicato
+# il danno resta un utente di troppo. Vedi tests/__init__.py.
+ADMIN = "e2e_admin"
 ADMIN_PW = "adminpw12345"          # >= MIN_PASSWORD_LENGTH
 
 
