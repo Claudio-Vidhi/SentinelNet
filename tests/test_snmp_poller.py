@@ -197,5 +197,84 @@ class TestSnapshotsReachTheEngine(unittest.TestCase):
             [])
 
 
+class TestConcorrenza(unittest.TestCase):
+    """Un apparato muto non deve fermare gli altri.
+
+    Non e' un'ottimizzazione: con TIMEOUT_S=2 e RETRIES=1 ogni apparato
+    irraggiungibile costa ~4s, e in sequenza venti apparati muti allungano
+    ogni giro di oltre un minuto. Il default di tenant li aggiunge in blocco,
+    quindi il costo va tolto prima, non dopo.
+    """
+
+    def test_gli_apparati_sono_interrogati_in_parallelo(self):
+        import asyncio
+        from unittest.mock import patch
+        from observability.ingesters import snmp_poller
+
+        in_volo = {"ora": 0, "max": 0}
+
+        async def lento(ip, community, port=161):
+            in_volo["ora"] += 1
+            in_volo["max"] = max(in_volo["max"], in_volo["ora"])
+            await asyncio.sleep(0.05)
+            in_volo["ora"] -= 1
+            return []
+
+        devices = [{"ip": f"192.0.2.{i}", "tenant": "sede-a",
+                    "community": "esempio-community"} for i in range(6)]
+
+        with patch.object(snmp_poller, "_snmp_devices", return_value=devices), \
+             patch.object(snmp_poller, "_poll_device", side_effect=lento):
+            asyncio.run(snmp_poller.poll_once())
+
+        self.assertGreater(in_volo["max"], 1,
+                           "in sequenza il massimo in volo resta 1")
+
+    def test_il_parallelismo_ha_un_tetto(self):
+        """Senza tetto, mille apparati aprirebbero mille socket UDP insieme."""
+        import asyncio
+        from unittest.mock import patch
+        from observability.ingesters import snmp_poller
+
+        in_volo = {"ora": 0, "max": 0}
+
+        async def lento(ip, community, port=161):
+            in_volo["ora"] += 1
+            in_volo["max"] = max(in_volo["max"], in_volo["ora"])
+            await asyncio.sleep(0.02)
+            in_volo["ora"] -= 1
+            return []
+
+        devices = [{"ip": f"192.0.2.{i}", "tenant": "sede-a",
+                    "community": "esempio-community"} for i in range(40)]
+
+        with patch.object(snmp_poller, "_snmp_devices", return_value=devices), \
+             patch.object(snmp_poller, "_poll_device", side_effect=lento):
+            asyncio.run(snmp_poller.poll_once())
+
+        self.assertLessEqual(in_volo["max"], snmp_poller.MAX_CONCURRENT_POLLS)
+
+    def test_un_apparato_che_solleva_non_ferma_il_giro(self):
+        """Gia' vero oggi e deve restarlo: SNMP su UDP tace di continuo."""
+        import asyncio
+        from unittest.mock import patch
+        from observability.ingesters import snmp_poller
+
+        async def uno_esplode(ip, community, port=161):
+            if ip.endswith(".2"):
+                raise OSError("rete irraggiungibile")
+            return [("snmp_system", "{}")]
+
+        devices = [{"ip": f"192.0.2.{i}", "tenant": "sede-a",
+                    "community": "esempio-community"} for i in (1, 2, 3)]
+
+        with patch.object(snmp_poller, "_snmp_devices", return_value=devices), \
+             patch.object(snmp_poller, "_poll_device", side_effect=uno_esplode), \
+             patch("core.db.enqueue_write"):
+            scritti = asyncio.run(snmp_poller.poll_once())
+
+        self.assertEqual(scritti, 2, "gli altri due passano comunque")
+
+
 if __name__ == "__main__":
     unittest.main()

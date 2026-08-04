@@ -35,6 +35,10 @@ MAX_INTERFACES = 200      # tetto per apparato: uno chassis grosso non deve
                           # bloccare il giro degli altri
 TIMEOUT_S = 2
 RETRIES = 1
+# Tetto agli apparati interrogati insieme. Serve perche' un default di tenant
+# puo' aggiungere in un colpo tutta la sede: senza tetto sarebbero altrettanti
+# socket UDP aperti nello stesso istante.
+MAX_CONCURRENT_POLLS = 10
 _MAX_SUMMARY = 20_000
 
 # OID scalari di sistema (RFC1213). Nessuna risoluzione MIB: numerici, così il
@@ -291,8 +295,21 @@ async def poll_once() -> int:
         return 0
     n = 0
     ts = int(time.time())
-    for device in devices:
-        for kind, summary in await _poll_device(device["ip"], device["community"]):
+    semaforo = asyncio.Semaphore(MAX_CONCURRENT_POLLS)
+
+    async def _uno(device: dict) -> list:
+        # Un apparato che solleva non ferma il giro: su UDP il silenzio e' il
+        # caso comune, non l'eccezione.
+        async with semaforo:
+            try:
+                return await _poll_device(device["ip"], device["community"])
+            except Exception as e:
+                logger.info("SNMP fallito su %s: %s", device["ip"], e)
+                return []
+
+    for device, snapshots in zip(devices,
+                                 await asyncio.gather(*(_uno(d) for d in devices))):
+        for kind, summary in snapshots:
             db.enqueue_write(
                 "INSERT INTO api_observations(ts, tenant, device_ip, kind, summary_json) "
                 "VALUES (?, ?, ?, ?, ?)",
