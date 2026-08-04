@@ -37,6 +37,7 @@ class DeviceSchema(BaseModel):
     # Community SNMP v2c in sola lettura (poller di stato). None = lascia
     # invariata quella già salvata; "" = rimuovila.
     snmp_community: Optional[str] = Field(None, max_length=128)
+    snmp_disabled: Optional[bool] = None
 
 class DeviceDelete(BaseModel):
     ip: str
@@ -77,13 +78,23 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         allowed_ips = {d['IP'] for d in devices}
         versions = {ip: v for ip, v in versions.items() if ip in allowed_ips}
         groups = {g: v for g, v in groups.items() if g in scope}
+    from security.snmp_defaults import tenants_with_default
+    _snmp_default_tenants = tenants_with_default()
     devices_enriched = []
     for d in devices:
         dev_copy = dict(d)
         dev_copy["redundancy"] = redundancy_service.device_redundancy_badge(d["IP"])
         # La community non esce mai da qui, nemmeno cifrata: alla UI serve
         # sapere SE il polling SNMP è configurato, non quale sia il segreto.
-        dev_copy["snmp_enabled"] = bool(dev_copy.pop("SNMP Community", ""))
+        # Alla UI serve sapere SE il polling e' configurato e DA DOVE arriva
+        # la community: senza il secondo campo, un apparato che eredita e uno
+        # con la sua sembrano identici, e l'admin non sa cosa sta modificando.
+        own = bool(dev_copy.pop("SNMP Community", ""))
+        disabled = str(dev_copy.get("SNMP Disabled") or "").strip() in ("1", "true", "True")
+        inherited = (not own) and (not disabled) and \
+            (d.get("Group") or "Generale") in _snmp_default_tenants
+        dev_copy["snmp_enabled"] = (own or inherited) and not disabled
+        dev_copy["snmp_inherited"] = inherited
         devices_enriched.append(dev_copy)
     return {
         "devices": devices_enriched,
@@ -137,7 +148,8 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
             device.ip, device.vendor, device.profile,
             device.username, device.password, device.enable_secret, device.group,
             ssh_port=device.ssh_port, transports=device.transports,
-            snmp_community=device.snmp_community
+            snmp_community=device.snmp_community,
+            snmp_disabled=device.snmp_disabled,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

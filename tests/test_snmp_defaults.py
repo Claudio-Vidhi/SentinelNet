@@ -125,5 +125,36 @@ class TestPrecedenza(_Base):
             "del-tenant")
 
 
+class TestPollerUsaLaRisoluzione(_Base):
+    """Il poller e' l'unico consumatore runtime della community: se non passa
+    dalla risoluzione condivisa, l'ereditarieta' non esiste per nessuno."""
+
+    def test_il_poller_include_un_apparato_che_eredita(self):
+        from unittest.mock import patch
+        from observability.ingesters import snmp_poller
+
+        snmp_defaults.set_tenant_community("sede-a", "del-tenant")
+        devices = [_device(ip="192.0.2.1", group="sede-a", community="")]
+
+        with patch("services.inventory_manager.get_all_devices",
+                   return_value=devices):
+            out = snmp_poller._snmp_devices()
+
+        self.assertEqual([d["ip"] for d in out], ["192.0.2.1"])
+        self.assertEqual(out[0]["community"], "del-tenant")
+
+    def test_il_poller_salta_un_apparato_escluso(self):
+        from unittest.mock import patch
+        from observability.ingesters import snmp_poller
+
+        snmp_defaults.set_tenant_community("sede-a", "del-tenant")
+        devices = [_device(ip="192.0.2.1", group="sede-a",
+                           community="propria", disabled="1")]
+
+        with patch("services.inventory_manager.get_all_devices",
+                   return_value=devices):
+            self.assertEqual(snmp_poller._snmp_devices(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
