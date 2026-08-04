@@ -600,3 +600,42 @@ class TestTabFrontend(unittest.TestCase):
         body = self._fn("async function endpointsPorts(")
         self.assertIn("host.innerHTML", body)
         self.assertIn("!res || !res.ok", body)
+
+    def test_la_riga_ha_le_azioni_esplicite(self):
+        """Il click sulla riga diagnosticava gia', ma non lo sapeva nessuno:
+        niente lo diceva. Le tre azioni sono ora visibili come pulsanti."""
+        body = self._fn("function endpointsRender(d)")
+        self.assertIn("endpointsDiagnose(", body)
+        self.assertIn("macLocate(", body)
+        self.assertIn("showPortConfig(", body)
+
+    def test_i_pulsanti_non_fanno_partire_anche_il_click_di_riga(self):
+        """Senza stopPropagation il pulsante lancia la sua azione E la
+        diagnosi della riga: due schermate per un click. La chiamata sta
+        UNA volta nell'helper `act`, comune ai tre pulsanti.
+
+        Si asserisce sulle TRE icone distintive e non su un conteggio di
+        ``act(``: quel token di tre lettere lo produrrebbe anche un futuro
+        ``compact(`` o la parola dentro un commento, e su questo ramo i
+        conteggi di sottostringhe generiche hanno gia' rotto due test.
+        """
+        body = self._fn("function endpointsRender(d)")
+        self.assertIn("event.stopPropagation()", body)
+        for icon in ("fa-stethoscope", "fa-magnifying-glass-location",
+                     "fa-file-lines"):
+            self.assertIn(icon, body)
+
+    def test_la_configurazione_porta_si_offre_solo_se_c_e_una_porta(self):
+        """Un endpoint TRANSIT-ONLY non ha switch ne' interfaccia: il
+        pulsante aprirebbe la configurazione di un'interfaccia vuota."""
+        body = self._fn("function endpointsRender(d)")
+        self.assertIn("r.switch_ip && r.interface", body)
+
+    def test_le_nuove_chiavi_i18n_esistono_in_entrambe_le_lingue(self):
+        """Stessa convenzione del test analogo gia' in questa classe: una
+        chiave presente in un solo dizionario darebbe un titolo vuoto
+        nell'altra lingua."""
+        for key in ("epThActions", "epActDiagnose", "epActLocate",
+                    "epActPortCfg"):
+            self.assertGreaterEqual(self.src.count(key + ":"), 2,
+                                    f"chiave {key} assente in una delle lingue")
