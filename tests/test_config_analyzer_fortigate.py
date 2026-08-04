@@ -245,5 +245,60 @@ class TestFortiosEnvelope(unittest.TestCase):
         fortios.analyze(None)
 
 
+class TestFortiosVlanInterfaces(unittest.TestCase):
+    """Le VLAN instradate dal firewall devono essere interrogabili, non solo
+    mostrate: senza 'vlanid' la derivazione del gateway non vede mai un
+    FortiGate, e direbbe 'nessuna interfaccia L3' di una VLAN che il firewall
+    instrada."""
+
+    CONF = """#config-version=FGT-7.0
+config system interface
+    edit "port1"
+        set ip 192.0.2.254 255.255.255.0
+        set status up
+    next
+    edit "vlan226"
+        set vdom "root"
+        set ip 192.0.2.1 255.255.255.0
+        set status up
+        set interface "port1"
+        set vlanid 226
+    next
+    edit "vlan227"
+        set status down
+        set interface "port1"
+        set vlanid 227
+    next
+end
+"""
+
+    def test_vlan_interfaces_are_extracted(self):
+        from fw_analyzers import fortios
+        vifs = {v["vlan"]: v for v in fortios.analyze(self.CONF)["vlan_interfaces"]}
+        self.assertEqual(sorted(vifs), ["226", "227"])
+        self.assertEqual(vifs["226"]["ip"], "192.0.2.1/24")
+        self.assertEqual(vifs["226"]["parent"], "port1")
+        self.assertEqual(vifs["226"]["status"], "up")
+
+    def test_interfaces_without_vlanid_are_not_vlan_interfaces(self):
+        from fw_analyzers import fortios
+        vifs = fortios.analyze(self.CONF)["vlan_interfaces"]
+        self.assertNotIn("port1", [v["name"] for v in vifs])
+
+    def test_a_broken_config_still_returns_the_key(self):
+        # analyze() è tollerante per contratto: chi legge non deve difendersi
+        # dall'assenza della chiave.
+        from fw_analyzers import fortios
+        self.assertEqual(fortios.analyze(None)["vlan_interfaces"], [])
+
+    def test_the_display_section_keeps_its_columns(self):
+        # Le colonne sono UI: questo lavoro non le cambia.
+        from fw_analyzers import fortios
+        sec = next(s for s in fortios.analyze(self.CONF)["sections"]
+                   if s["id"] == "interfaces")
+        self.assertEqual([c["key"] for c in sec["columns"]],
+                         ["name", "ip", "zone", "vdom", "allowaccess", "status"])
+
+
 if __name__ == "__main__":
     unittest.main()
