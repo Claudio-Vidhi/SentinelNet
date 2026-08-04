@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from core.app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
 from core import core_engine
 from security.security_manager import log_audit
-from routers.deps import require_admin
+from routers.deps import require_admin, get_current_user, user_group_scope
 from core import data_config
 
 _APP_ADV_ENV = {
@@ -129,4 +129,48 @@ def set_app_advanced_settings(payload: dict, current_user = Depends(require_admi
     log_audit(f"Impostazioni applicazione aggiornate da '{current_user.get('sub')}' "
               f"(riavvio richiesto): {clean}.")
     return {"status": "success", "restart_required": True, "settings": saved}
+
+
+class SnmpDefaultSchema(BaseModel):
+    tenant: str
+    community: str = ""          # "" rimuove il default
+
+
+@router.get("/api/settings/snmp-defaults")
+def snmp_defaults_get(current_user = Depends(get_current_user)):
+    """I tenant che hanno una community predefinita. SOLO i nomi.
+
+    Il valore non esce da qui nemmeno cifrato: alla UI serve sapere SE il
+    default c'e', non quale sia — stessa regola dei device in
+    ``/api/local-devices`` e delle identita'.
+    """
+    from security.snmp_defaults import tenants_with_default
+    scope = user_group_scope(current_user)
+    names = tenants_with_default()
+    if scope is not None:
+        names = {t for t in names if t in scope}
+    return {"tenants": sorted(names)}
+
+
+@router.post("/api/settings/snmp-defaults")
+def snmp_defaults_set(payload: SnmpDefaultSchema,
+                      current_user = Depends(require_admin)):
+    """Imposta o rimuove ("" rimuove) la community predefinita di un tenant.
+
+    ``require_admin``: e' una credenziale che vale per OGNI apparato della
+    sede, quindi non e' un'impostazione di comodo.
+    """
+    from security.snmp_defaults import set_tenant_community
+    # Stesso vincolo di routers.deps.assert_group_allowed, ma sul nome
+    # importato in QUESTO modulo: e' quello che i test mettono in patch.
+    scope = user_group_scope(current_user)
+    if scope is not None and payload.tenant not in scope:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Site '{payload.tenant}' is not allowed for your profile.")
+    set_tenant_community(payload.tenant, payload.community)
+    log_audit(f"Community SNMP predefinita del tenant '{payload.tenant}' "
+              f"{'impostata' if payload.community else 'rimossa'} da "
+              f"'{current_user.get('sub')}'.")
+    return {"status": "success"}
 
