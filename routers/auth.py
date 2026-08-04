@@ -189,11 +189,22 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
     return {"status": "success"}
 
 @router.post("/api/users/delete")
-def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(require_admin)):
-    if payload.username == current_user.get("sub"):
-        raise HTTPException(status_code=400, detail="Non puoi eliminare il tuo stesso account.")
-    if user_manager.get_role(payload.username) == "admin" and user_manager.count_admins() <= 1:
-        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore.")
+def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(get_current_user)):
+    # Chiunque può cancellare il PROPRIO account; per quello di un altro serve
+    # il ruolo di amministratore. Niente docstring: FastAPI la pubblicherebbe
+    # come description nello schema OpenAPI, che il parity test tiene congelato.
+    #
+    # Il quorum resta l'unico altro limite, e qui smette di essere teorico:
+    # cancellare un altro amministratore presuppone di esserlo a propria volta,
+    # quindi ce ne sono sempre almeno due. È la cancellazione del proprio
+    # account che può davvero togliere l'ultimo amministratore utilizzabile.
+    if payload.username != current_user.get("sub") and current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient privileges for this operation."
+        )
+    if user_manager.is_last_active_admin(payload.username):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
     if not user_manager.delete_user(payload.username):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Utente '{payload.username}' eliminato da '{current_user.get('sub')}'.")
@@ -203,9 +214,8 @@ def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(require_adm
 def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_admin)):
     if payload.role not in user_manager.VALID_ROLES:
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
-    if (user_manager.get_role(payload.username) == "admin"
-            and payload.role != "admin" and user_manager.count_admins() <= 1):
-        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore.")
+    if payload.role != "admin" and user_manager.is_last_active_admin(payload.username):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
     if not user_manager.set_role(payload.username, payload.role):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Ruolo di '{payload.username}' impostato a '{payload.role}' da '{current_user.get('sub')}'.")
@@ -216,8 +226,7 @@ def disable_user_ep(payload: UserDisableSchema, current_user = Depends(require_a
     """Abilita/disabilita un utente. Un utente disabilitato non può autenticarsi."""
     if payload.disabled and payload.username == current_user.get("sub"):
         raise HTTPException(status_code=400, detail="Non puoi disabilitare il tuo stesso account.")
-    if (payload.disabled and user_manager.get_role(payload.username) == "admin"
-            and user_manager.count_active_admins() <= 1):
+    if payload.disabled and user_manager.is_last_active_admin(payload.username):
         raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
     if not user_manager.set_disabled(payload.username, payload.disabled):
         raise HTTPException(status_code=404, detail="Utente non trovato.")

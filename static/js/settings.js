@@ -288,9 +288,7 @@
                   </select></td>
                 <td>${scopeCell}</td>
                 <td>${tabsCell}</td>
-                <td style="white-space:nowrap;">${toggleBtn}${isSelf
-                    ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
-                    : `<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button>`}</td>
+                <td style="white-space:nowrap;">${toggleBtn}<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
             </tr>`;
         }).join('');
     }
@@ -365,13 +363,20 @@
     }
 
     async function deleteUser(username) {
-        const msg = currentLang === 'en' ? `Delete user "${username}"?` : `Eliminare l'utente "${username}"?`;
+        const isSelf = username === currentUsername;
+        const msg = isSelf
+            ? (currentLang === 'en'
+                ? `Delete YOUR OWN account "${username}"? You will be signed out and cannot sign back in.`
+                : `Eliminare il TUO account "${username}"? Verrai disconnesso e non potrai più accedere.`)
+            : (currentLang === 'en' ? `Delete user "${username}"?` : `Eliminare l'utente "${username}"?`);
         if (!confirm(msg)) return;
         const res = await apiFetch('/api/users/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
         });
-        if (res && res.ok) loadUsers();
+        // Cancellato il proprio account la sessione non vale più: si esce subito,
+        // invece di lasciare che sia la prima chiamata a fallire con un 401.
+        if (res && res.ok) { if (isSelf) logout(); else loadUsers(); }
         else if (res) { const e = await res.json(); alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
     }
 
