@@ -101,6 +101,15 @@ function endpointsRender(d) {
                 L.epTruncated.replace('{shown}', String(_epRows.length)).replace('{total}', String(d.total)))}</div>`
         : '';
 
+    // Le tre azioni esistono gia' altrove: qui si rendono solo raggiungibili
+    // dalla riga. stopPropagation perche' la riga stessa e' cliccabile e
+    // senza di esso ogni pulsante farebbe partire anche la diagnosi.
+    const act = (icon, title, call, enabled) => enabled
+        ? `<button onclick="event.stopPropagation(); ${call}" title="${escapeHtml(title)}"
+             style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px; margin-right:8px;">
+             <i class="fa-solid ${icon}"></i></button>`
+        : `<span style="color:var(--text-muted); font-size:12px; margin-right:8px; opacity:0.35;"><i class="fa-solid ${icon}"></i></span>`;
+
     const body = _epRows.map(r => `<tr style="cursor:pointer;" onclick="endpointsDiagnose('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(r.tenant || ''))}')">
         <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(r.mac))}</td>
         <td style="font-size:12px;">${escapeHtml(jsStr(r.oui_vendor || '—'))}</td>
@@ -111,6 +120,15 @@ function endpointsRender(d) {
         <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(jsStr(_epTime(r.first_seen)))}</td>
         <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(jsStr(_epTime(r.last_seen)))}</td>
         <td>${(r.flags || []).map(_epFlag).join(' ')}</td>
+        <td style="white-space:nowrap;">${
+            act('fa-stethoscope', L.epActDiagnose,
+                `endpointsDiagnose('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(r.tenant || ''))}')`, true) +
+            act('fa-magnifying-glass-location', L.epActLocate,
+                `macLocate('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(r.tenant || ''))}')`, true) +
+            act('fa-file-lines', L.epActPortCfg,
+                `showPortConfig('${escapeHtml(jsStr(r.switch_ip))}','${escapeHtml(jsStr(r.interface))}','${escapeHtml(jsStr(r.switch_name || ''))}')`,
+                !!(r.switch_ip && r.interface))
+        }</td>
     </tr>`).join('');
 
     host.innerHTML = `${banner}
@@ -123,6 +141,7 @@ function endpointsRender(d) {
                 <th>${escapeHtml(L.epThWhere)}</th><th>${escapeHtml(L.epThVlan)}</th>
                 <th>${escapeHtml(L.epThFirst)}</th><th>${escapeHtml(L.epThLast)}</th>
                 <th>${escapeHtml(L.epThFlags)}</th>
+                <th>${escapeHtml(L.epThActions)}</th>
               </tr></thead>
               <tbody>${body}</tbody>
             </table>
