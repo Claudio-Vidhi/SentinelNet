@@ -686,6 +686,45 @@ class TestFortigateResolution(unittest.TestCase):
         self.assertEqual(fgt["ip"], "192.0.2.1")
 
 
+class TestDerivedGateway(unittest.TestCase):
+    """Senza gateway ARP la catena non si percorreva. Se la configurazione dice
+    chi instrada la VLAN, il capolinea c'e' lo stesso."""
+
+    def test_the_chain_uses_the_derived_gateway(self):
+        derived = {"known": True, "device_ip": "192.0.2.20",
+                   "svi_ip": "192.0.2.1/24", "source": "config",
+                   "backup_age_s": 3600, "unreadable": []}
+        with patch("services.vlan_routing.route_owner", return_value=derived), \
+             patch("services.client_diagnosis._hop_path", return_value=[]), \
+             patch("services.client_diagnosis._trunk_check",
+                   return_value={"known": True, "ok": True, "carrying": []}):
+            out = client_diagnosis._trunk_chain("192.0.2.30", None, "226",
+                                                "sede-a", "192.0.2.50")
+        self.assertEqual(out["gateway_source"], "config")
+        self.assertEqual(out["gateway_device"], "192.0.2.20")
+        self.assertEqual(out["gateway_vlan_ip"], "192.0.2.1/24")
+
+    def test_an_arp_gateway_keeps_the_old_shape(self):
+        with patch("services.client_diagnosis._hop_path", return_value=[]), \
+             patch("services.client_diagnosis._trunk_check",
+                   return_value={"known": True, "ok": True, "carrying": []}):
+            out = client_diagnosis._trunk_chain("192.0.2.30", "192.0.2.1", "226",
+                                                "sede-a", "192.0.2.50")
+        self.assertEqual(out["gateway_source"], "arp")
+        self.assertNotIn("gateway_device", out)
+
+    def test_a_failed_derivation_reports_its_reason(self):
+        derived = {"known": False, "unreadable": ["192.0.2.99"],
+                   "reason": "la risposta e' ignota"}
+        with patch("services.vlan_routing.route_owner", return_value=derived), \
+             patch("services.client_diagnosis._trunk_check",
+                   return_value={"known": True, "ok": True, "carrying": []}):
+            out = client_diagnosis._trunk_chain("192.0.2.30", None, "226",
+                                                "sede-a", "192.0.2.50")
+        self.assertEqual(out["gateway_source"], "arp")
+        self.assertIn("ignota", out["route_owner_reason"])
+
+
 class TestDenies(_Base):
 
     def test_blocks_are_attributed_to_a_policy(self):

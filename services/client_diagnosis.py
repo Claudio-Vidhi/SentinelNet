@@ -392,8 +392,8 @@ def _hop_path(access_ip: str, gateway_ip: str, tenant: Optional[str]) -> list:
     return []
 
 
-def _trunk_chain(access_switch_ip: str, gateway_ip: Optional[str], vlan,
-                 tenant: Optional[str] = None) -> dict:
+def _trunk_chain_inner(access_switch_ip: str, gateway_ip: Optional[str], vlan,
+                       tenant: Optional[str] = None) -> dict:
     """La VLAN del client passa su TUTTA la catena fino al gateway?
 
     Controllare il solo switch di accesso risponde a metà della domanda: la
@@ -457,6 +457,39 @@ def _trunk_chain(access_switch_ip: str, gateway_ip: Optional[str], vlan,
     return out
 
 
+def _trunk_chain(access_switch_ip: str, gateway_ip: Optional[str], vlan,
+                 tenant: Optional[str] = None,
+                 client_ip: Optional[str] = None) -> dict:
+    """La VLAN del client passa su TUTTA la catena fino al gateway?
+
+    Il capolinea e' il gateway ARP quando c'e'; quando manca lo si deduce dalla
+    configurazione (``vlan_routing.route_owner``). La risposta dice sempre da
+    quale delle due strade viene, perche' un gateway dedotto vale quanto il
+    backup che lo dichiara.
+    """
+    gateway_source, derived = "arp", None
+    if not gateway_ip and vlan:
+        from services import vlan_routing
+        derived = vlan_routing.route_owner(vlan, tenant, client_ip)
+        if derived.get("known"):
+            gateway_ip = derived["device_ip"]
+            gateway_source = derived["source"]
+
+    out = _trunk_chain_inner(access_switch_ip, gateway_ip, vlan, tenant)
+    out["gateway_source"] = gateway_source
+    if gateway_source != "arp" and derived:
+        out["gateway_device"] = derived["device_ip"]
+        out["gateway_vlan_ip"] = derived.get("svi_ip")
+        out["gateway_backup_age_s"] = derived.get("backup_age_s")
+    if derived and not derived.get("known"):
+        out["route_owner_reason"] = derived.get("reason", "")
+        if derived.get("candidates"):
+            out["gateway_candidates"] = derived["candidates"]
+    if derived and derived.get("unreadable"):
+        out["unreadable_devices"] = derived["unreadable"]
+    return out
+
+
 def _path(src_ip: str, dst_ip: str, tenant: str,
           dst_tenant: Optional[str] = None) -> dict:
     """Percorso logico, tradotto nel vocabolario del referto.
@@ -511,7 +544,8 @@ def _l2_health(position: dict) -> dict:
 
     try:
         out["trunk"] = _trunk_chain(switch_ip, position.get("gateway_ip"), vlan,
-                                    position.get("tenant"))
+                                    position.get("tenant"),
+                                    position.get("ip"))
     except Exception as e:
         out["trunk"] = {"known": False, "error": str(e)}
     return out
