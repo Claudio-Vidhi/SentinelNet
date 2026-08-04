@@ -267,13 +267,18 @@ async def _poll_device(ip: str, community: str, port: int = 161) -> list:
 
 
 def _snmp_devices() -> list:
-    """Apparati con una community configurata. La community è cifrata nel
-    vault come le altre credenziali: qui viene decifrata solo in memoria."""
-    from security.crypto_vault import decrypt_password
+    """Apparati da interrogare, con la community EFFETTIVA.
+
+    La precedenza (flag di esclusione, community dell'apparato, default del
+    tenant) vive in ``snmp_defaults.resolve_snmp_community``: qui non si
+    decifra piu' niente a mano, cosi' non c'e' una seconda regola che col
+    tempo diverge dalla prima.
+    """
+    from security.snmp_defaults import resolve_snmp_community
     from services import inventory_manager
     out = []
     for device in inventory_manager.get_all_devices():
-        community = decrypt_password(device.get("SNMP Community") or "")
+        community = resolve_snmp_community(device)
         if not community:
             continue
         out.append({"ip": device.get("IP"),
