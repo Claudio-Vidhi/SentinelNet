@@ -576,19 +576,54 @@ def resolve_endpoint(ip: str, tenants=None) -> dict:
 
 # --- L3: quale firewall, quale policy, quanti blocchi ------------------------
 
-def _resolve_fortigate(position: dict) -> dict:
+def _tenant_key(value) -> str:
+    """Chiave di confronto fra tenant.
+
+    Le due raccolte scrivono il tenant vuoto in modi diversi — ``arp_collector``
+    mette ``""``, ``mac_collector`` mette ``"Generale"`` — quindi un'installazione
+    senza gruppi produce due etichette per la stessa rete. Qui finiscono nella
+    stessa, altrimenti il confronto fallirebbe proprio nel caso più comune.
+    """
+    return (value or "").strip() or "Generale"
+
+
+def _resolve_fortigate(position: dict, tenants=None) -> dict:
     """Quale FortiGate governa questo client.
 
     Prima scelta: l'apparato che ha risposto all'ARP — per costruzione è il
-    gateway di quella VLAN, ed è già in ``client_map``. Se a rispondere è
-    stata una SVI di switch il firewall sta più a monte e da qui non si vede:
-    in quel caso, se di FortiGate configurati ce n'è uno solo, è lui; se sono
-    tanti, si dice che non si sa invece di tirare a indovinare.
+    gateway di quella VLAN, ed è già in ``client_map``. Se a rispondere è stata
+    una SVI di switch il firewall sta più a monte e da qui non si vede: allora
+    si guarda fra i FortiGate DEL TENANT DEL CLIENT, e solo se ce n'è
+    esattamente uno.
+
+    Il tenant non è un filtro di comodo. Interrogare il firewall di un'altra
+    rete significa leggerne ARP, DHCP, sessioni e policy e presentarli come se
+    riguardassero questo client: risposte sbagliate su dati di un altro
+    cliente, e con gli indirizzi privati che si ripetono fra clienti la
+    risposta arriva pure piena invece che vuota. Un'installazione con un solo
+    FortiGate configurato, in un tenant diverso da quello degli switch, lo
+    faceva a ogni diagnosi.
+
+    Da dove viene il tenant, in ordine: la posizione del client, se nota; in
+    mancanza, lo scope del chiamante. Se il client non è mai stato visto E il
+    chiamante non ha restrizioni (amministratore), non c'è un tenant da
+    rispettare e si interroga come prima — un client sconosciuto è proprio il
+    caso in cui il firewall può essere l'unico a saperne qualcosa, e rinunciare
+    butterebbe via mezzo referto.
     """
     from services import fortigate_service, inventory_manager
 
     targets = {t["ip"]: t for t in fortigate_service.list_targets()}
     devices = {d.get("IP"): d for d in inventory_manager.get_all_devices()}
+
+    if position.get("known"):
+        scope = {_tenant_key(position.get("tenant"))}
+        scope_label = f"tenant '{next(iter(scope))}'"
+    elif tenants:
+        scope = {_tenant_key(t) for t in tenants}
+        scope_label = "tenant visibili al chiamante"
+    else:
+        scope, scope_label = None, "installazione (client mai visto, nessun tenant da rispettare)"
 
     gw = position.get("gateway_ip") if position.get("known") else None
     if gw and gw in targets and (devices.get(gw, {}).get("Vendor") or "").lower() == "fortinet":
@@ -596,17 +631,21 @@ def _resolve_fortigate(position: dict) -> dict:
                 "resolved_by": "gateway ARP del client"}
 
     fortinets = [ip for ip in targets
-                 if (devices.get(ip, {}).get("Vendor") or "").lower() == "fortinet"]
+                 if (devices.get(ip, {}).get("Vendor") or "").lower() == "fortinet"
+                 and (scope is None
+                      or _tenant_key(devices.get(ip, {}).get("Group")) in scope)]
     if len(fortinets) == 1:
         return {"known": True, "ip": fortinets[0], "device": devices[fortinets[0]],
-                "resolved_by": "unico FortiGate configurato"}
+                "resolved_by": f"unico FortiGate in {scope_label}"}
     if not fortinets:
         return {"known": False,
-                "reason": "nessun FortiGate con token API configurato"}
+                "reason": f"nessun FortiGate con token API in {scope_label}: "
+                          "quelli configurati stanno altrove e non governano "
+                          "questo client"}
     return {"known": False,
-            "reason": f"{len(fortinets)} FortiGate configurati e il gateway del "
-                      f"client ({gw or 'sconosciuto'}) non è fra loro: "
-                      "impossibile dire quale sia sul percorso",
+            "reason": f"{len(fortinets)} FortiGate in {scope_label} e il "
+                      f"gateway del client ({gw or 'sconosciuto'}) non è fra "
+                      "loro: impossibile dire quale sia sul percorso",
             "candidates": fortinets}
 
 
@@ -661,12 +700,13 @@ def _relay_policy_lookup(device: dict, site_id: str, src_ip: str, dest: str,
                       "Rilancia la diagnosi fra poco."}
 
 
-def _firewall(client: str, position: dict, dest, dest_port, protocol) -> dict:
+def _firewall(client: str, position: dict, dest, dest_port, protocol,
+              tenants=None) -> dict:
     """Tutto ciò che il FortiGate sa del client: ARP, DHCP, sessioni, log e —
     se è stata data una destinazione — quale policy matcherebbe il flusso."""
     from services import fortigate_service
 
-    fgt = _resolve_fortigate(position)
+    fgt = _resolve_fortigate(position, tenants)
     if not fgt.get("known"):
         return fgt
     # L'IP è più preciso del MAC: se lo conosciamo già lo usiamo, così il
@@ -1060,7 +1100,7 @@ def diagnose(client: str, dest: Optional[str] = None,
             "reason": "serve un IP sorgente noto e una destinazione"}
 
     _section(result, "firewall", _firewall, client, position, dest,
-             dest_port, protocol)
+             dest_port, protocol, tenants)
     if dest:
         _section(result, "across_sites", _across_sites, position, dest,
                  dest_port, protocol, tenants)
