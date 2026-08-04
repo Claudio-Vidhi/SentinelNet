@@ -10,6 +10,7 @@ import os
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 _TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_caage_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
@@ -61,6 +62,43 @@ class TestBackupAgeExposed(unittest.TestCase):
 
     def test_no_backup_no_analysis(self):
         self.assertIsNone(config_analyzer.analyze_device("198.51.100.99"))
+
+
+class TestAnalyzeDeviceCache(unittest.TestCase):
+    """Ogni salto della catena dei trunk rilegge e ri-parsa un file. Il memo
+    serve alla derivazione del gateway, che scansiona un tenant intero, e
+    intanto ripaga il percorso che gia' esiste."""
+
+    def setUp(self):
+        config_analyzer._analyze_device_at.cache_clear()
+
+    def test_second_call_does_not_reparse(self):
+        calls = []
+
+        def _fake(ip):
+            calls.append(ip)
+            return {"ip": ip, "vlans": []}
+
+        with patch.object(config_analyzer, "analyze_device", _fake), \
+             patch.object(config_analyzer, "_backup_mtime", lambda ip: 111):
+            config_analyzer.analyze_device_cached("192.0.2.20")
+            config_analyzer.analyze_device_cached("192.0.2.20")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_newer_backup_invalidates(self):
+        calls = []
+
+        def _fake(ip):
+            calls.append(ip)
+            return {"ip": ip, "vlans": []}
+
+        mtime = {"v": 111}
+        with patch.object(config_analyzer, "analyze_device", _fake), \
+             patch.object(config_analyzer, "_backup_mtime", lambda ip: mtime["v"]):
+            config_analyzer.analyze_device_cached("192.0.2.20")
+            mtime["v"] = 222
+            config_analyzer.analyze_device_cached("192.0.2.20")
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":
