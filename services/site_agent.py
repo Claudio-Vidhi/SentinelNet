@@ -311,7 +311,8 @@ class Agent:
                         content = f.read()
                 else:
                     content = ("IP,Vendor,Profile,Username,Password,Enable Secret,"
-                               "Group,Hostname,Site,SSH Port,Transports,SNMP Community\n")
+                               "Group,Hostname,Site,SSH Port,Transports,SNMP Community,"
+                               "SNMP Disabled\n")
                 return {"status": "done", "result": content}
             except Exception as e:
                 return {"status": "error", "result": f"Errore lettura inventario locale: {e}"}

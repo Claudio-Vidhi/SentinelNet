@@ -141,12 +141,12 @@ python3 scripts/vm_agent_test_helper.py setup \
 mkdir -p agent-data
 
 cat << 'EOF' > agent-data/network_hosts.csv
-IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Site,SSH Port,Transports,SNMP Community
-192.0.2.10,cisco,custom,admin,,,Tenant_Milano,switch-01,milan-vm,22,,
+IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Site,SSH Port,Transports,SNMP Community,SNMP Disabled
+192.0.2.10,cisco,custom,admin,,,Tenant_Milano,switch-01,milan-vm,22,,,
 EOF
 ```
 
-These twelve columns are the canonical schema — the same ones
+These thirteen columns are the canonical schema — the same ones
 `inventory_manager.safe_write_hosts_csv` writes. Unrecognised columns are
 dropped the first time the inventory is rewritten.
 

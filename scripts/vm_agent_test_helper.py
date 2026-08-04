@@ -43,7 +43,8 @@ if REPO_ROOT not in sys.path:
 # primo salvataggio dell'inventario e l'apparato finiva nel gruppo sbagliato.
 CSV_HEADERS = [
     "IP", "Vendor", "Profile", "Username", "Password", "Enable Secret",
-    "Group", "Hostname", "Site", "SSH Port", "Transports", "SNMP Community"
+    "Group", "Hostname", "Site", "SSH Port", "Transports", "SNMP Community",
+    "SNMP Disabled"
 ]
 
 
