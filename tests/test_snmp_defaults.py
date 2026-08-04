@@ -237,5 +237,33 @@ class TestRotteSmoke(unittest.TestCase):
             json={"tenant": "sede-a", "community": "x"}).status_code)
 
 
+class TestUi(unittest.TestCase):
+    """Verifica grep-style: non c'e' un runner JS."""
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.test_helpers_frontend import frontend_source
+        cls.src = frontend_source()
+
+    def test_la_tabella_tenant_mostra_lo_stato_snmp(self):
+        self.assertIn("setTenantSnmp(", self.src)
+        self.assertIn("snmpDefaultTenants", self.src)
+
+    def test_il_modale_device_ha_l_esclusione(self):
+        self.assertIn('id="devSnmpDisabled"', self.src)
+        self.assertIn("payload.snmp_disabled", self.src)
+
+    def test_l_ereditarieta_e_dichiarata_nel_modale(self):
+        """Un apparato che eredita e uno con la sua community sembrano
+        identici se non lo si dice: l'admin non saprebbe cosa sta cambiando."""
+        self.assertIn("snmp_inherited", self.src)
+
+    def test_le_chiavi_i18n_esistono_in_entrambe_le_lingue(self):
+        for key in ("thTenantSnmp", "btnSetTenantSnmp", "lblSnmpDisabled",
+                    "hintSnmpInherited", "promptTenantSnmp"):
+            self.assertGreaterEqual(self.src.count(key + ":"), 2,
+                                    f"chiave {key} assente in una delle lingue")
+
+
 if __name__ == "__main__":
     unittest.main()

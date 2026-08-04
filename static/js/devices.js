@@ -18,6 +18,28 @@
     let wasTriageRunning = false;
     let _scanJobInterval = null;
 
+    // Solo i NOMI dei tenant con un default: la community non arriva mai al
+    // browser, quindi la tabella puo' dire "configurata" e nient'altro.
+    let snmpDefaultTenants = [];
+
+    async function loadSnmpDefaults() {
+        const res = await apiFetch('/api/settings/snmp-defaults');
+        if (!res || !res.ok) return;
+        snmpDefaultTenants = (await res.json()).tenants || [];
+        renderGroupsTable();
+    }
+
+    async function setTenantSnmp(tenant) {
+        const L = i18n[currentLang];
+        const value = prompt(L.promptTenantSnmp, '');
+        if (value === null) return;               // annullato: non toccare nulla
+        const res = await apiFetch('/api/settings/snmp-defaults', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant: tenant, community: value })
+        });
+        if (res && res.ok) loadSnmpDefaults();
+    }
+
     function renderGroupsTable() {
         const groupBody = document.getElementById('groupsTableBody');
         if (!groupBody) return;
@@ -36,9 +58,19 @@
             const renameBtn = (g !== 'Generale')
                 ? `<button onclick="renameGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${renameText}</button>` : '';
 
+            const hasSnmp = snmpDefaultTenants.includes(g);
+            const snmpCell = `<td>
+                <span style="font-size:11px; color:${hasSnmp ? 'var(--success)' : 'var(--text-muted)'}; border:1px solid ${hasSnmp ? 'var(--success)' : 'var(--border)'}; border-radius:4px; padding:1px 6px;">
+                    ${hasSnmp ? (currentLang === 'en' ? 'configured' : 'configurata')
+                              : (currentLang === 'en' ? 'not set' : 'non impostata')}</span>
+                ${currentRole === 'admin'
+                    ? `<button onclick="setTenantSnmp(this.dataset.g)" data-g="${escapeHtml(g)}" style="margin-left:8px; color:var(--primary); background:none; border:none; cursor:pointer;">${i18n[currentLang].btnSetTenantSnmp}</button>`
+                    : ''}</td>`;
+
             groupBody.innerHTML += `<tr>
                 <td><strong>${escapeHtml(g)}</strong></td>
                 <td><span style="color:var(--text-muted); font-size:13px;">${escapeHtml(desc)}</span></td>
+                ${snmpCell}
                 <td>${currentRole === 'viewer'
                     ? '<span style="color:var(--text-muted)">—</span>'
                     : (g !== 'Generale' ? `${renameBtn}<button onclick="deleteGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText)}</td>
@@ -311,6 +343,8 @@
         const snmpClear = document.getElementById('devSnmpClear');
         if (snmpClear && snmpClear.checked) payload.snmp_community = '';
         else if (snmp && snmp.value) payload.snmp_community = snmp.value;
+        const snmpDisabled = document.getElementById('devSnmpDisabled');
+        if (snmpDisabled) payload.snmp_disabled = snmpDisabled.checked;
 
         if(!payload.ip) { alert(i18n[currentLang].alertEnterIp); return; }
 
@@ -356,11 +390,15 @@
         updateDevSecretField();
         // Il segreto non torna dal server: il placeholder dice solo SE c'è.
         document.getElementById('devSnmp').value = '';
-        document.getElementById('devSnmp').placeholder = dev.snmp_enabled
-            ? (currentLang === 'en' ? 'configured — leave blank to keep'
-                                    : 'configurata — lascia vuoto per non cambiarla')
-            : '—';
+        document.getElementById('devSnmp').placeholder = dev.snmp_inherited
+            ? i18n[currentLang].hintSnmpInherited
+            : (dev.snmp_enabled
+                ? (currentLang === 'en' ? 'configured — leave blank to keep'
+                                        : 'configurata — lascia vuoto per non cambiarla')
+                : '—');
         document.getElementById('devSnmpClear').checked = false;
+        const dsd = document.getElementById('devSnmpDisabled');
+        if (dsd) dsd.checked = !!dev['SNMP Disabled'];
 
         // switchTab('tab-provisioning') ha già ricaricato le identità per il
         // tenant precedentemente selezionato (loadProvisioningTab chiama
@@ -417,6 +455,8 @@
         document.getElementById('devSnmp').value = '';
         document.getElementById('devSnmp').placeholder = '—';
         document.getElementById('devSnmpClear').checked = false;
+        const dsdReset = document.getElementById('devSnmpDisabled');
+        if (dsdReset) dsdReset.checked = false;
         document.getElementById('devFormTitle').innerHTML = i18n[currentLang].titleProvisioning;
         document.getElementById('devEditNotice').style.display = 'none';
         document.getElementById('btnSaveDevice').innerHTML = i18n[currentLang].btnSaveDevice;

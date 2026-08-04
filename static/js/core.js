@@ -525,6 +525,9 @@ async function appInit() {
         // Popola Tabella Gestione Gruppi
         renderGroupsTable();
 
+        // Stato SNMP di tenant: solo i nomi, la community non arriva al browser
+        loadSnmpDefaults();
+
     // Forza il reload delle mappe se le tab sono attive
     const activeTabId = document.querySelector('.tab-content.active')?.id;
     if (activeTabId === 'tab-map') {

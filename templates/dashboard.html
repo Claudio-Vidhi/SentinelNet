@@ -555,6 +555,10 @@
                 <input type="checkbox" id="devSnmpClear" style="accent-color:var(--danger);">
                 <span data-i18n="lblSnmpClear">Rimuovi la community e ferma il polling</span>
               </label>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:6px;">
+                <input type="checkbox" id="devSnmpDisabled" style="width:auto; margin:0;">
+                <span data-i18n="lblSnmpDisabled"></span>
+              </label>
               <small id="devSnmpHint" style="color:var(--text-muted); font-size:11px;" data-i18n="hintSnmpCommunity">
                 Solo v2c e sola lettura: abilita il polling di stato e contatori sugli apparati senza API REST. La community viaggia in chiaro — usare solo su rete di management. Vuoto in modifica = invariata.
               </small>
@@ -611,6 +615,7 @@
               <tr>
                 <th data-i18n="thGroupName">Nome Sede / Cliente</th>
                 <th data-i18n="thGroupDesc">Descrizione Metadati</th>
+                <th data-i18n="thTenantSnmp"></th>
                 <th data-i18n="thGroupActions">Azioni</th>
               </tr>
             </thead>
