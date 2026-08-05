@@ -1482,7 +1482,8 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   body.sidebar-collapsed { --sidebar-w: 62px }
   body.sidebar-collapsed aside { align-items: stretch; }
   body.sidebar-collapsed .aside-header { padding: 12px 8px; align-items: center; }
-  body.sidebar-collapsed .brand-row { justify-content: center; }
+  body.sidebar-collapsed .brand-row { flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  body.sidebar-collapsed .aside-actions { flex-direction: column; align-items: center; gap: 6px; }
   body.sidebar-collapsed .aside-header h2 { font-size: 0; gap: 0; }
   body.sidebar-collapsed .aside-header h2 i { font-size: 18px; }
   body.sidebar-collapsed .brand-chip,

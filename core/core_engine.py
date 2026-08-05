@@ -853,15 +853,49 @@ def extract_model_from_backup(content: str) -> str | None:
     # modello della CPU (es. "186"), e finiva in colonna al posto della macchina.
     if _backup_section(content, '/etc/os-release') is not None:
         return _linux_model(content)
+
+    # I blocchi CDP/LLDP descrivono ALTRI apparati (telefoni, AP, peer switch):
+    # i loro 'Model:'/'Platform:' non devono mai finire nel modello dello chassis.
+    neighbor_sections = (
+        'SHOW CDP NEIGHBORS',
+        'SHOW CDP NEIGHBORS DETAIL',
+        'SHOW LLDP NEIGHBORS',
+        'SHOW LLDP NEIGHBORS DETAIL',
+    )
+    filtered_lines = []
+    skipping = False
+    for line in content.splitlines():
+        header = re.match(r'^---\s*(.*?)\s*---\s*$', line)
+        if header:
+            section = header.group(1).strip().strip('-').strip()
+            if section:
+                skipping = section.upper() in neighbor_sections
+                if not skipping:
+                    filtered_lines.append(line)
+                continue
+        if not skipping:
+            filtered_lines.append(line)
+    filtered = '\n'.join(filtered_lines)
+
     for pat in (
         r'Model [Nn]umber\s*:\s*(\S+)',
         r'^\s*Model\s*:\s*(\S+)',
         r'cisco\s+(\S+)\s*\([^)]*\)\s*processor',
         r'Hardware:\s*(\S+)',
     ):
-        m = re.search(pat, content, re.IGNORECASE | re.MULTILINE)
+        m = re.search(pat, filtered, re.IGNORECASE | re.MULTILINE)
         if m:
             return m.group(1).strip().strip(',')
+
+    # Se nessun pattern esplicito sopravvive, si legge il primo PID dal blocco
+    # SHOW INVENTORY: e' il product id dello chassis (non dei moduli/SFP).
+    inventory = _backup_section(content, 'SHOW INVENTORY')
+    if inventory is not None:
+        m = re.search(r'^\s*PID\s*:\s*(.*)$', inventory, re.IGNORECASE | re.MULTILINE)
+        if m:
+            pid = m.group(1).split(',', 1)[0].strip().strip(',')
+            if pid:
+                return pid
     return None
 
 
