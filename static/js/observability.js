@@ -28,7 +28,7 @@
                 <input id="obs_${l}_port" type="number" min="1" max="65535"
                        value="${lc.port != null ? lc.port : ''}"
                        placeholder="${OBS_DEFAULT_PORTS[l]}"
-                       style="width:100px; padding:6px 10px; border-radius:8px; border:1px solid var(--border);
+                       style="width:100px; padding:6px 10px; border-radius:0; border:1px solid var(--border);
                               background:var(--surface-3); color:var(--text); font-family:var(--font-code); font-size:12px;">
                 <span style="font-size:11px; color:var(--text-muted);">UDP · ${L.hintObsDefaultPort || 'porta predefinita'} ${OBS_DEFAULT_PORTS[l]}</span>
             </div>`;
@@ -149,7 +149,7 @@
             const active = s === _flowsSource;
             const label = s === 'all' ? (L.chipAllSources || 'Tutte le origini') : FLOWS_SOURCE_LABELS[s];
             return `<button class="btn btn-small" onclick="setFlowsSource('${s}')"
-                style="padding:5px 14px; border-radius:16px; font-size:12px;
+                style="padding:5px 14px; border-radius:0; font-size:12px;
                        ${active ? 'background:var(--primary); color:#fff; border-color:var(--primary);' : ''}">${label}</button>`;
         }).join('');
         const colsBtn = document.getElementById('flowsColsBtn');
@@ -281,7 +281,7 @@
             ${pairs.length ? `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">${currentLang === 'en' ? 'Parsed fields' : 'Campi'}</h4>
             <table style="width:100%; border-collapse:collapse; margin-bottom:14px;">${pairs.map(kvRow).join('')}</table>` : ''}
             <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">Raw</h4>
-            <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; white-space:pre-wrap; word-break:break-all; font-family:var(--font-code); font-size:12px;">${escapeHtml(msg)}</pre>`;
+            <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; white-space:pre-wrap; word-break:break-all; font-family:var(--font-code); font-size:12px;">${escapeHtml(msg)}</pre>`;
         document.getElementById('syslogDetailModal').style.display = 'flex';
     }
 
@@ -595,9 +595,9 @@
                     <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.src_ip)}')" title="${hlTitle}">${escapeHtml(f.src_ip)}</a></td>
                     <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.dst_ip)}')" title="${hlTitle}">${escapeHtml(f.dst_ip)}</a></td>
                     ${flowsColHidden('proto') ? '' : `<td>${proto}/${f.dst_port ?? '—'}</td>`}
-                    ${flowsColHidden('source') ? '' : `<td><span style="font-size:11px; padding:2px 8px; border-radius:10px; background:var(--surface-3);">${srcLabel}</span></td>`}
+                    ${flowsColHidden('source') ? '' : `<td><span style="font-size:11px; padding:2px 8px; border-radius:0; background:var(--surface-3);">${srcLabel}</span></td>`}
                     <td><div style="display:flex; align-items:center; gap:8px;">
-                        <div style="flex:1; height:7px; background:var(--surface-3); border-radius:4px;"><div style="height:100%; width:${pct}%; background:var(--primary); border-radius:4px;"></div></div>
+                        <div style="flex:1; height:7px; background:var(--surface-3); border-radius:0;"><div style="height:100%; width:${pct}%; background:var(--primary); border-radius:0;"></div></div>
                         <span style="min-width:64px;">${fmtBytes(f.total_bytes)}</span></div></td>
                     ${flowsColHidden('packets') ? '' : `<td>${f.total_packets}</td>`}
                     ${flowsColHidden('flows') ? '' : `<td>${f.flow_count}</td>`}
@@ -672,7 +672,7 @@
                 return;
             }
             box.innerHTML = rows.map(r => `
-                <div style="padding:8px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+                <div style="padding:8px; border:1px solid var(--border); border-radius:0; margin-bottom:6px;">
                     <div><b>MAC</b>: <code>${escapeHtml(r.mac)}</code></div>
                     <div><b>Gateway</b>: ${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip || '')}</span></div>
                     <div><b>${en ? 'Access switch' : 'Switch di accesso'}</b>: ${r.switch_ip ? `${escapeHtml(r.switch_name || '')} ${escapeHtml(r.switch_ip)}` : '—'}</div>
@@ -1030,11 +1030,13 @@
         const d = _obsProtocolData;
         const totals = d.totals || {};
 
+        // Conduttori dello schema: il codice fasi del quadro, risolto in colori
+        // veri perche' questi valori finiscono anche in ctx.fillStyle su canvas.
         const PROTO_COLORS = {
-            netflow: '#3b82f6',
-            ipfix: '#8b5cf6',
-            sflow: '#06b6d4',
-            syslog: '#f59e0b'
+            netflow: cssVar('--cond-a', '#5aa9e6'),
+            ipfix:   cssVar('--cond-c', '#63c88a'),
+            sflow:   cssVar('--cond-d', '#b98a5e'),
+            syslog:  cssVar('--cond-b', '#e0a03c')
         };
         const PROTO_LABELS = {
             netflow: 'NetFlow',
@@ -1074,8 +1076,8 @@
                             <span style="font-family:var(--font-code); color:var(--text); font-weight:600;">${valStr}</span>
                             <span style="color:var(--text-muted); width:45px; text-align:right;">${pct}%</span>
                         </div>
-                        <div style="width:100%; height:8px; background:var(--surface-3); border-radius:4px; overflow:hidden;">
-                            <div style="width:${pct}%; height:100%; background:${col}; border-radius:4px; transition:width .3s;"></div>
+                        <div style="width:100%; height:8px; background:var(--surface-3); border-radius:0; overflow:hidden;">
+                            <div style="width:100%; transform:scaleX(${pct / 100}); transform-origin:left; height:100%; background:${col}; border-radius:0; transition:transform .3s;"></div>
                         </div>
                     </div>`;
                 }).join('');
@@ -1328,7 +1330,7 @@
                         <span style="color:${SEV_COLORS[sev] || 'var(--text)'}; font-weight:700;">${SEV_LABELS[sev] || ('Sev ' + sev)}</span>
                         <span>${cnt} eventi (${pct}%)</span>
                     </div>
-                    <div style="width:100%; height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden;">
+                    <div style="width:100%; height:6px; background:var(--surface-3); border-radius:0; overflow:hidden;">
                         <div style="width:${pct}%; height:100%; background:${SEV_COLORS[sev] || 'var(--primary)'};"></div>
                     </div>
                 </div>`;
@@ -1341,7 +1343,7 @@
                 .forEach(act => {
                     const cnt = actions[act];
                     const pct = totalAct > 0 ? Math.round((cnt / totalAct) * 100) : 0;
-                    actHtml += `<span class="badge" style="background:var(--surface-3); border:1px solid var(--border); font-size:11px; padding:3px 8px; border-radius:4px; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;">${escapeHtml(act)}: <strong>${cnt}</strong> <span style="color:var(--text-muted); font-size:10px;">(${pct}%)</span></span>`;
+                    actHtml += `<span class="badge" style="background:var(--surface-3); border:1px solid var(--border); font-size:11px; padding:3px 8px; border-radius:0; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;">${escapeHtml(act)}: <strong>${cnt}</strong> <span style="color:var(--text-muted); font-size:10px;">(${pct}%)</span></span>`;
                 });
 
             let devHtml = '';
@@ -1354,7 +1356,7 @@
                 });
 
             html += `
-            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px;">
                 <h4 style="margin:0 0 10px; font-size:14px; color:var(--warning); display:flex; align-items:center; gap:6px;">
                     <i class="fa-solid fa-list-check"></i> Syslog Event Breakdown (Finestra ${windowStr})
                 </h4>
@@ -1365,7 +1367,7 @@
                     </div>
                     <div>
                         <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">AZIONI REGISTRATE (ACCEPT/DENY)</div>
-                        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow-y:auto; padding:8px; background:var(--surface-1); border:1px solid var(--border); border-radius:6px; margin-bottom:10px;">
+                        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow-y:auto; padding:8px; background:var(--surface-1); border:1px solid var(--border); border-radius:0; margin-bottom:10px;">
                             ${actHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessuna azione</div>'}
                         </div>
                         <div style="font-size:12px; font-weight:700; margin:12px 0 6px; color:var(--text-muted);">TOP SORGENTI DISPOSITIVI</div>
@@ -1393,7 +1395,7 @@
                             <span style="font-weight:700;">${proto}</span>
                             <span>${typeof fmtBytes === 'function' ? fmtBytes(b) : b + ' B'} (${pct}%)</span>
                         </div>
-                        <div style="width:100%; height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden;">
+                        <div style="width:100%; height:6px; background:var(--surface-3); border-radius:0; overflow:hidden;">
                             <div style="width:${pct}%; height:100%; background:var(--primary);"></div>
                         </div>
                     </div>`;
@@ -1410,7 +1412,7 @@
                 });
 
                 html += `
-                <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
+                <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px;">
                     <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary); display:flex; align-items:center; gap:6px;">
                         <i class="fa-solid fa-network-wired"></i> Telemetria ${PROTO_LABELS[p]} (Flussi: ${pTot.flows || 0}, Pacchetti: ${pTot.packets || 0})
                     </h4>

@@ -1,935 +1,1532 @@
-/* ===== templates/dashboard.html <head> main stylesheet ===== */
-    :root {
-      /* Design tokens — DESIGN-sentry.md (violet midnight, lime scarce, pink punctuation) */
-      --bg: #1f1633;                    /* surface-canvas-dark */
-      --surface: #150f23;               /* surface-night: pannelli/card */
-      --surface-2: #1f1633;             /* ink-deep: superfici annidate */
-      --surface-3: #2b2144;             /* superficie sollevata (hover) */
-      --border: #362d59;                /* hairline-violet */
-      --text: #ffffff;                  /* on-primary */
-      --text-muted: #bdb8c0;            /* on-dark-muted */
-      --text-soft: #918aa0;             /* on-dark-faint: label/icona attenuata */
-      --primary: #a99ff2;               /* accent-violet schiarito per leggibilità su canvas scuro */
-      --primary-glow: rgba(169, 159, 242, 0.35);
-      --ring: rgba(59, 130, 246, 0.5);  /* ring-focus: unico blu del sistema */
-      --success: #57d987;               /* semantico (LED online) — non brand */
-      --success-glow: rgba(87, 217, 135, 0.3);
-      --danger: #fa7faa;                /* accent-pink come semantico di errore */
-      --danger-glow: rgba(250, 127, 170, 0.35);
-      --warning: #ffb84d;               /* semantico (stati caution) — non brand */
-      --discovered: #79628c;            /* accent-violet-mid */
-      --lime: #c2ef4e;                  /* accent-lime: SOLO chip keyword, mai bottoni */
-      --violet-deep: #422082;           /* select/spotlight */
-      --violet-mid: #79628c;            /* tag chip */
-      --ghost: rgba(255, 255, 255, 0.18);  /* on-dark-faint: fill ghost */
-      --cta: #ffffff;                   /* button-inverted: CTA dominante su canvas scuro */
-      --cta-text: #1f1633;
-      --cta-press: #f0f0f0;
-      --radius: 12px;                   /* rounded.xl: card */
-      --radius-lg: 18px;                /* rounded.lg: pannelli revamp */
-      --radius-xxl: 18px;               /* rounded.xxl: card feature/login */
-      --font-main: 'Rubik', -apple-system, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
-      --font-display: 'Space Grotesk', 'Rubik', system-ui, sans-serif;
-      --font-code: Monaco, Menlo, 'Ubuntu Mono', monospace;
-      --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: var(--font-main);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      display: grid;
-      /* --sidebar-w è l'unico punto di verità della larghezza della sidebar:
-         la rail collassata la riscrive e la griglia (quindi <main>) si riadatta. */
-      --sidebar-w: 340px;
-      grid-template-columns: var(--sidebar-w) 1fr;
-      gap: 20px;
-      padding: 20px;
-      overflow-x: hidden;
-      /* Solo la colonna: --transition è "all", che qui animerebbe anche
-         background/color/padding a ogni cambio di tema o stato. */
-      transition: grid-template-columns 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    input::placeholder, textarea::placeholder {
-      color: var(--text-muted);
-      opacity: 0.75;
-    }
-
-    /* Link di contenuto (es. IP sorgente/destinazione nelle tabelle flussi):
-       il blu di default del browser è poco leggibile sul canvas viola scuro.
-       Usiamo l'accent-violet del sistema, sottolineatura solo all'hover. */
-    a { color: var(--primary); text-decoration: none; transition: color 0.15s ease; }
-    a:hover { color: #d7d0ff; text-decoration: underline; }
-
-    /* Icon action button (edit/delete nelle tabelle, es. Identità tenant):
-       hairline-violet coerente col design language, accent all'hover. */
-    .btn-icon {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 30px; height: 30px; padding: 0; border-radius: 8px;
-      border: 1px solid var(--border); background: var(--surface-2);
-      color: var(--text-muted); cursor: pointer; font-size: 12px;
-      transition: var(--transition);
-    }
-    .btn-icon:hover { color: var(--primary); border-color: var(--primary); background: var(--surface-3); }
-    .btn-icon.danger:hover { color: var(--danger); border-color: var(--danger); }
-    .btn-icon + .btn-icon { margin-left: 6px; }
-
-    /* Scrollbar: trattamento coerente col design language — binario trasparente,
-       pollice hairline (--border) che vira su --primary al passaggio del mouse.
-       Globale di proposito: tabelle e modali mantengono un affordance visibile.
-       La sidebar lo sovrascrive più sotto per farlo sparire a riposo. */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 999px;
-      /* bordo trasparente + background-clip: pollice sottile ma area di presa piena */
-      border: 2px solid transparent;
-      background-clip: padding-box;
-    }
-    ::-webkit-scrollbar-thumb:hover { background: var(--primary); background-clip: padding-box; }
-    /* Firefox: nessun pseudo-elemento, si usano le proprietà standard. */
-    html { scrollbar-color: var(--border) transparent; }
-
-    /* Login / Setup Glassmorphic Overlay */
-    #authOverlay {
-      position: fixed;
-      top: 0; left: 0; width: 100vw; height: 100vh;
-      background:
-        /* Starfield: puntini bianchi a bassissima opacità sul canvas violetto */
-        radial-gradient(1px 1px at 12% 22%, rgba(255,255,255,0.35) 50%, transparent 51%),
-        radial-gradient(1px 1px at 28% 68%, rgba(255,255,255,0.22) 50%, transparent 51%),
-        radial-gradient(1.5px 1.5px at 44% 15%, rgba(255,255,255,0.28) 50%, transparent 51%),
-        radial-gradient(1px 1px at 61% 47%, rgba(255,255,255,0.2) 50%, transparent 51%),
-        radial-gradient(1px 1px at 75% 80%, rgba(255,255,255,0.3) 50%, transparent 51%),
-        radial-gradient(1.5px 1.5px at 88% 30%, rgba(255,255,255,0.24) 50%, transparent 51%),
-        radial-gradient(1px 1px at 8% 88%, rgba(255,255,255,0.2) 50%, transparent 51%),
-        radial-gradient(1px 1px at 94% 64%, rgba(255,255,255,0.26) 50%, transparent 51%),
-        #150f23;
-      /* Sfondo SOLIDO: con alpha<1 + backdrop-filter il contenuto retrostante
-         diventava leggibile ad alcuni livelli di zoom del browser (Chromium
-         scarta il blur al cambio di zoom). */
-      z-index: 9999;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      transition: var(--transition);
-    }
-
-    /* card-feature-dark: night solido, rounded.xxl, hairline violet */
-    .login-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-xxl);
-      padding: 40px;
-      width: 420px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-      animation: fadeInUp 0.4s ease;
-    }
-
-    .login-card h2 {
-      font-family: var(--font-display);
-      font-size: 24px;
-      margin-bottom: 8px;
-      color: var(--text);
-      font-weight: 700;
-    }
-
-    .login-card p {
-      color: var(--text-muted);
-      font-size: 13px;
-      margin-bottom: 25px;
-      line-height: 1.5;
-    }
-
-    /* Base Layout */
-    aside, main {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      /* Niente drop-shadow su canvas scuro: la profondità la danno le hairline */
-    }
-
-    aside {
-      gap: 20px;
-      position: sticky;
-      top: 20px;
-      height: calc(100vh - 40px);
-      overflow-y: auto; /* Abilita lo scorrimento autonomo del form sui monitor piccoli o elenchi lunghi */
-      scrollbar-width: thin;
-    }
-
-    /* Sidebar: il pollice resta invisibile a riposo così il bordo della sidebar
-       resta pulito, e compare solo mentre ci si passa sopra (lo scroll con la
-       rotella implica :hover) o quando la tastiera è dentro (:focus-within). */
-    aside::-webkit-scrollbar-thumb { background: transparent; }
-    aside:hover::-webkit-scrollbar-thumb,
-    aside:focus-within::-webkit-scrollbar-thumb { background: var(--border); }
-    aside:hover::-webkit-scrollbar-thumb:hover,
-    aside:focus-within::-webkit-scrollbar-thumb:hover { background: var(--primary); }
-    aside { scrollbar-color: transparent transparent; }
-    aside:hover, aside:focus-within { scrollbar-color: var(--border) transparent; }
-
-    h2, h3 {
-      font-family: var(--font-display);
-      font-weight: 700;
-      letter-spacing: 0;
-    }
-
-    .aside-header {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    /* chip-lime-keyword: l'evidenziatore firma — un solo elemento lime per viewport */
-    .brand-chip {
-      background: var(--lime);
-      color: var(--cta-text);
-      border-radius: 4px;
-      padding: 0 6px;
-      font-family: var(--font-display);
-      font-weight: 700;
-    }
-
-    .user-badge {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      padding: 8px 12px;
-      border-radius: var(--radius);
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* Forms elements */
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-
-    .form-group label {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-    }
-
-    .input-wrapper {
-      position: relative;
-    }
-
-    .input-wrapper i {
-      position: absolute;
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--text-muted);
-      font-size: 14px;
-    }
-
-    .form-group input:not([type="checkbox"]):not([type="radio"]), .form-group select {
-      width: 100%;
-      padding: 10px 12px 10px 36px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--surface-2);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 14px;
-      transition: var(--transition);
-    }
-
-    /* Un input dentro .input-wrapper ma FUORI da un .form-group non riceveva
-       alcuno stile: il browser lo disegnava bianco su pannello scuro (era il
-       caso del filtro di "Registro Flussi Triage"). Regola separata da quella
-       di .form-group di proposito: quella e' presidiata da un test di
-       regressione sui checkbox e non va allargata.
-       Le esclusioni checkbox/radio valgono anche qui, per la stessa ragione:
-       width:100% su un checkbox lo stira per tutta la riga. */
-    .input-wrapper input:not([type="checkbox"]):not([type="radio"]) {
-      width: 100%;
-      padding: 10px 12px 10px 36px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--surface-2);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 14px;
-      transition: var(--transition);
-    }
-    .input-wrapper input::placeholder { color: var(--text-muted); }
-
-    .form-group select {
-      cursor: pointer;
-    }
-
-    /* Input generico coerente con la UI (per form fuori da .form-group) */
-    .ui-input {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--surface-2);
-      color: var(--text);
-      font-family: inherit;
-      font-size: 14px;
-      transition: var(--transition);
-    }
-    .ui-input::placeholder { color: var(--text-muted); }
-    .ui-input:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px var(--ring);
-    }
-
-    .form-group input:focus, .form-group select:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px var(--ring);
-    }
-
-    /* Buttons — button-cap: uppercase 14px/700, 0.2px tracking, rounded.md 8px */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: 1px solid transparent;
-      font-weight: 700;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.2px;
-      line-height: 1.14;
-      cursor: pointer;
-      font-family: var(--font-main);
-      transition: var(--transition);
-    }
-
-    /* button-inverted: CTA dominante su canvas scuro (bianco pieno, testo ink) */
-    .btn-primary {
-      background: var(--cta);
-      color: var(--cta-text);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    }
-
-    .btn-primary:hover {
-      background: var(--cta-press);
-      color: #1a1a1a;
-      box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.18);
-    }
-
-    /* button-ghost-on-dark: fill traslucido, il canvas traspare */
-    .btn-secondary {
-      background: var(--ghost);
-      color: var(--text);
-      border-color: transparent;
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.26);
-      border-color: transparent;
-    }
-
-    /* Danger: accent-pink con testo ink per contrasto */
-    .btn-danger {
-      background: var(--danger);
-      color: var(--cta-text);
-    }
-
-    .btn-danger:hover {
-      background: #fb96ba;
-      box-shadow: 0 0 15px var(--danger-glow);
-    }
-
-    /* .btn-sm e' un alias: era usato in tutto il markup (template e HTML
-       generato da JS) senza essere mai definito, quindi quei pulsanti
-       restavano a dimensione piena e ogni chiamante compensava con uno
-       style inline. */
-    .btn-small, .btn-sm {
-      padding: 6px 12px;
-      font-size: 12px;
-      border-radius: 6px;
-      width: auto;
-    }
-
-    .tab-content {
-      display: none;
-      flex-grow: 1;
-      animation: fadeIn 0.3s ease;
-    }
-
-    .tab-content.active {
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Status led */
-    .led-container {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 700;
-      font-size: 12px;
-    }
-
-    .led {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-
-    .led-online {
-      background: var(--success);
-      box-shadow: 0 0 10px var(--success);
-    }
-
-    .led-offline {
-      background: var(--danger);
-      box-shadow: 0 0 10px var(--danger);
-    }
-
-    .led-auth_failed {
-      background: var(--warning);
-      box-shadow: 0 0 10px var(--warning);
-    }
-
-    .led-discovered {
-      background: var(--discovered);
-      box-shadow: 0 0 10px var(--discovered);
-    }
-
-    /* Table Styles */
-    .table-container {
-      width: 100%;
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: var(--surface-2);
-      text-align: left;
-    }
-
-    th, td {
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 14px;
-    }
-
-    th {
-      font-weight: 600;
-      color: var(--text-muted);
-      background: var(--surface-3);
-      text-transform: uppercase;
-      font-size: 10px;
-      letter-spacing: 0.25px;
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    tr:hover td {
-      background: rgba(255, 255, 255, 0.015);
-    }
-
-    /* button-violet-token: tag chip violet-mid con hairline più profonda */
-    .badge {
-      background: var(--violet-mid);
-      color: var(--text);
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 500;
-      border: 1px solid var(--violet-deep);
-      /* Un badge e' una pillola: il testo non deve andare a capo dentro il
-         bordo arrotondato. Senza questo "Access Rules" si spezzava su due
-         righe sfondando la pillola. inline-block perche' su uno <span>
-         inline il padding verticale non allarga la riga. */
-      display: inline-block;
-      white-space: nowrap;
-      vertical-align: middle;
-    }
-
-    .actions-cell {
-      display: flex;
-      gap: 6px;
-    }
-
-    /* Network Map Container */
-    #networkGraphContainer {
-      width: 100%;
-      height: 600px;
-      min-height: 300px;
-      background: #150f23;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      position: relative;
-      /* Ridimensionamento manuale dell'area mappa (trascina l'angolo in basso a destra) */
-      resize: vertical;
-      overflow: hidden;
-    }
-
-    /* Righe con modifiche non salvate nella tabella Dispositivi & Categorie */
-    tr.row-dirty { background: rgba(255, 184, 77, 0.07); }
-    tr.row-dirty td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
-
-    /* Stile personalizzato per i Tooltip di Vis.js */
-    div.vis-tooltip {
-      background: rgba(21, 15, 35, 0.96) !important;
-      border: 1px solid var(--border) !important;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(106, 95, 193, 0.18) !important;
-      color: var(--text) !important;
-      font-family: var(--font-main) !important;
-      padding: 14px 18px !important;
-      border-radius: var(--radius) !important;
-      backdrop-filter: blur(12px) !important;
-      -webkit-backdrop-filter: blur(12px) !important;
-      z-index: 1000 !important;
-      border-color: rgba(106, 95, 193, 0.45) !important;
-      transition: opacity 0.2s ease-in-out;
-    }
-
-    .network-legend {
-      position: absolute;
-      bottom: 15px;
-      left: 15px;
-      background: rgba(21, 15, 35, 0.88);
-      border: 1px solid var(--border);
-      padding: 12px 16px;
-      border-radius: var(--radius-lg, 18px);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      z-index: 10;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-    }
-
-    /* Vulnerability check panel */
-    .vuln-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 15px;
-    }
-
-    .vuln-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 10px;
-    }
-
-    .severity-pill {
-      padding: 3px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 900;
-      text-transform: uppercase;
-    }
-
-    .severity-CRITICAL { background: #3c0000; color: #ff5252; border: 1px solid #ff5252; }
-    .severity-HIGH { background: #3d1c00; color: #ffa726; border: 1px solid #ffa726; }
-    .severity-MEDIUM { background: #3b3a00; color: #ffee58; border: 1px solid #ffee58; }
-    .severity-LOW { background: #003604; color: #66bb6a; border: 1px solid #66bb6a; }
-
-    /* Modals */
-    .modal-overlay {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(21, 15, 35, 0.8);
-      backdrop-filter: blur(10px);
-      z-index: 900;
-      display: none;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-      width: 480px;
-      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
-      animation: zoomIn 0.3s ease;
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 10px;
-    }
-
-    .modal-close {
-      cursor: pointer;
-      color: var(--text-muted);
-      font-size: 18px;
-      transition: var(--transition);
-    }
-
-    .modal-close:hover {
-      color: var(--text);
-    }
-
-    /* Background Jobs Monitor Bar */
-    .progress-overlay {
-      position: fixed;
-      bottom: 25px;
-      right: 25px;
-      background: var(--surface-2);
-      border: 2px solid var(--primary);
-      box-shadow: 0 10px 30px var(--primary-glow);
-      padding: 20px;
-      border-radius: 12px;
-      width: 380px;
-      z-index: 800;
-      display: none;
-      flex-direction: column;
-      gap: 10px;
-      animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .progress-bar-bg {
-      width: 100%;
-      height: 8px;
-      background: var(--surface-3);
-      border-radius: 4px;
-      overflow: hidden;
-    }
-
-    .progress-bar-fill {
-      height: 100%;
-      width: 0%;
-      background: var(--primary);
-      box-shadow: 0 0 10px var(--primary);
-      transition: width 0.3s ease;
-    }
-
-    /* Templates / Code Area */
-    .template-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-family: var(--font-code);
-      padding: 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      margin-bottom: 15px;
-      overflow-x: auto;
-    }
-
-    /* Keyframes Animations */
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    @keyframes zoomIn {
-      from { opacity: 0; transform: scale(0.95); }
-      to { opacity: 1; transform: scale(1); }
-    }
-    @keyframes slideInRight {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-
-    /* Layout responsive: sotto i 1000px la sidebar si impila sopra il contenuto */
-    @media (max-width: 1000px) {
-      body {
-        grid-template-columns: 1fr;
-        padding: 12px;
-        gap: 12px;
-      }
-      aside {
-        position: static;
-        height: auto;
-        max-height: none;
-      }
-      .login-card {
-        width: 92vw;
-        padding: 28px;
-      }
-      .modal {
-        width: 92vw !important;
-      }
-    }
-
-    /* Controllo accessi lato UI: nasconde i controlli di scrittura ai viewer e
-       le funzioni da amministratore a chi non è admin. L'enforcement reale è
-       comunque lato server (RBAC sugli endpoint). */
-    body.role-viewer .requires-write { display: none !important; }
-    body:not(.role-admin) .requires-admin { display: none !important; }
-
-    .role-pill {
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-size: 10px;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-    .role-pill-admin    { background: rgba(250,127,170,0.15); color: var(--danger);  border: 1px solid rgba(250,127,170,0.35); }
-    .role-pill-operator { background: rgba(106,95,193,0.18);  color: #a99ff2;        border: 1px solid rgba(106,95,193,0.45); }
-    .role-pill-viewer   { background: rgba(189,184,192,0.12); color: var(--text-muted); border: 1px solid rgba(189,184,192,0.3); }
-
-    /* ===== Revamp component layer (design-language modules) ===== */
-    .hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:18px}
-    .hero-card{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01)),var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:22px}
-    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:rgba(194,239,78,.1);color:var(--lime);border:1px solid rgba(194,239,78,.16);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px}
-    .panel{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01)),var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px);padding:18px}
-    .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-    .kpi{padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg,18px)}
-    .kpi h4{margin:0;font-family:var(--font-display);font-size:17px}.kpi strong{display:block;margin-top:14px;font-family:var(--font-display);font-size:34px;letter-spacing:-.05em}
-    .kpi-clickable{cursor:pointer;transition:var(--transition)}
-    .kpi-clickable:hover{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
-    .kpi-clickable:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-    .filterbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-    .search-wrap{position:relative;min-width:260px;flex:1}.search-wrap>i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-soft)}
-    .table-wrap{margin-top:14px;overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface-2)}
-    .status{display:inline-flex;align-items:center;gap:7px;padding:6px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border:1px solid transparent}
-    .status.ok{background:rgba(87,217,135,.1);color:var(--success);border-color:rgba(87,217,135,.18)}
-    .status.warn{background:rgba(255,184,77,.1);color:var(--warning);border-color:rgba(255,184,77,.18)}
-    .status.bad{background:rgba(250,127,170,.1);color:var(--danger);border-color:rgba(250,127,170,.18)}
-    .status .led{display:inline-block;margin-right:8px}
-    .led-success{background:var(--success);box-shadow:0 0 10px rgba(87,217,135,.45)}
-    .led-warning{background:var(--warning);box-shadow:0 0 10px rgba(255,184,77,.45)}
-    .led-danger{background:var(--danger);box-shadow:0 0 10px rgba(250,127,170,.45)}
-    .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(169,159,242,.12);color:var(--primary);border:1px solid rgba(169,159,242,.18);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
-    /* Variante interattiva di .chip: selettore a scelta singola (Tipo apparato ZTP).
-       Non selezionato = neutro; selezionato = accento primary (stessi canali di .chip). */
-    .chip-choice{cursor:pointer;font-family:inherit;font-size:12px;padding:8px 14px;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);transition:var(--transition)}
-    .chip-choice:hover{color:var(--text);border-color:rgba(169,159,242,.45)}
-    .chip-choice[aria-pressed="true"]{background:rgba(169,159,242,.12);color:var(--primary);border-color:rgba(169,159,242,.45)}
-    .chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-    /* Utility: nascosto visivamente ma vivo per screen reader, tastiera e JS.
-       !important perché `.form-group select` è più specifico su width/padding. */
-    .visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;border:0!important}
-    .split-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-    .preview-badge{font-size:10px;font-weight:700;text-transform:uppercase;border-radius:999px;padding:3px 7px;letter-spacing:.05em;background:rgba(255,184,77,.16);color:var(--warning);border:1px solid rgba(255,184,77,.24)}
-    .count-badge{font-size:10px;font-weight:700;border-radius:999px;padding:3px 7px;background:rgba(169,159,242,.16);color:var(--primary);border:1px solid rgba(169,159,242,.24)}
-    .sidenav{display:flex;flex-direction:column;gap:4px}
-    .nav-group>h3{margin:14px 8px 8px;font-size:11px;color:var(--text-soft);text-transform:uppercase;letter-spacing:.08em}
-    .nav-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:11px 12px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--text-muted);text-align:left;font:inherit;font-size:14px;cursor:pointer;transition:all var(--transition,220ms)}
-    .nav-item:hover{color:var(--text);background:rgba(255,255,255,.05)}
-    .nav-item.active{color:var(--text);background:var(--surface-3);border-color:var(--border);box-shadow:inset 3px 0 0 var(--primary)}
-    .nav-item .nav-left{display:flex;align-items:center;gap:10px;min-width:0}
-    .nav-item .nav-left i{width:16px;text-align:center;color:var(--primary)}
-
-    /* --- Sidebar rail (collassabile) --- */
-    .brand-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%}
-    .aside-actions{display:flex;align-items:center;gap:8px;flex:none}
-    .sidebar-toggle{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;padding:0;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-muted);cursor:pointer;transition:var(--transition)}
-    .sidebar-toggle:hover{color:var(--text);border-color:var(--primary)}
-    .sidebar-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
-    .sidebar-toggle i{transition:var(--transition)}
-    body.sidebar-collapsed .sidebar-toggle i{transform:rotate(180deg)}
-
-    /* Stato collassato: solo da 1001px in su. Sotto i 1000px la sidebar si impila
-       già a piena larghezza sopra il contenuto, dove una rail di icone non ha senso
-       (e lascerebbe le etichette nascoste su tutta la riga). */
-    @media (min-width:1001px){
-      body.sidebar-collapsed{--sidebar-w:72px}
-      body.sidebar-collapsed aside{padding:24px 10px;align-items:center}
-      body.sidebar-collapsed .aside-header{width:100%;align-items:center}
-      body.sidebar-collapsed .brand-row{justify-content:center}
-      /* Le etichette sono nodi di testo nudi accanto alle <i>: font-size:0 le
-         azzera senza toccare il markup né i valori i18n (che contengono le <i>),
-         e a differenza di display:none il testo resta leggibile dagli screen reader. */
-      body.sidebar-collapsed .aside-header h2{font-size:0;gap:0}
-      body.sidebar-collapsed .aside-header h2 i{font-size:20px}
-      body.sidebar-collapsed .brand-chip,
-      body.sidebar-collapsed .aside-tagline,
-      body.sidebar-collapsed #langSelect,
-      body.sidebar-collapsed .nav-group>h3,
-      body.sidebar-collapsed .preview-badge,
-      body.sidebar-collapsed .count-badge{display:none}
-      body.sidebar-collapsed .user-badge{flex-direction:column;gap:12px;padding:10px 4px;font-size:0;width:100%}
-      body.sidebar-collapsed .user-badge i{font-size:14px}
-      /* .role-pill dichiara font-size:10px, quindi non eredita lo 0 di
-         .user-badge e traboccherebbe dalla rail da 72px. Va nascosta esplicitamente.
-         Scoped a .user-badge: le role-pill nelle tabelle non c'entrano. */
-      body.sidebar-collapsed .user-badge .role-pill{display:none}
-      body.sidebar-collapsed .sidenav{width:100%}
-      /* NB: nessuna regola qui tocca `display` di .nav-item — i gate RBAC
-         (body:not(.role-admin) .requires-admin{display:none!important}) restano
-         gli unici a deciderne la visibilità. */
-      body.sidebar-collapsed .nav-item{justify-content:center;padding:11px 0}
-      body.sidebar-collapsed .nav-item .nav-left{font-size:0;gap:0}
-      /* Solo font-size: la width:16px della regola base va conservata, è quella
-         che dà alle icone una cassetta di larghezza fissa (quindi allineata) —
-         con width:auto la cassetta collassa sulla glifo e la rail si disallinea. */
-      body.sidebar-collapsed .nav-item .nav-left i{font-size:15px}
-    }
-    /* Monitor molto larghi: la griglia è `340px 1fr` senza tetto, quindi il
-       contenuto cresceva all'infinito e su un ultrawide righe di testo e form
-       arrivavano a migliaia di pixel. Si limita ciò che si legge, non le
-       tabelle: una policy ha 12 colonne e lì la larghezza serve davvero.
-       Allineato a sinistra e non centrato, perché la sidebar sta a sinistra e
-       centrare aprirebbe un vuoto fra navigazione e contenuto.
-       Regole separate: se il browser non conosce :has() cade solo l'ultima. */
-    @media (min-width:1700px){
-      main .hero{max-width:1600px}
-      main .subtab-bar{max-width:1600px}
-      main .kpi-grid{max-width:1600px}
-      main .panel:not(:has(table)){max-width:1600px}
-    }
-    @media (max-width:1000px){.sidebar-toggle{display:none}}
-    @media (max-width:1200px){.hero,.kpi-grid{grid-template-columns:1fr}}
-    @media (max-width: 1100px) { .prov-grid { grid-template-columns: 1fr !important; } }
-
-/* ===== templates/dashboard.html #tab-mac scoped style ===== */
-        #tab-mac details.mac-switch > summary::-webkit-details-marker { display:none; }
-        #tab-mac details.mac-switch > summary { list-style:none; }
-        #tab-mac details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
-        #tab-mac details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
-        #tab-mac details.mac-switch > summary:hover { background: var(--surface-3); }
-        #tab-mac #macDeviceMenu > summary::-webkit-details-marker { display:none; }
-        #tab-mac #macDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
-        #tab-mac #macDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
-
-/* ===== templates/dashboard.html #tab-clientmap scoped style ===== */
-        #tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker { display:none; }
-        #tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
-        #tab-clientmap #arpDeviceList label:hover { background: var(--surface-3); border-radius:6px; }
-        #tab-clientmap #arpTenantMenu > summary::-webkit-details-marker { display:none; }
-        #tab-clientmap #arpTenantMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
-        #tab-clientmap #arpTenantList label:hover { background: var(--surface-3); border-radius:6px; }
-
-/* ===== templates/dashboard.html #tab-config scoped style ===== */
-        #tab-config details.mac-switch > summary::-webkit-details-marker { display:none; }
-        #tab-config details.mac-switch > summary { list-style:none; }
-        #tab-config details.mac-switch > summary .mac-chev { transition: transform .15s ease; color: var(--text-muted); }
-        #tab-config details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
-        #tab-config details.mac-switch > summary:hover { background: var(--surface-3); }
-        #tab-config .ca-pill, #tab-fortigate .ca-pill { padding:6px 14px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; transition:var(--transition); }
-        #tab-config .ca-pill.active, #tab-fortigate .ca-pill.active { background:var(--primary); color:#fff; border-color:var(--primary); }
-        #tab-config .ca-pill:hover:not(.active), #tab-fortigate .ca-pill:hover:not(.active) { background:var(--surface-3); }
-        /* .btn nasce width:100%: dentro una .subtab-bar (flex + wrap) ogni voce
-           reclamava l'intera riga e i sotto-tab si impilavano invece di stare
-           in fila. Vale per tutte le subtab-bar, non solo una. */
-        .subtab-bar .btn { width:auto; }
-        /* Barra 0-100 usata dal formattatore `meter` della tab Fortigate: un
-           numero nudo non dice se 62 sia molto o poco, la barra sì. Le soglie
-           (75/90) vivono nel JS, qui solo i colori semantici già esistenti. */
-        /* Riga espandibile: il dettaglio mostra il record grezzo, come il
-           pannello Details della GUI del FortiGate. Va segnalato che la riga
-           è cliccabile, altrimenti la funzione non si scopre. */
-        #tab-fortigate .fgt-row:hover { background:var(--surface-2); }
-        #tab-fortigate .fgt-row-detail > td { background:var(--surface-2); }
-        .fgt-meter { display:inline-flex; align-items:center; gap:8px; min-width:120px; }
-        .fgt-meter-bar { flex:1; height:6px; border-radius:999px; background:var(--surface-3); overflow:hidden; }
-        .fgt-meter-fill { display:block; height:100%; border-radius:999px; background:var(--success); }
-        .fgt-meter-fill.warn { background:var(--warning); }
-        .fgt-meter-fill.bad { background:var(--danger); }
-        .fgt-meter-num { font-family:var(--font-code); font-size:12px; color:var(--text-muted); min-width:34px; text-align:right; }
-        .ti-subtab.active { border-color:var(--primary) !important; color:var(--primary) !important; }
-        #tab-config .ca-chip { display:inline-flex; align-items:center; gap:4px; font-size:10px; border-radius:5px; padding:1px 6px; border:1px solid var(--border); color:var(--text-muted); margin:2px 4px 2px 0; }
-        #tab-config .ca-route-map { height:220px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-top:8px; }
-        /* Regola disattivata: la riga resta leggibile ma smette di reclamare
-           attenzione. Nessun rosso: in questa stessa tabella il rosso significa
-           gia' azione "deny", e due cose diverse dello stesso colore si
-           confondono. Solo opacita' + una barra neutra sul bordo sinistro. */
-        #tab-config tbody tr.ca-row-off { opacity:.6; }
-        #tab-config tbody tr.ca-row-off > td:first-child { box-shadow:inset 3px 0 0 var(--text-muted); }
-        #tab-config tbody tr.ca-row-off:hover { opacity:.85; }
-        /* "+N" delle celle multi-valore: chip cliccabile, stessa forma di .ca-chip. */
-        #tab-config .ca-more { display:inline-flex; align-items:center; font-size:10px; line-height:1.4; border-radius:5px; padding:1px 6px; margin-left:6px; border:1px solid var(--border); background:var(--surface-3); color:var(--text-muted); cursor:pointer; font-family:var(--font-code); transition:var(--transition); }
-        #tab-config .ca-more:hover { color:var(--primary); border-color:var(--primary); }
-
-/* ===== templates/dashboard.html #tab-ai scoped style ===== */
-        /* Chat a due colonne: elenco conversazioni + thread. Altezza fissata
-           al viewport perche' una chat che allunga la pagina costringe a
-           scorrere due volte, il thread e poi il tab. */
-        /* grid-template-rows:minmax(0,1fr) non è ridondante: senza, la riga
-           implicita è `auto`, si dimensiona sul contenuto e sfonda l'altezza
-           del contenitore — il composer finisce sotto il bordo e l'overflow
-           hidden lo taglia via. minmax(0,...) obbliga la riga a stare dentro. */
-        #tab-ai .ai-chat-shell { display:grid; grid-template-columns:260px 1fr; grid-template-rows:minmax(0, 1fr); height:min(calc(100vh - 240px), 760px); min-height:520px; }
-        #tab-ai .ai-conv-sidebar { display:flex; flex-direction:column; gap:10px; padding:14px; border-right:1px solid var(--border); background:var(--surface-2); overflow:hidden; min-height:0; }
-        #tab-ai .ai-conv-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin:0 -6px; padding:0 6px; }
-        #tab-ai .ai-conv-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; border:1px solid transparent; cursor:pointer; font-size:13px; color:var(--text-muted); transition:var(--transition); }
-        #tab-ai .ai-conv-item:hover { background:var(--surface-3); color:var(--text); }
-        #tab-ai .ai-conv-item.active { background:var(--surface-3); border-color:var(--primary); color:var(--text); }
-        #tab-ai .ai-conv-item .ai-conv-title { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        #tab-ai .ai-conv-item .ai-conv-del { opacity:0; border:0; background:none; color:var(--text-muted); cursor:pointer; padding:2px 4px; font-size:12px; }
-        #tab-ai .ai-conv-item:hover .ai-conv-del { opacity:1; }
-        #tab-ai .ai-conv-item .ai-conv-del:hover { color:var(--danger, #d9534f); }
-        #tab-ai .ai-conv-empty { font-size:12px; color:var(--text-muted); padding:10px 4px; }
-
-        /* min-height:0 e flex:0 0 auto non sono decorativi: senza, l'area
-           messaggi si rifiuta di scendere sotto la propria altezza minima,
-           spinge il composer fuori dal riquadro e l'overflow:hidden del panel
-           lo taglia via — la casella di testo sparisce e non si scrive più. */
-        #tab-ai .ai-chat-main { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
-        #tab-ai .ai-chat-header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); flex:0 0 auto; }
-        #tab-ai .ai-chat-header h3 { flex:1; min-width:0; }
-        #tab-ai .ai-chat-context { padding:10px 16px; border-bottom:1px solid var(--border); align-items:center; background:var(--surface-2); flex:0 0 auto; }
-        #tab-ai #aiChatMessages { flex:1 1 0; min-height:0; }
-        #tab-ai .ai-chat-composer { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border); background:var(--surface-2); flex:0 0 auto; }
-
-        /* Profili: la lista a card sostituisce le due <select>, che restano
-           nascoste nel DOM come stato (vedi il commento nel markup). */
-        #tab-ai .ai-profile-layout { display:grid; grid-template-columns:230px 1fr; gap:16px; align-items:start; }
-        #tab-ai .ai-profile-form { border-left:1px solid var(--border); padding-left:16px; }
-        #tab-ai .ai-profile-card { display:flex; flex-direction:column; gap:3px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); cursor:pointer; transition:var(--transition); }
-        #tab-ai .ai-profile-card:hover { background:var(--surface-3); }
-        #tab-ai .ai-profile-card.editing { border-color:var(--primary); background:var(--surface-3); }
-        #tab-ai .ai-profile-card .ai-prof-top { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; }
-        #tab-ai .ai-profile-card .ai-prof-meta { font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-        #tab-ai .ai-profile-card .ai-prof-activate { border:0; background:none; color:var(--text-muted); font-size:11px; cursor:pointer; padding:0; text-decoration:underline; align-self:flex-start; }
-        #tab-ai .ai-profile-card .ai-prof-activate:hover { color:var(--primary); }
-
-        #tab-ai details > summary::-webkit-details-marker { display:none; }
-        #tab-ai details > summary { list-style:none; }
-        #tab-ai details > summary:hover { background:var(--surface-3); }
-
-        @media (max-width: 900px) {
-          #tab-ai .ai-chat-shell { grid-template-columns:1fr; height:auto; }
-          #tab-ai .ai-conv-sidebar { border-right:0; border-bottom:1px solid var(--border); max-height:220px; }
-          #tab-ai .ai-chat-messages { min-height:320px; }
-          #tab-ai .ai-profile-layout { grid-template-columns:1fr; }
-          #tab-ai .ai-profile-form { border-left:0; padding-left:0; border-top:1px solid var(--border); padding-top:14px; }
-        }
+/* =====================================================================
+   SentinelNet — Mimic Panel
+   Il quadro sinottico di sottostazione e lo schema unifilare IEC che lo ha
+   sostituito a video. Due rese reali dello stesso disegno: la targa incisa
+   (chiara) e lo schermo SCADA (scura). Non un tema invertito.
+
+   REGOLA PORTANTE: il colore significa STATO, mai enfasi. La gerarchia la
+   fanno l'incisione, il peso dell'inchiostro e lo spazio. Le lampade e i
+   conduttori sono gli unici elementi cromatici del sistema.
+   ===================================================================== */
+
+/* Font serviti dall'applicazione, non da un CDN: in una LAN di management
+   isolata i <link> a fonts.googleapis.com non risolvono e ogni maiuscoletto
+   inciso cadrebbe sul condensato di sistema. Sottoinsieme latino.
+   Saira Condensed e Azeret Mono: SIL OFL 1.1. */
+@font-face {
+  font-family: 'Saira Condensed';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/static/fonts/saira-condensed-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Saira Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/saira-condensed-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Saira Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/saira-condensed-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Azeret Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('/static/fonts/azeret-mono-var.woff2') format('woff2');
+}
+
+/* ---------------------------------------------------------------
+   1. TOKEN — resa chiara: laminato inciso
+   --------------------------------------------------------------- */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Superfici: laminato, targa, incasso */
+  --bg: #d4d7cf;                 /* laminato del quadro */
+  --surface: #e6e7e1;            /* targa: bay, card, pannello */
+  --surface-2: #dcded7;          /* incasso: input, corpo tabella */
+  --surface-3: #cbcec5;          /* rilievo: hover, intestazione tabella */
+  --border: #a8ada4;             /* solco di incisione */
+  --border-strong: #8b9188;      /* solco marcato: separazione di bay */
+
+  /* Incisione: la profondità è un solco, non un'ombra */
+  --engrave-hi: rgba(255, 255, 255, 0.85);
+  --engrave-lo: rgba(30, 36, 32, 0.28);
+
+  /* Inchiostro */
+  --text: #16191c;
+  --text-muted: #4a5058;
+  --text-soft: #525860;
+
+  /* Comando primario: blocco d'inchiostro, il contrasto più alto del quadro */
+  --cta: #16191c;
+  --cta-text: #e6e7e1;
+  --cta-press: #2b3036;
+
+  /* Lampade — colore = stato */
+  --lamp-up: #2f8f4e;
+  --lamp-warn: #b8791a;
+  --lamp-fault: #c0392b;
+  --lamp-idle: #7d848b;
+  --lamp-up-ink: #1e6b3c;
+  --lamp-warn-ink: #8a5a0f;
+  --lamp-fault-ink: #9d2b20;
+  --lamp-idle-ink: #5c636a;
+  --lamp-up-wash: rgba(47, 143, 78, 0.14);
+  --lamp-warn-wash: rgba(184, 121, 26, 0.15);
+  --lamp-fault-wash: rgba(192, 57, 43, 0.13);
+  --lamp-idle-wash: rgba(125, 132, 139, 0.14);
+
+  /* Conduttori dello schema unifilare (codice fasi) */
+  --cond-a: #1f6fb2;
+  --cond-b: #b8791a;
+  --cond-c: #2e8b57;
+  --cond-d: #6b4423;
+  --cond-trace: #7b3fb5;         /* percorso in tracciamento: sopra tutto */
+
+  /* Scala CVSS: rampa separata, solo triage vulnerabilità */
+  --sev-critical: #a3231a;
+  --sev-high: #985806;
+  --sev-medium: #6f6410;
+  --sev-low: #2c6b3f;
+  --sev-critical-wash: rgba(163, 35, 26, 0.12);
+  --sev-high-wash: rgba(154, 90, 8, 0.13);
+  --sev-medium-wash: rgba(111, 100, 16, 0.14);
+  --sev-low-wash: rgba(44, 107, 63, 0.12);
+
+  --focus: #16191c;
+  --shadow-float: 0 18px 40px -12px rgba(22, 25, 28, 0.42);
+  --shadow-lift: 0 8px 22px -10px rgba(22, 25, 28, 0.34);
+}
+
+/* ---------------------------------------------------------------
+   2. TOKEN — resa scura: schermo SCADA
+   Ardesia, non nero: un quadro di controllo non è mai spento.
+   --------------------------------------------------------------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #12171b;
+  --surface: #1e242a;
+  --surface-2: #181e23;
+  --surface-3: #2a333a;
+  --border: #333d44;
+  --border-strong: #46535c;
+
+  --engrave-hi: rgba(255, 255, 255, 0.07);
+  --engrave-lo: rgba(0, 0, 0, 0.45);
+
+  --text: #e8ebe6;
+  --text-muted: #a2acb2;
+  --text-soft: #909ba2;
+
+  --cta: #e8ebe6;
+  --cta-text: #12171b;
+  --cta-press: #ffffff;
+
+  --lamp-up: #56c07a;
+  --lamp-warn: #e0a03c;
+  --lamp-fault: #ef6b5e;
+  --lamp-idle: #6c7a83;
+  --lamp-up-ink: #6ed394;
+  --lamp-warn-ink: #e8b055;
+  --lamp-fault-ink: #ff8377;
+  --lamp-idle-ink: #93a0a8;
+  --lamp-up-wash: rgba(86, 192, 122, 0.14);
+  --lamp-warn-wash: rgba(224, 160, 60, 0.14);
+  --lamp-fault-wash: rgba(239, 107, 94, 0.14);
+  --lamp-idle-wash: rgba(108, 122, 131, 0.16);
+
+  --cond-a: #5aa9e6;
+  --cond-b: #e0a03c;
+  --cond-c: #63c88a;
+  --cond-d: #b98a5e;
+  --cond-trace: #b98ae8;
+
+  --sev-critical: #ff7a6e;
+  --sev-high: #f0a94e;
+  --sev-medium: #ddd06a;
+  --sev-low: #79cf99;
+  --sev-critical-wash: rgba(255, 122, 110, 0.13);
+  --sev-high-wash: rgba(240, 169, 78, 0.13);
+  --sev-medium-wash: rgba(221, 208, 106, 0.12);
+  --sev-low-wash: rgba(121, 207, 153, 0.12);
+
+  --focus: #e8ebe6;
+  --shadow-float: 0 20px 44px -12px rgba(0, 0, 0, 0.72);
+  --shadow-lift: 0 10px 26px -12px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #12171b;
+    --surface: #1e242a;
+    --surface-2: #181e23;
+    --surface-3: #2a333a;
+    --border: #333d44;
+    --border-strong: #46535c;
+    --engrave-hi: rgba(255, 255, 255, 0.07);
+    --engrave-lo: rgba(0, 0, 0, 0.45);
+    --text: #e8ebe6;
+    --text-muted: #a2acb2;
+    --text-soft: #909ba2;
+    --cta: #e8ebe6;
+    --cta-text: #12171b;
+    --cta-press: #ffffff;
+    --lamp-up: #56c07a;
+    --lamp-warn: #e0a03c;
+    --lamp-fault: #ef6b5e;
+    --lamp-idle: #6c7a83;
+    --lamp-up-ink: #6ed394;
+    --lamp-warn-ink: #e8b055;
+    --lamp-fault-ink: #ff8377;
+    --lamp-idle-ink: #93a0a8;
+    --lamp-up-wash: rgba(86, 192, 122, 0.14);
+    --lamp-warn-wash: rgba(224, 160, 60, 0.14);
+    --lamp-fault-wash: rgba(239, 107, 94, 0.14);
+    --lamp-idle-wash: rgba(108, 122, 131, 0.16);
+    --cond-a: #5aa9e6;
+    --cond-b: #e0a03c;
+    --cond-c: #63c88a;
+    --cond-d: #b98a5e;
+    --cond-trace: #b98ae8;
+    --sev-critical: #ff7a6e;
+    --sev-high: #f0a94e;
+    --sev-medium: #ddd06a;
+    --sev-low: #79cf99;
+    --sev-critical-wash: rgba(255, 122, 110, 0.13);
+    --sev-high-wash: rgba(240, 169, 78, 0.13);
+    --sev-medium-wash: rgba(221, 208, 106, 0.12);
+    --sev-low-wash: rgba(121, 207, 153, 0.12);
+    --focus: #e8ebe6;
+    --shadow-float: 0 20px 44px -12px rgba(0, 0, 0, 0.72);
+    --shadow-lift: 0 10px 26px -12px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* ---------------------------------------------------------------
+   3. TOKEN — invarianti di forma
+   Il laminato non ha angoli morbidi: l'unica curva del sistema è la
+   lente della lampada.
+   --------------------------------------------------------------- */
+:root {
+  --font-legend: 'Saira Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --font-data: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-prose: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  /* Alias di compatibilità: il markup esistente cita ancora questi nomi.
+     --surface-1 e --info erano citati da stili inline ma non sono mai stati
+     definiti: quei pannelli restavano trasparenti. Su fondo chiaro si vede. */
+  --surface-1: var(--surface);
+  --info: var(--lamp-idle-ink);
+  --font-main: var(--font-prose);
+  --font-display: var(--font-legend);
+  --font-code: var(--font-data);
+  --primary: var(--text);
+  --primary-glow: transparent;
+  --ring: var(--focus);
+  --success: var(--lamp-up);
+  --danger: var(--lamp-fault);
+  --warning: var(--lamp-warn);
+  --discovered: var(--lamp-idle);
+  --ghost: transparent;
+  --lime: var(--text);
+  --violet-mid: var(--surface-3);
+  --violet-deep: var(--border);
+  --radius: 0;
+  --radius-lg: 0;
+  --radius-xxl: 0;
+  --success-glow: transparent;
+  --danger-glow: transparent;
+
+  --edge: 2px;                   /* raggio dei comandi: smusso, non curva */
+  --seam: 1px;
+  --transition: 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Solco inciso: chiaro sopra, scuro sotto. Su fondo scuro si inverte da sé
+   perché i due token cambiano insieme al tema. */
+.is-engraved,
+.panel, .hero-card, .kpi, .vuln-card, .modal, .login-card,
+aside, main, .table-container, .table-wrap, .template-box {
+  box-shadow: inset 0 1px 0 var(--engrave-hi), inset 0 -1px 0 var(--engrave-lo);
+}
+
+
+/* ---------------------------------------------------------------
+   MATERIA — grana della targa e granulosita' dello schermo
+   La grana e' un LIVELLO DI SFONDO dell'elemento, non uno pseudo-elemento:
+   uno pseudo a z-index:-1 obbligava a isolation:isolate su nove selettori, e
+   ogni isolate crea un contesto di impilamento che intrappola i discendenti
+   (i dropdown a z-index:1000 e i modali a 10050 dentro <main>). Come livello
+   di background non tocca l'impilamento di nulla.
+   L'opacita' vive UNA volta sola, dentro l'SVG: prima era moltiplicata due
+   volte (rect opacity x opacity del pseudo) e finiva sotto la soglia di
+   visibilita', ~4 livelli su 255. Data-URI: nessun file, nessuna rete.
+   --------------------------------------------------------------- */
+:root,
+:root[data-theme="light"] {
+  --plate-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)' opacity='0.13'/%3E%3C/svg%3E");
+}
+:root[data-theme="dark"] {
+  --plate-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)' opacity='0.09'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --plate-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)' opacity='0.09'/%3E%3C/svg%3E");
+  }
+}
+
+.panel, .hero-card, .kpi, .vuln-card, .login-card, .modal, aside, main, .oneline {
+  background-image: var(--plate-grain);
+  background-size: 140px 140px;
+  background-repeat: repeat;
+}
+
+/* ---------------------------------------------------------------
+   4. BASE
+   --------------------------------------------------------------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scrollbar-color: var(--border) transparent; }
+
+body {
+  font-family: var(--font-prose);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: grid;
+  --sidebar-w: 318px;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  gap: 14px;
+  padding: 14px;
+  overflow-x: hidden;
+  transition: grid-template-columns 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numerali tabulari ovunque compaia una misura */
+.kpi strong, table, .fgt-meter-num, .template-box, .count-badge,
+.ds-num, .mono, code, pre { font-variant-numeric: tabular-nums; }
+
+a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--border-strong);
+  transition: text-decoration-color var(--transition);
+}
+a:hover { text-decoration-color: currentColor; }
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+input::placeholder, textarea::placeholder { color: var(--text-soft); opacity: 1; }
+
+/* Barra di scorrimento: guida incisa, cursore in inchiostro attenuato */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--primary); background-clip: padding-box; }
+
+/* ---------------------------------------------------------------
+   5. TIPOGRAFIA — legenda incisa
+   --------------------------------------------------------------- */
+h2, h3, h4 {
+  font-family: var(--font-legend);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+h2 { font-size: 25px; line-height: 1.15; }
+h3 { font-size: 17px; line-height: 1.2; }
+h4 { font-size: 15px; line-height: 1.2; }
+
+/* Targa incisa: l'intestazione di ogni bay. Piccola, spaziata, in incasso. */
+.plate,
+.panel > h3:first-child,
+.hero-card > h2,
+.vuln-header > h3 {
+  font-family: var(--font-legend);
+  text-transform: uppercase;
+}
+
+.panel > h3:first-child,
+.modal-header h3,
+.vuln-header > h3 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------
+   6. SCOCCA — quadro e bay
+   --------------------------------------------------------------- */
+aside, main {
+  background-color: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  border-radius: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+aside {
+  gap: 0;
+  position: sticky;
+  top: 14px;
+  height: calc(100vh - 28px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Il pollice della sidebar resta invisibile a riposo, così il bordo del quadro
+   resta pulito, e compare solo al passaggio del mouse (scorrere con la rotella
+   implica :hover) o quando la tastiera è dentro. Le tabelle mantengono il loro:
+   una regola globale trasparente toglierebbe l'affordance dove serve davvero. */
+aside::-webkit-scrollbar-thumb{background:transparent}
+aside:hover::-webkit-scrollbar-thumb,
+aside:focus-within::-webkit-scrollbar-thumb{background:var(--border)}
+aside:hover::-webkit-scrollbar-thumb:hover,
+aside:focus-within::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+aside { scrollbar-color: transparent transparent; }
+aside:hover, aside:focus-within { scrollbar-color: var(--border) transparent; }
+
+main { padding: 18px 20px 24px; gap: 0; }
+
+.aside-header {
+  border-bottom: var(--seam) solid var(--border-strong);
+  background-color: var(--surface-3);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+.aside-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+
+.aside-header h2 {
+  font-size: 17px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* Targhetta di identità: incisa nel laminato, non evidenziata a colore */
+.brand-chip {
+  background: transparent;
+  color: var(--text-muted);
+  border: var(--seam) solid var(--border-strong);
+  border-radius: 0;
+  padding: 1px 6px;
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.aside-tagline { font-size: 12px; color: var(--text-soft); line-height: 1.45; }
+
+.user-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background-color: var(--surface-2);
+  border: var(--seam) solid var(--border);
+  border-radius: 0;
+  padding: 8px 12px;
+  margin: 12px 16px 0;
+  font-family: var(--font-data);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------
+   7. INDICE DI BAY — navigazione
+   --------------------------------------------------------------- */
+.sidenav { display: flex; flex-direction: column; gap: 0; padding: 12px 0 18px; }
+
+.nav-group { display: flex; flex-direction: column; }
+.nav-group > h3 {
+  margin: 16px 16px 6px;
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  padding-bottom: 5px;
+  border-bottom: var(--seam) solid var(--border);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 16px 9px 15px;
+  border: 0;
+  border-left: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  font-family: var(--font-legend);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.nav-item:hover { color: var(--text); background: var(--surface-2); }
+.nav-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.nav-item.active {
+  /* Selezione = incasso, non colore: la bay attiva è premuta nel laminato e
+     porta la costa a 3px, l'unico segnale che sopravvive alla rail collassata
+     (dove le etichette vanno a font-size:0). */
+  color: var(--text);
+  background-color: var(--surface-3);
+  box-shadow: inset 3px 0 0 var(--primary), inset 0 -1px 0 var(--engrave-hi);
+}
+
+.nav-item .nav-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nav-item .nav-left i { /* width:16px non è decorativo: è la cassetta fissa che
+     allinea le icone nella rail collassata; con width:auto si disallinea. */
+  width:16px; text-align: center; color: var(--text-soft); font-size: 13px; }
+.nav-item.active .nav-left i { color: var(--text); }
+
+/* ---------------------------------------------------------------
+   8. COMANDI DI QUADRO
+   --------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  border-radius: var(--edge);
+  border: var(--seam) solid var(--border-strong);
+  background-color: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.btn:hover { background: var(--surface-2); border-color: var(--text-soft); }
+.btn:active { box-shadow: inset 0 1px 3px var(--engrave-lo); }
+
+/* Comando primario: blocco d'inchiostro pieno. Uno per vista. */
+.btn-primary {
+  background: var(--cta);
+  color: var(--cta-text);
+  border-color: var(--cta);
+}
+.btn-primary:hover { background: var(--cta-press); border-color: var(--cta-press); color: var(--cta-text); }
+
+.btn-secondary { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.btn-secondary:hover { background: var(--surface-3); border-color: var(--text-soft); }
+
+/* Manovra irreversibile: contorno finché non è deliberatamente a fuoco,
+   e distanziata dai vicini. Disciplina di quadro, non decorazione. */
+.btn-danger {
+  background: transparent;
+  color: var(--lamp-fault-ink);
+  border-color: var(--lamp-fault);
+  margin-left: 18px;
+}
+.btn-danger:hover, .btn-danger:focus-visible {
+  background: var(--lamp-fault);
+  color: #ffffff;
+  border-color: var(--lamp-fault);
+}
+
+.btn-small, .btn-sm { padding: 5px 10px; font-size: 11px; letter-spacing: 0.08em; width: auto; }
+
+.btn:disabled, .btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background-color: var(--surface-2);
+  color: var(--text-soft);
+  border-color: var(--border);
+}
+.btn:disabled:hover { background: var(--surface-2); border-color: var(--border); }
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  padding: 0;
+  border-radius: var(--edge);
+  border: var(--seam) solid var(--border);
+  background-color: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.btn-icon:hover { color: var(--text); border-color: var(--text-soft); background: var(--surface-3); }
+.btn-icon.danger:hover { color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
+.btn-icon + .btn-icon { margin-left: 5px; }
+
+.sidebar-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex: none; padding: 0;
+  border-radius: var(--edge);
+  border: var(--seam) solid var(--border);
+  background-color: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+.sidebar-toggle:hover { color: var(--text); border-color: var(--text-soft); }
+.sidebar-toggle i { transition: transform var(--transition); }
+body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
+
+/* Selettore di resa: due stati incisi, non un interruttore decorativo */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex: none; padding: 0;
+  border-radius: var(--edge);
+  border: var(--seam) solid var(--border);
+  background-color: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--text-soft); }
+.theme-toggle .icon-dark { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-dark { display: inline; }
+:root[data-theme="dark"] .theme-toggle .icon-light { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-dark { display: inline; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-light { display: none; }
+}
+
+/* ---------------------------------------------------------------
+   9. CAMPI
+   --------------------------------------------------------------- */
+.form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+
+.form-group label,
+.plate-label {
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.input-wrapper { position: relative; }
+.input-wrapper i {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-soft); font-size: 12px; pointer-events: none;
+}
+
+/* Le esclusioni checkbox/radio non sono cosmetiche: width:100% + padding-left
+   per liberare l'icona stirerebbe ogni checkbox dentro un .form-group su tutta
+   la riga (#devTransports, #aiAllowUnredacted). Presidiate da un test. */
+.form-group input:not([type="checkbox"]):not([type="radio"]), .form-group select {
+  width: 100%;
+  padding: 8px 10px 8px 30px;
+  border-radius: 0;
+  border: var(--seam) solid var(--border-strong);
+  background-color: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-data);
+  font-size: 13px;
+  box-shadow: inset 0 1px 2px var(--engrave-lo);
+  transition: border-color var(--transition);
+}
+
+/* Un input dentro .input-wrapper ma FUORI da un .form-group non riceveva alcuno
+   stile. Regola separata di proposito: quella sopra è presidiata dal test sui
+   checkbox e non va allargata. */
+.input-wrapper input:not([type="checkbox"]):not([type="radio"]) {
+  width: 100%;
+  padding: 8px 10px 8px 30px;
+  border-radius: 0;
+  border: var(--seam) solid var(--border-strong);
+  background-color: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-data);
+  font-size: 13px;
+  box-shadow: inset 0 1px 2px var(--engrave-lo);
+  transition: border-color var(--transition);
+}
+
+.ui-input, textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 0;
+  border: var(--seam) solid var(--border-strong);
+  background-color: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-data);
+  font-size: 13px;
+  box-shadow: inset 0 1px 2px var(--engrave-lo);
+  transition: border-color var(--transition);
+}
+
+.form-group select { cursor: pointer; font-family: var(--font-prose); }
+
+.form-group input:focus, .form-group select:focus, .ui-input:focus, textarea:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -1px;
+  border-color: var(--text);
+}
+
+input[type="checkbox"], input[type="radio"] { accent-color: var(--text); }
+
+/* ---------------------------------------------------------------
+   10. LAMPADE — l'unico colore del sistema
+   Stato leggibile anche senza colore: la geometria della lente cambia.
+   --------------------------------------------------------------- */
+.led-container {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-legend);
+  font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+.led {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  flex: none;
+  border: 1.5px solid var(--border-strong);   /* ghiera */
+  background: var(--lamp-idle);
+  position: relative;
+}
+
+.led-online, .led-success {
+  background: var(--lamp-up);
+  border-color: var(--lamp-up-ink);
+  box-shadow: 0 0 0 1px var(--lamp-up-wash), 0 1px 4px -1px var(--lamp-up);
+}
+.led-auth_failed, .led-warning {
+  background: var(--lamp-warn);
+  border-color: var(--lamp-warn-ink);
+  box-shadow: 0 0 0 1px var(--lamp-warn-wash), 0 1px 4px -1px var(--lamp-warn);
+}
+.led-offline, .led-danger {
+  background: var(--lamp-fault);
+  border-color: var(--lamp-fault-ink);
+  box-shadow: 0 0 0 1px var(--lamp-fault-wash), 0 1px 4px -1px var(--lamp-fault);
+}
+/* Rilevato ma non confermato: lente vuota. Si legge in scala di grigi. */
+.led-discovered {
+  background: transparent;
+  border-color: var(--lamp-idle);
+  border-style: dashed;
+}
+
+/* Pastiglia di stato: lente + legenda incisa su lavaggio del proprio stato */
+.status {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px;
+  border-radius: 0;
+  border: var(--seam) solid transparent;
+  font-family: var(--font-legend);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.status.ok   { background: var(--lamp-up-wash);    color: var(--lamp-up-ink);    border-color: var(--lamp-up); }
+.status.warn { background: var(--lamp-warn-wash);  color: var(--lamp-warn-ink);  border-color: var(--lamp-warn); }
+.status.bad  { background: var(--lamp-fault-wash); color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
+.status .led { margin-right: 2px; }
+
+/* ---------------------------------------------------------------
+   11. BAY — pannelli
+   --------------------------------------------------------------- */
+.panel, .hero-card, .kpi, .vuln-card {
+  background-color: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  border-radius: 0;
+}
+.panel { padding: 16px 18px 18px; margin-bottom: 14px; }
+.hero-card { padding: 18px 20px 20px; }
+.vuln-card { padding: 14px 16px; margin-bottom: 12px; }
+
+/* Intestazione di bay: targa incisa a filo del bordo superiore */
+.panel > h3:first-child {
+  margin: -16px -18px 14px;
+  padding: 8px 18px;
+  background-color: var(--surface-3);
+  border-bottom: var(--seam) solid var(--border);
+}
+
+.hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr); gap: 14px; margin-bottom: 14px; }
+
+.hero-card > h2 { margin-bottom: 8px; font-size: 25px; letter-spacing: 0.01em; }
+.hero-card > p { color: var(--text-muted); font-size: 14px; line-height: 1.55; max-width: 66ch; }
+
+.split-footer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+
+/* Strumenti: la misura, non la card. Numerale in mono, legenda incisa sopra. */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.kpi { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
+.kpi h4 {
+  margin: 0;
+  font-family: var(--font-legend);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-soft);
+}
+.kpi strong {
+  display: block;
+  font-family: var(--font-data);
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.kpi-clickable { cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+.kpi-clickable:hover { background: var(--surface-3); border-color: var(--text-soft); }
+.kpi-clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* ---------------------------------------------------------------
+   12. SCHEDULE — tabelle
+   --------------------------------------------------------------- */
+.table-container, .table-wrap {
+  width: 100%;
+  overflow: auto;
+  border: var(--seam) solid var(--border-strong);
+  border-radius: 0;
+  background-color: var(--surface-2);
+}
+.table-wrap { margin-top: 12px; }
+
+table { width: 100%; border-collapse: collapse; background: var(--surface-2); text-align: left; }
+
+th {
+  font-family: var(--font-legend);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background-color: var(--surface-3);
+  padding: 9px 14px;
+  border-bottom: var(--seam) solid var(--border-strong);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+td {
+  padding: 9px 14px;
+  border-bottom: var(--seam) solid var(--border);
+  font-family: var(--font-data);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface-3); }
+
+/* Riga con modifiche non salvate: lavaggio ambra + marca incisa da 1px.
+   La costa colorata spessa e' bandita, e a 1px resta comunque un bordo. */
+tr.row-dirty td { background: var(--lamp-warn-wash); }
+tr.row-dirty td:first-child { border-left: 1px solid var(--lamp-warn); }
+
+.actions-cell { display: flex; gap: 5px; align-items: center; }
+
+/* ---------------------------------------------------------------
+   13. ETICHETTE INCISE — badge, chip, pill
+   --------------------------------------------------------------- */
+.badge, .chip, .count-badge, .preview-badge, .role-pill, .ca-chip {
+  display: inline-block;
+  border-radius: 0;
+  font-family: var(--font-legend);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.badge {
+  background-color: var(--surface-3);
+  color: var(--text-muted);
+  border: var(--seam) solid var(--border-strong);
+  padding: 2px 7px;
+  font-size: 10px;
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  border: var(--seam) solid var(--border-strong);
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.chip-choice {
+  cursor: pointer;
+  font-family: var(--font-legend);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  background-color: var(--surface-2);
+  color: var(--text-muted);
+  border: var(--seam) solid var(--border-strong);
+  border-radius: var(--edge);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.chip-choice:hover { color: var(--text); border-color: var(--text-soft); }
+.chip-choice[aria-pressed="true"] {
+  background-color: var(--surface-3);
+  color: var(--text);
+  border-color: var(--text);
+  box-shadow: inset 0 1px 3px var(--engrave-lo);
+}
+.chip-choice:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+.count-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  background-color: var(--surface-3);
+  color: var(--text-muted);
+  border: var(--seam) solid var(--border);
+  font-family: var(--font-data);
+  letter-spacing: 0.02em;
+}
+
+.preview-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: var(--lamp-warn-wash);
+  color: var(--lamp-warn-ink);
+  border: var(--seam) solid var(--lamp-warn);
+}
+
+.role-pill { font-size: 9px; padding: 1px 6px; border: var(--seam) solid; }
+.role-pill-admin    { background: var(--lamp-fault-wash); color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
+.role-pill-operator { background: var(--surface-3);       color: var(--text-muted);     border-color: var(--border-strong); }
+.role-pill-viewer   { background: transparent;            color: var(--text-soft);      border-color: var(--border); }
+
+/* ---------------------------------------------------------------
+   14. SCALA CVSS — rampa separata, solo vulnerabilità
+   --------------------------------------------------------------- */
+.severity-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 0;
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: var(--seam) solid;
+}
+.severity-CRITICAL { background: var(--sev-critical-wash); color: var(--sev-critical); border-color: var(--sev-critical); }
+.severity-HIGH     { background: var(--sev-high-wash);     color: var(--sev-high);     border-color: var(--sev-high); }
+.severity-MEDIUM   { background: var(--sev-medium-wash);   color: var(--sev-medium);   border-color: var(--sev-medium); }
+.severity-LOW      { background: var(--sev-low-wash);      color: var(--sev-low);      border-color: var(--sev-low); }
+
+.vuln-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  margin: -14px -16px 12px;
+  padding: 8px 16px;
+  background-color: var(--surface-3);
+  border-bottom: var(--seam) solid var(--border);
+}
+
+/* ---------------------------------------------------------------
+   15. STRUMENTI — misure con la propria scala
+   --------------------------------------------------------------- */
+.fgt-meter { display: inline-flex; align-items: center; gap: 8px; min-width: 128px; }
+.fgt-meter-bar {
+  flex: 1; height: 8px;
+  border-radius: 0;
+  background-color: var(--surface-3);
+  border: var(--seam) solid var(--border);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px var(--engrave-lo);
+}
+.fgt-meter-fill { display: block; height: 100%; background: var(--lamp-up); }
+.fgt-meter-fill.warn { background: var(--lamp-warn); }
+.fgt-meter-fill.bad { background: var(--lamp-fault); }
+.fgt-meter-num {
+  font-family: var(--font-data); font-size: 11.5px; color: var(--text-muted);
+  min-width: 36px; text-align: right;
+}
+
+.progress-bar-bg {
+  width: 100%; height: 10px;
+  background-color: var(--surface-3);
+  border: var(--seam) solid var(--border);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px var(--engrave-lo);
+}
+.progress-bar-fill { height: 100%; width: 100%; transform: scaleX(0); transform-origin: left; background: var(--text); transition: transform 300ms linear; }
+
+/* ---------------------------------------------------------------
+   16. STRATI FLOTTANTI — le uniche ombre vere del sistema
+   --------------------------------------------------------------- */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  z-index: 900;
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal {
+  background-color: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  border-radius: 0;
+  padding: 20px;
+  width: 480px;
+  max-width: 92vw;
+  box-shadow: var(--shadow-float);
+  animation: plateDrop 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin: -20px -20px 16px;
+  padding: 10px 20px;
+  background-color: var(--surface-3);
+  border-bottom: var(--seam) solid var(--border);
+}
+
+.modal-close {
+  cursor: pointer; color: var(--text-soft); font-size: 16px;
+  background: none; border: 0; padding: 4px;
+  transition: color var(--transition);
+}
+.modal-close:hover { color: var(--text); }
+
+.progress-overlay {
+  position: fixed; bottom: 18px; right: 18px;
+  background-color: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  box-shadow: var(--shadow-float);
+  padding: 16px;
+  border-radius: 0;
+  width: 360px; max-width: calc(100vw - 36px);
+  z-index: 800;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  animation: plateSlide 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#authOverlay {
+  position: fixed; inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 39px, var(--engrave-lo) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, var(--engrave-lo) 39px 40px),
+    var(--bg);
+  z-index: 9999;
+  display: flex; justify-content: center; align-items: center;
+}
+
+.login-card {
+  background-color: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  border-radius: 0;
+  padding: 30px 32px;
+  width: 400px; max-width: 92vw;
+  box-shadow: var(--shadow-float);
+  animation: plateDrop 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.login-card h2 { font-size: 21px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.login-card p { color: var(--text-muted); font-size: 13px; line-height: 1.55; margin-bottom: 20px; }
+
+/* ---------------------------------------------------------------
+   17. CARTIGLI SPECIFICI
+   --------------------------------------------------------------- */
+.template-box {
+  background-color: var(--surface-2);
+  border: var(--seam) solid var(--border-strong);
+  color: var(--text);
+  font-family: var(--font-data);
+  padding: 14px;
+  border-radius: 0;
+  font-size: 12px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+#networkGraphContainer {
+  width: 100%; height: 600px; min-height: 300px;
+  background-color: var(--surface-2);
+  border-radius: 0;
+  border: var(--seam) solid var(--border-strong);
+  position: relative;
+  resize: vertical;
+  overflow: hidden;
+}
+
+div.vis-tooltip {
+  background-color: var(--surface) !important;
+  border: var(--seam) solid var(--border-strong) !important;
+  box-shadow: var(--shadow-lift) !important;
+  color: var(--text) !important;
+  font-family: var(--font-data) !important;
+  font-size: 12px !important;
+  padding: 10px 14px !important;
+  border-radius: 0 !important;
+  z-index: 1000 !important;
+}
+
+.network-legend {
+  position: absolute; bottom: 12px; left: 12px;
+  background-color: var(--surface);
+  border: var(--seam) solid var(--border-strong);
+  padding: 10px 14px;
+  border-radius: 0;
+  display: flex; flex-direction: column; gap: 7px;
+  z-index: 10;
+  box-shadow: var(--shadow-lift);
+}
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; font-family: var(--font-legend); letter-spacing: 0.06em; text-transform: uppercase; }
+
+.filterbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+.search-wrap { position: relative; min-width: 240px; flex: 1; }
+.search-wrap > i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-soft); font-size: 12px; }
+.search-wrap > input { padding-left: 30px !important; }
+
+.subtab-bar {
+  display: flex; gap: 0; flex-wrap: wrap;
+  margin-bottom: 16px;
+  border-bottom: var(--seam) solid var(--border-strong);
+}
+.subtab-bar .btn {
+  width: auto;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-soft);
+  padding: 8px 14px;
+}
+.subtab-bar .btn:hover { background: var(--surface-2); color: var(--text); }
+.subtab-bar .btn.active,
+.subtab-bar .ti-subtab.active {
+  color: var(--text) !important;
+  border-bottom-color: var(--text) !important;
+  background: transparent;
+}
+
+.ca-pill, #tab-config .ca-pill, #tab-fortigate .ca-pill {
+  padding: 5px 12px;
+  border-radius: var(--edge);
+  border: var(--seam) solid var(--border-strong);
+  background-color: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--font-legend);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+#tab-config .ca-pill.active, #tab-fortigate .ca-pill.active {
+  background-color: var(--surface-3); color: var(--text); border-color: var(--text);
+  box-shadow: inset 0 1px 3px var(--engrave-lo);
+}
+#tab-config .ca-pill:hover:not(.active), #tab-fortigate .ca-pill:hover:not(.active) { background: var(--surface-3); color: var(--text); }
+
+#tab-config .ca-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9px; padding: 1px 5px;
+  border: var(--seam) solid var(--border); color: var(--text-muted);
+  margin: 2px 4px 2px 0;
+  font-family: var(--font-data); letter-spacing: 0.02em; text-transform: none;
+}
+#tab-config .ca-more {
+  display: inline-flex; align-items: center;
+  font-size: 9px; line-height: 1.4; padding: 1px 5px; margin-left: 5px;
+  border: var(--seam) solid var(--border); background: var(--surface-3);
+  color: var(--text-muted); cursor: pointer; font-family: var(--font-data);
+  transition: color var(--transition), border-color var(--transition);
+}
+#tab-config .ca-more:hover { color: var(--text); border-color: var(--text-soft); }
+#tab-config .ca-route-map { height: 220px; background: var(--surface-2); border: var(--seam) solid var(--border-strong); margin-top: 8px; }
+
+#tab-config tbody tr.ca-row-off { opacity: 0.55; }
+#tab-config tbody tr.ca-row-off > td:first-child { box-shadow: inset 3px 0 0 var(--text-soft); }
+#tab-config tbody tr.ca-row-off:hover { opacity: 0.85; }
+
+#tab-fortigate .fgt-row:hover { background: var(--surface-3); }
+#tab-fortigate .fgt-row-detail > td { background: var(--surface-3); }
+
+/* details/summary condivisi */
+details.mac-switch > summary::-webkit-details-marker,
+#tab-mac #macDeviceMenu > summary::-webkit-details-marker,
+#tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker,
+#tab-clientmap #arpTenantMenu > summary::-webkit-details-marker,
+#tab-ai details > summary::-webkit-details-marker { display: none; }
+details.mac-switch > summary, #tab-ai details > summary { list-style: none; cursor: pointer; }
+details.mac-switch > summary .mac-chev { transition: transform var(--transition); color: var(--text-soft); }
+details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
+details.mac-switch > summary:hover,
+#tab-ai details > summary:hover { background: var(--surface-3); }
+#tab-mac #macDeviceMenu[open] > summary .fa-chevron-down,
+#tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down,
+#tab-clientmap #arpTenantMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+#tab-mac #macDeviceList label:hover,
+#tab-clientmap #arpDeviceList label:hover,
+#tab-clientmap #arpTenantList label:hover { background: var(--surface-3); }
+
+/* Chat assistente */
+#tab-ai .ai-chat-shell { display: grid; grid-template-columns: 248px 1fr; grid-template-rows: minmax(0, 1fr); height: min(calc(100vh - 240px), 760px); min-height: 520px; }
+#tab-ai .ai-conv-sidebar { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-right: var(--seam) solid var(--border); background: var(--surface-2); overflow: hidden; min-height: 0; }
+#tab-ai .ai-conv-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; padding: 0 6px; }
+#tab-ai .ai-conv-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: var(--seam) solid transparent; cursor: pointer; font-size: 12.5px; color: var(--text-muted); transition: background var(--transition), color var(--transition); }
+#tab-ai .ai-conv-item:hover { background: var(--surface-3); color: var(--text); }
+#tab-ai .ai-conv-item.active { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
+#tab-ai .ai-conv-item .ai-conv-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-ai .ai-conv-item .ai-conv-del { opacity: 0; border: 0; background: none; color: var(--text-soft); cursor: pointer; padding: 2px 4px; font-size: 11px; }
+#tab-ai .ai-conv-item:hover .ai-conv-del { opacity: 1; }
+#tab-ai .ai-conv-item .ai-conv-del:hover { color: var(--lamp-fault-ink); }
+#tab-ai .ai-conv-empty { font-size: 12px; color: var(--text-soft); padding: 10px 4px; }
+#tab-ai .ai-chat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+#tab-ai .ai-chat-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: var(--seam) solid var(--border); flex:0 0 auto; background: var(--surface-3); }
+#tab-ai .ai-chat-header h3 { flex: 1; min-width: 0; }
+#tab-ai .ai-chat-context { padding: 9px 14px; border-bottom: var(--seam) solid var(--border); align-items: center; background: var(--surface-2); flex:0 0 auto; }
+#tab-ai #aiChatMessages { flex: 1 1 0; min-height: 0; }
+#tab-ai .ai-chat-composer { display: flex; gap: 8px; padding: 10px 14px; border-top: var(--seam) solid var(--border); background: var(--surface-2); flex:0 0 auto; }
+#tab-ai .ai-profile-layout { display: grid; grid-template-columns: 222px 1fr; gap: 16px; align-items: start; }
+#tab-ai .ai-profile-form { border-left: var(--seam) solid var(--border); padding-left: 16px; }
+#tab-ai .ai-profile-card { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border: var(--seam) solid var(--border-strong); background: var(--surface-2); cursor: pointer; transition: background var(--transition), border-color var(--transition); }
+#tab-ai .ai-profile-card:hover { background: var(--surface-3); }
+#tab-ai .ai-profile-card.editing { border-color: var(--text); background: var(--surface-3); }
+#tab-ai .ai-profile-card .ai-prof-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
+#tab-ai .ai-profile-card .ai-prof-meta { font-size: 10.5px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--font-data); }
+#tab-ai .ai-profile-card .ai-prof-activate { border: 0; background: none; color: var(--text-muted); font-size: 10.5px; cursor: pointer; padding: 0; text-decoration: underline; align-self: flex-start; }
+#tab-ai .ai-profile-card .ai-prof-activate:hover { color: var(--text); }
+
+/* ---------------------------------------------------------------
+   18. SCHEMA UNIFILARE — la prima vista
+   --------------------------------------------------------------- */
+.oneline {
+  position: relative;
+  background-color: var(--surface-2);
+  border: var(--seam) solid var(--border-strong);
+  padding: 0;
+  overflow-x: auto;
+}
+
+/* Reticolo di disegno: la carta su cui è tracciato lo schema */
+.oneline-grid {
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 23px, var(--engrave-lo) 23px 24px),
+    repeating-linear-gradient(90deg, transparent 0 23px, var(--engrave-lo) 23px 24px);
+  background-position: -1px -1px;
+}
+
+.oneline-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 8px 16px;
+  background-color: var(--surface-3);
+  border-bottom: var(--seam) solid var(--border-strong);
+  font-family: var(--font-legend);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.oneline-head .oneline-rev { font-family: var(--font-data); letter-spacing: 0.04em; color: var(--text-soft); }
+
+.oneline-body { padding: 20px 18px 24px; min-width: 640px; }
+
+/* Sbarra principale: la dorsale su cui pendono le bay */
+.oneline-bus { position: relative; height: 3px; background: var(--text); margin: 0 8px 0; }
+.oneline-bus::before, .oneline-bus::after {
+  content: ""; position: absolute; top: -4px; width: 3px; height: 11px; background: var(--text);
+}
+.oneline-bus::before { left: -1px; }
+.oneline-bus::after { right: -1px; }
+
+.oneline-bays { display: flex; gap: 0; align-items: flex-start; }
+
+.oneline-bay {
+  flex: 1 1 0;
+  min-width: 108px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 0 4px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+}
+.oneline-bay:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Discesa: il conduttore che scende dalla sbarra all'apparato */
+.oneline-drop { width: 2px; height: 26px; background: var(--text-soft); }
+.oneline-bay:hover .oneline-drop { background: var(--text); }
+
+/* Sezionatore: quadrato pieno = chiuso, vuoto = aperto. Geometria, non colore. */
+/* Il sezionatore porta lo stato nella GEOMETRIA, non nel colore: pieno = chiuso,
+   mezzo = in allarme, vuoto = aperto, tratteggiato = rilevato ma non confermato.
+   Quattro forme distinte, quindi leggibili in bianco e nero e da lontano
+   (scena 4: monitor sempre acceso letto a distanza). Il colore conferma, non
+   informa. La legenda sotto lo schema disegna esattamente queste quattro. */
+.oneline-sw {
+  width: 13px; height: 13px;
+  border: 2px dashed var(--lamp-idle);
+  background: transparent;
+  transform: rotate(45deg);
+}
+/* chiuso: pieno */
+.oneline-bay[data-state="up"] .oneline-sw {
+  background: var(--lamp-up); border: 2px solid var(--lamp-up);
+}
+/* allarme: mezzo pieno, la diagonale resta visibile in scala di grigi */
+.oneline-bay[data-state="warn"] .oneline-sw {
+  background: linear-gradient(to bottom, var(--lamp-warn) 50%, transparent 50%);
+  border: 2px solid var(--lamp-warn);
+}
+/* aperto: vuoto, contorno pieno */
+.oneline-bay[data-state="down"] .oneline-sw {
+  background: transparent; border: 2px solid var(--lamp-fault);
+}
+/* rilevato: vuoto, contorno tratteggiato (stato di default) */
+.oneline-bay[data-state="idle"] .oneline-sw {
+  background: transparent; border: 2px dashed var(--lamp-idle);
+}
+
+.oneline-node {
+  margin-top: 8px;
+  width: 100%;
+  border: var(--seam) solid var(--border-strong);
+  background-color: var(--surface);
+  padding: 8px 6px 9px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.oneline-bay:hover .oneline-node { background: var(--surface-3); border-color: var(--text-soft); }
+
+.oneline-name {
+  font-family: var(--font-legend);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text);
+  max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.oneline-count { font-family: var(--font-data); font-size: 17px; color: var(--text); line-height: 1; }
+.oneline-sub { font-family: var(--font-data); font-size: 9.5px; letter-spacing: 0.04em; color: var(--text-soft); text-transform: uppercase; }
+
+
+/* Cartiglio: i totali di flotta stanno nel piede del disegno, non su tre card.
+   Su un disegno tecnico il riquadro delle quantita' e' sempre a margine. */
+.oneline-foot {
+  display: flex; flex-wrap: wrap; gap: 6px 26px;
+  padding: 8px 16px;
+  border-top: var(--seam) solid var(--border);
+  background-color: var(--surface-3);
+  font-family: var(--font-legend);
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.oneline-foot b { font-family: var(--font-data); font-size: 13px; font-weight: 500; color: var(--text); letter-spacing: 0; }
+.oneline-foot i { font-family: var(--font-data); font-style: normal; font-size: 11px; color: var(--text-soft); letter-spacing: 0; }
+.oneline-empty { padding: 24px 4px; color: var(--text-soft); font-family: var(--font-prose); font-size: 13px; text-transform: none; letter-spacing: 0; }
+
+/* Legenda dello schema: il contratto dei simboli, sempre a vista */
+.oneline-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+  padding: 8px 16px;
+  border-top: var(--seam) solid var(--border);
+  background-color: var(--surface);
+  font-family: var(--font-legend);
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-soft);
+}
+/* Le voci di legenda riusano .oneline-bay[data-state] per disegnare i simboli
+   veri invece di copiarli: se una geometria cambia, la legenda cambia con lei.
+   Qui si annulla solo la GEOMETRIA DI RIGA della bay, non i suoi stati. */
+.oneline-legend .oneline-bay {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 6px;
+  flex: 0 0 auto; min-width: 0; padding: 0; cursor: default;
+}
+.oneline-legend .oneline-sw { width: 9px; height: 9px; border-width: 1.5px; }
+.oneline-legend .oneline-bay[data-state="up"] .oneline-sw,
+.oneline-legend .oneline-bay[data-state="warn"] .oneline-sw,
+.oneline-legend .oneline-bay[data-state="down"] .oneline-sw,
+.oneline-legend .oneline-bay[data-state="idle"] .oneline-sw { border-width: 1.5px; }
+
+/* Striscia eventi: la stampante di sala controllo */
+.eventstrip { display: flex; flex-direction: column; }
+.eventstrip-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: var(--seam) solid var(--border);
+  font-family: var(--font-data);
+  font-size: 12px;
+}
+.eventstrip-row:last-child { border-bottom: 0; }
+.eventstrip-time { color: var(--text-soft); font-size: 11px; }
+.eventstrip-text { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.eventstrip-empty { padding: 14px 0; color: var(--text-soft); font-family: var(--font-prose); font-size: 13px; }
+
+/* ---------------------------------------------------------------
+   19. MOVIMENTO — un solo momento: la prova lampade
+   All'arrivo dei dati il quadro fa il lamp test, come un pannello vero.
+   --------------------------------------------------------------- */
+@keyframes lampStrike {
+  0%   { opacity: 0.25; transform: scale(0.82); }
+  55%  { opacity: 1;    transform: scale(1.14); }
+  100% { opacity: 1;    transform: scale(1); }
+}
+@keyframes plateDrop {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes plateSlide {
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+/* Alias storici: il markup li cita ancora */
+@keyframes fadeInUp    { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes zoomIn      { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideInRight{ from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+
+.tab-content.active .led,
+.tab-content.active .oneline-sw { animation: lampStrike 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.tab-content.active .oneline-bay:nth-child(2) .oneline-sw { animation-delay: 40ms; }
+.tab-content.active .oneline-bay:nth-child(3) .oneline-sw { animation-delay: 80ms; }
+.tab-content.active .oneline-bay:nth-child(4) .oneline-sw { animation-delay: 120ms; }
+.tab-content.active .oneline-bay:nth-child(5) .oneline-sw { animation-delay: 160ms; }
+
+.tab-content { display: none; flex-grow: 1; }
+.tab-content.active { display: flex; flex-direction: column; animation: fadeIn 160ms ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------
+   20. UTILITY E CONTROLLO ACCESSI
+   --------------------------------------------------------------- */
+.visually-hidden {
+  position: absolute !important; width: 1px !important; height: 1px !important;
+  padding: 0 !important; margin: -1px !important; overflow: hidden !important;
+  clip: rect(0 0 0 0) !important; white-space: nowrap !important; border: 0 !important;
+}
+
+body.role-viewer .requires-write { display: none !important; }
+body:not(.role-admin) .requires-admin { display: none !important; }
+
+/* ---------------------------------------------------------------
+   21. ADATTAMENTO
+   --------------------------------------------------------------- */
+@media (min-width: 1700px) {
+  main .hero { max-width: 1560px; }
+  main .subtab-bar { max-width: 1560px; }
+  main .kpi-grid { max-width: 1560px; }
+  main .panel:not(:has(table)) { max-width: 1560px; }
+}
+
+@media (max-width: 1200px) {
+  .hero { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1100px) {
+  .prov-grid { grid-template-columns: 1fr !important; }
+}
+
+@media (min-width: 1001px) {
+  body.sidebar-collapsed { --sidebar-w: 62px }
+  body.sidebar-collapsed aside { align-items: stretch; }
+  body.sidebar-collapsed .aside-header { padding: 12px 8px; align-items: center; }
+  body.sidebar-collapsed .brand-row { justify-content: center; }
+  body.sidebar-collapsed .aside-header h2 { font-size: 0; gap: 0; }
+  body.sidebar-collapsed .aside-header h2 i { font-size: 18px; }
+  body.sidebar-collapsed .brand-chip,
+  body.sidebar-collapsed .aside-tagline,
+  body.sidebar-collapsed #langSelect,
+  body.sidebar-collapsed .nav-group > h3,
+  body.sidebar-collapsed .preview-badge,
+  body.sidebar-collapsed .count-badge { display: none; }
+  body.sidebar-collapsed .user-badge { flex-direction: column; gap: 10px; padding: 9px 4px; font-size: 0; margin: 10px 6px 0; }
+  body.sidebar-collapsed .user-badge i { font-size: 13px; }
+  body.sidebar-collapsed .user-badge .role-pill { display: none; }
+  body.sidebar-collapsed .sidenav { width: 100%; }
+  body.sidebar-collapsed .nav-item { justify-content: center; padding: 10px 0; }
+  body.sidebar-collapsed .nav-item .nav-left { font-size: 0; gap: 0; }
+  body.sidebar-collapsed .nav-item .nav-left i { font-size: 15px; }
+}
+
+@media (max-width: 1000px) {
+  body { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
+  aside { position: static; height: auto; max-height: none; }
+  main { padding: 14px; }
+  .sidebar-toggle { display: none; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .oneline-body { min-width: 0; }
+  .oneline-bays { flex-wrap: wrap; gap: 10px 0; }
+  .oneline-bay { flex: 1 1 44%; min-width: 132px; }
+}
+
+@media (max-width: 900px) {
+  #tab-ai .ai-chat-shell { grid-template-columns: 1fr; height: auto; }
+  #tab-ai .ai-conv-sidebar { border-right: 0; border-bottom: var(--seam) solid var(--border); max-height: 220px; }
+  #tab-ai .ai-chat-messages { min-height: 320px; }
+  #tab-ai .ai-profile-layout { grid-template-columns: 1fr; }
+  #tab-ai .ai-profile-form { border-left: 0; padding-left: 0; border-top: var(--seam) solid var(--border); padding-top: 14px; }
+}
+
+@media (max-width: 620px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .panel { padding: 12px 14px 14px; }
+  .panel > h3:first-child { margin: -12px -14px 12px; padding: 8px 14px; }
+  .hero-card { padding: 14px 16px 16px; }
+  .hero-card > h2 { font-size: 21px; }
+  .btn { width: 100%; }
+  .split-footer > .btn { width: 100%; }
+  .btn-danger { margin-left: 0; margin-top: 14px; }
+  th, td { padding: 8px 10px; }
+}

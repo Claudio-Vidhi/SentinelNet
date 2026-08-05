@@ -105,3 +105,4 @@ HANDOFF.md
 .agents/skills/impeccable/
 # Impeccable live-mode session state (local only)
 .impeccable/live/
+.impeccable/questions/

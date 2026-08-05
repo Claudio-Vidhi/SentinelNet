@@ -64,12 +64,12 @@
                     if (po.live_total) {
                         const ok = po.live_up === po.live_total;
                         const col = ok ? 'var(--success)' : '#ff6b7c';
-                        stateBadge = `<span title="${currentLang==='en'?'Live SNMP state':'Stato vivo da SNMP'}" style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-tower-broadcast"></i> ${po.live_up}/${po.live_total} UP</span>`;
+                        stateBadge = `<span title="${currentLang==='en'?'Live SNMP state':'Stato vivo da SNMP'}" style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-tower-broadcast"></i> ${po.live_up}/${po.live_total} UP</span>`;
                     } else if (po.status === 'up' && !po.issue) {
-                        stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
+                        stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
                     } else if (po.issue) {
                         const down = po.status === 'down';
-                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'#ff6b7c':'#ffb84d'}; border:1px solid ${down?'#ff6b7c':'#ffb84d'}; border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
+                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'#ff6b7c':'#ffb84d'}; border:1px solid ${down?'#ff6b7c':'#ffb84d'}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
                     }
                     return `<div style="margin-bottom:6px;">
                         <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po.name)}</span>
@@ -90,7 +90,7 @@
                     </div>`;
                 }).join('')
                     : `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No Port-Channels.':'Nessun Port-Channel.'}</div>`;
-                return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px;">
+                return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:12px;">
                     <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span>${age(d.backup_ts)}</h4>
                     ${pcHtml}
                 </div>`;
@@ -185,7 +185,7 @@
         box.innerHTML = cats.map(k => `
             <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:pointer; color:var(--text);">
                 <input type="checkbox" ${isMapCatVisible(k)?'checked':''} onchange="toggleMapCat('${k}', this.checked)" style="accent-color:var(--primary);">
-                <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${mapCatMeta(k).color};"></span>
+                <span style="display:inline-block; width:10px; height:10px; border-radius:0; background:${mapCatMeta(k).color};"></span>
                 ${mapCatLabel(k)}
             </label>`).join('');
     }
@@ -196,7 +196,7 @@
         if (!box) return;
         box.innerHTML = Object.keys(DEVICE_TYPE_META).map(t => {
             const m = DEVICE_TYPE_META[t];
-            return `<div class="legend-item"><span style="width:12px;height:12px;border-radius:3px;background:${m.color};display:inline-block;"></span><span>${deviceTypeLabel(t)}</span></div>`;
+            return `<div class="legend-item"><span style="width:12px;height:12px;border-radius:0;background:${m.color};display:inline-block;"></span><span>${deviceTypeLabel(t)}</span></div>`;
         }).join("");
     }
 
@@ -341,7 +341,7 @@
           <defs>
             <linearGradient id="cardGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stop-color="#251c3e" />
-              <stop offset="100%" stop-color="#150f23" />
+              <stop offset="100%" stop-color="${cssVar('--surface-2', '#181e23')}" />
             </linearGradient>
             <linearGradient id="borderGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="${borderGradStart}" />
@@ -356,7 +356,7 @@
           <path d="M2 14C2 7.37 7.37 2 14 2H18V${cardH - 2}H14C7.37 ${cardH - 2} 2 ${cardH - 7.37} 2 ${cardH - 14}V14Z" fill="${statusColor}" opacity="0.85" />
           
           <!-- Cerchio contenitore per l'icona dell'apparato (bordo nel colore del tipo) -->
-          <circle cx="44" cy="42" r="22" fill="#1f1633" stroke="${typeColor}" stroke-dasharray="1.5" stroke-width="1.5" />
+          <circle cx="44" cy="42" r="22" fill="${cssVar('--surface', '#1e242a')}" stroke="${typeColor}" stroke-dasharray="1.5" stroke-width="1.5" />
 
           <!-- Posizionamento SVG dell'icona -->
           <g transform="translate(32, 30)">
@@ -608,7 +608,7 @@
             }
 
             const pcBadge = isPC ? `
-              <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.3); padding:2px 7px; border-radius:5px; margin-bottom:8px;">
+              <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.3); padding:2px 7px; border-radius:0; margin-bottom:8px;">
                 <i class="fa-solid fa-link"></i> ${currentLang === 'en' ? 'AGGREGATED' : 'AGGREGATO'} · ${escapeHtml(l.pc_name || (currentLang === 'en' ? 'Port-Channel / LAG' : 'Port-Channel / LAG'))}${l.member_count > 1 ? ` · ${l.member_count} ${currentLang === 'en' ? 'members' : 'membri'}` : ''}
               </div>` : '';
 
@@ -656,17 +656,17 @@
                     size: 11,
                     face: "Menlo, monospace",
                     strokeWidth: 0,
-                    background: "#150f23" // Combacia con lo sfondo della mappa
+                    background: cssVar('--surface-2', '#181e23') // Combacia con lo sfondo della mappa
                 },
                 color: emphasize
                     ? { color: "rgba(255, 184, 77, 0.85)", highlight: "#ffb84d", hover: "#ffd27d" }
-                    : { color: "rgba(106, 95, 193, 0.45)", highlight: "#a99ff2", hover: "#c4bdf7" },
+                    : { color: "rgba(106, 95, 193, 0.45)", highlight: "var(--text-muted)", hover: "#c4bdf7" },
                 dashes: emphasize ? [8, 4] : false,
                 arrows: { to: { enabled: false } },
                 width: emphasize ? 5 : 3.5,
                 hoverWidth: 1.5,
                 // ponytail: dati "piatti" (no oggetti color vis.js) usati solo dall'export Visio
-                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : '#6A5FC1' }
+                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : 'var(--text-soft)' }
             };
         });
 
@@ -679,7 +679,7 @@
     let mapViewMode = localStorage.getItem('mapViewMode') === 'minimal' ? 'minimal' : 'classic';
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
-        const base = 'width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
+        const base = 'width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
         const on  = base + 'background:var(--primary); color:#fff; border-color:var(--primary);';
         const off = base + 'background:var(--surface-2); color:var(--text-muted); border-color:var(--border);';
         const c = document.getElementById('mapViewClassicBtn');
@@ -909,7 +909,7 @@
         if (!box) return;
         box.innerHTML = MINIMAL_LINK_TYPES.map(t => `
             <label style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted); cursor:pointer; user-select:none;" title="${currentLang==='en'?t.en:t.it}">
-                <input type="color" value="${linkColor(t.key)}" onchange="setMinimalLinkColor('${t.key}', this.value)" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer;">
+                <input type="color" value="${linkColor(t.key)}" onchange="setMinimalLinkColor('${t.key}', this.value)" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:0; background:none; cursor:pointer;">
                 <span>${currentLang==='en'?t.en:t.it}</span>
             </label>`).join('')
             // Categorie personalizzate (sola visualizzazione: gestione nel pannello
@@ -985,7 +985,7 @@
         const rows = names.map(nm => {
             const c = minimalCustomCats.categories[nm];
             return `<div style="display:flex; align-items:center; gap:6px; padding:3px 0;">
-                <span style="width:14px; height:14px; border-radius:4px; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
+                <span style="width:14px; height:14px; border-radius:0; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
                 <span style="flex:1; font-size:12px; color:var(--text);">${escapeHtml(nm)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${dashLabel(c.dash)}</span>
                 <button onclick="deleteMinimalCustomCat('${attrEsc(nm)}')" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:#e05656; cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
@@ -993,14 +993,14 @@
         }).join('') || `<div style="font-size:12px; color:var(--text-muted); padding:4px 0;">${currentLang==='en'?'No categories yet':'Nessuna categoria'}</div>`;
         box.innerHTML = rows + `
             <div style="display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
-                <input id="minimalCatNameInput" type="text" placeholder="${currentLang==='en'?'Name':'Nome'}" style="flex:1; min-width:0; padding:4px 6px; border-radius:5px; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:12px;">
-                <input id="minimalCatColorInput" type="color" value="#607d8b" style="width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer;">
-                <select id="minimalCatDashInput" style="padding:3px; border-radius:5px; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:11px;">
+                <input id="minimalCatNameInput" type="text" placeholder="${currentLang==='en'?'Name':'Nome'}" style="flex:1; min-width:0; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:12px;">
+                <input id="minimalCatColorInput" type="color" value="#607d8b" style="width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:0; background:none; cursor:pointer;">
+                <select id="minimalCatDashInput" style="padding:3px; border-radius:0; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:11px;">
                     <option value="solid">${currentLang==='en'?'Solid':'Continua'}</option>
                     <option value="dashed">${currentLang==='en'?'Dashed':'Tratteggiata'}</option>
                     <option value="dotted">${currentLang==='en'?'Dotted':'Punteggiata'}</option>
                 </select>
-                <button onclick="addMinimalCustomCat()" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--primary); color:#fff; border:none; border-radius:5px; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
+                <button onclick="addMinimalCustomCat()" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--primary); color:#fff; border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
             </div>`;
     }
     // Menu contestuale (click destro su un cavo nella mappa minimalista) per
@@ -1020,14 +1020,14 @@
         const cur = minimalCustomCats.assignments[edgeKey];
         const div = document.createElement('div');
         div.id = 'edgeCatMenu';
-        div.style.cssText = `position:fixed; left:${x}px; top:${y}px; z-index:9999; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.5); font-family:inherit; font-size:12px; min-width:170px;`;
+        div.style.cssText = `position:fixed; left:${x}px; top:${y}px; z-index:9999; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.5); font-family:inherit; font-size:12px; min-width:170px;`;
         const rowsHtml = names.length ? names.map(nm => `
-            <div class="edgeCatRow" data-nm="${attrEsc(nm)}" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:5px; cursor:pointer; color:var(--text); ${nm===cur?'background:rgba(120,144,156,0.25);':''}">
+            <div class="edgeCatRow" data-nm="${attrEsc(nm)}" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text); ${nm===cur?'background:rgba(120,144,156,0.25);':''}">
                 <span style="width:10px; height:10px; border-radius:50%; background:${minimalCustomCats.categories[nm].color}; display:inline-block;"></span>
                 <span>${escapeHtml(nm)}</span>
             </div>`).join('')
             : `<div style="padding:4px 6px; color:var(--text-muted);">${currentLang==='en'?'No custom categories yet':'Nessuna categoria personalizzata'}</div>`;
-        const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:5px; cursor:pointer; color:var(--text-muted);">${currentLang==='en'?'None (default style)':'Nessuna (stile predefinito)'}</div>`;
+        const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text-muted);">${currentLang==='en'?'None (default style)':'Nessuna (stile predefinito)'}</div>`;
         div.innerHTML = rowsHtml + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + noneRow;
         document.body.appendChild(div);
         div.querySelectorAll('.edgeCatRow').forEach(row => {
@@ -1983,8 +1983,8 @@
                 const delBtn = (!c.builtin && canWrite)
                     ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="deleteCategory('${escapeHtml(k)}')"></i>` : '';
                 const subChips = c.subcategories.length
-                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" onclick="deleteSubcategory('${escapeHtml(k)}','${escapeHtml(s)}')" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
-                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:10px; padding:14px;">
+                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" onclick="deleteSubcategory('${escapeHtml(k)}','${escapeHtml(s)}')" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
+                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:0; padding:14px;">
                     ${delBtn}
                     <div style="font-size:26px; font-weight:900; color:${color};">${n}</div>
                     <div style="font-size:12px; font-weight:700; color:var(--text); margin-top:2px;">${escapeHtml(c.label)}</div>
@@ -2018,12 +2018,12 @@
                     const chevron = n.stack
                         ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${currentLang==='en'?'Show stack units':'Mostra unità dello stack'}" onclick="toggleStackRow('${escapeHtml(n.id)}')" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
                         : '';
-                    const dot = `${chevron}<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>`;
+                    const dot = `${chevron}<span style="display:inline-block; width:9px; height:9px; border-radius:0; background:${meta.color}; margin-right:6px;"></span>`;
                     // Rinomina inline: modifica il nome mostrato (stage 'name', salvato col pulsante).
                     if (canWrite) {
                         const p = pendingEdits[n.id];
                         const curName = (p && Object.prototype.hasOwnProperty.call(p, 'name')) ? p.name : (n.label || '');
-                        return td(`${dot}<input value="${attrEsc(curName)}" onchange="stageEdit('${escapeHtml(n.id)}','name',this.value.trim())" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
+                        return td(`${dot}<input value="${attrEsc(curName)}" onchange="stageEdit('${escapeHtml(n.id)}','name',this.value.trim())" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
                     }
                     return td(`${dot}${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
                 }
@@ -2031,23 +2031,23 @@
                     return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
                 case 'source': {
                     const badge = n.discovered
-                        ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:4px; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
-                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
+                        ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:0; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
+                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:0; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
                     // Promozione di un dispositivo scoperto a gestito (operator/admin).
                     const promote = (n.discovered && canWrite && n.display_ip)
-                        ? ` <button onclick="promoteDevice('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
+                        ? ` <button onclick="promoteDevice('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
                     return td(badge + promote);
                 }
                 case 'vendor': {
                     const v = (function(){ const e = effVal(n,'vendor'); return (e && e !== 'discovered') ? e : ''; })();
                     return td(canWrite
-                        ? `<input list="catVendorDL" value="${attrEsc(v)}" onchange="stageEdit('${escapeHtml(n.id)}','vendor',this.value.trim())" placeholder="—" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `<input list="catVendorDL" value="${attrEsc(v)}" onchange="stageEdit('${escapeHtml(n.id)}','vendor',this.value.trim())" placeholder="—" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(v||'—')}</span>`);
                 }
                 case 'model': {
                     const vk = String(effVal(n,'vendor')||'').toLowerCase();
                     return td(canWrite
-                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" onchange="stageModel('${escapeHtml(n.id)}', this.value.trim())" placeholder="—" style="width:140px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" onchange="stageModel('${escapeHtml(n.id)}', this.value.trim())" placeholder="—" style="width:140px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(effVal(n,'model')||'—')}</span>`);
                 }
                 case 'version':
@@ -2058,21 +2058,21 @@
                 }
                 case 'ha': {
                     const hg = effVal(n,'ha_group') || '';
-                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:#ff8c42; border:1px solid #ff8c42; border-radius:4px; padding:1px 4px; margin-right:4px;">HA</span>` : '';
+                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:#ff8c42; border:1px solid #ff8c42; border-radius:0; padding:1px 4px; margin-right:4px;">HA</span>` : '';
                     return td(canWrite
-                        ? `${badge}<input value="${attrEsc(hg)}" onchange="stageEdit('${escapeHtml(n.id)}','ha_group',this.value.trim())" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `${badge}<input value="${attrEsc(hg)}" onchange="stageEdit('${escapeHtml(n.id)}','ha_group',this.value.trim())" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : (hg ? `${badge}<span style="font-size:12px; color:#ff8c42;">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
                 }
                 case 'stack': {
                     if (n.stack) {
                         const warn = n.stack.health === 'degraded'
                             ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'Degraded stack':'Stack degradato'}" style="color:var(--danger); font-size:10px;"></i>` : '';
-                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:4px; padding:2px 6px; cursor:pointer;" onclick="toggleStackRow('${escapeHtml(n.id)}')"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
+                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:0; padding:2px 6px; cursor:pointer;" onclick="toggleStackRow('${escapeHtml(n.id)}')"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
                     }
                     // Solo switch/router gestiti possono essere marcati a mano.
                     const canMark = canAdmin && !n.discovered && ['switch','router'].includes(effVal(n,'category'));
                     return td(canMark
-                        ? `<button onclick="markAsStack('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:4px; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
+                        ? `<button onclick="markAsStack('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:0; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
                         : '<span style="color:var(--text-muted);">—</span>', 'white-space:nowrap;');
                 }
                 case 'category': {
@@ -2082,12 +2082,12 @@
                     // Il menù sottocategoria viene reso SOLO se la categoria ne ha:
                     // così, rimuovendo l'ultima sottocategoria, non resta spazio vuoto.
                     const subSel = (canWrite && subs.length)
-                        ? `<select class="subcat-sel" onchange="stageEdit('${escapeHtml(n.id)}','subcategory',this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                        ? `<select class="subcat-sel" onchange="stageEdit('${escapeHtml(n.id)}','subcategory',this.value)" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                             <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
                             ${subs.map(s => `<option value="${escapeHtml(s)}"${s===curSub?' selected':''}>${escapeHtml(s)}</option>`).join('')}
                         </select>` : '';
                     const ctrl = canWrite
-                        ? `<select onchange="stageCategory('${escapeHtml(n.id)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                        ? `<select onchange="stageCategory('${escapeHtml(n.id)}', this.value)" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                             ${categoryOptions(curCat)}
                         </select>${subSel}`
                         : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(curCat))}</span>${curSub?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(curSub)}</span>`:''}`;
@@ -2106,7 +2106,7 @@
             // Gli input riempiono la colonna: la tabella unità occupa tutta la
             // larghezza della riga espansa invece di stringersi a sinistra.
             const inp = (i, field, val) => canAdmin
-                ? `<input data-stack-field="${field}" data-stack-idx="${i}" value="${attrEsc(val||'')}" style="width:100%; box-sizing:border-box; padding:3px 6px; border-radius:5px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">`
+                ? `<input data-stack-field="${field}" data-stack-idx="${i}" value="${attrEsc(val||'')}" style="width:100%; box-sizing:border-box; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">`
                 : `<span style="font-size:11px;">${escapeHtml(val || '—')}</span>`;
             const body = members.map((m, i) => `<tr>
                 <td style="padding:3px 8px; font-size:11px; color:var(--text-muted);">${escapeHtml(String(m.index != null ? m.index : i + 1))}</td>
@@ -2117,8 +2117,8 @@
             </tr>`).join('');
             // Azioni accanto al titolo: sfruttano lo spazio orizzontale libero.
             const actions = canAdmin ? `<div style="display:flex; gap:8px;">
-                <button onclick="saveStackMembers('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:5px; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
-                <button onclick="removeStack('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:5px; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
+                <button onclick="saveStackMembers('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
+                <button onclick="removeStack('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
             </div>` : '';
             // Larghezze: #, Ruolo, Modello, Serial, Stato.
             const widths = ['36px', '18%', '32%', '30%', '90px'];
@@ -2333,16 +2333,16 @@
         if (!n || !n.name_options || n.name_options.length < 2) return;
         const cur = n.label;
         const rows = n.name_options.map(o => `
-            <label style="display:flex; gap:10px; align-items:center; padding:9px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; cursor:pointer;">
+            <label style="display:flex; gap:10px; align-items:center; padding:9px 10px; border:1px solid var(--border); border-radius:0; margin-bottom:6px; cursor:pointer;">
                 <input type="radio" name="confName" value="${attrEsc(o.name)}" data-ver="${attrEsc(o.version||'')}" ${o.name===cur?'checked':''} style="accent-color:var(--primary);">
                 <span style="font-weight:700;">${escapeHtml(o.name)}</span>
                 <span style="margin-left:auto; font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${o.version?escapeHtml(o.version):'—'}</span>
             </label>`).join('');
         const ov = document.createElement('div');
         ov.id = 'conflictModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
         ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(480px,92vw); box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(480px,92vw); box-shadow:0 20px 60px color-mix(in srgb, var(--bg) 82%, transparent);">
                 <h3 style="font-size:16px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${currentLang==='en'?'Resolve CDP/LLDP conflict':'Risolvi conflitto CDP/LLDP'}</h3>
                 <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${currentLang==='en'?'The same device was discovered with different names. Choose the name and version to keep.':'Lo stesso dispositivo è stato rilevato con nomi diversi. Scegli nome e versione da mantenere.'}</p>
                 ${rows}
@@ -2471,7 +2471,7 @@
                 out.height = src.height;
                 const ctx = out.getContext("2d");
                 // La nuova mappa minimalista ha sfondo bianco, la classica scuro.
-                ctx.fillStyle = getMapView() === 'minimal' ? "#ffffff" : "#150f23";
+                ctx.fillStyle = getMapView() === 'minimal' ? "#ffffff" : cssVar('--surface-2', '#181e23');
                 ctx.fillRect(0, 0, out.width, out.height);
                 ctx.drawImage(src, 0, 0);
                 cb(out);
@@ -2685,7 +2685,7 @@
                 return {
                     source: e.from, target: e.to,
                     label: ex.isPortChannel ? (ex.pcName || 'Port-Channel') : '',
-                    color: ex.color || '#6A5FC1'
+                    color: ex.color || 'var(--text-soft)'
                 };
             });
         }

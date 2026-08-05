@@ -272,6 +272,17 @@ components:
     padding: 32px 24px
 ---
 
+> [!IMPORTANT]
+> **Superseded.** This file is an analysis of *Sentry's* design language, kept
+> as reference material. It is not SentinelNet's design system and never fully
+> described the shipped UI — the implementation had already diverged from it
+> (the accent was lightened for legibility, the display face was substituted,
+> pink was promoted to an error semantic).
+>
+> The authority for SentinelNet's visual system is [`DESIGN.md`](../DESIGN.md)
+> at the repository root, with its machine-readable sidecar in
+> `.impeccable/design.json`. Do not take tokens from this file.
+
 # UI design system
 
 The design language the dashboard implements. The YAML block above is the token

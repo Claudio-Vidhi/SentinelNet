@@ -535,7 +535,7 @@
             // che il servizio dovrebbe comunque risolvere).
             td(`<button onclick="diagnoseClientInTab('${escapeHtml(jsStr(r.ip || r.mac))}','')" title="${escapeHtml(i18n[currentLang].btnDiagnose)}" style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:13px;"><i class="fa-solid fa-stethoscope"></i></button>`),
         ].join('') + '</tr>';
-        const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; overflow:hidden;">` +
+        const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">` +
             `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
         box.innerHTML = tenants.map(t => {
             const rows = byTenant[t] || [];
@@ -586,11 +586,11 @@
                     ? `${escapeHtml(r.interface||'—')} <span class="badge" style="font-size:10px;">${escapeHtml(r.port_channel)}</span>`
                     : escapeHtml(r.interface || '—');
                 const uplink = r.is_uplink
-                    ? ` <span title="${currentLang==='en'?'Seen on a trunk/uplink (transit, not the access location)':'Visto su trunk/uplink (transito, non posizione di accesso)'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:0 4px;">uplink</span>`
+                    ? ` <span title="${currentLang==='en'?'Seen on a trunk/uplink (transit, not the access location)':'Visto su trunk/uplink (transito, non posizione di accesso)'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:0 4px;">uplink</span>`
                     : '';
                 const originCell = r.is_uplink
-                    ? `<span title="${currentLang==='en'?'In transit on an uplink':'In transito su un uplink'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${currentLang==='en'?'transit':'transito'}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
-                    : `<span title="${currentLang==='en'?'Access port – device attached here':'Porta di accesso – dispositivo collegato qui'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${currentLang==='en'?'access':'accesso'}</span>`;
+                    ? `<span title="${currentLang==='en'?'In transit on an uplink':'In transito su un uplink'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${currentLang==='en'?'transit':'transito'}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
+                    : `<span title="${currentLang==='en'?'Access port – device attached here':'Porta di accesso – dispositivo collegato qui'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${currentLang==='en'?'access':'accesso'}</span>`;
                 const portCfgBtn = (g.ip && r.interface)
                     ? `<button onclick="showPortConfig('${escapeHtml(g.ip)}','${escapeHtml(r.interface)}','${escapeHtml(g.name || '')}')" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
                     : '';
@@ -604,7 +604,7 @@
                 const swName = r.origin_switch || r.switch_name || r.switch_ip;
                 const swIf = r.origin_interface || '';
                 const switchBadge = isSwitchIf
-                    ? ` <span title="${currentLang==='en'?`Interface of ${swName}${swIf?` (${swIf})`:''}`:`Interfaccia di ${swName}${swIf?` (${swIf})`:''}`}" style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:4px; padding:0 4px;"><i class="fa-solid fa-microchip"></i> SWITCH</span>`
+                    ? ` <span title="${currentLang==='en'?`Interface of ${swName}${swIf?` (${swIf})`:''}`:`Interfaccia di ${swName}${swIf?` (${swIf})`:''}`}" style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:0; padding:0 4px;"><i class="fa-solid fa-microchip"></i> SWITCH</span>`
                     : '';
                 const rowStyle = isSwitchIf ? ' style="color:var(--text-muted);"' : '';
                 return `<tr${rowStyle}>
@@ -617,7 +617,7 @@
                 </tr>`;
             }).join('');
             const macWord = currentLang==='en' ? (g.rows.length===1?'MAC':'MACs') : 'MAC';
-            return `<details class="mac-switch" ${openAll?'open':''} style="margin-bottom:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); overflow:hidden;">
+            return `<details class="mac-switch" ${openAll?'open':''} style="margin-bottom:10px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); overflow:hidden;">
                 <summary style="cursor:pointer; padding:12px 14px; font-weight:700; display:flex; align-items:center; gap:8px;">
                     <i class="fa-solid fa-chevron-right mac-chev"></i>
                     <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
@@ -653,7 +653,7 @@
 
         // rank: la porta d'accesso più recente è la più probabile (primo elemento).
         const sightRow = (s, accent, badge) => `
-            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:8px; margin-bottom:6px; background:var(--surface-2);">
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:0; margin-bottom:6px; background:var(--surface-2);">
                 <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
                 <div style="flex:1;">
                     <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
@@ -689,21 +689,21 @@
             if (isSwitchIf) {
                 const swName = g.origin_switch || '';
                 const swIf = g.origin_interface || '';
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
                     <span>${escapeHtml(jsStr(en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`))}</span></div>`;
             } else if (status === 'ambiguous') {
                 // Ambiguo significa più porte plausibili NELLA STESSA rete: qui
                 // una scansione più fresca serve davvero.
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
                     <span>${en?`Multiple possible access ports (${g.access_count}) in this tenant. The most recent is the likeliest; run a fresh MAC Scan to disambiguate.`:`Più porte d'accesso possibili (${g.access_count}) in questo tenant. La più recente è la più probabile; esegui una MAC Scan aggiornata per disambiguare.`}</span></div>`;
             } else if (status === 'transit_only') {
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
                     <span>${en?'Only seen in transit on uplinks – the device is behind an unmanaged/unscanned switch. Scan more switches to find the access port.':'Visto solo in transito sugli uplink – il dispositivo è dietro uno switch non gestito/non scansionato. Scansiona altri switch per trovare la porta di accesso.'}</span></div>`;
             } else if (status === 'resolved' && origin.length) {
-                banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:0; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-check"></i>
                     <span>${en?'Single access port resolved.':'Porta di accesso univoca risolta.'}</span></div>`;
             }
@@ -725,7 +725,7 @@
         // Più sedi: si dice che il MAC esiste in più reti. NON si consiglia una
         // riscansione — non c'entra niente, e ognuna di queste posizioni è vera.
         const multiBanner = multi
-            ? `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:8px; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:4px;">
+            ? `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:4px;">
                 <i class="fa-solid fa-layer-group" style="margin-top:2px;"></i>
                 <span>${en?`This MAC exists in ${entries.length} tenants. Each position below is true for its own network — they are not alternatives to pick from.`:`Questo MAC esiste in ${entries.length} tenant. Ogni posizione qui sotto è vera per la sua rete — non sono alternative fra cui scegliere.`}</span></div>`
             : '';
@@ -734,9 +734,9 @@
 
         const ov = document.createElement('div');
         ov.id = 'macLocateModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
         ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px color-mix(in srgb, var(--bg) 82%, transparent);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                     <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
                     <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>

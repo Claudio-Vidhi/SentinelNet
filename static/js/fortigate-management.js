@@ -266,7 +266,7 @@ function renderFgtDataset(key) {
             <summary style="cursor:pointer; font-size:12px; color:var(--text-muted); margin-bottom:8px;">
               ${escapeHtml(counter)} ${escapeHtml(L.lblFgtLines || (en ? 'lines' : 'righe'))}</summary>
             <pre style="font-family:var(--font-code); font-size:12px; background:var(--surface);
-            border:1px solid var(--border); border-radius:8px; padding:12px; margin:0;
+            border:1px solid var(--border); border-radius:0; padding:12px; margin:0;
             white-space:pre-wrap; max-height:420px; overflow:auto;">${escapeHtml(jsStr(lines.join('\n')))}</pre>
           </details>`;
         return;

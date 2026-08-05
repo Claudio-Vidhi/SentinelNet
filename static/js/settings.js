@@ -135,7 +135,7 @@
             const isEnabled = !disabled.has(t.name);
             const stKey = isEnabled ? 'mcpStEnabled' : 'mcpStDisabled';
             return `
-            <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;">
+            <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); cursor:pointer;">
               <input type="checkbox" class="mcp-tool-toggle" value="${escapeHtml(t.name)}" ${isEnabled ? 'checked' : ''} style="margin-top:2px;">
               <span style="flex:1;">
                 <span style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
@@ -224,7 +224,7 @@
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
                       <i class="fa-solid fa-location-dot" style="color:var(--text-muted); margin-right:4px;"></i>${summary}
                     </summary>
-                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); max-height:160px; overflow:auto;">
+                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); max-height:160px; overflow:auto;">
                       <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tenants' : 'Nessuno spuntato = tutti i tenant'}</div>
                       ${checks || `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No tenants' : 'Nessun tenant'}</span>`}
                     </div>
@@ -252,7 +252,7 @@
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
                       <i class="fa-solid fa-table-columns" style="color:var(--text-muted); margin-right:4px;"></i>${tabsSummary}
                     </summary>
-                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); max-height:200px; overflow:auto;">
+                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); max-height:200px; overflow:auto;">
                       <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tabs' : 'Nessuna spuntata = tutte le tab'}</div>
                       ${tabChecks}
                       <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
@@ -283,7 +283,7 @@
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
                 <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}${disabledBadge}</td>
                 <td><select data-u="${escapeHtml(u.username)}" onchange="changeUserRole(this.dataset.u, this.value)"
-                       style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
+                       style="font-size:12px; padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
                     ${roleOptions}
                   </select></td>
                 <td>${scopeCell}</td>
@@ -539,7 +539,7 @@
             return `<option value="${escapeHtml(ip)}" ${ip === current ? 'selected' : ''}>${escapeHtml(ip)}${hint}</option>`;
         }).join('');
         const envNote = d.env_override
-            ? `<div style="margin-top:10px; padding:8px 10px; border:1px solid var(--warning); border-radius:8px; color:var(--warning); font-size:12px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(L.msgEnvOverride)}</div>`
+            ? `<div style="margin-top:10px; padding:8px 10px; border:1px solid var(--warning); border-radius:0; color:var(--warning); font-size:12px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(L.msgEnvOverride)}</div>`
             : '';
         box.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">

@@ -59,11 +59,11 @@
 
         engagements.forEach(e => {
             const pct = e.total_items > 0 ? Math.round((e.evaluated_items / e.total_items) * 100) : 0;
-            let statusBadge = `<span style="background:var(--surface-2); padding:3px 8px; border-radius:4px; font-size:11px; text-transform:uppercase;">${escapeHtml(e.status)}</span>`;
+            let statusBadge = `<span style="background:var(--surface-2); padding:3px 8px; border-radius:0; font-size:11px; text-transform:uppercase;">${escapeHtml(e.status)}</span>`;
             if (e.status === 'completed') {
-                statusBadge = `<span style="background:var(--success); color:white; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; text-transform:uppercase;">Completato</span>`;
+                statusBadge = `<span style="background:var(--success); color:white; padding:3px 8px; border-radius:0; font-size:11px; font-weight:bold; text-transform:uppercase;">Completato</span>`;
             } else if (e.status === 'in_progress') {
-                statusBadge = `<span style="background:var(--cta); color:white; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; text-transform:uppercase;">In Corso</span>`;
+                statusBadge = `<span style="background:var(--cta); color:white; padding:3px 8px; border-radius:0; font-size:11px; font-weight:bold; text-transform:uppercase;">In Corso</span>`;
             }
 
             html += `
@@ -76,7 +76,7 @@
                     <td style="padding:10px;">${statusBadge}</td>
                     <td style="padding:10px; text-align:center;">
                         <div style="font-weight:600; font-size:12px;">${pct}%</div>
-                        <div style="background:var(--surface-3); height:5px; border-radius:3px; overflow:hidden; margin-top:3px; width:80px; display:inline-block;">
+                        <div style="background:var(--surface-3); height:5px; border-radius:0; overflow:hidden; margin-top:3px; width:80px; display:inline-block;">
                             <div style="background:var(--primary); height:100%; width:${pct}%;"></div>
                         </div>
                     </td>
@@ -199,7 +199,7 @@
             const evalCount = secItems.filter(i => i.status !== 'non_valutato').length;
 
             html += `
-                <details style="border:1px solid var(--border); border-radius:6px; margin-bottom:12px; background:var(--surface);" ${idx === 0 ? 'open' : ''}>
+                <details style="border:1px solid var(--border); border-radius:0; margin-bottom:12px; background:var(--surface);" ${idx === 0 ? 'open' : ''}>
                     <summary style="padding:12px 16px; cursor:pointer; font-weight:600; font-size:15px; display:flex; justify-content:space-between; align-items:center; background:var(--surface-2);">
                         <span>${escapeHtml(secTitle)}</span>
                         <span style="font-size:12px; color:var(--text-muted); font-weight:normal;">${evalCount}/${secItems.length} valutati</span>
@@ -208,18 +208,18 @@
             `;
 
             secItems.forEach(item => {
-                const prereqBadge = item.is_prerequisite ? '<span style="background:rgba(250, 127, 170, 0.25); color:var(--danger); border:1px solid var(--danger); font-size:10px; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:6px;">PREREQUISITO</span>' : '';
-                const evBadge = item.requires_evidence ? '<span style="background:rgba(169, 159, 242, 0.25); color:var(--primary); border:1px solid var(--primary); font-size:10px; padding:2px 8px; border-radius:4px; font-weight:bold; margin-left:6px;">EVIDENZA RICHIESTA</span>' : '';
+                const prereqBadge = item.is_prerequisite ? '<span style="background:rgba(250, 127, 170, 0.25); color:var(--danger); border:1px solid var(--danger); font-size:10px; padding:2px 8px; border-radius:0; font-weight:bold; margin-left:6px;">PREREQUISITO</span>' : '';
+                const evBadge = item.requires_evidence ? '<span style="background:rgba(169, 159, 242, 0.25); color:var(--primary); border:1px solid var(--primary); font-size:10px; padding:2px 8px; border-radius:0; font-weight:bold; margin-left:6px;">EVIDENZA RICHIESTA</span>' : '';
 
                 html += `
-                    <div style="border:1px solid var(--border); border-radius:6px; padding:14px; margin-bottom:14px; background:var(--surface-3);">
+                    <div style="border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px; background:var(--surface-3);">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
                             <div>
                                 <strong style="font-size:14px; color:var(--text);">Item ${escapeHtml(item.item_ref)} — ${escapeHtml(item.title)}</strong>
                                 ${prereqBadge} ${evBadge}
                             </div>
                             <div>
-                                <select id="status_${item.item_ref}" style="padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; font-weight:bold;">
+                                <select id="status_${item.item_ref}" style="padding:5px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px; font-weight:bold;">
                                     <option value="non_valutato" ${item.status === 'non_valutato' ? 'selected' : ''}>NON VALUTATO</option>
                                     <option value="conforme" ${item.status === 'conforme' ? 'selected' : ''} style="color:var(--success);">CONFORME</option>
                                     <option value="parziale" ${item.status === 'parziale' ? 'selected' : ''} style="color:var(--warning);">PARZIALE</option>
@@ -227,7 +227,7 @@
                                     <option value="da_verificare" ${item.status === 'da_verificare' ? 'selected' : ''} style="color:#60a5fa;">DA VERIFICARE</option>
                                     <option value="non_applicabile" ${item.status === 'non_applicabile' ? 'selected' : ''}>NON APPLICABILE</option>
                                 </select>
-                                <select id="sev_${item.item_ref}" style="padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                                <select id="sev_${item.item_ref}" style="padding:5px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                                     <option value="critica" ${item.severity === 'critica' ? 'selected' : ''}>Critica</option>
                                     <option value="alta" ${item.severity === 'alta' ? 'selected' : ''}>Alta</option>
                                     <option value="media" ${item.severity === 'media' ? 'selected' : ''}>Media</option>
@@ -236,18 +236,18 @@
                                 </select>
                             </div>
                         </div>
-                        <div style="font-size:13px; color:var(--text); line-height:1.5; margin-bottom:12px; background:var(--surface-2); padding:10px 14px; border-radius:6px; border-left:3px solid var(--primary);">
+                        <div style="font-size:13px; color:var(--text); line-height:1.5; margin-bottom:12px; background:var(--surface-2); padding:10px 14px; border-radius:0; border-left:3px solid var(--primary);">
                             <strong style="color:var(--primary);">Perché è importante:</strong> ${escapeHtml(item.guidance_why || '')}<br>
                             <strong style="color:var(--primary);">Cosa cercare:</strong> ${escapeHtml(item.guidance_good || '')}
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                             <div>
                                 <label style="display:block; font-size:11px; font-weight:bold; margin-bottom:4px; color:var(--text-muted);">Rilievo / Esito dell'audit:</label>
-                                <textarea id="finding_${item.item_ref}" rows="3" style="width:100%; font-size:13px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--font-main);" placeholder="Descrivi il riscontro ottenuto...">${escapeHtml(item.finding_text || '')}</textarea>
+                                <textarea id="finding_${item.item_ref}" rows="3" style="width:100%; font-size:13px; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--font-main);" placeholder="Descrivi il riscontro ottenuto...">${escapeHtml(item.finding_text || '')}</textarea>
                             </div>
                             <div>
                                 <label style="display:block; font-size:11px; font-weight:bold; margin-bottom:4px; color:var(--text-muted);">Raccomandazione per la relazione:</label>
-                                <textarea id="recom_${item.item_ref}" rows="3" style="width:100%; font-size:13px; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--font-main);" placeholder="Azione correttiva consigliata...">${escapeHtml(item.recommendation_text || '')}</textarea>
+                                <textarea id="recom_${item.item_ref}" rows="3" style="width:100%; font-size:13px; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:var(--font-main);" placeholder="Azione correttiva consigliata...">${escapeHtml(item.recommendation_text || '')}</textarea>
                             </div>
                         </div>
                         <div style="display:flex; justify-content:flex-end;">
@@ -355,7 +355,7 @@
         });
 
         box.innerHTML = Object.keys(sections).map(sec => `
-            <details style="border:1px solid var(--border); border-radius:6px; margin-bottom:10px; background:var(--surface);">
+            <details style="border:1px solid var(--border); border-radius:0; margin-bottom:10px; background:var(--surface);">
                 <summary style="padding:10px 14px; cursor:pointer; font-weight:600; font-size:14px; background:var(--surface-2);">
                     ${escapeHtml(sec)} <span style="font-size:12px; font-weight:normal; color:var(--text-muted);">(${sections[sec].length})</span>
                 </summary>

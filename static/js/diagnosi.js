@@ -212,7 +212,7 @@ function renderDiagnosi(d, dest) {
     const relayNote = relay ? `<div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
         ${relay.known
             ? `<div style="font-size:12px; font-weight:600; margin-bottom:4px;">${escapeHtml(en ? 'Matching policy (via relay)' : 'Policy che matcherebbe (via relay)')}</div>
-               <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; margin:0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(relay.data, null, 2)))}</pre>`
+               <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(relay.data, null, 2)))}</pre>`
             : `<div style="color:${relay.pending ? 'var(--warning)' : 'var(--text-muted)'}; font-size:12px;">
                  <i class="fa-solid ${relay.pending ? 'fa-hourglass-half' : 'fa-circle-info'}" style="margin-right:6px;"></i>${escapeHtml(jsStr(relay.reason || ''))}</div>`}
     </div>` : '';
@@ -223,12 +223,12 @@ function renderDiagnosi(d, dest) {
         const pl = sub.policy_lookup;
         if (pl && pl.data) {
             out += `<div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12px; font-weight:600;">${escapeHtml(en ? 'Matching policy' : 'Policy che matcherebbe')}</div>`;
-            out += `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(pl.data, null, 2)))}</pre>`;
+            out += `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(pl.data, null, 2)))}</pre>`;
         }
         const failed = Object.keys(sub).filter(k => sub[k] && sub[k].error);
         if (failed.length) out += `<div style="color:var(--text-muted); font-size:11px; margin-top:8px;">${escapeHtml(en ? 'Sections unavailable' : 'Sezioni non disponibili')}: ${escapeHtml(jsStr(failed.join(', ')))}</div>`;
         out += `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:11px; color:var(--text-muted);">${escapeHtml(en ? 'Raw FortiGate output' : 'Output grezzo del FortiGate')}</summary>
-            <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(sub, null, 2)))}</pre></details>`;
+            <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(sub, null, 2)))}</pre></details>`;
         return out;
     }, relayNote);
 
@@ -241,7 +241,7 @@ function renderDiagnosi(d, dest) {
         const fe = a.far_end_policy || {};
         out += `<div style="margin-top:8px; font-size:12px; font-weight:600;">${escapeHtml(en ? 'Far-end firewall policy' : 'Policy del firewall remoto')}</div>`;
         out += fe.data
-            ? `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:160px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(fe.data, null, 2)))}</pre>`
+            ? `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:160px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(fe.data, null, 2)))}</pre>`
             : `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(jsStr(fe.reason || fe.error || ''))}</div>`;
         if (a.route) {
             const rd = a.route.data || {};
@@ -391,7 +391,7 @@ function _diagWifiCard() {
             <i class="fa-solid fa-wifi" style="color:var(--text-muted);"></i> ${escapeHtml(en ? 'Wireless (Cisco WLC)' : 'Wireless (Cisco WLC)')}
             <div style="flex:1; min-width:20px;"></div>
             <input id="diagWlcIp" placeholder="${escapeHtml(en ? 'WLC address' : 'indirizzo WLC')}"
-                   style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:4px 10px; font-size:12px; color:var(--text); width:170px;">
+                   style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:4px 10px; font-size:12px; color:var(--text); width:170px;">
             <button onclick="diagnoseWifi()" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-stethoscope"></i> ${escapeHtml(en ? 'Run' : 'Lancia')}</button>
         </div>
         <div id="diagWifiBody"><div style="color:var(--text-muted); font-size:12px;">${escapeHtml(
@@ -434,7 +434,7 @@ async function diagnoseWifi() {
     host.innerHTML = _kv('WLC', d.wlc) + _kv(en ? 'Platform' : 'Piattaforma', d.platform) +
         _kv('MAC', d.client_mac) + rows +
         `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:11px; color:var(--text-muted);">${escapeHtml(en ? 'Raw controller output' : 'Output grezzo del controller')}</summary>
-         <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(sections, null, 2)))}</pre></details>`;
+         <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(sections, null, 2)))}</pre></details>`;
 }
 
 // --- Port bounce -----------------------------------------------------------
@@ -448,7 +448,7 @@ function _diagBounceControl() {
             <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(en ? 'Bounce the port' : 'Spegni e riaccendi la porta')}
                 <b style="font-family:var(--font-code);">${escapeHtml(jsStr(_diagSwitch.port))}</b></span>
             <input id="diagBounceConfirm" placeholder="${escapeHtml(en ? 'type the port name' : 'digita il nome della porta')}"
-                   style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:4px 10px; font-size:12px; color:var(--text); width:190px;">
+                   style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:4px 10px; font-size:12px; color:var(--text); width:190px;">
             <button onclick="diagBouncePort()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
                 <i class="fa-solid fa-power-off"></i> ${escapeHtml(en ? 'Bounce' : 'Riavvia porta')}</button>
         </div>

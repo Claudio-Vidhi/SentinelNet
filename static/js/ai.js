@@ -371,7 +371,7 @@
                 ? `<span title="${escapeHtml(L.lblAiLocalLlm || 'LLM locale')}"><i class="fa-solid fa-house-laptop"></i></span>`
                 : (p.api_key_set
                     ? `<span style="color:var(--success, #4caf50);" title="${escapeHtml(L.lblAiKeySet || 'API key impostata')}"><i class="fa-solid fa-key"></i></span>`
-                    : `<span style="color:var(--warning, #e0a800);" title="${escapeHtml(L.lblAiKeyMissing || 'API key mancante')}"><i class="fa-solid fa-triangle-exclamation"></i></span>`);
+                    : `<span style="color:var(--warning, var(--lamp-warn));" title="${escapeHtml(L.lblAiKeyMissing || 'API key mancante')}"><i class="fa-solid fa-triangle-exclamation"></i></span>`);
             return `<div class="ai-profile-card${p.id === editing ? ' editing' : ''}" onclick="selectAiProfileCard('${escapeHtml(jsStr(p.id))}')">
                 <div class="ai-prof-top">
                     <i class="${AI_PROVIDER_ICONS[p.provider] || 'fa-solid fa-robot'}" style="color:var(--primary); width:14px;"></i>
@@ -603,7 +603,7 @@
         const box = document.getElementById('aiChatMessages');
         if (!box) return;
         const card = document.createElement('div');
-        card.style.cssText = 'border:1px solid var(--warning, #e0a800); border-radius:10px; padding:12px; margin:8px 0; font-size:13px;';
+        card.style.cssText = 'border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; padding:12px; margin:8px 0; font-size:13px;';
         if (!(attachedIps || []).includes(p.device_ip)) {
             card.innerHTML = currentLang==='en' ? `⚠️ The AI proposed a change for <code>${escapeHtml(p.device_ip)}</code>, which is not among the attached devices. Proposal ignored for safety.` : `⚠️ L'AI ha proposto una modifica per <code>${escapeHtml(p.device_ip)}</code>, che non è tra i dispositivi allegati. Proposta ignorata per sicurezza.`;
             box.appendChild(card);
@@ -612,7 +612,7 @@
         }
         card.innerHTML = `
             <div style="font-weight:600; margin-bottom:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> ${currentLang==='en' ? 'Proposed configuration change' : 'Modifica di configurazione proposta'} — <code>${escapeHtml(p.device_ip)}</code></div>
-            <pre style="background:var(--surface-2); border-radius:8px; padding:10px; overflow:auto; margin:0 0 8px 0;">${escapeHtml(p.commands.join('\n'))}</pre>
+            <pre style="background:var(--surface-2); border-radius:0; padding:10px; overflow:auto; margin:0 0 8px 0;">${escapeHtml(p.commands.join('\n'))}</pre>
             <div style="display:flex; gap:8px; align-items:center;">
                 <button class="btn btn-primary btn-small requires-write" style="width:auto;"><i class="fa-solid fa-play"></i> ${currentLang==='en' ? 'Apply…' : 'Applica…'}</button>
                 <button class="btn btn-secondary btn-small" style="width:auto;">${currentLang==='en' ? 'Cancel' : 'Annulla'}</button>
@@ -629,10 +629,10 @@
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10000; display:flex; align-items:center; justify-content:center;';
         overlay.innerHTML = `
-            <div style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:12px; max-width:560px; width:92%; padding:18px;">
+            <div style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:0; max-width:560px; width:92%; padding:18px;">
                 <h4 style="margin:0 0 10px 0;">${currentLang==='en' ? 'Confirm configuration push' : 'Conferma invio configurazione'}</h4>
                 <p style="font-size:13px; margin:0 0 8px 0;">${currentLang==='en' ? `You are about to send <b>${p.commands.length}</b> commands in configuration mode to <code>${escapeHtml(p.device_ip)}</code>. The operation is audited and blacklisted commands are blocked server-side.` : `Stai per inviare <b>${p.commands.length}</b> comandi in modalità configurazione a <code>${escapeHtml(p.device_ip)}</code>. L'operazione viene auditata e i comandi in blacklist vengono bloccati dal server.`}</p>
-                <pre style="background:var(--surface-2); border-radius:8px; padding:10px; max-height:220px; overflow:auto; font-size:12px;">${escapeHtml(p.commands.join('\n'))}</pre>
+                <pre style="background:var(--surface-2); border-radius:0; padding:10px; max-height:220px; overflow:auto; font-size:12px;">${escapeHtml(p.commands.join('\n'))}</pre>
                 <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin:8px 0;">
                     <input type="checkbox" id="aiCfgSaveAfter"${p.save_after ? ' checked' : ''}> ${currentLang==='en' ? 'Save startup configuration after the push' : "Salva configurazione di avvio dopo l'invio"}
                 </label>
@@ -708,7 +708,7 @@
         div.style.alignItems = isUser ? 'flex-end' : 'flex-start';
         const label = isUser ? (i18n[currentLang].lblAiChatYou || 'Tu') : (meta || (i18n[currentLang].lblAiChatAssistant || 'AI'));
         div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${escapeHtml(label)}</div>
-            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--accent, #3b82f6)' : 'var(--surface-3)'}; color:${isUser ? '#fff' : 'inherit'}; border-radius:12px; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
+            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--accent, #3b82f6)' : 'var(--surface-3)'}; color:${isUser ? '#fff' : 'inherit'}; border-radius:0; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         return div;

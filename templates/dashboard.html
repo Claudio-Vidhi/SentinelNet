@@ -1,17 +1,19 @@
 <!DOCTYPE html>
-<html lang="it" data-theme="dark">
+<html lang="it">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SentinelNet</title>
 
-  <!-- Favicon: scudo "Sentinel" con nodi di rete connessi (SVG inline, nessun file esterno) -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 28 7V15c0 8-6 13-12 15C10 28 4 23 4 15V7Z' fill='%236a5fc1'/%3E%3Cpath d='M16 11 11 20M16 11 21 20M11 20 21 20' stroke='%23c2ef4e' stroke-width='1.4' fill='none'/%3E%3Ccircle cx='16' cy='11' r='2.6' fill='%23c2ef4e'/%3E%3Ccircle cx='11' cy='20' r='2.6' fill='%23c2ef4e'/%3E%3Ccircle cx='21' cy='20' r='2.6' fill='%23c2ef4e'/%3E%3C/svg%3E">
+  <!-- Favicon: sbarra, due discese e un sezionatore — lo schema unifilare
+       del quadro, in miniatura (SVG inline, nessun file esterno). -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23d4d7cf'/%3E%3Cpath d='M4 10h24M11 10v8M21 10v8' stroke='%2316191c' stroke-width='2.5' fill='none'/%3E%3Crect x='8' y='18' width='6' height='6' fill='%232f8f4e'/%3E%3Crect x='18' y='18' width='6' height='6' fill='none' stroke='%2316191c' stroke-width='2'/%3E%3C/svg%3E">
 
-  <!-- Rubik (UI) + Space Grotesk (display) + Ubuntu Mono (code) — DESIGN-sentry.md -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Saira Condensed (legenda incisa) + Azeret Mono (dati e misure): serviti
+       da static/fonts/, non da un CDN — vedi @font-face in dashboard.css.
+       La prosa usa lo stack di sistema: nessun terzo file da scaricare. -->
+  <link rel="preload" href="/static/fonts/saira-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/azeret-mono-var.woff2" as="font" type="font/woff2" crossorigin>
   
   <!-- FontAwesome Icons -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -26,6 +28,33 @@
   <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
+<!--
+  IMPECCABLE DIRECTION CONTRACT — seed ff63c544 / 8c37ee38
+  THESIS: SentinelNet is drawn as the estate it manages — a one-line mimic
+  diagram indexed by bay, device and port. It refuses the sparkline card grid
+  every observability console ships.
+  OWN-WORLD: substation mimic board and its SCADA successor. Engraved laminate
+  (light) and slate console (dark) are two real renditions of one drawing.
+  Square corners, engraved grooves for depth, Saira Condensed legend capitals,
+  Azeret Mono for every measured value. Colour means STATE, never emphasis.
+  STORY: the engineer sees which bays are energised, what changed, and where to
+  look next — with the symbol legend visible as a contract.
+  FIRST VIEWPORT: title block, then the one-line — bus bar, bays hanging on
+  droppers, isolator symbols carrying state by geometry — then the event strip.
+  Primary control is the single ink block in the title row.
+  FORM: candidate 7 of the grounded list (mimic panel), assigned by roll.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the
+  finish review, the verdict, and DESIGN.md.
+-->
+  <script>
+    // Resa (chiara/scura) PRIMA del primo paint, come per la sidebar: applicarla
+    // dopo farebbe lampeggiare il quadro nella polarità sbagliata. Nessun valore
+    // salvato = si segue il sistema operativo (prefers-color-scheme).
+    try {
+      var t = localStorage.getItem('sentinelnet_theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* localStorage non disponibile: si segue il sistema */ }
+  </script>
   <script>
     // Ripristina lo stato della sidebar PRIMA del primo paint: applicare la classe
     // più tardi (a DOMContentLoaded) farebbe vedere la sidebar espansa che si
@@ -44,12 +73,12 @@
   <div id="authOverlay">
     <div class="login-card">
       <div style="font-size: 40px; color: var(--primary); margin-bottom: 15px; text-align: center;">
-        <i class="fa-solid fa-shield-halved fa-bounce" id="overlayIcon"></i>
+        <i class="fa-solid fa-shield-halved" id="overlayIcon"></i>
       </div>
       
       <!-- Sezione Registrazione Primo Account -->
       <div id="wizardSection" style="display: none;">
-        <h2 id="wizTitle" style="text-align: center;" data-i18n="wizTitle">🚀 Primo Accesso rilevato</h2>
+        <h2 id="wizTitle" style="text-align: center;" data-i18n="wizTitle">Primo Accesso rilevato</h2>
         <p id="wizSubtitle" style="text-align: center;" data-i18n="wizSubtitle">Benvenuto in SentinelNet. Crea il tuo account Amministratore locale per iniziare a gestire la tua infrastruttura di rete.</p>
         
         <div class="form-group" style="text-align: left;">
@@ -101,7 +130,7 @@
 
       <!-- Sezione Cambio Password obbligatorio al primo accesso -->
       <div id="changePwSection" style="display: none;">
-        <h2 id="cpwTitle" style="text-align: center;" data-i18n="cpwTitle">🔑 Imposta la tua Password</h2>
+        <h2 id="cpwTitle" style="text-align: center;" data-i18n="cpwTitle">Imposta la tua Password</h2>
         <p id="cpwSubtitle" style="text-align: center;" data-i18n="cpwSubtitle">Questo account è stato creato da un amministratore. Per motivi di sicurezza scegli una nuova password personale prima di continuare.</p>
 
         <div class="form-group" style="text-align: left;">
@@ -136,9 +165,16 @@
   <aside id="appSidebar">
     <div class="aside-header">
       <div class="brand-row">
-        <h2><i class="fa-solid fa-shield-halved" style="color: var(--primary);"></i> Sentinel<span class="brand-chip">Net</span></h2>
+        <h2><i class="fa-solid fa-shield-halved"></i> Sentinel<span class="brand-chip">Net</span></h2>
         <div class="aside-actions">
           <!-- #langSelect viene iniettato qui da initLanguageSelector() -->
+          <button type="button" id="themeToggle" class="theme-toggle" onclick="toggleTheme()"
+                  aria-label="Alterna resa chiara e scura"
+                  title="Alterna resa chiara e scura"
+                  data-i18n-title="titleThemeToggle" data-i18n-aria-label="titleThemeToggle">
+            <i class="fa-solid fa-circle-half-stroke icon-light"></i>
+            <i class="fa-solid fa-circle-half-stroke icon-dark"></i>
+          </button>
           <button type="button" id="sidebarToggle" class="sidebar-toggle" onclick="toggleSidebar()"
                   aria-expanded="true" aria-controls="appSidebar"
                   aria-label="Comprimi o espandi la barra laterale"
@@ -237,46 +273,59 @@
   <main>
     <!-- TAB 0: Operations Home (landing) -->
     <div id="tab-home" class="tab-content active">
-      <div class="hero">
-        <div class="hero-card">
-          <span class="eyebrow" data-i18n="homeEyebrow"><i class="fa-solid fa-grip"></i> Operations</span>
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="homeTitle">Panoramica operativa</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:54ch;" data-i18n="homeSubtitle">Stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
-          <div class="split-footer">
-            <button class="btn btn-primary" style="width:auto; margin:0;" onclick="switchTab('tab-devices')" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
-            <button class="btn btn-secondary requires-write" style="width:auto; margin:0; border-color: var(--cta); color: var(--cta);" onclick="startGroupTriage('all')" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
-          </div>
+      <!-- Cartiglio: come su un disegno tecnico, l'intestazione dice cosa si sta
+           guardando e porta il comando primario. -->
+      <div class="hero-card" style="display:flex; align-items:flex-end; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:14px;">
+        <div style="min-width:0;">
+          <h2 data-i18n="homeTitle">Panoramica operativa</h2>
+          <p data-i18n="homeSubtitle">Stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
         </div>
-        <div class="hero-card" style="display:flex; flex-direction:column; gap:14px; justify-content:center;">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-            <span style="color:var(--text-muted); font-size:13px;" data-i18n="homeStatDevices">Dispositivi totali</span>
-            <strong id="homeKpiTotal" style="font-family:var(--font-display); font-size:22px;">&mdash;</strong>
-          </div>
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-            <span class="status ok"><span class="led led-success"></span><span data-i18n="homeStOnline">Online</span></span>
-            <strong id="homeStatOnline" style="font-family:var(--font-display); font-size:22px;">&mdash;</strong>
-          </div>
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-            <span class="status warn"><span class="led led-warning"></span><span data-i18n="homeAttention">Richiede attenzione</span></span>
-            <strong id="homeStatAttention" style="font-family:var(--font-display); font-size:22px;">&mdash;</strong>
-          </div>
+        <div class="split-footer" style="margin-top:0;">
+          <button class="btn btn-primary" style="width:auto;" onclick="switchTab('tab-devices')" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
+          <button class="btn btn-secondary requires-write" style="width:auto;" onclick="startGroupTriage('all')" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:18px;">
-        <div class="kpi">
-          <h4 data-i18n="homeKpiOnlineLabel">Dispositivi online</h4>
-          <strong id="homeKpiOnline">&mdash;</strong>
+      <!-- Schema unifilare della flotta: sbarra, discese, sezionatori.
+           Lo stato è nella GEOMETRIA del simbolo (pieno = attivo, vuoto = giù,
+           tratteggiato = rilevato), quindi resta leggibile senza colore. -->
+      <div class="oneline" style="margin-bottom:14px;">
+        <div class="oneline-head">
+          <span data-i18n="homeOnelineTitle">Schema unifilare flotta</span>
+          <span class="oneline-rev" id="homeOnelineRev">&mdash;</span>
         </div>
-        <div class="kpi">
-          <h4 data-i18n="homeKpiAttentionLabel">Richiedono attenzione</h4>
-          <strong id="homeKpiAttention">&mdash;</strong>
+        <div class="oneline-body oneline-grid">
+          <div class="oneline-bus"></div>
+          <!-- Una bay per TENANT reale, non tre contatori aggregati: e' l'estate
+               a essere indicizzata, come su un quadro vero. Popolata da
+               renderFleetOneline(); il totale di flotta vive nel cartiglio. -->
+          <div class="oneline-bays" id="homeOnelineBays"></div>
+        </div>
+        <div class="oneline-foot">
+          <span><span data-i18n="homeStatDevices">Dispositivi totali</span> <b id="homeKpiTotal">&mdash;</b></span>
+          <span><span data-i18n="homeStOnline">Online</span> <b id="homeKpiOnline">&mdash;</b> <i id="homeStatOnline">&mdash;</i></span>
+          <span><span data-i18n="homeAttention">Richiede attenzione</span> <b id="homeKpiAttention">&mdash;</b> <i id="homeStatAttention">&mdash;</i></span>
+        </div>
+        <!-- La legenda e' il contratto dei simboli: disegna le stesse quattro
+             geometrie che compaiono sulla sbarra, riusando gli stati reali. -->
+        <div class="oneline-legend">
+          <span class="oneline-bay" data-state="up"><i class="oneline-sw"></i> <span data-i18n="homeLegUp">Attivo</span></span>
+          <span class="oneline-bay" data-state="warn"><i class="oneline-sw"></i> <span data-i18n="homeLegWarn">Attenzione</span></span>
+          <span class="oneline-bay" data-state="down"><i class="oneline-sw"></i> <span data-i18n="homeLegDown">Non raggiungibile</span></span>
+          <span class="oneline-bay" data-state="idle"><i class="oneline-sw"></i> <span data-i18n="homeLegIdle">Rilevato</span></span>
         </div>
       </div>
 
-      <div class="panel" style="margin-top:18px;">
+      <!-- Striscia eventi: la stampante di sala controllo. Cronologica, una riga
+           per evento, la piu' recente in alto. -->
+      <div class="panel">
+        <h3 data-i18n="homeEventStrip">Registro eventi</h3>
+        <div class="eventstrip" id="homeEventStrip"></div>
+      </div>
+
+      <div class="panel">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
-          <h3 style="margin:0; font-size:16px;" data-i18n="homeAttentionQueue"><i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i> Coda attenzione flotta</h3>
+          <h3 style="margin:0; font-size:16px;" data-i18n="homeAttentionQueue"><i class="fa-solid fa-triangle-exclamation"></i> Coda attenzione flotta</h3>
           <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="switchTab('tab-devices')" data-i18n="homeViewAll">Vedi tutti</button>
         </div>
         <div class="table-container">
@@ -316,7 +365,6 @@
     <div id="tab-devices" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="invEyebrow"><i class="fa-solid fa-server"></i> Inventario</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="invHeroTitle">Inventario Dispositivi di Rete</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="invHeroSubtitle">Elenco completo degli apparati monitorati: stato in tempo reale, filtri per tenant e azioni rapide di triage, ping e scansione.</p>
           <div class="split-footer">
@@ -345,14 +393,14 @@
       <div class="panel" style="margin-top:18px;">
         <h3 style="margin:0 0 6px; font-size:16px;" data-i18n="titleInventoryTable">Dispositivi di Rete Sotto Monitoraggio</h3>
         <div class="filterbar">
-          <select id="filterGroupSelect" onchange="renderDeviceTable()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+          <select id="filterGroupSelect" onchange="renderDeviceTable()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <div class="search-wrap">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input id="deviceSearch" type="search" oninput="renderDeviceTable()" autocomplete="off"
               placeholder="Cerca IP, hostname, vendor, gruppo..." data-i18n-placeholder="searchInventoryPl"
-              style="padding:6px 10px 6px 30px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:100%; transition:var(--transition);"
+              style="padding:6px 10px 6px 30px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; outline:none; width:100%; transition:var(--transition);"
               onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
               onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
           </div>
@@ -416,7 +464,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="provisioningEyebrow"><i class="fa-solid fa-plus"></i> Provisioning</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="provisioningHeroTitle">Provisioning Apparato</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="provisioningHeroSubtitle">Aggiungi o modifica un dispositivo esistente nell'inventario, assegnalo a un tenant e configura protocolli di connessione e credenziali. Crea qui anche nuovi tenant.</p>
         </div>
@@ -427,7 +474,7 @@
           <div class="requires-write">
             <h3 style="margin-bottom: 12px; font-size: 16px;" id="devFormTitle" data-i18n="titleProvisioning"><i class="fa-solid fa-circle-plus"></i> Provisioning Apparato</h3>
 
-            <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:8px; color:var(--primary); font-size:12px;">
+            <div id="devEditNotice" style="display:none; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:0; color:var(--primary); font-size:12px;">
               <i class="fa-solid fa-pen-to-square"></i> <span data-i18n="msgEditingDevice">Stai modificando un dispositivo esistente. Le credenziali vanno reinserite per confermarle.</span>
             </div>
 
@@ -475,7 +522,7 @@
                  (solo SSH:22) -- vedi setTransportsForm(). -->
             <div class="form-group">
               <label data-i18n="lblTransports">Protocolli di connessione</label>
-              <details id="devTransports" style="border:1px solid var(--border); border-radius:8px; background:var(--surface-2); overflow:hidden;">
+              <details id="devTransports" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); overflow:hidden;">
                 <summary style="list-style:none; cursor:pointer; padding:8px 10px; font-size:13px; font-weight:700; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
                   <i class="fa-solid fa-plug"></i>
                   <span data-i18n="lblTransportsEnabled">Abilitati:</span>
@@ -600,7 +647,6 @@
     <div id="tab-groups" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="groupsEyebrow"><i class="fa-solid fa-sitemap"></i> Anagrafica</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleGroupsRegistry">Anagrafica Gruppi, Clienti e Sedi Locali</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descGroupsRegistry">
             I gruppi organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un gruppo sposta i dispositivi associati nel gruppo Generale.
@@ -672,7 +718,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="portchannelsEyebrow"><i class="fa-solid fa-link"></i> Rete</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titlePortchannels">Port-Channel & Interfacce per Switch</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descPortchannels">
             Elenco dei Port-Channel configurati su ogni switch con le interfacce membro.
@@ -682,7 +727,7 @@
 
       <div class="panel">
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
-          <select id="topologyGroupSelect" onchange="loadTopology()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+          <select id="topologyGroupSelect" onchange="loadTopology()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <button class="btn btn-danger btn-small" onclick="resetTopology()" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
@@ -701,7 +746,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="mapEyebrow"><i class="fa-solid fa-diagram-project"></i> Mappa</span>
           <h2 style="margin:0; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="title2DMap">Topologia Dinamica 2D Interactive</h2>
         </div>
       </div>
@@ -709,14 +753,14 @@
       <div class="panel" style="margin-bottom:15px;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap: 15px; flex-wrap: wrap;">
         <div style="display:flex; align-items:center; gap: 15px; flex-wrap: wrap;">
-          <select id="interactiveGroupSelect" onchange="loadInteractiveMap()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+          <select id="interactiveGroupSelect" onchange="loadInteractiveMap()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
 
           <!-- Selettore categorie da mostrare nella mappa -->
           <details id="mapCatMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
             <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-layer-group"></i> <span data-i18n="lblMapCategories">Categorie</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
-            <div id="mapCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:180px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            <div id="mapCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:180px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
           </details>
 
           <!-- Elenco dispositivi della Sede selezionata: spunta/deseleziona per
@@ -725,37 +769,37 @@
                che per quella minimalista. -->
           <details id="deviceFilterMenu" style="position:relative; padding-left:10px; border-left:1px solid var(--border);">
             <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-list-check"></i> <span data-i18n="lblDeviceFilter">Dispositivi</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
-            <div id="deviceFilterList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:220px; max-height:320px; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            <div id="deviceFilterList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:220px; max-height:320px; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
           </details>
 
           <!-- Interruttore dispositivi scoperti (CDP/LLDP): nascosti di default -->
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleDiscovered" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #a3a3a3; cursor: pointer; border-radius: 4px;">
+            <input type="checkbox" id="toggleDiscovered" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #a3a3a3; cursor: pointer; border-radius: 0;">
             <span data-i18n="lblShowDiscovered">Mostra Scoperti</span>
           </label>
 
           <!-- Interruttore evidenziazione link Port-Channel / LAG -->
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="togglePortChannel" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--warning); cursor: pointer; border-radius: 4px;">
+            <input type="checkbox" id="togglePortChannel" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--text); cursor: pointer; border-radius: 0;">
             <span data-i18n="lblHighlightPortChannel">Evidenzia Port-Channel</span>
           </label>
 
           <!-- Interruttore range dominio VTP: colora i nodi per dominio VTP -->
           <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleVtpDomain" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #b76bff; cursor: pointer; border-radius: 4px;">
+            <input type="checkbox" id="toggleVtpDomain" onchange="loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #b76bff; cursor: pointer; border-radius: 0;">
             <span data-i18n="lblVtpDomain">Dominio VTP</span>
           </label>
 
           <!-- Selettore vista: mappa classica oppure la nuova mappa minimalista -->
           <div style="display:inline-flex; align-items:center; gap:4px; padding-left:10px; border-left:1px solid var(--border);">
-            <button id="mapViewClassicBtn" class="map-view-btn chip" onclick="setMapView('classic')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapClassic">Classica</button>
-            <button id="mapViewMinimalBtn" class="map-view-btn chip" onclick="setMapView('minimal')" style="width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Nuova</button>
+            <button id="mapViewClassicBtn" class="map-view-btn chip" onclick="setMapView('classic')" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapClassic">Classica</button>
+            <button id="mapViewMinimalBtn" class="map-view-btn chip" onclick="setMapView('minimal')" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Nuova</button>
           </div>
 
           <!-- Interruttore tooltip al passaggio del mouse: solo per la nuova mappa,
                dove le etichette Port-Channel sono già sempre visibili sul disegno -->
           <label id="minimalHoverWrap" style="display: none; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); cursor: pointer; user-select: none; padding-left: 10px; border-left: 1px solid var(--border); margin: 0;">
-            <input type="checkbox" id="toggleMinimalHover" onchange="localStorage.setItem('minimalHoverInfo', this.checked ? '1' : '0'); loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: #6a5fc1; cursor: pointer; border-radius: 4px;">
+            <input type="checkbox" id="toggleMinimalHover" onchange="localStorage.setItem('minimalHoverInfo', this.checked ? '1' : '0'); loadInteractiveMap()" style="width: 16px; height: 16px; accent-color: var(--text-soft); cursor: pointer; border-radius: 0;">
             <span data-i18n="lblHoverInfo">Info al passaggio</span>
           </label>
 
@@ -768,7 +812,7 @@
                su un cavo nella mappa minimalista). Solo nuova mappa. -->
           <details id="minimalCustomCatMenu" style="display:none; position:relative; padding-left:10px; border-left:1px solid var(--border);">
             <summary style="list-style:none; cursor:pointer; font-size:13px; font-weight:700; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px;"><i class="fa-solid fa-tags"></i> <span data-i18n="lblCustomCats">Categorie link</span> <i class="fa-solid fa-caret-down" style="font-size:11px;"></i></summary>
-            <div id="minimalCustomCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:230px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+            <div id="minimalCustomCatList" style="position:absolute; left:10px; top:130%; z-index:60; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:230px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
           </details>
 
         </div>
@@ -815,7 +859,6 @@
     <div id="tab-categories" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="categoriesEyebrow"><i class="fa-solid fa-shapes"></i> Inventario</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleCategories">Dispositivi Scoperti &amp; Classificazione</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descCategories">
             Conteggio per categoria dei dispositivi inventariati e scoperti via CDP/LLDP. Operatori e amministratori possono riclassificare manualmente i dispositivi e creare nuove categorie/sottocategorie.
@@ -826,10 +869,10 @@
       <div class="panel" style="margin-bottom:18px;">
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
-            <select id="categoriesGroupSelect" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <select id="categoriesGroupSelect" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
-            <select id="categoriesCatFilter" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <select id="categoriesCatFilter" onchange="renderCategoriesPanel()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
             </select>
           </div>
@@ -842,7 +885,7 @@
             </button>
             <details id="categoryColumnsMenu" style="position:relative;">
               <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
-              <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:170px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+              <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:170px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
             </details>
             <button class="btn btn-secondary btn-small" onclick="exportCategoriesCsv()" style="width:auto; margin:0;" data-i18n="btnExportCsv">
               <i class="fa-solid fa-file-csv"></i> Esporta CSV
@@ -892,7 +935,6 @@
     <div id="tab-security" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="threatEyebrow"><i class="fa-solid fa-shield-virus"></i> Sicurezza</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleThreatIntel">Vulnerability Matcher (EUVD ENISA)</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descThreatIntel">
             Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).
@@ -911,7 +953,7 @@
         <div class="panel" style="margin-bottom:18px;">
           <div class="filterbar" style="margin-top:0; align-items:center;">
             <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
-            <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
             <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
@@ -963,7 +1005,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="macEyebrow"><i class="fa-solid fa-location-crosshairs"></i> Rete</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleMacTracker">MAC Address Tracker</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descMacTracker">
             Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.
@@ -994,18 +1035,18 @@
         <h3 style="margin:0 0 10px; font-size:16px;" data-i18n="titleMacScanPanel">Scansione MAC</h3>
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <select id="macScanGroup" onchange="populateMacScanDevices(); macSearch(); refreshMacStats(false);" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <select id="macScanGroup" onchange="populateMacScanDevices(); macSearch(); refreshMacStats(false);" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
             </select>
             <details id="macDeviceMenu" style="position:relative;">
-              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
                 <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
                 <span id="macDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
                 <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
               </summary>
-              <div id="macDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+              <div id="macDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
             </details>
-            <select id="macScanTransport" title="" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <select id="macScanTransport" title="" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
               <option value="" data-i18n="optMacTransportAuto">Trasporto: Auto</option>
               <option value="netconf">NETCONF</option>
               <option value="restconf">RESTCONF</option>
@@ -1018,7 +1059,7 @@
             </button>
             <div class="requires-admin" style="display:flex; align-items:center; gap:6px;">
               <label style="font-size:12px; color:var(--text-muted);" data-i18n="lblMacRetention">Retention (giorni):</label>
-              <input id="macRetentionDays" type="number" min="1" max="3650" style="width:70px; padding:5px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+              <input id="macRetentionDays" type="number" min="1" max="3650" style="width:70px; padding:5px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
               <button class="btn btn-secondary btn-small" onclick="saveMacRetention()" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
             </div>
           </div>
@@ -1028,7 +1069,7 @@
       <!-- Comandi ad-hoc per apparati non ordinari (es. C8000V bridge-domain) -->
       <details class="panel requires-write" style="margin-bottom:18px; padding:0; overflow:hidden;">
         <summary style="cursor:pointer; padding:14px 18px; font-weight:700; list-style:none;">
-          <i class="fa-solid fa-terminal" style="color:var(--warning); margin-right:6px;"></i>
+          <i class="fa-solid fa-terminal" style="margin-right:6px;"></i>
           <span data-i18n="titleMacAdhoc">Comandi ad-hoc (apparati non standard)</span>
         </summary>
         <div style="padding:0 18px 18px; border-top:1px solid var(--border); padding-top:14px;">
@@ -1103,7 +1144,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="clientmapEyebrow"><i class="fa-solid fa-network-wired"></i> Rete</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleClientMap">Client Map — MAC ↔ IP</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descClientMap">
             Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.
@@ -1133,23 +1173,23 @@
              il tenant; questo evita raccolte ARP indiscriminate su apparati non previsti. -->
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <select id="arpScanGroup" onchange="populateArpScanDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <select id="arpScanGroup" onchange="populateArpScanDevices()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
             </select>
             <details id="arpDeviceMenu" style="position:relative;">
-              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
                 <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
                 <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
                 <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
               </summary>
-              <div id="arpDeviceList" style="position:absolute; top:110%; right:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+              <div id="arpDeviceList" style="position:absolute; top:110%; right:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
             </details>
           </div>
           <button class="btn btn-primary btn-small requires-write" id="btnArpScan" onclick="runArpScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
             <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
           </button>
         </div>
-        <div id="arpScanSummary" style="display:none; margin-top:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:12px;"></div>
+        <div id="arpScanSummary" style="display:none; margin-top:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px;"></div>
       </div>
 
       <div class="panel">
@@ -1168,12 +1208,12 @@
             <!-- Multi-selezione tenant a checkbox (nessun tenant di default): evita di
                  mostrare tutti i binding di tutti i tenant senza una scelta esplicita. -->
             <details id="arpTenantMenu" style="position:relative;">
-              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px; width:160px;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px; width:160px;">
                 <i class="fa-solid fa-building" style="color:var(--text-muted);"></i>
                 <span id="arpTenantSummary" data-i18n="arpPickTenantHint" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Seleziona un tenant per visualizzare i binding</span>
                 <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted); margin-left:auto;"></i>
               </summary>
-              <div id="arpTenantList" style="position:absolute; top:110%; left:0; z-index:60; min-width:200px; max-height:260px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
+              <div id="arpTenantList" style="position:absolute; top:110%; left:0; z-index:60; min-width:200px; max-height:260px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>
             </details>
           </div>
           <div>
@@ -1224,7 +1264,7 @@
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="diagProtoInput" data-i18n="lblFgtProto"></label>
-            <select id="diagProtoInput" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            <select id="diagProtoInput" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               <option value="TCP">TCP</option>
               <option value="UDP">UDP</option>
               <option value="ICMP">ICMP</option>
@@ -1255,7 +1295,7 @@
                 onclick="endpointsMode('list')" data-i18n="epModeList"></button>
         <button id="epModePortsBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0;"
                 onclick="endpointsMode('ports')" data-i18n="epModePorts"></button>
-        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"
+        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"
                 onchange="endpointsPorts()"></select>
       </div>
       <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
@@ -1272,7 +1312,7 @@
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="epFilterTenant" data-i18n="epThTenant"></label>
-            <select id="epFilterTenant" onchange="endpointsApplyFilters()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"></select>
+            <select id="epFilterTenant" onchange="endpointsApplyFilters()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"></select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="epFilterStale" data-i18n="epFilterStale"></label>
@@ -1299,7 +1339,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="flowsEyebrow"><i class="fa-solid fa-wave-square"></i> Observability</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleFlows">Live Flows (Top Talkers)</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descFlows">
             Aggregated network flows (IPFIX/NetFlow/sFlow) per site, with anomalies correlated to security events. Listeners are configured in Settings → Observability.
@@ -1307,14 +1346,14 @@
         </div>
       </div>
 
-      <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, #e0a800); border-radius:8px; color:var(--warning, #e0a800); font-size:13px;"></div>
+      <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; color:var(--warning, var(--lamp-warn)); font-size:13px;"></div>
 
       <!-- KPI strip -->
-      <div class="hero" style="grid-template-columns:repeat(4, 1fr); margin-bottom:18px;" id="fgKpiStrip">
-        <div class="hero-card"><span class="eyebrow" data-i18n="kpiThroughput">Throughput</span><h3 id="fgKpiThroughput" style="margin:6px 0 0; font-size:22px;">—</h3></div>
-        <div class="hero-card"><span class="eyebrow" data-i18n="kpiTopPath">Top path</span><h3 id="fgKpiTopPath" style="margin:6px 0 0; font-size:16px;">—</h3></div>
-        <div class="hero-card"><span class="eyebrow" data-i18n="kpiTalkers">Active talkers</span><h3 id="fgKpiTalkers" style="margin:6px 0 0; font-size:22px;">—</h3></div>
-        <div class="hero-card"><span class="eyebrow" data-i18n="kpiSpikes">Spikes</span><h3 id="fgKpiSpikes" style="margin:6px 0 0; font-size:22px;">—</h3></div>
+      <div class="kpi-grid" id="fgKpiStrip">
+        <div class="kpi"><h4 data-i18n="kpiThroughput">Throughput</h4><strong id="fgKpiThroughput">&mdash;</strong></div>
+        <div class="kpi"><h4 data-i18n="kpiTopPath">Top path</h4><strong id="fgKpiTopPath">&mdash;</strong></div>
+        <div class="kpi"><h4 data-i18n="kpiTalkers">Active talkers</h4><strong id="fgKpiTalkers">&mdash;</strong></div>
+        <div class="kpi"><h4 data-i18n="kpiSpikes">Spikes</h4><strong id="fgKpiSpikes">&mdash;</strong></div>
       </div>
 
       <div class="panel" style="margin-bottom:18px;">
@@ -1339,14 +1378,14 @@
           </div>
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
             <!-- 3-Way Graph Type Selector Buttons -->
-            <div class="btn-group" style="display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface-3);">
+            <div class="btn-group" style="display:inline-flex; border:1px solid var(--border); border-radius:0; overflow:hidden; background:var(--surface-3);">
               <button id="btnChartTypeDonut" class="btn btn-sm" onclick="setObsChartType('donut')" style="padding:5px 10px; border:none; background:var(--primary); color:#fff; font-size:12px;" title="Grafico a Ciambella (Donut)"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="lblChartDonut">Ciambella</span></button>
               <button id="btnChartTypeBar" class="btn btn-sm" onclick="setObsChartType('bar')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
               <button id="btnChartTypeTrend" class="btn btn-sm" onclick="setObsChartType('trend')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
             </div>
             <!-- Window Selector & Inspect Button -->
             <button class="btn btn-sm btn-secondary" onclick="openObsInspectModal('all')" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
-            <select id="obsChartWindow" onchange="loadObsProtocolDist()" style="padding:5px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <select id="obsChartWindow" onchange="loadObsProtocolDist()" style="padding:5px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
               <option value="15m">15m</option>
               <option value="1h">1h</option>
               <option value="24h" selected>24h</option>
@@ -1354,7 +1393,7 @@
             </select>
           </div>
         </div>
-        <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; overflow:hidden;">
+        <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; overflow:hidden;">
           <canvas id="obsProtocolCanvas" onclick="openObsInspectModal('all')" style="width:100%; height:100%; display:block; cursor:pointer;" title="Clicca per aprire l'ispezione dettagliata telemetria"></canvas>
           <div id="obsProtocolStats" style="display:none; width:100%; height:100%; flex-direction:column; justify-content:center; gap:10px; padding:10px 20px;"></div>
         </div>
@@ -1362,11 +1401,9 @@
 
       <div class="hero" style="grid-template-columns:repeat(2, 1fr); margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow"><i class="fa-solid fa-building"></i> <span data-i18n="lblTenantSummary">Riepilogo tenant</span></span>
           <div id="fgTenantSummary" style="margin-top:8px; font-size:13px; line-height:1.8;">—</div>
         </div>
         <div class="hero-card">
-          <span class="eyebrow"><i class="fa-solid fa-layer-group"></i> <span data-i18n="titleProtocolBreakdown">Ripartizione protocolli</span></span>
           <div class="table-wrap" style="max-height:180px; margin-top:8px;">
             <table style="width:100%; border-collapse:collapse; font-size:12px;">
               <thead><tr><th style="text-align:left; padding:4px 6px;" data-i18n="thFgProtocol">Protocollo</th><th style="text-align:left;" data-i18n="thFgPort">Porta</th><th style="text-align:left;" data-i18n="thFgRate">Rate</th></tr></thead>
@@ -1395,13 +1432,13 @@
 
       <div class="panel" style="margin-bottom:18px;">
         <div class="filterbar" style="align-items:center; margin-top:0;">
-        <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
           <option value="1h" data-i18n="optWin1h">Ultima ora</option>
           <option value="24h" data-i18n="optWin24h">Ultime 24 ore</option>
           <option value="7d" data-i18n="optWin7d">Ultimi 7 giorni</option>
         </select>
-        <select id="flowsMetric" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <select id="flowsMetric" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="bytes" data-i18n="optByBytes">Per byte</option>
           <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
         </select>
@@ -1409,7 +1446,7 @@
           <button id="flowsTenantBtn" class="btn" onclick="toggleFlowsTenantDropdown()" style="padding:6px 12px;">
             <i class="fa-solid fa-filter"></i> Tenants
           </button>
-          <div id="flowsTenantDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:220px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
+          <div id="flowsTenantDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:220px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
             <div style="padding:8px;">
               <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; font-weight:500;">
                 <input type="checkbox" id="flowsTenantAll" onchange="toggleFlowsTenantAll()" style="accent-color:var(--primary);">
@@ -1433,14 +1470,14 @@
           <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
         </button>
         </div>
-        <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, #e0a800); margin-top:10px;"></div>
+        <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, var(--lamp-warn)); margin-top:10px;"></div>
         <div class="filterbar" style="gap:6px; align-items:center;">
           <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
           <div style="position:relative; display:inline-block; margin-left:auto;">
             <button id="flowsColsBtn" class="btn btn-small" onclick="toggleFlowsColsDropdown()" style="padding:6px 12px;">
               <i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span>
             </button>
-            <div id="flowsColsDropdown" style="display:none; position:absolute; top:100%; right:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:180px; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1); padding:8px;"></div>
+            <div id="flowsColsDropdown" style="display:none; position:absolute; top:100%; right:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:180px; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1); padding:8px;"></div>
           </div>
         </div>
         <div class="table-wrap" style="max-height:420px;">
@@ -1469,7 +1506,7 @@
       <div class="panel">
       <h3 id="anomSectionTitle" style="margin:0 0 10px; font-size:16px;" data-i18n="titleCorrelatedAnomalies">Correlated anomalies</h3>
       <div class="filterbar" style="gap:10px; align-items:center; margin-top:0;">
-        <select id="anomStatus" onchange="loadAnomalies()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <select id="anomStatus" onchange="loadAnomalies()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="new" data-i18n="optAnomNew">Nuove</option>
           <option value="ack" data-i18n="optAnomAck">Prese in carico</option>
           <option value="resolved" data-i18n="optAnomResolved">Risolte</option>
@@ -1508,7 +1545,6 @@
     <div id="tab-config" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="configEyebrow"><i class="fa-solid fa-file-code"></i> Configurazioni</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleConfigAnalyzer">Config Analyzer</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descConfigAnalyzer">
             Analisi strutturata delle configurazioni: VLAN, routing, ACL e interfacce per apparato, con controlli incrociati di validazione.
@@ -1533,8 +1569,8 @@
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <input id="caSearch" type="text" oninput="caApplySearch()"
                    data-i18n-placeholder="phCaSearch" placeholder="Cerca..."
-                   style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; outline:none; width:180px;">
-            <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+                   style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; outline:none; width:180px;">
+            <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
             <button class="btn btn-secondary btn-small" onclick="loadConfigAnalyzer(true)" style="width:auto; margin:0;" data-i18n="btnCaRefresh">
@@ -1553,7 +1589,6 @@
     <div id="tab-ai" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="aiEyebrow"><i class="fa-solid fa-robot"></i> Intelligenza</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleAiAssistant">AI Assistant</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descAiAssistant">
             Chat con un assistente AI (Anthropic Claude, OpenAI ChatGPT, Google Gemini o un LLM locale via Ollama). Puoi allegare l'inventario o la configurazione di un dispositivo come contesto.
@@ -1566,7 +1601,7 @@
            sorgente di verità che legge tutta la logica di ai.js: le card sono
            una VISTA su di esse, non una seconda macchina a stati. -->
       <div class="panel" style="margin-bottom:14px; padding:0;">
-      <details class="requires-admin" id="aiSettingsPanel" style="border:0; border-radius:12px; padding:0; margin-bottom:0; background:transparent; overflow:hidden;">
+      <details class="requires-admin" id="aiSettingsPanel" style="border:0; border-radius:0; padding:0; margin-bottom:0; background:transparent; overflow:hidden;">
         <summary style="cursor:pointer; padding:14px 16px; font-weight:600; display:flex; align-items:center; gap:10px;">
           <i class="fa-solid fa-sliders" style="color:var(--primary);"></i>
           <span data-i18n="titleAiSettings">Configurazione Provider (Profili)</span>
@@ -1599,7 +1634,7 @@
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group" style="min-width:150px;">
               <label data-i18n="lblAiProvider">Provider</label>
-              <select id="aiProvider" onchange="resetAiModelList()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+              <select id="aiProvider" onchange="resetAiModelList()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
                 <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI (ChatGPT)</option>
@@ -1610,7 +1645,7 @@
             <div class="form-group" style="min-width:200px;">
               <label data-i18n="lblAiModel">Modello</label>
               <div style="display:flex; gap:4px;">
-                <select id="aiModelSelect" style="flex:1; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+                <select id="aiModelSelect" style="flex:1; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
                   <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
                 </select>
                 <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="refreshAiModels()" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
@@ -1659,7 +1694,7 @@
 
       <!-- Panel: generazione config per un NUOVO switch (template o parametri comuni tenant) -->
       <div class="panel" style="margin-bottom:14px; padding:0;">
-        <details style="border:0; border-radius:12px; overflow:hidden;">
+        <details style="border:0; border-radius:0; overflow:hidden;">
         <summary style="cursor:pointer; padding:14px 16px; font-weight:600; display:flex; align-items:center; gap:10px;">
           <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--primary);"></i>
           <span data-i18n="titleAiGenConfig">Genera configurazione nuovo switch</span>
@@ -1671,11 +1706,11 @@
         <div class="filterbar" style="margin-top:0; align-items:flex-end; flex-wrap:wrap; gap:10px;">
           <div class="form-group" style="min-width:170px; margin:0;">
             <label data-i18n="lblGenCfgTenant">Tenant</label>
-            <select id="genCfgTenant" onchange="populateGenCfgTemplates()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
+            <select id="genCfgTenant" onchange="populateGenCfgTemplates()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
           </div>
           <div class="form-group" style="min-width:220px; margin:0;">
             <label data-i18n="lblGenCfgTemplate">Switch template (opzionale)</label>
-            <select id="genCfgTemplate" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+            <select id="genCfgTemplate" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
               <option value="" data-i18n="optGenCfgNoTemplate">-- usa parametri comuni del tenant --</option>
             </select>
           </div>
@@ -1702,7 +1737,7 @@
               <i class="fa-solid fa-copy"></i> Copia
             </button>
           </div>
-          <pre id="genCfgOutput" style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px; max-height:420px; overflow:auto; font-size:12px; white-space:pre-wrap; margin:0;"></pre>
+          <pre id="genCfgOutput" style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; max-height:420px; overflow:auto; font-size:12px; white-space:pre-wrap; margin:0;"></pre>
         </div>
         </div>
         </details>
@@ -1740,14 +1775,14 @@
             <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
               <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
             </label>
-            <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+            <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
               <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
             </select>
             <div style="position:relative; display:inline-block;">
               <button id="aiAttachDeviceBtn" class="btn" onclick="toggleAiDeviceDropdown()" style="padding:6px 12px;">
                 <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
               </button>
-              <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
+              <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:0 4px 8px rgba(0,0,0,0.1);">
                 <div style="padding:8px;">
                   <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
                     <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
@@ -1762,7 +1797,7 @@
           <div id="aiChatMessages" style="flex:1 1 0; min-height:0; overflow-y:auto; padding:16px; background:var(--surface);"></div>
 
           <div class="ai-chat-composer">
-            <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
+            <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
             <button class="btn btn-primary" id="btnAiSend" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
               <i class="fa-solid fa-paper-plane"></i> Invia
             </button>
@@ -1779,7 +1814,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="provisionerEyebrow"><i class="fa-solid fa-screwdriver-wrench"></i> Provisioning</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleProvisioner">Zero-Touch Provisioning (Switch Cisco / Firewall FortiGate)</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descProvisioner">
             Genera una configurazione day-0 completa e sicura — IOS/IOS-XE per switch Cisco o FortiOS per firewall FortiGate — seguendo le linee guida di hardening del vendor, poi scegli come consegnarla: testo, SSH o console/seriale.
@@ -1829,7 +1863,7 @@
           <div class="form-group"><label>Mask MGMT</label><input id="fgtMgmtMask" type="text" placeholder="255.255.255.0" style="padding-left:12px;"></div>
           <div class="form-group"><label data-i18n="lblProvWanIf">Interfaccia WAN</label><input id="fgtWanIf" type="text" placeholder="wan1" style="padding-left:12px;"></div>
           <div class="form-group"><label data-i18n="lblProvWanMode">Modalità WAN</label>
-            <select id="fgtWanMode" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+            <select id="fgtWanMode" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
               <option value="dhcp">DHCP</option>
               <option value="static" data-i18n="optProvStatic">Statica</option>
             </select>
@@ -1851,7 +1885,7 @@
           <div class="form-group"><label>SNMPv3 priv pass</label><input id="fgtSnmpPriv" type="password" style="padding-left:12px;"></div>
           <div class="form-group"><label>Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" style="padding-left:12px;"></div>
           <div class="form-group"><label data-i18n="lblAaaProtocol">Protocollo AAA</label>
-            <select id="fgtAaaProtocol" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+            <select id="fgtAaaProtocol" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
               <option value="none" data-i18n="optAaaNone">Nessuno</option>
               <option value="radius">RADIUS</option>
               <option value="tacacs">TACACS+</option>
@@ -1874,7 +1908,7 @@
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
         <div class="form-group"><label>Hostname</label><input id="provHostname" type="text" value="SW-NEW-01" style="padding-left:12px;"></div>
         <div class="form-group"><label data-i18n="lblProvRole">Ruolo</label>
-          <select id="provRole" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <select id="provRole" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
             <option value="access">Access</option>
             <option value="distribution">Distribution/Core (L3)</option>
           </select>
@@ -1902,7 +1936,7 @@
         <div class="form-group" id="provSvisGroup" style="display:none;"><label>SVI distribution (vlan:ip:mask, comma)</label><input id="provSvis" type="text" placeholder="10:10.1.10.1:255.255.255.0" style="padding-left:12px;"></div>
         <div class="form-group" id="provDefRouteGroup" style="display:none;"><label>Default route gateway</label><input id="provDefRouteGw" type="text" placeholder="10.1.0.1" style="padding-left:12px;"></div>
         <div class="form-group"><label data-i18n="lblAaaProtocol">Protocollo AAA</label>
-          <select id="provAaaProtocol" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <select id="provAaaProtocol" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
             <option value="none" data-i18n="optAaaNone">Nessuno</option>
             <option value="radius">RADIUS</option>
             <option value="tacacs">TACACS+</option>
@@ -1933,7 +1967,7 @@
       <div style="margin-top:0; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
         <button class="btn btn-primary" id="btnProvGenerate"><i class="fa-solid fa-file-code"></i> Genera Config</button>
         <button class="btn" id="btnProvDownload"><i class="fa-solid fa-download"></i> Scarica .txt</button>
-        <select id="provDeliveryMode" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <select id="provDeliveryMode" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="view">Solo visualizzazione</option>
           <option value="ssh">Push via SSH</option>
           <option value="serial">Push via Console/Seriale</option>
@@ -1957,7 +1991,7 @@
           </div>
         </div>
         <div class="form-group"><label>Baud rate</label>
-          <select id="provBaudrate" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <select id="provBaudrate" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
             <option value="9600" selected>9600</option>
             <option value="19200">19200</option>
             <option value="38400">38400</option>
@@ -1972,7 +2006,7 @@
 
       <div style="margin-top:20px;">
         <label style="font-size:13px; color:var(--text-muted);">Config generata / esito operazione</label>
-        <textarea id="provOutput" readonly style="width:100%; height:320px; margin-top:6px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
+        <textarea id="provOutput" readonly style="width:100%; height:320px; margin-top:6px; padding:10px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
       </div>
       </div>
     </div>
@@ -1981,7 +2015,6 @@
     <div id="tab-import" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="importEyebrow"><i class="fa-solid fa-file-csv"></i> Import</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleImportCsv">Importazione Massiva da CSV</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descImportCsv">
             Il file CSV deve contenere tassativamente l'intestazione specificata di seguito.
@@ -1999,7 +2032,7 @@
           (<code>indirizzo</code>, <code>utente</code>, <code>gruppo</code>) sono riconosciuti, così come
           il punto e virgola come separatore e i file salvati da Excel.
         </p>
-        <div style="margin-top:12px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px;">
+        <div style="margin-top:12px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--border); border-radius:0;">
           <div style="font-size:12px; font-weight:600; margin-bottom:8px;">
             <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="importTenantVsSiteTitle">Group e Site sono due cose diverse</span>
           </div>
@@ -2024,7 +2057,7 @@
         <!-- Trascinamento oltre al selettore: il file arriva quasi sempre da
              una cartella già aperta, e obbligare a passare dal dialogo di
              sistema è il passaggio in più che rende l'operazione noiosa. -->
-        <div id="csvDropZone" style="margin-top:18px; border:2px dashed var(--border); border-radius:8px; padding:22px; text-align:center; cursor:pointer; background:var(--surface-2);">
+        <div id="csvDropZone" style="margin-top:18px; border:2px dashed var(--border); border-radius:0; padding:22px; text-align:center; cursor:pointer; background:var(--surface-2);">
           <input type="file" id="csvFileInput" accept=".csv,.txt" style="display:none;">
           <div id="csvDropText" style="font-size:13px; color:var(--text-muted);">
             <i class="fa-solid fa-file-csv fa-2x" style="color:var(--primary); margin-bottom:8px;"></i><br>
@@ -2046,7 +2079,6 @@
     <div id="tab-users" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="usersEyebrow"><i class="fa-solid fa-users-gear"></i> Amministrazione</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleUsers">Gestione Utenti e Privilegi</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descUsers">
             Crea account con privilegi differenziati. <strong>Admin</strong>: controllo totale e gestione utenti. <strong>Operator</strong>: tutte le operazioni di rete (triage, comandi, inventario). <strong>Viewer</strong>: sola lettura.
@@ -2100,7 +2132,6 @@
     <div id="tab-sites" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="sitesEyebrow"><i class="fa-solid fa-sitemap"></i> Multi-sito</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleSites">Sedi multi-sito</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:78ch;" data-i18n="descSites">
             Gestisci le sedi remote su VPN. <strong>Central poll</strong>: il centrale raggiunge i dispositivi direttamente tramite il routing VPN. <strong>Site agent</strong>: un agente remoto si connette in uscita al centrale e vi spinge inventario/MAC; i comandi CLI sono inoltrati tramite coda.
@@ -2153,7 +2184,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="mcpEyebrow"><i class="fa-solid fa-plug"></i> Integrazioni</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleMcp">MCP Server — client LLM esterni</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descMcp">
             SentinelNet è utilizzabile da client LLM esterni (Claude Desktop, LM Studio, Cline…) tramite il protocollo
@@ -2176,7 +2206,7 @@
           Snippet per <code>claude_desktop_config.json</code> (o equivalente del tuo client). Sostituisci utente e password
           con l'account dedicato; il percorso deve puntare alla copia locale di <code>mcp_server.py</code>.
         </p>
-        <pre id="mcpConfigSnippet" style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; font-family:var(--font-code); font-size:12px; overflow-x:auto; white-space:pre;"></pre>
+        <pre id="mcpConfigSnippet" style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:12px; font-family:var(--font-code); font-size:12px; overflow-x:auto; white-space:pre;"></pre>
       </div>
 
       <div class="panel">
@@ -2215,7 +2245,6 @@
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="mcpClientEyebrow"><i class="fa-solid fa-network-wired"></i> Integrazioni · <span class="preview-badge">preview</span></span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleMcpClient">MCP Client — server esterni</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descMcpClient">
             SentinelNet come <strong>client</strong> MCP verso server esterni via Streamable HTTP (JSON-RPC 2.0). Aggiungi un server, elenca i tool esposti e invocali. Anteprima: solo trasporto HTTP (niente stdio). I token di autenticazione sono cifrati a riposo e mai restituiti al browser.
@@ -2250,7 +2279,6 @@
     <div id="tab-fortigate" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="fgtEyebrow"><i class="fa-solid fa-shield-halved"></i> Integrazioni</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleFgtTab">Fortigate Management</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descFgtTab">
             Stato, rete, policy, traffico e WiFi dei FortiGate in tempo reale. Sola lettura: nessuna modifica viene scritta sul firewall, e i token non vengono mai restituiti al browser.
@@ -2263,7 +2291,7 @@
         <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
           <div class="form-group" style="margin-bottom:0; min-width:260px;">
             <label for="fgtTargetSelect" data-i18n="lblFgtTargetSelect">Target FortiGate attivo</label>
-            <select id="fgtTargetSelect" onchange="onFgtTargetSelectChange()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            <select id="fgtTargetSelect" onchange="onFgtTargetSelectChange()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               <option value="" data-i18n="optFgtNoTargets">-- nessun target configurato --</option>
             </select>
           </div>
@@ -2309,12 +2337,12 @@
             <button type="button" class="ca-pill" id="fgtPill-sdwan" onclick="fgtPickView('network','sdwan')" data-i18n="fgtPillSdwan">SD-WAN</button>
           </div>
           <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-interfaces" type="text" oninput="renderFgtDataset('interfaces')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-arp" type="text" oninput="renderFgtDataset('arp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-dhcp" type="text" oninput="renderFgtDataset('dhcp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-routes" type="text" oninput="renderFgtDataset('routes')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-vpn" type="text" oninput="renderFgtDataset('vpn')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-sdwan" type="text" oninput="renderFgtDataset('sdwan')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-interfaces" type="text" oninput="renderFgtDataset('interfaces')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-arp" type="text" oninput="renderFgtDataset('arp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-dhcp" type="text" oninput="renderFgtDataset('dhcp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-routes" type="text" oninput="renderFgtDataset('routes')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-vpn" type="text" oninput="renderFgtDataset('vpn')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-sdwan" type="text" oninput="renderFgtDataset('sdwan')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-interfaces"></div>
           <div id="fgtView-arp" style="display:none;"></div>
           <div id="fgtView-dhcp" style="display:none;"></div>
@@ -2338,13 +2366,13 @@
             <button type="button" class="ca-pill" id="fgtPill-policyLookup" onclick="fgtPickView('firewall','policyLookup')" data-i18n="fgtPillPolicyLookup">Verifica Policy</button>
           </div>
           <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-addresses" type="text" oninput="renderFgtDataset('addresses')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-addressGroups" type="text" oninput="renderFgtDataset('addressGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-services" type="text" oninput="renderFgtDataset('services')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-serviceGroups" type="text" oninput="renderFgtDataset('serviceGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-vips" type="text" oninput="renderFgtDataset('vips')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-ipPools" type="text" oninput="renderFgtDataset('ipPools')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-policies" type="text" oninput="renderFgtDataset('policies')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-addresses" type="text" oninput="renderFgtDataset('addresses')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-addressGroups" type="text" oninput="renderFgtDataset('addressGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-services" type="text" oninput="renderFgtDataset('services')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-serviceGroups" type="text" oninput="renderFgtDataset('serviceGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-vips" type="text" oninput="renderFgtDataset('vips')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-ipPools" type="text" oninput="renderFgtDataset('ipPools')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-policies" type="text" oninput="renderFgtDataset('policies')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtForm-policyLookup" style="display:none; margin-bottom:12px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
               <div class="form-group" style="margin-bottom:0;">
@@ -2357,7 +2385,7 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLookupProto" data-i18n="lblFgtProto">Protocollo</label>
-                <select id="fgtLookupProto" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLookupProto" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="TCP">TCP</option>
                   <option value="UDP">UDP</option>
                   <option value="ICMP">ICMP</option>
@@ -2432,14 +2460,14 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLogDevice" data-i18n="lblFgtLogDevice">Dispositivo log</label>
-                <select id="fgtLogDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLogDevice" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="disk">disk</option>
                   <option value="memory">memory</option>
                 </select>
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLogType" data-i18n="lblFgtLogType">Tipo log</label>
-                <select id="fgtLogType" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLogType" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="traffic">traffic</option>
                   <option value="event">event</option>
                   <option value="utm">utm</option>
@@ -2447,7 +2475,7 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtLogSubtype" data-i18n="lblFgtLogSubtype">Sottotipo log</label>
-                <select id="fgtLogSubtype" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtLogSubtype" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="forward">forward</option>
                   <option value="local">local</option>
                   <option value="virus">virus</option>
@@ -2472,9 +2500,9 @@
               <i class="fa-solid fa-rotate"></i> Carica log
             </button>
           </div>
-          <input id="fgtFilter-sessions" type="text" oninput="renderFgtDataset('sessions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-logs" type="text" oninput="renderFgtDataset('logs')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-deviceInventory" type="text" oninput="renderFgtDataset('deviceInventory')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-sessions" type="text" oninput="renderFgtDataset('sessions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-logs" type="text" oninput="renderFgtDataset('logs')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-deviceInventory" type="text" oninput="renderFgtDataset('deviceInventory')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtForm-clientDiagnosis" style="display:none; margin-bottom:12px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
               <div class="form-group" style="margin-bottom:0;">
@@ -2487,7 +2515,7 @@
               </div>
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtDiagProto" data-i18n="lblFgtProto">Protocollo</label>
-                <select id="fgtDiagProto" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtDiagProto" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="TCP">TCP</option>
                   <option value="UDP">UDP</option>
                   <option value="ICMP">ICMP</option>
@@ -2520,10 +2548,10 @@
             <button type="button" class="ca-pill" id="fgtPill-securityProfiles" onclick="fgtPickView('security','securityProfiles')" data-i18n="fgtPillSecurityProfiles">Profili Sicurezza</button>
           </div>
           <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-admins" type="text" oninput="renderFgtDataset('admins')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-bannedUsers" type="text" oninput="renderFgtDataset('bannedUsers')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-certificates" type="text" oninput="renderFgtDataset('certificates')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-configRevisions" type="text" oninput="renderFgtDataset('configRevisions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-admins" type="text" oninput="renderFgtDataset('admins')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-bannedUsers" type="text" oninput="renderFgtDataset('bannedUsers')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-certificates" type="text" oninput="renderFgtDataset('certificates')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-configRevisions" type="text" oninput="renderFgtDataset('configRevisions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-admins"></div>
           <div id="fgtView-bannedUsers" style="display:none;"></div>
           <div id="fgtView-certificates" style="display:none;"></div>
@@ -2540,8 +2568,8 @@
             <button type="button" class="ca-pill" id="fgtPill-wifiClients" onclick="fgtPickView('wifi','wifiClients')" data-i18n="fgtPillWifiClients">Client WiFi</button>
           </div>
           <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-wifiAps" type="text" oninput="renderFgtDataset('wifiAps')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-wifiClients" type="text" oninput="renderFgtDataset('wifiClients')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-wifiAps" type="text" oninput="renderFgtDataset('wifiAps')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-wifiClients" type="text" oninput="renderFgtDataset('wifiClients')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-wifiAps"></div>
           <div id="fgtView-wifiClients" style="display:none;"></div>
         </div>
@@ -2575,7 +2603,7 @@
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
               <div class="form-group" style="margin-bottom:0;">
                 <label for="fgtPrevTokenDevice" data-i18n="lblFgtTokenDevice">Dispositivo FortiGate</label>
-                <select id="fgtPrevTokenDevice" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="fgtPrevTokenDevice" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
                 </select>
               </div>
@@ -2618,7 +2646,7 @@
           </button>
           <input id="fgtFilter-fullConfig" type="text" oninput="renderFgtDataset('fullConfig')"
                  data-i18n-placeholder="phFgtConfigSearch" placeholder="Cerca nella configurazione..."
-                 style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+                 style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-fullConfig"></div>
         </div>
       </div>
@@ -2627,7 +2655,6 @@
     <div id="tab-audit-checklist" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow"><i class="fa-solid fa-clipboard-check"></i> Security Audit</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;">Checklist Audit Manutenzione Firewall</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:75ch;">
             Guida passo-passo per l'audit di manutenzione dei firewall dei clienti. Compila i rilievi sulle 9 sezioni di sicurezza, registra le evidenze e genera la relazione di audit finale.
@@ -2661,48 +2688,48 @@
 
       <!-- Modale Domanda del Template -->
       <div id="templateItemModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
-        <div class="panel" style="width:100%; max-width:620px; max-height:90vh; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <div class="panel" style="width:100%; max-width:620px; max-height:90vh; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
           <h3 id="tplItemModalTitle" style="margin-top:0; margin-bottom:15px; font-size:18px;"><i class="fa-solid fa-list-check" style="color:var(--primary);"></i> Nuova Domanda</h3>
           <form onsubmit="submitTemplateItemForm(event)">
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
               <div>
                 <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Riferimento *</label>
-                <input id="tplItemRef" type="text" required style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. 4.7">
+                <input id="tplItemRef" type="text" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. 4.7">
               </div>
               <div>
                 <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Sezione n. *</label>
-                <input id="tplItemSectionNo" type="number" min="1" required style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <input id="tplItemSectionNo" type="number" min="1" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               </div>
               <div>
                 <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Ordine</label>
-                <input id="tplItemSortOrder" type="number" min="0" step="10" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <input id="tplItemSortOrder" type="number" min="0" step="10" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               </div>
             </div>
             <div class="form-group" style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Titolo Sezione *</label>
-              <input id="tplItemSectionTitle" type="text" required list="tplSectionTitles" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <input id="tplItemSectionTitle" type="text" required list="tplSectionTitles" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               <datalist id="tplSectionTitles"></datalist>
             </div>
             <div class="form-group" style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Domanda / Controllo *</label>
-              <input id="tplItemTitle" type="text" required style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <input id="tplItemTitle" type="text" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
             </div>
             <div class="form-group" style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Perche' e' importante</label>
-              <textarea id="tplItemWhy" rows="2" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
+              <textarea id="tplItemWhy" rows="2" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
             </div>
             <div class="form-group" style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Cosa cercare</label>
-              <textarea id="tplItemGood" rows="2" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
+              <textarea id="tplItemGood" rows="2" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
             </div>
             <div class="form-group" style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Come verificarlo</label>
-              <textarea id="tplItemHow" rows="2" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
+              <textarea id="tplItemHow" rows="2" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
               <div>
                 <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Gravita' di default</label>
-                <select id="tplItemSeverity" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="tplItemSeverity" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="critica">Critica</option>
                   <option value="alta">Alta</option>
                   <option value="media" selected>Media</option>
@@ -2712,7 +2739,7 @@
               </div>
               <div>
                 <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Tipo di verifica</label>
-                <select id="tplItemCheckKind" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <select id="tplItemCheckKind" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                   <option value="manual">Manuale</option>
                   <option value="semi">Semi-automatica</option>
                   <option value="auto">Automatica</option>
@@ -2737,23 +2764,23 @@
 
       <!-- Modale Creazione Nuovo Audit Cliente -->
       <div id="newAuditModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; justify-content:center; align-items:center;">
-        <div class="panel" style="width:100%; max-width:480px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <div class="panel" style="width:100%; max-width:480px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
           <h3 style="margin-top:0; margin-bottom:15px; font-size:18px;"><i class="fa-solid fa-clipboard-check" style="color:var(--primary);"></i> Nuovo Audit Cliente</h3>
           <form onsubmit="submitNewAuditForm(event)">
             <div class="form-group" style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Nome Cliente / Azienda *</label>
-              <input id="auditCustomerName" type="text" required style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. ACME Corp S.p.A.">
+              <input id="auditCustomerName" type="text" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. ACME Corp S.p.A.">
             </div>
             <div class="form-group" style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Modalità Audit</label>
-              <select id="auditModality" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <select id="auditModality" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
                 <option value="onsite">On-Site (Presenza presso sede cliente)</option>
                 <option value="remote">Remoto (Interview / Config Review)</option>
               </select>
             </div>
             <div class="form-group" style="margin-bottom:18px;">
               <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Referente Intervistato (Opzionale)</label>
-              <input id="auditInterviewee" type="text" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. Mario Rossi (IT Manager)">
+              <input id="auditInterviewee" type="text" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. Mario Rossi (IT Manager)">
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
               <button type="button" class="btn btn-secondary" onclick="closeNewAuditModal()" style="width:auto; margin:0;">Annulla</button>
@@ -2782,7 +2809,6 @@
     <div id="tab-settings" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <span class="eyebrow" data-i18n="settingsEyebrow"><i class="fa-solid fa-gear"></i> Amministrazione</span>
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;" data-i18n="titleSettings">Impostazioni</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descSettingsHero">
             Configurazione dell'istanza, raggruppata per ambito: esposizione in rete, sicurezza dei comandi, telemetria e parametri applicativi. Le impostazioni contrassegnate richiedono il riavvio dell'applicazione; le variabili d'ambiente, se impostate, hanno sempre la precedenza.
@@ -2820,7 +2846,7 @@
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descObsSettings">
           Configura i listener di telemetria di rete. Le modifiche richiedono il riavvio dell'applicazione per avere effetto.
         </p>
-        <div id="obsRestartBanner" style="display:none; margin-bottom:14px; padding:10px 14px; border:1px solid var(--warning); border-radius:8px; background:rgba(185,119,14,0.12); color:var(--warning); font-size:13px; font-weight:600;">
+        <div id="obsRestartBanner" style="display:none; margin-bottom:14px; padding:10px 14px; border:1px solid var(--warning); border-radius:0; background:var(--lamp-warn-wash); color:var(--warning); font-size:13px; font-weight:600;">
           <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="msgObsRestartRequired">Riavvio richiesto per applicare le modifiche.</span>
         </div>
         <div id="obsSettingsBody">
@@ -2834,7 +2860,7 @@
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descAppAdvanced">
           Porta HTTP, TLS, CORS, retention dei dati observability e apertura automatica del browser. Le variabili d'ambiente, se impostate, hanno la precedenza. Le modifiche richiedono il riavvio dell'applicazione.
         </p>
-        <div id="appAdvRestartBanner" style="display:none; margin-bottom:14px; padding:10px 14px; border:1px solid var(--warning); border-radius:8px; background:rgba(185,119,14,0.12); color:var(--warning); font-size:13px; font-weight:600;">
+        <div id="appAdvRestartBanner" style="display:none; margin-bottom:14px; padding:10px 14px; border:1px solid var(--warning); border-radius:0; background:var(--lamp-warn-wash); color:var(--warning); font-size:13px; font-weight:600;">
           <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="msgObsRestartRequired">Riavvio richiesto per applicare le modifiche.</span>
         </div>
         <div id="appAdvBody">
@@ -2851,14 +2877,13 @@
       </div>
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <span class="eyebrow"><i class="fa-solid fa-chart-line"></i> Flow SIEM &amp; Traffic Analytics (Preview)</span>
           <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;">Network Traffic Analytics (Flow SIEM)</h2>
           <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:600px;">Ispezione granulare dei flussi di rete, tailing in tempo reale, aggregazioni per faccette e filtri di sicurezza.</p>
         </div>
         <div class="hero-card" style="display:flex; align-items:center; gap:12px;">
           <span id="flowSiemStreamBadge" class="status ok"><span class="led led-success"></span>LIVE TAIL</span>
           <button id="btnFlowSiemStream" class="btn btn-sm btn-secondary" onclick="toggleSiemStream()"><i class="fa-solid fa-pause"></i> Pausa Streaming</button>
-          <select id="flowSiemWindow" onchange="loadFlowSiemTab()" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+          <select id="flowSiemWindow" onchange="loadFlowSiemTab()" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
             <option value="15m">15m</option>
             <option value="1h">1h</option>
             <option value="24h" selected>24h</option>
@@ -2869,7 +2894,7 @@
 
       <div class="panel" style="margin-bottom:18px;">
         <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);"><i class="fa-solid fa-chart-bar"></i> Event Rate Histogram (Events / sec)</h4>
-        <div style="position:relative; width:100%; height:100px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+        <div style="position:relative; width:100%; height:100px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">
           <canvas id="flowSiemHistCanvas" style="width:100%; height:100%; display:block;"></canvas>
         </div>
       </div>
@@ -2919,7 +2944,6 @@
     <div id="tab-incidents" class="tab-content">
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <span class="eyebrow" data-i18n="incEyebrow"><i class="fa-solid fa-timeline"></i> Incidenti (Preview)</span>
           <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;" data-i18n="incTitle">Timeline e Ragionamento</h2>
           <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:640px;" data-i18n="incDesc">Gli eventi correlati che condividono un'entità e una finestra temporale diventano un incidente unico, con causa e confidenza calcolate in modo deterministico e la sequenza di ciò che è successo.</p>
         </div>
@@ -2928,7 +2952,7 @@
       <div class="panel" style="padding:12px 16px; margin-bottom:18px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
         <div>
           <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterStatus">Stato</label>
-          <select id="incStatusFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+          <select id="incStatusFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
             <option value="new" data-i18n="incOptNew">Nuovi</option>
             <option value="ack" data-i18n="incOptAck">Presi in carico</option>
             <option value="resolved" data-i18n="incOptResolved">Risolti</option>
@@ -2937,7 +2961,7 @@
         </div>
         <div>
           <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterWindow">Finestra</label>
-          <select id="incWindowFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+          <select id="incWindowFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
             <option value="24h" data-i18n="optWin24h">24 ore</option>
             <option value="6h" data-i18n="optWin6h">6 ore</option>
             <option value="7d" data-i18n="optWin7d">7 giorni</option>
@@ -2985,7 +3009,6 @@
     <div id="tab-netsec-audit" class="tab-content">
       <div class="hero" style="margin-bottom:18px;">
         <div class="hero-card" style="flex:1;">
-          <span class="eyebrow" data-i18n="nsaEyebrow"><i class="fa-solid fa-shield-cat"></i> Network Security &amp; Compliance Audit (Preview)</span>
           <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;" data-i18n="nsaTitle">Auditing Configurazione Firewall, Router e Switch</h2>
           <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:600px;" data-i18n="nsaDesc">Valutazione automatizzata delle policy di sicurezza, regole di accesso, cifrari e hardening degli apparati di rete gestiti.</p>
         </div>
@@ -3018,7 +3041,7 @@
           <strong id="auditStatUnknown" style="color:var(--text-muted);">0</strong>
         </div>
       </div>
-      <div id="auditPartialWarning" style="display:none; margin:-8px 0 18px; padding:8px 12px; border-radius:8px; background:rgba(245,158,11,0.12); border:1px solid var(--warning); font-size:12px; color:var(--warning);">
+      <div id="auditPartialWarning" style="display:none; margin:-8px 0 18px; padding:8px 12px; border-radius:0; background:var(--lamp-warn-wash); border:1px solid var(--warning); font-size:12px; color:var(--warning);">
         <i class="fa-solid fa-circle-info"></i> <span id="auditPartialWarningText"></span>
       </div>
 
@@ -3028,7 +3051,7 @@
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
             <div>
               <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaTargetLabel">Apparato Target dall'Inventario</label>
-              <select id="auditDeviceSelect" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <select id="auditDeviceSelect" style="width:100%; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
                 <!-- La scansione multi-dispositivo non e' implementata: questa
                      voce e' un segnaposto, non una promessa di funzionalita'. -->
                 <option value="all" data-i18n="nsaSelectDevice">— Seleziona un dispositivo —</option>
@@ -3036,7 +3059,7 @@
             </div>
             <div>
               <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label>
-              <select id="auditBenchmarkSelect" onchange="renderBenchmarkRequirements()" style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <select id="auditBenchmarkSelect" onchange="renderBenchmarkRequirements()" style="width:100%; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
                 <option value="cis" data-i18n="nsaBenchCis">CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x / Ubuntu 24.04 LTS)</option>
                 <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
                 <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
@@ -3044,7 +3067,7 @@
             </div>
           </div>
 
-          <details id="auditBenchmarkReqs" style="margin-bottom:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);" ontoggle="renderBenchmarkRequirements()">
+          <details id="auditBenchmarkReqs" style="margin-bottom:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-2);" ontoggle="renderBenchmarkRequirements()">
             <summary style="padding:8px 12px; cursor:pointer; font-size:12px; font-weight:600; color:var(--primary);" data-i18n="nsaReqsSummary">
               <i class="fa-solid fa-circle-info"></i> Requisiti verificati da questo benchmark
             </summary>
@@ -3057,7 +3080,7 @@
                    e il destinatario puo' non leggere la lingua di chi lo esegue.
                    Default sulla lingua della UI, sovrascrivibile. -->
               <label for="auditReportLang" style="font-size:12px; color:var(--text-muted);" data-i18n="nsaReportLangLabel">Lingua report</label>
-              <select id="auditReportLang" style="padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <select id="auditReportLang" style="padding:6px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
                 <option value="it">Italiano</option>
                 <option value="en">English</option>
               </select>
@@ -3068,7 +3091,7 @@
 
         <div class="panel" style="padding:16px; display:flex; flex-direction:column; justify-content:center;">
           <h4 style="margin:0 0 8px; font-size:13px; color:var(--text-muted);" data-i18n="nsaUploadTitle"><i class="fa-solid fa-file-arrow-up"></i> Upload File Config (.conf / .cfg / .xml)</h4>
-          <div id="auditDropZone" style="border:2px dashed var(--border); border-radius:8px; padding:20px; text-align:center; cursor:pointer; background:var(--surface-2);">
+          <div id="auditDropZone" style="border:2px dashed var(--border); border-radius:0; padding:20px; text-align:center; cursor:pointer; background:var(--surface-2);">
             <input type="file" id="auditFileInput" style="display:none;" accept=".conf,.cfg,.txt,.xml">
             <!-- Il testo tradotto sta in uno span interno: il drop di un file
                  riscrive #auditDropText, e un data-i18n sul contenitore
@@ -3086,7 +3109,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
           <h4 style="margin:0; font-size:15px;" data-i18n="nsaResultsTitle"><i class="fa-solid fa-list-check"></i> Matrice Risultati Audit Policy</h4>
           <div style="display:flex; gap:8px;">
-            <select id="auditSevFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <select id="auditSevFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
               <option value="all" data-i18n="nsaFilterSevAll">Filtra Severità: Tutte</option>
               <option value="critical">Critical</option>
               <option value="high">High</option>
@@ -3096,7 +3119,7 @@
             <!-- Le categorie corrispondono al campo 'category' delle regole in
                  services/netsec_audit/benchmarks.py: aggiungerne una li' senza
                  aggiungerla qui la rende non filtrabile. -->
-            <select id="auditCatFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <select id="auditCatFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
               <option value="all" data-i18n="nsaFilterCatAll">Filtra Categoria: Tutte</option>
               <option value="hardening">Hardening</option>
               <option value="access rules">Access Rules</option>
@@ -3154,7 +3177,7 @@
                placeholder="es. 192.168.1.0/24 oppure 192.168.1.0 255.255.255.0"
                data-i18n-placeholder="placeholderNetworkInput"
                style="font-family: Menlo, monospace; font-size: 13px;
-                      padding: 10px 12px; border-radius: 8px;
+                      padding: 10px 12px; border-radius: 0;
                       background: var(--surface-2); border: 1px solid var(--border);
                       color: var(--text); width: 100%; box-sizing: border-box;
                       outline: none; transition: var(--transition);"
@@ -3166,7 +3189,7 @@
         <div class="form-group" style="margin-bottom: 0;">
           <label data-i18n="lblVendor">Vendor</label>
           <select id="scanVendorSelect"
-                  style="padding: 10px 12px; border-radius: 8px;
+                  style="padding: 10px 12px; border-radius: 0;
                          background: var(--surface-2); border: 1px solid var(--border);
                          color: var(--text); font-family: inherit; font-size: 13px;
                          cursor: pointer; outline: none; width: 100%; transition: var(--transition);"></select>
@@ -3174,7 +3197,7 @@
         <div class="form-group" style="margin-bottom: 0;">
           <label data-i18n="lblGroup">Gruppo / Sede</label>
           <select id="scanGroupSelect"
-                  style="padding: 10px 12px; border-radius: 8px;
+                  style="padding: 10px 12px; border-radius: 0;
                          background: var(--surface-2); border: 1px solid var(--border);
                          color: var(--text); font-family: inherit; font-size: 13px;
                          cursor: pointer; outline: none; width: 100%; transition: var(--transition);">
@@ -3202,12 +3225,12 @@
       <div id="subnetScanResults" style="display: none; margin-top: 20px;">
         <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;"
              id="subnetScanStatus"></div>
-        <div style="height: 4px; background: var(--surface-3); border-radius: 2px; margin-bottom: 10px; overflow: hidden;">
+        <div style="height: 4px; background: var(--surface-3); border-radius: 0; margin-bottom: 10px; overflow: hidden;">
           <div id="subnetScanProgressBar"
-               style="height: 100%; width: 0%; background: var(--primary); border-radius: 2px; transition: width 0.4s ease;"></div>
+               style="height: 100%; width: 100%; transform: scaleX(0); transform-origin: left; background: var(--text); border-radius: 0; transition: transform 0.4s ease;"></div>
         </div>
         <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border);
-                    border-radius: 8px; background: var(--surface-2);"
+                    border-radius: 0; background: var(--surface-2);"
              id="subnetScanResultsTable"></div>
       </div>
     </div>
@@ -3250,7 +3273,7 @@
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="fgtMgrIp" data-i18n="lblFgtMgrIp">IP dispositivo</label>
-            <select id="fgtMgrIp" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            <select id="fgtMgrIp" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               <option value="" data-i18n="optFgtSelectDevice">-- seleziona dispositivo --</option>
             </select>
           </div>
@@ -3322,13 +3345,13 @@
         <div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
             <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblBulkTargets">Dispositivi target</label>
-            <select id="bulkGroupFilter" onchange="renderBulkTargets()" style="font-size:11px; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; outline:none;"></select>
+            <select id="bulkGroupFilter" onchange="renderBulkTargets()" style="font-size:11px; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; outline:none;"></select>
           </div>
           <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; padding:6px 0;">
             <input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulkTargets(this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
             <span data-i18n="bulkSelectAll">Seleziona tutti</span>
           </label>
-          <div id="bulkTargetList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); padding:6px;"></div>
+          <div id="bulkTargetList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:6px;"></div>
         </div>
 
         <!-- Colonna destra: modalità e comandi -->
@@ -3350,7 +3373,7 @@
             <textarea id="bulkCommands" rows="8"
               placeholder="Un comando per riga, nella sintassi del vendore selezionato.&#10;Cisco:  show version&#10;Linux:  uptime -p"
               data-i18n-placeholder="phBulkCommands"
-              style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
+              style="width:100%; padding:10px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:var(--font-code); font-size:12px; resize:vertical; outline:none;"></textarea>
           </div>
         </div>
       </div>
@@ -3362,10 +3385,10 @@
 
       <div id="bulkResults" style="display:none; margin-top:18px;">
         <div id="bulkStatus" style="font-size:12px; color:var(--text-muted); margin-bottom:6px;"></div>
-        <div style="height:4px; background:var(--surface-3); border-radius:2px; margin-bottom:10px; overflow:hidden;">
-          <div id="bulkProgressBar" style="height:100%; width:0%; background:var(--warning); border-radius:2px; transition:width 0.4s ease;"></div>
+        <div style="height:4px; background:var(--surface-3); border-radius:0; margin-bottom:10px; overflow:hidden;">
+          <div id="bulkProgressBar" style="height:100%; width:100%; transform:scaleX(0); transform-origin:left; background:var(--lamp-warn); border-radius:0; transition:transform 0.4s ease;"></div>
         </div>
-        <div id="bulkResultsList" style="max-height:280px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);"></div>
+        <div id="bulkResultsList" style="max-height:280px; overflow-y:auto; border:1px solid var(--border); border-radius:0; background:var(--surface-2);"></div>
       </div>
     </div>
   </div>
@@ -3377,7 +3400,7 @@
         <h3><i class="fa-solid fa-code" style="color: var(--primary);"></i> <span data-i18n="titleCaRawRoute">Riga di configurazione</span></h3>
         <i class="fa-solid fa-xmark modal-close" onclick="caCloseRawRouteModal()"></i>
       </div>
-      <pre id="caRawRouteContent" style="font-family:var(--font-code); font-size:13px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; white-space:pre-wrap; word-break:break-all; margin:0;"></pre>
+      <pre id="caRawRouteContent" style="font-family:var(--font-code); font-size:13px; background:var(--surface); border:1px solid var(--border); border-radius:0; padding:12px; white-space:pre-wrap; word-break:break-all; margin:0;"></pre>
     </div>
   </div>
 
@@ -3391,13 +3414,13 @@
         <span data-i18n="lblTargetDevice">Dispositivo target:</span> <strong id="cliTargetIp">10.0.0.1</strong>
       </div>
       
-      <div id="terminal-container" style="background:#150f23; border-radius: 8px; padding: 10px; height: 400px; border: 1px solid var(--border); overflow: hidden;"></div>
+      <div id="terminal-container" style="background:var(--surface-2); border-radius: 0; padding: 10px; height: 400px; border: 1px solid var(--border); overflow: hidden;"></div>
     </div>
   </div>
 
   <!-- Modal: Gestione Remota Agente (Checkmk Style Control Plane) -->
-  <div id="agentControlModal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:10050; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
-    <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:12px; width:92%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.4);">
+  <div id="agentControlModal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:color-mix(in srgb, var(--bg) 82%, transparent); z-index:10050; align-items:center; justify-content:center;">
+    <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:0; width:92%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.4);">
       <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
         <h3 id="agentControlTitle" style="margin:0; font-size:16px; display:flex; align-items:center; gap:8px;">
           <i class="fa-solid fa-gears" style="color:var(--primary);"></i>
@@ -3415,8 +3438,8 @@
   </div>
 
   <!-- Modal: Ispezione Dettagliata Protocollo (Protocol Inspection Modal) -->
-  <div id="obsInspectModal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:10050; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
-    <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:12px; width:92%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.4);">
+  <div id="obsInspectModal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:color-mix(in srgb, var(--bg) 82%, transparent); z-index:10050; align-items:center; justify-content:center;">
+    <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:0; width:92%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 12px 36px rgba(0,0,0,0.4);">
       <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
         <h3 id="obsInspectTitle" style="margin:0; font-size:16px; display:flex; align-items:center; gap:8px;">
           <i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i>
@@ -3499,8 +3522,17 @@
         setText('homeKpiTotal', devs.length);
         setText('homeKpiOnline', online);
         setText('homeKpiAttention', attention.length);
-        setText('homeStatOnline', online);
-        setText('homeStatAttention', attention.length);
+
+        // Righe di contesto sotto ogni bay: un numero nudo non dice se sia molto.
+        const L = i18n[currentLang];
+        const pct = devs.length ? Math.round((online / devs.length) * 100) : 0;
+        setText('homeStatOnline', `${pct}% ${L.homeOfFleet}`);
+        setText('homeStatAttention', `${L.homeOutOf} ${devs.length}`);
+
+        // Cartiglio del disegno: revisione = istante dell'ultima lettura.
+        setText('homeOnelineRev', new Date().toLocaleString(currentLang === 'en' ? 'en-GB' : 'it-IT'));
+
+        renderFleetOneline(devs);
 
         const body = document.getElementById('homeAttentionBody');
         if (body) {
@@ -3524,7 +3556,79 @@
         }
 
         if (currentRole === 'admin') loadHomeAnomalies();
+        else renderEventStripDenied();
     }
+
+    // Una bay per tenant: e' l'estate a essere indicizzata. Lo stato della bay e'
+    // il peggiore dei suoi apparati, perche' su un quadro una sbarra in allarme
+    // si vede prima del dettaglio che l'ha causata.
+    function renderFleetOneline(devs) {
+        const host = document.getElementById('homeOnelineBays');
+        if (!host) return;
+        const L = i18n[currentLang];
+
+        const bays = new Map();
+        devs.forEach(d => {
+            const tenant = (d.Group || '').trim() || L.homeBayUnassigned;
+            if (!bays.has(tenant)) bays.set(tenant, { total: 0, down: 0, warn: 0, idle: 0 });
+            const b = bays.get(tenant);
+            b.total++;
+            const st = (globalVersions[d.IP] || {}).status;
+            if (!st) b.idle++;                                   // mai interrogato
+            else if (st === 'offline' || st === 'unknown') b.down++;
+            else if (st !== 'online') b.warn++;
+        });
+
+        if (bays.size === 0) {
+            host.innerHTML = `<p class="oneline-empty">${escapeHtml(L.homeOnelineEmpty)}</p>`;
+            return;
+        }
+
+        // Molte bay non stanno sulla sbarra: si mostrano le piu' grandi e si
+        // raccoglie la coda in una bay di riepilogo, come un quadro di gruppo.
+        const sorted = [...bays.entries()].sort((a, b) => b[1].total - a[1].total);
+        const shown = sorted.slice(0, 6);
+        const rest  = sorted.slice(6);
+
+        // Peggiore stato della bay. 'idle' vince quando NIENTE e' stato ancora
+        // interrogato: una bay tutta da scansionare non e' una bay in avaria.
+        const state = b => b.down ? 'down'
+                         : b.warn ? 'warn'
+                         : (b.idle === b.total) ? 'idle'
+                         : b.total ? 'up' : 'idle';
+        let html = shown.map(([name, b]) => `
+            <button type="button" class="oneline-bay" data-state="${state(b)}"
+                    onclick="switchTab('tab-devices')"
+                    title="${escapeHtml(name)}">
+              <span class="oneline-drop"></span><span class="oneline-sw"></span>
+              <span class="oneline-node">
+                <span class="oneline-count">${b.total}</span>
+                <span class="oneline-name">${escapeHtml(name)}</span>
+                <span class="oneline-sub">${b.down ? escapeHtml(`${b.down} ${L.homeBayDown}`)
+                     : (b.idle === b.total) ? escapeHtml(L.homeBayUnscanned)
+                     : escapeHtml(L.homeBayAllUp)}</span>
+              </span>
+            </button>`).join('');
+
+        if (rest.length) {
+            const agg = rest.reduce((a, [, b]) => ({
+                total: a.total + b.total, down: a.down + b.down,
+                warn: a.warn + b.warn, idle: a.idle + b.idle
+            }), { total: 0, down: 0, warn: 0, idle: 0 });
+            html += `
+            <button type="button" class="oneline-bay" data-state="${state(agg)}"
+                    onclick="switchTab('tab-devices')">
+              <span class="oneline-drop"></span><span class="oneline-sw"></span>
+              <span class="oneline-node">
+                <span class="oneline-count">${agg.total}</span>
+                <span class="oneline-name">${escapeHtml(`+${rest.length} ${L.homeBayOther}`)}</span>
+                <span class="oneline-sub">${escapeHtml(L.homeBayOtherSub)}</span>
+              </span>
+            </button>`;
+        }
+        host.innerHTML = html;
+    }
+
 
     async function loadHomeAnomalies() {
         const body = document.getElementById('homeAnomBody');
@@ -3537,6 +3641,7 @@
             body.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted); text-align:center; padding:16px;">${i18n[currentLang].homeNoAnomalies}</td></tr>`;
             return;
         }
+        renderEventStrip(rows);
         body.innerHTML = rows.map(a => {
             const sev = (a.severity || '').toString().toLowerCase();
             const cls = (sev === 'high' || sev === 'critical') ? 'bad' : (sev === 'medium' ? 'warn' : 'ok');
@@ -3547,6 +3652,40 @@
                 <td><span class="status ${cls}">${escapeHtml((a.severity || '—').toString())}</span></td>
                 <td style="color:var(--text-muted); font-size:12px;">${escapeHtml(when)}</td>
             </tr>`;
+        }).join('');
+    }
+
+    // Una sezione che non si puo' mostrare spiega perche', invece di sparire.
+    function renderEventStripDenied() {
+        const strip = document.getElementById('homeEventStrip');
+        if (strip) strip.innerHTML =
+            `<p class="eventstrip-empty">${escapeHtml(i18n[currentLang].homeEventStripDenied)}</p>`;
+    }
+
+    // Striscia eventi: una riga per evento, la piu' recente in alto, come la
+    // stampante di sala controllo da cui prende la forma.
+    function renderEventStrip(rows) {
+        const strip = document.getElementById('homeEventStrip');
+        if (!strip) return;
+        const L = i18n[currentLang];
+        if (!rows || rows.length === 0) {
+            strip.innerHTML = `<p class="eventstrip-empty">${escapeHtml(L.homeNoAnomalies)}</p>`;
+            return;
+        }
+        strip.innerHTML = rows.map(a => {
+            const sev = (a.severity || '').toString().toLowerCase();
+            const cls = (sev === 'high' || sev === 'critical') ? 'bad' : (sev === 'medium' ? 'warn' : 'ok');
+            const when = a.created_ts
+                ? new Date(a.created_ts * 1000).toLocaleTimeString(currentLang === 'en' ? 'en-GB' : 'it-IT')
+                : '--:--:--';
+            const src = escapeHtml((a.src_ip || '').toString());
+            const dst = escapeHtml((a.dst_ip || '').toString());
+            const kind = escapeHtml((a.kind || '').toString());
+            return `<div class="eventstrip-row">
+                <span class="eventstrip-time">${escapeHtml(when)}</span>
+                <span class="eventstrip-text">${kind}${src ? ` &middot; ${src} &rarr; ${dst}` : ''}</span>
+                <span class="status ${cls}"><span class="led led-${cls === 'bad' ? 'danger' : cls === 'warn' ? 'warning' : 'success'}"></span>${escapeHtml((a.severity || '—').toString())}</span>
+            </div>`;
         }).join('');
     }
 
@@ -3569,12 +3708,12 @@
         termInstance = new Terminal({
             cursorBlink: true,
             theme: {
-                background: '#150f23',
-                foreground: '#f0f4f9',
-                cursor: '#c2ef4e',
-                selection: 'rgba(44, 188, 195, 0.3)'
+                background: cssVar('--surface-2', '#181e23'),
+                foreground: cssVar('--text', '#e8ebe6'),
+                cursor: cssVar('--lamp-up', '#56c07a'),
+                selection: cssVar('--surface-3', '#2a333a')
             },
-            fontFamily: "Menlo, monospace",
+            fontFamily: "'Azeret Mono', Menlo, monospace",
             fontSize: 14,
             rows: 24,
             cols: 80
@@ -3701,7 +3840,7 @@
             .map(d => {
                 const isOn = checked.has(d.IP) ? 'checked' : '';
                 const hn = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>';
-                return `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-radius:6px;">
+                return `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-radius:0;">
                     <input type="checkbox" class="bulk-target" value="${escapeHtml(d.IP)}" ${isOn} onchange="syncBulkSelectAll()">
                     <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(d.IP)}</span>
                     <span>${hn}</span>
@@ -3742,7 +3881,7 @@
         btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Sending...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Invio in corso...';
         document.getElementById('bulkResults').style.display = 'block';
         document.getElementById('bulkResultsList').innerHTML = '';
-        document.getElementById('bulkProgressBar').style.width = '0%';
+        document.getElementById('bulkProgressBar').style.transform = 'scaleX(0)';
         document.getElementById('bulkStatus').textContent = currentLang === 'en' ? 'Starting...' : 'Avvio...';
 
         const res = await apiFetch('/api/bulk-command', {
@@ -3773,14 +3912,14 @@
             }
             const data = await res.json();
             const pct = total > 0 ? Math.round((data.progress / total) * 100) : 0;
-            document.getElementById('bulkProgressBar').style.width = `${pct}%`;
+            document.getElementById('bulkProgressBar').style.transform = `scaleX(${pct / 100})`;
             document.getElementById('bulkStatus').textContent =
                 currentLang === 'en' ? `Running — ${data.progress}/${total} devices...` : `In corso — ${data.progress}/${total} dispositivi...`;
             renderBulkResults(data.results || []);
 
             if (data.status !== 'running') {
                 clearInterval(_bulkJobInterval); _bulkJobInterval = null;
-                document.getElementById('bulkProgressBar').style.width = '100%';
+                document.getElementById('bulkProgressBar').style.transform = 'scaleX(1)';
                 const ok  = (data.results || []).filter(r => r.result && r.result.status === 'success').length;
                 const err = (data.results || []).length - ok;
                 document.getElementById('bulkStatus').textContent =
@@ -3798,7 +3937,7 @@
             const body = ok ? (r.result.output || '') : (r.result ? (r.result.message || '') : '');
             return `<details style="border-bottom:1px solid var(--border);">
                 <summary style="padding:8px 12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:12px; list-style:none;">
-                    <span style="color:${ok ? 'var(--success)' : 'var(--danger)'}; font-weight:700;">${ok ? '✓' : '✗'}</span>
+                    <span style="color:${ok ? 'var(--success)' : 'var(--danger)'}; font-weight:700;">${ok ? 'OK' : 'KO'}</span>
                     <strong>${escapeHtml(r.hostname || r.ip)}</strong>
                     <span style="font-family:var(--font-code); color:var(--text-muted);">${escapeHtml(r.ip)}</span>
                 </summary>

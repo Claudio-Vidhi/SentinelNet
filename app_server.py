@@ -126,8 +126,9 @@ app.add_middleware(
 _CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
-    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+    # I font sono serviti da static/fonts/: le origini Google non servono piu'.
+    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+    "font-src 'self' https://cdnjs.cloudflare.com; "
     "img-src 'self' data:; "
     "connect-src 'self' ws: wss:; "
     "frame-ancestors 'none'; "
