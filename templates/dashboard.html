@@ -3598,7 +3598,7 @@
                          : b.total ? 'up' : 'idle';
         let html = shown.map(([name, b]) => `
             <button type="button" class="oneline-bay" data-state="${state(b)}"
-                    onclick="switchTab('tab-devices')"
+                    onclick="openInventoryForTenant('${escapeHtml(jsStr(name))}')"
                     title="${escapeHtml(name)}">
               <span class="oneline-drop"></span><span class="oneline-sw"></span>
               <span class="oneline-node">
@@ -3627,6 +3627,17 @@
             </button>`;
         }
         host.innerHTML = html;
+    }
+
+    // Apre l'inventario gia' filtrato sul tenant della bay cliccata.
+    function openInventoryForTenant(tenant) {
+        const sel = document.getElementById('filterGroupSelect');
+        if (sel) {
+            const hasOption = Array.from(sel.options).some(o => o.value === tenant);
+            sel.value = hasOption ? tenant : 'all';
+        }
+        renderDeviceTable();
+        switchTab('tab-devices');
     }
 
 
