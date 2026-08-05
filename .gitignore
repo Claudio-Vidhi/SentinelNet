@@ -41,7 +41,6 @@ secret.key
 jwt_secret.key
 
 # Local / IDE files
-.claude/
 .vscode/
 .idea/
 .env
