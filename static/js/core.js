@@ -613,10 +613,17 @@ function switchTab(tabId, clickedBtn) {
 function showToast(msg, kind) {
     const el = document.createElement('div');
     el.textContent = msg;
+    // Il colore significa stato: il fondo resta una superficie del sistema e lo
+    // stato lo porta il bordo. Prima erano tre colori fissi (fra cui uno slate
+    // che nella palette non esiste): sul laminato chiaro erano fuori sistema.
+    const edge = kind === 'error' ? 'var(--lamp-fault)'
+               : kind === 'warning' ? 'var(--lamp-warn)'
+               : 'var(--border-strong)';
     el.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:9999;'
-        + 'padding:10px 16px; border-radius:0; font-size:13px; color:#fff;'
-        + 'box-shadow:0 4px 16px rgba(0,0,0,0.35); background:'
-        + (kind === 'error' ? '#c0392b' : kind === 'warning' ? '#b9770e' : '#2c3e50') + ';';
+        + 'padding:10px 16px; border-radius:0; font-size:13px;'
+        + 'font-family:var(--font-prose); color:var(--text);'
+        + 'background:var(--surface-3); box-shadow:var(--shadow-float);'
+        + 'border:1px solid ' + edge + ';';
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 4000);
 }
