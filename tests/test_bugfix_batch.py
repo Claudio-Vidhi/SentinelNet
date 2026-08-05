@@ -159,5 +159,29 @@ class TestSortKeepsDetailRowsWithTheirParent(unittest.TestCase):
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
+class TestSortIndicatorIsDrawnByCss(unittest.TestCase):
+    """La freccia di ordinamento deve essere disegnata dal CSS a partire dagli
+    attributi dell'intestazione. Come nodo figlio non sopravviveva a
+    applyLanguage(), che riscrive l'innerHTML di ogni [data-i18n]."""
+
+    def setUp(self):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "static", "css", "dashboard.css"),
+                  encoding="utf-8") as fh:
+            self.css = fh.read()
+
+    def test_neutral_ascending_and_descending_all_have_a_rule(self):
+        for selector in ('th[data-sortable="1"]::after',
+                         'th[data-sort-asc="true"]::after',
+                         'th[data-sort-asc="false"]::after'):
+            self.assertIn(selector, self.css, f"manca la regola per {selector}")
+
+    def test_each_state_sets_its_own_glyph(self):
+        glyphs = re.findall(r'th\[data-sort(?:able|-asc)="[^"]+"\]::after\s*\{[^}]*'
+                            r'content:\s*[\'"]([^\'"]+)[\'"]', self.css)
+        self.assertEqual(3, len(glyphs), f"attesi 3 glifi distinti, trovati {glyphs}")
+        self.assertEqual(3, len(set(glyphs)), f"i tre stati non sono distinguibili: {glyphs}")
+
+
 if __name__ == "__main__":
     unittest.main()
