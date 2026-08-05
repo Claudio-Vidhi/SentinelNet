@@ -334,6 +334,16 @@ a:hover { text-decoration-color: currentColor; }
   outline-offset: 2px;
 }
 
+/* Righe e celle rese raggiungibili da tastiera in makeClickablesFocusable():
+   l'outline su una table-row non e' reso in modo affidabile dai browser, il
+   rilievo dell'incasso invece si vede sempre. */
+tr[data-kbd="1"]:focus-visible,
+td[data-kbd="1"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  background: var(--surface-3);
+}
+
 input::placeholder, textarea::placeholder { color: var(--text-soft); opacity: 1; }
 
 /* Barra di scorrimento: guida incisa, cursore in inchiostro attenuato */

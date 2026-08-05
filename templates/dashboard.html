@@ -15,15 +15,14 @@
   <link rel="preload" href="/static/fonts/saira-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/azeret-mono-var.woff2" as="font" type="font/woff2" crossorigin>
   
-  <!-- FontAwesome Icons -->
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  
-  <!-- Vis.js Standalone for beautiful Interactive Topologies -->
-  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-
-  <!-- Xterm.js CDNs for interactive SSH terminal -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
-  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <!-- Icone, topologia e terminale serviti dall'applicazione, non da un CDN:
+       una LAN di management isolata non risolve cdnjs/unpkg/jsdelivr, e la
+       console resterebbe senza una sola icona e con due tab morte. Stesso
+       criterio dei font in static/fonts/. -->
+  <link href="/static/vendor/fontawesome/css/all.min.css" rel="stylesheet">
+  <script src="/static/vendor/vis/vis-network.min.js"></script>
+  <link rel="stylesheet" href="/static/vendor/xterm/xterm.css" />
+  <script src="/static/vendor/xterm/xterm.js"></script>
 
   <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>

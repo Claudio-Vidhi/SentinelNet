@@ -327,6 +327,25 @@ greyscale, distance, and colour blindness.
 (#2c6b3f), each on a tinted wash with a matching hairline. Re-inked per
 rendition. This ramp maps to a published score and appears in exactly one place.
 
+### Topology palettes (map surfaces only)
+
+The topology map is drawn onto a canvas by vis-network, which cannot resolve
+`var(--…)`. Colours there are read from the active rendition at draw time with
+`cssVar()` — that is why literals appear in `static/js/topology.js` as
+*fallbacks*, never as the value itself. Three populations live there, and only
+the first is part of this system:
+
+- **State** — always the lamp ramp via `cssVar('--lamp-*-ink')`. Same four
+  states, same meaning, same geometry rule as everywhere else.
+- **Device-type and VTP-domain ramps** — categorical encodings, not state. A
+  category has no severity, so it may not borrow the lamp ramp; these are
+  independent hues chosen for separability at small sizes on both grounds. They
+  colour icons, borders and pills, never body text.
+- **The minimal map rendition** — a deliberate third rendition, neither laminate
+  nor slate: a white-ground engineering drawing with pastel node fills and dark
+  ink, for printing a topology and reading it on paper. It is fixed by intent;
+  it does not follow the theme, and it must not be "corrected" to tokens.
+
 ### Named Rules
 
 **The Colour Is State Rule.** Colour carries state and diagram identity. It is

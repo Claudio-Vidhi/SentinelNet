@@ -76,9 +76,11 @@ and SNMP from the management LAN; remote sites via site agents.
   in `static/js`, served by FastAPI. No framework, no bundler, no npm. Adding
   one is a product decision, not a design one.
 - **Browser internet access varies by customer.** Some deployments sit on an
-  isolated management LAN. The UI must degrade gracefully when the CDN-hosted
-  assets it currently depends on (Google Fonts, FontAwesome, Vis.js, Xterm.js)
-  are unreachable. *Open decision: whether those assets get vendored locally.*
+  isolated management LAN, so the console loads nothing from the network.
+  Resolved 2026-08-05: every third-party asset is vendored — fonts in
+  `static/fonts/`, FontAwesome, Vis.js and Xterm.js in `static/vendor/`. A new
+  `<link>` or `<script>` pointing at a CDN is a regression; `static/` ships
+  whole in both artifacts, so vendoring costs no spec change.
 - **Dark and light are both required.** Confirmed 2026-08-05: the interface must
   ship a real dark rendition and a real light one, not a dark product with a
   bolted-on inversion. The four usage scenes force it — a lit office desk and an
@@ -133,7 +135,12 @@ and SNMP from the management LAN; remote sites via site agents.
 
 ## Accessibility & Inclusion
 
-No formal standard has been established yet. Two product-specific needs are
-confirmed by the usage scenes and are not hypothetical: legibility at distance
-on an always-on NOC display, and one-handed operation on a small screen while
-standing at a rack. *Open decision: target WCAG level.*
+**Target: WCAG 2.1 AA** (confirmed 2026-08-05). Text contrast at least 4.5:1 in
+*both* renditions — the light one is where this fails first, because colour
+literals inherited from the previous dark-only design do not follow the theme.
+Every interactive element is operable from the keyboard with a visible focus
+state; `onclick` on a non-native control is a defect, not a shortcut.
+
+Two product-specific needs beyond AA are confirmed by the usage scenes and are
+not hypothetical: legibility at distance on an always-on NOC display, and
+one-handed operation on a small screen while standing at a rack.
