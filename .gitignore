@@ -98,3 +98,10 @@ data/security/
 data/vendors.json
 HANDOFF.md
 .qwen/settings.json
+
+# Vendored AI skill packages: third-party, reinstallable, ~6.7 MB of files that
+# are not project source. The tracked .claude/launch.json and settings.json stay.
+.claude/skills/
+.agents/skills/impeccable/
+# Impeccable live-mode session state (local only)
+.impeccable/live/
