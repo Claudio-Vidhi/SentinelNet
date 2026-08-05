@@ -30,6 +30,29 @@ function toggleSidebar() {
     applySidebarCollapsed(collapsed);
 }
 
+// --- RESA CHIARA / SCURA ---
+// Il quadro esiste in due rese reali: targa incisa e schermo SCADA. Senza
+// preferenza salvata si segue il sistema operativo, quindi il primo click
+// deve partire dalla polarità effettivamente a schermo, non da un default.
+const THEME_KEY = 'sentinelnet_theme';
+
+function toggleTheme() {
+    const explicit = document.documentElement.getAttribute('data-theme');
+    const current = explicit
+        || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+}
+
+// Canvas e librerie esterne (vis.js, xterm.js) vogliono un colore vero: una
+// stringa 'var(--x)' non la sanno risolvere. Qui il token viene letto dallo
+// stile calcolato, così anche la mappa e il terminale seguono la resa attiva.
+function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback || '#000000';
+}
+
 let globalDevices = [];
 let globalGroups = {};
 let globalVendors = {};
@@ -591,7 +614,7 @@ function showToast(msg, kind) {
     const el = document.createElement('div');
     el.textContent = msg;
     el.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:9999;'
-        + 'padding:10px 16px; border-radius:10px; font-size:13px; color:#fff;'
+        + 'padding:10px 16px; border-radius:0; font-size:13px; color:#fff;'
         + 'box-shadow:0 4px 16px rgba(0,0,0,0.35); background:'
         + (kind === 'error' ? '#c0392b' : kind === 'warning' ? '#b9770e' : '#2c3e50') + ';';
     document.body.appendChild(el);
@@ -708,13 +731,13 @@ function renderIdentitiesPanel() {
 
         closePortConfigModal();
         const body = iface
-            ? `<pre style="font-family:var(--font-code); background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; margin:0; white-space:pre-wrap; font-size:12px;">${escapeHtml(iface.raw || '—')}</pre>`
+            ? `<pre style="font-family:var(--font-code); background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; margin:0; white-space:pre-wrap; font-size:12px;">${escapeHtml(iface.raw || '—')}</pre>`
             : `<div style="font-size:13px; color:var(--text-muted); padding:10px 0;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.portConfigNotFound)}</div>`;
         const ov = document.createElement('div');
         ov.id = 'portConfigModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
         ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:0 20px 60px color-mix(in srgb, var(--bg) 82%, transparent);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                     <h3 style="font-size:16px;"><i class="fa-solid fa-ethernet" style="color:var(--primary);"></i> ${escapeHtml(L.portConfigTitle)}</h3>
                     <i class="fa-solid fa-xmark" onclick="closePortConfigModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>

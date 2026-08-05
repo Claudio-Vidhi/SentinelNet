@@ -2,7 +2,7 @@
     // --- GESTIONE MULTILINGUA (i18n) ---
     const i18n = {
       it: {
-        wizTitle: "🚀 Primo Accesso rilevato",
+        wizTitle: "Primo Accesso rilevato",
         wizSubtitle: "Benvenuto in SentinelNet. Crea il tuo account Amministratore locale per iniziare a gestire la tua infrastruttura di rete.",
         lblWizUser: "Crea Username Amministratore",
         wizUserPl: "Es. system_admin",
@@ -17,7 +17,7 @@
         loginPassPl: "Inserisci password",
         btnLogin: '<i class="fa-solid fa-right-to-bracket"></i> Autenticati',
         loginError: "Credenziali non corrette o errore di sistema. Riprova.",
-        cpwTitle: "🔑 Imposta la tua Password",
+        cpwTitle: "Imposta la tua Password",
         cpwSubtitle: "Questo account è stato creato da un amministratore. Per motivi di sicurezza scegli una nuova password personale prima di continuare.",
         lblNewPass: "Nuova Password",
         cpwPassPl: "Minimo 8 caratteri",
@@ -86,6 +86,23 @@
         homeOpenInventory: '<i class="fa-solid fa-list-check"></i> Apri inventario',
         homeRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale',
         homeStatDevices: "Dispositivi totali",
+        homeOnelineTitle: "Schema unifilare flotta",
+        homeBayUnassigned: "Senza tenant",
+        homeBayDown: "giù",
+        homeBayAllUp: "tutti attivi",
+        homeBayUnscanned: "mai interrogati",
+        homeEventStripDenied: "Il registro eventi richiede privilegi di amministratore: la sezione resta qui per dire che esiste.",
+        homeBayOther: "altri tenant",
+        homeBayOtherSub: "aggregato",
+        homeOnelineEmpty: "Nessun apparato in inventario: lo schema si disegna al primo provisioning.",
+        homeEventStrip: "Registro eventi",
+        homeBayAll: "flotta",
+        homeOfFleet: "della flotta",
+        homeOutOf: "su",
+        homeLegUp: "Attivo",
+        homeLegWarn: "Attenzione",
+        homeLegDown: "Non raggiungibile",
+        homeLegIdle: "Rilevato",
         homeStOnline: "Online",
         homeStOffline: "Offline",
         homeStAuth: "Autenticazione fallita",
@@ -177,6 +194,7 @@
         titleFlowDetail: 'Dettaglio flusso',
         titleClose: 'Chiudi',
         titleSidebarToggle: 'Comprimi o espandi la barra laterale',
+        titleThemeToggle: 'Alterna resa chiara e scura',
         titleHighlightTopology: 'Evidenzia nella topologia',
         clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Rete',
         titleClientMap: "Client Map — MAC ↔ IP",
@@ -1314,7 +1332,7 @@
         incGenerating: "Generazione in corso…",
     },
       en: {
-        wizTitle: "🚀 First Access Detected",
+        wizTitle: "First Access Detected",
         wizSubtitle: "Welcome to SentinelNet. Create your local Administrator account to start managing your network infrastructure.",
         lblWizUser: "Create Administrator Username",
         wizUserPl: "e.g. admin_user",
@@ -1329,7 +1347,7 @@
         loginPassPl: "Enter password",
         btnLogin: '<i class="fa-solid fa-right-to-bracket"></i> Log In',
         loginError: "Incorrect credentials or system error. Please try again.",
-        cpwTitle: "🔑 Set Your Password",
+        cpwTitle: "Set Your Password",
         cpwSubtitle: "This account was created by an administrator. For security, choose a new personal password before continuing.",
         lblNewPass: "New Password",
         cpwPassPl: "Minimum 8 characters",
@@ -1398,6 +1416,23 @@
         homeOpenInventory: '<i class="fa-solid fa-list-check"></i> Open inventory',
         homeRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run global triage',
         homeStatDevices: "Total devices",
+        homeOnelineTitle: "Fleet one-line diagram",
+        homeBayUnassigned: "No tenant",
+        homeBayDown: "down",
+        homeBayAllUp: "all energised",
+        homeBayUnscanned: "never polled",
+        homeEventStripDenied: "The event log needs administrator privileges. The section stays here so you know it exists.",
+        homeBayOther: "more tenants",
+        homeBayOtherSub: "aggregated",
+        homeOnelineEmpty: "No devices in inventory: the diagram is drawn at first provisioning.",
+        homeEventStrip: "Event log",
+        homeBayAll: "fleet",
+        homeOfFleet: "of fleet",
+        homeOutOf: "of",
+        homeLegUp: "Energised",
+        homeLegWarn: "Attention",
+        homeLegDown: "Unreachable",
+        homeLegIdle: "Discovered",
         homeStOnline: "Online",
         homeStOffline: "Offline",
         homeStAuth: "Auth failed",
@@ -1489,6 +1524,7 @@
         titleFlowDetail: 'Flow detail',
         titleClose: 'Close',
         titleSidebarToggle: 'Collapse or expand the sidebar',
+        titleThemeToggle: 'Switch between light and dark rendition',
         titleHighlightTopology: 'Highlight in topology',
         clientmapEyebrow: '<i class="fa-solid fa-network-wired"></i> Network',
         titleClientMap: "Client Map — MAC ↔ IP",
@@ -2709,7 +2745,7 @@
         if (actions && !document.getElementById("langSelect")) {
             const select = document.createElement('select');
             select.id = "langSelect";
-            select.style.cssText = "padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 11px; cursor: pointer; outline: none;";
+            select.style.cssText = "padding: 2px 6px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 11px; cursor: pointer; outline: none;";
             select.innerHTML = `
                 <option value="it">IT</option>
                 <option value="en">EN</option>

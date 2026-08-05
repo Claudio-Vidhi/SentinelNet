@@ -54,7 +54,7 @@ function renderMcpClientServers(servers) {
     }
     list.innerHTML = servers.map(s => {
         const nm = escapeHtml(jsStr(s.name));
-        return `<div style="border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px; background:var(--surface);">
+        return `<div style="border:1px solid var(--border); border-radius:0; padding:12px; margin-bottom:10px; background:var(--surface);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
               <span><strong>${escapeHtml(s.name)}</strong> <code style="font-size:11px; color:var(--text-muted);">${escapeHtml(s.url)}</code>
                 ${s.has_auth ? '<span class="chip"><i class="fa-solid fa-key"></i> auth</span>' : ''}</span>
@@ -115,13 +115,13 @@ async function mcpClientListTools(name) {
     target.innerHTML = tools.map((t, i) => {
         const tn = escapeHtml(jsStr(t.name));
         const schema = t.inputSchema ? escapeHtml(JSON.stringify(t.inputSchema, null, 2)) : '';
-        return `<div style="border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px;">
+        return `<div style="border:1px solid var(--border); border-radius:0; padding:10px; margin-bottom:8px;">
           <div><code style="font-size:12px;">${escapeHtml(t.name)}</code></div>
           <div style="color:var(--text-muted); font-size:11px; margin:4px 0;">${escapeHtml(t.description || '')}</div>
-          ${schema ? `<pre style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; font-size:11px; overflow-x:auto; white-space:pre;">${schema}</pre>` : ''}
+          ${schema ? `<pre style="background:var(--bg); border:1px solid var(--border); border-radius:0; padding:8px; font-size:11px; overflow-x:auto; white-space:pre;">${schema}</pre>` : ''}
           <textarea id="mcpcArgs-${nm}-${i}" class="input" rows="3" style="font-family:var(--font-code); font-size:12px;" placeholder='{ }'>{}</textarea>
           <div style="margin-top:6px;"><button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="mcpClientCall('${nm}','${tn}','mcpcArgs-${nm}-${i}','mcpcResult-${nm}-${i}')"><i class="fa-solid fa-play"></i> ${escapeHtml(L.btnMcpInvoke)}</button></div>
-          <pre id="mcpcResult-${nm}-${i}" style="margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:8px; font-size:11px; overflow-x:auto; white-space:pre-wrap; display:none;"></pre>
+          <pre id="mcpcResult-${nm}-${i}" style="margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:0; padding:8px; font-size:11px; overflow-x:auto; white-space:pre-wrap; display:none;"></pre>
         </div>`;
     }).join('');
 }

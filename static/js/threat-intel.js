@@ -275,7 +275,7 @@
 
         // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
         if (onlineDevices.length === 0) {
-            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
+            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:0; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
                 ${i18n[currentLang].noDevicesText}
             </div>`;
         } else {
@@ -300,7 +300,7 @@
                             <button id="btn-mgd-${safeIpId}"
                                 data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
                                 onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
-                                style="padding:8px 14px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
+                                style="padding:8px 14px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
                                 ${i18n[currentLang].btnAnalyzeVuln}
                             </button>
                         </div>
@@ -352,7 +352,7 @@
             card.style.cssText = `
                 background: var(--surface-2);
                 border: 2px solid var(--border);
-                border-radius: 10px;
+                border-radius: 0;
                 padding: 14px;
                 cursor: pointer;
                 transition: all 0.2s ease;
@@ -364,7 +364,7 @@
                         <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
                         <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
                     </div>
-                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
+                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:0; font-weight:700;">DISCOVERED</span>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
                     <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
@@ -375,7 +375,7 @@
                     data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
                     data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
                     onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
-                    style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                    style="width:100%; padding:8px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
                     ${i18n[currentLang].btnAnalyzeVuln}
                 </button>
             `;
@@ -509,7 +509,7 @@
                     resultsEl.innerHTML = `
                         <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:6px;">
                             <button onclick="toggleVulnResults('${effectiveResultsId}', this)"
-                                style="padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                                style="padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
                                 <i class="fa-solid fa-chevron-up"></i> ${hideLabel}
                             </button>
                         </div>
@@ -538,13 +538,13 @@
 
                         const exploitedFlag = (v.exploited === true || String(v.exploited).toLowerCase() === 'true') ? '1' : '0';
                         cardsEl.innerHTML += `
-                            <div data-sev="${severity.toLowerCase()}" data-exploited="${exploitedFlag}" style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
+                            <div data-sev="${severity.toLowerCase()}" data-exploited="${exploitedFlag}" style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 0; font-size:13px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <strong style="color:var(--primary);">${escapeHtml(enisaId)}</strong>
                                         <span style="color:var(--text-muted);">(CVE: ${escapeHtml(cveId)})</span>
                                         <button onclick="toggleVulnDesc('${descId}', this)"
-                                            style="padding:2px 7px; border-radius:5px; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                            style="padding:2px 7px; border-radius:0; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
                                             <i class="fa-solid fa-chevron-up"></i>
                                         </button>
                                     </div>

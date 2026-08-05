@@ -165,7 +165,7 @@
                     <i class="fa-solid ${icon}"></i> ${title}
                 </h5>
                 ${(items || []).map(item => `
-                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:4px; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" onclick="applySiemFilter('${jsStr(item.value)}', '${field}')" title="${escapeHtml(field)}:${escapeHtml(item.value)}">
+                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:0; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" onclick="applySiemFilter('${jsStr(item.value)}', '${field}')" title="${escapeHtml(field)}:${escapeHtml(item.value)}">
                         <span style="font-family:var(--font-code); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:130px;">${escapeHtml(item.value)}</span>
                         <span class="badge" style="font-size:10px;">${item.count}</span>
                     </div>
@@ -230,10 +230,10 @@
                 <td style="padding:6px 8px;"><span class="badge" style="background:${isDeny ? 'rgba(239, 68, 68, 0.15)' : 'var(--surface-3)'}; color:${isDeny ? 'var(--danger)' : 'var(--text)'};">${escapeHtml(e.threat_flag)}</span></td>
             </tr>
             ${isSelected ? `<tr style="background:var(--surface-2);"><td colspan="7" style="padding:12px;">
-                <div style="font-family:var(--font-code); font-size:11px; background:var(--surface); padding:10px; border-radius:6px; border:1px solid var(--border); margin-bottom:8px;">
+                <div style="font-family:var(--font-code); font-size:11px; background:var(--surface); padding:10px; border-radius:0; border:1px solid var(--border); margin-bottom:8px;">
                     <strong>Raw SIEM Flow Event Payload (JSON):</strong>
                     <pre style="margin:4px 0 0; white-space:pre-wrap;">${escapeHtml(JSON.stringify(e, null, 2))}</pre>
-                    ${isDeny ? `<div style="margin-top:8px; padding:8px 12px; border-radius:6px; background:rgba(59, 130, 246, 0.1); border:1px solid rgba(59, 130, 246, 0.25); color:var(--text); font-size:11px; font-family:var(--font-main, sans-serif);">
+                    ${isDeny ? `<div style="margin-top:8px; padding:8px 12px; border-radius:0; background:rgba(59, 130, 246, 0.1); border:1px solid rgba(59, 130, 246, 0.25); color:var(--text); font-size:11px; font-family:var(--font-main, sans-serif);">
                         <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:4px;"></i>
                         <strong>Nota sull'Azione DENY / BLOCKED:</strong> SentinelNet è una piattaforma di osservabilità passiva (raccoglie telemetria). L'azione <code>DENY</code> indica che il <strong>firewall/router apparato di rete</strong> di origine ha bloccato il pacchetto ed emesso il relativo log.
                     </div>` : ''}

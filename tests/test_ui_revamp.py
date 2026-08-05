@@ -390,7 +390,7 @@ class TestGroupsTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-groups"')
         tab_end = html.index('<!-- TAB 3:')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+        for cls in ('class="hero"', 'class="hero-card"'):
             self.assertIn(cls, tab_html)
         self.assertEqual(tab_html.count('class="panel"'), 2)
         self.assertGreaterEqual(tab_html.count('class="table-wrap"'), 2)
@@ -437,7 +437,7 @@ class TestMapTabRestyle(unittest.TestCase):
         tab_start = html.index('<!-- TAB 3:')
         tab_end = html.index('<!-- TAB: Dispositivi & Categorie -->')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+        for cls in ('class="hero"', 'class="hero-card"'):
             self.assertGreaterEqual(tab_html.count(cls), 2, f"{cls} expected once per tab (tab-map + tab-map-interactive)")
         self.assertGreaterEqual(tab_html.count('class="panel"'), 2)
         # view-toggle buttons carry the .chip class alongside their existing marker class
@@ -546,7 +546,7 @@ class TestCategoriesTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-categories"')
         tab_end = html.index('<!-- TAB 5: Threat Intel')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"', 'class="filterbar"'):
+        for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"'):
             self.assertIn(cls, tab_html)
         self.assertGreaterEqual(tab_html.count('class="panel'), 4)
 
@@ -590,7 +590,7 @@ class TestThreatIntelTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-security"')
         tab_end = html.index('<!-- TAB: MAC Address Tracker')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"', 'class="filterbar"', 'class="panel'):
+        for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"', 'class="panel'):
             self.assertIn(cls, tab_html)
 
     def test_i18n_keys_both_langs(self):
@@ -705,7 +705,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         # and Task 20 corrected it, which silently broke this slice.
         tab_end = html.index('<div id="tab-flows"')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"', 'class="filterbar"', 'class="table-wrap"'):
+        for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"', 'class="table-wrap"'):
             self.assertIn(cls, tab_html)
         self.assertGreaterEqual(tab_html.count('class="kpi-grid"'), 2)
         self.assertGreaterEqual(tab_html.count('class="panel'), 4)
@@ -780,7 +780,7 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-config"')
         tab_end = html.index('<!-- TAB: AI Assistant -->')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+        for cls in ('class="hero"', 'class="hero-card"',
                     'class="filterbar"', 'class="panel'):
             self.assertIn(cls, tab_html)
         # input-filter panel + results panel
@@ -900,7 +900,7 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-ai"')
         tab_end = html.index('<!-- TAB: Switch da Zero (Provisioner) -->')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+        for cls in ('class="hero"', 'class="hero-card"',
                     'class="filterbar"', 'class="panel'):
             self.assertIn(cls, tab_html)
         # tre panel card: profili, generatore di config, chat (quest'ultima
@@ -1065,7 +1065,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         # Visible focus indicator reuses design tokens (var(--primary)), not a
         # new invented color.
         # Task 2: this selector lives in static/css/dashboard.css now.
-        self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--primary);outline-offset:2px}',
+        self.assertIn('.chip-choice:focus-visible{outline:2px solid var(--focus);outline-offset:2px}',
                       src)
 
     def test_endpoint_contract_present(self):
@@ -1099,7 +1099,7 @@ class TestProvisionerTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         # table-wrap left with the removed inline token/objects section -- that
         # UI now lives solely in #tab-fortigate (Fortigate Management tab).
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+        for cls in ('class="hero"', 'class="hero-card"'):
             self.assertIn(cls, tab)
         # device/params card + generate/deliver card.
         self.assertGreaterEqual(tab.count('class="panel'), 2)
@@ -1171,7 +1171,7 @@ class TestImportTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+        for cls in ('class="hero"', 'class="hero-card"'):
             self.assertIn(cls, tab)
         # the upload-form panel
         self.assertGreaterEqual(tab.count('class="panel"'), 1)
@@ -1250,7 +1250,7 @@ class TestUsersTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+        for cls in ('class="hero"', 'class="hero-card"',
                     'class="table-wrap"'):
             self.assertIn(cls, tab)
         # users-table panel + create-user-form panel
@@ -1337,7 +1337,7 @@ class TestSitesTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+        for cls in ('class="hero"', 'class="hero-card"',
                     'class="table-wrap"'):
             self.assertIn(cls, tab)
         # sites-table panel + create-site-form panel
@@ -1441,7 +1441,7 @@ class TestMcpTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"',
+        for cls in ('class="hero"', 'class="hero-card"',
                     'class="panel"'):
             self.assertIn(cls, tab)
         # client-config panel + tool-list panel + MCP Client preview-toggle panel.
@@ -1568,7 +1568,7 @@ class TestSettingsTabRestyle(unittest.TestCase):
     def test_tab_uses_component_classes(self):
         html = _html()
         tab = self._tab(html)
-        for cls in ('class="hero"', 'class="hero-card"', 'class="eyebrow"'):
+        for cls in ('class="hero"', 'class="hero-card"'):
             self.assertIn(cls, tab)
         # Four one-concern cards: network exposure, command safety,
         # observability, application (general).
@@ -1719,7 +1719,6 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
     def test_component_classes_applied(self):
         tab = self._tab(_html())
         self.assertIn('<div class="hero" style="grid-template-columns:1fr;', tab)
-        self.assertIn('<span class="eyebrow" data-i18n="flowsEyebrow"', tab)
         # Cards: flow graph, obs protocol dist, tenant summary, protocol breakdown, top talkers, correlated anomalies.
         self.assertEqual(tab.count('<div class="panel"'), 5)
         self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 4)
@@ -2173,7 +2172,7 @@ class TestTransportsCollapsible(unittest.TestCase):
         self.assertIn('[type="checkbox"]', selector_suffix)
         self.assertIn('[type="radio"]', selector_suffix)
         self.assertIn('width: 100%', body)
-        self.assertIn('padding: 10px 12px 10px 36px', body)
+        self.assertIn('padding: 8px 10px 8px 30px', body)
 
     def test_devtransports_is_a_collapsible_details_with_summary(self):
         # <details id="devTransports"> ... <summary>...</summary> ... </details>
@@ -2327,10 +2326,10 @@ class TestSidebarRail(unittest.TestCase):
         gtc = re.search(r'grid-template-columns:\s*([^;]+);', body)
         self.assertIsNotNone(gtc)
         self.assertIn('var(--sidebar-w)', gtc.group(1))
-        self.assertNotIn('340px', gtc.group(1))
+        self.assertNotIn('318px', gtc.group(1))
         expanded = re.search(r'--sidebar-w:\s*(\d+)px', body)
         self.assertIsNotNone(expanded, "body must define the expanded --sidebar-w")
-        self.assertEqual(int(expanded.group(1)), 340)
+        self.assertEqual(int(expanded.group(1)), 318)
         # The collapse must be animated, but scoped to the column only.
         # --transition is "all 0.25s", so using the bare token here would also
         # animate body's background/color/padding on every theme/state change.
@@ -2382,7 +2381,7 @@ class TestSidebarRail(unittest.TestCase):
             depth += (self.css[i] == '{') - (self.css[i] == '}')
             i += 1
         block = self.css[start:i - 1]
-        self.assertIn('--sidebar-w:72px', block.replace(' ', ''))
+        self.assertIn('--sidebar-w:62px', block.replace(' ', ''))
         self.assertIn('.nav-item', block)
         # mobile layout must still collapse to a single column
         self.assertRegex(self.css, r'@media\s*\(max-width:\s*1000px\)')
@@ -2597,9 +2596,10 @@ class TestCaRenderedListIndex(unittest.TestCase):
         js = self._source()
         block = js[js.index("function caBuildRouteMap"):]
         block = block[:block.index("function caRenderAcls")]
-        # Il selezionato resta scuro: e' li' che sta il contrasto del testo.
-        self.assertIn("highlight: { background: '#5a4fb0'", block)
-        self.assertIn("highlight: { background: '#241b3a'", block)
+        # Il selezionato tiene una superficie del sistema invece del default di
+        # vis.js: cosi' il contrasto con l'etichetta regge in entrambe le rese.
+        self.assertIn("highlight: { background: cssVar('--surface-3'", block)
+        self.assertIn("highlight: { background: cssVar('--surface-2'", block)
 
     def test_toggle_and_focus_read_the_rendered_list(self):
         js = self._source()

@@ -51,7 +51,7 @@
     function confidenceBar(value) {
         const pct = Math.max(0, Math.min(100, Number(value) || 0));
         const color = pct >= 70 ? 'var(--success)' : (pct >= 45 ? 'var(--warning)' : 'var(--text-muted)');
-        return `<div style="height:6px; border-radius:3px; background:var(--surface-3); overflow:hidden;">
+        return `<div style="height:6px; border-radius:0; background:var(--surface-3); overflow:hidden;">
                     <div style="width:${pct}%; height:100%; background:${color};"></div>
                 </div>`;
     }
@@ -127,13 +127,13 @@
         // tabelle aperte sono un muro. Chiuso non vuol dire nascosto, il
         // riassunto sta nell'intestazione.
         const interesting = down > 0 || unstable > 0 || !!devRule;
-        const badge = (txt, col) => `<span style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:5px; padding:1px 6px; margin-left:6px;">${txt}</span>`;
+        const badge = (txt, col) => `<span style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:0; padding:1px 6px; margin-left:6px;">${txt}</span>`;
 
         const sorted = list.slice().sort(
             (a, b) => (b.transitions || 0) - (a.transitions || 0)
                    || String(a.interface).localeCompare(String(b.interface)));
 
-        return `<details ${interesting ? 'open' : ''} style="margin-bottom:8px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);">
+        return `<details ${interesting ? 'open' : ''} style="margin-bottom:8px; border:1px solid var(--border); border-radius:0; background:var(--surface-2);">
             <summary style="cursor:pointer; padding:8px 10px; font-size:13px;">
                 <strong style="font-family:var(--font-code);">${escapeHtml(jsStr(name || ip))}</strong>
                 ${name ? `<span style="color:var(--text-muted); font-size:11px; font-family:var(--font-code);"> ${escapeHtml(jsStr(ip))}</span>` : ''}
@@ -165,9 +165,9 @@
             <input type="datetime-local" id="dvu-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr(until))}"
                    onchange="saveDeviceSuppression('${jsStr(tenant)}','${jsStr(ip)}')"
                    title="${L('incUntilHint')}"
-                   style="padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
+                   style="padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
             <input type="text" id="dvn-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr((rule || {}).note || ''))}" placeholder="${L('incReasonPl')}"
-                   style="flex:1; min-width:140px; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
+                   style="flex:1; min-width:140px; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
         </div>`;
     }
 
@@ -209,10 +209,10 @@
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
                     <input type="datetime-local" id="ifu-${r._i}" value="${escapeHtml(jsStr(local(r.to_ts)))}"
                            onchange="saveInterfaceExpectation(${r._i})"
-                           style="padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
+                           style="padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
                     <input type="text" id="ifn-${r._i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="${L('incReasonPl')}"
-                           style="width:100%; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
+                           style="width:100%; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
             </tr>`).join('')}</tbody></table>`;
     }
 
@@ -293,7 +293,7 @@
             _catalog = {};
             (data.rules || []).forEach(r => { _catalog[r.id] = r; });
             box.innerHTML = (data.rules || []).map(r => `
-                <div style="padding:10px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface-2);">
+                <div style="padding:10px; border:1px solid var(--border); border-radius:0; margin-bottom:8px; background:var(--surface-2);">
                     <div style="display:flex; justify-content:space-between; gap:12px; align-items:baseline;">
                         <strong style="font-size:13px;">${escapeHtml(jsStr(r.title))}</strong>
                         <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(jsStr(r.id))} v${escapeHtml(jsStr(r.version))}</span>
@@ -315,7 +315,7 @@
                             <input type="number" id="rp-${escapeHtml(jsStr(r.id))}-${escapeHtml(jsStr(p.name))}"
                                    value="${escapeHtml(jsStr((r.effective || {})[p.name] ?? p.default))}"
                                    min="${escapeHtml(jsStr(p.min))}" max="${escapeHtml(jsStr(p.max))}"
-                                   style="width:110px; padding:5px 8px; border-radius:6px; border:1px solid var(--border);
+                                   style="width:110px; padding:5px 8px; border-radius:0; border:1px solid var(--border);
                                           background:var(--surface-2); color:var(--text); font-size:12px;">
                         </div>`).join('')}
                         <button class="btn btn-secondary btn-small" style="width:auto;"
@@ -384,7 +384,7 @@
         }
         box.innerHTML = _incidents.map(inc => {
             const active = inc.id === _selectedId;
-            return `<div onclick="openIncident(${Number(inc.id)})" style="cursor:pointer; padding:10px; border-radius:8px; margin-bottom:8px;
+            return `<div onclick="openIncident(${Number(inc.id)})" style="cursor:pointer; padding:10px; border-radius:0; margin-bottom:8px;
                         border:1px solid ${active ? 'var(--primary)' : 'var(--border)'}; background:var(--surface-2);">
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
                     <span style="width:8px; height:8px; border-radius:50%; background:${sevColor(inc.severity)};"></span>
@@ -431,10 +431,10 @@
         const roleCounts = Object.keys(byRole).map(role => {
             const meta = ROLE_META[role] || { color: 'var(--text-muted)', label: role };
             const roleLabel = metaLabel(meta);
-            return `<span style="padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700;
+            return `<span style="padding:1px 6px; border-radius:0; font-size:10px; font-weight:700;
                         color:${meta.color}; border:1px solid ${meta.color};">${escapeHtml(roleLabel)} ${byRole[role].length}</span>`;
         }).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
-        return `<div style="padding:12px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); margin-bottom:16px;">
+        return `<div style="padding:12px; border-radius:0; background:var(--surface-2); border:1px solid var(--border); margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px;">
                 <div>
                     <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">${L('incCauseTitle')}</div>
@@ -500,9 +500,9 @@
                     <div style="font-size:11px; color:var(--text-muted);">
                         ${escapeHtml(fmtTime(e.ts))} ·
                         <i class="fa-solid ${meta.icon}" style="color:${meta.color};"></i> ${escapeHtml(metaLabel(meta))}
-                        ${role ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
+                        ${role ? `<span style="margin-left:6px; padding:1px 6px; border-radius:0; font-weight:700;
                                      font-size:10px; color:${role.color}; border:1px solid ${role.color};">${escapeHtml(metaLabel(role))}</span>` : ''}
-                        ${retracted ? `<span style="margin-left:6px; padding:1px 6px; border-radius:4px; font-weight:700;
+                        ${retracted ? `<span style="margin-left:6px; padding:1px 6px; border-radius:0; font-weight:700;
                                      font-size:10px; color:var(--text-muted); border:1px solid var(--text-muted);">${L('incRetractedBadge')}</span>` : ''}
                     </div>
                     <div style="font-size:13px; ${retracted ? 'text-decoration:line-through;' : ''}
@@ -523,7 +523,7 @@
             ? `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(jsStr(inc.ai_narrative))}</div>
                <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(inc.ai_narrative_ts))}</div>`
             : `<div style="font-size:12px; color:var(--text-muted);">${L('incNoNarrative')}</div>`;
-        return `<div style="margin-top:18px; padding:12px; border-radius:8px; border:1px dashed var(--primary); background:rgba(99,102,241,0.06);">
+        return `<div style="margin-top:18px; padding:12px; border-radius:0; border:1px dashed var(--primary); background:rgba(99,102,241,0.06);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
                 <span style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--primary);">
                     <i class="fa-solid fa-robot"></i> ${L('incAiRestated')}
@@ -538,7 +538,7 @@
 
     function renderConclusionHistory(history) {
         if (!history.length) return '';
-        return `<div style="margin-top:12px; padding:10px; border-radius:8px; background:var(--surface-3);">
+        return `<div style="margin-top:12px; padding:10px; border-radius:0; background:var(--surface-3);">
             <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:6px;">
                 <i class="fa-solid fa-clock-rotate-left"></i> Conclusioni precedenti (superate)
             </div>
@@ -568,7 +568,7 @@
                 endpoint: 'fa-desktop', access: 'fa-ethernet',
                 gateway: 'fa-route', perimeter: 'fa-shield-halved'
             }[h.kind] || 'fa-circle-dot');
-            return `<div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; font-size:12px; color:${color}; ${unknown ? 'border-style:dashed;' : ''}">
+            return `<div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; font-size:12px; color:${color}; ${unknown ? 'border-style:dashed;' : ''}">
                 <i class="fa-solid ${icon}"></i>
                 <span>${escapeHtml(jsStr(h.label || h.kind))}</span>
             </div>`;

@@ -185,7 +185,7 @@
                        : caView === 'routing' ? caRenderRouting(dev, L, en, idx)
                        : caView === 'acl' ? caRenderAcls(dev, L, en)
                        : caRenderIfaces(dev, L, en);
-            return `<details class="mac-switch" data-ca-idx="${idx}" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''} ontoggle="caOnToggle(this, ${idx})">
+            return `<details class="mac-switch" data-ca-idx="${idx}" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''} ontoggle="caOnToggle(this, ${idx})">
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
@@ -247,7 +247,7 @@
 
     function caRenderHome(L) {
         const card = (view, icon, title, desc) => `
-            <div class="hero-card" onclick="caSwitchView('${view}')" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:22px 18px; transition:var(--transition);"
+            <div class="hero-card" onclick="caSwitchView('${view}')" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:22px 18px; transition:var(--transition);"
                  onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
                 <div style="font-size:26px; color:var(--primary); margin-bottom:10px;"><i class="fa-solid ${icon}"></i></div>
                 <div style="font-weight:600; font-size:15px; margin-bottom:6px;">${escapeHtml(title)}</div>
@@ -264,19 +264,19 @@
     function caRenderConvert(L) {
         const vendorOpts = (sel) => ['fortios', 'panos'].map(v =>
             `<option value="${v}" ${v === sel ? 'selected' : ''}>${v === 'fortios' ? 'FortiGate (FortiOS)' : 'Palo Alto (PAN-OS)'}</option>`).join('');
-        return `<div style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); padding:16px;">
+        return `<div style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:16px;">
             <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
-                <select id="caConvDevice" onchange="caConvPickDevice()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
+                <select id="caConvDevice" onchange="caConvPickDevice()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
                     ${caDeviceOptions(L, 'caConvDevicePick')}
                 </select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
-                <select id="caConvSource" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
+                <select id="caConvSource" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvTarget)}</label>
-                <select id="caConvTarget" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
+                <select id="caConvTarget" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
                 <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caConvertPreview()"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
             </div>
-            <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
+            <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
             <div id="caConvResult" style="margin-top:12px;"></div>
         </div>`;
     }
@@ -327,19 +327,19 @@
             const unmapped = (d.unmapped || []);
             out.innerHTML = `
                 <div style="font-weight:600; font-size:13px; margin:8px 0;">${escapeHtml(L.caConvMapped)} (${(d.mapped || []).length})</div>
-                <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:8px;">
+                <div style="max-height:320px; overflow:auto; border:1px solid var(--border); border-radius:0;">
                 <table class="data-table" style="width:100%;"><thead><tr>
                     <th>${escapeHtml(L.thCaConvSource)}</th><th>${escapeHtml(L.thCaConvTarget)}</th><th>${escapeHtml(L.thCaConvNote)}</th>
                 </tr></thead><tbody>${rows || `<tr><td colspan="3" style="color:var(--text-muted); font-size:12px;">—</td></tr>`}</tbody></table></div>
                 <details style="margin-top:10px;">
                     <summary style="cursor:pointer; font-weight:600; font-size:13px;">${escapeHtml(L.caConvUnmapped)} (${unmapped.length})</summary>
-                    <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:10px; margin-top:8px; max-height:240px; overflow:auto;">${escapeHtml(unmapped.join('\n\n'))}</pre>
+                    <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:0; padding:10px; margin-top:8px; max-height:240px; overflow:auto;">${escapeHtml(unmapped.join('\n\n'))}</pre>
                 </details>
                 <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
                     <div style="font-weight:600; font-size:13px;">Preview</div>
                     <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="caConvDownload()"><i class="fa-solid fa-download"></i> ${escapeHtml(L.caConvDownload)}</button>
                 </div>
-                <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:8px; padding:10px; margin-top:8px; max-height:320px; overflow:auto;">${escapeHtml(caConvLastPreview)}</pre>`;
+                <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:0; padding:10px; margin-top:8px; max-height:320px; overflow:auto;">${escapeHtml(caConvLastPreview)}</pre>`;
         } catch (e) {
             out.innerHTML = `<div style="color:var(--danger); font-size:13px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(e.message || 'Error')}</div>`;
         }
@@ -474,7 +474,7 @@
                 <td>${caRawRouteButton(r, L)}</td>
                 </tr>`).join('');
             const defaultBadge = g.hasDefault ? ` <span class="badge" style="font-size:10px; color:var(--warning); border:1px solid var(--warning);">${escapeHtml(L.lblCaDefaultRoute)}</span>` : '';
-            return `<details style="border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface);">
+            return `<details style="border:1px solid var(--border); border-radius:0; margin-bottom:8px; background:var(--surface);">
                 <summary style="cursor:pointer; padding:8px 10px; font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;">
                     <span style="font-family:var(--font-code);">${escapeHtml(hop)}</span>
                     <span class="badge" style="font-size:10px;">${g.rows.length}</span>
@@ -491,7 +491,7 @@
         </div>`;
         const staticSection = `${routeToggle}${caRouteGroupMode === 'byhop' ? groupedHtml : staticTable}`;
         const protoCards = protocols.length ? protocols.map(p => `
-            <details style="border:1px solid var(--border); border-radius:8px; margin-top:8px; background:var(--surface);">
+            <details style="border:1px solid var(--border); border-radius:0; margin-top:8px; background:var(--surface);">
                 <summary style="cursor:pointer; padding:8px 10px; font-size:12px; font-weight:700;">${escapeHtml(p.proto)}${p.id ? ' ' + escapeHtml(p.id) : ''}</summary>
                 <div style="padding:8px 10px; border-top:1px solid var(--border);">
                     ${(p.details || []).length ? `<pre style="font-family:var(--font-code); font-size:11px; background:var(--surface); margin:0 0 6px; white-space:pre-wrap;">${escapeHtml((p.details || []).join('\\n'))}</pre>` : ''}
@@ -516,19 +516,22 @@
         if (!container || typeof vis === 'undefined') return;
         const statics = (dev.routing && dev.routing.static) || [];
         const hostname = dev.hostname || dev.ip;
-        const nodeFont = { color: '#ffffff', size: 13, face: 'Rubik, sans-serif' };
-        const hopFont = { color: '#ffffff', size: 12, face: 'Rubik, sans-serif' };
+        // Nodi e testo seguono la resa attiva: in chiara l'etichetta e' inchiostro
+        // su targa, in scura e' chiara su ardesia. vis.js vuole colori veri.
+        const nodeInk = cssVar('--text', '#e8ebe6');
+        const nodeFont = { color: nodeInk, size: 13, face: 'Saira Condensed, sans-serif' };
+        const hopFont = { color: nodeInk, size: 12, face: 'Saira Condensed, sans-serif' };
         // Senza un 'highlight' esplicito vis.js usa il proprio: sfondo #D2E5FF,
-        // quasi bianco. L'etichetta resta bianca e il nodo selezionato diventa
-        // illeggibile. Il selezionato tiene quindi il fondo scuro — e' li' che
-        // sta il contrasto del testo — e si distingue con un anello chiaro.
+        // quasi bianco, e in resa scura l'etichetta chiara ci sparisce sopra. Il
+        // selezionato tiene quindi una superficie del sistema — e' li' che sta il
+        // contrasto col testo — e si distingue con l'anello di selezione.
         const centerColor = {
-            background: '#6a5fc1', border: '#a99ff2',
-            highlight: { background: '#5a4fb0', border: '#ffffff' }
+            background: cssVar('--surface-3', '#2a333a'), border: nodeInk,
+            highlight: { background: cssVar('--surface-3', '#2a333a'), border: nodeInk }
         };
         const hopColor = {
-            background: '#2b2144', border: '#a99ff2',
-            highlight: { background: '#241b3a', border: '#ffffff' }
+            background: cssVar('--surface-2', '#181e23'), border: cssVar('--border-strong', '#46535c'),
+            highlight: { background: cssVar('--surface-2', '#181e23'), border: nodeInk }
         };
         const nodes = [{
             id: 'center', label: hostname, shape: 'box',
@@ -559,14 +562,14 @@
                     ? { color: '#ffb84d', highlight: '#ffd479' }
                     : { color: 'rgba(169,159,242,0.65)', highlight: '#d9d2ff' },
                 width: hopHasDefault[hop] ? 3 : 2,
-                font: { color: '#ffffff', size: 12, strokeWidth: 0, background: '#150f23' }
+                font: { color: nodeInk, size: 12, strokeWidth: 0, background: cssVar('--surface-2', '#181e23') }
             });
         });
         if (caNetworks[idx]) { try { caNetworks[idx].destroy(); } catch (e) {} }
         const network = new vis.Network(container, { nodes, edges }, {
             physics: { stabilization: { iterations: 100 } },
             interaction: { dragView: true, zoomView: true },
-            edges: { font: { color: '#ffffff', size: 12, strokeWidth: 0, background: '#150f23' } }
+            edges: { font: { color: nodeInk, size: 12, strokeWidth: 0, background: cssVar('--surface-2', '#181e23') } }
         });
         let frozen = false;
         const freeze = () => { if (!frozen) { frozen = true; network.setOptions({ physics: false }); } };
@@ -588,7 +591,7 @@
                 const color = act === 'permit' ? 'var(--success)' : act === 'deny' ? 'var(--danger)' : 'var(--text-muted)';
                 return `<tr><td>${escapeHtml(e.seq != null ? String(e.seq) : '—')}</td><td style="color:${color}; font-weight:700;">${escapeHtml(e.action || '—')}</td><td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(e.text || '—')}</td></tr>`;
             }).join('');
-            return `<details style="border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--surface);">
+            return `<details style="border:1px solid var(--border); border-radius:0; margin-bottom:8px; background:var(--surface);">
                 <summary style="cursor:pointer; padding:10px 12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; list-style:none;">
                     <strong>${escapeHtml(acl.name)}</strong>
                     <span class="badge" style="font-size:10px;">${escapeHtml(acl.kind || '—')}</span>
@@ -618,7 +621,7 @@
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
                     <td>${aclChips || '—'}</td><td>${state}</td>
                 </tr>
-                <tr id="${rowId}" style="display:none;"><td colspan="7"><pre style="font-family:var(--font-code); background:var(--surface); border-radius:6px; padding:8px; margin:0; white-space:pre-wrap; font-size:11px;">${escapeHtml(i.raw || '—')}</pre></td></tr>`;
+                <tr id="${rowId}" style="display:none;"><td colspan="7"><pre style="font-family:var(--font-code); background:var(--surface); border-radius:0; padding:8px; margin:0; white-space:pre-wrap; font-size:11px;">${escapeHtml(i.raw || '—')}</pre></td></tr>`;
         }).join('');
         return `<div class="table-container"><table><thead><tr>
             <th>${L.thCaIface}</th><th>${L.thCaDesc}</th><th>${L.thCaMode}</th><th>${L.thCaVlanCol}</th><th>${L.thCaIp}</th><th>${L.thCaAclInOut}</th><th>${L.thCaState}</th>
@@ -675,7 +678,7 @@
             }
         });
         if (total === 0) {
-            return { total: 0, body: `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+            return { total: 0, body: `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
                 <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>` };
         }
         return { total, body: sections.join('') };
@@ -685,7 +688,7 @@
         if (dev.config_type === 'fortios' || dev.config_type === 'wlc-aireos') {
             const mv = caRenderMvValidationBody(dev, L, en);
             const tenantMv = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
-            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
@@ -708,7 +711,7 @@
         const chips = arr => arr.map(x => `<span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">${escapeHtml(x)}</span>`).join('');
         let body;
         if (total === 0) {
-            body = `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+            body = `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
                 <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>`;
         } else {
             const sections = [];
@@ -719,7 +722,7 @@
             if (routeAclRefs.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--primary);">${L.titleCaRouteAclRefs}</h4><div>${routeAclRefs.map(r => `<span class="ca-chip">${escapeHtml(r.context)} → ${escapeHtml(r.acl)}</span>`).join('')}</div>`);
             body = sections.join('');
         }
-        return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
+        return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" open>
             <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                 <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                 <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>
@@ -959,7 +962,7 @@
                 const sec = sections.find(s => s.id === activeId);
                 inner = sec ? caRenderFwSection(sec, L) : caMvEmpty();
             }
-            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:12px; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
+            return `<details class="mac-switch" data-ca-ip="${escapeHtml(dev.ip)}" style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); margin-bottom:10px; overflow:hidden;" ${openAll ? 'open' : ''}>
                 <summary style="cursor:pointer; padding:12px 14px; display:flex; align-items:center; gap:10px; list-style:none;">
                     <i class="fa-solid fa-chevron-right mac-chev" style="font-size:11px;"></i>
                     <strong>${escapeHtml(dev.hostname || dev.ip)}</strong>

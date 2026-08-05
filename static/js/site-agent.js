@@ -69,12 +69,12 @@
                 pendingCfg.reqInterval != null ? `Intervallo: ${escapeHtml(String(pendingCfg.reqInterval))}s` : null
             ].filter(Boolean).join(', ');
             if (j.status === 'error') {
-                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:6px; background:rgba(220,53,69,0.12); border:1px solid var(--danger); font-size:11px; color:var(--danger);">
+                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:0; background:rgba(220,53,69,0.12); border:1px solid var(--danger); font-size:11px; color:var(--danger);">
                     <i class="fa-solid fa-triangle-exclamation"></i> <strong>Ultima richiesta di configurazione FALLITA</strong>${reqBits ? ` (${reqBits})` : ''}.
                     <div style="margin-top:4px; font-family:var(--font-code); white-space:pre-wrap;">${escapeHtml(j.result || 'Errore sconosciuto')}</div>
                 </div>`;
             } else {
-                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:6px; background:rgba(255,193,7,0.12); border:1px solid var(--warning); font-size:11px; color:var(--warning);">
+                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:0; background:rgba(255,193,7,0.12); border:1px solid var(--warning); font-size:11px; color:var(--warning);">
                     <i class="fa-solid fa-hourglass-half"></i> <strong>Modifica in attesa di applicazione dall'agente</strong>${reqBits ? ` (${reqBits})` : ''}.
                     Verrà applicata al prossimo ciclo di polling dell'agente (ritardo massimo atteso: ~${escapeHtml(String(curInterval))}s, in base all'intervallo attualmente applicato).
                 </div>`;
@@ -104,7 +104,7 @@
         }).join('');
 
         body.innerHTML = `
-        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
                 <div style="display:flex; align-items:center; gap:10px;">
                     <span style="font-weight:700; font-size:14px;">Stato Agente Remoto</span>
@@ -128,16 +128,16 @@
             </div>
         </div>
 
-        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <h4 style="margin:0 0 10px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-sliders"></i> Configurazione Porta Syslog & Timing Polling</h4>
             <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end;">
                 <div>
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Porta Syslog UDP Listener</label>
-                    <input id="agentCfgSyslogPort" type="number" value="${curPort}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
+                    <input id="agentCfgSyslogPort" type="number" value="${curPort}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
                 </div>
                 <div>
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Intervallo Polling Inventario (sec)</label>
-                    <input id="agentCfgInterval" type="number" value="${curInterval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); color:var(--text);">
+                    <input id="agentCfgInterval" type="number" value="${curInterval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
                 </div>
                 <button class="btn btn-sm" onclick="triggerAgentConfigSave('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--primary); color:#fff;">
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
@@ -146,14 +146,14 @@
             ${pendingCfgHtml}
         </div>
 
-        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
                 <h4 style="margin:0; font-size:13px; color:var(--warning);"><i class="fa-solid fa-file-csv"></i> Editor Inventario Locale Sede (network_hosts.csv)</h4>
                 <button class="btn btn-sm btn-secondary" onclick="fetchAgentInventory('${escapeHtml(siteId)}')" style="padding:4px 10px; font-size:11px;">
                     <i class="fa-solid fa-download"></i> Leggi da Agente
                 </button>
             </div>
-            <textarea id="agentInventoryTextarea" placeholder="IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Site,SSH Port,Transports,SNMP Community&#10;192.0.2.1,fortigate,custom,admin,,,Tenant_Milano,fw-01,milano,22,,&#10;192.0.2.2,cisco,custom,admin,,,Tenant_Milano,switch-01,milano,22,," style="width:100%; height:100px; font-family:var(--font-code); font-size:11px; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text); resize:vertical;"></textarea>
+            <textarea id="agentInventoryTextarea" placeholder="IP,Vendor,Profile,Username,Password,Enable Secret,Group,Hostname,Site,SSH Port,Transports,SNMP Community&#10;192.0.2.1,fortigate,custom,admin,,,Tenant_Milano,fw-01,milano,22,,&#10;192.0.2.2,cisco,custom,admin,,,Tenant_Milano,switch-01,milano,22,," style="width:100%; height:100px; font-family:var(--font-code); font-size:11px; padding:8px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); resize:vertical;"></textarea>
             <div style="margin-top:6px; font-size:11px; color:var(--text-muted); line-height:1.5;">
                 Serve almeno la colonna <code>IP</code>; il separatore può essere <code>,</code> o <code>;</code> e le altre
                 colonne sono opzionali. Il tenant è la colonna <strong>Group</strong> (non "Tenant"): con un nome diverso
@@ -170,7 +170,7 @@
             </div>
         </div>
 
-        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <h4 style="margin:0 0 10px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-screwdriver-wrench"></i> Azioni di Gestione Remota (Checkmk Style)</h4>
             <div style="display:flex; flex-wrap:wrap; gap:10px;">
                 <button class="btn btn-sm" onclick="triggerAgentSelfUpdate('${escapeHtml(siteId)}')" style="background:var(--primary); color:#fff; padding:8px 14px;">
@@ -182,9 +182,9 @@
             </div>
         </div>
 
-        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px;">
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px;">
             <h4 style="margin:0 0 8px; font-size:13px; color:var(--text-muted);"><i class="fa-solid fa-list-check"></i> Cronologia Comandi & RPC Accodati</h4>
-            <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; background:var(--surface-3); padding:4px;">
+            <div style="max-height:160px; overflow-y:auto; border:1px solid var(--border); border-radius:0; background:var(--surface-3); padding:4px;">
                 ${jobsHtml || '<div style="padding:10px; color:var(--text-muted); font-size:12px;">Nessun comando in cronologia.</div>'}
             </div>
         </div>`;

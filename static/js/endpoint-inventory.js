@@ -96,7 +96,7 @@ function endpointsRender(d) {
     }
 
     const banner = _epTruncated
-        ? `<div style="padding:10px 12px; margin-bottom:10px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px;">
+        ? `<div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px;">
             <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
                 L.epTruncated.replace('{shown}', String(_epRows.length)).replace('{total}', String(d.total)))}</div>`
         : '';
@@ -160,7 +160,7 @@ const _EP_FLAG_COLOR = {
 
 function _epFlag(f) {
     const color = _EP_FLAG_COLOR[f] || 'var(--text-muted)';
-    return `<span style="font-size:10px; color:${color}; border:1px solid ${color}; border-radius:4px; padding:0 4px; white-space:nowrap;">${escapeHtml(jsStr(f))}</span>`;
+    return `<span style="font-size:10px; color:${color}; border:1px solid ${color}; border-radius:0; padding:0 4px; white-space:nowrap;">${escapeHtml(jsStr(f))}</span>`;
 }
 
 function _epTime(iso) {
@@ -303,13 +303,13 @@ function endpointsPortsRender(d) {
 
     const rows = (d.ports || []).map(p => `<tr>
         <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(p.interface))}${
-            p.physical ? '' : ' <span style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:4px; padding:0 4px;">virt</span>'}</td>
-        <td><span style="font-size:10px; color:${stateColor[p.state]}; border:1px solid ${stateColor[p.state]}; border-radius:4px; padding:1px 5px;">${escapeHtml(jsStr(stateLabel[p.state] || p.state))}</span></td>
+            p.physical ? '' : ' <span style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:0; padding:0 4px;">virt</span>'}</td>
+        <td><span style="font-size:10px; color:${stateColor[p.state]}; border:1px solid ${stateColor[p.state]}; border-radius:0; padding:1px 5px;">${escapeHtml(jsStr(stateLabel[p.state] || p.state))}</span></td>
         <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml(jsStr((p.macs || []).join(', ') || (p.uplink_to ? '→ ' + p.uplink_to : '—')))}</td>
     </tr>`).join('');
 
     host.innerHTML = `
-        <div style="padding:10px 12px; margin-bottom:10px; border-radius:8px; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px;">
+        <div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px;">
             <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.epPortsFreeWarn)}
             ${ageDays === null ? '' : `<div style="margin-top:4px; color:var(--text-muted);">${escapeHtml(L.epPortsAge)} — ${escapeHtml(String(ageDays))}g</div>`}
         </div>

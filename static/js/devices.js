@@ -60,7 +60,7 @@
 
             const hasSnmp = snmpDefaultTenants.includes(g);
             const snmpCell = `<td>
-                <span style="font-size:11px; color:${hasSnmp ? 'var(--success)' : 'var(--text-muted)'}; border:1px solid ${hasSnmp ? 'var(--success)' : 'var(--border)'}; border-radius:4px; padding:1px 6px;">
+                <span style="font-size:11px; color:${hasSnmp ? 'var(--success)' : 'var(--text-muted)'}; border:1px solid ${hasSnmp ? 'var(--success)' : 'var(--border)'}; border-radius:0; padding:1px 6px;">
                     ${hasSnmp ? (currentLang === 'en' ? 'configured' : 'configurata')
                               : (currentLang === 'en' ? 'not set' : 'non impostata')}</span>
                 ${currentRole === 'admin'
@@ -150,7 +150,7 @@
                       id="grpsel_${safeIp}"
                       onchange="reassignDevice('${d.IP}', this.value, this)"
                       title="${currentLang==='en'?'Move to another tenant without deleting':'Sposta in un altro tenant senza eliminare'}"
-                      style="font-size:11px; padding:3px 6px; border-radius:6px;
+                      style="font-size:11px; padding:3px 6px; border-radius:0;
                              border:1px solid var(--border); background:var(--surface-3);
                              color:var(--text-muted); cursor:pointer; outline:none;
                              max-width:120px; transition:var(--transition);">
@@ -676,7 +676,7 @@
                 document.getElementById("triageProgressPct").innerText = `${pct}%`;
                 const processingText = currentLang === 'en' ? 'Processing' : 'Elaborazione';
                 document.getElementById("triageProgressMsg").innerText = `${processingText}: ${statusData.current_device} (${progress}/${total})`;
-                document.getElementById("triageProgressBarFill").style.width = `${pct}%`;
+                document.getElementById("triageProgressBarFill").style.transform = `scaleX(${pct / 100})`;
                 
                 setTimeout(pollTriageStatus, 1500);
             } else {
@@ -735,7 +735,7 @@
         document.getElementById('subnetScanResults').style.display = 'block';
         document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Starting scan...' : 'Avvio scansione...';
         document.getElementById('subnetScanResultsTable').innerHTML = '';
-        document.getElementById('subnetScanProgressBar').style.width = '0%';
+        document.getElementById('subnetScanProgressBar').style.transform = 'scaleX(0)';
 
         const res = await apiFetch('/api/scan-subnet', {
             method: 'POST',
@@ -770,7 +770,7 @@
             }
             const data = await res.json();
             const pct  = totalHosts > 0 ? Math.round((data.progress / totalHosts) * 100) : 0;
-            document.getElementById('subnetScanProgressBar').style.width = `${pct}%`;
+            document.getElementById('subnetScanProgressBar').style.transform = `scaleX(${pct / 100})`;
             document.getElementById('subnetScanStatus').textContent =
                 currentLang === 'en' ? `Scanning in progress — ${data.progress}/${totalHosts} hosts processed...` : `Scansione in corso — ${data.progress}/${totalHosts} host elaborati...`;
 
@@ -779,7 +779,7 @@
                 const b = document.getElementById('btnAvviaScan');
                 b.disabled = false;
                 b.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan' : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
-                document.getElementById('subnetScanProgressBar').style.width = '100%';
+                document.getElementById('subnetScanProgressBar').style.transform = 'scaleX(1)';
                 if (data.status === 'error') {
                     document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Scan finished with error.' : 'Scansione terminata con errore.';
                     return;
@@ -954,7 +954,7 @@
         const en = currentLang === 'en';
         box.style.display = '';
         if (errorDetail) {
-            box.innerHTML = `<div style="padding:12px 14px; border-radius:8px; border:1px solid var(--danger); background:rgba(239,68,68,0.10); font-size:13px; color:var(--danger);">
+            box.innerHTML = `<div style="padding:12px 14px; border-radius:0; border:1px solid var(--danger); background:rgba(239,68,68,0.10); font-size:13px; color:var(--danger);">
                 <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(errorDetail)}</div>`;
             return;
         }
@@ -967,7 +967,7 @@
                 <td style="padding:5px 8px; color:var(--danger);">${escapeHtml(String(f.error))}</td>
             </tr>`).join('');
         box.innerHTML = `
-            <div style="padding:12px 14px; border-radius:8px; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'rgba(245,158,11,0.10)' : 'rgba(34,197,94,0.10)'}; font-size:13px;">
+            <div style="padding:12px 14px; border-radius:0; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'rgba(245,158,11,0.10)' : 'rgba(34,197,94,0.10)'}; font-size:13px;">
                 <strong>${ok}</strong> ${en ? 'devices imported' : 'dispositivi importati'}${failed.length ? ` · <strong>${failed.length}</strong> ${en ? 'rows skipped' : 'righe scartate'}` : ''}
             </div>
             ${failed.length ? `
