@@ -63,13 +63,13 @@
                     let stateBadge = '';
                     if (po.live_total) {
                         const ok = po.live_up === po.live_total;
-                        const col = ok ? 'var(--success)' : '#ff6b7c';
+                        const col = ok ? 'var(--lamp-up-ink)' : 'var(--lamp-fault-ink)';
                         stateBadge = `<span title="${currentLang==='en'?'Live SNMP state':'Stato vivo da SNMP'}" style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-tower-broadcast"></i> ${po.live_up}/${po.live_total} UP</span>`;
                     } else if (po.status === 'up' && !po.issue) {
                         stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
                     } else if (po.issue) {
                         const down = po.status === 'down';
-                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'#ff6b7c':'#ffb84d'}; border:1px solid ${down?'#ff6b7c':'#ffb84d'}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
+                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'var(--lamp-fault-ink)':'var(--lamp-warn-ink)'}; border:1px solid ${down?'var(--lamp-fault)':'var(--lamp-warn)'}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
                     }
                     return `<div style="margin-bottom:6px;">
                         <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po.name)}</span>
@@ -82,7 +82,7 @@
                             // Un membro spento resta membro, ma non compone il
                             // bundle: mostrarlo verde come gli altri fa credere
                             // che l'aggregato sia integro.
-                            return `<span style="color:${down ? '#ff6b7c' : 'var(--success)'};"${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(m)}${shut ? ' ⛔' : ''}</span>`;
+                            return `<span style="color:${down ? 'var(--lamp-fault-ink)' : 'var(--lamp-up-ink)'};"${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(m)}${shut ? ' ⛔' : ''}</span>`;
                         }).join(', ')}</span>
                         <span style="font-size:11px; color:var(--text-muted);"> (${(po.members||[]).length} ${currentLang==='en'?'members':'membri'})</span>
                         ${stateBadge}
@@ -220,36 +220,39 @@
     }
 
     function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp, stack) {
-        let statusColor = "#8d9bb0";
-        let statusBg = "rgba(141, 155, 176, 0.1)";
-        let statusGlow = "rgba(141, 155, 176, 0.2)";
+        // Il colore di stato viene letto dai token della resa attiva: l'SVG e'
+        // disegnato su canvas e non risolve var(--...), ma il neon fisso della
+        // vecchia resa era illeggibile sul laminato chiaro (1.4:1).
+        let statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
+        let statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
+        let statusGlow = cssVar('--lamp-idle', '#6c7a83');
         let statusText = "OFFLINE";
-        
+
         if (status === "online") {
-            statusColor = "#57d987"; // verde semantico
-            statusBg = "rgba(59, 225, 136, 0.15)";
-            statusGlow = "rgba(59, 225, 136, 0.4)";
+            statusColor = cssVar('--lamp-up-ink', '#6ed394');
+            statusBg = cssVar('--lamp-up-wash', 'rgba(86, 192, 122, 0.14)');
+            statusGlow = cssVar('--lamp-up', '#56c07a');
             statusText = "ONLINE";
         } else if (status === "offline") {
-            statusColor = "#ff6b7c"; // rosso neon
-            statusBg = "rgba(255, 107, 124, 0.15)";
-            statusGlow = "rgba(255, 107, 124, 0.4)";
+            statusColor = cssVar('--lamp-fault-ink', '#ff8377');
+            statusBg = cssVar('--lamp-fault-wash', 'rgba(239, 107, 94, 0.14)');
+            statusGlow = cssVar('--lamp-fault', '#ef6b5e');
             statusText = "OFFLINE";
         } else if (status === "auth_failed") {
-            statusColor = "#ffb84d"; // arancio neon
-            statusBg = "rgba(255, 184, 77, 0.15)";
-            statusGlow = "rgba(255, 184, 77, 0.4)";
+            statusColor = cssVar('--lamp-warn-ink', '#e8b055');
+            statusBg = cssVar('--lamp-warn-wash', 'rgba(224, 160, 60, 0.14)');
+            statusGlow = cssVar('--lamp-warn', '#e0a03c');
             statusText = "AUTH ERR";
         } else if (status === "discovered") {
-            statusColor = "#a3a3a3"; // grigio vicini scoperti
-            statusBg = "rgba(163, 163, 163, 0.15)";
-            statusGlow = "rgba(163, 163, 163, 0.2)";
+            statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
+            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
+            statusGlow = cssVar('--lamp-idle', '#6c7a83');
             statusText = currentLang === 'en' ? "DISCOVERED" : "RILEVATO";
         }
 
         if (isBoundary) {
-            statusColor = "#4a5568";
-            statusBg = "rgba(74, 85, 104, 0.15)";
+            statusColor = cssVar('--text-soft', '#909ba2');
+            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
             statusGlow = "transparent";
             statusText = currentLang === 'en' ? "EXTERNAL" : "ESTERNO";
         }
@@ -260,7 +263,7 @@
 
         // Colore tema per il bordo sfumato della scheda basato sullo stato del nodo
         let borderGradStart = statusColor;
-        let borderGradEnd = "#362d59";
+        let borderGradEnd = cssVar('--border-strong', '#46535c');
 
         // Badge in alto a destra: SEMPRE il tipo di apparato. Il dominio VTP, se
         // attivo, va su una riga separata sotto (non deve coprire il tipo).
@@ -340,7 +343,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="240" height="${cardH}" viewBox="0 0 240 ${cardH}">
           <defs>
             <linearGradient id="cardGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#251c3e" />
+              <stop offset="0%" stop-color="${cssVar('--surface-3', '#2a333a')}" />
               <stop offset="100%" stop-color="${cssVar('--surface-2', '#181e23')}" />
             </linearGradient>
             <linearGradient id="borderGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -370,12 +373,12 @@
           <text x="185" y="19.5" font-family="'Rubik', 'Inter', sans-serif" font-size="8.5" font-weight="900" fill="${badgeColor}" text-anchor="middle" letter-spacing="0.3">${escapedBadge}</text>
 
           <!-- Informazioni testuali: Hostname e Indirizzo IP -->
-          <text x="78" y="32" font-family="'Rubik', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="#ffffff" letter-spacing="-0.3">${escapedLabel}</text>
-          <text x="78" y="49" font-family="Menlo, monospace" font-size="11" font-weight="700" fill="#bdb8c0">${escapedIp}</text>
+          <text x="78" y="32" font-family="'Rubik', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="${cssVar('--text', '#e8ebe6')}" letter-spacing="-0.3">${escapedLabel}</text>
+          <text x="78" y="49" font-family="Menlo, monospace" font-size="11" font-weight="700" fill="${cssVar('--text-muted', '#a2acb2')}">${escapedIp}</text>
 
           <!-- Badge del Vendor (Cisco, HPE) -->
           <rect x="78" y="58" width="55" height="14" rx="4" fill="rgba(44, 188, 195, 0.1)" stroke="rgba(44, 188, 195, 0.2)" stroke-width="1" />
-          <text x="105.5" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="9" font-weight="900" fill="#b1a7f0" text-anchor="middle" letter-spacing="0.5">${escapedVendor}</text>
+          <text x="105.5" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="9" font-weight="900" fill="${cssVar('--text-muted', '#a2acb2')}" text-anchor="middle" letter-spacing="0.5">${escapedVendor}</text>
 
           <!-- Badge dello Stato Operativo (ONLINE, OFFLINE...) -->
           <rect x="139" y="58" width="70" height="14" rx="4" fill="${statusBg}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
@@ -393,10 +396,10 @@
     // Generatore dinamico del Tooltip HTML premium per ciascun apparato (al passaggio del mouse)
     function createNodeTooltip(n, scan, resolvedVendor) {
         let statusLed = "";
-        if (n.status === "online") statusLed = `<span style="color: #57d987; font-weight: bold;">● ONLINE</span>`;
-        else if (n.status === "offline") statusLed = `<span style="color: #ff6b7c; font-weight: bold;">● OFFLINE</span>`;
-        else if (n.status === "auth_failed") statusLed = `<span style="color: #ffb84d; font-weight: bold;">● AUTH FAILED</span>`;
-        else if (n.status === "discovered") statusLed = `<span style="color: #a3a3a3; font-weight: bold;">● DISCOVERED</span>`;
+        if (n.status === "online") statusLed = `<span style="color: var(--lamp-up-ink); font-weight: bold;">● ONLINE</span>`;
+        else if (n.status === "offline") statusLed = `<span style="color: var(--lamp-fault-ink); font-weight: bold;">● OFFLINE</span>`;
+        else if (n.status === "auth_failed") statusLed = `<span style="color: var(--lamp-warn-ink); font-weight: bold;">● AUTH FAILED</span>`;
+        else if (n.status === "discovered") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● DISCOVERED</span>`;
         
         const firmware = (n.version) ? n.version : ((scan && scan.version) ? scan.version : (currentLang === 'en' ? "Not detected / Offline" : "Non rilevato / Offline"));
         const vendorName = (resolvedVendor && resolvedVendor !== 'discovered') ? resolvedVendor : (currentLang === 'en' ? "LLDP/CDP Neighbor" : "Vicino LLDP/CDP");
@@ -422,10 +425,10 @@
             <i class="fa-solid fa-network-wired"></i> ${titleText}
           </div>
           <table style="width: 100%; border-collapse: collapse; background: transparent;">
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.label)}</td></tr>
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.status === 'discovered' ? (n.reported_ip || '—') : n.id)}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--text);">${escapeHtml(n.label)}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--text);">${escapeHtml(n.status === 'discovered' ? (n.reported_ip || '—') : n.id)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${escapeHtml(vendorName)}</td></tr>
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.group)}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--text);">${escapeHtml(n.group)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelStatusText}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${statusLed}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Type:' : 'Tipo:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${deviceTypeMeta(n.device_type).color};">${escapeHtml(deviceTypeLabel(n.device_type))}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${escapeHtml(firmware)}</code></td></tr>
@@ -630,13 +633,13 @@
               <div style="display: grid; grid-template-columns: 1fr 30px 1fr; gap: 8px; align-items: center; font-size: 11px; line-height: 1.4;">
                 <div>
                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Source' : 'Origine'}</span>
-                  <strong style="font-size:11px; color:#fff;">${escapeHtml(l.source)}</strong>
+                  <strong style="font-size:11px; color:var(--text);">${escapeHtml(l.source)}</strong>
                   <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (l.pc_name ? shortIface(l.pc_name) : (localMembers || l.local_port)) : l.local_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
                 </div>
                 <div style="color: var(--primary); font-size: 14px; text-align: center;"><i class="fa-solid fa-right-left"></i></div>
                 <div style="text-align: right;">
                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Destination' : 'Destinazione'}</span>
-                  <strong style="font-size:11px; color:#fff;">${escapeHtml(l.target)}</strong>
+                  <strong style="font-size:11px; color:var(--text);">${escapeHtml(l.target)}</strong>
                   <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (remoteMembers || l.remote_port) : l.remote_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
                 </div>
               </div>
@@ -680,7 +683,7 @@
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
         const base = 'width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
-        const on  = base + 'background:var(--primary); color:#fff; border-color:var(--primary);';
+        const on  = base + 'background:var(--cta); color:var(--cta-text); border-color:var(--cta);';
         const off = base + 'background:var(--surface-2); color:var(--text-muted); border-color:var(--border);';
         const c = document.getElementById('mapViewClassicBtn');
         const m = document.getElementById('mapViewMinimalBtn');
@@ -988,7 +991,7 @@
                 <span style="width:14px; height:14px; border-radius:0; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
                 <span style="flex:1; font-size:12px; color:var(--text);">${escapeHtml(nm)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${dashLabel(c.dash)}</span>
-                <button onclick="deleteMinimalCustomCat('${attrEsc(nm)}')" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:#e05656; cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
+                <button onclick="deleteMinimalCustomCat('${attrEsc(nm)}')" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:var(--lamp-fault-ink); cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
             </div>`;
         }).join('') || `<div style="font-size:12px; color:var(--text-muted); padding:4px 0;">${currentLang==='en'?'No categories yet':'Nessuna categoria'}</div>`;
         box.innerHTML = rows + `
@@ -1000,7 +1003,7 @@
                     <option value="dashed">${currentLang==='en'?'Dashed':'Tratteggiata'}</option>
                     <option value="dotted">${currentLang==='en'?'Dotted':'Punteggiata'}</option>
                 </select>
-                <button onclick="addMinimalCustomCat()" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--primary); color:#fff; border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
+                <button onclick="addMinimalCustomCat()" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--cta); color:var(--cta-text); border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
             </div>`;
     }
     // Menu contestuale (click destro su un cavo nella mappa minimalista) per
@@ -2031,7 +2034,7 @@
                     return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
                 case 'source': {
                     const badge = n.discovered
-                        ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:0; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
+                        ? `<span style="font-size:10px; color:var(--lamp-idle-ink); border:1px solid var(--lamp-idle); border-radius:0; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
                         : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:0; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
                     // Promozione di un dispositivo scoperto a gestito (operator/admin).
                     const promote = (n.discovered && canWrite && n.display_ip)
@@ -2058,10 +2061,10 @@
                 }
                 case 'ha': {
                     const hg = effVal(n,'ha_group') || '';
-                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:#ff8c42; border:1px solid #ff8c42; border-radius:0; padding:1px 4px; margin-right:4px;">HA</span>` : '';
+                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:var(--cond-d); border:1px solid var(--cond-d); border-radius:0; padding:1px 4px; margin-right:4px;">HA</span>` : '';
                     return td(canWrite
                         ? `${badge}<input value="${attrEsc(hg)}" onchange="stageEdit('${escapeHtml(n.id)}','ha_group',this.value.trim())" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
-                        : (hg ? `${badge}<span style="font-size:12px; color:#ff8c42;">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
+                        : (hg ? `${badge}<span style="font-size:12px; color:var(--cond-d);">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
                 }
                 case 'stack': {
                     if (n.stack) {

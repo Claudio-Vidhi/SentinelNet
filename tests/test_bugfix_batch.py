@@ -138,5 +138,21 @@ class TestOnelineBayOpensFilteredInventory(unittest.TestCase):
         self.assertIn("openInventoryForTenant(", bay.group(1))
 
 
+class TestSortKeepsDetailRowsWithTheirParent(unittest.TestCase):
+    """Le tabelle con riga di dettaglio espandibile (matrice audit) la
+    perdevano al primo click su un'intestazione: l'ordinamento trattava la
+    riga di dettaglio come una voce a se', e quella non ha la colonna su cui
+    si ordina."""
+
+    def test_sorter_groups_full_width_rows_with_the_row_above(self):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "static", "js", "core.js"), encoding="utf-8") as fh:
+            src = fh.read()
+        body = re.search(r'function sortTableByColumn\(.*?\n\}', src, re.DOTALL)
+        self.assertIsNotNone(body, "sortTableByColumn() non trovata")
+        self.assertIn("colSpan", body.group(0),
+                      "l'ordinamento deve riconoscere le righe di dettaglio")
+
+
 if __name__ == "__main__":
     unittest.main()

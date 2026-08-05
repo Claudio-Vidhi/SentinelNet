@@ -92,8 +92,20 @@ function sortTableByColumn(table, colIdx, th) {
     th.setAttribute('data-sort-asc', asc ? 'true' : 'false');
     const ind = th.querySelector('.sort-ind');
     if (ind) { ind.textContent = asc ? ' ▲' : ' ▼'; ind.style.opacity = '1'; }
-    const rows = Array.from(tbody.rows);
-    rows.sort((a, b) => {
+    // Una riga di dettaglio (cella unica a tutta larghezza, es. le evidenze
+    // aperte nella matrice audit) non e' una voce autonoma: e' la coda della
+    // riga che l'ha aperta. Ordinarla da sola la staccava dalla sua regola e
+    // la spediva in cima, perche' non ha la colonna su cui si ordina.
+    const rows = [];
+    Array.from(tbody.rows).forEach(r => {
+        if (rows.length && r.cells.length === 1 && r.cells[0].colSpan > 1) {
+            rows[rows.length - 1].push(r);
+        } else {
+            rows.push([r]);
+        }
+    });
+    rows.sort((ga, gb) => {
+        const a = ga[0], b = gb[0];
         const x = _cellSortValue(a.cells[colIdx]);
         const y = _cellSortValue(b.cells[colIdx]);
         const numX = Number(x);
@@ -136,17 +148,48 @@ function makeTableSortable(table) {
 function enhanceAllTables(root) {
     (root || document).querySelectorAll('table').forEach(makeTableSortable);
 }
+
+// ===== Tastiera sugli elementi cliccabili non nativi =====
+// Un onclick su <tr>/<div>/<span> non e' raggiungibile da tastiera: la matrice
+// audit, le righe della topologia e la client map si aprivano solo col mouse
+// (WCAG 2.1.1 Keyboard). Invece di correggere ogni punto di render, gli
+// elementi vengono resi focusabili qui, dove passa tutto il DOM generato.
+const NATIVE_INTERACTIVE = 'a[href], button, input, select, textarea, summary, [contenteditable]';
+function makeClickablesFocusable(root) {
+    (root || document).querySelectorAll('[onclick]').forEach(el => {
+        if (el.dataset.kbd === '1' || el.matches(NATIVE_INTERACTIVE)) return;
+        el.dataset.kbd = '1';
+        if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+        // Una riga o una cella restano tali: role="button" su <tr>/<td>
+        // romperebbe la struttura di tabella annunciata dallo screen reader.
+        if (!el.hasAttribute('role') && el.tagName !== 'TR' && el.tagName !== 'TD') {
+            el.setAttribute('role', 'button');
+        }
+    });
+}
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target;
+    if (!(el instanceof Element) || el.dataset.kbd !== '1') return;
+    e.preventDefault();          // lo spazio non deve scorrere la pagina
+    el.click();
+});
+
 function initSortableTables() {
     enhanceAllTables(document);
-    const obs = new MutationObserver(muts => {
-        for (const m of muts) {
-            for (const node of m.addedNodes) {
-                if (node.nodeType === 1) {
-                    if (node.tagName === 'TABLE') makeTableSortable(node);
-                    enhanceAllTables(node);
-                }
-            }
-        }
+    makeClickablesFocusable(document);
+    // Una passata per frame invece di una per nodo inserito: il render di una
+    // tabella lunga produce centinaia di mutazioni, e ognuna rilanciava un
+    // querySelectorAll sull'intero sottoalbero.
+    let scheduled = false;
+    const obs = new MutationObserver(() => {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(() => {
+            scheduled = false;
+            enhanceAllTables(document);
+            makeClickablesFocusable(document);
+        });
     });
     obs.observe(document.body, { childList: true, subtree: true });
 }

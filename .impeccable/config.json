@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "static/js/netsec-audit.js"
+        ],
+        "createdAt": "2026-08-05T16:33:24.772Z",
+        "reason": "Exported standalone audit report: a self-contained HTML document that leaves the app and cannot reference app tokens"
+      }
+    ]
+  }
+}
