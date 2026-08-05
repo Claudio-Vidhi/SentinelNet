@@ -12,11 +12,16 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const src = readFileSync(join(root, 'static/js/core.js'), 'utf8');
 const start = src.indexOf('function _cellSortValue');
-const end = src.indexOf('function makeTableSortable');
+const end = src.indexOf('function enhanceAllTables');
 assert.ok(start > 0 && end > start, 'funzioni di ordinamento non trovate in core.js');
-const { sortTableByColumn } = (0, eval)(
-    `(() => { ${src.slice(start, end)}; return { sortTableByColumn }; })()`
-);
+// document minimo: serve solo se l'implementazione crea ancora nodi.
+const document = {
+    createElement: () => ({ style: {}, dataset: {}, classList: { add() {} } }),
+};
+const { sortTableByColumn, makeTableSortable } = (0, eval)(
+    `(document => { ${src.slice(start, end)};
+      return { sortTableByColumn, makeTableSortable }; })`
+)(document);
 
 const cell = (text, colSpan = 1) => ({
     colSpan, textContent: text,
@@ -40,13 +45,18 @@ function build(rows) {
         },
     };
     const th = {
-        attrs: {},
+        attrs: {}, dataset: {}, style: {}, innerHTML: 'ID', children: [],
         getAttribute(n) { return this.attrs[n] ?? null; },
-        setAttribute(n, v) { this.attrs[n] = v; },
+        setAttribute(n, v) { this.attrs[n] = String(v); },
         removeAttribute(n) { delete this.attrs[n]; },
         querySelector: () => null,
+        appendChild(n) { this.children.push(n); },
+        addEventListener(_, fn) { this.onclick = fn; },
     };
-    return { table: { tBodies: [tbody], tHead: { rows: [{ cells: [th] }] } }, tbody, th };
+    const table = {
+        dataset: {}, tBodies: [tbody], tHead: { rows: [{ cells: [th] }] },
+    };
+    return { table, tbody, th };
 }
 
 function order(tbody) {
@@ -81,6 +91,27 @@ function order(tbody) {
     const { table, tbody, th } = build([detail('empty'), rule('A', 'a')]);
     sortTableByColumn(table, 0, th);
     assert.equal(tbody.rows.length, 2);
+}
+
+// 5. L'affordance di ordinamento deve vivere in un ATTRIBUTO, non in un nodo
+//    figlio: applyLanguage() riscrive l'innerHTML di ogni [data-i18n], quindi
+//    una <span class="sort-ind"> appesa all'intestazione spariva al primo
+//    cambio lingua (e al caricamento) e non tornava piu'. Restavano colonne
+//    ordinabili senza freccia, senza verso e senza alcun segno di esserlo.
+{
+    const { table, th } = build([rule('B', 'b'), rule('A', 'a')]);
+    makeTableSortable(table);
+    assert.equal(th.getAttribute('data-sortable'), '1',
+        'l\'intestazione deve dichiararsi ordinabile con un attributo');
+
+    th.innerHTML = 'ID Regola';          // esattamente cio' che fa applyLanguage()
+    assert.equal(th.getAttribute('data-sortable'), '1',
+        'l\'affordance non deve dipendere da un nodo figlio');
+
+    sortTableByColumn(table, 0, th);
+    assert.equal(th.getAttribute('data-sort-asc'), 'true', 'primo click: crescente');
+    sortTableByColumn(table, 0, th);
+    assert.equal(th.getAttribute('data-sort-asc'), 'false', 'secondo click: decrescente');
 }
 
 console.log('sort_table: ok');

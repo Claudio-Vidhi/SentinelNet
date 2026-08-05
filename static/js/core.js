@@ -86,12 +86,8 @@ function sortTableByColumn(table, colIdx, th) {
     const asc = th.getAttribute('data-sort-asc') !== 'true';
     Array.from(table.tHead.rows[0].cells).forEach(c => {
         c.removeAttribute('data-sort-asc');
-        const i = c.querySelector('.sort-ind');
-        if (i) { i.textContent = ' ⇅'; i.style.opacity = '0.35'; }
     });
     th.setAttribute('data-sort-asc', asc ? 'true' : 'false');
-    const ind = th.querySelector('.sort-ind');
-    if (ind) { ind.textContent = asc ? ' ▲' : ' ▼'; ind.style.opacity = '1'; }
     // Una riga di dettaglio (cella unica a tutta larghezza, es. le evidenze
     // aperte nella matrice audit) non e' una voce autonoma: e' la coda della
     // riga che l'ha aperta. Ordinarla da sola la staccava dalla sua regola e
@@ -126,22 +122,13 @@ function makeTableSortable(table) {
     table.dataset.sortable = '1';
     Array.from(table.tHead.rows[0].cells).forEach((th, idx) => {
         if (th.dataset.noSort === '1') return;
+        th.setAttribute('data-sortable', '1');
         th.style.cursor = 'pointer';
         th.style.userSelect = 'none';
-        // Le intestazioni sono etichette brevi: senza nowrap la freccia di
-        // ordinamento veniva spinta da sola sulla riga sotto, perche' lo
-        // spazio davanti a ' ⇅' e' un punto di interruzione. Lo spazio e'
-        // sostituito da un margine, cosi' non resta alcun punto di rottura.
+        // Le intestazioni sono etichette brevi: il nowrap evita che il glifo
+        // vada a capo da solo; il margine sinistro del pseudo-elemento non
+        // inserisce spazi nel content e quindi non crea punti di rottura.
         th.style.whiteSpace = 'nowrap';
-        if (!th.querySelector('.sort-ind')) {
-            const s = document.createElement('span');
-            s.className = 'sort-ind';
-            s.textContent = '⇅';
-            s.style.opacity = '0.35';
-            s.style.fontSize = '10px';
-            s.style.marginLeft = '4px';
-            th.appendChild(s);
-        }
         th.addEventListener('click', () => sortTableByColumn(table, idx, th));
     });
 }
