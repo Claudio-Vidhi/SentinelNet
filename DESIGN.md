@@ -56,6 +56,30 @@ typography:
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "0.14em"
+  micro-tag:
+    fontFamily: "Saira Condensed, Arial Narrow, sans-serif"
+    fontSize: "9px"
+    fontWeight: 600
+    lineHeight: 1.4
+    letterSpacing: "0.1em"
+  pill-label:
+    fontFamily: "Saira Condensed, Arial Narrow, sans-serif"
+    fontSize: "11px"
+    fontWeight: 600
+    lineHeight: 1.4
+    letterSpacing: "0.1em"
+  legend-sub:
+    fontFamily: "Saira Condensed, Arial Narrow, sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "0.02em"
+  plate-title:
+    fontFamily: "Saira Condensed, Arial Narrow, sans-serif"
+    fontSize: "21px"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "0.06em"
   plate-label:
     fontFamily: "Saira Condensed, Arial Narrow, sans-serif"
     fontSize: "10px"
@@ -342,8 +366,14 @@ platform condensed sans there would take the system's whole voice with it.
 - **Legend Title** (600, 17px): panel and section headings.
 - **Plate Header** (600, 12px, uppercase, +0.14em): the engraved strip across the
   top of a bay panel.
+- **Plate Title** (600, 21px): login and modal titles.
+- **Legend Sub** (600, 15px): sub-section headings inside a bay.
+- **Pill Label** (600, 11px, uppercase, +0.1em): status pills, the title-block
+  cartouche, the one-line legend. The most repeated small step in the system.
 - **Plate Label** (600, 10px, uppercase, +0.16em): field labels, table headers,
   tags, nav group headings (+0.18em).
+- **Micro Tag** (600, 9px, uppercase, +0.1em): role pills and inline config chips,
+  where a tag must not out-weigh the value beside it.
 - **Control Cap** (600, 13px, uppercase, +0.1em): every button and nav item.
 - **Prose** (platform stack, 400, 14px/1.55): explanatory copy, capped at 66ch.
 - **Reading** (Azeret Mono 500, 30px, -0.02em): an instrument's value.
