@@ -55,7 +55,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Insecure management protocols (Telnet / HTTP)"},
      "severity": "CRITICAL", "category": "Hardening",
      "check": rules.check_management_protocols,
-     "audit": "show system interface | grep allowaccess",
+     "audit": "config system interface\n    show full-configuration | grep allowaccess",
      "remediation": "config system interface / edit <port> / "
                     "set allowaccess ssh https"},
     {"id": "AUD-CIS-02", "vendor": FORTIOS, "ref": "3.2", "level": 1,
@@ -64,7 +64,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Permissive any-to-any policy"},
      "severity": "CRITICAL", "category": "Access Rules",
      "check": rules.check_any_any_policy,
-     "audit": "show firewall policy",
+     "audit": "show full-configuration firewall policy",
      "remediation": {"it": "Specificare srcaddr, dstaddr e service espliciti.",
                      "en": "Set explicit srcaddr, dstaddr and service."}},
     {"id": "AUD-CIS-03", "vendor": FORTIOS, "ref": "2.1.10", "level": 1,
@@ -73,7 +73,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Legacy SSL/TLS ciphers (TLS < 1.2)"},
      "severity": "HIGH", "category": "Encryption",
      "check": rules.check_tls_version,
-     "audit": "show system global | grep ssl",
+     "audit": "config system global\n    show full-configuration | grep admin-https-ssl-versions",
      "remediation": "config system global / set admin-https-ssl-versions "
                     "tlsv1-2 tlsv1-3"},
     {"id": "AUD-CIS-04", "vendor": FORTIOS, "ref": "2.4.4", "level": 1,
@@ -82,7 +82,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Idle timeout on the management console"},
      "severity": "MEDIUM", "category": "Hardening",
      "check": rules.check_idle_timeout,
-     "audit": "show system global | grep admintimeout",
+     "audit": "config system global\n    show full-configuration | grep admintimeout",
      "remediation": "config system global / set admintimeout 5"},
     {"id": "AUD-CIS-05", "vendor": FORTIOS, "ref": "2.3.1", "level": 1,
      "automated": True,
@@ -90,7 +90,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Default SNMP v1/v2c communities"},
      "severity": "HIGH", "category": "Management",
      "check": rules.check_snmp_community,
-     "audit": "show system snmp community",
+     "audit": "config system snmp community\n    show full-configuration",
      "remediation": {"it": "Disabilitare SNMP v1/v2c e configurare SNMPv3.",
                      "en": "Disable SNMP v1/v2c and configure SNMPv3."}},
     {"id": "AUD-CIS-06", "vendor": FORTIOS, "ref": "2.1.9", "level": 2,
@@ -99,7 +99,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Strong cryptography not enforced (strong-crypto)"},
      "severity": "MEDIUM", "category": "Encryption",
      "check": rules.check_strong_crypto,
-     "audit": "show system global | grep strong-crypto",
+     "audit": "config system global\n    show full-configuration | grep strong-crypto",
      "remediation": "config system global / set strong-crypto enable"},
     {"id": "AUD-CIS-07", "vendor": FORTIOS, "ref": "1.1", "level": 1,
      "automated": True,
@@ -107,7 +107,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "DNS servers configured"},
      "severity": "LOW", "category": "Hardening",
      "check": rules.check_dns_configured,
-     "audit": "show system dns",
+     "audit": "config system dns\n    show full-configuration",
      "remediation": "config system dns / set primary <ip> / "
                     "set secondary <ip>"},
     {"id": "AUD-CIS-08", "vendor": FORTIOS, "ref": "1.2", "level": 1,
@@ -116,7 +116,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Intra-zone traffic allowed"},
      "severity": "MEDIUM", "category": "Access Rules",
      "check": rules.check_intrazone_deny,
-     "audit": "show system zone",
+     "audit": "config system zone\n    show full-configuration | grep intrazone",
      "remediation": "config system zone / edit <zona> / set intrazone deny"},
     {"id": "AUD-CIS-09", "vendor": FORTIOS, "ref": "2.1.1 / 2.1.2", "level": 1,
      "automated": True,
@@ -124,7 +124,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Pre-login and post-login banners"},
      "severity": "LOW", "category": "Hardening",
      "check": rules.check_login_banners,
-     "audit": "show system global | grep banner",
+     "audit": "config system global\n    show full-configuration | grep banner",
      "remediation": "config system global / set pre-login-banner enable / "
                     "set post-login-banner enable"},
     {"id": "AUD-CIS-10", "vendor": FORTIOS, "ref": "2.1.3", "level": 1,
@@ -133,7 +133,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Time zone not set"},
      "severity": "LOW", "category": "Logging",
      "check": rules.check_timezone,
-     "audit": "show system global | grep timezone",
+     "audit": "config system global\n    show full-configuration | grep timezone",
      "remediation": "config system global / set timezone <id>"},
     {"id": "AUD-CIS-11", "vendor": FORTIOS, "ref": "2.1.4", "level": 1,
      "automated": False,
@@ -141,7 +141,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Time synchronisation (NTP)"},
      "severity": "MEDIUM", "category": "Logging",
      "check": rules.check_ntp,
-     "audit": "show system ntp",
+     "audit": "config system ntp\n    show full-configuration",
      "remediation": "config system ntp / set ntpsync enable / "
                     "set type custom / config ntpserver / edit 1 / "
                     "set server <ip>"},
@@ -150,7 +150,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
      "title": {"it": "Hostname di fabbrica", "en": "Factory hostname"},
      "severity": "LOW", "category": "Hardening",
      "check": rules.check_hostname,
-     "audit": "show system global | grep hostname",
+     "audit": "config system global\n    show full-configuration | grep hostname",
      "remediation": "config system global / set hostname <nome>"},
     {"id": "AUD-CIS-13", "vendor": FORTIOS, "ref": "2.1.7", "level": 2,
      "automated": True,
@@ -158,7 +158,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Automatic install from USB"},
      "severity": "MEDIUM", "category": "Hardening",
      "check": rules.check_auto_install,
-     "audit": "show system auto-install",
+     "audit": "config system auto-install\n    show full-configuration",
      "remediation": "config system auto-install / "
                     "set auto-install-config disable / "
                     "set auto-install-image disable"},
@@ -168,7 +168,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Static-key ciphers (no forward secrecy)"},
      "severity": "HIGH", "category": "Encryption",
      "check": rules.check_static_key_ciphers,
-     "audit": "show system global | grep ssl-static-key-ciphers",
+     "audit": "config system global\n    show full-configuration | grep ssl-static-key-ciphers",
      "remediation": "config system global / set ssl-static-key-ciphers "
                     "disable"},
     {"id": "AUD-CIS-15", "vendor": FORTIOS, "ref": "", "level": 1,
@@ -177,7 +177,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "HTTP-to-HTTPS redirect on the GUI"},
      "severity": "MEDIUM", "category": "Hardening",
      "check": rules.check_admin_https_redirect,
-     "audit": "show system global | grep admin-https-redirect",
+     "audit": "config system global\n    show full-configuration | grep admin-https-redirect",
      "remediation": "config system global / set admin-https-redirect enable"},
     {"id": "AUD-CIS-16", "vendor": FORTIOS, "ref": "2.1.12", "level": 1,
      "automated": True,
@@ -185,7 +185,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Single-CPU saturation alarm"},
      "severity": "LOW", "category": "Logging",
      "check": rules.check_cpu_log_threshold,
-     "audit": "show system global | grep log-single-cpu-high",
+     "audit": "config system global\n    show full-configuration | grep log-single-cpu-high",
      "remediation": "config system global / set log-single-cpu-high enable"},
     {"id": "AUD-CIS-17", "vendor": FORTIOS, "ref": "2.1.13", "level": 2,
      "automated": True,
@@ -193,7 +193,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Hostname shown on the login page"},
      "severity": "LOW", "category": "Hardening",
      "check": rules.check_gui_hostname_display,
-     "audit": "show system global | grep gui-display-hostname",
+     "audit": "config system global\n    show full-configuration | grep gui-display-hostname",
      "remediation": "config system global / set gui-display-hostname disable"},
     {"id": "AUD-CIS-18", "vendor": FORTIOS, "ref": "2.2.1", "level": 1,
      "automated": True,
@@ -201,7 +201,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Password policy strength"},
      "severity": "HIGH", "category": "Identity",
      "check": rules.check_password_policy_strength,
-     "audit": "show system password-policy",
+     "audit": "config system password-policy\n    show full-configuration",
      "remediation": "config system password-policy / set status enable / "
                     "set minimum-length 14 / set min-lower-case-letter 1 / "
                     "set min-upper-case-letter 1 / set min-number 1 / "
@@ -212,7 +212,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Account lockout after failed attempts"},
      "severity": "HIGH", "category": "Identity",
      "check": rules.check_admin_lockout,
-     "audit": "show system global | grep admin-lockout",
+     "audit": "config system global\n    show full-configuration | grep admin-lockout",
      "remediation": "config system global / set admin-lockout-threshold 3 / "
                     "set admin-lockout-duration 900"},
     {"id": "AUD-CIS-20", "vendor": FORTIOS, "ref": "2.3.1", "level": 1,
@@ -221,7 +221,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "SNMP v1/v2c still enabled"},
      "severity": "HIGH", "category": "Management",
      "check": rules.check_snmp_v3_only,
-     "audit": "show system snmp community / show system snmp user",
+     "audit": "show full-configuration system snmp community\n    show full-configuration system snmp user",
      "remediation": {"it": "Rimuovere le community v1/v2c e configurare "
                            "'config system snmp user' con auth-proto sha256 e "
                            "priv-proto aes256.",
@@ -234,7 +234,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Administrative ports on their default values"},
      "severity": "LOW", "category": "Hardening",
      "check": rules.check_admin_ports_changed,
-     "audit": "show system global | grep admin-sport",
+     "audit": "config system global\n    show full-configuration | grep admin-sport",
      "remediation": "config system global / set admin-sport <porta> / "
                     "set admin-ssh-port <porta>"},
     {"id": "AUD-CIS-22", "vendor": FORTIOS, "ref": "2.4.6", "level": 1,
@@ -243,7 +243,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "'local-in' policies protecting the device's services"},
      "severity": "MEDIUM", "category": "Access Rules",
      "check": rules.check_local_in_policy,
-     "audit": "show firewall local-in-policy",
+     "audit": "show full-configuration firewall local-in-policy",
      "remediation": "config firewall local-in-policy / edit 1 / "
                     "set intf <wan> / set srcaddr <mgmt> / set dstaddr all / "
                     "set service HTTPS SSH / set action accept"},
@@ -253,7 +253,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Interfaces monitored by the HA cluster"},
      "severity": "MEDIUM", "category": "Availability",
      "check": rules.check_ha_configured,
-     "audit": "show system ha",
+     "audit": "config system ha\n    show full-configuration",
      "remediation": "config system ha / set monitor <port1> <port2>"},
     {"id": "AUD-CIS-24", "vendor": FORTIOS, "ref": "3.4", "level": 1,
      "automated": True,
@@ -261,7 +261,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Traffic logging on the policies"},
      "severity": "HIGH", "category": "Logging",
      "check": rules.check_policy_logging,
-     "audit": "show firewall policy | grep logtraffic",
+     "audit": "show full-configuration firewall policy | grep logtraffic",
      "remediation": "config firewall policy / edit <id> / "
                     "set logtraffic all"},
     {"id": "AUD-CIS-25", "vendor": FORTIOS, "ref": "4.1.2", "level": 1,
@@ -270,7 +270,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Inspection profiles on Internet-bound traffic"},
      "severity": "HIGH", "category": "Threat Prevention",
      "check": rules.check_policy_security_profiles,
-     "audit": "show firewall policy",
+     "audit": "show full-configuration firewall policy",
      "remediation": "config firewall policy / edit <id> / "
                     "set utm-status enable / set av-profile default / "
                     "set ips-sensor default"},
@@ -280,7 +280,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Policies with no comment"},
      "severity": "LOW", "category": "Access Rules",
      "check": rules.check_policy_comments,
-     "audit": "show firewall policy | grep comments",
+     "audit": "show full-configuration firewall policy | grep comments",
      "remediation": "config firewall policy / edit <id> / "
                     "set comments \"<motivazione e riferimento richiesta>\""},
     {"id": "AUD-CIS-27", "vendor": FORTIOS, "ref": "6.1.2", "level": 2,
@@ -289,7 +289,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "TLS version of the SSL-VPN portal"},
      "severity": "HIGH", "category": "Encryption",
      "check": rules.check_sslvpn_tls,
-     "audit": "show vpn ssl settings | grep ssl-min-proto-ver",
+     "audit": "config vpn ssl settings\n    show full-configuration | grep ssl-min-proto-ver",
      "remediation": "config vpn ssl settings / set ssl-min-proto-ver tls1-2"},
     {"id": "AUD-CIS-28", "vendor": FORTIOS, "ref": "", "level": 2,
      "automated": False,
@@ -297,7 +297,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Source restriction on the SSL-VPN portal"},
      "severity": "HIGH", "category": "Access Rules",
      "check": rules.check_sslvpn_source_restriction,
-     "audit": "show vpn ssl settings | grep source-address",
+     "audit": "config vpn ssl settings\n    show full-configuration | grep source-address",
      "remediation": "config vpn ssl settings / set source-address "
                     "<gruppo indirizzi consentiti>"},
     {"id": "AUD-CIS-29", "vendor": FORTIOS, "ref": "7.3.2", "level": 1,
@@ -306,7 +306,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Transport encryption towards the remote syslog"},
      "severity": "MEDIUM", "category": "Logging",
      "check": rules.check_syslog_encrypted,
-     "audit": "show log syslogd setting",
+     "audit": "config log syslogd setting\n    show full-configuration",
      "remediation": "config log syslogd setting / set enc-algorithm high"},
     {"id": "AUD-CIS-30", "vendor": FORTIOS, "ref": "7.1.1", "level": 2,
      "automated": True,
@@ -314,7 +314,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "System event logging"},
      "severity": "MEDIUM", "category": "Logging",
      "check": rules.check_event_logging,
-     "audit": "show log eventfilter",
+     "audit": "show full-configuration log eventfilter | grep event",
      "remediation": "config log eventfilter / set event enable"},
     {"id": "AUD-CIS-31", "vendor": FORTIOS, "ref": "", "level": 2,
      "automated": True,
@@ -322,7 +322,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Local disk logging"},
      "severity": "LOW", "category": "Logging",
      "check": rules.check_log_local_disk,
-     "audit": "show log disk setting",
+     "audit": "config log disk setting\n    show full-configuration",
      "remediation": "config log disk setting / set status enable"},
     {"id": "AUD-CIS-32", "vendor": FORTIOS, "ref": "2.4.1", "level": 1,
      "automated": True,
@@ -330,7 +330,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Default 'admin' administrative account"},
      "severity": "HIGH", "category": "Identity",
      "check": rules.check_vendor_defaults,
-     "audit": "show system admin",
+     "audit": "config system admin\n    show full-configuration",
      "remediation": {"it": "Creare un amministratore con un altro nome, "
                            "verificarne l'accesso, poi rimuovere 'admin'.",
                      "en": "Create an administrator under a different name, "
@@ -341,7 +341,7 @@ _CIS_FORTIOS: List[Dict[str, Any]] = [
                "en": "Trusted hosts on every login account"},
      "severity": "CRITICAL", "category": "Hardening",
      "check": rules.check_admin_trusthost,
-     "audit": "show system admin",
+     "audit": "config system admin\n    show full-configuration",
      "remediation": "config system admin / edit <utente> / "
                     "set trusthost1 <subnet gestione> <netmask>"},
 ]
