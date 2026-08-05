@@ -76,7 +76,7 @@
         // Sidebar nav groups
 
         // Tabs
-        tabHome: '<i class="fa-solid fa-grid-2"></i> Home',
+        tabHome: '<i class="fa-solid fa-table-cells-large"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
         // Operations Home
@@ -1406,7 +1406,7 @@
         // Sidebar nav groups
 
         // Tabs
-        tabHome: '<i class="fa-solid fa-grid-2"></i> Home',
+        tabHome: '<i class="fa-solid fa-table-cells-large"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
         // Operations Home
