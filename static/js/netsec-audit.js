@@ -326,7 +326,7 @@
                 <td style="padding:8px;"><span class="badge">${escapeHtml(r.category)}</span></td>
                 <td style="padding:8px;">${statusBadge}</td>
                 <td style="padding:8px;">
-                    <code title="${escapeHtml(r.remediation)}" style="font-size:11px; color:var(--primary); background:var(--surface-2); padding:3px 6px; border-radius:4px; display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:middle;">${escapeHtml(r.remediation)}</code>
+                    <code title="${escapeHtml(r.remediation)}" style="font-size:11px; color:var(--primary); background:var(--surface-2); padding:3px 6px; border-radius:0; display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:middle;">${escapeHtml(r.remediation)}</code>
                 </td>
             </tr>
             <tr id="auditEv-${escapeHtml(evId)}" style="${isOpen ? '' : 'display:none;'}">
@@ -336,11 +336,11 @@
                     <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
                         ${currentLang === 'en' ? 'Verify on the device' : 'Verifica sull\'apparato'}
                     </div>
-                    <code style="display:block; font-size:12px; color:var(--text); background:var(--surface); padding:8px 10px; border-radius:6px; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:12px;">${escapeHtml(r.audit)}</code>` : ''}
+                    <code style="display:block; font-size:12px; color:var(--text); background:var(--surface); padding:8px 10px; border-radius:0; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:12px;">${escapeHtml(r.audit)}</code>` : ''}
                     <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">
                         ${currentLang === 'en' ? 'Recommendation / CLI fix' : 'Raccomandazione / Fix CLI'}
                     </div>
-                    <code style="display:block; font-size:12px; color:var(--primary); background:var(--surface); padding:8px 10px; border-radius:6px; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:${ev.length ? '12px' : '0'};">${escapeHtml(r.remediation)}</code>
+                    <code style="display:block; font-size:12px; color:var(--primary); background:var(--surface); padding:8px 10px; border-radius:0; border:1px solid var(--border); white-space:pre-wrap; word-break:break-word; margin-bottom:${ev.length ? '12px' : '0'};">${escapeHtml(r.remediation)}</code>
                     ${evRows}
                 </td>
             </tr>`;
@@ -598,7 +598,7 @@
                 ? `<div class="detail">${escapeHtml(String(r.ref))}${r.level ? ' · ' + T.level + ' ' + escapeHtml(String(r.level)) : ''}${r.automated === false ? ' · ' + T.manual : ''}</div>`
                 : '';
             const auditCmd = r.audit
-                ? `<div class="detail">${T.verifyOn}: <code>${escapeHtml(r.audit)}</code></div>`
+                ? `<div class="detail">${T.verifyOn}: <code style="white-space:pre-wrap;">${escapeHtml(r.audit)}</code></div>`
                 : '';
             const g = r.guidance || {};
             const guide = (label2, text) => text
@@ -626,9 +626,9 @@
 <style>
 body{font-family:system-ui,sans-serif;margin:32px;color:#111;}
 h1{font-size:20px;margin:0 0 4px;} .meta{color:#666;font-size:13px;margin-bottom:20px;}
-.warn{border:1px solid #a60;background:#fff8e6;color:#7a4d00;padding:10px 14px;border-radius:8px;margin-bottom:18px;font-size:13px;line-height:1.5;}
+.warn{border:1px solid #a60;background:#fff8e6;color:#7a4d00;padding:10px 14px;border-radius:0;margin-bottom:18px;font-size:13px;line-height:1.5;}
 .kpis{display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap;}
-.kpi{border:1px solid #ddd;border-radius:8px;padding:10px 16px;min-width:110px;font-size:12px;color:#666;}
+.kpi{border:1px solid #ddd;border-radius:0;padding:10px 16px;min-width:110px;font-size:12px;color:#666;}
 .kpi b{display:block;font-size:22px;color:#111;}
 table{width:100%;border-collapse:collapse;font-size:12px;}
 th,td{border-bottom:1px solid #e5e5e5;padding:8px;text-align:left;vertical-align:top;}
@@ -691,12 +691,12 @@ th{background:#f6f6f6;}
     }
 </script>
 </head><body>
-<div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif;">
+<div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 0; display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif;">
     <span style="font-size: 14px; font-weight: bold;">SentinelNet — ${T.preview}</span>
     <div style="display: flex; gap: 10px;">
-        <button id="btnPdfNetsec" onclick="downloadPdf()" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">${T.pdf}</button>
-        <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">${T.print}</button>
-        <button onclick="downloadHtml()" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer;">${T.html}</button>
+        <button id="btnPdfNetsec" onclick="downloadPdf()" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.pdf}</button>
+        <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.print}</button>
+        <button onclick="downloadHtml()" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.html}</button>
     </div>
 </div>
 <h1>${T.heading} — ${escapeHtml(benchmark)}</h1>
@@ -785,7 +785,7 @@ ${partialBanner}
                         <td style="padding:8px 10px 8px 0; vertical-align:top;">
                             <strong>${escapeHtml(r.title)}</strong>
                             <div style="color:var(--text-muted); margin-top:2px;">${en ? 'Check' : 'Verifica'}: ${escapeHtml(r.checks)}</div>
-                            ${r.audit ? `<div style="color:var(--text-muted); margin-top:2px; font-family:ui-monospace,monospace;">${en ? 'Audit' : 'Audit'}: ${escapeHtml(r.audit)}</div>` : ''}
+                            ${r.audit ? `<div style="color:var(--text-muted); margin-top:2px; font-family:ui-monospace,monospace; white-space:pre-wrap;">${en ? 'Audit' : 'Audit'}: ${escapeHtml(r.audit)}</div>` : ''}
                             <div style="color:var(--text-muted); margin-top:2px;">${en ? 'Remediation' : 'Rimedio'}: ${escapeHtml(r.remediation)}</div>
                         </td>
                         <td style="padding:8px 0; vertical-align:top; text-align:right; white-space:nowrap;">
