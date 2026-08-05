@@ -12,6 +12,8 @@
 
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -144,14 +146,17 @@ class TestSortKeepsDetailRowsWithTheirParent(unittest.TestCase):
     riga di dettaglio come una voce a se', e quella non ha la colonna su cui
     si ordina."""
 
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
     def test_sorter_groups_full_width_rows_with_the_row_above(self):
+        # Il resto di questa suite verifica il frontend per sottostringhe, e su
+        # questa regressione non basterebbe: la versione rotta conteneva tutte
+        # le parole giuste e lasciava la tabella immobile. Qui la funzione viene
+        # eseguita davvero, su un DOM finto.
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(base, "static", "js", "core.js"), encoding="utf-8") as fh:
-            src = fh.read()
-        body = re.search(r'function sortTableByColumn\(.*?\n\}', src, re.DOTALL)
-        self.assertIsNotNone(body, "sortTableByColumn() non trovata")
-        self.assertIn("colSpan", body.group(0),
-                      "l'ordinamento deve riconoscere le righe di dettaglio")
+        harness = os.path.join(base, "tests", "js", "test_sort_table.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=base)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
 if __name__ == "__main__":

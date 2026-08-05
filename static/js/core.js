@@ -118,7 +118,7 @@ function sortTableByColumn(table, colIdx, th) {
         const c = x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' });
         return asc ? c : -c;
     });
-    rows.forEach(r => tbody.appendChild(r));
+    rows.forEach(group => group.forEach(r => tbody.appendChild(r)));
 }
 function makeTableSortable(table) {
     if (!table || table.dataset.sortable === '1') return;
