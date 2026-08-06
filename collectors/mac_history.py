@@ -1,14 +1,14 @@
-"""Storicizzazione e ricerca degli avvistamenti MAC address (SQLite, WAL).
+"""Historization and search of MAC address sightings (SQLite, WAL).
 
-Modello dati: per ogni (mac, switch, interfaccia, vlan) si tiene UNA riga con
-first_seen/last_seen/seen_count. Quando un MAC compare in una posizione diversa
-(altra porta/switch/vlan) si crea una nuova riga: la sequenza di righe di uno
-stesso MAC ne racconta lo storico degli spostamenti nell'infrastruttura.
+Data model: for each (mac, switch, interface, vlan) ONE row is kept with
+first_seen/last_seen/seen_count. When a MAC appears in a different position
+(different port/switch/vlan) a new row is created: the sequence of rows of
+the same MAC tells the history of its movements through the infrastructure.
 
-Smart retention: le righe non più aggiornate da 'retention_days' (default 30)
-vengono eliminate al termine di ogni scan, così il DB non cresce all'infinito.
-Il layer storage è indipendente dal trasporto usato per raccogliere i dati
-(NETCONF/RESTCONF/CLI): riceve semplicemente una lista di avvistamenti.
+Smart retention: rows no longer updated within 'retention_days' (default 30)
+are deleted at the end of each scan, so the DB does not grow indefinitely.
+The storage layer is independent of the transport used to collect the data
+(NETCONF/RESTCONF/CLI): it simply receives a list of sightings.
 """
 import os
 import re
@@ -30,10 +30,10 @@ _HEXONLY = re.compile(r'[^0-9a-fA-F]')
 
 
 def normalize_mac(raw: str):
-    """Canonicalizza un MAC nel formato 'aa:bb:cc:dd:ee:ff'.
+    """Canonicalize a MAC into the 'aa:bb:cc:dd:ee:ff' format.
 
-    Accetta i formati vendor più comuni ('aabb.ccdd.eeff', 'AA-BB-CC-DD-EE-FF',
-    'aabbccddeeff', ...). Ritorna None se non sono 12 cifre esadecimali.
+    Accepts the most common vendor formats ('aabb.ccdd.eeff', 'AA-BB-CC-DD-EE-FF',
+    'aabbccddeeff', ...). Returns None if there are not 12 hexadecimal digits.
     """
     if not raw:
         return None
@@ -85,13 +85,13 @@ def init_db():
                 c.execute("ALTER TABLE mac_sightings ADD COLUMN uplink_to TEXT DEFAULT ''")
             except sqlite3.OperationalError:
                 pass
-            # 'site': sede multi-sede di provenienza (default 'central'). Attribuzione
-            # indipendente dal 'tenant' (gruppo) usato per lo scoping utente.
+            # 'site': multi-site origin (default 'central'). Attribution
+            # independent of the 'tenant' (group) used for user scoping.
             try:
                 c.execute("ALTER TABLE mac_sightings ADD COLUMN site TEXT DEFAULT 'central'")
             except sqlite3.OperationalError:
                 pass
-            # Una posizione = (mac, switch, interfaccia, vlan): chiave di upsert.
+            # A position = (mac, switch, interface, vlan): the upsert key.
             c.execute("""CREATE UNIQUE INDEX IF NOT EXISTS ux_mac_pos
                          ON mac_sightings(mac, switch_ip, interface, vlan)""")
             c.execute("CREATE INDEX IF NOT EXISTS ix_mac       ON mac_sightings(mac)")
@@ -99,26 +99,26 @@ def init_db():
             c.execute("CREATE INDEX IF NOT EXISTS ix_last_seen ON mac_sightings(last_seen)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_tenant    ON mac_sightings(tenant)")
             c.execute("CREATE TABLE IF NOT EXISTS mac_settings (key TEXT PRIMARY KEY, value TEXT)")
-            # Override comando ad-hoc per apparati non ordinari (es. C8000V con
-            # bridge-domain, dove la FDB sta in 'show bridge-domain' e non in
-            # 'show mac address-table').
+            # Ad-hoc command override for non-standard devices (e.g. C8000V with
+            # bridge-domain, where the FDB lives in 'show bridge-domain' and not
+            # in 'show mac address-table').
             c.execute("""CREATE TABLE IF NOT EXISTS mac_cmd_overrides (
                 switch_ip TEXT PRIMARY KEY,
                 command   TEXT NOT NULL,
                 fmt       TEXT DEFAULT 'generic'
             )""")
-            # MAC delle interfacce PROPRIE degli switch (infrastruttura): servono a
-            # classificare quei MAC come "switch-interface" invece che endpoint.
+            # MACs of the switches' OWN interfaces (infrastructure): used to
+            # classify those MACs as "switch-interface" rather than endpoints.
             c.execute("""
                 CREATE TABLE IF NOT EXISTS switch_if_macs (
                   mac TEXT NOT NULL, switch_ip TEXT NOT NULL, switch_name TEXT DEFAULT '',
                   interface TEXT NOT NULL, last_seen TEXT NOT NULL,
                   PRIMARY KEY (mac, switch_ip, interface))
             """)
-            # Corrispondenze MAC <-> IP raccolte dalle tabelle ARP dei gateway
-            # L3 (switch con SVI o firewall, a seconda di chi ruota la VLAN).
-            # Una riga per (mac, ip, source_ip): lo stesso MAC può avere più IP
-            # (multi-VLAN) e lo stesso binding può essere visto da più gateway.
+            # MAC <-> IP mappings collected from the ARP tables of L3 gateways
+            # (switches with SVI or firewalls, depending on who owns the VLAN).
+            # One row per (mac, ip, source_ip): the same MAC can have multiple IPs
+            # (multi-VLAN) and the same binding can be seen by multiple gateways.
             c.execute("""
                 CREATE TABLE IF NOT EXISTS arp_entries (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,7 +164,7 @@ def _migrate_unexpanded_interfaces(c):
                           (exp_if, exp_pc, r["id"]))
 
 
-# --- Retention (smart, configurabile) ---
+# --- Retention (smart, configurable) ---
 
 def get_retention_days() -> int:
     init_db()
@@ -185,10 +185,10 @@ def set_retention_days(days: int) -> int:
     return days
 
 
-# --- Override comando ad-hoc per apparato ---
+# --- Ad-hoc command override per device ---
 
 def get_override(switch_ip: str):
-    """Ritorna {command, fmt} per l'apparato, o None se non configurato."""
+    """Returns {command, fmt} for the device, or None if not configured."""
     init_db()
     with _lock, _connect() as c:
         row = c.execute("SELECT command, fmt FROM mac_cmd_overrides WHERE switch_ip=?",
@@ -224,8 +224,8 @@ def list_overrides() -> list:
 
 
 def prune(retention_days: Optional[int] = None) -> int:
-    """Elimina gli avvistamenti non aggiornati da più di 'retention_days'.
-    Ritorna il numero di righe rimosse."""
+    """Deletes sightings not updated within 'retention_days'.
+    Returns the number of rows removed."""
     init_db()
     days = retention_days if retention_days is not None else get_retention_days()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec='seconds')
@@ -236,16 +236,17 @@ def prune(retention_days: Optional[int] = None) -> int:
         return removed
 
 
-# --- Scrittura avvistamenti (upsert) ---
+# --- Writing sightings (upsert) ---
 
 def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = "",
                      site: str = "central") -> dict:
-    """Registra una lista di avvistamenti di UNO switch.
+    """Records a list of sightings from ONE switch.
 
-    rows: iterabile di dict con chiavi: mac (obbligatoria), vlan, interface,
+    rows: iterable of dicts with keys: mac (mandatory), vlan, interface,
     port_channel, is_uplink (bool), oui_vendor.
-    Upsert sulla posizione (mac, switch, interfaccia, vlan): se esiste aggiorna
-    last_seen e seen_count, altrimenti crea la riga (nuova posizione = spostamento).
+    Upsert on the position (mac, switch, interface, vlan): if it exists it
+    updates last_seen and seen_count, otherwise it creates the row (new
+    position = movement).
     """
     init_db()
     now = _now_iso()
@@ -282,13 +283,13 @@ def record_sightings(rows, switch_ip: str, switch_name: str = "", tenant: str = 
     return {"new": n_new, "updated": n_upd, "skipped": n_skip}
 
 
-# --- MAC delle interfacce proprie degli switch (infrastruttura) ---
+# --- MACs of the switches' own interfaces (infrastructure) ---
 
 def record_switch_if_macs(rows, switch_ip: str, switch_name: str = "") -> dict:
-    """Registra (upsert) i MAC delle interfacce proprie di UNO switch.
+    """Records (upsert) the MACs of the own interfaces of ONE switch.
 
-    rows: iterabile di dict con chiavi 'interface' e 'mac' (grezzo). Chiave di
-    upsert: (mac, switch_ip, interface); aggiorna last_seen/switch_name.
+    rows: iterable of dicts with keys 'interface' and 'mac' (raw). Upsert
+    key: (mac, switch_ip, interface); updates last_seen/switch_name.
     """
     init_db()
     now = _now_iso()
@@ -318,8 +319,8 @@ def record_switch_if_macs(rows, switch_ip: str, switch_name: str = "") -> dict:
 
 
 def get_switch_if_macs() -> dict:
-    """Ritorna { mac_normalizzato: {switch_ip, switch_name, interface} } per la
-    classificazione read-time degli avvistamenti come infrastruttura."""
+    """Returns { normalized_mac: {switch_ip, switch_name, interface} } for
+    read-time classification of sightings as infrastructure."""
     init_db()
     with _lock, _connect() as c:
         rows = c.execute("SELECT mac, switch_ip, switch_name, interface "
@@ -328,16 +329,16 @@ def get_switch_if_macs() -> dict:
                        "interface": r["interface"]} for r in rows}
 
 
-# --- MAC <-> IP (tabelle ARP dei gateway L3) ---
+# --- MAC <-> IP (ARP tables of L3 gateways) ---
 
 def record_arp_entries(rows, source_ip: str, source_name: str = "",
                        source_type: str = "", tenant: str = "",
                        site: str = "central") -> dict:
-    """Registra (upsert) i binding MAC<->IP letti dalla tabella ARP di UN
-    gateway L3 (switch SVI o firewall).
+    """Records (upsert) the MAC<->IP bindings read from the ARP table of ONE
+    L3 gateway (switch SVI or firewall).
 
-    rows: iterabile di dict con chiavi: mac e ip (obbligatorie), vlan,
-    interface. Chiave di upsert: (mac, ip, source_ip).
+    rows: iterable of dicts with keys: mac and ip (mandatory), vlan,
+    interface. Upsert key: (mac, ip, source_ip).
     """
     init_db()
     now = _now_iso()
@@ -375,7 +376,7 @@ def record_arp_entries(rows, source_ip: str, source_name: str = "",
 
 def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: Optional[str] = None,
                tenants=None, limit: int = 500) -> list:
-    """Ricerca i binding MAC<->IP. mac accetta anche frammenti (come search)."""
+    """Search MAC<->IP bindings. mac also accepts fragments (like search)."""
     init_db()
     q = ["SELECT * FROM arp_entries WHERE 1=1"]
     args: List[Any] = []
@@ -408,20 +409,20 @@ def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: O
 
 
 def vlans_for_ips(ip_tenant_map: dict) -> dict:
-    """Ritorna { ip: vlan } per gli IP richiesti, dal binding ARP più recente
-    con VLAN non vuota (match esatto, niente prefix-LIKE), **vincolato al
-    tenant** di ciascun IP (``ip_tenant_map``: { ip: tenant }).
+    """Returns { ip: vlan } for the requested IPs, from the most recent ARP
+    binding with a non-empty VLAN (exact match, no prefix-LIKE), **constrained
+    to the tenant** of each IP (``ip_tenant_map``: { ip: tenant }).
 
-    IMPORTANTE (scoping multi-tenant): IP privati possono ripetersi su sedi
-    diverse (RFC1918 dietro NAT indipendenti). Senza il filtro tenant, un
-    binding ARP della sede B potrebbe "trapelare" nel grafo flussi della
-    sede A solo perché condividono lo stesso IP. Ogni lookup è quindi
-    ``ip = ? AND tenant = ?`` — mai un IN(...) globale sugli ip.
+    IMPORTANT (multi-tenant scoping): private IPs can repeat across different
+    sites (RFC1918 behind independent NATs). Without the tenant filter, an
+    ARP binding from site B could "leak" into the flow graph of site A just
+    because they share the same IP. Each lookup is therefore
+    ``ip = ? AND tenant = ?`` — never a global IN(...) on the IPs.
 
-    Usato dal grafo dei flussi (Task 3, osservabilità) per mostrare la VLAN
-    reale quando nota, invece di un valore sintetico. IP senza binding ARP
-    noto (per quel tenant) sono assenti dal dict ritornato (fallback
-    lasciato al chiamante)."""
+    Used by the flow graph (Task 3, observability) to show the real VLAN
+    when known, instead of a synthetic value. IPs with no known ARP binding
+    (for that tenant) are absent from the returned dict (fallback left to
+    the caller)."""
     pairs = [(ip, tenant) for ip, tenant in ip_tenant_map.items() if ip]
     if not pairs:
         return {}
@@ -440,17 +441,18 @@ def vlans_for_ips(ip_tenant_map: dict) -> dict:
 
 
 def positions_for_mac(mac: str, tenants=None) -> list:
-    """Dove è attaccato questo MAC, dalla sola MAC table — senza ARP.
+    """Where this MAC is attached, from the MAC table alone — without ARP.
 
-    ``client_map`` parte dai binding ARP: risponde a "che IP ha questo MAC e
-    dov'è", e senza un gateway interrogabile non risponde affatto. Ma "a quale
-    porta di quale switch è attaccato" è una domanda di livello 2, e la MAC
-    table da sola la soddisfa. Chi non ha visibilità L3 — gateway non gestito,
-    VLAN che ruota su un apparato di terzi — deve poter localizzare comunque
-    un MAC, senza IP e senza gateway.
+    ``client_map`` starts from ARP bindings: it answers "what IP does this
+    MAC have and where is it", and without an interrogable gateway it does
+    not answer at all. But "which port of which switch is it attached to"
+    is a layer-2 question, and the MAC table alone satisfies it. Whoever
+    has no L3 visibility — unmanaged gateway, VLAN owned by a third-party
+    device — must still be able to locate a MAC, without an IP and without
+    a gateway.
 
-    Una posizione per tenant, la più recente, uplink esclusi: stessa regola di
-    ``client_map``, stessa funzione (``_access_positions_for``).
+    One position per tenant, the most recent, uplinks excluded: same rule
+    as ``client_map``, same function (``_access_positions_for``).
     """
     init_db()
     norm = normalize_mac(mac)
@@ -463,23 +465,23 @@ def positions_for_mac(mac: str, tenants=None) -> list:
 
 
 def client_history(mac: str, tenants=None, limit: int = 50) -> dict:
-    """Dove è stato questo MAC e che IP ha avuto, dal dato già raccolto.
+    """Where this MAC has been and what IPs it has had, from already-collected data.
 
-    Le due tabelle sono già storiche e nessuno lo sfruttava: la chiave unica di
-    ``mac_sightings`` è (mac, switch_ip, interface, vlan), quindi un client che
-    cambia porta o VLAN lascia una riga NUOVA e la vecchia resta; quella di
-    ``arp_entries`` è (mac, ip, source_ip), quindi un cambio di IP — o un
-    secondo gateway che lo vede — lascia anch'esso la sua riga. Sommate a
-    ``first_seen``/``last_seen``/``seen_count`` raccontano già la storia del
-    client, fin dove arriva ``retention_days``.
+    The two tables are already historical and nobody was taking advantage of
+    it: the unique key of ``mac_sightings`` is (mac, switch_ip, interface,
+    vlan), so a client that changes port or VLAN leaves a NEW row and the old
+    one remains; that of ``arp_entries`` is (mac, ip, source_ip), so a change
+    of IP — or a second gateway that sees it — also leaves its row. Combined
+    with ``first_seen``/``last_seen``/``seen_count`` they already tell the
+    client's story, as far back as ``retention_days`` reaches.
 
-    Limite noto: le righe aggregano, non sono un giornale. Un client che
-    rimbalza A→B→A→B è indistinguibile da uno che si è spostato una volta,
-    ``seen_count`` a parte. Contare il flapping richiederebbe una tabella di
-    eventi, che qui non serve.
+    Known limitation: rows aggregate, they are not a journal. A client that
+    bounces A→B→A→B is indistinguishable from one that moved once, ``seen_count``
+    aside. Counting flapping would require an events table, which is not
+    needed here.
 
-    Gli uplink restano fuori dalle posizioni, come in ``client_map``: la porta
-    di un uplink dice dov'è il *cavo*, non dov'è il client.
+    Uplinks stay out of positions, as in ``client_map``: the port of an uplink
+    tells where the *cable* is, not where the client is.
     """
     init_db()
     norm = normalize_mac(mac)
@@ -508,11 +510,11 @@ def client_history(mac: str, tenants=None, limit: int = 50) -> dict:
     addresses = _q(
         "SELECT ip, vlan, source_ip, source_name, source_type, tenant, "
         "first_seen, last_seen, seen_count FROM arp_entries WHERE mac=?", [])
-    # ``known`` = "ho potuto rispondere", non "ho trovato righe". Uno storico
-    # vuoto È una risposta — un client visto per la prima volta oggi — e farlo
-    # passare per sezione ignota trascinerebbe giù il ``complete`` dell'intero
-    # referto. Stessa convenzione della sezione blocchi, dove zero blocchi è
-    # ``known: True`` con ``total: 0``.
+    # ``known`` = "I could answer", not "I found rows". An empty history
+    # IS an answer — a client seen for the first time today — and letting it
+    # pass for an unknown section would drag down the ``complete`` of the
+    # entire report. Same convention as the blocks section, where zero blocks
+    # is ``known: True`` with ``total: 0``.
     return {"mac": norm, "known": True,
             "empty": not (positions or addresses),
             "positions": positions, "addresses": addresses,
@@ -520,24 +522,24 @@ def client_history(mac: str, tenants=None, limit: int = 50) -> dict:
 
 
 def _access_positions_for(macs, tenants=None) -> dict:
-    """Per un insieme di MAC ritorna { (mac, tenant): sighting_di_accesso_più_recente },
-    escludendo gli uplink. La chiave include il tenant per evitare che la posizione
-    di un tenant venga associata a un binding ARP di un altro tenant (stesso MAC).
-    UNA sola query (a chunk per il limite di parametri di SQLite)."""
-    macs = [m for m in dict.fromkeys(macs) if m]      # unici, ordine preservato
+    """For a set of MACs returns { (mac, tenant): most_recent_access_sighting },
+    excluding uplinks. The key includes the tenant to prevent the position of
+    one tenant from being associated with an ARP binding of another tenant
+    (same MAC). ONE single query (in chunks due to SQLite's parameter limit)."""
+    macs = [m for m in dict.fromkeys(macs) if m]      # unique, order preserved
     if not macs:
         return {}
     rows = []
     tenant_list = list(tenants) if tenants is not None else None
-    CHUNK = 400                                       # < limite ~999 parametri SQLite
+    CHUNK = 400                                       # < SQLite ~999 param limit
     with _lock, _connect() as c:
         for i in range(0, len(macs), CHUNK):
             batch = macs[i:i + CHUNK]
-            # NON si filtra su is_uplink in SQL: il valore scritto in raccolta
-            # non riconosce i Port-channel (vedi reclassify_sightings), e
-            # fidarsene qui faceva passare per porta di accesso un'interfaccia
-            # aggregata verso un altro switch — cioè indicava come "posizione
-            # del client" un punto di transito.
+            # is_uplink is NOT filtered in SQL: the value written at collection
+            # time does not recognize Port-channels (see reclassify_sightings),
+            # and trusting it here would pass off an aggregated interface toward
+            # another switch as an access port — i.e. it would indicate a
+            # transit point as the "client position".
             q = ("SELECT mac, tenant, switch_ip, switch_name, interface, "
                  "port_channel, vlan, is_uplink, last_seen "
                  "FROM mac_sightings WHERE mac IN (%s)" % ",".join("?" * len(batch)))
@@ -545,7 +547,7 @@ def _access_positions_for(macs, tenants=None) -> dict:
             if tenant_list is not None:
                 q += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
                 args.extend(tenant_list)
-            q += " ORDER BY last_seen DESC"           # il primo per (MAC, tenant) = più recente
+            q += " ORDER BY last_seen DESC"           # first per (MAC, tenant) = most recent
             rows.extend(dict(r) for r in c.execute(q, args).fetchall())
 
     reclassify_sightings(rows)
@@ -561,21 +563,21 @@ def _access_positions_for(macs, tenants=None) -> dict:
 
 def client_map(mac: Optional[str] = None, ip: Optional[str] = None, tenants=None,
                limit: int = 500, source_ip: Optional[str] = None) -> list:
-    """Vista unificata client: binding MAC<->IP (ARP dei gateway) arricchito
-    con l'ultima posizione fisica nota (switch/porta della MAC table, uplink
-    esclusi). Risponde a 'che IP ha questo MAC e a quale porta è attaccato'.
-    source_ip filtra per gateway di provenienza."""
+    """Unified client view: MAC<->IP binding (gateway ARP) enriched with the
+    last known physical position (switch/port from the MAC table, uplinks
+    excluded). Answers 'what IP does this MAC have and which port is it
+    attached to'. source_ip filters by source gateway."""
     entries = search_arp(mac=mac, ip=ip, source_ip=source_ip,
                          tenants=tenants, limit=limit)
     best = _access_positions_for((e["mac"] for e in entries), tenants=tenants)
-    # Tipo del client: certo SOLO se assegnato nella scheda "Dispositivi e
-    # categorie" (assignments per IP); altrimenti generico "client". Mai
-    # ereditare source_type, che descrive il gateway, non il client.
+    # Client type: certain ONLY if assigned in the "Devices and categories"
+    # tab (assignments per IP); otherwise generic "client". Never inherit
+    # source_type, which describes the gateway, not the client.
     from services import inventory_manager
     assignments = inventory_manager.get_category_assignments()
     out = []
     for e in entries:
-        access = best.get((e["mac"], e["tenant"]))  # join per-tenant: stessa MAC, stesso tenant
+        access = best.get((e["mac"], e["tenant"]))  # per-tenant join: same MAC, same tenant
         assigned = assignments.get(e["ip"]) or {}
         out.append({
             **e,
@@ -590,7 +592,7 @@ def client_map(mac: Optional[str] = None, ip: Optional[str] = None, tenants=None
 
 
 def arp_stats(tenants=None) -> dict:
-    """Statistiche ARP. tenants: None = nessuna restrizione (admin); lista = solo quei tenant."""
+    """ARP statistics. tenants: None = no restriction (admin); list = only those tenants."""
     init_db()
     where, args = "", []
     if tenants is not None:
@@ -605,10 +607,10 @@ def arp_stats(tenants=None) -> dict:
     return {"bindings": total, "unique_macs": macs, "sources": sources}
 
 
-# --- Inventario endpoint (derivato, mai memorizzato) -------------------------
+# --- Endpoint inventory (derived, never stored) -------------------------
 
-# Interfacce in cui non si infila un cavo: restano visibili, ma fuori dal
-# conteggio delle porte libere.
+# Interfaces into which no cable is plugged: they remain visible, but outside
+# the count of free ports.
 _NON_PHYSICAL_IF = ("vlan", "loopback", "null", "port-channel", "tunnel", "bdi")
 
 
@@ -617,11 +619,11 @@ def _is_physical_iface(name: str) -> bool:
 
 
 def _age_days(iso: str, now=None):
-    """Giorni trascorsi da un timestamp ISO, None se non interpretabile.
+    """Days elapsed since an ISO timestamp, None if not interpretable.
 
-    I timestamp scritti da questo modulo portano il fuso; quelli che arrivano
-    da un import piu' vecchio possono essere ingenui. Un valore illeggibile
-    non e' "vecchio zero giorni": e' None, e chi lo legge non marca nulla.
+    Timestamps written by this module carry the timezone; those coming from
+    an older import may be naive. An unreadable value is not "zero days old":
+    it is None, and whoever reads it marks nothing.
     """
     if not iso:
         return None
@@ -638,21 +640,21 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
                        switch_ip: Optional[str] = None, vlan: Optional[str] = None,
                        q: Optional[str] = None, stale_days: int = 7,
                        limit: int = 2000) -> dict:
-    """Un endpoint per (MAC, tenant), dal dato gia' raccolto.
+    """One endpoint per (MAC, tenant), from already-collected data.
 
-    Parte da ``mac_sightings`` — la verita' L2, ogni MAC mai visto — e aggancia
-    ``arp_entries`` a sinistra per gli IP. Il contrario, cioe' partire dai
-    binding come fa ``client_map()``, perderebbe ogni endpoint di una VLAN il
-    cui gateway non e' interrogabile: proprio quelli che un inventario deve
-    elencare.
+    It starts from ``mac_sightings`` — the L2 truth, every MAC ever seen —
+    and left-joins ``arp_entries`` for the IPs. The opposite, i.e. starting
+    from the bindings as ``client_map()`` does, would lose every endpoint of
+    a VLAN whose gateway is not interrogable: exactly the ones an inventory
+    must list.
 
-    La chiave e' (MAC, tenant), la stessa di ``_access_positions_for()``: un
-    tenant e' una rete a se', e lo stesso MAC in due sedi e' legittimamente due
-    righe.
+    The key is (MAC, tenant), the same as ``_access_positions_for()``: a
+    tenant is a network of its own, and the same MAC in two sites is
+    legitimately two rows.
 
-    Tutto e' DERIVATO e niente viene salvato, per la stessa ragione scritta in
-    ``observability/endpoints.py``: il giorno in cui la classificazione impara
-    qualcosa di nuovo, migliora anche cio' che e' stato raccolto ieri.
+    Everything is DERIVED and nothing is saved, for the same reason written
+    in ``observability/endpoints.py``: the day the classification learns
+    something new, what was collected yesterday improves too.
     """
     from observability import endpoints as ep_kb
     from services import inventory_manager
@@ -662,7 +664,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
     empty = {"results": [], "total": 0, "truncated": False,
              "counts": {"endpoints": 0, "switches": 0, "vlans": 0,
                         "stale": 0, "new": 0, "no_ip": 0, "random": 0}}
-    # [] = "nessun tenant visibile", che non e' None = "nessuna restrizione".
+    # [] = "no tenant visible", which is not None = "no restriction".
     if tenant_list is not None and not tenant_list:
         return empty
 
@@ -693,9 +695,9 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         infra = {r["mac"] for r in c.execute(
             "SELECT DISTINCT mac FROM switch_if_macs").fetchall()}
 
-    # Il valore grezzo non riconosce i Port-channel: fidarsene qui farebbe
-    # passare per porta di accesso un'interfaccia aggregata verso un altro
-    # switch, cioe' un punto di transito.
+    # The raw value does not recognize Port-channels: trusting it here would
+    # pass off an aggregated interface toward another switch as an access
+    # port, i.e. a transit point.
     reclassify_sightings(rows)
     rows = [r for r in rows if r["mac"] not in infra]
     if not rows:
@@ -703,7 +705,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
 
     macs = list(dict.fromkeys(r["mac"] for r in rows))
     arp: dict = {}
-    CHUNK = 400                                   # < limite ~999 parametri SQLite
+    CHUNK = 400                                   # < SQLite ~999 param limit
     with _lock, _connect() as c:
         for i in range(0, len(macs), CHUNK):
             batch = macs[i:i + CHUNK]
@@ -755,8 +757,8 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         if born is not None and born <= stale_days:
             flags.append("NEW")
 
-        # Tipo del client: certo SOLO se assegnato a mano nella scheda
-        # "Dispositivi e categorie". Mai ereditare il tipo del gateway.
+        # Client type: certain ONLY if assigned by hand in the "Devices and
+        # categories" tab. Never inherit the gateway's type.
         assigned = next((assignments[ip] for ip in ips if assignments.get(ip)), {})
         results.append({
             "mac": mac, "tenant": tenant,
@@ -790,7 +792,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
             "truncated": total > cap, "counts": counts}
 
 
-# --- Ricerca storica ---
+# --- Historical search ---
 
 def _row_to_dict(row) -> dict:
     d = dict(row)
@@ -801,11 +803,11 @@ def _row_to_dict(row) -> dict:
 def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Optional[str] = None,
            switch_ip: Optional[str] = None, tenants=None, frm: Optional[str] = None, to: Optional[str] = None,
            limit: int = 500, site: Optional[str] = None) -> list:
-    """Ricerca avvistamenti con filtri combinabili.
+    """Search sightings with combinable filters.
 
-    - mac: MAC completo (match esatto) oppure frammento/OUI (ricerca parziale,
-      ignora i separatori).
-    - tenants: None = nessuna restrizione (admin); lista = solo quei tenant.
+    - mac: full MAC (exact match) or fragment/OUI (partial search,
+      ignores separators).
+    - tenants: None = no restriction (admin); list = only those tenants.
     """
     init_db()
     q = ["SELECT * FROM mac_sightings WHERE 1=1"]
@@ -819,7 +821,7 @@ def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Opt
         else:
             frag = _HEXONLY.sub('', mac).lower()
             if frag:
-                # Ricerca parziale/OUI: confronta ignorando i due punti.
+                # Partial/OUI search: compare ignoring colons.
                 q.append("AND REPLACE(mac, ':', '') LIKE ?")
                 args.append('%' + frag + '%')
     if vlan:
@@ -855,7 +857,7 @@ def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Opt
 
 
 def switch_table(switch_ip: str, tenants=None, limit: int = 2000) -> list:
-    """Ultimo stato noto della MAC-table di uno switch."""
+    """Last known state of a switch's MAC table."""
     return search(switch_ip=switch_ip, tenants=tenants, limit=limit)
 
 
@@ -877,25 +879,26 @@ def stats(tenants=None) -> dict:
             "retention_days": get_retention_days()}
 
 
-# --- Accesso o transito? -----------------------------------------------
-# La marcatura fatta in raccolta (mark_uplinks) non riconosce i Port-channel:
-# CDP/LLDP annunciano i vicini sulle porte fisiche membro, mai sull'interfaccia
-# aggregata, quindi un MAC imparato su Po10 resta is_uplink=0 e sembra una
-# porta di accesso. Qui si ricalcola contro la topologia, dove il Port-channel
-# ha un nome (pc_name) e si sa dove va.
+# --- Access or transit? -----------------------------------------------
+# The marking done at collection time (mark_uplinks) does not recognize
+# Port-channels: CDP/LLDP announce neighbors on the physical member ports,
+# never on the aggregated interface, so a MAC learned on Po10 stays
+# is_uplink=0 and looks like an access port. Here it is recomputed against
+# the topology, where the Port-channel has a name (pc_name) and we know
+# where it goes.
 #
-# Import locali di core_engine: e' lui a possedere la mappa di rete, e questo
-# modulo e' storage — a livello di modulo sarebbe una dipendenza al contrario.
+# Local imports of core_engine: it owns the network map, and this module is
+# storage — at the module level this would be a backward dependency.
 _INFRA_TYPES = {"switch", "router"}
 
 
 def topology_uplinks():
-    """Ritorna (uplink_map, known_switches).
+    """Returns (uplink_map, known_switches).
 
-    uplink_map: { switch_ip: { porta_normalizzata: etichetta_vicino } } — solo le
-                porte che vanno verso un altro apparato di rete (infrastruttura).
-    known_switches: insieme degli IP inventariati presenti in mappa (per cui la
-                topologia è autorevole: assenza di una porta = porta di accesso).
+    uplink_map: { switch_ip: { normalized_port: neighbor_label } } — only the
+                ports that go toward another network device (infrastructure).
+    known_switches: set of inventoried IPs present on the map (for which the
+                topology is authoritative: absence of a port = access port).
     """
     from collections import defaultdict
     from core import core_engine
@@ -921,7 +924,7 @@ def topology_uplinks():
         tgt_infra = node_type.get(tgt) in _INFRA_TYPES
         src_infra = node_type.get(src) in _INFRA_TYPES
         pc = l.get("pc_name")
-        # Le porte locali di src vanno verso tgt: sono uplink solo se tgt è infra.
+        # src's local ports go toward tgt: they are uplinks only if tgt is infra.
         if tgt_infra:
             for p in l.get("local_ports", []):
                 add(src, p, tgt)
@@ -935,14 +938,15 @@ def topology_uplinks():
     return uplink_map, known_switches
 
 def reclassify_sightings(rows, uplink_map=None, known_switches=None):
-    """Ricalcola is_uplink/uplink_to di ogni avvistamento contro la topologia
-    globale. Per gli switch noti la topologia è autorevole; per gli switch senza
-    dati topologici si conserva il valore rilevato in raccolta (fallback)."""
+    """Recomputes is_uplink/uplink_to of each sighting against the global
+    topology. For known switches the topology is authoritative; for switches
+    without topological data the value detected at collection time is kept
+    (fallback)."""
     from core import core_engine
     if uplink_map is None or known_switches is None:
         uplink_map, known_switches = topology_uplinks()
-    # MAC delle interfacce proprie degli switch: tali MAC sono infrastruttura
-    # ("switch-interface"), non endpoint. Si taggano, non si scartano.
+    # MACs of the switches' own interfaces: those MACs are infrastructure
+    # ("switch-interface"), not endpoints. They are tagged, not discarded.
     if_macs = get_switch_if_macs()
     norm = core_engine._normalize_iface
     for r in rows:
@@ -954,7 +958,7 @@ def reclassify_sightings(rows, uplink_map=None, known_switches=None):
             neigh = ups.get(ni) or (ups.get(npc) if npc else None)
             r["is_uplink"] = bool(neigh)
             r["uplink_to"] = neigh or ""
-        # else: switch senza topologia nota → mantiene is_uplink/uplink_to raccolti
+        # else: switch without known topology → keeps collected is_uplink/uplink_to
         r["is_uplink"] = bool(r.get("is_uplink"))
         info = if_macs.get(r.get("mac"))
         if info:
@@ -967,17 +971,17 @@ def reclassify_sightings(rows, uplink_map=None, known_switches=None):
 
 
 def port_occupancy(switch_ip: str, tenants=None) -> dict:
-    """Stato di ogni porta di uno switch: occupata, uplink, o libera.
+    """State of each port of a switch: occupied, uplink, or free.
 
-    L'elenco delle interfacce esiste gia': ``switch_if_macs`` viene popolata a
-    ogni scansione MAC da ``collect_interface_macs()`` (``show interfaces``, o
-    ``ietf-interfaces`` via NETCONF/RESTCONF). Quando quella raccolta e'
-    fallita — non e' fatale, la lista resta vuota — lo si DICE con
-    ``port_list_known: False`` invece di rispondere "zero porte libere": zero
-    righe travestite da "nessun dato" sono peggio di un buco dichiarato.
+    The interface list already exists: ``switch_if_macs`` is populated at
+    every MAC scan by ``collect_interface_macs()`` (``show interfaces``, or
+    ``ietf-interfaces`` via NETCONF/RESTCONF). When that collection failed —
+    it is not fatal, the list stays empty — it is SAID with
+    ``port_list_known: False`` instead of answering "zero free ports": zero
+    rows disguised as "no data" are worse than a declared gap.
 
-    ``free`` significa "nessun MAC imparato", NON "nessun cavo": un
-    dispositivo silenzioso legge come porta libera. Sta scritto nella UI.
+    ``free`` means "no learned MAC", NOT "no cable": a silent device reads as
+    a free port. It is stated in the UI.
     """
     from core.core_engine import _normalize_iface
 
@@ -1032,15 +1036,15 @@ def port_occupancy(switch_ip: str, tenants=None) -> dict:
                       "uplink_to": neigh or "",
                       "macs": sorted({s["mac"] for s in access}),
                       "last_seen": row["last_seen"]})
-        # Il conteggio riguarda le porte in cui si infila un cavo: una Vlan10
-        # fra le "libere" sarebbe una porta che non esiste.
+        # The count concerns the ports into which a cable is plugged: a Vlan10
+        # among the "free" ones would be a port that does not exist.
         if physical:
             counts["total"] += 1
             counts[state] += 1
 
-    # Eta' dell'elenco interfacce: quanto e' vecchia la scansione MAC piu'
-    # recente di QUESTO switch. None se il timestamp non e' interpretabile —
-    # che non e' "aggiornato adesso".
+    # Age of the interface list: how old the most recent MAC scan of THIS
+    # switch is. None if the timestamp is not interpretable — which is not
+    # "updated now".
     age_days = _age_days(max(r["last_seen"] for r in ifaces))
     return {"switch": switch_ip, "port_list_known": True,
             "if_list_age_s": None if age_days is None else age_days * 86400.0,
