@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
-"""Artefatto di backup Linux -> envelope a sezioni per il Config Analyzer.
+"""Linux backup artifact -> section envelope for the Config Analyzer.
 
-Stessa forma dell'envelope dei firewall (``fw_analyzers``): ``sections`` con
-``columns``/``rows``, cosi' la UI ricava i sotto-pill dai dati e non deve
-conoscere niente di Linux.
+Same shape as the firewall envelope (``fw_analyzers``): ``sections`` with
+``columns``/``rows``, so the UI derives sub-pills from the data and does not
+need to know anything about Linux.
 
-PERCHE' NON RIUSA IL PARSER IOS — ``detect_config_type`` ripiega su ``'ios'``
-per ogni vendor che non riconosce. Su un host Linux quel ripiego non e' una
-approssimazione, e' un risultato inventato: il parser cerca VLAN, ACL e
-interfacce dentro ``/etc/fstab`` e la scheda esce come uno switch senza VLAN.
-Meglio una piattaforma in piu' che un apparato descritto male.
+WHY IT DOESN'T REUSE THE IOS PARSER — ``detect_config_type`` falls back to
+``'ios'`` for every vendor it doesn't recognize. On a Linux host that fallback
+isn't an approximation, it's a made-up result: the parser looks for VLANs, ACLs,
+and interfaces inside ``/etc/fstab`` and the device card comes out as a switch
+with no VLANs. Better one extra platform than a misdescribed device.
 
-COSA LEGGE — l'artefatto che scrive ``drivers/linux.py`` piu' le sezioni che il
-triage appende (``ip -br a``, ``ip route``, ``ss -tuln``, ``df -hT``,
-``systemctl --failed``). La divisione in sezioni la fa gia'
-``netsec_audit.linux_parser``: qui si interpreta soltanto il contenuto.
+WHAT IT READS — the artifact written by ``drivers/linux.py`` plus the sections
+the triage appends (``ip -br a``, ``ip route``, ``ss -tuln``, ``df -hT``,
+``systemctl --failed``). The section splitting is already done by
+``netsec_audit.linux_parser``: here we only interpret the content.
 
-Tollerante come gli altri analizzatori: nessuna riga malformata solleva, una
-sezione assente produce una tabella vuota e non un errore.
+Tolerant like the other analyzers: no malformed line raises, a missing section
+produces an empty table, not an error.
 """
 
 import re
@@ -26,7 +26,7 @@ from typing import Any, Dict, List
 from services.netsec_audit.linux_parser import (
     SSHD_EFFECTIVE, LinuxConfig, parse_linux)
 
-# Sezioni dell'artefatto prodotte dai comandi extra del triage.
+# Artifact sections produced by the extra triage commands.
 _S_HOSTNAME = "HOSTNAME"
 _S_UNAME = "UNAME"
 _S_UPTIME = "UPTIME"
@@ -57,8 +57,8 @@ _F_SSHD = "/etc/ssh/sshd_config"
 _F_PASSWD = "/etc/passwd"
 _F_GROUP = "/etc/group"
 
-# Impostazioni sshd mostrate nella scheda. Non e' l'audit (quello vive in
-# netsec_audit e da' verdetti): qui si mostra COM'E' configurato, senza giudizio.
+# sshd settings shown in the device card. This is not the audit (that lives in
+# netsec_audit and produces verdicts): here we show HOW it's configured, without judgment.
 _SSHD_KEYS = ("port", "permitrootlogin", "passwordauthentication",
               "pubkeyauthentication", "permitemptypasswords",
               "hostbasedauthentication", "ignorerhosts", "maxauthtries",
@@ -89,7 +89,7 @@ def _lines(cfg: LinuxConfig, name: str) -> List[str]:
 
 
 def _system_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """Identita' dell'host: distribuzione, kernel, hostname, uptime."""
+    """Host identity: distribution, kernel, hostname, uptime."""
     rows = []
 
     def add(prop, value):
@@ -112,8 +112,8 @@ def _system_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
             break
     add("hostname", hostname)
 
-    # ``uname -srm`` -> "Linux <kernel> <arch>": kernel e architettura sono le
-    # parole 2 e 3, il resto della riga non serve.
+    # ``uname -srm`` -> "Linux <kernel> <arch>": kernel and architecture are
+    # words 2 and 3, the rest of the line is not needed.
     uname = _lines(cfg, _S_UNAME)[:1]
     if uname:
         parts = uname[0].split()
@@ -128,11 +128,11 @@ def _system_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
            if l.lower().startswith("nameserver") and len(l.split()) > 1]
     add("dns", ", ".join(dns))
 
-    # Runtime dei container: righe di sistema, non una tabella a se'. Se il
-    # comando non esiste la sezione e' vuota e la riga non compare, che e' la
-    # risposta giusta: su questo host non c'e'.
+    # Container runtime: system rows, not a separate table. If the
+    # command doesn't exist the section is empty and the row won't appear,
+    # which is the right answer: there isn't one on this host.
     add("docker", " ".join(_lines(cfg, _S_DOCKER)[:1]))
-    # ``kubelet --version`` -> "Kubernetes v1.29.0": interessa la versione.
+    # ``kubelet --version`` -> "Kubernetes v1.29.0": we care about the version.
     kubelet = _lines(cfg, _S_KUBELET)[:1]
     if kubelet:
         add("kubernetes", kubelet[0].split()[-1])
@@ -140,7 +140,7 @@ def _system_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _after(parts: List[str], token: str) -> str:
-    """Parola che segue ``token`` in una riga gia' divisa, "" se assente."""
+    """Word that follows ``token`` in an already-split line, "" if absent."""
     return parts[parts.index(token) + 1] if token in parts \
         and parts.index(token) + 1 < len(parts) else ""
 
@@ -149,11 +149,11 @@ _LINK_HEAD = re.compile(r'^\d+:\s+([^:@\s]+)[@:]')
 
 
 def _link_stats(cfg: LinuxConfig) -> Dict[str, Dict[str, str]]:
-    """``ip -s link`` -> per interfaccia: MTU, stato e contatori RX/TX.
+    """``ip -s link`` -> per interface: MTU, state, and RX/TX counters.
 
-    I contatori stanno sulla riga SUCCESSIVA all'intestazione ``RX:``/``TX:``,
-    quindi non si legge una riga per volta in isolamento: l'intestazione arma
-    la lettura e la riga dopo la consuma.
+    Counters are on the line AFTER the ``RX:``/``TX:`` header, so you can't
+    read one line at a time in isolation: the header arms the read and the
+    next line consumes it.
     """
     out: Dict[str, Dict[str, str]] = {}
     cur: Dict[str, str] = {}
@@ -183,8 +183,8 @@ def _link_stats(cfg: LinuxConfig) -> Dict[str, Dict[str, str]]:
 
 
 def _link_speed(cfg: LinuxConfig) -> Dict[str, Dict[str, str]]:
-    """``/sys/class/net/*/speed`` e ``duplex``. Il kernel scrive -1 su una
-    interfaccia giu': e' un "non lo so", non una velocita', e non va mostrato."""
+    """``/sys/class/net/*/speed`` and ``duplex``. The kernel writes -1 for a down
+    interface: it's "I don't know", not a speed, and it shouldn't be shown."""
     out = {}
     for line in _lines(cfg, _S_LINK_SPEED):
         parts = line.split()
@@ -197,8 +197,8 @@ def _link_speed(cfg: LinuxConfig) -> Dict[str, Dict[str, str]]:
 
 
 def _interface_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``ip -br a`` per indirizzi e stato, arricchito con MTU (``ip -s link``)
-    e velocita'/duplex (sysfs)."""
+    """``ip -br a`` for addresses and state, enriched with MTU (``ip -s link``)
+    and speed/duplex (sysfs)."""
     stats = _link_stats(cfg)
     speeds = _link_speed(cfg)
     rows = []
@@ -214,16 +214,16 @@ def _interface_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
             "mtu": st.get("mtu", ""),
             "speed": sp.get("speed", ""),
             "duplex": sp.get("duplex", ""),
-            # Lista, non stringa: la UI espande le celle multi-valore.
+            # List, not string: the UI expands multi-value cells.
             "addresses": parts[2:] or [],
         })
     return rows
 
 
 def _counter_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """Contatori per interfaccia. Tabella separata dalle interfacce: unirle
-    darebbe una riga da tredici colonne dove le due meta' si leggono per
-    motivi diversi (com'e' configurata / come sta andando)."""
+    """Per-interface counters. Separate table from interfaces: merging them
+    would give a thirteen-column row where the two halves are read for
+    different reasons (how it's configured / how it's performing)."""
     rows = []
     for name, st in _link_stats(cfg).items():
         rows.append({
@@ -241,7 +241,7 @@ def _counter_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _route_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``ip route``: destinazione, gateway, interfaccia, metrica."""
+    """``ip route``: destination, gateway, interface, metric."""
     rows = []
     for line in _lines(cfg, _S_ROUTE):
         parts = line.split()
@@ -262,14 +262,14 @@ _PROCESS = re.compile(r'\("([^"]+)",pid=(\d+)')
 
 
 def _socket_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``ss -tuln`` (o ``-tulpn`` sul tier privilegiato): porte in ascolto.
+    """``ss -tuln`` (or ``-tulpn`` on the privileged tier): listening ports.
 
-    E' la sezione che dice davvero cosa l'host espone: un servizio su
-    ``0.0.0.0`` e' raggiungibile da tutta la rete, uno su ``127.0.0.1`` no, e
-    la differenza non si vede da nessun'altra parte dell'applicazione.
+    This is the section that really tells what the host exposes: a service on
+    ``0.0.0.0`` is reachable from the whole network, one on ``127.0.0.1`` is
+    not, and the difference is not visible anywhere else in the application.
     """
     rows = []
-    # La sezione privilegiata ha in piu' il processo: quando c'e', vince.
+    # The privileged section also has the process: when it's present, it wins.
     lines = _lines(cfg, _S_SOCKETS_PID) or _lines(cfg, _S_SOCKETS)
     for line in lines:
         parts = line.split()
@@ -285,8 +285,8 @@ def _socket_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
             "protocol": parts[0],
             "address": address or local,
             "port": port,
-            # 0.0.0.0 e :: sono "tutte le interfacce": vale la pena dirlo qui
-            # invece di lasciarlo dedurre.
+            # 0.0.0.0 and :: mean "all interfaces": it's worth saying it here
+            # instead of leaving it to be inferred.
             "scope": "any" if address in ("0.0.0.0", "[::]", "*") else "local"
             if address in ("127.0.0.1", "[::1]") else "bound",
             "process": process,
@@ -295,10 +295,10 @@ def _socket_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _fstab_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``/etc/fstab`` arricchito con l'occupazione da ``df -hT``.
+    """``/etc/fstab`` enriched with usage from ``df -hT``.
 
-    Due tabelle separate direbbero le stesse cose a meta': le opzioni di mount
-    contano proprio sui filesystem che si stanno riempiendo.
+    Two separate tables would tell the same things half-way: mount options
+    matter precisely on the filesystems that are filling up.
     """
     used = {}
     for line in _lines(cfg, _S_DF):
@@ -320,8 +320,8 @@ def _fstab_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
             "size": extra.get("size", ""),
             "used_pct": extra.get("used_pct", ""),
         })
-    # Filesystem montati ma non dichiarati in fstab (tmpfs, overlay): esistono
-    # e occupano spazio, ometterli renderebbe la tabella una mezza verita'.
+    # Filesystems mounted but not declared in fstab (tmpfs, overlay): they exist
+    # and consume space, omitting them would make the table a half-truth.
     declared = {r["mount"] for r in rows}
     for line in _lines(cfg, _S_DF):
         parts = line.split()
@@ -333,7 +333,7 @@ def _fstab_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _service_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``systemctl --failed``: unita' che il sistema non e' riuscito ad avviare."""
+    """``systemctl --failed``: units the system couldn't start."""
     rows = []
     for line in _lines(cfg, _S_FAILED):
         parts = line.split(None, 4)
@@ -346,21 +346,21 @@ def _service_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
     return rows
 
 
-# Tipi di unita' che rappresentano qualcosa che qualcuno ha deciso di far
-# partire. Le .mount le genera automaticamente ogni snap installato: sono
-# decine, sono tutte "enabled" per costruzione, e sommergono le poche righe che
-# dicono davvero cosa gira su questa macchina.
+# Unit types that represent something someone decided to start.
+# .mount units are auto-generated by every installed snap: there are dozens,
+# they're all "enabled" by construction, and they drown the few rows that
+# actually tell what runs on this machine.
 _ENABLED_UNIT_TYPES = (".service", ".socket", ".timer", ".path")
 
 
 def _enabled_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``systemctl list-unit-files --state=enabled``: cosa parte da solo al boot.
+    """``systemctl list-unit-files --state=enabled``: what starts on its own at boot.
 
-    Lo stato non si mostra: la query filtra gia' su ``--state=enabled``, quindi
-    la colonna direbbe "enabled" su ogni riga. Si mostra il PRESET, cioe' cosa
-    prevedeva la distribuzione: ``preset=disabled`` su una unita' abilitata
-    significa che qualcuno l'ha accesa a mano, ed e' l'unica informazione della
-    tabella che distingua una riga dall'altra.
+    The state is not shown: the query already filters on ``--state=enabled``, so
+    the column would read "enabled" on every row. We show the PRESET, i.e. what
+    the distribution expected: ``preset=disabled`` on an enabled unit means
+    someone turned it on by hand, and that's the only piece of information in
+    the table that distinguishes one row from another.
     """
     rows = []
     for line in _lines(cfg, _S_ENABLED):
@@ -371,16 +371,16 @@ def _enabled_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
     return rows
 
 
-# Shell che NON danno accesso interattivo: un account di servizio con una di
-# queste non e' una via d'ingresso, uno con /bin/bash si'. E' la sola colonna
-# della tabella utenti che richieda un giudizio, e vale la pena calcolarla qui
-# invece di lasciare l'operatore a riconoscere i percorsi a occhio.
+# Shells that do NOT give interactive access: a service account with one of
+# these is not an entry point, one with /bin/bash is. This is the only column
+# in the user table that requires a judgment call, and it's worth computing it
+# here instead of leaving the operator to recognize paths by eye.
 _NOLOGIN_SHELLS = ("/usr/sbin/nologin", "/sbin/nologin", "/bin/false",
                    "/usr/bin/false", "/bin/sync", "")
 
 
 def _user_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``/etc/passwd``: utenti locali, con l'indicazione di chi puo' loggarsi."""
+    """``/etc/passwd``: local users, with an indication of who can log in."""
     rows = []
     for line in _lines(cfg, _F_PASSWD):
         f = line.split(":")
@@ -394,7 +394,7 @@ def _user_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _group_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``/etc/group``: gruppi locali e membri secondari."""
+    """``/etc/group``: local groups and secondary members."""
     rows = []
     for line in _lines(cfg, _F_GROUP):
         f = line.split(":")
@@ -406,11 +406,11 @@ def _group_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _sudoers_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``/etc/sudoers`` e ``/etc/sudoers.d/*``: chi puo' diventare root.
+    """``/etc/sudoers`` and ``/etc/sudoers.d/*``: who can become root.
 
-    Niente interpretazione della grammatica sudoers: la riga si mostra intera,
-    con davanti il soggetto (utente, ``%gruppo`` o ``Defaults``), perche' e' su
-    quello che si cerca.
+    No interpretation of the sudoers grammar: the line is shown in full, with
+    the subject (user, ``%group``, or ``Defaults``) up front, because that's
+    what you search on.
     """
     rows = []
     for line in _lines(cfg, _S_SUDOERS):
@@ -423,10 +423,10 @@ def _sudoers_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _container_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``docker ps``, campi separati da TAB.
+    """``docker ps``, TAB-separated fields.
 
-    Il separatore non e' lo spazio perche' STATUS lo contiene ("Up 3 hours") e
-    PORTS pure: dividere sugli spazi spezzerebbe due colonne su quattro.
+    The separator is not space because STATUS contains it ("Up 3 hours") and
+    PORTS does too: splitting on spaces would break two out of four columns.
     """
     rows = []
     for line in _lines(cfg, _S_CONTAINERS):
@@ -440,16 +440,16 @@ def _container_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _firewall_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``nft list ruleset`` o ``iptables -S``: firewall dell'host.
+    """``nft list ruleset`` or ``iptables -S``: host firewall.
 
-    Le due sintassi non si normalizzano in una terza: ogni riga si mostra com'e',
-    ed e' anche cosi' che si incolla in una shell per verificarla.
+    The two syntaxes are not normalized into a third: each line is shown as-is,
+    and that's also how you paste it into a shell to verify it.
     """
     return [{"rule": line} for line in _lines(cfg, _S_FIREWALL)]
 
 
 def _colon_keyed(lines: List[str], keys: tuple) -> Dict[str, str]:
-    """Righe ``Chiave: valore`` (lscpu, dmidecode -s) ridotte alle chiavi note."""
+    """``Key: value`` lines (lscpu, dmidecode -s) reduced to known keys."""
     found = {}
     for line in lines:
         key, sep, value = line.partition(":")
@@ -466,7 +466,7 @@ _DMI_KEYS = ("system-manufacturer", "system-product-name",
 
 
 def _hardware_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """CPU (``lscpu``) e identita' della macchina (``dmidecode -s``, tier sudo)."""
+    """CPU (``lscpu``) and machine identity (``dmidecode -s``, sudo tier)."""
     rows = []
     for key, value in _colon_keyed(_lines(cfg, _S_LSCPU), _LSCPU_KEYS).items():
         rows.append({"property": key, "value": value})
@@ -478,11 +478,11 @@ def _hardware_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 
 def _disk_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``lsblk -dno NAME,MODEL,SERIAL,SIZE``: dischi fisici, non le partizioni.
+    """``lsblk -dno NAME,MODEL,SERIAL,SIZE``: physical disks, not partitions.
 
-    Il modello puo' contenere spazi, quindi si tiene la dimensione dal fondo e
-    il seriale dalla penultima posizione: dividere da sinistra spezzerebbe il
-    nome del modello su ogni disco che ne ha uno lungo.
+    The model may contain spaces, so we grab size from the end and serial from
+    the second-to-last position: splitting from the left would break the model
+    name on every disk that has a long one.
     """
     rows = []
     for line in _lines(cfg, _S_DISKS):
@@ -504,11 +504,11 @@ _DIMM_KEYS = {"size": "size", "locator": "locator", "type": "type",
 
 
 def _dimm_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    """``dmidecode -t 17``: banchi di memoria.
+    """``dmidecode -t 17``: memory banks.
 
-    I record sono separati da righe vuote, che il parser ha gia' scartato:
-    l'inizio di un banco si riconosce dall'intestazione ``Memory Device``.
-    Gli slot vuoti ("No Module Installed") si omettono.
+    Records are separated by blank lines, which the parser already discarded:
+    the start of a bank is recognized by the ``Memory Device`` header.
+    Empty slots ("No Module Installed") are omitted.
     """
     rows: List[Dict[str, Any]] = []
     cur: Dict[str, Any] = {}
@@ -529,7 +529,7 @@ def _dimm_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
 
 def _keyed_rows(lines: List[str], keys: tuple, separator: bool = False
                 ) -> List[Dict[str, Any]]:
-    """Righe ``chiave valore`` filtrate sulle chiavi note, ultima occorrenza."""
+    """``key value`` lines filtered to known keys, last occurrence wins."""
     found: Dict[str, str] = {}
     for line in lines:
         text = line.replace("=", " ", 1) if separator else line
@@ -543,14 +543,14 @@ def _keyed_rows(lines: List[str], keys: tuple, separator: bool = False
 
 
 def _sshd_rows(cfg: LinuxConfig) -> List[Dict[str, Any]]:
-    # sshd -T e' la configurazione EFFETTIVA (tiene conto degli Include):
-    # quando il triage privilegiato l'ha raccolta, vince sul file.
+    # sshd -T is the EFFECTIVE configuration (accounts for Include directives):
+    # when the privileged triage collected it, it wins over the file.
     lines = _lines(cfg, SSHD_EFFECTIVE) or _lines(cfg, _F_SSHD)
     return _keyed_rows(lines, _SSHD_KEYS)
 
 
 def analyze(text) -> Dict[str, Any]:
-    """Artefatto Linux -> envelope a sezioni. Puro e tollerante."""
+    """Linux artifact -> section envelope. Pure and tolerant."""
     try:
         return _analyze(text)
     except Exception:
