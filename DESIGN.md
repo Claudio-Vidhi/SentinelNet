@@ -28,6 +28,8 @@ colors:
   lamp-caution-dark: "#e0a03c"
   lamp-fault-dark: "#ef6b5e"
   lamp-unpolled-dark: "#6c7a83"
+  on-lamp: "#ffffff"
+  on-lamp-dark: "#12171b"
   conductor-a: "#1f6fb2"
   conductor-b: "#b8791a"
   conductor-c: "#2e8b57"
@@ -320,6 +322,17 @@ greyscale, distance, and colour blindness.
   (`rgba(255,255,255,0.85)` over `rgba(30,36,32,0.28)` on laminate; 0.07 over
   0.45 on slate). Flipping these two values is most of what makes the two
   renditions feel like different materials rather than inverted colours.
+
+### Ink on a lamp
+
+**On Lamp** (#ffffff on laminate, #12171b on slate). Text almost never sits on a
+state colour — it sits on a plate, next to a lamp. The exception is a control
+that *is* the state while you are pressing it: the destructive button's hover,
+where the fault lamp becomes the fill. That one case needs an ink that inverts
+with the rendition; a fixed white reads 5.44:1 on the laminate fault but 3.03:1
+on the slate one, because the dark rendition's lamps are lighter, not darker.
+Never use this token on a wash — a wash sits over a plate, so the `-ink` lamp
+variants apply there.
 
 ### CVSS ramp (vulnerability triage only)
 
