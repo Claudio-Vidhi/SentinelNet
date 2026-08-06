@@ -1,38 +1,38 @@
 import re
 from drivers.base_driver import BaseDriver
 
-# Sequenze OSC di "shell integration" (Fedora, e sempre piu' distro, le emettono
-# attorno al prompt: ESC ] 8003 ; start=<uuid> ... ESC \). Netmiko ripulisce solo
-# le sequenze CSI, quindi queste finiscono dentro find_prompt() — e con esse un
-# UUID DIVERSO A OGNI COMANDO. send_command costruisce il pattern di terminazione
-# proprio dal prompt, quindi dopo il primo comando il pattern non corrisponde mai
-# piu' e ogni lettura va in timeout.
+# OSC sequences of "shell integration" (Fedora, and increasingly more distros,
+# emit them around the prompt: ESC ] 8003 ; start=<uuid> ... ESC \). Netmiko
+# only cleans CSI sequences, so these end up inside find_prompt() — and with
+# them a DIFFERENT UUID ON EVERY COMMAND. send_command builds the termination
+# pattern right from the prompt, so after the first command the pattern never
+# matches again and every read times out.
 _SHELL_INTEGRATION = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)')
 
-# Sequenze CSI generiche (colore, grassetto, movimento cursore). Netmiko ne
-# rimuove solo un elenco chiuso, non la forma generale: i codici colore di
-# systemd (ESC[0;1;32m attorno a "enabled") non sono in quell'elenco e
-# finivano dentro l'artefatto, e da li' nelle tabelle della UI.
+# Generic CSI sequences (color, bold, cursor movement). Netmiko only removes
+# a closed list of them, not the general form: systemd's color codes
+# (ESC[0;1;32m around "enabled") aren't in that list and ended up in the
+# artifact, and from there into the UI tables.
 _ANSI_CSI = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]')
 
 
 def sanitize_session(net_connect):
-    """Toglie le sequenze di escape da tutto cio' che netmiko legge sulla sessione.
+    """Strips escape sequences from everything netmiko reads on the session.
 
-    ``strip_ansi_escape_codes`` e' gia' il punto in cui netmiko ripulisce
-    l'output (LinuxSSH attiva ``ansi_escape_codes``): lo si estende invece di
-    filtrare a valle, cosi' anche il prompt che netmiko usa per riconoscere la
-    fine di un comando nasce pulito. ``set_base_prompt`` viene rifatto perche'
-    quello calcolato alla connessione contiene ancora le sequenze.
+    ``strip_ansi_escape_codes`` is already the point at which netmiko cleans
+    the output (LinuxSSH enables ``ansi_escape_codes``): it's extended rather
+    than filtering downstream, so the prompt netmiko uses to detect the end of
+    a command is also born clean. ``set_base_prompt`` is redone because the
+    one computed at connection still contains the sequences.
     """
     original = net_connect.strip_ansi_escape_codes
     net_connect.strip_ansi_escape_codes = \
         lambda text: _ANSI_CSI.sub("", _SHELL_INTEGRATION.sub("", original(text)))
     net_connect.set_base_prompt()
 
-# File di configurazione leggibili da un account NON privilegiato. Sono anche
-# l'input dell'audit CIS Linux: i marcatori '--- <path> ---' che li separano
-# sono la stessa forma che _backup_section() gia' riconosce.
+# Configuration files readable by a NON-privileged account. They're also the
+# input to the CIS Linux audit: the '--- <path> ---' markers that separate
+# them are the same form _backup_section() already recognizes.
 BACKUP_FILES = (
     "/etc/os-release",
     "/etc/ssh/sshd_config",
@@ -41,8 +41,8 @@ BACKUP_FILES = (
     "/etc/fstab",
     "/etc/hosts",
     "/etc/resolv.conf",
-    # Utenti e gruppi locali. /etc/shadow resta fuori di proposito: gli hash
-    # delle password non vanno in un artefatto che viene archiviato e riletto.
+    # Local users and groups. /etc/shadow is deliberately left out: password
+    # hashes don't belong in an artifact that gets archived and re-read.
     "/etc/passwd",
     "/etc/group",
 )
