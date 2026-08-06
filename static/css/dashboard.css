@@ -85,6 +85,11 @@
   --lamp-fault-wash: rgba(192, 57, 43, 0.13);
   --lamp-idle-wash: rgba(125, 132, 139, 0.14);
 
+  /* Inchiostro sopra una lampada PIENA (non sopra la sua velatura): l'unico
+     caso in cui il testo sta su un colore di stato invece che su una targa.
+     Si inverte con la resa, altrimenti resta bianco su rosso chiaro. */
+  --on-lamp: #ffffff;
+
   /* Conduttori dello schema unifilare (codice fasi) */
   --cond-a: #1f6fb2;
   --cond-b: #b8791a;
@@ -144,6 +149,7 @@
   --lamp-warn-wash: rgba(224, 160, 60, 0.14);
   --lamp-fault-wash: rgba(239, 107, 94, 0.14);
   --lamp-idle-wash: rgba(108, 122, 131, 0.16);
+  --on-lamp: #12171b;
 
   --cond-a: #5aa9e6;
   --cond-b: #e0a03c;
@@ -194,6 +200,7 @@
     --lamp-warn-wash: rgba(224, 160, 60, 0.14);
     --lamp-fault-wash: rgba(239, 107, 94, 0.14);
     --lamp-idle-wash: rgba(108, 122, 131, 0.16);
+    --on-lamp: #12171b;
     --cond-a: #5aa9e6;
     --cond-b: #e0a03c;
     --cond-c: #63c88a;
@@ -581,7 +588,7 @@ main { padding: 18px 20px 24px; gap: 0; }
 }
 .btn-danger:hover, .btn-danger:focus-visible {
   background: var(--lamp-fault);
-  color: #ffffff;
+  color: var(--on-lamp);
   border-color: var(--lamp-fault);
 }
 

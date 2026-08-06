@@ -80,30 +80,24 @@ function _cellSortValue(td) {
     const f = td.querySelector('input, select');
     return f ? String(f.value || '').trim() : td.textContent.trim();
 }
-function sortTableByColumn(table, colIdx, th) {
+function _applySort(table, colIdx, asc) {
     const tbody = table.tBodies[0];
     if (!tbody) return;
-    const asc = th.getAttribute('data-sort-asc') !== 'true';
-    Array.from(table.tHead.rows[0].cells).forEach(c => {
-        c.removeAttribute('data-sort-asc');
-    });
-    th.setAttribute('data-sort-asc', asc ? 'true' : 'false');
     // Una riga di dettaglio (cella unica a tutta larghezza, es. le evidenze
     // aperte nella matrice audit) non e' una voce autonoma: e' la coda della
     // riga che l'ha aperta. Ordinarla da sola la staccava dalla sua regola e
     // la spediva in cima, perche' non ha la colonna su cui si ordina.
-    const rows = [];
+    const groups = [];
     Array.from(tbody.rows).forEach(r => {
-        if (rows.length && r.cells.length === 1 && r.cells[0].colSpan > 1) {
-            rows[rows.length - 1].push(r);
+        if (groups.length && r.cells.length === 1 && r.cells[0].colSpan > 1) {
+            groups[groups.length - 1].push(r);
         } else {
-            rows.push([r]);
+            groups.push([r]);
         }
     });
-    rows.sort((ga, gb) => {
-        const a = ga[0], b = gb[0];
-        const x = _cellSortValue(a.cells[colIdx]);
-        const y = _cellSortValue(b.cells[colIdx]);
+    groups.sort((ga, gb) => {
+        const x = _cellSortValue(ga[0].cells[colIdx]);
+        const y = _cellSortValue(gb[0].cells[colIdx]);
         const numX = Number(x);
         const numY = Number(y);
         if (x !== '' && y !== '' && !isNaN(numX) && !isNaN(numY)) {
@@ -114,7 +108,35 @@ function sortTableByColumn(table, colIdx, th) {
         const c = x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' });
         return asc ? c : -c;
     });
-    rows.forEach(group => group.forEach(r => tbody.appendChild(r)));
+    const target = groups.flat();
+    const current = Array.from(tbody.rows);
+    // reapplySort() gira dentro il MutationObserver: riscrivere quando l'ordine
+    // e' gia' quello giusto produrrebbe le mutazioni che schedulano la passata
+    // successiva, senza mai fermarsi.
+    if (target.length === current.length && target.every((r, i) => r === current[i])) return;
+    target.forEach(r => tbody.appendChild(r));
+}
+
+function sortTableByColumn(table, colIdx, th) {
+    const asc = th.getAttribute('data-sort-asc') !== 'true';
+    Array.from(table.tHead.rows[0].cells).forEach(c => {
+        c.removeAttribute('data-sort-asc');
+    });
+    th.setAttribute('data-sort-asc', asc ? 'true' : 'false');
+    _applySort(table, colIdx, asc);
+}
+
+// L'ordine vive solo nel DOM, quindi qualunque re-render lo cancella: la
+// matrice audit riscrive tbody.innerHTML dai dati a ogni apertura di dettaglio
+// e a ogni cambio filtro, e la tabella tornava all'ordine di partenza sotto gli
+// occhi di chi l'aveva appena ordinata. Qui l'ordinamento scelto viene
+// riapplicato, conservando il verso: riapplicare non e' cliccare di nuovo.
+function reapplySort(table) {
+    if (!table.tHead || !table.tHead.rows.length) return;
+    const cells = Array.from(table.tHead.rows[0].cells);
+    const idx = cells.findIndex(c => c.getAttribute('data-sort-asc') !== null);
+    if (idx < 0) return;
+    _applySort(table, idx, cells[idx].getAttribute('data-sort-asc') === 'true');
 }
 function makeTableSortable(table) {
     if (!table || table.dataset.sortable === '1') return;
@@ -176,6 +198,7 @@ function initSortableTables() {
             scheduled = false;
             enhanceAllTables(document);
             makeClickablesFocusable(document);
+            document.querySelectorAll('table[data-sortable="1"]').forEach(reapplySort);
         });
     });
     obs.observe(document.body, { childList: true, subtree: true });

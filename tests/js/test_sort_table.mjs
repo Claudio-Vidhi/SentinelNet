@@ -18,9 +18,9 @@ assert.ok(start > 0 && end > start, 'funzioni di ordinamento non trovate in core
 const document = {
     createElement: () => ({ style: {}, dataset: {}, classList: { add() {} } }),
 };
-const { sortTableByColumn, makeTableSortable } = (0, eval)(
+const { sortTableByColumn, makeTableSortable, reapplySort } = (0, eval)(
     `(document => { ${src.slice(start, end)};
-      return { sortTableByColumn, makeTableSortable }; })`
+      return { sortTableByColumn, makeTableSortable, reapplySort }; })`
 )(document);
 
 const cell = (text, colSpan = 1) => ({
@@ -34,7 +34,9 @@ const detail = id => ({ id, cells: [cell('', 6)] });   // <td colspan="6">
 function build(rows) {
     const tbody = {
         rows,
+        moves: 0,
         appendChild(r) {
+            this.moves++;
             // Come il DOM vero: tutto ciò che non è un nodo è un TypeError.
             if (!r || !Array.isArray(r.cells)) {
                 throw new TypeError('appendChild: parameter 1 is not of type Node');
@@ -112,6 +114,57 @@ function order(tbody) {
     assert.equal(th.getAttribute('data-sort-asc'), 'true', 'primo click: crescente');
     sortTableByColumn(table, 0, th);
     assert.equal(th.getAttribute('data-sort-asc'), 'false', 'secondo click: decrescente');
+}
+
+// 6. Un re-render azzera l'ordinamento. renderAuditRulesTable() riscrive
+//    tbody.innerHTML dai dati originali a ogni apertura di dettaglio, a ogni
+//    cambio filtro e a ogni refresh: l'ordine, che vive solo nel DOM, spariva
+//    e la tabella tornava all'ordine di partenza sotto gli occhi dell'utente.
+{
+    const { table, tbody, th } = build([
+        rule('B', 'AUD-B'), detail('B-ev'),
+        rule('A', 'AUD-A'), detail('A-ev'),
+        rule('C', 'AUD-C'), detail('C-ev'),
+    ]);
+    makeTableSortable(table);
+    sortTableByColumn(table, 0, th);
+    assert.deepEqual(order(tbody), ['A', 'A-ev', 'B', 'B-ev', 'C', 'C-ev']);
+
+    // Il re-render: righe nuove, ordine dei dati, stesso <thead>.
+    tbody.rows = [
+        rule('B', 'AUD-B'), detail('B-ev'),
+        rule('A', 'AUD-A'), detail('A-ev'),
+        rule('C', 'AUD-C'), detail('C-ev'),
+    ];
+    reapplySort(table);
+    assert.deepEqual(order(tbody), ['A', 'A-ev', 'B', 'B-ev', 'C', 'C-ev'],
+        'dopo un re-render l\'ordinamento attivo va riapplicato');
+
+    // Il verso va conservato: riapplicare non e' cliccare di nuovo.
+    sortTableByColumn(table, 0, th);                      // -> decrescente
+    tbody.rows = [rule('A', 'AUD-A'), rule('C', 'AUD-C'), rule('B', 'AUD-B')];
+    reapplySort(table);
+    assert.deepEqual(order(tbody), ['C', 'B', 'A'], 'il verso non deve invertirsi');
+}
+
+// 7. Riapplicare su una tabella gia' in ordine non deve toccare il DOM. La
+//    riapplicazione gira dentro il MutationObserver: se scrivesse comunque,
+//    ogni passata genererebbe le mutazioni che schedulano la successiva.
+{
+    const { table, tbody, th } = build([rule('A', 'a'), rule('B', 'b'), rule('C', 'c')]);
+    makeTableSortable(table);
+    sortTableByColumn(table, 0, th);
+    tbody.moves = 0;
+    reapplySort(table);
+    assert.equal(tbody.moves, 0, 'nessuna scrittura se l\'ordine e\' gia\' quello giusto');
+}
+
+// 8. Nessuna colonna ordinata: riapplicare non fa nulla.
+{
+    const { table, tbody } = build([rule('B', 'b'), rule('A', 'a')]);
+    makeTableSortable(table);
+    reapplySort(table);
+    assert.deepEqual(order(tbody), ['B', 'A']);
 }
 
 console.log('sort_table: ok');
