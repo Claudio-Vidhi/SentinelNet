@@ -1,27 +1,27 @@
 # -*- coding: utf-8 -*-
-"""SentinelNet MCP Server — espone SentinelNet come server MCP (Model Context
-Protocol) su stdio, così qualunque client LLM esterno (Claude Desktop, LM
-Studio, Cline, ecc.) può interrogare inventario, mappa di rete, MAC tracker,
-config analyzer ed eseguire comandi CLI tramite l'API REST del centrale.
+"""SentinelNet MCP Server — exposes SentinelNet as an MCP (Model Context
+Protocol) server over stdio, so any external LLM client (Claude Desktop, LM
+Studio, Cline, etc.) can query inventory, network map, MAC tracker,
+config analyzer and run CLI commands through the central server's REST API.
 
-Il server NON reimplementa alcuna logica: è un ponte autenticato verso l'API
-HTTP di SentinelNet. Autorizzazione (ruoli, gruppi/tenant, blacklist comandi)
-resta interamente lato server.
+The server does NOT reimplement any logic: it is an authenticated bridge to
+SentinelNet's HTTP API. Authorization (roles, groups/tenant, command blacklist)
+remains entirely server-side.
 
-Configurazione (variabili d'ambiente):
-    SENTINELNET_URL        Base URL del centrale (default http://127.0.0.1:8765)
-    SENTINELNET_USERNAME   Utente SentinelNet con cui autenticarsi
+Configuration (environment variables):
+    SENTINELNET_URL        Base URL of the central server (default http://127.0.0.1:8765)
+    SENTINELNET_USERNAME   SentinelNet user for authentication
     SENTINELNET_PASSWORD   Password
-    SENTINELNET_VERIFY_TLS "0" per non verificare il certificato (default "1")
+    SENTINELNET_VERIFY_TLS "0" to skip certificate verification (default "1")
 
-Esempio (Claude Desktop / claude_desktop_config.json):
+Example (Claude Desktop / claude_desktop_config.json):
     {"mcpServers": {"sentinelnet": {
-        "command": "python", "args": ["/percorso/SentinelNet/mcp_server.py"],
+        "command": "python", "args": ["/path/to/SentinelNet/mcp_server.py"],
         "env": {"SENTINELNET_URL": "http://127.0.0.1:8765",
                 "SENTINELNET_USERNAME": "admin",
                 "SENTINELNET_PASSWORD": "..."}}}}
 
-Trasporto: JSON-RPC 2.0, un messaggio per riga su stdin/stdout (MCP stdio).
+Transport: JSON-RPC 2.0, one message per line on stdin/stdout (MCP stdio).
 """
 import os
 import sys
@@ -35,7 +35,7 @@ from security.redaction import redact
 
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "sentinelnet", "version": "1.0.0"}
-MAX_TEXT = 200_000   # limite prudenziale sul testo restituito a un client LLM
+MAX_TEXT = 200_000   # conservative limit on text returned to an LLM client
 
 BASE_URL = os.environ.get("SENTINELNET_URL", "http://127.0.0.1:8765").rstrip("/")
 USERNAME = os.environ.get("SENTINELNET_USERNAME", "")
@@ -45,7 +45,7 @@ VERIFY_TLS = os.environ.get("SENTINELNET_VERIFY_TLS", "1") != "0"
 _token = None
 
 
-# --- Client HTTP autenticato verso il centrale -----------------------------
+# --- Authenticated HTTP client toward the central server --------------------
 
 def _login() -> str:
     global _token
@@ -58,7 +58,7 @@ def _login() -> str:
 
 
 def api(method: str, path: str, params: Optional[dict] = None, body: Optional[dict] = None):
-    """Chiama l'API REST con JWT; su 401 riprova una volta dopo re-login."""
+    """Call the REST API with JWT; on 401 retry once after re-login."""
     global _token
     if _token is None:
         _login()
@@ -77,16 +77,16 @@ def api(method: str, path: str, params: Optional[dict] = None, body: Optional[di
         except Exception:
             detail = r.text
         raise RuntimeError(f"HTTP {r.status_code}: {detail}")
-    # Redazione segreti (finding I-1): il risultato dei tool va a un client
-    # LLM esterno, quindi passa per lo stesso choke-point dell'assistente in-app.
+    # Secret redaction (finding I-1): tool results go to an external LLM
+    # client, so they pass through the same choke-point as the in-app assistant.
     try:
         return redact(r.json())
     except ValueError:
         return redact(r.text)
 
 
-# --- Definizione dei tool MCP ----------------------------------------------
-# Ogni voce: (descrizione, inputSchema, funzione(args) -> oggetto/testo)
+# --- MCP tool definitions ---------------------------------------------------
+# Each entry: (description, inputSchema, function(args) -> object/text)
 
 def _obj(props: Optional[dict] = None, required: Optional[list] = None) -> dict:
     schema: Dict[str, Any] = {"type": "object", "properties": props or {}}
@@ -440,9 +440,9 @@ TOOLS = {
              ["hostname"]),
         lambda a: api("POST", "/api/provisioner/generate", body=a),
     ),
-    # --- Observability (fase 4.4): SOLO lettura, dati aggregati/riassunti
-    # (mai dump raw), scoping tenant e redazione applicati lato server.
-    # Disabilitati di default: l'admin li abilita dal tab MCP Server.
+    # --- Observability (phase 4.4): READ-ONLY, aggregated/summarized data
+    # (never raw dump), tenant scoping and redaction applied server-side.
+    # Disabled by default: admin enables them from the MCP Server tab.
     "get_top_talkers": (
         "Get the top bandwidth consumers (aggregated flow records) for a time "
         "window. Read-only, tenant-scoped, summarized (top-N only).",
@@ -476,8 +476,8 @@ TOOLS = {
 }
 
 
-# --- Tool disabilitati dall'amministratore (tab "MCP Server" del centrale) ---
-# Cache con TTL: si evita una chiamata HTTP per ogni tools/list o tools/call.
+# --- Tools disabled by the administrator (central server "MCP Server" tab) ---
+# Cache with TTL: avoids one HTTP call per tools/list or tools/call.
 
 _disabled = {"at": 0.0, "tools": set()}
 
@@ -489,12 +489,12 @@ def disabled_tools() -> set:
         data = api("GET", "/api/mcp/tool-config")
         _disabled["tools"] = set(data.get("disabled_tools") or [])
     except Exception:
-        pass                     # centrale irraggiungibile: si tiene l'ultimo noto
+        pass                     # central server unreachable: keep last known value
     _disabled["at"] = time.monotonic()
     return _disabled["tools"]
 
 
-# --- Ciclo JSON-RPC su stdio -------------------------------------------------
+# --- JSON-RPC loop on stdio -------------------------------------------------
 
 def _reply(msg_id, result=None, error=None):
     out = {"jsonrpc": "2.0", "id": msg_id}
@@ -557,7 +557,7 @@ def main():
                 "serverInfo": SERVER_INFO,
             })
         elif method == "notifications/initialized":
-            pass                       # notifica: nessuna risposta
+            pass                       # notification: no response
         elif method == "ping":
             _reply(msg_id, {})
         elif method == "tools/list":
