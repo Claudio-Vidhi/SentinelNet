@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Analizzatori firewall per-vendor.
+"""Per-vendor firewall analyzers.
 
-Ogni modulo vendor espone ``analyze(text)`` che ritorna l'envelope generico
+Each vendor module exposes ``analyze(text)`` which returns the generic envelope
 ``{"vendor": <str>, "sections": [{"id","label_key","columns","rows"}]}``
-renderizzato genericamente dal frontend.
+rendered generically by the frontend.
 
-``analyze(vendor, text)`` fa da dispatcher: ritorna ``None`` per vendor non
-supportati.
+``analyze(vendor, text)`` acts as a dispatcher: returns ``None`` for unsupported
+vendors.
 """
 from . import fortios, panos
 
@@ -14,6 +14,6 @@ _VENDORS = {"fortios": fortios, "panos": panos}
 
 
 def analyze(vendor, text):
-    """Dispatch verso l'analizzatore del vendor. Ritorna l'envelope o None."""
+    """Dispatches to the vendor's analyzer. Returns the envelope or None."""
     mod = _VENDORS.get((vendor or '').strip().lower())
     return mod.analyze(text) if mod else None

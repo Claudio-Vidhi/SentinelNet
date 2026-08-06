@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 
 from core import data_config
 from core import db
-from security import crypto_vault  # compat per test_observability_ui.py
+from security import crypto_vault  # compat for test_observability_ui.py
 
 from core.app_settings import (  # noqa: F401
     PORT, _app_adv_setting, get_app_settings, save_app_settings,
@@ -42,8 +42,12 @@ async def lifespan(app: "FastAPI"):
     from services import audit_checklist
     audit_checklist.seed_default_template()
 
+    from services import ping_monitor
+    ping_monitor.start()
+
     yield
 
+    ping_monitor.stop()
     await listener_manager.shutdown()
     db.stop_writer()
 
@@ -126,7 +130,7 @@ app.add_middleware(
 _CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
-    # I font sono serviti da static/fonts/: le origini Google non servono piu'.
+    # Fonts are served from static/fonts/: Google origins are no longer needed.
     "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
     "font-src 'self' https://cdnjs.cloudflare.com; "
     "img-src 'self' data:; "
@@ -149,7 +153,7 @@ def get_resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
-# Monta gli asset statici (JS/CSS) estratti dal dashboard.html
+# Mount the static assets (JS/CSS) extracted from dashboard.html
 app.mount("/static", StaticFiles(directory=get_resource_path("static")), name="static")
 
 @app.get("/")

@@ -131,6 +131,52 @@ def set_app_advanced_settings(payload: dict, current_user = Depends(require_admi
     return {"status": "success", "restart_required": True, "settings": saved}
 
 
+class PingMonitorSchema(BaseModel):
+    enabled: bool
+    interval_seconds: int = Field(default=60, ge=5, le=86400)
+
+
+@router.get("/api/settings/ping-monitor")
+def get_ping_monitor_settings(current_user = Depends(require_admin)):
+    """Configurazione corrente del monitor ping continuo."""
+    from services import ping_monitor
+    return ping_monitor.get_config()
+
+
+@router.post("/api/settings/ping-monitor")
+def set_ping_monitor_settings(payload: PingMonitorSchema,
+                              current_user = Depends(require_admin)):
+    """Attiva/disattiva il monitor ping continuo e ne imposta l'intervallo.
+    Applicato subito, senza riavvio."""
+    from services import ping_monitor
+    cfg = ping_monitor.save_config(payload.enabled, payload.interval_seconds,
+                                   current_user.get('sub'))
+    return {"status": "success", **cfg}
+
+
+@router.get("/api/ping-monitor/status")
+def ping_monitor_status(current_user = Depends(get_current_user)):
+    """Stato up/down di tutti i dispositivi monitorati, con scoping per tenant."""
+    from services import ping_monitor, inventory_manager
+    from routers.deps import user_group_scope
+    status = ping_monitor.get_status()
+    scope = user_group_scope(current_user)
+    if scope is not None:
+        ips_in_scope = {
+            (d.get("IP") or "").strip()
+            for d in inventory_manager.get_all_devices()
+            if (d.get("Group") or "Generale") in scope
+        }
+        status["devices"] = [d for d in status["devices"] if d["ip"] in ips_in_scope]
+        up_count = sum(1 for d in status["devices"] if d["up"])
+        status["summary"] = {
+            "total": len(status["devices"]),
+            "up": up_count,
+            "down": len(status["devices"]) - up_count,
+        }
+    return status
+
+
 class SnmpDefaultSchema(BaseModel):
     tenant: str
     community: str = ""          # "" rimuove il default
