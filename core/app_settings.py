@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Impostazioni applicative e risoluzione host/porta.
+"""Application settings and host/port resolution.
 
-Spostate qui da app_server.py (fase 6.6) per essere usate dai router modulari
-e da main() senza import circolari: routers/observability.py importava
-get_app_settings/save_app_settings da app_server dentro la funzione proprio
-per evitare il ciclo. app_server reimporta questi nomi, quindi i punti di
-patch dei test restano invariati.
+Moved here from app_server.py (phase 6.6) to be used by modular routers
+and by main() without circular imports: routers/observability.py imported
+get_app_settings/save_app_settings from app_server inside the function
+precisely to avoid the cycle. app_server re-imports these names, so the
+test patch points remain unchanged.
 
-Il file app_settings.json e' tollerante a mancanza/corruzione: in entrambi i
-casi si legge {}.
+The app_settings.json file is tolerant to absence/corruption: in both
+cases {} is read.
 """
 
 import json
@@ -22,10 +22,10 @@ PORT = 8765
 
 
 def _app_adv_setting(key, default=None):
-    """Legge una chiave dalla sezione 'app' di app_settings.json (impostazioni
-    avanzate configurabili da GUI). Usata anche a import-time, prima che
-    get_app_settings sia definita. Le variabili d'ambiente hanno la precedenza
-    nei singoli punti di lettura."""
+    """Reads a key from the 'app' section of app_settings.json (advanced
+    settings configurable from GUI). Also used at import-time, before
+    get_app_settings is defined. Environment variables take precedence
+    at each read point."""
     try:
         with open(data_config.get_path("app_settings.json"), encoding="utf-8") as fh:
             return ((json.load(fh) or {}).get("app") or {}).get(key, default)
@@ -34,7 +34,7 @@ def _app_adv_setting(key, default=None):
 
 
 def effective_port() -> int:
-    """Porta HTTP effettiva: env SENTINELNET_PORT > app_settings 'app.port' > 8765."""
+    """Effective HTTP port: env SENTINELNET_PORT > app_settings 'app.port' > 8765."""
     try:
         return int(os.environ.get("SENTINELNET_PORT") or _app_adv_setting("port") or PORT)
     except (TypeError, ValueError):
@@ -44,7 +44,7 @@ def effective_port() -> int:
 _app_settings_lock = threading.Lock()
 
 def get_app_settings() -> dict:
-    """Legge app_settings.json. Ritorna {} se assente o corrotto."""
+    """Reads app_settings.json. Returns {} if absent or corrupt."""
     path = data_config.get_path("app_settings.json")
     with _app_settings_lock:
         try:
@@ -55,7 +55,7 @@ def get_app_settings() -> dict:
             return {}
 
 def save_app_settings(settings: dict) -> None:
-    """Salva (merge) le impostazioni su app_settings.json."""
+    """Saves (merges) settings to app_settings.json."""
     path = data_config.get_path("app_settings.json")
     with _app_settings_lock:
         current = {}
@@ -71,15 +71,15 @@ def save_app_settings(settings: dict) -> None:
             json.dump(current, fh, indent=2)
 
 def list_local_ips() -> list:
-    """Enumera gli IP locali senza dipendenze aggiuntive. Include sempre
-    '0.0.0.0' (tutte le interfacce) e '127.0.0.1'; esclude i link-local 169.254.*."""
+    """Enumerates local IPs without additional dependencies. Always includes
+    '0.0.0.0' (all interfaces) and '127.0.0.1'; excludes link-local 169.254.*."""
     ips = set()
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ips.add(info[4][0])
     except OSError:
         pass
-    # Trucco UDP-connect: ricava l'IP dell'interfaccia usata verso l'esterno.
+    # UDP-connect trick: obtains the IP of the interface used toward the outside.
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
@@ -95,7 +95,7 @@ def list_local_ips() -> list:
     return ["0.0.0.0", "127.0.0.1"] + sorted(ips)
 
 def resolve_bind_host() -> str:
-    """Ordine di risoluzione dell'host di bind: env SENTINELNET_HOST >
+    """Bind host resolution order: env SENTINELNET_HOST >
     app_settings.json 'host' > '127.0.0.1'."""
     env = os.environ.get("SENTINELNET_HOST")
     if env:

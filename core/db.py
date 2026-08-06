@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Strato di accesso async-safe a observability.db (SQLite, WAL).
+"""Async-safe access layer to observability.db (SQLite, WAL).
 
-Regole (vedi CONTRIBUTING.md §3 e docs/adr/0004-single-process-sqlite-writer.md):
-- UNICA connessione in scrittura, posseduta dal thread writer dedicato.
-- Le scritture NON si fanno mai direttamente: si accodano con
-  ``enqueue_write()`` (coda bounded, non bloccante; se piena il payload viene
-  scartato e conteggiato in ``metrics``).
-- Le letture dagli endpoint async passano da ``read()`` (off-load su thread,
-  connessione read-only per chiamata: WAL consente letture concorrenti).
-- ``get_observability_connection()`` è SOLO per migrazioni e test: vietata
-  nei percorsi async (gate di CI via grep).
+Rules (see CONTRIBUTING.md §3 and docs/adr/0004-single-process-sqlite-writer.md):
+- SINGLE write connection, owned by the dedicated writer thread.
+- Writes are NEVER done directly: they are enqueued via
+  ``enqueue_write()`` (bounded, non-blocking queue; if full the payload is
+  dropped and counted in ``metrics``).
+- Reads from async endpoints go through ``read()`` (off-loaded to a thread,
+  read-only connection per call: WAL allows concurrent reads).
+- ``get_observability_connection()`` is ONLY for migrations and tests: forbidden
+  in async paths (CI gate via grep).
 
-Il writer esegue commit BATCH: consuma fino a ``BATCH_SIZE`` payload o quanto
-disponibile, esegue, un solo commit. Crash del writer → riavvio automatico
-con tentativi limitati; oltre il limite le scritture vengono scartate con
-metrica (l'app resta viva, §2.7 del piano).
+The writer performs BATCH commits: consumes up to ``BATCH_SIZE`` payloads or
+whatever is available, executes, a single commit. Writer crash → automatic restart
+with limited attempts; beyond the limit writes are dropped with a metric
+(the app stays alive, §2.7 of the plan).
 """
 
 import asyncio
@@ -30,11 +30,11 @@ from core import data_config
 
 logger = logging.getLogger("sentinelnet.db")
 
-SCHEMA_VERSION = 9          # versione schema supportata da questo codice (v9: conversazioni AI)
-QUEUE_MAX = 10_000          # payload massimi in coda scritture
-BATCH_SIZE = 500            # payload massimi per singolo commit
-MAX_WRITER_RESTARTS = 5     # riavvii writer consentiti prima del fail-open
-CLOCK_SKEW_MAX_S = 300      # tolleranza timestamp exporter (±300s, §1.4)
+SCHEMA_VERSION = 9          # schema version supported by this code (v9: AI conversations)
+QUEUE_MAX = 10_000          # max payloads in the write queue
+BATCH_SIZE = 500            # max payloads per single commit
+MAX_WRITER_RESTARTS = 5     # writer restarts allowed before fail-open
+CLOCK_SKEW_MAX_S = 300      # exporter timestamp tolerance (±300s, §1.4)
 
 metrics = {
     "writes_ok": 0,
@@ -54,9 +54,9 @@ def get_db_path() -> str:
 
 
 def _schema_path() -> str:
-    """Percorso di schema.sql, funzionante da sorgente, exe bundled e Docker."""
-    # In sorgente questo modulo vive in core/, quindi la root del repo e' un
-    # livello sopra; nell'exe bundled (_MEIPASS) invece resta la root stessa.
+    """Path to schema.sql, working from source, bundled exe, and Docker."""
+    # In source this module lives in core/, so the repo root is one
+    # level up; in the bundled exe (_MEIPASS) instead it stays the root itself.
     src_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base = getattr(sys, "_MEIPASS", src_root)
     return os.path.join(base, "observability", "storage", "schema.sql")
@@ -72,27 +72,26 @@ def _configure(conn: sqlite3.Connection) -> sqlite3.Connection:
 
 
 def get_observability_connection() -> sqlite3.Connection:
-    """SOLO per migrazioni e test. Mai nei percorsi async (vedi CONTRIBUTING.md)."""
+    """ONLY for migrations and tests. Never in async paths (see CONTRIBUTING.md)."""
     return _configure(sqlite3.connect(get_db_path()))
 
 
 class SchemaTooNewError(RuntimeError):
-    """Il DB è stato scritto da una versione più recente del codice."""
+    """The DB was written by a newer version of the code."""
     pass
 
 
 def _migrate_v7_evidence(conn: sqlite3.Connection) -> None:
-    """v7: ``correlated_events`` e ``incident_events`` vengono sostituiti da
-    ``evidence``. Le righe esistenti sono TRAVASATE, non buttate: ogni evento
-    correlato diventa un'evidenza con ruolo 'trigger' e provenienza
+    """v7: ``correlated_events`` and ``incident_events`` are replaced by
+    ``evidence``. Existing rows are TRANSFERRED, not thrown away: each correlated
+    event becomes an evidence with role 'trigger' and source
     LEGACY_CORRELATOR.
 
-    Limite dichiarato: ``event_id`` viene risolto solo dove l'evento syslog
-    d'origine esiste ancora nel modello normalizzato. I correlati più vecchi
-    della retention syslog (7 giorni contro i 90 dei correlati) non hanno un
-    evento a cui puntare e restano con ``event_id`` NULL — il loro contenuto
-    originale è comunque conservato in ``attrs_json``, quindi non si perde
-    nulla.
+    Stated limitation: ``event_id`` is resolved only where the originating syslog
+    event still exists in the normalized model. Correlates older than
+    the syslog retention (7 days vs the 90 of correlates) have no
+    event to point to and remain with ``event_id`` NULL — their original
+    content is still preserved in ``attrs_json``, so nothing is lost.
     """
     tables = {r["name"] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
@@ -126,11 +125,11 @@ def _migrate_v7_evidence(conn: sqlite3.Connection) -> None:
 
 
 def migrate() -> None:
-    """Applica lo schema (idempotente, forward-only) e registra la versione.
+    """Applies the schema (idempotent, forward-only) and records the version.
 
-    Guardia di downgrade: se il DB dichiara una versione più nuova di quella
-    supportata dal codice, l'osservabilità rifiuta di partire (l'app di
-    gestione resta su) — contratto di rollback del piano (§6.3).
+    Downgrade guard: if the DB declares a newer version than the one
+    supported by the code, observability refuses to start (the management
+    app stays up) — rollback contract of the plan (§6.3).
     """
     conn = get_observability_connection()
     try:
@@ -138,7 +137,7 @@ def migrate() -> None:
         try:
             row = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
         except sqlite3.OperationalError:
-            pass  # DB nuovo: schema_version non esiste ancora
+            pass  # New DB: schema_version does not exist yet
         current = row["v"] if row and row["v"] is not None else 0
         if current > SCHEMA_VERSION:
             raise SchemaTooNewError(
@@ -148,16 +147,16 @@ def migrate() -> None:
             )
         with open(_schema_path(), encoding="utf-8") as f:
             conn.executescript(f.read())
-        # v3: colonna 'source' su DB pre-esistenti (ALTER idempotente:
-        # CREATE TABLE IF NOT EXISTS non tocca le tabelle già create).
+        # v3: 'source' column on pre-existing DBs (idempotent ALTER:
+        # CREATE TABLE IF NOT EXISTS does not touch already-created tables).
         cols = {r["name"] for r in conn.execute(
             "PRAGMA table_info(flow_aggregates)").fetchall()}
         if "source" not in cols:
             conn.execute("ALTER TABLE flow_aggregates ADD COLUMN source TEXT")
         if current and current < 7:
             _migrate_v7_evidence(conn)
-        # v8: colonne del ciclo di vita su una tabella evidence preesistente
-        # (CREATE TABLE IF NOT EXISTS non tocca le tabelle già create).
+        # v8: lifecycle columns on a pre-existing evidence table
+        # (CREATE TABLE IF NOT EXISTS does not touch already-created tables).
         ev_cols = {r["name"] for r in conn.execute(
             "PRAGMA table_info(evidence)").fetchall()}
         for column, ddl in (
@@ -176,10 +175,10 @@ def migrate() -> None:
         conn.close()
 
 
-# --- LETTURE (async, executor-offloaded) ------------------------------------
+# --- READS (async, executor-offloaded) ------------------------------------
 
 async def read(sql: str, params: tuple = ()) -> list:
-    """Esegue una SELECT su un thread (mai nel loop) e ritorna le righe."""
+    """Runs a SELECT on a thread (never in the loop) and returns the rows."""
     def _run():
         conn = _configure(sqlite3.connect(get_db_path()))
         try:
@@ -189,11 +188,11 @@ async def read(sql: str, params: tuple = ()) -> list:
     return await asyncio.to_thread(_run)
 
 
-# --- SCRITTURE (coda bounded + writer dedicato) ------------------------------
+# --- WRITES (bounded queue + dedicated writer) ------------------------------
 
 def enqueue_write(sql: str, params: tuple = ()) -> bool:
-    """Accoda una scrittura. Non blocca mai: se la coda è piena il payload è
-    scartato (metrica ``writes_dropped_queue_full``) e ritorna False."""
+    """Enqueues a write. Never blocks: if the queue is full the payload is
+    dropped (metric ``writes_dropped_queue_full``) and returns False."""
     try:
         _write_queue.put_nowait((sql, params))
         return True
@@ -203,9 +202,9 @@ def enqueue_write(sql: str, params: tuple = ()) -> bool:
 
 
 def flow_window_start(export_ts, receive_ts=None) -> int:
-    """Bucket al minuto per un flusso (§1.4): usa il timestamp dell'exporter
-    se entro ±300s dalla ricezione, altrimenti il tempo di ricezione
-    (metrica ``clock_skew_fallback``)."""
+    """Per-minute bucket for a flow (§1.4): uses the exporter timestamp
+    if within ±300s of reception, otherwise the reception time
+    (metric ``clock_skew_fallback``)."""
     now = int(receive_ts if receive_ts is not None else time.time())
     try:
         ts = int(export_ts)
@@ -236,8 +235,8 @@ DO UPDATE SET
 def enqueue_flow(tenant: str, src_ip: str, dst_ip: str, protocol, dst_port,
                  total_bytes: int, total_packets: int, exporter_ip: str,
                  export_ts=None, receive_ts=None, source=None) -> bool:
-    """Accoda l'UPSERT di aggregazione al minuto per un flusso (§1.4).
-    ``source``: nome del listener di origine (ipfix|netflow|sflow)."""
+    """Enqueues the per-minute aggregation UPSERT for a flow (§1.4).
+    ``source``: name of the source listener (ipfix|netflow|sflow)."""
     return enqueue_write(FLOW_UPSERT_SQL, (
         flow_window_start(export_ts, receive_ts), tenant, src_ip, dst_ip,
         protocol, dst_port, int(total_bytes or 0), int(total_packets or 0),
@@ -246,7 +245,7 @@ def enqueue_flow(tenant: str, src_ip: str, dst_ip: str, protocol, dst_port,
 
 
 def _writer_loop():
-    """Loop del thread writer: unica connessione in scrittura, commit batch."""
+    """Writer thread loop: single write connection, batch commit."""
     conn = get_observability_connection()
     try:
         while not _stop_event.is_set() or not _write_queue.empty():
@@ -266,9 +265,9 @@ def _writer_loop():
                 conn.commit()
                 metrics["writes_ok"] += len(batch)
             except sqlite3.Error:
-                # Un payload difettoso non deve far perdere l'intero batch:
-                # rollback e riesecuzione item-per-item, scartando solo i
-                # payload che falliscono (l'app resta viva, §2.7).
+                # A faulty payload must not lose the whole batch:
+                # rollback and re-execution item-per-item, dropping only the
+                # payloads that fail (the app stays alive, §2.7).
                 conn.rollback()
                 for sql, params in batch:
                     try:
@@ -284,12 +283,12 @@ def _writer_loop():
 
 
 def _writer_supervisor():
-    """Supervisiona il writer: riavvio su crash, con tentativi limitati."""
+    """Supervises the writer: restart on crash, with limited attempts."""
     restarts = 0
     while not _stop_event.is_set():
         try:
             _writer_loop()
-            return  # uscita pulita (stop richiesto)
+            return  # clean exit (stop requested)
         except Exception as e:
             restarts += 1
             metrics["writer_restarts"] = restarts
@@ -306,7 +305,7 @@ def _writer_supervisor():
 
 
 def start_writer() -> None:
-    """Avvia migrazione + thread writer (chiamato dal lifespan dell'app)."""
+    """Starts migration + writer thread (called by the app lifespan)."""
     global _writer_thread
     if _writer_thread and _writer_thread.is_alive():
         return
@@ -318,7 +317,7 @@ def start_writer() -> None:
 
 
 def stop_writer(drain_timeout: float = 10.0) -> None:
-    """Ferma il writer drenando la coda (best-effort entro il timeout)."""
+    """Stops the writer draining the queue (best-effort within the timeout)."""
     global _writer_thread
     if not _writer_thread:
         return
