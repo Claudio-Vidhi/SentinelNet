@@ -8,16 +8,16 @@ from security import secure_key_store
 KEY_FILE = data_config.get_path("secret.key")
 
 def load_or_create_key():
-    # 1. Tenta prima di caricare la Master Key dalla variabile d'ambiente
+    # 1. First tries to load the Master Key from the environment variable
     env_key = os.getenv("SENTINELNET_MASTER_KEY")
     if env_key:
-        # Genera deterministica chiave Fernet valida a 32 byte base64-encoded tramite hashing SHA-256
+        # Derives a deterministic valid 32-byte base64-encoded Fernet key via SHA-256 hashing
         hashed = hashlib.sha256(env_key.encode('utf-8')).digest()
         return base64.urlsafe_b64encode(hashed)
 
-    # 2. Fallback su file locale persistente, protetto a riposo con DPAPI su
-    #    Windows (il file copiato altrove è inservibile). I file legacy in chiaro
-    #    vengono migrati in-place mantenendo la stessa chiave.
+    # 2. Fallback to a persistent local file, protected at rest with DPAPI on
+    #    Windows (a file copied elsewhere is unusable). Legacy plaintext files
+    #    are migrated in-place keeping the same key.
     return secure_key_store.load_or_create(KEY_FILE, Fernet.generate_key)
 
 CIPHER_SUITE = Fernet(load_or_create_key())

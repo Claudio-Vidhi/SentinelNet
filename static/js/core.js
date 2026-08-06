@@ -639,7 +639,14 @@ function switchTab(tabId, clickedBtn) {
 
     if (tabId === 'tab-home') {
         loadHome();
-    } else if (tabId === 'tab-devices') {
+    } else {
+        // Leaving home: stop the ping-monitor auto-refresh so it doesn't keep
+        // polling and re-rendering a hidden tab. loadHome() re-arms it on return.
+        if (typeof _pingRefreshTimer !== 'undefined' && _pingRefreshTimer) {
+            clearInterval(_pingRefreshTimer); _pingRefreshTimer = null;
+        }
+    }
+    if (tabId === 'tab-devices') {
         renderDeviceTable();
     } else if (tabId === 'tab-provisioning') {
         loadProvisioningTab();

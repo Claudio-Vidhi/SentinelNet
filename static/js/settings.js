@@ -412,6 +412,7 @@
         const d = await res.json();
         renderAppSettings(d);
         loadCliBlacklistSetting();
+        loadPingMonitorSettings();
         loadObsSettings();
         loadAppAdvSettings();
     }
@@ -575,4 +576,64 @@
         }
         const notice = document.getElementById('netSettingsNotice');
         if (notice) notice.textContent = L.msgRestartRequired;
+    }
+
+    // --- MONITOR PING CONTINUO (solo admin) ---
+
+    async function loadPingMonitorSettings() {
+        if (currentRole !== 'admin') return;
+        const toggle = document.getElementById('pingMonitorToggle');
+        const intervalEl = document.getElementById('pingMonitorInterval');
+        if (!toggle || !intervalEl) return;
+        const res = await apiFetch('/api/settings/ping-monitor');
+        if (!res || !res.ok) return;
+        const cfg = await res.json();
+        toggle.checked = !!cfg.enabled;
+        intervalEl.value = cfg.interval_seconds || 60;
+        loadPingMonitorStatus();
+    }
+
+    async function savePingMonitorSettings() {
+        const toggle = document.getElementById('pingMonitorToggle');
+        const intervalEl = document.getElementById('pingMonitorInterval');
+        const statusEl = document.getElementById('pingMonitorStatus');
+        if (!toggle || !intervalEl) return;
+        const L = i18n[currentLang];
+        const interval = parseInt(intervalEl.value, 10);
+        if (!Number.isFinite(interval) || interval < 5 || interval > 86400) {
+            if (statusEl) statusEl.textContent = L.msgPingMonitorIntervalInvalid || 'Intervallo non valido (5–86400 secondi).';
+            return;
+        }
+        const res = await apiFetch('/api/settings/ping-monitor', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: toggle.checked, interval_seconds: interval })
+        });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || '');
+            return;
+        }
+        if (statusEl) statusEl.textContent = L.msgPingMonitorSaved || 'Impostazioni monitor ping salvate.';
+        loadPingMonitorStatus();
+    }
+
+    async function loadPingMonitorStatus() {
+        const summaryEl = document.getElementById('pingMonitorSummary');
+        const statusEl = document.getElementById('pingMonitorStatus');
+        if (!summaryEl) return;
+        const L = i18n[currentLang];
+        const res = await apiFetch('/api/ping-monitor/status');
+        if (!res || !res.ok) { summaryEl.innerHTML = ''; return; }
+        const st = await res.json();
+        const lastRun = st.last_run ? new Date(st.last_run * 1000).toLocaleString() : '—';
+        if (statusEl) {
+            statusEl.textContent = st.enabled
+                ? `${L.lblPingMonitorLastRun || 'Ultimo ciclo'}: ${lastRun}`
+                : (L.msgPingMonitorDisabled || 'Monitor ping disattivato.');
+        }
+        const s = st.summary || { total: 0, up: 0, down: 0 };
+        summaryEl.innerHTML = `
+            <span class="chip">${escapeHtml(L.lblPingMonitorTotal || 'Dispositivi')}: ${s.total}</span>
+            <span class="status ok"><span class="led led-success"></span>${escapeHtml(L.lblPingMonitorUp || 'Up')}: ${s.up}</span>
+            <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>`;
     }

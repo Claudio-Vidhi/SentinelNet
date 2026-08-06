@@ -2839,6 +2839,29 @@
         <div id="cliBlacklistStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
       </div>
 
+      <!-- Ambito: monitor ping continuo -->
+      <div class="panel requires-admin" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-signal" style="color:var(--primary);"></i> <span data-i18n="titlePingMonitor">Monitor Ping Continuo</span></h3>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descPingMonitor">
+          Invia ping ICMP a tutti i dispositivi dell'inventario a un intervallo configurabile e traccia lo stato up/down. Le modifiche sono applicate subito, senza riavvio.
+        </p>
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;">
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+            <input type="checkbox" id="pingMonitorToggle">
+            <span style="font-size:13px;" data-i18n="lblPingMonitorEnabled">Attiva monitor ping</span>
+          </label>
+          <div class="form-group" style="margin:0; max-width:180px;">
+            <label style="font-size:12px;" data-i18n="lblPingMonitorInterval">Intervallo (secondi)</label>
+            <input type="number" id="pingMonitorInterval" min="5" max="86400" value="60" style="padding-left:12px;">
+          </div>
+          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="savePingMonitorSettings()">
+            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
+          </button>
+        </div>
+        <div id="pingMonitorStatus" style="font-size:12px; color:var(--text-muted);"></div>
+        <div id="pingMonitorSummary" style="margin-top:10px; display:flex; gap:12px; flex-wrap:wrap;"></div>
+      </div>
+
       <!-- Ambito: observability (telemetria) -->
       <div class="panel requires-admin" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-satellite-dish" style="color:var(--primary);"></i> <span data-i18n="titleObsSettings">Observability (IPFIX/sFlow/syslog/NetFlow)</span></h3>
@@ -3496,7 +3519,12 @@
         return { cls: 'bad', led: 'led-danger', key: 'homeStOffline' };
     }
 
+    let _pingRefreshTimer = null;
+
     async function loadHome() {
+        // Reset any previous auto-refresh timer; it will be re-armed below if
+        // the ping monitor is still active.
+        if (_pingRefreshTimer) { clearInterval(_pingRefreshTimer); _pingRefreshTimer = null; }
         // Reuse the globals cached at login; fetch only if empty (same shape as appInit).
         if (!globalDevices || globalDevices.length === 0) {
             const res = await apiFetch('/api/local-devices');
@@ -3507,6 +3535,25 @@
                 globalVersions = data.detected_versions || {};
             }
         }
+        // When the continuous ping monitor is active, its results are the
+        // authoritative source for up/down state — fresher than the last scan.
+        try {
+            const pmRes = await apiFetch('/api/ping-monitor/status');
+            if (pmRes && pmRes.ok) {
+                const pm = await pmRes.json();
+                if (pm.enabled && pm.devices && pm.devices.length) {
+                    pm.devices.forEach(d => {
+                        if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
+                        globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                    });
+                    // Keep the home tab live: re-poll at the monitor cadence.
+                    // loadHome() is cheap here — globalDevices is cached, so
+                    // only the ping status and the render are repeated.
+                    const ms = Math.max(5, pm.interval_seconds || 60) * 1000;
+                    _pingRefreshTimer = setInterval(() => loadHome(), ms);
+                }
+            }
+        } catch (_) { /* monitor endpoint optional */ }
         const devs = globalDevices || [];
 
         let online = 0;
