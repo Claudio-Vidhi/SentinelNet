@@ -900,3 +900,43 @@ function openPortInAnalyzer(switchIp, port) {
     closePortConfigModal();
     switchTab('tab-config');
 }
+
+// --- GLOBAL KEYBOARD SHORTCUTS (Power User Alex) ---
+let _gPendingKey = false;
+let _gPendingTimer = null;
+
+document.addEventListener('keydown', e => {
+    const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+    const isInput = activeTag === 'input' || activeTag === 'select' || activeTag === 'textarea' || (document.activeElement && document.activeElement.isContentEditable);
+
+    if (e.key === 'Escape') {
+        closePortConfigModal();
+        return;
+    }
+
+    if (isInput) return;
+
+    if (e.key === '/' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        const searchEl = document.querySelector('input[type="search"], input[placeholder*="Search"], input[placeholder*="Cerca"]');
+        if (searchEl) searchEl.focus();
+        return;
+    }
+
+    if (e.key === 'g' && !_gPendingKey) {
+        _gPendingKey = true;
+        clearTimeout(_gPendingTimer);
+        _gPendingTimer = setTimeout(() => { _gPendingKey = false; }, 1000);
+        return;
+    }
+
+    if (_gPendingKey) {
+        _gPendingKey = false;
+        clearTimeout(_gPendingTimer);
+        const target = e.key.toLowerCase();
+        if (target === 'h') switchTab('tab-home');
+        else if (target === 's') switchTab('tab-settings');
+        else if (target === 'd') switchTab('tab-devices');
+        else if (target === 'a') switchTab('tab-ai-chat');
+    }
+});
