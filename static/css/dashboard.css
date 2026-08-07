@@ -812,6 +812,27 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--text); }
 .hero-card { padding: 18px 20px 20px; }
 .vuln-card { padding: 14px 16px; margin-bottom: 12px; }
 
+/* --- DROPDOWN ELEVATION & STACKING --- */
+details[open] {
+  position: relative !important;
+  z-index: 1000 !important;
+}
+
+.panel:has(details[open]),
+.hero-card:has(details[open]),
+.filterbar:has(details[open]),
+.panel.has-open-dropdown,
+.hero-card.has-open-dropdown {
+  z-index: 500 !important;
+  position: relative !important;
+}
+
+details[open] > div[id*="List"],
+details[open] > div[id*="Menu"],
+#categoryColumnsList {
+  z-index: 10000 !important;
+}
+
 /* Intestazione di bay: targa incisa a filo del bordo superiore */
 .panel > h3:first-child {
   margin: -16px -18px 14px;

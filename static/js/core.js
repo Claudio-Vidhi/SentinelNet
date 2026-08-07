@@ -940,3 +940,23 @@ document.addEventListener('keydown', e => {
         else if (target === 'a') switchTab('tab-ai-chat');
     }
 });
+
+// --- DROPDOWN STACKING ELEVATION (Fix clipped dropdown menus across themes) ---
+document.addEventListener('toggle', function(e) {
+    if (e.target && e.target.tagName === 'DETAILS') {
+        const panel = e.target.closest('.panel, .hero-card, .filterbar, aside, main');
+        if (panel) {
+            if (e.target.open) {
+                panel.style.zIndex = '500';
+                panel.style.position = 'relative';
+                panel.classList.add('has-open-dropdown');
+            } else {
+                const hasOtherOpen = panel.querySelector('details[open]');
+                if (!hasOtherOpen) {
+                    panel.style.zIndex = '';
+                    panel.classList.remove('has-open-dropdown');
+                }
+            }
+        }
+    }
+}, true);
