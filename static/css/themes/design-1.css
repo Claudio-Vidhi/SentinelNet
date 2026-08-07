@@ -1,6 +1,101 @@
-/* Impeccable UI Design 1 - Theme Variant */
+/* =====================================================================
+   Impeccable UI Design 1: Modern Blue (Clean Glassmorphic Enterprise)
+   ===================================================================== */
 :root[data-ui-variant="design-1"] {
-    --primary-color: #0284c7;
-    --accent-color: #38bdf8;
-    --card-border-radius: 12px;
+  --bg: #0b1329;
+  --surface: #131f37;
+  --surface-2: #1b2a47;
+  --surface-3: #243656;
+  --border: #25395c;
+  --border-strong: #38bdf8;
+
+  --text: #f0f9ff;
+  --text-muted: #94a3b8;
+  --text-soft: #cbd5e1;
+
+  --cta: #0284c7;
+  --cta-text: #ffffff;
+  --cta-press: #0369a1;
+
+  --primary: #38bdf8;
+  --lamp-up: #10b981;
+  --lamp-warn: #f59e0b;
+  --lamp-fault: #ef4444;
+  --lamp-idle: #64748b;
+
+  --lamp-up-wash: rgba(16, 185, 129, 0.18);
+  --lamp-warn-wash: rgba(245, 158, 11, 0.18);
+  --lamp-fault-wash: rgba(239, 68, 68, 0.18);
+  --shadow-float: 0 20px 35px -10px rgba(2, 132, 199, 0.25);
+  --shadow-lift: 0 10px 20px -5px rgba(2, 132, 199, 0.15);
+}
+
+:root[data-ui-variant="design-1"] body {
+  background: radial-gradient(circle at 50% 0%, #15294a 0%, #0b1329 70%) fixed;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+:root[data-ui-variant="design-1"] .panel,
+:root[data-ui-variant="design-1"] .hero-card,
+:root[data-ui-variant="design-1"] .card {
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  background: rgba(19, 31, 55, 0.75);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+:root[data-ui-variant="design-1"] .panel:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 12px 40px 0 rgba(2, 132, 199, 0.2);
+}
+
+:root[data-ui-variant="design-1"] .sidenav {
+  background: rgba(11, 19, 41, 0.9);
+  border-right: 1px solid rgba(56, 189, 248, 0.15);
+  backdrop-filter: blur(16px);
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item {
+  border-radius: 8px;
+  margin: 2px 8px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item.active {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 14px 0 rgba(2, 132, 199, 0.39);
+}
+
+:root[data-ui-variant="design-1"] .btn-primary {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 4px 14px 0 rgba(56, 189, 248, 0.3);
+  transition: all 0.2s ease;
+}
+
+:root[data-ui-variant="design-1"] .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(56, 189, 248, 0.45);
+}
+
+:root[data-ui-variant="design-1"] table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:root[data-ui-variant="design-1"] th {
+  background: #1b2a47;
+  color: #38bdf8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
 }
