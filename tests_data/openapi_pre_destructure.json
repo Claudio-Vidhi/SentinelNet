@@ -42,8 +42,161 @@
         "title": "AaaServerSchema",
         "type": "object"
       },
+      "AddEvidenceRequest": {
+        "properties": {
+          "confidential": {
+            "default": true,
+            "title": "Confidential",
+            "type": "boolean"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "item_ref": {
+            "title": "Item Ref",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          }
+        },
+        "required": [
+          "item_ref",
+          "kind"
+        ],
+        "title": "AddEvidenceRequest",
+        "type": "object"
+      },
+      "AgentArpCollection": {
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "source_ip": {
+            "title": "Source Ip",
+            "type": "string"
+          },
+          "source_name": {
+            "default": "",
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "",
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_ip"
+        ],
+        "title": "AgentArpCollection",
+        "type": "object"
+      },
+      "AgentArpSchema": {
+        "properties": {
+          "collections": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AgentArpCollection"
+            },
+            "title": "Collections",
+            "type": "array"
+          }
+        },
+        "title": "AgentArpSchema",
+        "type": "object"
+      },
+      "AgentConfigUpdateSchema": {
+        "properties": {
+          "interval": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval"
+          },
+          "syslog_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syslog Enabled"
+          },
+          "syslog_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Syslog Port"
+          }
+        },
+        "title": "AgentConfigUpdateSchema",
+        "type": "object"
+      },
       "AgentDeviceSchema": {
         "properties": {
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "hostname": {
             "default": "",
             "title": "Hostname",
@@ -63,6 +216,19 @@
           "ip"
         ],
         "title": "AgentDeviceSchema",
+        "type": "object"
+      },
+      "AgentInventorySaveSchema": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "AgentInventorySaveSchema",
         "type": "object"
       },
       "AgentInventorySchema": {
@@ -134,6 +300,43 @@
           }
         },
         "title": "AgentMacSchema",
+        "type": "object"
+      },
+      "AgentSyslogBatchSchema": {
+        "properties": {
+          "events": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AgentSyslogItemSchema"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "title": "AgentSyslogBatchSchema",
+        "type": "object"
+      },
+      "AgentSyslogItemSchema": {
+        "properties": {
+          "raw": {
+            "title": "Raw",
+            "type": "string"
+          },
+          "src_ip": {
+            "title": "Src Ip",
+            "type": "string"
+          },
+          "ts": {
+            "default": 0,
+            "title": "Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "src_ip",
+          "raw"
+        ],
+        "title": "AgentSyslogItemSchema",
         "type": "object"
       },
       "AiChatMessage": {
@@ -233,6 +436,57 @@
           "messages"
         ],
         "title": "AiChatSchema",
+        "type": "object"
+      },
+      "AiConversationSchema": {
+        "properties": {
+          "messages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AiChatMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "AiConversationSchema",
+        "type": "object"
+      },
+      "AiConversationUpdateSchema": {
+        "description": "``None`` = non modificare. Rinominare non deve riscrivere i messaggi.",
+        "properties": {
+          "messages": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AiChatMessage"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messages"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "AiConversationUpdateSchema",
         "type": "object"
       },
       "AiGenerateConfigSchema": {
@@ -425,6 +679,54 @@
         "title": "AiProfileUpdateSchema",
         "type": "object"
       },
+      "AlertSuppressSchema": {
+        "properties": {
+          "event_id": {
+            "title": "Event Id",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Confermato falso positivo",
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "event_id"
+        ],
+        "title": "AlertSuppressSchema",
+        "type": "object"
+      },
+      "BulkAssignIdentitySchema": {
+        "description": "Assegnazione massiva di un'identita' (o del profilo 'default') a più\ndispositivi: evita di ripetere l'operazione scheda per scheda.",
+        "properties": {
+          "identity_id": {
+            "title": "Identity Id",
+            "type": "string"
+          },
+          "ips": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Ips",
+            "type": "array"
+          }
+        },
+        "required": [
+          "identity_id",
+          "ips"
+        ],
+        "title": "BulkAssignIdentitySchema",
+        "type": "object"
+      },
       "BulkCommandRequest": {
         "properties": {
           "commands": {
@@ -555,6 +857,62 @@
         "title": "CliBlacklistSchema",
         "type": "object"
       },
+      "ClientDiagnosisSchema": {
+        "properties": {
+          "client": {
+            "title": "Client",
+            "type": "string"
+          },
+          "dest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dest"
+          },
+          "dest_port": {
+            "default": 443,
+            "title": "Dest Port",
+            "type": "integer"
+          },
+          "max_age_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Age S"
+          },
+          "protocol": {
+            "default": "TCP",
+            "title": "Protocol",
+            "type": "string"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "client"
+        ],
+        "title": "ClientDiagnosisSchema",
+        "type": "object"
+      },
       "CommandRequest": {
         "properties": {
           "command": {
@@ -612,6 +970,90 @@
           "target"
         ],
         "title": "ConvertSchema",
+        "type": "object"
+      },
+      "CreateEngagementRequest": {
+        "properties": {
+          "assigned_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          },
+          "customer_name": {
+            "title": "Customer Name",
+            "type": "string"
+          },
+          "interviewee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interviewee"
+          },
+          "onsite_or_remote": {
+            "default": "remote",
+            "title": "Onsite Or Remote",
+            "type": "string"
+          },
+          "scope_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Notes"
+          },
+          "site_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Id"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "customer_name"
+        ],
+        "title": "CreateEngagementRequest",
         "type": "object"
       },
       "DeviceCategorySchema": {
@@ -756,7 +1198,7 @@
       "DeviceSchema": {
         "properties": {
           "enable_secret": {
-            "default": "admin",
+            "default": "",
             "title": "Enable Secret",
             "type": "string"
           },
@@ -771,13 +1213,36 @@
             "type": "string"
           },
           "password": {
-            "default": "admin",
+            "default": "",
             "title": "Password",
             "type": "string"
           },
           "profile": {
             "title": "Profile",
             "type": "string"
+          },
+          "snmp_community": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snmp Community"
+          },
+          "snmp_disabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snmp Disabled"
           },
           "ssh_port": {
             "default": 22,
@@ -808,7 +1273,7 @@
             "title": "Transports"
           },
           "username": {
-            "default": "Admin",
+            "default": "",
             "title": "Username",
             "type": "string"
           },
@@ -885,6 +1350,11 @@
             ],
             "title": "Action"
           },
+          "cli_category": {
+            "default": "traffic",
+            "title": "Cli Category",
+            "type": "string"
+          },
           "count": {
             "default": 100,
             "title": "Count",
@@ -906,6 +1376,27 @@
             "title": "Log Device",
             "type": "string"
           },
+          "log_subtype": {
+            "default": "forward",
+            "title": "Log Subtype",
+            "type": "string"
+          },
+          "log_type": {
+            "default": "traffic",
+            "title": "Log Type",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
           "src_ip": {
             "anyOf": [
               {
@@ -916,6 +1407,17 @@
               }
             ],
             "title": "Src Ip"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
           }
         },
         "title": "FgtLogQuerySchema",
@@ -1085,6 +1587,19 @@
           "ip"
         ],
         "title": "FgtTokenSchema",
+        "type": "object"
+      },
+      "FlowControlSchema": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "title": "FlowControlSchema",
         "type": "object"
       },
       "FlowKeySchema": {
@@ -1806,19 +2321,6 @@
         "title": "FortiGateProvisionSerialSchema",
         "type": "object"
       },
-      "FortigatePreviewSchema": {
-        "properties": {
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "FortigatePreviewSchema",
-        "type": "object"
-      },
       "GroupDeleteSchema": {
         "properties": {
           "name": {
@@ -1871,6 +2373,75 @@
           "name"
         ],
         "title": "GroupSchema",
+        "type": "object"
+      },
+      "GroupWrite": {
+        "properties": {
+          "group_name": {
+            "title": "Group Name",
+            "type": "string"
+          },
+          "group_type": {
+            "title": "Group Type",
+            "type": "string"
+          },
+          "health": {
+            "default": "ok",
+            "title": "Health",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "logical_device_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logical Device Ip"
+          },
+          "members": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MemberWrite"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "virtual_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Virtual Ip"
+          }
+        },
+        "required": [
+          "group_name",
+          "group_type",
+          "name"
+        ],
+        "title": "GroupWrite",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2023,6 +2594,94 @@
         "title": "McpSettingsSchema",
         "type": "object"
       },
+      "MemberWrite": {
+        "properties": {
+          "details": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Details",
+            "type": "object"
+          },
+          "device_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Ip"
+          },
+          "firmware": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firmware"
+          },
+          "mgmt_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mgmt Ip"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "role": {
+            "default": "unknown",
+            "title": "Role",
+            "type": "string"
+          },
+          "serial": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serial"
+          },
+          "state": {
+            "default": "ready",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "title": "MemberWrite",
+        "type": "object"
+      },
       "ModelSchema": {
         "properties": {
           "model": {
@@ -2039,6 +2698,55 @@
           "model"
         ],
         "title": "ModelSchema",
+        "type": "object"
+      },
+      "NetSecAuditSchema": {
+        "properties": {
+          "benchmark": {
+            "default": "cis",
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "config_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Text"
+          },
+          "device_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Ip"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "lang": {
+            "default": "it",
+            "title": "Lang",
+            "type": "string"
+          }
+        },
+        "title": "NetSecAuditSchema",
         "type": "object"
       },
       "NetworkSettingsSchema": {
@@ -2063,6 +2771,49 @@
           }
         },
         "title": "PingCheckRequest",
+        "type": "object"
+      },
+      "PingMonitorSchema": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_seconds": {
+            "default": 60,
+            "maximum": 86400.0,
+            "minimum": 5.0,
+            "title": "Interval Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "PingMonitorSchema",
+        "type": "object"
+      },
+      "PortBounceSchema": {
+        "properties": {
+          "client_mac": {
+            "title": "Client Mac",
+            "type": "string"
+          },
+          "interface": {
+            "title": "Interface",
+            "type": "string"
+          },
+          "switch_ip": {
+            "title": "Switch Ip",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_mac",
+          "switch_ip",
+          "interface"
+        ],
+        "title": "PortBounceSchema",
         "type": "object"
       },
       "PreviewSchema": {
@@ -2284,6 +3035,24 @@
           "id"
         ],
         "title": "SiteUpdateSchema",
+        "type": "object"
+      },
+      "SnmpDefaultSchema": {
+        "properties": {
+          "community": {
+            "default": "",
+            "title": "Community",
+            "type": "string"
+          },
+          "tenant": {
+            "title": "Tenant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant"
+        ],
+        "title": "SnmpDefaultSchema",
         "type": "object"
       },
       "SubcategoryDeleteSchema": {
@@ -3102,6 +3871,144 @@
         "title": "SwitchProvisionSerialSchema",
         "type": "object"
       },
+      "TemplateItemRequest": {
+        "properties": {
+          "check_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Kind"
+          },
+          "guidance_good": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidance Good"
+          },
+          "guidance_how": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidance How"
+          },
+          "guidance_why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidance Why"
+          },
+          "is_prerequisite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Prerequisite"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "requires_evidence": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires Evidence"
+          },
+          "section_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section No"
+          },
+          "section_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Title"
+          },
+          "severity_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity Default"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "TemplateItemRequest",
+        "type": "object"
+      },
       "TriageRunRequest": {
         "properties": {
           "group": {
@@ -3111,6 +4018,118 @@
           }
         },
         "title": "TriageRunRequest",
+        "type": "object"
+      },
+      "UpdateEngagementMetadataRequest": {
+        "properties": {
+          "assigned_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          },
+          "interviewee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interviewee"
+          },
+          "onsite_or_remote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Onsite Or Remote"
+          },
+          "scope_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Notes"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "UpdateEngagementMetadataRequest",
+        "type": "object"
+      },
+      "UpdateItemAssessmentRequest": {
+        "properties": {
+          "ai_assisted": {
+            "default": false,
+            "title": "Ai Assisted",
+            "type": "boolean"
+          },
+          "finding_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Text"
+          },
+          "recommendation_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Text"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "UpdateItemAssessmentRequest",
         "type": "object"
       },
       "UserCreateSchema": {
@@ -3568,9 +4587,20 @@
         ]
       }
     },
-    "/api/agent/heartbeat": {
+    "/api/agent/arp": {
       "post": {
-        "operationId": "agent_heartbeat_api_agent_heartbeat_post",
+        "description": "L'agente spinge le tabelle ARP raccolte localmente: e' cio' che da' un\nIP ai client della sede remota. Senza, la MAC table dice a quale porta\nstanno ma non chi sono, e ogni vista a valle parte dall'IP.",
+        "operationId": "agent_push_arp_api_agent_arp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentArpSchema"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -3579,6 +4609,63 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Push Arp",
+        "tags": [
+          "Agent"
+        ]
+      }
+    },
+    "/api/agent/heartbeat": {
+      "post": {
+        "operationId": "agent_heartbeat_api_agent_heartbeat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Agent Heartbeat",
@@ -3737,6 +4824,46 @@
         ]
       }
     },
+    "/api/agent/syslog": {
+      "post": {
+        "description": "L'agente spinge un batch di eventi syslog raccolti localmente nella sede remota.",
+        "operationId": "agent_push_syslog_api_agent_syslog_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSyslogBatchSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Push Syslog",
+        "tags": [
+          "Agent"
+        ]
+      }
+    },
     "/api/ai/chat": {
       "post": {
         "operationId": "ai_chat_api_ai_chat_post",
@@ -3776,6 +4903,214 @@
           }
         ],
         "summary": "Ai Chat",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/api/ai/conversations": {
+      "get": {
+        "description": "Elenco delle conversazioni dell'utente, più recenti prima. Senza i\nmessaggi: la sidebar mostra solo i titoli.",
+        "operationId": "list_ai_conversations_api_ai_conversations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Ai Conversations",
+        "tags": [
+          "AI"
+        ]
+      },
+      "post": {
+        "operationId": "create_ai_conversation_api_ai_conversations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConversationSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Ai Conversation",
+        "tags": [
+          "AI"
+        ]
+      }
+    },
+    "/api/ai/conversations/{conversation_id}": {
+      "delete": {
+        "operationId": "delete_ai_conversation_api_ai_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Ai Conversation",
+        "tags": [
+          "AI"
+        ]
+      },
+      "get": {
+        "operationId": "get_ai_conversation_api_ai_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Ai Conversation",
+        "tags": [
+          "AI"
+        ]
+      },
+      "put": {
+        "operationId": "update_ai_conversation_api_ai_conversations__conversation_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConversationUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Ai Conversation",
         "tags": [
           "AI"
         ]
@@ -4377,6 +5712,635 @@
         "summary": "Arp Stats Ep",
         "tags": [
           "ARP"
+        ]
+      }
+    },
+    "/api/audit-checklist/engagements": {
+      "get": {
+        "description": "Elenca gli engagement di audit registrati.",
+        "operationId": "list_engagements_api_audit_checklist_engagements_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Engagements Api Audit Checklist Engagements Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Engagements",
+        "tags": [
+          "Audit Checklist"
+        ]
+      },
+      "post": {
+        "description": "Crea un nuovo audit engagement.",
+        "operationId": "create_engagement_api_audit_checklist_engagements_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEngagementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Engagement Api Audit Checklist Engagements Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Engagement",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/engagements/{engagement_id}": {
+      "get": {
+        "description": "Ottiene l'engagement completo con tutti gli item e lo stato avanzamento.",
+        "operationId": "get_engagement_api_audit_checklist_engagements__engagement_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Engagement Api Audit Checklist Engagements  Engagement Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Engagement",
+        "tags": [
+          "Audit Checklist"
+        ]
+      },
+      "patch": {
+        "description": "Aggiorna le informazioni generali o lo stato dell'engagement.",
+        "operationId": "update_engagement_metadata_api_audit_checklist_engagements__engagement_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEngagementMetadataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Engagement Metadata Api Audit Checklist Engagements  Engagement Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Engagement Metadata",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/engagements/{engagement_id}/evidence": {
+      "post": {
+        "description": "Allega un'evidenza o un riferimento ad un item di audit.",
+        "operationId": "add_evidence_api_audit_checklist_engagements__engagement_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Evidence Api Audit Checklist Engagements  Engagement Id  Evidence Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Evidence",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/engagements/{engagement_id}/items/{item_ref}": {
+      "put": {
+        "description": "Salva la valutazione di un singolo item di audit.",
+        "operationId": "update_item_assessment_api_audit_checklist_engagements__engagement_id__items__item_ref__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_ref",
+            "required": true,
+            "schema": {
+              "title": "Item Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateItemAssessmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Item Assessment Api Audit Checklist Engagements  Engagement Id  Items  Item Ref  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Item Assessment",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/engagements/{engagement_id}/report": {
+      "get": {
+        "description": "Genera e restituisce la relazione di audit in formato HTML.",
+        "operationId": "get_audit_report_api_audit_checklist_engagements__engagement_id__report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Audit Report",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/templates": {
+      "get": {
+        "description": "Elenca tutti i template di audit disponibili.",
+        "operationId": "list_templates_api_audit_checklist_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Templates Api Audit Checklist Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Templates",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/templates/{template_id}": {
+      "get": {
+        "description": "Ritorna un template di audit con i relativi item.",
+        "operationId": "get_template_api_audit_checklist_templates__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Template Api Audit Checklist Templates  Template Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Template",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/templates/{template_id}/items": {
+      "post": {
+        "description": "Aggiunge una domanda al template di audit (solo amministratori).",
+        "operationId": "create_template_item_api_audit_checklist_templates__template_id__items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Template Item Api Audit Checklist Templates  Template Id  Items Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Template Item",
+        "tags": [
+          "Audit Checklist"
+        ]
+      }
+    },
+    "/api/audit-checklist/templates/{template_id}/items/{ref}": {
+      "delete": {
+        "description": "Elimina una domanda del template, se non e' gia' stata valutata.",
+        "operationId": "delete_template_item_api_audit_checklist_templates__template_id__items__ref__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Template Item Api Audit Checklist Templates  Template Id  Items  Ref  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Template Item",
+        "tags": [
+          "Audit Checklist"
+        ]
+      },
+      "put": {
+        "description": "Modifica una domanda del template di audit (solo amministratori).",
+        "operationId": "update_template_item_api_audit_checklist_templates__template_id__items__ref__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Template Item Api Audit Checklist Templates  Template Id  Items  Ref  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Template Item",
+        "tags": [
+          "Audit Checklist"
         ]
       }
     },
@@ -5088,6 +7052,96 @@
         ]
       }
     },
+    "/api/diagnose/client": {
+      "post": {
+        "description": "Referto L2+L3 su un client: dove è attaccato, come sta la sua porta, che\nstrada fa il traffico, quale policy lo governa e quanti blocchi ha subito.\n\nSola lettura: interroga apparati e storico, non tocca nulla. Per questo\nbasta ``get_current_user`` e non ``require_operator``.",
+        "operationId": "diagnose_client_api_diagnose_client_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientDiagnosisSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Diagnose Client",
+        "tags": [
+          "Diagnosis"
+        ]
+      }
+    },
+    "/api/diagnose/port-bounce": {
+      "post": {
+        "description": "Spegne e riaccende la porta di accesso di un client.\n\nL'unica scrittura di questa tab, e l'unica di tutta la diagnosi. I due\ncontrolli sotto non sono formalità: la porta arriva da una MAC table\nscansionata a mano, e se il dato è vecchio la porta di oggi appartiene a\nqualcun altro. Staccare l'utente sbagliato è un guasto causato dallo\nstrumento che doveva ripararne uno.\n\n``require_admin``: il comando entra in modalità di configurazione. Chi può\nfarlo è la stessa categoria che può scavalcare la blacklist dei comandi.",
+        "operationId": "port_bounce_api_diagnose_port_bounce_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortBounceSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Port Bounce",
+        "tags": [
+          "Diagnosis"
+        ]
+      }
+    },
     "/api/download-backup/{ip_or_filename}": {
       "get": {
         "operationId": "download_backup_api_download_backup__ip_or_filename__get",
@@ -5133,6 +7187,189 @@
         ]
       }
     },
+    "/api/endpoints/list": {
+      "get": {
+        "description": "Gli endpoint scoperti, uno per (MAC, tenant).\n\nSola lettura sul dato gia' raccolto: non interroga nessun apparato, quindi\nbasta ``get_current_user`` e non ``require_operator``.",
+        "operationId": "endpoints_list_api_endpoints_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "site",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Site"
+            }
+          },
+          {
+            "in": "query",
+            "name": "switch",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Switch"
+            }
+          },
+          {
+            "in": "query",
+            "name": "vlan",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vlan"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stale_days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "title": "Stale Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 2000,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Endpoints List",
+        "tags": [
+          "Endpoint Inventory"
+        ]
+      }
+    },
+    "/api/endpoints/ports": {
+      "get": {
+        "description": "Stato delle porte di uno switch: occupata, uplink, libera.\n\nLe righe di ``mac_sightings`` sono scopate per tenant, ma lo switch stesso\nno (``switch_if_macs`` non ha colonna tenant): senza questo controllo un\nutente della sede A poteva chiedere l'IP di uno switch della sede B e\nriceverne comunque l'elenco interfacce, la freschezza della scansione e i\nvicini di uplink — e una porta occupata da un MAC non suo tornava \"free\",\ncioe' il referto mentiva oltre a trapelare.",
+        "operationId": "endpoints_ports_api_endpoints_ports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "switch",
+            "required": true,
+            "schema": {
+              "title": "Switch",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Endpoints Ports",
+        "tags": [
+          "Endpoint Inventory"
+        ]
+      }
+    },
     "/api/export/devices": {
       "get": {
         "operationId": "export_devices_csv_api_export_devices_get",
@@ -5154,6 +7391,265 @@
         "summary": "Export Devices Csv",
         "tags": [
           "Inventory"
+        ]
+      }
+    },
+    "/api/flow-siem/alerts/suppress": {
+      "post": {
+        "description": "Sopprime un'allerta, PERSISTENDOLA.\n\nPrima rispondeva ``{\"suppressed\": true}`` senza scrivere nulla: l'allerta\nricompariva al refresh successivo. L'evento va anche verificato nello scope\ndell'utente, altrimenti si potrebbe sopprimere un'allerta di un'altra sede.",
+        "operationId": "suppress_flow_siem_alert_api_flow_siem_alerts_suppress_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertSuppressSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Suppress Flow Siem Alert",
+        "tags": [
+          "Flow SIEM"
+        ]
+      }
+    },
+    "/api/flow-siem/events": {
+      "get": {
+        "description": "Registro eventi di sicurezza, ordinato dal piu' recente.",
+        "operationId": "get_flow_siem_events_api_flow_siem_events_get",
+        "parameters": [
+          {
+            "description": "Sottostringa su IP, azione, device, messaggio",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sottostringa su IP, azione, device, messaggio",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "Finestra temporale (15m, 1h, 24h, 7d)",
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "description": "Finestra temporale (15m, 1h, 24h, 7d)",
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filtro: ALLOW / DENY",
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filtro: ALLOW / DENY",
+              "title": "Action"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Flow Siem Events",
+        "tags": [
+          "Flow SIEM"
+        ]
+      }
+    },
+    "/api/flow-siem/facets": {
+      "get": {
+        "description": "Conteggi aggregati reali (top sorgenti/destinazioni, azioni, threat).",
+        "operationId": "get_flow_siem_facets_api_flow_siem_facets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "title": "Window",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Flow Siem Facets",
+        "tags": [
+          "Flow SIEM"
+        ]
+      }
+    },
+    "/api/flow-siem/histogram": {
+      "get": {
+        "description": "Istogramma reale degli eventi per bucket temporale.\n\nLa versione precedente non interrogava affatto il database: i valori erano\n``abs(sin(i * 0.4)) * 45`` e i deny il 15% di quelli. Le barre disegnate\nerano una sinusoide.",
+        "operationId": "get_flow_siem_histogram_api_flow_siem_histogram_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "buckets",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 100,
+              "minimum": 10,
+              "title": "Buckets",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Flow Siem Histogram",
+        "tags": [
+          "Flow SIEM"
         ]
       }
     },
@@ -5591,6 +8087,52 @@
         ]
       }
     },
+    "/api/fortigate/{ip}/firewall/address-groups": {
+      "get": {
+        "description": "Gruppi di indirizzi, sola lettura.",
+        "operationId": "fgt_firewall_address_groups_api_fortigate__ip__firewall_address_groups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Firewall Address Groups",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
     "/api/fortigate/{ip}/firewall/addresses": {
       "get": {
         "description": "Oggetti indirizzo firewall (address book), sola lettura.",
@@ -5632,6 +8174,98 @@
           }
         ],
         "summary": "Fgt Firewall Addresses",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/firewall/ip-pools": {
+      "get": {
+        "description": "IP pool (SNAT), sola lettura.",
+        "operationId": "fgt_firewall_ip_pools_api_fortigate__ip__firewall_ip_pools_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Firewall Ip Pools",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/firewall/policies-with-stats": {
+      "get": {
+        "description": "Policy firewall unite ai contatori runtime (hit, byte, sessioni):\nuna sola richiesta invece di due, e le regole mai colpite sono già\nmarcate.",
+        "operationId": "fgt_firewall_policies_with_stats_api_fortigate__ip__firewall_policies_with_stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Firewall Policies With Stats",
         "tags": [
           "FortiGate"
         ]
@@ -5683,6 +8317,98 @@
         ]
       }
     },
+    "/api/fortigate/{ip}/firewall/security-profiles": {
+      "get": {
+        "description": "Profili di sicurezza (antivirus, IPS, webfilter, application control).",
+        "operationId": "fgt_firewall_security_profiles_api_fortigate__ip__firewall_security_profiles_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Firewall Security Profiles",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/firewall/service-groups": {
+      "get": {
+        "description": "Gruppi di servizi, sola lettura.",
+        "operationId": "fgt_firewall_service_groups_api_fortigate__ip__firewall_service_groups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Firewall Service Groups",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
     "/api/fortigate/{ip}/firewall/services": {
       "get": {
         "description": "Servizi custom (firewall.service/custom), sola lettura.",
@@ -5724,6 +8450,52 @@
           }
         ],
         "summary": "Fgt Firewall Services",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/firewall/vips": {
+      "get": {
+        "description": "Virtual IP (DNAT), sola lettura.",
+        "operationId": "fgt_firewall_vips_api_fortigate__ip__firewall_vips_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Firewall Vips",
         "tags": [
           "FortiGate"
         ]
@@ -6066,6 +8838,52 @@
         ]
       }
     },
+    "/api/fortigate/{ip}/sdwan/health": {
+      "get": {
+        "description": "Qualità dei link SD-WAN (latenza, jitter, perdita per SLA).",
+        "operationId": "fgt_sdwan_health_api_fortigate__ip__sdwan_health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Sdwan Health",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
     "/api/fortigate/{ip}/sessions": {
       "post": {
         "operationId": "fgt_sessions_api_fortigate__ip__sessions_post",
@@ -6161,6 +8979,328 @@
           }
         ],
         "summary": "Fgt Status",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/system/admins": {
+      "get": {
+        "description": "Account amministrativi del FortiGate (proiettati: nessuna credenziale).\nAdmin-only: è l'elenco di chi può amministrare il firewall.",
+        "operationId": "fgt_system_admins_api_fortigate__ip__system_admins_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt System Admins",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/system/banned-users": {
+      "get": {
+        "description": "Utenti/IP in quarantena.",
+        "operationId": "fgt_system_banned_users_api_fortigate__ip__system_banned_users_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt System Banned Users",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/system/certificates": {
+      "get": {
+        "description": "Certificati disponibili con data di scadenza.",
+        "operationId": "fgt_system_certificates_api_fortigate__ip__system_certificates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt System Certificates",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/system/config-revisions": {
+      "get": {
+        "description": "Revisioni di configurazione salvate a bordo.",
+        "operationId": "fgt_system_config_revisions_api_fortigate__ip__system_config_revisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt System Config Revisions",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/system/ha": {
+      "get": {
+        "description": "Stato HA e checksum di sincronizzazione del cluster.",
+        "operationId": "fgt_system_ha_api_fortigate__ip__system_ha_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt System Ha",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/system/resources": {
+      "get": {
+        "description": "Uso CPU/memoria/disco/sessioni e ora di sistema.",
+        "operationId": "fgt_system_resources_api_fortigate__ip__system_resources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt System Resources",
+        "tags": [
+          "FortiGate"
+        ]
+      }
+    },
+    "/api/fortigate/{ip}/vpn/tunnels": {
+      "get": {
+        "description": "Stato vivo dei tunnel IPsec: quali stanno in piedi adesso, non quali\nsono configurati.",
+        "operationId": "fgt_vpn_tunnels_api_fortigate__ip__vpn_tunnels_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ip",
+            "required": true,
+            "schema": {
+              "title": "Ip",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Fgt Vpn Tunnels",
         "tags": [
           "FortiGate"
         ]
@@ -6324,6 +9464,7 @@
     },
     "/api/groups/delete": {
       "post": {
+        "description": "Elimina un tenant. Solo admin: e' distruttivo e tocca lo scope RBAC.",
         "operationId": "remove_group_api_groups_delete_post",
         "requestBody": {
           "content": {
@@ -6368,7 +9509,7 @@
     },
     "/api/groups/rename": {
       "post": {
-        "description": "Rinomina una sede/gruppo (admin/operator) e riassegna i relativi apparati.\n'Generale' non è rinominabile.",
+        "description": "Rinomina un tenant e riassegna i relativi apparati. 'Generale' non è\nrinominabile.\n\nSolo admin: rinominare un tenant riscrive l'assegnazione di TUTTI i suoi\napparati e cambia lo scope RBAC di chi vi è limitato. La creazione resta\noperator (serve durante il provisioning, tab Provisioning).",
         "operationId": "rename_group_api_groups_rename_post",
         "requestBody": {
           "content": {
@@ -6604,6 +9745,62 @@
         ]
       }
     },
+    "/api/identities/{identity_id}/assign": {
+      "post": {
+        "description": "Assegna l'identita' a più dispositivi in una sola operazione. Il campo\n``identity_id`` nel body deve coincidere con quello nel percorso; il valore\nspeciale ``default`` ripristina le credenziali di default.",
+        "operationId": "identities_bulk_assign_api_identities__identity_id__assign_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identity_id",
+            "required": true,
+            "schema": {
+              "title": "Identity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkAssignIdentitySchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Identities Bulk Assign",
+        "tags": [
+          "Provisioner"
+        ]
+      }
+    },
     "/api/import-csv": {
       "post": {
         "operationId": "import_csv_api_import_csv_post",
@@ -6648,6 +9845,392 @@
         ]
       }
     },
+    "/api/incidents": {
+      "get": {
+        "description": "Incidenti aperti/chiusi sulla finestra, scoped per tenant, paginati.",
+        "operationId": "list_incidents_api_incidents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "new",
+              "pattern": "^(new|ack|resolved|all)$",
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "24h",
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Incidents",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
+    "/api/incidents/interfaces": {
+      "get": {
+        "description": "Interfacce viste dal motore: ultimo stato, instabilità recente e la\nsoppressione che le copre.\n\nServe a due cose opposte. Togliere rumore prima che diventi tale (Loopback,\nNull e VLAN dismesse sono giù per progetto), e MOSTRARE l'instabilità anche\nquando non è mai diventata un incidente: la regola guarda una finestra di\ncorrelazione, questa vista guarda un giorno intero, quindi una porta che\noscilla piano compare qui pur non scattando mai.",
+        "operationId": "list_interfaces_api_incidents_interfaces_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Interfaces",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
+    "/api/incidents/interfaces/expected": {
+      "post": {
+        "description": "Dichiara che qualcosa è atteso, con o senza scadenza.\n\nNessuna finestra = \"è così per progetto\". Con ``to_ts`` = manutenzione\npianificata. Sono lo stesso modello: 'per sempre' è il caso senza scadenza,\nnon un caso speciale.\n\nNon cancella e non nasconde niente: l'evento resta in ``events`` e nel\nfeed. Cambia solo se le regole ne traggano un'evidenza — l'interpretazione,\nche è dove la conoscenza dell'operatore deve entrare.",
+        "operationId": "set_suppression_api_incidents_interfaces_expected_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Suppression",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
+    "/api/incidents/rules": {
+      "get": {
+        "description": "Catalogo delle regole di correlazione: il motore descrive se stesso.\n\nLa UI ci costruisce il pannello soglie, l'assistente AI sa quali regole\nesistono e la documentazione deriva dal codice — una sola fonte di verità.\nNessun dato di tenant qui dentro, solo la definizione del motore.",
+        "operationId": "list_rules_api_incidents_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Rules",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
+    "/api/incidents/rules/{rule_id}/parameters": {
+      "post": {
+        "description": "Ritocca le soglie di UNA regola. La logica resta nel codice: qui si\naccettano solo i parametri dichiarati dal catalogo, solo numerici e solo\ndentro l'intervallo min/max — la UI non può iniettare nulla nel motore.",
+        "operationId": "set_rule_parameters_api_incidents_rules__rule_id__parameters_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Rule Parameters",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}": {
+      "get": {
+        "description": "Dettaglio: conclusione corrente, storico delle conclusioni superate e\ntimeline multi-fonte.\n\nLo storico esiste perché una ritrattazione può cambiare la causa: il\nsistema deve poter dire \"avevamo ipotizzato X, poi un fatto nuovo l'ha\ninvalidata\" invece di cambiare idea in silenzio.",
+        "operationId": "get_incident_api_incidents__incident_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Incident",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}/explain": {
+      "post": {
+        "description": "Narrativa AI on-demand per UN incidente. Costa credito: ogni chiamata è\ntracciata nell'audit. Il risultato è salvato in colonne separate e marcato\n``ai_assisted`` — resta una riformulazione, non la conclusione.",
+        "operationId": "explain_incident_api_incidents__incident_id__explain_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Explain Incident",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
+    "/api/incidents/{incident_id}/status": {
+      "post": {
+        "description": "Transizione di stato: new→ack, new→resolved, ack→resolved, con\nconcorrenza ottimistica. Lo stato vive sull'incidente e basta: le evidenze\nnon hanno uno stato proprio, seguono l'incidente (anche in cancellazione,\nvia ON DELETE CASCADE).",
+        "operationId": "set_incident_status_api_incidents__incident_id__status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Incident Status",
+        "tags": [
+          "Incidents"
+        ]
+      }
+    },
     "/api/local-devices": {
       "get": {
         "operationId": "get_devices_and_versions_api_local_devices_get",
@@ -6674,6 +10257,7 @@
     },
     "/api/mac/locate": {
       "get": {
+        "description": "Dove è attaccato questo MAC, una risposta per tenant.\n\n``tenant`` RESTRINGE lo scoping dell'utente, non lo allarga: chi clicca\ndentro uno switch di una sede riceve la risposta di quella sede e basta.\nUn tenant fuori dal profilo è 403 e non un silenzioso \"vabbè, glielo\nmostro\" — stessa regola di ``/api/mac/search``.",
         "operationId": "mac_locate_api_mac_locate_get",
         "parameters": [
           {
@@ -6683,6 +10267,22 @@
             "schema": {
               "title": "Mac",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
             }
           }
         ],
@@ -6881,8 +10481,15 @@
             "name": "mac",
             "required": false,
             "schema": {
-              "title": "Mac",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mac"
             }
           },
           {
@@ -6890,8 +10497,15 @@
             "name": "vlan",
             "required": false,
             "schema": {
-              "title": "Vlan",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vlan"
             }
           },
           {
@@ -6899,8 +10513,15 @@
             "name": "interface",
             "required": false,
             "schema": {
-              "title": "Interface",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Interface"
             }
           },
           {
@@ -6908,8 +10529,15 @@
             "name": "switch",
             "required": false,
             "schema": {
-              "title": "Switch",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Switch"
             }
           },
           {
@@ -6917,8 +10545,15 @@
             "name": "frm",
             "required": false,
             "schema": {
-              "title": "Frm",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Frm"
             }
           },
           {
@@ -6926,8 +10561,15 @@
             "name": "to",
             "required": false,
             "schema": {
-              "title": "To",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
             }
           },
           {
@@ -6935,8 +10577,15 @@
             "name": "tenant",
             "required": false,
             "schema": {
-              "title": "Tenant",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
             }
           }
         ],
@@ -7024,8 +10673,15 @@
             "name": "tenant",
             "required": false,
             "schema": {
-              "title": "Tenant",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant"
             }
           }
         ],
@@ -7632,6 +11288,98 @@
         ]
       }
     },
+    "/api/netsec-audit/benchmarks": {
+      "get": {
+        "description": "Requisiti verificati da ciascun benchmark, senza eseguire alcuna scansione.",
+        "operationId": "netsec_audit_benchmarks_api_netsec_audit_benchmarks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lang",
+            "required": false,
+            "schema": {
+              "default": "it",
+              "title": "Lang",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Netsec Audit Benchmarks",
+        "tags": [
+          "Analyzer"
+        ]
+      }
+    },
+    "/api/netsec-audit/scan": {
+      "post": {
+        "description": "Valutazione di compliance di sicurezza (CIS, NIST, PCI-DSS) su testo o dispositivo.",
+        "operationId": "netsec_audit_scan_api_netsec_audit_scan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetSecAuditSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Netsec Audit Scan",
+        "tags": [
+          "Analyzer"
+        ]
+      }
+    },
     "/api/network-map": {
       "get": {
         "description": "Restituisce il grafo topologico strutturato per Vis.js.",
@@ -7681,7 +11429,7 @@
     },
     "/api/observability/anomalies": {
       "get": {
-        "description": "Eventi correlati (fase 4.2), scoped per tenant, paginati.",
+        "description": "Anomalie correlate, scoped per tenant, paginate.\n\nDalla v7 la riga è un INCIDENTE, non più un singolo evento correlato: la\nstessa anomalia ripetuta 27 volte era 27 righe da chiudere a mano. La forma\ndella risposta resta quella storica (``kind``, ``src_ip``, ``switch_port``,\n``status``) perché la consumano il tab Flussi e il tool MCP ``get_anomalies``;\nil dettaglio completo con ruoli e timeline sta in ``/api/incidents/{id}``.",
         "operationId": "obs_anomalies_api_observability_anomalies_get",
         "parameters": [
           {
@@ -7762,7 +11510,7 @@
     },
     "/api/observability/anomalies/{event_id}/status": {
       "post": {
-        "description": "Transizione di stato di un evento correlato (5.5): new→ack,\nnew→resolved, ack→resolved. Concorrenza ottimistica: la transizione\navviene solo se lo stato corrente è ancora quello di partenza.",
+        "description": "Transizione di stato di un'anomalia: new→ack, new→resolved,\nack→resolved. Concorrenza ottimistica: la transizione avviene solo se lo\nstato corrente è ancora quello di partenza.\n\nDalla v7 ``event_id`` è l'id dell'INCIDENTE (vedi ``obs_anomalies``).",
         "operationId": "obs_anomaly_status_api_observability_anomalies__event_id__status_post",
         "parameters": [
           {
@@ -7914,7 +11662,7 @@
         ]
       },
       "post": {
-        "description": "Salva la sezione 'observability' in app_settings.json (§9.5) e applica\nsubito la nuova config ai listener UDP e ai task di background (nessun\nriavvio del processo necessario).\nChiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},\napi_poll_s.",
+        "description": "Salva la sezione 'observability' in app_settings.json (§9.5) e applica\nsubito la nuova config ai listener UDP e ai task di background (nessun\nriavvio del processo necessario).\nChiavi ammesse: enabled, bind, {ipfix,sflow,syslog,netflow}_{enabled,port},\napi_poll_s, snmp_poll_s, linux_poll_s.",
         "operationId": "obs_set_config_api_observability_config_post",
         "requestBody": {
           "content": {
@@ -7959,6 +11707,96 @@
         ]
       }
     },
+    "/api/observability/events": {
+      "get": {
+        "description": "Feed del modello eventi unificato: la stessa forma per NetFlow, syslog e\nsnapshot REST. È il livello su cui lavorano correlazione e ragionamento, ed\nè esposto perché ogni consumatore (CLI, AI, automazione) possa partire da\nqui invece che dalle tabelle grezze di ogni sorgente.",
+        "operationId": "obs_events_api_observability_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "15m",
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "title": "Event Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Entity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Obs Events",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
     "/api/observability/flowgraph": {
       "get": {
         "description": "Grafo dei flussi aggregato (Task 3, Live Flows): nodi/archi con tassi,\nKPI di sintesi, riepilogo del tenant corrente e breakdown protocolli.\nRiusa le stesse query di ``obs_top_talkers``/``obs_anomalies``, scoped\nper tenant via ``_tenant_filter``. Nodi/archi limitati ai top 50 per rate.\n\nVLAN: quando esiste un binding ARP noto per l'IP (tabella ``arp_entries``\ndi Client Map, popolata dai gateway L3) si usa la VLAN reale 802.1Q;\naltrimenti si ricade su ``_synthetic_vlan(tenant)`` e il nodo/arco viene\nmarcato ``vlan_real: false`` così la UI può segnalarlo (non è un fake\nsilenzioso).",
@@ -7972,6 +11810,16 @@
               "default": "5m",
               "title": "Window",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_telemetry",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Exclude Telemetry",
+              "type": "boolean"
             }
           }
         ],
@@ -8026,6 +11874,63 @@
           }
         ],
         "summary": "Obs Health",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/observability/protocol-distribution": {
+      "get": {
+        "description": "Ripartizione traffico e volumi per protocollo (NetFlow, IPFIX, sFlow, Syslog)\nsulla finestra temporale, scoped per tenant.",
+        "operationId": "obs_protocol_distribution_api_observability_protocol_distribution_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "15m",
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_telemetry",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Exclude Telemetry",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Obs Protocol Distribution",
         "tags": [
           "Observability"
         ]
@@ -8092,7 +11997,7 @@
     },
     "/api/observability/top": {
       "get": {
-        "description": "Top talker aggregati sulla finestra richiesta, scoped per tenant.\n``source`` filtra per listener di origine (le righe legacy senza source\ncompaiono solo con 'all').",
+        "description": "Top talker aggregati sulla finestra richiesta, scoped per tenant.\n``source`` filtra per listener di origine (le righe legacy senza source\ncompaiono solo con 'all'); ``exclude_telemetry`` toglie i flussi diretti\nai collector (vedi ``_telemetry_filter``).",
         "operationId": "obs_top_talkers_api_observability_top_get",
         "parameters": [
           {
@@ -8137,6 +12042,16 @@
               "pattern": "^(all|ipfix|netflow|sflow)$",
               "title": "Source",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_telemetry",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Exclude Telemetry",
+              "type": "boolean"
             }
           }
         ],
@@ -8216,6 +12131,31 @@
         ]
       }
     },
+    "/api/ping-monitor/status": {
+      "get": {
+        "description": "Stato up/down di tutti i dispositivi monitorati, con scoping per tenant.",
+        "operationId": "ping_monitor_status_api_ping_monitor_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ping Monitor Status",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
     "/api/ping/{ip}": {
       "get": {
         "operationId": "ping_single_api_ping__ip__get",
@@ -8263,7 +12203,7 @@
     },
     "/api/portchannels": {
       "get": {
-        "description": "Report Port-channel per apparato (per il tab Adjacency List), filtrato per sede.",
+        "description": "Report Port-channel per apparato (per il tab Adjacency List).\n\nDue sorgenti, ciascuna per ciò che sa davvero:\n- la **configurazione** (backup) dice chi è MEMBRO dell'aggregato e chi è\n  spento da comando;\n- lo **stato SNMP** dice chi è SU adesso.\n\nPrima il report si reggeva solo sul backup, e lo stato operativo veniva da\nun ``show etherchannel summary`` presente solo in alcuni backup vecchi: una\nporta caduta dopo l'ultimo backup non compariva, e un badge di due\nsettimane prima si leggeva come se fosse di adesso.",
         "operationId": "get_portchannels_api_portchannels_get",
         "parameters": [
           {
@@ -8831,6 +12771,213 @@
         ]
       }
     },
+    "/api/redundancy/groups": {
+      "get": {
+        "operationId": "list_redundancy_groups_api_redundancy_groups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Redundancy Groups",
+        "tags": [
+          "Redundancy"
+        ]
+      },
+      "post": {
+        "operationId": "create_redundancy_group_api_redundancy_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Redundancy Group",
+        "tags": [
+          "Redundancy"
+        ]
+      }
+    },
+    "/api/redundancy/groups/{group_id}": {
+      "delete": {
+        "operationId": "delete_redundancy_group_api_redundancy_groups__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Redundancy Group",
+        "tags": [
+          "Redundancy"
+        ]
+      },
+      "get": {
+        "operationId": "get_redundancy_group_api_redundancy_groups__group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Redundancy Group",
+        "tags": [
+          "Redundancy"
+        ]
+      },
+      "put": {
+        "operationId": "update_redundancy_group_api_redundancy_groups__group_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Redundancy Group",
+        "tags": [
+          "Redundancy"
+        ]
+      }
+    },
     "/api/rename-device": {
       "post": {
         "description": "Rinomina un dispositivo gestito impostandone manualmente l'hostname (il\nnome mostrato in inventario e sulla mappa). admin/operator, con scoping.",
@@ -9214,73 +13361,6 @@
         ]
       }
     },
-    "/api/settings/fortigate-preview": {
-      "get": {
-        "description": "Stato del flag preview per la tab 'FortiGate LIVE' (default: disattivo).",
-        "operationId": "get_fortigate_preview_settings_api_settings_fortigate_preview_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Get Fortigate Preview Settings",
-        "tags": [
-          "Settings"
-        ]
-      },
-      "post": {
-        "operationId": "set_fortigate_preview_settings_api_settings_fortigate_preview_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FortigatePreviewSchema"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Set Fortigate Preview Settings",
-        "tags": [
-          "Settings"
-        ]
-      }
-    },
     "/api/settings/network": {
       "get": {
         "description": "Stato attuale del bind IP: host configurato, host effettivo, eventuale\noverride via env, porta e IP locali selezionabili.",
@@ -9344,6 +13424,142 @@
           }
         ],
         "summary": "Set Network Settings",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/settings/ping-monitor": {
+      "get": {
+        "description": "Configurazione corrente del monitor ping continuo.",
+        "operationId": "get_ping_monitor_settings_api_settings_ping_monitor_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Ping Monitor Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "post": {
+        "description": "Attiva/disattiva il monitor ping continuo e ne imposta l'intervallo.\nApplicato subito, senza riavvio.",
+        "operationId": "set_ping_monitor_settings_api_settings_ping_monitor_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PingMonitorSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Ping Monitor Settings",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/settings/snmp-defaults": {
+      "get": {
+        "description": "I tenant che hanno una community predefinita. SOLO i nomi.\n\nIl valore non esce da qui nemmeno cifrato: alla UI serve sapere SE il\ndefault c'e', non quale sia — stessa regola dei device in\n``/api/local-devices`` e delle identita'.",
+        "operationId": "snmp_defaults_get_api_settings_snmp_defaults_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Snmp Defaults Get",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "post": {
+        "description": "Imposta o rimuove (\"\" rimuove) la community predefinita di un tenant.\n\n``require_admin``: e' una credenziale che vale per OGNI apparato della\nsede, quindi non e' un'impostazione di comodo.",
+        "operationId": "snmp_defaults_set_api_settings_snmp_defaults_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnmpDefaultSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Snmp Defaults Set",
         "tags": [
           "Settings"
         ]
@@ -9542,6 +13758,312 @@
           }
         ],
         "summary": "Update Site Ep",
+        "tags": [
+          "Sites"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/agent/config": {
+      "post": {
+        "description": "Accoda un comando RPC per aggiornare i parametri di configurazione dell'agente remoto.",
+        "operationId": "agent_config_update_ep_api_sites__site_id__agent_config_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentConfigUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Agent Config Update Ep",
+        "tags": [
+          "Sites"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/agent/flow-control": {
+      "post": {
+        "description": "Mette in pausa o riprende l'ingestione / streaming dati per la sede agent.",
+        "operationId": "agent_flow_control_ep_api_sites__site_id__agent_flow_control_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlowControlSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Agent Flow Control Ep",
+        "tags": [
+          "Sites"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/agent/inventory/get": {
+      "post": {
+        "description": "Accoda un comando RPC per leggere l'inventario locale network_hosts.csv dell'agente.",
+        "operationId": "agent_get_inventory_ep_api_sites__site_id__agent_inventory_get_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Agent Get Inventory Ep",
+        "tags": [
+          "Sites"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/agent/inventory/save": {
+      "post": {
+        "description": "Accoda un comando RPC per salvare l'inventario locale network_hosts.csv dell'agente.",
+        "operationId": "agent_save_inventory_ep_api_sites__site_id__agent_inventory_save_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentInventorySaveSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Agent Save Inventory Ep",
+        "tags": [
+          "Sites"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/agent/restart": {
+      "post": {
+        "description": "Accoda un comando RPC di restart per l'agente remoto (systemctl auto-restart).",
+        "operationId": "agent_restart_ep_api_sites__site_id__agent_restart_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Agent Restart Ep",
+        "tags": [
+          "Sites"
+        ]
+      }
+    },
+    "/api/sites/{site_id}/agent/update": {
+      "post": {
+        "description": "Accoda un comando RPC di self-update (git pull) per l'agente remoto.",
+        "operationId": "agent_self_update_ep_api_sites__site_id__agent_update_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "site_id",
+            "required": true,
+            "schema": {
+              "title": "Site Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Agent Self Update Ep",
         "tags": [
           "Sites"
         ]

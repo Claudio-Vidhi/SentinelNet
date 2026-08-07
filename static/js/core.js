@@ -26,7 +26,7 @@ function applySidebarCollapsed(collapsed) {
 
 function toggleSidebar() {
     const collapsed = !document.body.classList.contains('sidebar-collapsed');
-    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) { }
     applySidebarCollapsed(collapsed);
 }
 
@@ -42,7 +42,7 @@ function toggleTheme() {
         || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { }
 }
 
 // Canvas e librerie esterne (vis.js, xterm.js) vogliono un colore vero: una
@@ -307,8 +307,8 @@ document.getElementById('btnRegisterAdmin').addEventListener('click', async () =
     const user = document.getElementById('wizUser').value.trim();
     const pass = document.getElementById('wizPass').value.trim();
 
-    if(!user || !pass) { alert(i18n[currentLang].alertFirstSetupFill); return; }
-    if(pass.length < 8) { alert(i18n[currentLang].alertPassTooShort); return; }
+    if (!user || !pass) { alert(i18n[currentLang].alertFirstSetupFill); return; }
+    if (pass.length < 8) { alert(i18n[currentLang].alertPassTooShort); return; }
 
     const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -345,7 +345,7 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
     const pass = document.getElementById('loginPass').value.trim();
     const errDiv = document.getElementById('loginError');
 
-    if(!user || !pass) { errDiv.innerText = i18n[currentLang].alertLoginFill; errDiv.style.display = 'block'; return; }
+    if (!user || !pass) { errDiv.innerText = i18n[currentLang].alertLoginFill; errDiv.style.display = 'block'; return; }
     errDiv.style.display = 'none';
 
     const res = await fetch('/api/auth/login', {
@@ -389,7 +389,7 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
     errDiv.style.display = 'none';
 
     if (np.length < 8) { errDiv.innerText = i18n[currentLang].alertPassTooShort; errDiv.style.display = 'block'; return; }
-    if (np !== cp)     { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
+    if (np !== cp) { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
 
     const res = await fetch('/api/auth/change-password', {
         method: 'POST',
@@ -415,12 +415,14 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
 async function logout() {
     // Cancella il cookie di sessione lato server (best-effort).
     try {
-        await fetch('/api/auth/logout', { method: 'POST',
-            headers: { 'X-Requested-With': 'SentinelNet' } });
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'SentinelNet' }
+        });
     } catch (e) { /* sessione già scaduta: ignora */ }
     currentRole = 'viewer';
     currentUsername = '';
-    document.body.classList.remove('role-admin','role-operator','role-viewer');
+    document.body.classList.remove('role-admin', 'role-operator', 'role-viewer');
     checkAuthRequirements();
 }
 
@@ -445,7 +447,7 @@ function backupAgeLabel(ts) {
 // --- RUOLI / PRIVILEGI ---
 
 function roleLabel(role) {
-    if (role === 'admin')    return currentLang === 'en' ? 'Administrator' : 'Amministratore';
+    if (role === 'admin') return currentLang === 'en' ? 'Administrator' : 'Amministratore';
     if (role === 'operator') return currentLang === 'en' ? 'Operator' : 'Operatore';
     return currentLang === 'en' ? 'Viewer' : 'Visualizzatore';
 }
@@ -453,12 +455,12 @@ function roleLabel(role) {
 function applyRoleUI(username, role, allowedTabs) {
     currentUsername = username || '';
     currentRole = role || 'viewer';
-    document.body.classList.remove('role-admin','role-operator','role-viewer');
+    document.body.classList.remove('role-admin', 'role-operator', 'role-viewer');
     document.body.classList.add('role-' + currentRole);
     const badge = document.getElementById('userBadgeLabel');
     if (badge) {
         const icon = currentRole === 'admin' ? 'fa-user-shield'
-                   : currentRole === 'operator' ? 'fa-user-gear' : 'fa-user';
+            : currentRole === 'operator' ? 'fa-user-gear' : 'fa-user';
         badge.innerHTML = `<i class="fa-solid ${icon}"></i> ${escapeHtml(currentUsername)} · ` +
             `<span class="role-pill role-pill-${currentRole}">${roleLabel(currentRole)}</span>`;
     }
@@ -604,17 +606,17 @@ async function appInit() {
         // Stato SNMP di tenant: solo i nomi, la community non arriva al browser
         loadSnmpDefaults();
 
-    // Forza il reload delle mappe se le tab sono attive
-    const activeTabId = document.querySelector('.tab-content.active')?.id;
-    if (activeTabId === 'tab-map') {
-        await loadTopology();
-    } else if (activeTabId === 'tab-map-interactive') {
-        await loadInteractiveMap();
-    } else if (activeTabId === 'tab-security') {
-        loadThreatIntel();
-    }
+        // Forza il reload delle mappe se le tab sono attive
+        const activeTabId = document.querySelector('.tab-content.active')?.id;
+        if (activeTabId === 'tab-map') {
+            await loadTopology();
+        } else if (activeTabId === 'tab-map-interactive') {
+            await loadInteractiveMap();
+        } else if (activeTabId === 'tab-security') {
+            loadThreatIntel();
+        }
 
-    startTriageStatusPolling();
+        startTriageStatusPolling();
 
     } catch (err) {
         console.error(err);
@@ -650,22 +652,22 @@ function switchTab(tabId, clickedBtn) {
         renderDeviceTable();
     } else if (tabId === 'tab-provisioning') {
         loadProvisioningTab();
-    } else if(tabId === 'tab-map') loadTopology();
-    else if(tabId === 'tab-map-interactive') loadInteractiveMap();
-    else if(tabId === 'tab-categories') loadCategoriesData();
-    else if(tabId === 'tab-security' && !appLoading) {
+    } else if (tabId === 'tab-map') loadTopology();
+    else if (tabId === 'tab-map-interactive') loadInteractiveMap();
+    else if (tabId === 'tab-categories') loadCategoriesData();
+    else if (tabId === 'tab-security' && !appLoading) {
         loadThreatIntel();
     }
-    else if(tabId === 'tab-mac') loadMacTracker();
-    else if(tabId === 'tab-config') loadConfigAnalyzer();
-    else if(tabId === 'tab-ai') loadAiTab();
-    else if(tabId === 'tab-users') loadUsers();
-    else if(tabId === 'tab-sites') loadSites();
-    else if(tabId === 'tab-mcp') loadMcpTab();
-    else if(tabId === 'tab-mcp-client') loadMcpClientTab();
-    else if(tabId === 'tab-fortigate') loadFgtTab();
-    else if(tabId === 'tab-audit-checklist') loadAuditChecklistTab();
-    else if(tabId === 'tab-settings') loadAppSettings();
+    else if (tabId === 'tab-mac') loadMacTracker();
+    else if (tabId === 'tab-config') loadConfigAnalyzer();
+    else if (tabId === 'tab-ai') loadAiTab();
+    else if (tabId === 'tab-users') loadUsers();
+    else if (tabId === 'tab-sites') loadSites();
+    else if (tabId === 'tab-mcp') loadMcpTab();
+    else if (tabId === 'tab-mcp-client') loadMcpClientTab();
+    else if (tabId === 'tab-fortigate') loadFgtTab();
+    else if (tabId === 'tab-audit-checklist') loadAuditChecklistTab();
+    else if (tabId === 'tab-settings') loadAppSettings();
 }
 
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
@@ -677,8 +679,8 @@ function showToast(msg, kind) {
     // stato lo porta il bordo. Prima erano tre colori fissi (fra cui uno slate
     // che nella palette non esiste): sul laminato chiaro erano fuori sistema.
     const edge = kind === 'error' ? 'var(--lamp-fault)'
-               : kind === 'warning' ? 'var(--lamp-warn)'
-               : 'var(--border-strong)';
+        : kind === 'warning' ? 'var(--lamp-warn)'
+            : 'var(--border-strong)';
     el.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:9999;'
         + 'padding:10px 16px; border-radius:0; font-size:13px;'
         + 'font-family:var(--font-prose); color:var(--text);'
@@ -697,10 +699,10 @@ function showToast(msg, kind) {
 // by the still-inline Groups tab's btnCreateGroup handler. ---
 
 function buildVendorOptions(selected) {
-    const builtins = ["cisco","hpe"];
+    const builtins = ["cisco", "hpe"];
     const all = [...new Set([...builtins, ...Object.keys(globalVendors)])];
     return all.map(v =>
-        `<option value="${escapeHtml(v)}" ${v===selected?"selected":""}>${escapeHtml(v.toUpperCase())}</option>`
+        `<option value="${escapeHtml(v)}" ${v === selected ? "selected" : ""}>${escapeHtml(v.toUpperCase())}</option>`
     ).join("");
 }
 
@@ -734,9 +736,9 @@ async function refreshIdentityOptions(preserve) {
     const keep = preserve || sel.value;
     const res = await apiFetch('/api/identities?tenant=' + encodeURIComponent(tenant));
     const idents = res && res.ok ? (await res.json()).identities : [];
-    sel.innerHTML = `<option value="default">${i18n[currentLang].optProfileDefault.replace(/<[^>]*>/g,'')}</option>` +
+    sel.innerHTML = `<option value="default">${i18n[currentLang].optProfileDefault.replace(/<[^>]*>/g, '')}</option>` +
         idents.map(i => `<option value="identity:${i.id}">${escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('') +
-        `<option value="custom">${i18n[currentLang].optProfileCustom.replace(/<[^>]*>/g,'')}</option>`;
+        `<option value="custom">${i18n[currentLang].optProfileCustom.replace(/<[^>]*>/g, '')}</option>`;
     sel.value = Array.from(sel.options).some(o => o.value === keep) ? keep : 'default';
     document.getElementById('customCredsForm').style.display = sel.value === 'custom' ? 'block' : 'none';
     window._tenantIdentities = idents;
@@ -750,60 +752,61 @@ function renderIdentitiesPanel() {
         <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.username)}</td>
         <td>${i.devices_using}</td>
         <td>
+          <button class="btn-icon" onclick="assignIdentityToDevices('${i.id}')" title="${escapeHtml(i18n[currentLang].btnAssignIdentityTitle || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle"></i></button>
           <button class="btn-icon" onclick="editIdentity('${i.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
           <button class="btn-icon danger" onclick="deleteIdentity('${i.id}')" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
         </td></tr>`).join('')
-      : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
+        : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
 }
 
 // ===== Port Config Modal (promosso da static/js/topology.js: usato anche
 // dal tab MAC-tracker/ARP inline e da static/js/config-analyzer.js) =====
-    // Espande le abbreviazioni comuni delle interfacce ('Gi1/0/5' -> 'GigabitEthernet1/0/5').
-    // Speculare a expand_iface() di mac_collector.py: tenerli allineati.
-    function expandIface(name) {
-        if (!name) return '';
-        name = String(name).trim();
-        const abbr = [
-            [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
-            [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
-            [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
-            [/^Eth(?=\d)/, 'Ethernet'], [/^Et(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
-        ];
-        for (const [pat, full] of abbr) {
-            if (pat.test(name)) return name.replace(pat, full);
+// Espande le abbreviazioni comuni delle interfacce ('Gi1/0/5' -> 'GigabitEthernet1/0/5').
+// Speculare a expand_iface() di mac_collector.py: tenerli allineati.
+function expandIface(name) {
+    if (!name) return '';
+    name = String(name).trim();
+    const abbr = [
+        [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
+        [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
+        [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
+        [/^Eth(?=\d)/, 'Ethernet'], [/^Et(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
+    ];
+    for (const [pat, full] of abbr) {
+        if (pat.test(name)) return name.replace(pat, full);
+    }
+    return name;
+}
+
+// Deep-link verso il Config Analyzer (impostati da showPortConfig, letti da renderCaResults).
+let caFocusIp = null;
+let caFocusPort = null;
+
+function closePortConfigModal() {
+    const m = document.getElementById('portConfigModal');
+    if (m) m.remove();
+}
+
+async function showPortConfig(switchIp, port, switchName) {
+    const L = i18n[currentLang];
+    let iface = null;
+    try {
+        const res = await apiFetch('/api/config-analyzer/' + encodeURIComponent(switchIp));
+        if (res && res.ok) {
+            const d = await res.json();
+            const want = expandIface(port).toLowerCase();
+            iface = (d.interfaces || []).find(i => expandIface(i.name).toLowerCase() === want) || null;
         }
-        return name;
-    }
+    } catch (e) { /* trattato come non trovato */ }
 
-    // Deep-link verso il Config Analyzer (impostati da showPortConfig, letti da renderCaResults).
-    let caFocusIp = null;
-    let caFocusPort = null;
-
-    function closePortConfigModal() {
-        const m = document.getElementById('portConfigModal');
-        if (m) m.remove();
-    }
-
-    async function showPortConfig(switchIp, port, switchName) {
-        const L = i18n[currentLang];
-        let iface = null;
-        try {
-            const res = await apiFetch('/api/config-analyzer/' + encodeURIComponent(switchIp));
-            if (res && res.ok) {
-                const d = await res.json();
-                const want = expandIface(port).toLowerCase();
-                iface = (d.interfaces || []).find(i => expandIface(i.name).toLowerCase() === want) || null;
-            }
-        } catch (e) { /* trattato come non trovato */ }
-
-        closePortConfigModal();
-        const body = iface
-            ? `<pre style="font-family:var(--font-code); background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; margin:0; white-space:pre-wrap; font-size:12px;">${escapeHtml(iface.raw || '—')}</pre>`
-            : `<div style="font-size:13px; color:var(--text-muted); padding:10px 0;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.portConfigNotFound)}</div>`;
-        const ov = document.createElement('div');
-        ov.id = 'portConfigModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
-        ov.innerHTML = `
+    closePortConfigModal();
+    const body = iface
+        ? `<pre style="font-family:var(--font-code); background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; margin:0; white-space:pre-wrap; font-size:12px;">${escapeHtml(iface.raw || '—')}</pre>`
+        : `<div style="font-size:13px; color:var(--text-muted); padding:10px 0;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.portConfigNotFound)}</div>`;
+    const ov = document.createElement('div');
+    ov.id = 'portConfigModal';
+    ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+    ov.innerHTML = `
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                     <h3 style="font-size:16px;"><i class="fa-solid fa-ethernet" style="color:var(--primary);"></i> ${escapeHtml(L.portConfigTitle)}</h3>
@@ -813,16 +816,16 @@ function renderIdentitiesPanel() {
                 ${body}
                 <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
                     <button onclick="openPortInAnalyzer('${escapeHtml(switchIp)}','${escapeHtml(port)}')" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-up-right-from-square"></i> ${escapeHtml(L.openInAnalyzer)}</button>
-                    <button onclick="closePortConfigModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Close':'Chiudi'}</button>
+                    <button onclick="closePortConfigModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang === 'en' ? 'Close' : 'Chiudi'}</button>
                 </div>
             </div>`;
-        ov.addEventListener('click', e => { if (e.target === ov) closePortConfigModal(); });
-        document.body.appendChild(ov);
-    }
+    ov.addEventListener('click', e => { if (e.target === ov) closePortConfigModal(); });
+    document.body.appendChild(ov);
+}
 
-    function openPortInAnalyzer(switchIp, port) {
-        caFocusIp = switchIp;
-        caFocusPort = port;
-        closePortConfigModal();
-        switchTab('tab-config');
-    }
+function openPortInAnalyzer(switchIp, port) {
+    caFocusIp = switchIp;
+    caFocusPort = port;
+    closePortConfigModal();
+    switchTab('tab-config');
+}

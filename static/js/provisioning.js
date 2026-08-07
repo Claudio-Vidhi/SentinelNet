@@ -39,7 +39,7 @@ async function deleteIdentity(id) {
 
 document.getElementById('btnNewIdentity').addEventListener('click', () => {
     document.getElementById('identEditId').value = '';
-    ['identName','identUser','identPass','identSecret'].forEach(i => document.getElementById(i).value = '');
+    ['identName', 'identUser', 'identPass', 'identSecret'].forEach(i => document.getElementById(i).value = '');
     document.getElementById('identityForm').style.display = 'block';
 });
 document.getElementById('btnCancelIdentity').addEventListener('click', () =>
@@ -353,7 +353,7 @@ function provInitToggles() {
                 document.getElementById('provComPort').value = data.ports[0].device;
                 alert(data.ports.map(p => `${p.device} — ${p.description}`).join('\n'));
             } else {
-                alert(currentLang==='en' ? 'No serial port detected on the server.' : 'Nessuna porta seriale rilevata sul server.');
+                alert(currentLang === 'en' ? 'No serial port detected on the server.' : 'Nessuna porta seriale rilevata sul server.');
             }
         }
     });
@@ -416,4 +416,84 @@ async function loadProvisioningTab() {
     populateProvisioningFormSelects();
     await refreshIdentityOptions();
     renderIdentitiesPanel();
+}
+
+// --- BULK ASSIGN IDENTITY TO DEVICES ---
+// Apre un modale che elenca i dispositivi del tenant corrente e permette di
+// selezionare quali assegnare all'identità scelta.
+function assignIdentityToDevices(identityId) {
+    const ident = (window._tenantIdentities || []).find(x => x.id === identityId);
+    if (!ident) return;
+    const tenant = document.getElementById('devGroupSelect').value;
+    const L = i18n[currentLang];
+    // Dispositivi del tenant corrente (globalDevices è già caricato da appInit)
+    const devices = (window.globalDevices || []).filter(d => d.Group === tenant);
+    const ov = document.createElement('div');
+    ov.id = 'assignIdentityModal';
+    ov.style.cssText = 'position:fixed; inset:0; z-index:10060; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+    const rows = devices.length
+        ? devices.map(d => `<tr>
+            <td style="padding:4px 8px;"><input type="checkbox" class="assignDevCb" value="${escapeHtml(d.IP)}" style="width:auto;"></td>
+            <td style="padding:4px 8px; font-family:var(--font-code); font-size:12px;">${escapeHtml(d.IP)}</td>
+            <td style="padding:4px 8px;">${escapeHtml(d.Hostname || '—')}</td>
+            <td style="padding:4px 8px;">${escapeHtml(d.Vendor || '')}</td>
+          </tr>`).join('')
+        : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px;">${L.noDevicesInTenant || 'Nessun dispositivo in questo tenant.'}</td></tr>`;
+    ov.innerHTML = `
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(620px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <h3 style="font-size:16px;"><i class="fa-solid fa-users-rectangle" style="color:var(--primary);"></i> ${escapeHtml(L.assignIdentityTitle || 'Assegna identità')}</h3>
+          <i class="fa-solid fa-xmark" onclick="closeAssignIdentityModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+        </div>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
+          ${escapeHtml((L.assignIdentityDesc || 'Seleziona i dispositivi a cui assegnare l\'identità:')).replace('{name}', escapeHtml(ident.name))}
+          <strong>${escapeHtml(ident.name)}</strong> (${escapeHtml(ident.username)})
+        </p>
+        <div style="max-height:320px; overflow:auto; border:1px solid var(--border); margin-bottom:16px;">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead><tr style="background:var(--surface-2);">
+              <th style="padding:6px 8px; width:32px;"><input type="checkbox" id="assignSelectAll" style="width:auto;"></th>
+              <th style="padding:6px 8px; text-align:left;">IP</th>
+              <th style="padding:6px 8px; text-align:left;">Hostname</th>
+              <th style="padding:6px 8px; text-align:left;">Vendor</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button class="btn btn-secondary" onclick="closeAssignIdentityModal()">${escapeHtml(L.btnCancelIdentity || 'Annulla')}</button>
+          <button class="btn btn-primary" id="btnConfirmAssignIdentity"><i class="fa-solid fa-check"></i> ${escapeHtml(L.btnConfirmAssign || 'Assegna')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) closeAssignIdentityModal(); });
+    // Select-all checkbox
+    const selAll = document.getElementById('assignSelectAll');
+    if (selAll) selAll.addEventListener('change', () => {
+        document.querySelectorAll('.assignDevCb').forEach(cb => cb.checked = selAll.checked);
+    });
+    document.getElementById('btnConfirmAssignIdentity').addEventListener('click', async () => {
+        const ips = Array.from(document.querySelectorAll('.assignDevCb:checked')).map(cb => cb.value);
+        if (!ips.length) { alert(L.alertSelectDevices || 'Seleziona almeno un dispositivo.'); return; }
+        const res = await apiFetch(`/api/identities/${identityId}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identity_id: identityId, ips })
+        });
+        if (res && res.ok) {
+            const data = await res.json();
+            closeAssignIdentityModal();
+            await refreshIdentityOptions();
+            renderIdentitiesPanel();
+            alert((L.assignSuccess || 'Identità assegnata a {n} dispositivi.').replace('{n}', data.assigned.length));
+        } else if (res) {
+            const err = await res.json();
+            alert(err.detail || 'Errore');
+        }
+    });
+}
+
+function closeAssignIdentityModal() {
+    const m = document.getElementById('assignIdentityModal');
+    if (m) m.remove();
 }

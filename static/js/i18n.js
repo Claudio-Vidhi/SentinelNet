@@ -1,7 +1,7 @@
 // --- Estratto da templates/dashboard.html: gestione multilingua (i18n) ---
-    // --- GESTIONE MULTILINGUA (i18n) ---
-    const i18n = {
-      it: {
+// --- GESTIONE MULTILINGUA (i18n) ---
+const i18n = {
+    it: {
         wizTitle: "Primo Accesso rilevato",
         wizSubtitle: "Benvenuto in SentinelNet. Crea il tuo account Amministratore locale per iniziare a gestire la tua infrastruttura di rete.",
         lblWizUser: "Crea Username Amministratore",
@@ -27,7 +27,7 @@
         alertPassTooShort: "La password deve contenere almeno 8 caratteri.",
         alertPassMismatch: "Le password non coincidono.",
         alertPassChangeErr: "Impossibile cambiare la password. Riprova.",
-        
+
         // Sidebar
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Amministratore',
         btnExit: '<i class="fa-solid fa-power-off"></i> Esci',
@@ -68,6 +68,13 @@
         emptyIdentities: "Nessuna identità configurata per questo tenant.",
         confirmDeleteIdentity: "Eliminare questa identità?",
         alertIdentityInUse: "Identità in uso dai seguenti device:",
+        btnAssignIdentityTitle: "Assegna identità ai dispositivi",
+        assignIdentityTitle: "Assegna identità",
+        assignIdentityDesc: "Seleziona i dispositivi a cui assegnare l'identità:",
+        btnConfirmAssign: "Assegna",
+        assignSuccess: "Identità assegnata a {n} dispositivi.",
+        alertSelectDevices: "Seleziona almeno un dispositivo.",
+        noDevicesInTenant: "Nessun dispositivo in questo tenant.",
         alertIdentityFields: "Nome, username e password sono obbligatori.",
         hintIpInvalid: "Indirizzo IP non valido.",
         hintIpExists: "IP già in inventario.",
@@ -833,7 +840,7 @@
         thVendor: "Vendor",
         thFirmware: "Firmware",
         thActions: "Azioni / Utility",
-        
+
         // Tab 2
         groupsEyebrow: '<i class="fa-solid fa-sitemap"></i> Anagrafica',
         titleGroupsRegistry: "Anagrafica Tenant e Clienti",
@@ -856,7 +863,7 @@
         placeholderVendorName: "es. mikrotik",
         placeholderVendorTerm: "es. mikrotik",
         placeholderVendorDriver: "es. mikrotik_routeros",
-        
+
         // Tab 3
         portchannelsEyebrow: '<i class="fa-solid fa-link"></i> Rete',
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topologia',
@@ -888,7 +895,7 @@
         legendAuthFailed: "Autenticazione Fallita",
         legendDiscovered: "Vicino Discoperto (CDP/LLDP)",
         legendPortChannel: "Link Port-Channel / LAG",
-        
+
         // Tab 5
         threatEyebrow: '<i class="fa-solid fa-shield-virus"></i> Sicurezza',
         titleThreatIntel: "Vulnerability Matcher (EUVD ENISA)",
@@ -906,7 +913,7 @@
         btnDownloadCsvTemplate: '<i class="fa-solid fa-download"></i> Scarica modello CSV',
         importDropText: "Trascina qui il file CSV o clicca per selezionarlo",
         btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Elabora e Importa',
-        
+
         // Modals / Progress
         titleTriageProgress: '<i class="fa-solid fa-circle-notch fa-spin"></i> Triage in Corso...',
         txtTriageProgressStart: "Avvio scansione...",
@@ -1150,7 +1157,7 @@
         alertFirstSetupError: "Errore: ",
         alertLoginFill: "Compila tutti i campi!",
         alertLoginDenied: "Accesso negato: credenziali errate o utente inesistente.",
-        
+
         // Dynamic UI / JS Alerts
         noDevicesText: "Nessun apparato online con firmware rilevato. Esegui prima un <strong>Triage Globale</strong>.",
         tiTabMatcher: '<i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher',
@@ -1209,7 +1216,7 @@
         pingingBtnText: "Ping {group}...",
         emptyInventory: 'Nessun dispositivo in inventario. Aggiungi un apparato dalla barra laterale oppure avvia una <strong>Scansione Subnet</strong>.',
         emptyInventoryFiltered: "Nessun dispositivo in questo tenant."
-      ,
+        ,
 
         // --- Tab Incidenti (preview) ---
         navInvestigate: "Indaga",
@@ -1342,7 +1349,7 @@
         incFromTo: "dal {a} al {b}",
         incGenerating: "Generazione in corso…",
     },
-      en: {
+    en: {
         wizTitle: "First Access Detected",
         wizSubtitle: "Welcome to SentinelNet. Create your local Administrator account to start managing your network infrastructure.",
         lblWizUser: "Create Administrator Username",
@@ -1368,7 +1375,7 @@
         alertPassTooShort: "Password must be at least 8 characters.",
         alertPassMismatch: "Passwords do not match.",
         alertPassChangeErr: "Could not change the password. Please try again.",
-        
+
         // Sidebar
         badgeAdmin: '<i class="fa-solid fa-user-shield"></i> Administrator',
         btnExit: '<i class="fa-solid fa-power-off"></i> Logout',
@@ -1409,6 +1416,13 @@
         emptyIdentities: "No identity configured for this tenant.",
         confirmDeleteIdentity: "Delete this identity?",
         alertIdentityInUse: "Identity in use by the following devices:",
+        btnAssignIdentityTitle: "Assign identity to devices",
+        assignIdentityTitle: "Assign identity",
+        assignIdentityDesc: "Select the devices to assign this identity to:",
+        btnConfirmAssign: "Assign",
+        assignSuccess: "Identity assigned to {n} devices.",
+        alertSelectDevices: "Select at least one device.",
+        noDevicesInTenant: "No devices in this tenant.",
         alertIdentityFields: "Name, username and password are required.",
         hintIpInvalid: "Invalid IP address.",
         hintIpExists: "IP already in inventory.",
@@ -2174,7 +2188,7 @@
         thVendor: "Vendor",
         thFirmware: "Firmware",
         thActions: "Actions / Utilities",
-        
+
         // Tab 2
         groupsEyebrow: '<i class="fa-solid fa-sitemap"></i> Registry',
         titleGroupsRegistry: "Tenants and Clients Registry",
@@ -2197,7 +2211,7 @@
         placeholderVendorName: "e.g. mikrotik",
         placeholderVendorTerm: "e.g. mikrotik",
         placeholderVendorDriver: "e.g. mikrotik_routeros",
-        
+
         // Tab 3
         portchannelsEyebrow: '<i class="fa-solid fa-link"></i> Network',
         btnResetTopology: '<i class="fa-solid fa-trash-can"></i> Reset Topology',
@@ -2229,7 +2243,7 @@
         legendAuthFailed: "Authentication Failed",
         legendDiscovered: "Discovered Neighbor (CDP/LLDP)",
         legendPortChannel: "Port-Channel / LAG Link",
-        
+
         // Tab 5
         threatEyebrow: '<i class="fa-solid fa-shield-virus"></i> Security',
         titleThreatIntel: "Vulnerability Matcher (EUVD ENISA)",
@@ -2247,7 +2261,7 @@
         btnDownloadCsvTemplate: '<i class="fa-solid fa-download"></i> Download CSV template',
         importDropText: "Drop the CSV file here, or click to select it",
         btnUploadCsv: '<i class="fa-solid fa-cloud-arrow-up"></i> Process and Import',
-        
+
         // Modals / Progress
         titleTriageProgress: '<i class="fa-solid fa-circle-notch fa-spin"></i> Triage in Progress...',
         txtTriageProgressStart: "Starting scan...",
@@ -2491,7 +2505,7 @@
         alertFirstSetupError: "Error: ",
         alertLoginFill: "Fill in all fields!",
         alertLoginDenied: "Access denied: incorrect credentials or user does not exist.",
-        
+
         // Dynamic UI / JS Alerts
         noDevicesText: "No online devices with detected firmware. Please run a <strong>Global Triage</strong> first.",
         tiTabMatcher: '<i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher',
@@ -2548,7 +2562,7 @@
         pingingBtnText: "Ping {group}...",
         emptyInventory: 'No devices in inventory. Add a device from the sidebar or run a <strong>Subnet Scan</strong>.',
         emptyInventoryFiltered: "No devices in this tenant."
-      ,
+        ,
 
         // --- Tab Incidenti (preview) ---
         navInvestigate: "Investigate",
@@ -2681,103 +2695,103 @@
         incFromTo: "from {a} to {b}",
         incGenerating: "Generating…",
     }
-    };
+};
 
-    let currentLang = localStorage.getItem("sentinelnet_lang") || "it";
+let currentLang = localStorage.getItem("sentinelnet_lang") || "it";
 
-    function changeLanguage(lang) {
-        currentLang = lang;
-        localStorage.setItem("sentinelnet_lang", lang);
-        document.documentElement.lang = lang;
+function changeLanguage(lang) {
+    currentLang = lang;
+    localStorage.setItem("sentinelnet_lang", lang);
+    document.documentElement.lang = lang;
 
-        const langSel = document.getElementById("langSelect");
-        if (langSel) langSel.value = lang;
-        
-        // Traduci elementi con attributo data-i18n
-        document.querySelectorAll("[data-i18n]").forEach(el => {
-            const key = el.getAttribute("data-i18n");
-            if (i18n[lang] && i18n[lang][key]) {
-                el.innerHTML = i18n[lang][key];
-            }
-        });
+    const langSel = document.getElementById("langSelect");
+    if (langSel) langSel.value = lang;
 
-        // Traduci elementi con attributo data-i18n-placeholder
-        document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-            const key = el.getAttribute("data-i18n-placeholder");
-            if (i18n[lang] && i18n[lang][key]) {
-                el.setAttribute("placeholder", i18n[lang][key]);
-            }
-        });
-
-        // Traduci elementi con attributo data-i18n-title (tooltip)
-        document.querySelectorAll("[data-i18n-title]").forEach(el => {
-            const key = el.getAttribute("data-i18n-title");
-            if (i18n[lang] && i18n[lang][key]) {
-                el.setAttribute("title", i18n[lang][key]);
-            }
-        });
-
-        // Traduci elementi con attributo data-i18n-aria-label (nome accessibile
-        // dei controlli con la sola icona, es. il toggle della sidebar)
-        document.querySelectorAll("[data-i18n-aria-label]").forEach(el => {
-            const key = el.getAttribute("data-i18n-aria-label");
-            if (i18n[lang] && i18n[lang][key]) {
-                el.setAttribute("aria-label", i18n[lang][key]);
-            }
-        });
-
-        // I tooltip della rail derivano dai label tradotti: vanno rigenerati qui.
-        syncNavTooltips();
-
-        // Aggiorna il badge utente (ruolo localizzato)
-        if (currentUsername) applyRoleUI(currentUsername, currentRole);
-
-        // Ridisegna componenti dinamici se caricati
-        if (globalDevices.length > 0) {
-            // Aggiorna opzioni Filtro Sede
-            const filterSelect = document.getElementById('filterGroupSelect');
-            if (filterSelect) {
-                const prev = filterSelect.value;
-                filterSelect.options[0].text = i18n[lang].optFilterAll;
-                filterSelect.value = prev;
-            }
-            const topoSelect = document.getElementById('topologyGroupSelect');
-            if (topoSelect) {
-                const prev = topoSelect.value;
-                topoSelect.options[0].text = i18n[lang].optFilterAll;
-                topoSelect.value = prev;
-            }
-            const interSelect = document.getElementById('interactiveGroupSelect');
-            if (interSelect) {
-                const prev = interSelect.value;
-                interSelect.options[0].text = i18n[lang].optFilterAll;
-                interSelect.value = prev;
-            }
-
-            renderDeviceTable();
-            renderGroupsTable();
-            renderVendorTable();
+    // Traduci elementi con attributo data-i18n
+    document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.getAttribute("data-i18n");
+        if (i18n[lang] && i18n[lang][key]) {
+            el.innerHTML = i18n[lang][key];
         }
-    }
+    });
 
-    function initLanguageSelector() {
-        // Il selettore viene iniettato nello slot .aside-actions, prima del
-        // pulsante di collasso (che è già nel markup).
-        const actions = document.querySelector('.aside-header .aside-actions');
-        if (actions && !document.getElementById("langSelect")) {
-            const select = document.createElement('select');
-            select.id = "langSelect";
-            select.style.cssText = "padding: 2px 6px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 11px; cursor: pointer; outline: none;";
-            select.innerHTML = `
+    // Traduci elementi con attributo data-i18n-placeholder
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        const key = el.getAttribute("data-i18n-placeholder");
+        if (i18n[lang] && i18n[lang][key]) {
+            el.setAttribute("placeholder", i18n[lang][key]);
+        }
+    });
+
+    // Traduci elementi con attributo data-i18n-title (tooltip)
+    document.querySelectorAll("[data-i18n-title]").forEach(el => {
+        const key = el.getAttribute("data-i18n-title");
+        if (i18n[lang] && i18n[lang][key]) {
+            el.setAttribute("title", i18n[lang][key]);
+        }
+    });
+
+    // Traduci elementi con attributo data-i18n-aria-label (nome accessibile
+    // dei controlli con la sola icona, es. il toggle della sidebar)
+    document.querySelectorAll("[data-i18n-aria-label]").forEach(el => {
+        const key = el.getAttribute("data-i18n-aria-label");
+        if (i18n[lang] && i18n[lang][key]) {
+            el.setAttribute("aria-label", i18n[lang][key]);
+        }
+    });
+
+    // I tooltip della rail derivano dai label tradotti: vanno rigenerati qui.
+    syncNavTooltips();
+
+    // Aggiorna il badge utente (ruolo localizzato)
+    if (currentUsername) applyRoleUI(currentUsername, currentRole);
+
+    // Ridisegna componenti dinamici se caricati
+    if (globalDevices.length > 0) {
+        // Aggiorna opzioni Filtro Sede
+        const filterSelect = document.getElementById('filterGroupSelect');
+        if (filterSelect) {
+            const prev = filterSelect.value;
+            filterSelect.options[0].text = i18n[lang].optFilterAll;
+            filterSelect.value = prev;
+        }
+        const topoSelect = document.getElementById('topologyGroupSelect');
+        if (topoSelect) {
+            const prev = topoSelect.value;
+            topoSelect.options[0].text = i18n[lang].optFilterAll;
+            topoSelect.value = prev;
+        }
+        const interSelect = document.getElementById('interactiveGroupSelect');
+        if (interSelect) {
+            const prev = interSelect.value;
+            interSelect.options[0].text = i18n[lang].optFilterAll;
+            interSelect.value = prev;
+        }
+
+        renderDeviceTable();
+        renderGroupsTable();
+        renderVendorTable();
+    }
+}
+
+function initLanguageSelector() {
+    // Il selettore viene iniettato nello slot .aside-actions, prima del
+    // pulsante di collasso (che è già nel markup).
+    const actions = document.querySelector('.aside-header .aside-actions');
+    if (actions && !document.getElementById("langSelect")) {
+        const select = document.createElement('select');
+        select.id = "langSelect";
+        select.style.cssText = "padding: 2px 6px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 11px; cursor: pointer; outline: none;";
+        select.innerHTML = `
                 <option value="it">IT</option>
                 <option value="en">EN</option>
             `;
-            select.value = currentLang;
-            select.onchange = (e) => changeLanguage(e.target.value);
+        select.value = currentLang;
+        select.onchange = (e) => changeLanguage(e.target.value);
 
-            actions.insertBefore(select, actions.firstChild);
-        }
-        changeLanguage(currentLang);
-        // Allinea aria-expanded e i tooltip allo stato ripristinato prima del paint.
-        applySidebarCollapsed(document.body.classList.contains('sidebar-collapsed'));
+        actions.insertBefore(select, actions.firstChild);
     }
+    changeLanguage(currentLang);
+    // Allinea aria-expanded e i tooltip allo stato ripristinato prima del paint.
+    applySidebarCollapsed(document.body.classList.contains('sidebar-collapsed'));
+}
