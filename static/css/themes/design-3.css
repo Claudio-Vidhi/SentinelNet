@@ -1,5 +1,7 @@
 /* =====================================================================
    Impeccable UI Design 3: Emerald Tactical Dark Ops
+   Tactical SOC Emerald Dark ops console with crisp monospace density
+   and aligned navigation elements.
    ===================================================================== */
 :root[data-ui-variant="design-3"] {
   --bg: #06130d;
@@ -28,53 +30,86 @@
   --lamp-fault-wash: rgba(239, 68, 68, 0.2);
   --shadow-float: 0 20px 40px -10px rgba(16, 185, 129, 0.3);
   --shadow-lift: 0 10px 20px -5px rgba(16, 185, 129, 0.2);
+  --card-border-radius: 4px;
 }
 
 :root[data-ui-variant="design-3"] body {
   background: radial-gradient(circle at 50% 50%, #0a2418 0%, #06130d 100%) fixed;
+  color: #ecfdf5;
   font-family: 'Azeret Mono', 'Courier New', monospace;
 }
 
 :root[data-ui-variant="design-3"] .panel,
 :root[data-ui-variant="design-3"] .hero-card,
-:root[data-ui-variant="design-3"] .card {
-  border-radius: 4px;
-  border: 1px solid #1f4d38;
-  background: rgba(13, 31, 23, 0.9);
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+:root[data-ui-variant="design-3"] .card,
+:root[data-ui-variant="design-3"] .kpi,
+:root[data-ui-variant="design-3"] .vuln-card,
+:root[data-ui-variant="design-3"] .modal {
+  border-radius: 4px !important;
+  border: 1px solid #1f4d38 !important;
+  background: rgba(13, 31, 23, 0.9) !important;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.1) !important;
 }
 
 :root[data-ui-variant="design-3"] .panel:hover {
-  border-color: #34d399;
+  border-color: #34d399 !important;
 }
 
 :root[data-ui-variant="design-3"] .sidenav {
-  background: #081711;
-  border-right: 1px solid #1f4d38;
+  background: #081711 !important;
+  border-right: 1px solid #1f4d38 !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item {
+  border-radius: 4px !important;
+  margin: 3px 6px !important;
+  padding: 8px 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  transition: all 0.15s ease !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item .nav-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item .nav-left i {
+  width: 18px !important;
+  text-align: center !important;
+  color: #34d399 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 :root[data-ui-variant="design-3"] .sidenav .nav-item.active {
-  background: #10b981;
-  color: #06130d;
-  font-weight: 700;
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+  background: #10b981 !important;
+  color: #06130d !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.5) !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item.active .nav-left i {
+  color: #06130d !important;
 }
 
 :root[data-ui-variant="design-3"] .btn-primary {
-  background: #10b981;
-  border: 1px solid #34d399;
-  border-radius: 4px;
-  color: #06130d;
-  font-weight: 700;
+  background: #10b981 !important;
+  border: 1px solid #34d399 !important;
+  border-radius: 4px !important;
+  color: #06130d !important;
+  font-weight: 700 !important;
 }
 
 :root[data-ui-variant="design-3"] .btn-primary:hover {
-  background: #34d399;
-  box-shadow: 0 0 15px rgba(52, 211, 153, 0.6);
+  background: #34d399 !important;
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.6) !important;
 }
 
 :root[data-ui-variant="design-3"] th {
-  background: #142c20;
-  color: #34d399;
-  border-bottom: 1px solid #1f4d38;
+  background: #142c20 !important;
+  color: #34d399 !important;
+  border-bottom: 1px solid #1f4d38 !important;
 }

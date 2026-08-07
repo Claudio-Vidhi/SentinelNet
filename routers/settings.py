@@ -90,7 +90,7 @@ def get_ui_variant_settings(current_user = Depends(get_current_user)):
 @router.post("/api/settings/ui-variant")
 def set_ui_variant_settings(payload: UiVariantSchema, current_user = Depends(get_current_user)):
     """Imposta la variante grafica UI."""
-    allowed = {"default", "design-1", "design-2", "design-3", "design-4"}
+    allowed = {"default", "design-1", "design-2", "design-3"}
     variant = payload.ui_variant.strip().lower()
     if variant not in allowed:
         raise HTTPException(status_code=400, detail=f"Variante UI non valida. Valori ammessi: {sorted(list(allowed))}")

@@ -86,11 +86,30 @@
   color: #f8fafc !important;
 }
 
+:root[data-ui-variant="design-1"] .sidenav .nav-item .nav-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item .nav-left i {
+  width: 18px !important;
+  text-align: center !important;
+  color: #38bdf8 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
 :root[data-ui-variant="design-1"] .sidenav .nav-item.active {
   background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
   color: #ffffff !important;
   box-shadow: 0 4px 16px 0 rgba(2, 132, 199, 0.4) !important;
   font-weight: 600 !important;
+}
+
+:root[data-ui-variant="design-1"] .sidenav .nav-item.active .nav-left i {
+  color: #ffffff !important;
 }
 
 /* --- BUTTONS & CONTROLS --- */
