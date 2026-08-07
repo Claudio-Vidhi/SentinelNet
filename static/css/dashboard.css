@@ -1547,8 +1547,10 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   body.sidebar-collapsed .nav-group > h3,
   body.sidebar-collapsed .preview-badge,
   body.sidebar-collapsed .count-badge { display: none; }
-  body.sidebar-collapsed .user-badge { flex-direction: column; gap: 10px; padding: 9px 4px; font-size: 0; margin: 10px 6px 0; }
-  body.sidebar-collapsed .user-badge i { font-size: 13px; }
+  body.sidebar-collapsed .user-badge { flex-direction: column; gap: 12px; padding: 10px 0; font-size: 0; margin: 10px 0 0; width: 100%; align-items: center; justify-content: center; }
+  body.sidebar-collapsed .user-badge #userBadgeLabel,
+  body.sidebar-collapsed .user-badge a { display: flex; align-items: center; justify-content: center; width: 100%; font-size: 0; margin: 0; text-align: center; }
+  body.sidebar-collapsed .user-badge i { font-size: 14px; margin: 0; }
   body.sidebar-collapsed .user-badge .role-pill { display: none; }
   body.sidebar-collapsed .sidenav { width: 100%; }
   body.sidebar-collapsed .nav-item { justify-content: center; padding: 10px 0; }
