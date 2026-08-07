@@ -72,9 +72,10 @@ function applyUiVariant(variant, saveServer = false) {
     }
 
     if (saveServer) {
+        const headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'SentinelNet' };
         fetch('/api/settings/ui-variant', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify({ ui_variant: selected })
         }).catch(err => console.warn('Save UI variant failed:', err));
     }
@@ -85,8 +86,11 @@ function initUiVariant() {
     try { saved = localStorage.getItem(UI_VARIANT_KEY); } catch (e) { }
     if (saved) {
         applyUiVariant(saved);
+        return;
     }
-    fetch('/api/settings/ui-variant')
+    fetch('/api/settings/ui-variant', {
+        headers: { 'X-Requested-With': 'SentinelNet' }
+    })
         .then(r => r.ok ? r.json() : null)
         .then(data => {
             if (data && data.ui_variant) {

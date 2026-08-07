@@ -25,6 +25,21 @@
   <script src="/static/vendor/xterm/xterm.js"></script>
 
   <link rel="stylesheet" href="/static/css/dashboard.css">
+  <script>
+    (function() {
+      try {
+        var v = localStorage.getItem('sentinelnet_ui_variant');
+        if (v && v !== 'default' && ['design-1', 'design-2', 'design-3'].indexOf(v) !== -1) {
+          document.documentElement.setAttribute('data-ui-variant', v);
+          var l = document.createElement('link');
+          l.id = 'theme-variant-stylesheet';
+          l.rel = 'stylesheet';
+          l.href = '/static/css/themes/' + v + '.css';
+          document.head.appendChild(l);
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 <!--
