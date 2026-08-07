@@ -43,13 +43,14 @@ PASSWORD = os.environ.get("SENTINELNET_PASSWORD", "")
 VERIFY_TLS = os.environ.get("SENTINELNET_VERIFY_TLS", "1") != "0"
 
 _token = None
+_session = requests.Session()
 
 
 # --- Authenticated HTTP client toward the central server --------------------
 
 def _login() -> str:
     global _token
-    r = requests.post(f"{BASE_URL}/api/auth/login",
+    r = _session.post(f"{BASE_URL}/api/auth/login",
                       json={"username": USERNAME, "password": PASSWORD},
                       verify=VERIFY_TLS, timeout=15)
     r.raise_for_status()
@@ -63,7 +64,7 @@ def api(method: str, path: str, params: Optional[dict] = None, body: Optional[di
     if _token is None:
         _login()
     for attempt in (1, 2):
-        r = requests.request(method, BASE_URL + path,
+        r = _session.request(method, BASE_URL + path,
                              headers={"Authorization": f"Bearer {_token}"},
                              params=params, json=body,
                              verify=VERIFY_TLS, timeout=60)
@@ -527,7 +528,17 @@ def _tool_call(params):
     try:
         result = TOOLS[name][2](args)
     except Exception as e:
-        return {"content": [{"type": "text", "text": f"Error: {e}"}],
+        err_msg = str(e)
+        hint = ""
+        if "HTTP 404" in err_msg:
+            hint = " [Hint: check target device IP, site parameter, or resource path]"
+        elif "HTTP 403" in err_msg:
+            hint = " [Hint: action unauthorized for current account permissions]"
+        elif "HTTP 422" in err_msg:
+            hint = " [Hint: check tool parameter types and required fields]"
+        elif "Connection" in err_msg or "ConnectTimeout" in err_msg:
+            hint = f" [Hint: failed to reach base URL {BASE_URL}]"
+        return {"content": [{"type": "text", "text": f"Error: {err_msg}{hint}"}],
                 "isError": True}
     text = result if isinstance(result, str) \
         else json.dumps(result, ensure_ascii=False, indent=1)
