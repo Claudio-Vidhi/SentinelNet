@@ -114,9 +114,9 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   - **API Route**: `GET /api/wlc/{ip}/diagnose-client/{mac}` ([routers/wlc.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py))
   - **API Route**: `GET /api/wlc/{ip}/ap-summary` ([routers/wlc.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L43-L45))
   - **MCP Tools**: `wlc_client_detail`, `wlc_diagnose_client`, `wlc_ap_summary` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: WLC Live Observability view (`static/js/wlc.js`)
 
 - **Missing Features / Gaps**:
+  - **Dashboard UI Tab (`wlc.js`)**: Lacks dedicated WLC frontend tab in web dashboard (`templates/dashboard.html`); WLC endpoints are accessible only via REST API, MCP tools, or AI Assistant.
   - **802.11 Roaming Event Timeline**: Does not retain historical log of fast roaming transitions (802.11r/k/v) between APs over time.
   - **AP RF Heatmap Visualization**: Displays tabular AP summary metrics without spatial floor plan coverage overlay.
 
@@ -135,9 +135,9 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   - **API Route**: `GET /api/wlc/{ip}/rogue-aps` ([routers/wlc.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L59-L61))
   - **API Route**: `GET /api/fortigate/{ip}/managed-aps` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py))
   - **MCP Tools**: `wlc_rogue_aps`, `fortigate_managed_aps` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: Rogue AP & Wireless Threat Inspector (`static/js/wlc.js`, `static/js/fortigate.js`)
 
 - **Missing Features / Gaps**:
+  - **Dashboard UI Tab**: No dedicated WLC UI view in web dashboard; rogue AP telemetry currently relies on MCP tool / API calls.
   - **Active Rogue Containment Trigger**: Cannot send API command to trigger 802.11 deauthentication frame injection / wire containment from WLC.
   - **Automated Switch Port Auto-Block for Wired Rogue**: Cannot automatically disable switch port matching rogue MAC on wired network.
 
