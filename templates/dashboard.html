@@ -2857,15 +2857,42 @@
         <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descUiVariant">
           Scegli la variante grafica dell'interfaccia utente. Le modifiche vengono applicate all'istante e salvate per il tuo profilo.
         </p>
-        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-          <div class="form-group" style="margin:0; max-width:320px;">
+
+        <!-- Dropdown Selector -->
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+          <div class="form-group" style="margin:0; max-width:340px;">
             <label style="font-size:12px;" data-i18n="lblUiVariantSelect">Seleziona Layout / Design</label>
             <select id="uiVariantSelect" onchange="applyUiVariant(this.value, true)" style="padding-left:12px;">
               <option value="default" data-i18n="optUiVariantDefault">Standard (SentinelNet SCADA Mimic)</option>
               <option value="design-1" data-i18n="optUiVariantDesign1">Design 1 (Impeccable Modern Blue)</option>
               <option value="design-2" data-i18n="optUiVariantDesign2">Design 2 (Impeccable Cyber Violet)</option>
               <option value="design-3" data-i18n="optUiVariantDesign3">Design 3 (Impeccable Emerald Dark)</option>
+              <option value="design-4" data-i18n="optUiVariantDesign4">Design 4 (Bento Command Dock Workspace)</option>
             </select>
+          </div>
+        </div>
+
+        <!-- Interactive Visual Cards Grid -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:12px;">
+          <div onclick="applyUiVariant('default', true)" style="cursor:pointer; padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); transition:all 0.2s ease;">
+            <div style="font-weight:600; font-size:13px; margin-bottom:4px;"><i class="fa-solid fa-layer-group" style="color:var(--primary); margin-right:6px;"></i>Standard</div>
+            <div style="font-size:11px; color:var(--text-muted);">SCADA Mimic board</div>
+          </div>
+          <div onclick="applyUiVariant('design-1', true)" style="cursor:pointer; padding:14px; border:1px solid rgba(56,189,248,0.3); border-radius:8px; background:rgba(19,31,55,0.7); transition:all 0.2s ease;">
+            <div style="font-weight:600; font-size:13px; color:#38bdf8; margin-bottom:4px;"><i class="fa-solid fa-gem" style="margin-right:6px;"></i>Design 1</div>
+            <div style="font-size:11px; color:#94a3b8;">Modern Blue Glass</div>
+          </div>
+          <div onclick="applyUiVariant('design-2', true)" style="cursor:pointer; padding:14px; border:1px solid rgba(139,92,246,0.3); border-radius:8px; background:rgba(18,25,41,0.7); transition:all 0.2s ease;">
+            <div style="font-weight:600; font-size:13px; color:#c084fc; margin-bottom:4px;"><i class="fa-solid fa-bolt" style="margin-right:6px;"></i>Design 2</div>
+            <div style="font-size:11px; color:#a78bfa;">Cyber Violet Synthwave</div>
+          </div>
+          <div onclick="applyUiVariant('design-3', true)" style="cursor:pointer; padding:14px; border:1px solid rgba(16,185,129,0.3); border-radius:8px; background:rgba(13,31,23,0.7); transition:all 0.2s ease;">
+            <div style="font-weight:600; font-size:13px; color:#34d399; margin-bottom:4px;"><i class="fa-solid fa-shield-cat" style="margin-right:6px;"></i>Design 3</div>
+            <div style="font-size:11px; color:#6ee7b7;">Emerald Dark Tactical</div>
+          </div>
+          <div onclick="applyUiVariant('design-4', true)" style="cursor:pointer; padding:14px; border:1px solid rgba(99,102,241,0.3); border-radius:8px; background:rgba(17,24,39,0.7); transition:all 0.2s ease;">
+            <div style="font-weight:600; font-size:13px; color:#818cf8; margin-bottom:4px;"><i class="fa-solid fa-cubes" style="margin-right:6px;"></i>Design 4</div>
+            <div style="font-size:11px; color:#9ca3af;">Bento Command Dock</div>
           </div>
         </div>
       </div>
