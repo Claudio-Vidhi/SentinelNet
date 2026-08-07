@@ -91,6 +91,7 @@ const i18n = {
         // Tabs
         tabHome: '<i class="fa-solid fa-table-cells-large"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
+        tabWlc: '<i class="fa-solid fa-wifi"></i> Cisco WLC',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
         // Operations Home
         homeEyebrow: '<i class="fa-solid fa-grip"></i> Operazioni',
@@ -1452,6 +1453,7 @@ const i18n = {
         // Tabs
         tabHome: '<i class="fa-solid fa-table-cells-large"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
+        tabWlc: '<i class="fa-solid fa-wifi"></i> Cisco WLC',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
         // Operations Home
         homeEyebrow: '<i class="fa-solid fa-grip"></i> Operations',

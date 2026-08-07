@@ -588,6 +588,24 @@ def get_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = N
     return _api_or_ssh(device, "monitor/firewall/session", params, ssh_cmd)
 
 
+def delete_sessions(device, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
+                    dst_port: Optional[int] = None):
+    """Termina le sessioni attive nel firewall in base ai filtri specificati."""
+    filt = []
+    if src_ip:
+        filt.append(f"diagnose sys session filter src {src_ip}")
+    if dst_ip:
+        filt.append(f"diagnose sys session filter dst {dst_ip}")
+    if dst_port:
+        filt.append(f"diagnose sys session filter dport {dst_port}")
+    if not filt:
+        raise FortiGateError("At least one filter (src_ip, dst_ip, dst_port) is required to clear sessions.")
+
+    ssh_cmd = "\n".join(["diagnose sys session filter clear", *filt, "diagnose sys session clear"])
+    out = ssh_command(device, ssh_cmd)
+    return {"source": "ssh", "status": "success", "message": "Filter applied and sessions cleared", "output": out}
+
+
 def get_routes(device):
     return _api_or_ssh(device, "monitor/router/ipv4", None,
                        "get router info routing-table all")

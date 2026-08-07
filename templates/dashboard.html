@@ -252,6 +252,9 @@
         <button id="navFortigate" class="nav-item requires-admin" onclick="switchTab('tab-fortigate', this)">
           <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
         </button>
+        <button id="navWlc" class="nav-item" onclick="switchTab('tab-wlc', this); loadWlcTab();">
+          <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
+        </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navAssess">Valuta</h3>
         <button class="nav-item" onclick="switchTab('tab-security', this)">
@@ -1283,6 +1286,109 @@
 
         <div class="table-wrap">
           <div id="arpResults" style="overflow-x:auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Cisco WLC Live Observability -->
+    <div id="tab-wlc" class="tab-content">
+      <div class="hero-card" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+        <div>
+          <h2 style="margin:0 0 6px; font-family:var(--font-display); font-size:24px;"><i class="fa-solid fa-wifi" style="color:var(--primary); margin-right:8px;"></i>Cisco WLC Live Observability</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:13px;">Monitoraggio in tempo reale di Access Point Cisco, client wireless associati, WLAN/SSID e rilevamento Rogue AP.</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <select id="wlcTargetSelect" onchange="onWlcTargetChanged()" style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
+            <option value="">-- Seleziona Cisco WLC --</option>
+          </select>
+          <button class="btn btn-primary" onclick="refreshWlcData()" style="width:auto;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        </div>
+      </div>
+
+      <!-- KPI Status -->
+      <div id="wlcStatusBox" class="panel" style="margin-bottom:16px;">
+        <span style="color:var(--text-muted);">Seleziona un controller WLC per caricare la telemetria.</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr; gap:16px; margin-bottom:16px;">
+        <!-- AP Summary -->
+        <div class="panel">
+          <h3 style="font-size:15px; margin:0 0 12px;"><i class="fa-solid fa-tower-cell" style="color:var(--accent); margin-right:8px;"></i>Access Point Rilevati</h3>
+          <div class="table-wrap" style="max-height:280px; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead style="position:sticky; top:0; background:var(--surface-2); font-size:12px;">
+                <tr><th>Nome AP</th><th>IP</th><th>MAC Ethernet</th><th>Stato</th><th>Clienti</th><th>Modello</th></tr>
+              </thead>
+              <tbody id="wlcApTableBody">
+                <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Nessun dato AP.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Client Summary & Search -->
+        <div class="panel">
+          <h3 style="font-size:15px; margin:0 0 12px;"><i class="fa-solid fa-users-viewfinder" style="color:var(--success); margin-right:8px;"></i>Client Wireless Associati</h3>
+          <div class="table-wrap" style="max-height:300px; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead style="position:sticky; top:0; background:var(--surface-2); font-size:12px;">
+                <tr><th>MAC Client</th><th>IP Address</th><th>AP Collegato</th><th>WLAN / SSID</th><th>RSSI / SNR</th><th>Azioni</th></tr>
+              </thead>
+              <tbody id="wlcClientTableBody">
+                <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Nessun client attivo.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+        <!-- WLAN Summary -->
+        <div class="panel">
+          <h3 style="font-size:15px; margin:0 0 12px;"><i class="fa-solid fa-network-wired" style="color:var(--primary); margin-right:8px;"></i>WLAN / SSID Configurate</h3>
+          <div class="table-wrap" style="max-height:240px; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead style="position:sticky; top:0; background:var(--surface-2); font-size:12px;">
+                <tr><th>ID</th><th>SSID</th><th>Stato</th><th>Autenticazione</th></tr>
+              </thead>
+              <tbody id="wlcWlanTableBody">
+                <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Nessun WLAN.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Rogue AP Detection -->
+        <div class="panel">
+          <h3 style="font-size:15px; margin:0 0 12px;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--warning); margin-right:8px;"></i>Rogue AP Rilevati</h3>
+          <div class="table-wrap" style="max-height:240px; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead style="position:sticky; top:0; background:var(--surface-2); font-size:12px;">
+                <tr><th>BSSID Rogue</th><th>SSID Broadcast</th><th>Canale</th><th>RSSI</th><th>Stato</th></tr>
+              </thead>
+              <tbody id="wlcRogueTableBody">
+                <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Nessun Rogue AP.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Diagnostica Client WLC -->
+    <div id="wlcDiagModal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10050; align-items:center; justify-content:center;">
+      <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:0; width:90%; max-width:650px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden;">
+        <div style="padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+          <h3 style="margin:0; font-size:16px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i> Diagnostica Client Wireless WLC
+          </h3>
+          <button onclick="closeModal('wlcDiagModal')" style="border:none; background:transparent; color:var(--text-muted); font-size:18px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="wlcDiagModalBody" style="padding:18px; overflow-y:auto;">
+          <!-- Telemetria diagnostica dinamica -->
+        </div>
+        <div style="padding:12px 18px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
+          <button class="btn btn-secondary" onclick="closeModal('wlcDiagModal')">Chiudi</button>
         </div>
       </div>
     </div>
@@ -3585,6 +3691,7 @@
   <script src="/static/js/settings.js"></script>
   <script src="/static/js/mcp-client.js"></script>
   <script src="/static/js/fortigate-management.js"></script>
+  <script src="/static/js/wlc.js"></script>
   <script src="/static/js/site-agent.js"></script>
   <script src="/static/js/flow-analytics.js"></script>
   <script src="/static/js/netsec-audit.js"></script>

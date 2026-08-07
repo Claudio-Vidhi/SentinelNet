@@ -727,6 +727,7 @@ function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-mcp') loadMcpTab();
     else if (tabId === 'tab-mcp-client') loadMcpClientTab();
     else if (tabId === 'tab-fortigate') loadFgtTab();
+    else if (tabId === 'tab-wlc' && typeof loadWlcTab === 'function') loadWlcTab();
     else if (tabId === 'tab-audit-checklist') loadAuditChecklistTab();
     else if (tabId === 'tab-settings') loadAppSettings();
 }

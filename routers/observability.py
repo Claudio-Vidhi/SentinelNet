@@ -687,3 +687,19 @@ def obs_health(current_user = Depends(require_admin)):
         "db_size_bytes": db_size,
         "schema_version": db.SCHEMA_VERSION,
     }
+
+
+from pydantic import BaseModel
+import time
+
+class PruneLogsSchema(BaseModel):
+    days: int = 30
+
+
+@router.post("/api/observability/prune-logs")
+async def obs_prune_logs(payload: PruneLogsSchema, current_user = Depends(require_admin)):
+    """Elimina i log di osservabilità più vecchi del limite in giorni."""
+    cutoff = int(time.time()) - (payload.days * 86400)
+    db.enqueue_write("DELETE FROM syslog_events WHERE ts < ?", (cutoff,))
+    db.enqueue_write("DELETE FROM flow_aggregates WHERE ts < ?", (cutoff,))
+    return {"status": "success", "days_retained": payload.days, "cutoff_timestamp": cutoff}
