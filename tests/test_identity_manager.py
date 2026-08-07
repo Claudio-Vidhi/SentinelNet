@@ -43,6 +43,16 @@ class TestIdentityManager(unittest.TestCase):
         self.assertIn("specific", names)
         self.assertIn("global", names)
 
+    def test_multi_tenant_identity(self):
+        ident = self.im.add_identity("multi", ["T1", "T2"], "u", "p", "s")
+        self.assertEqual(ident["tenant"], ["T1", "T2"])
+        t1_names = [i["name"] for i in self.im.get_identities(tenant="T1")]
+        t2_names = [i["name"] for i in self.im.get_identities(tenant="T2")]
+        t3_names = [i["name"] for i in self.im.get_identities(tenant="T3")]
+        self.assertIn("multi", t1_names)
+        self.assertIn("multi", t2_names)
+        self.assertNotIn("multi", t3_names)
+
     def test_update_preserves_password_when_empty(self):
         ident = self.im.add_identity("x", "T1", "u1", "p1", "s1")
         self.im.update_identity(ident["id"], name="x2", tenant="T2", username="u2",
