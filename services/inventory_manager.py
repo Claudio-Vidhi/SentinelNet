@@ -791,6 +791,26 @@ def update_device_hostname(ip: str, hostname: str):
         if changed:
             safe_write_hosts_csv(devices)
 
+def bulk_assign_profile(ips: list, profile: str):
+    """Assegna il valore Profile (es. 'identity:<id>' o 'default') a più
+    dispositivi in un'unica scrittura di hosts.csv. Ritorna
+    (assigned, not_found): liste di IP."""
+    wanted = set(ips)
+    assigned, not_found = [], []
+    with _io_lock:
+        devices = get_all_devices()
+        by_ip = {d['IP']: d for d in devices}
+        for ip in wanted:
+            d = by_ip.get(ip)
+            if d is None:
+                not_found.append(ip)
+                continue
+            d['Profile'] = profile
+            assigned.append(ip)
+        if assigned:
+            safe_write_hosts_csv(devices)
+    return assigned, not_found
+
 # --- UTILITIES GESTIONE GRUPPI (CRUD) ---
 
 def add_group(group_name: str, description: str = "") -> bool:

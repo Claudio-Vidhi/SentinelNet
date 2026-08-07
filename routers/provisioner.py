@@ -341,3 +341,53 @@ def identities_delete(identity_id: str, current_user = Depends(require_operator)
     log_audit(f"Identita' '{identity_id}' eliminata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+
+class BulkAssignIdentitySchema(BaseModel):
+    """Assegnazione massiva di un'identita' (o del profilo 'default') a più
+    dispositivi: evita di ripetere l'operazione scheda per scheda."""
+    identity_id: str
+    ips: List[str] = Field(min_length=1)
+
+
+@router.post("/api/identities/{identity_id}/assign")
+def identities_bulk_assign(identity_id: str, payload: BulkAssignIdentitySchema,
+                           current_user = Depends(require_operator)):
+    """Assegna l'identita' a più dispositivi in una sola operazione. Il campo
+    ``identity_id`` nel body deve coincidere con quello nel percorso; il valore
+    speciale ``default`` ripristina le credenziali di default."""
+    if identity_id != payload.identity_id:
+        raise HTTPException(status_code=400, detail="identity_id nel body e nel percorso non coincidono.")
+    from services import inventory_manager
+    from routers.deps import user_group_scope
+    if identity_id == "default":
+        profile = "default"
+    else:
+        creds = identity_manager.get_identity_credentials(identity_id)
+        if creds is None:
+            raise HTTPException(status_code=404, detail="Identita' non trovata.")
+        profile = f"identity:{identity_id}"
+    # Scoping per sede: un operatore limitato non può toccare device fuori
+    # dalle proprie sedi. Gli IP non ammessi vengono saltati (non un errore
+    # globale: l'azione parziale resta utile).
+    scope = user_group_scope(current_user)
+    devices_by_ip = {d['IP']: d for d in inventory_manager.get_all_devices()}
+    allowed_ips = []
+    skipped = []
+    for ip in payload.ips:
+        d = devices_by_ip.get(ip)
+        if d is None:
+            skipped.append({"ip": ip, "reason": "not_found"})
+            continue
+        if scope is not None and d.get('Group', 'Generale') not in scope:
+            skipped.append({"ip": ip, "reason": "forbidden"})
+            continue
+        allowed_ips.append(ip)
+    assigned, not_found = inventory_manager.bulk_assign_profile(allowed_ips, profile)
+    for ip in not_found:
+        skipped.append({"ip": ip, "reason": "not_found"})
+    log_audit(
+        f"Assegnazione massiva identita' '{identity_id}' a {len(assigned)} device "
+        f"da '{current_user.get('sub')}'."
+    )
+    return {"status": "success", "assigned": assigned, "skipped": skipped}
+
