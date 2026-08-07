@@ -49,6 +49,18 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
+  /* Tipografia & Forme */
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 26px;
+  --font-size-4xl: 36px;
+  --card-border-radius: 0px;
+
   /* Superfici: laminato, targa, incasso */
   --bg: #d4d7cf;                 /* laminato del quadro */
   --surface: #e6e7e1;            /* targa: bay, card, pannello */
@@ -297,6 +309,7 @@ aside, main, .table-container, .table-wrap, .template-box {
   background-image: var(--plate-grain);
   background-size: 140px 140px;
   background-repeat: repeat;
+  border-radius: var(--card-border-radius, 0px);
 }
 
 /* ---------------------------------------------------------------
