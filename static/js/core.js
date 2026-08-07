@@ -47,7 +47,7 @@ function toggleTheme() {
 }
 
 function applyUiVariant(variant, saveServer = false) {
-    const valid = ['default', 'design-1', 'design-2', 'design-3'];
+    const valid = ['default', 'design-1', 'design-2', 'design-3', 'design-4'];
     const selected = valid.includes(variant) ? variant : 'default';
 
     document.documentElement.setAttribute('data-ui-variant', selected);
