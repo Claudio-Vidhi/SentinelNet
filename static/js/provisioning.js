@@ -15,23 +15,36 @@ document.getElementById('devGroupSelect').addEventListener('change', async () =>
 
 // --- IDENTITIES CRUD (pannello destro della tab Provisioning) ---
 
-function populateIdentTenantOptions(selected) {
+async function populateIdentTenantOptions(selected) {
     const sel = document.getElementById('identTenant');
     if (!sel) return;
-    const groups = (window.globalGroups || []).map(g => g.name || g);
-    if (!groups.includes('Generale')) groups.unshift('Generale');
+    let fromGlobal = Object.keys(window.globalGroups || {});
+    if (fromGlobal.length <= 1) {
+        try {
+            const res = await apiFetch('/api/groups');
+            if (res && res.ok) {
+                const data = await res.json();
+                if (data.groups) {
+                    window.globalGroups = data.groups;
+                    fromGlobal = Object.keys(data.groups);
+                }
+            }
+        } catch (e) { /* fallback */ }
+    }
+    const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
+    const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
     const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
-        .concat([...new Set(groups)].map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
+        .concat(allTenants.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
     sel.innerHTML = options.join('');
     sel.value = selected || 'all';
 }
 
-function editIdentity(id) {
+async function editIdentity(id) {
     const i = (window._tenantIdentities || []).find(x => x.id === id);
     if (!i) return;
     document.getElementById('identEditId').value = id;
     document.getElementById('identName').value = i.name;
-    populateIdentTenantOptions(i.tenant || 'all');
+    await populateIdentTenantOptions(i.tenant || 'all');
     document.getElementById('identUser').value = i.username;
     document.getElementById('identPass').value = '';
     document.getElementById('identSecret').value = '';
@@ -49,10 +62,10 @@ async function deleteIdentity(id) {
     await refreshIdentityOptions(); renderIdentitiesPanel();
 }
 
-document.getElementById('btnNewIdentity').addEventListener('click', () => {
+document.getElementById('btnNewIdentity').addEventListener('click', async () => {
     document.getElementById('identEditId').value = '';
     ['identName', 'identUser', 'identPass', 'identSecret'].forEach(i => document.getElementById(i).value = '');
-    populateIdentTenantOptions(document.getElementById('devGroupSelect').value || 'all');
+    await populateIdentTenantOptions(document.getElementById('devGroupSelect').value || 'all');
     document.getElementById('identityForm').style.display = 'block';
 });
 document.getElementById('btnCancelIdentity').addEventListener('click', () =>
@@ -430,75 +443,6 @@ async function loadProvisioningTab() {
     await refreshIdentityOptions();
     renderIdentitiesPanel();
 }
-
-function populateIdentTenantOptions(selected) {
-    const sel = document.getElementById('identTenant');
-    if (!sel) return;
-    const fromGlobal = Object.keys(window.globalGroups || {});
-    const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
-    const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])];
-    const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
-        .concat(allTenants.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
-    sel.innerHTML = options.join('');
-    sel.value = selected || 'all';
-}
-
-function editIdentity(id) {
-    const i = (window._tenantIdentities || []).find(x => x.id === id);
-    if (!i) return;
-    document.getElementById('identEditId').value = id;
-    document.getElementById('identName').value = i.name;
-    populateIdentTenantOptions(i.tenant || 'all');
-    document.getElementById('identUser').value = i.username;
-    document.getElementById('identPass').value = '';
-    document.getElementById('identSecret').value = '';
-    document.getElementById('identityForm').style.display = 'block';
-}
-
-async function deleteIdentity(id) {
-    if (!confirm(i18n[currentLang].confirmDeleteIdentity)) return;
-    const res = await apiFetch('/api/identities/' + id, { method: 'DELETE' });
-    if (res && res.status === 409) {
-        const err = await res.json();
-        alert(i18n[currentLang].alertIdentityInUse + '\n' + (err.detail.devices || []).join(', '));
-        return;
-    }
-    await refreshIdentityOptions(); renderIdentitiesPanel();
-}
-
-document.getElementById('btnNewIdentity').addEventListener('click', () => {
-    document.getElementById('identEditId').value = '';
-    ['identName', 'identUser', 'identPass', 'identSecret'].forEach(i => document.getElementById(i).value = '');
-    populateIdentTenantOptions(document.getElementById('devGroupSelect').value || 'all');
-    document.getElementById('identityForm').style.display = 'block';
-});
-document.getElementById('btnCancelIdentity').addEventListener('click', () =>
-    document.getElementById('identityForm').style.display = 'none');
-document.getElementById('btnSaveIdentity').addEventListener('click', async () => {
-    const id = document.getElementById('identEditId').value;
-    const payload = {
-        name: document.getElementById('identName').value.trim(),
-        tenant: document.getElementById('identTenant')?.value || document.getElementById('devGroupSelect').value,
-        username: document.getElementById('identUser').value.trim(),
-        password: document.getElementById('identPass').value,
-        enable_secret: document.getElementById('identSecret').value,
-    };
-    if (!payload.name || !payload.username || (!id && !payload.password)) {
-        alert(i18n[currentLang].alertIdentityFields); return;
-    }
-    const res = await apiFetch(id ? '/api/identities/' + id : '/api/identities', {
-        method: id ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-    if (res && res.ok) {
-        document.getElementById('identityForm').style.display = 'none';
-        await refreshIdentityOptions(); renderIdentitiesPanel();
-    } else if (res) {
-        const err = await res.json();
-        alert(err.detail || 'Errore');
-    }
-});
 
 // --- BULK ASSIGN IDENTITY TO DEVICES ---
 // Apre un modale che elenca i dispositivi del tenant dell'identità (o del tenant
