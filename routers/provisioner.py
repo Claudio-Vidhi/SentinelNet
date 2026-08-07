@@ -300,9 +300,9 @@ from security import identity_manager
 
 class IdentitySchema(BaseModel):
     name: str
-    tenant: str
+    tenant: str = "all"
     username: str
-    password: str
+    password: str = ""
     enable_secret: str = ""
 
 @router.get("/api/identities")
@@ -313,7 +313,7 @@ def identities_list(tenant: Optional[str] = None, current_user = Depends(require
 @router.post("/api/identities")
 def identities_create(payload: IdentitySchema, current_user = Depends(require_operator)):
     if not payload.name.strip() or not payload.username or not payload.password:
-        raise HTTPException(status_code=400, detail="Nome, username e password sono obbligatori.")
+        raise HTTPException(status_code=400, detail="Nome, username e password sono obbligatori per nuove identita'.")
     ident = identity_manager.add_identity(payload.name, payload.tenant,
                                           payload.username, payload.password,
                                           payload.enable_secret)
@@ -323,8 +323,8 @@ def identities_create(payload: IdentitySchema, current_user = Depends(require_op
 @router.put("/api/identities/{identity_id}")
 def identities_update(identity_id: str, payload: IdentitySchema,
                       current_user = Depends(require_operator)):
-    if not payload.name.strip() or not payload.username or not payload.password:
-        raise HTTPException(status_code=400, detail="Nome, username e password sono obbligatori.")
+    if not payload.name.strip() or not payload.username:
+        raise HTTPException(status_code=400, detail="Nome e username sono obbligatori.")
     if not identity_manager.update_identity(identity_id, payload.name, payload.tenant,
                                             payload.username, payload.password,
                                             payload.enable_secret):

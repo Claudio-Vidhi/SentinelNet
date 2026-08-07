@@ -46,12 +46,12 @@ def _devices_using(identity_id: str) -> list:
 
 
 def get_identities(tenant: Optional[str] = None) -> list:
-    """Lista identita' SENZA segreti; opzionale filtro per tenant."""
+    """Lista identita' SENZA segreti; opzionale filtro per tenant. 'all' o vuoto include globali."""
     with _lock:
         rows = _load()
-    if tenant:
-        rows = [r for r in rows if r.get("tenant") == tenant]
-    return [{"id": r["id"], "name": r["name"], "tenant": r["tenant"],
+    if tenant and tenant != "all":
+        rows = [r for r in rows if r.get("tenant") == tenant or r.get("tenant") == "all" or not r.get("tenant")]
+    return [{"id": r["id"], "name": r["name"], "tenant": r.get("tenant", "all"),
              "username": r["username"],
              "devices_using": len(_devices_using(r["id"]))} for r in rows]
 
@@ -73,7 +73,7 @@ def add_identity(name: str, tenant: str, username: str,
     ident = {
         "id": uuid.uuid4().hex,
         "name": name.strip(),
-        "tenant": tenant,
+        "tenant": tenant or "all",
         "username": username,
         "password_enc": encrypt_password(password),
         "secret_enc": encrypt_password(secret),
@@ -82,18 +82,22 @@ def add_identity(name: str, tenant: str, username: str,
         rows = _load()
         rows.append(ident)
         _save(rows)
-    return {"id": ident["id"], "name": ident["name"], "tenant": tenant}
+    return {"id": ident["id"], "name": ident["name"], "tenant": ident["tenant"]}
 
 
 def update_identity(identity_id: str, name: str, tenant: str,
-                    username: str, password: str, secret: str) -> bool:
+                    username: str, password: str = "", secret: str = "") -> bool:
     with _lock:
         rows = _load()
         for r in rows:
             if r["id"] == identity_id:
-                r.update(name=name.strip(), tenant=tenant, username=username,
-                         password_enc=encrypt_password(password),
-                         secret_enc=encrypt_password(secret))
+                r["name"] = name.strip()
+                r["tenant"] = tenant or "all"
+                r["username"] = username
+                if password:
+                    r["password_enc"] = encrypt_password(password)
+                if secret:
+                    r["secret_enc"] = encrypt_password(secret)
                 _save(rows)
                 return True
     return False

@@ -624,13 +624,14 @@
           <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;" data-i18n="descIdentities">Profili credenziali riusabili, legati al tenant selezionato nel form.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th data-i18n="thIdentName">Nome</th><th>Username</th><th data-i18n="thIdentDevices">Device</th><th data-i18n="thIdentActions">Azioni</th></tr></thead>
+              <thead><tr><th data-i18n="thIdentName">Nome</th><th data-i18n="thIdentTenant">Tenant</th><th>Username</th><th data-i18n="thIdentDevices">Device</th><th data-i18n="thIdentActions">Azioni</th></tr></thead>
               <tbody id="identitiesTableBody"></tbody>
             </table>
           </div>
           <div id="identityForm" style="display:none; border-left:2px solid var(--primary); padding-left:10px; margin-top:12px;">
             <input type="hidden" id="identEditId">
             <div class="form-group"><label data-i18n="thIdentName">Nome</label><input id="identName" type="text" style="padding-left:12px;"></div>
+            <div class="form-group"><label data-i18n="thIdentTenant">Tenant / Sede</label><select id="identTenant" style="padding-left:12px;"></select></div>
             <div class="form-group"><label>Username</label><input id="identUser" type="text" style="padding-left:12px;"></div>
             <div class="form-group"><label data-i18n="lblPass">Password</label><input id="identPass" type="password" style="padding-left:12px;"></div>
             <div class="form-group"><label data-i18n="lblSecret">Enable Secret</label><input id="identSecret" type="password" style="padding-left:12px;"></div>
