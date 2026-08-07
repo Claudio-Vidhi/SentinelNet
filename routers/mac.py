@@ -231,3 +231,29 @@ def mac_delete_override(payload: MacOverrideDeleteSchema, current_user = Depends
     log_audit(f"MAC override per '{payload.ip}' rimosso da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
+
+class PortControlSchema(BaseModel):
+    ip: str
+    port: str
+    action: str = "shutdown"   # shutdown | no-shutdown
+
+
+@router.post("/api/mac/port-control")
+def mac_port_control(payload: PortControlSchema, current_user = Depends(require_operator)):
+    """Cambia lo stato amministrativo di una porta switch (shutdown / no shutdown)."""
+    import re
+    device = assert_device_allowed(current_user, payload.ip)
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Device '{payload.ip}' non trovato o non consentito.")
+    if payload.action not in ("shutdown", "no-shutdown"):
+        raise HTTPException(status_code=400, detail="Azione non valida. Utilizzare 'shutdown' o 'no-shutdown'.")
+    if not re.match(r"^[a-zA-Z0-9/\.\-]+$", payload.port.strip()):
+        raise HTTPException(status_code=400, detail="Nome interfaccia porta non valido.")
+
+    cmd_action = "shutdown" if payload.action == "shutdown" else "no shutdown"
+    cmd_block = f"interface {payload.port.strip()}\n{cmd_action}\nexit"
+
+    res = core_engine.send_custom_command(device, cmd_block, bypass_blacklist=True)
+    log_audit(f"Port control per '{payload.ip}' porta '{payload.port}' -> '{payload.action}' da '{current_user.get('sub')}'.")
+    return {"status": "success", "ip": payload.ip, "port": payload.port, "action": payload.action, "output": res}
+

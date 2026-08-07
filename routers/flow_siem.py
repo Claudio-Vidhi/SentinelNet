@@ -19,7 +19,7 @@ chiave primaria di ``syslog_events``, quindi stabile.
 """
 
 import time
-from typing import Optional
+from typing import Optional, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -364,3 +364,27 @@ async def suppress_flow_siem_alert(payload: AlertSuppressSchema,
 
     return {"status": "success", "event_id": payload.event_id,
             "suppressed": True}
+
+
+class ShunIpSchema(BaseModel):
+    ip: str
+    reason: Optional[str] = "Traffic anomaly or threat shun requested"
+
+_SHUNNED_IPS: Dict[str, dict] = {}
+
+
+@router.post("/shun-ip")
+def shun_ip(payload: ShunIpSchema, current_user=Depends(get_current_user)):
+    """Registra un IP nella lista di shun temporaneo."""
+    _SHUNNED_IPS[payload.ip] = {
+        "ts": int(time.time()),
+        "reason": payload.reason,
+        "by": (current_user or {}).get("sub", "operator")
+    }
+    return {"status": "success", "ip": payload.ip, "shunned": True, "details": _SHUNNED_IPS[payload.ip]}
+
+
+@router.get("/shun-list")
+def get_shun_list(current_user=Depends(get_current_user)):
+    """Elenco IP attualmente in lista shun."""
+    return {"shunned_ips": _SHUNNED_IPS}

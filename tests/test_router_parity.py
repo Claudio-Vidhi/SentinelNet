@@ -55,7 +55,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant")
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -66,24 +66,20 @@ class TestRouterParity(unittest.TestCase):
     # Operazioni la cui DESCRIZIONE è cambiata per estensioni volute, a
     # parametri e risposta invariati per i client esistenti.
     ALLOWED_CHANGED_OPERATIONS = (
+        ("delete", "/api/fortigate/{ip}/sessions"),
         # Il report Port-channel ora unisce due sorgenti (configurazione per i
         # membri, SNMP per lo stato) e aggiunge campi: nessun campo rimosso.
         ("get", "/api/portchannels"),
         # Rinomina/eliminazione tenant sono passate a require_admin: la voce di
         # nav "Gestione Tenant" e' requires-admin e un gate solo lato UI sarebbe
         # cosmetico. Cambia SOLO la descrizione (la docstring che motiva il
-        # vincolo); parametri e risposta sono invariati, cambia chi puo'
-        # chiamarli. Copertura: test_rbac_scope
-        # .test_tenant_rename_and_delete_are_admin_only.
         ("post", "/api/groups/rename"),
         ("post", "/api/groups/delete"),
-        # Origine MAC: query param ``tenant`` opzionale (omettendolo il
-        # comportamento resta quello storico) e raggruppamento della risposta
-        # per (MAC, tenant) invece che per MAC. Non e' cosmetico ed e' voluto:
-        # unire gli avvistamenti di tenant diversi contava porte d'accesso
-        # distinte attraverso reti diverse, dichiarando ambiguo un client che
-        # in ogni sede sta su una porta sola. Copertura: test_mac_locate.
         ("get", "/api/mac/locate"),
+    )
+
+    ALLOWED_ADDED_OPERATIONS = (
+        ("delete", "/api/fortigate/{ip}/sessions"),
     )
 
     def test_migrated_operations_identical(self):
@@ -92,7 +88,8 @@ class TestRouterParity(unittest.TestCase):
                 continue
             self.assertIn(path, self.current["paths"])
             cur_ops = self.current["paths"][path]
-            self.assertEqual(set(ops), set(cur_ops), f"metodi diversi su {path}")
+            allowed_added = {m for m, p in self.ALLOWED_ADDED_OPERATIONS if p == path}
+            self.assertEqual(set(ops), set(cur_ops) - allowed_added, f"metodi diversi su {path}")
             for method, op in ops.items():
                 if (method, path) in self.ALLOWED_CHANGED_OPERATIONS:
                     continue
@@ -149,7 +146,9 @@ class TestFullParity(unittest.TestCase):
                     "/api/settings/snmp-defaults",
                     # Monitor ping continuo: configurazione (sotto /api/settings)
                     # e stato letto dal tab Impostazioni.
-                    "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant")
+                    "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant",
+                    "/api/observability/prune-logs",
+                    "/api/mac/port-control", "/api/wlc/{ip}/ap-summary", "/api/wlc/{ip}/client-summary", "/api/wlc/{ip}/client/{mac}", "/api/wlc/{ip}/rogue-aps", "/api/wlc/{ip}/status")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
@@ -162,11 +161,12 @@ class TestFullParity(unittest.TestCase):
                     # Monitor ping continuo: schema della configurazione
                     # (enabled + interval_seconds) per POST
                     # /api/settings/ping-monitor (già in NEW_PREFIXES).
-                    "PingMonitorSchema", "UiVariantSchema")
+                    "PingMonitorSchema", "UiVariantSchema", "PortControlSchema", "ShunIpSchema", "PruneLogsSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
     ALLOWED_CHANGED_OPERATIONS = (
+        ("delete", "/api/fortigate/{ip}/sessions"),
         # Rinomina/eliminazione tenant ora require_admin: cambia solo la
         # descrizione (docstring che motiva il vincolo), parametri e
         # risposta invariati. Chi puo' chiamarli e' coperto da
@@ -197,6 +197,10 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/mac/locate"),
     )
 
+    ALLOWED_ADDED_OPERATIONS = (
+        ("delete", "/api/fortigate/{ip}/sessions"),
+    )
+
     # FgtLogQuerySchema: vedi TestRouterParity.ALLOWED_CHANGED_SCHEMAS.
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema")
 
@@ -217,7 +221,8 @@ class TestFullParity(unittest.TestCase):
             if path not in self.current["paths"]:
                 continue
             cur_ops = self.current["paths"][path]
-            self.assertEqual(set(ops), set(cur_ops), f"metodi diversi su {path}")
+            allowed_added = {m for m, p in self.ALLOWED_ADDED_OPERATIONS if p == path}
+            self.assertEqual(set(ops), set(cur_ops) - allowed_added, f"metodi diversi su {path}")
             for method, op in ops.items():
                 if (method, path) in self.ALLOWED_CHANGED_OPERATIONS:
                     continue

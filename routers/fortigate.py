@@ -276,6 +276,14 @@ def fgt_sessions(ip: str, payload: FgtSessionQuerySchema,
                      src_ip=payload.src_ip, dst_ip=payload.dst_ip,
                      dst_port=payload.dst_port, count=payload.count)
 
+@router.delete("/api/fortigate/{ip}/sessions")
+def fgt_delete_sessions(ip: str, payload: FgtSessionQuerySchema,
+                        current_user = Depends(require_operator)):
+    """Termina sessioni attive che matchano i filtri indicati (richiede ruolo operator+)."""
+    log_audit(f"Session kill FortiGate '{ip}' da '{current_user.get('sub')}' (src={payload.src_ip}, dst={payload.dst_ip}, dport={payload.dst_port}).")
+    return _fgt_call(fortigate_service.delete_sessions, _fgt_device(ip, current_user),
+                     src_ip=payload.src_ip, dst_ip=payload.dst_ip, dst_port=payload.dst_port)
+
 @router.get("/api/fortigate/{ip}/routes")
 def fgt_routes(ip: str, current_user = Depends(get_current_user)):
     return _fgt_call(fortigate_service.get_routes, _fgt_device(ip, current_user))
