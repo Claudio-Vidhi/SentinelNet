@@ -748,9 +748,15 @@ function renderIdentitiesPanel() {
     const body = document.getElementById('identitiesTableBody');
     const idents = window._tenantIdentities || [];
     body.innerHTML = idents.length ? idents.map(i => {
-        const tenantLabel = (!i.tenant || i.tenant === 'all')
-            ? `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:11px;">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti (Globale)')}</span>`
-            : `<span class="badge" style="background:var(--surface-2); font-size:11px;">${escapeHtml(i.tenant)}</span>`;
+        let tenantLabel = '';
+        if (!i.tenant || i.tenant === 'all') {
+            tenantLabel = `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:11px;">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti (Globale)')}</span>`;
+        } else if (Array.isArray(i.tenant)) {
+            tenantLabel = i.tenant.map(t => `<span class="badge" style="background:var(--surface-2); font-size:11px; margin-right:3px;">${escapeHtml(t)}</span>`).join('');
+        } else {
+            const parts = String(i.tenant).split(',').map(s => s.trim()).filter(Boolean);
+            tenantLabel = parts.map(t => `<span class="badge" style="background:var(--surface-2); font-size:11px; margin-right:3px;">${escapeHtml(t)}</span>`).join('');
+        }
         return `<tr>
         <td>${escapeHtml(i.name)}</td>
         <td>${tenantLabel}</td>

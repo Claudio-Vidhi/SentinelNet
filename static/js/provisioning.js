@@ -28,10 +28,57 @@ async function populateIdentTenantOptions(selected) {
     const fromGlobal = Object.keys(window.globalGroups || {});
     const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
     const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
+
+    // Single select options
     const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
         .concat(allTenants.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
     sel.innerHTML = options.join('');
-    sel.value = selected || 'all';
+
+    // Multi-tenant checkboxes
+    const cbContainer = document.getElementById('identTenantCheckboxes');
+    if (cbContainer) {
+        cbContainer.innerHTML = allTenants.map(t => `
+          <label style="font-size:12px; font-weight:normal; cursor:pointer; display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" class="identTenantCb" value="${escapeHtml(t)}" style="width:auto; margin:0;">
+            <span>${escapeHtml(t)}</span>
+          </label>
+        `).join('');
+    }
+
+    // Wire checkbox toggle listener
+    const chkSpecific = document.getElementById('chkIdentSpecificTenant');
+    const singleWrap = document.getElementById('identTenantSingleWrap');
+    const multiWrap = document.getElementById('identTenantMultiWrap');
+
+    if (chkSpecific && !chkSpecific._wired) {
+        chkSpecific._wired = true;
+        chkSpecific.addEventListener('change', () => {
+            if (chkSpecific.checked) {
+                if (singleWrap) singleWrap.style.display = 'none';
+                if (multiWrap) multiWrap.style.display = 'block';
+            } else {
+                if (singleWrap) singleWrap.style.display = 'block';
+                if (multiWrap) multiWrap.style.display = 'none';
+                if (sel) sel.value = 'all';
+            }
+        });
+    }
+
+    // Initialize state from 'selected'
+    const isGlobal = !selected || selected === 'all' || (Array.isArray(selected) && (selected.length === 0 || selected.includes('all')));
+    if (chkSpecific) chkSpecific.checked = !isGlobal;
+    if (singleWrap) singleWrap.style.display = isGlobal ? 'block' : 'none';
+    if (multiWrap) multiWrap.style.display = isGlobal ? 'none' : 'block';
+
+    if (isGlobal) {
+        sel.value = 'all';
+    } else {
+        const selArray = Array.isArray(selected) ? selected : String(selected).split(',').map(s => s.trim());
+        document.querySelectorAll('.identTenantCb').forEach(cb => {
+            cb.checked = selArray.includes(cb.value);
+        });
+        if (selArray.length === 1) sel.value = selArray[0];
+    }
 }
 
 async function editIdentity(id) {
@@ -67,9 +114,23 @@ document.getElementById('btnCancelIdentity').addEventListener('click', () =>
     document.getElementById('identityForm').style.display = 'none');
 document.getElementById('btnSaveIdentity').addEventListener('click', async () => {
     const id = document.getElementById('identEditId').value;
+    const chkSpecific = document.getElementById('chkIdentSpecificTenant');
+    let tenantPayload = 'all';
+
+    if (chkSpecific && chkSpecific.checked) {
+        const selectedCbs = Array.from(document.querySelectorAll('.identTenantCb:checked')).map(cb => cb.value);
+        if (!selectedCbs.length) {
+            alert(i18n[currentLang].alertSelectTenant || 'Seleziona almeno un tenant.');
+            return;
+        }
+        tenantPayload = selectedCbs.length === 1 ? selectedCbs[0] : selectedCbs;
+    } else {
+        tenantPayload = 'all';
+    }
+
     const payload = {
         name: document.getElementById('identName').value.trim(),
-        tenant: document.getElementById('identTenant')?.value || document.getElementById('devGroupSelect').value,
+        tenant: tenantPayload,
         username: document.getElementById('identUser').value.trim(),
         password: document.getElementById('identPass').value,
         enable_secret: document.getElementById('identSecret').value,
@@ -455,18 +516,23 @@ function assignIdentityToDevices(identityId) {
     const currentTenant = document.getElementById('devGroupSelect')?.value || 'Generale';
     const L = i18n[currentLang];
 
-    // Se l'identità è legata a un tenant specifico, vengono elencati SOLO i device di quel tenant.
+    // Se l'identità è legata a tenant specifici, vengono elencati SOLO i device di quei tenant.
     // Se è globale ('all'), vengono elencati i device del tenant corrente (o tutti se devGroupSelect è 'all').
-    const isSpecificTenant = ident.tenant && ident.tenant !== 'all';
-    const targetTenant = isSpecificTenant ? ident.tenant : currentTenant;
+    let allowedTenants = null;
+    if (ident.tenant && ident.tenant !== 'all') {
+        allowedTenants = Array.isArray(ident.tenant)
+            ? ident.tenant
+            : String(ident.tenant).split(',').map(s => s.trim()).filter(Boolean);
+        if (allowedTenants.includes('all')) allowedTenants = null;
+    }
 
     const devices = (window.globalDevices || []).filter(d => {
-        if (isSpecificTenant) return d.Group === ident.tenant;
-        return targetTenant === 'all' || d.Group === targetTenant;
+        if (allowedTenants && allowedTenants.length) return allowedTenants.includes(d.Group);
+        return currentTenant === 'all' || d.Group === currentTenant;
     });
 
-    const scopeNotice = isSpecificTenant
-        ? (L.assignIdentityScopeSpecific || 'Identità riservata al tenant <strong>{tenant}</strong>. Vengono elencati solo i dispositivi di questa sede.').replace('{tenant}', escapeHtml(ident.tenant))
+    const scopeNotice = (allowedTenants && allowedTenants.length)
+        ? (L.assignIdentityScopeSpecific || 'Identità riservata ai tenant <strong>{tenant}</strong>. Vengono elencati solo i dispositivi di queste sedi.').replace('{tenant}', escapeHtml(allowedTenants.join(', ')))
         : (L.assignIdentityScopeGlobal || 'Identità globale: selezionabili i dispositivi del tenant corrente.');
 
     const ov = document.createElement('div');

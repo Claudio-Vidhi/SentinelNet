@@ -631,7 +631,21 @@
           <div id="identityForm" style="display:none; border-left:2px solid var(--primary); padding-left:10px; margin-top:12px;">
             <input type="hidden" id="identEditId">
             <div class="form-group"><label data-i18n="thIdentName">Nome</label><input id="identName" type="text" style="padding-left:12px;"></div>
-            <div class="form-group"><label data-i18n="thIdentTenant">Tenant / Sede</label><select id="identTenant" style="padding-left:12px;"></select></div>
+            <div class="form-group">
+              <label data-i18n="thIdentTenant">Tenant / Sede</label>
+              <div style="margin-bottom:6px;">
+                <label style="font-size:12px; font-weight:normal; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                  <input type="checkbox" id="chkIdentSpecificTenant" style="width:auto; margin:0;">
+                  <span data-i18n="lblRestrictSpecificTenant">Riserva a tenant specifici</span>
+                </label>
+              </div>
+              <div id="identTenantSingleWrap">
+                <select id="identTenant" style="padding-left:12px;"></select>
+              </div>
+              <div id="identTenantMultiWrap" style="display:none; border:1px solid var(--border); padding:8px; max-height:140px; overflow-y:auto; background:var(--surface-2);">
+                <div id="identTenantCheckboxes" style="display:flex; flex-direction:column; gap:4px;"></div>
+              </div>
+            </div>
             <div class="form-group"><label>Username</label><input id="identUser" type="text" style="padding-left:12px;"></div>
             <div class="form-group"><label data-i18n="lblPass">Password</label><input id="identPass" type="password" style="padding-left:12px;"></div>
             <div class="form-group"><label data-i18n="lblSecret">Enable Secret</label><input id="identSecret" type="password" style="padding-left:12px;"></div>

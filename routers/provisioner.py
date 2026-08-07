@@ -4,7 +4,7 @@
 import json
 import uuid
 import os
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import Response
@@ -16,6 +16,7 @@ from services import switch_provisioner
 from services import fortigate_provisioner
 from services import fortigate_service
 from security import provisioning_secrets
+from security import identity_manager
 
 router = APIRouter(tags=["Provisioner"])
 
@@ -300,7 +301,7 @@ from security import identity_manager
 
 class IdentitySchema(BaseModel):
     name: str
-    tenant: str = "all"
+    tenant: Union[str, List[str]] = "all"
     username: str
     password: str = ""
     enable_secret: str = ""
