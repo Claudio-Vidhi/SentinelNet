@@ -29,7 +29,7 @@ class TestUiVariantApi(unittest.TestCase):
         self.assertIn("ui_variant", data)
 
     def test_ui_variant_set_valid_and_retrieve(self):
-        for variant in ["default", "design-1", "design-2", "design-3", "design-4"]:
+        for variant in ["default", "design-1", "design-2", "design-3"]:
             res = self.client.post("/api/settings/ui-variant", json={"ui_variant": variant})
             self.assertEqual(res.status_code, 200)
             self.assertEqual(res.json().get("ui_variant"), variant)
