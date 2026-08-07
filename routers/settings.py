@@ -36,6 +36,9 @@ class NetworkSettingsSchema(BaseModel):
 class CliBlacklistSchema(BaseModel):
     cli_blacklist_operators: bool
 
+class UiVariantSchema(BaseModel):
+    ui_variant: str = Field(default="default")
+
 # --- ROTTE ---
 
 @router.get("/api/settings/network")
@@ -77,6 +80,23 @@ def set_cli_blacklist_settings(payload: CliBlacklistSchema, current_user = Depen
               f"{'attivata' if payload.cli_blacklist_operators else 'disattivata'} "
               f"dall'utente '{current_user.get('sub')}'.")
     return {"status": "success", "cli_blacklist_operators": payload.cli_blacklist_operators}
+
+@router.get("/api/settings/ui-variant")
+def get_ui_variant_settings(current_user = Depends(get_current_user)):
+    """Restituisce la variante grafica UI selezionata (default, design-1, design-2, design-3)."""
+    variant = get_app_settings().get("ui_variant", "default")
+    return {"ui_variant": variant}
+
+@router.post("/api/settings/ui-variant")
+def set_ui_variant_settings(payload: UiVariantSchema, current_user = Depends(get_current_user)):
+    """Imposta la variante grafica UI."""
+    allowed = {"default", "design-1", "design-2", "design-3"}
+    variant = payload.ui_variant.strip().lower()
+    if variant not in allowed:
+        raise HTTPException(status_code=400, detail=f"Variante UI non valida. Valori ammessi: {sorted(list(allowed))}")
+    save_app_settings({"ui_variant": variant})
+    log_audit(f"Variante UI impostata a '{variant}' dall'utente '{current_user.get('sub')}'.")
+    return {"status": "success", "ui_variant": variant}
 
 # NetSec Audit, Incidenti, Flow SIEM e Fortigate Management non hanno piu' un
 # flag di attivazione: le tab sono sempre presenti (restano gated dalla sola

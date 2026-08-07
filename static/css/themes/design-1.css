@@ -1,0 +1,6 @@
+/* Impeccable UI Design 1 - Theme Variant */
+:root[data-ui-variant="design-1"] {
+    --primary-color: #0284c7;
+    --accent-color: #38bdf8;
+    --card-border-radius: 12px;
+}
