@@ -747,16 +747,22 @@ async function refreshIdentityOptions(preserve) {
 function renderIdentitiesPanel() {
     const body = document.getElementById('identitiesTableBody');
     const idents = window._tenantIdentities || [];
-    body.innerHTML = idents.length ? idents.map(i => `<tr>
+    body.innerHTML = idents.length ? idents.map(i => {
+        const tenantLabel = (!i.tenant || i.tenant === 'all')
+            ? `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:11px;">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti (Globale)')}</span>`
+            : `<span class="badge" style="background:var(--surface-2); font-size:11px;">${escapeHtml(i.tenant)}</span>`;
+        return `<tr>
         <td>${escapeHtml(i.name)}</td>
+        <td>${tenantLabel}</td>
         <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.username)}</td>
         <td>${i.devices_using}</td>
         <td>
           <button class="btn-icon" onclick="assignIdentityToDevices('${i.id}')" title="${escapeHtml(i18n[currentLang].btnAssignIdentityTitle || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle"></i></button>
           <button class="btn-icon" onclick="editIdentity('${i.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
           <button class="btn-icon danger" onclick="deleteIdentity('${i.id}')" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
-        </td></tr>`).join('')
-        : `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
+        </td></tr>`;
+    }).join('')
+        : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;
 }
 
 // ===== Port Config Modal (promosso da static/js/topology.js: usato anche

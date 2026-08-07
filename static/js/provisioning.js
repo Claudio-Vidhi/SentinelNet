@@ -15,11 +15,23 @@ document.getElementById('devGroupSelect').addEventListener('change', async () =>
 
 // --- IDENTITIES CRUD (pannello destro della tab Provisioning) ---
 
+function populateIdentTenantOptions(selected) {
+    const sel = document.getElementById('identTenant');
+    if (!sel) return;
+    const groups = (window.globalGroups || []).map(g => g.name || g);
+    if (!groups.includes('Generale')) groups.unshift('Generale');
+    const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
+        .concat([...new Set(groups)].map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
+    sel.innerHTML = options.join('');
+    sel.value = selected || 'all';
+}
+
 function editIdentity(id) {
     const i = (window._tenantIdentities || []).find(x => x.id === id);
     if (!i) return;
     document.getElementById('identEditId').value = id;
     document.getElementById('identName').value = i.name;
+    populateIdentTenantOptions(i.tenant || 'all');
     document.getElementById('identUser').value = i.username;
     document.getElementById('identPass').value = '';
     document.getElementById('identSecret').value = '';
@@ -40,6 +52,7 @@ async function deleteIdentity(id) {
 document.getElementById('btnNewIdentity').addEventListener('click', () => {
     document.getElementById('identEditId').value = '';
     ['identName', 'identUser', 'identPass', 'identSecret'].forEach(i => document.getElementById(i).value = '');
+    populateIdentTenantOptions(document.getElementById('devGroupSelect').value || 'all');
     document.getElementById('identityForm').style.display = 'block';
 });
 document.getElementById('btnCancelIdentity').addEventListener('click', () =>
@@ -48,12 +61,12 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
     const id = document.getElementById('identEditId').value;
     const payload = {
         name: document.getElementById('identName').value.trim(),
-        tenant: document.getElementById('devGroupSelect').value,
+        tenant: document.getElementById('identTenant')?.value || document.getElementById('devGroupSelect').value,
         username: document.getElementById('identUser').value.trim(),
         password: document.getElementById('identPass').value,
         enable_secret: document.getElementById('identSecret').value,
     };
-    if (!payload.name || !payload.username || !payload.password) {
+    if (!payload.name || !payload.username || (!id && !payload.password)) {
         alert(i18n[currentLang].alertIdentityFields); return;
     }
     const res = await apiFetch(id ? '/api/identities/' + id : '/api/identities', {
@@ -418,16 +431,98 @@ async function loadProvisioningTab() {
     renderIdentitiesPanel();
 }
 
+function populateIdentTenantOptions(selected) {
+    const sel = document.getElementById('identTenant');
+    if (!sel) return;
+    const fromGlobal = Object.keys(window.globalGroups || {});
+    const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
+    const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])];
+    const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
+        .concat(allTenants.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`));
+    sel.innerHTML = options.join('');
+    sel.value = selected || 'all';
+}
+
+function editIdentity(id) {
+    const i = (window._tenantIdentities || []).find(x => x.id === id);
+    if (!i) return;
+    document.getElementById('identEditId').value = id;
+    document.getElementById('identName').value = i.name;
+    populateIdentTenantOptions(i.tenant || 'all');
+    document.getElementById('identUser').value = i.username;
+    document.getElementById('identPass').value = '';
+    document.getElementById('identSecret').value = '';
+    document.getElementById('identityForm').style.display = 'block';
+}
+
+async function deleteIdentity(id) {
+    if (!confirm(i18n[currentLang].confirmDeleteIdentity)) return;
+    const res = await apiFetch('/api/identities/' + id, { method: 'DELETE' });
+    if (res && res.status === 409) {
+        const err = await res.json();
+        alert(i18n[currentLang].alertIdentityInUse + '\n' + (err.detail.devices || []).join(', '));
+        return;
+    }
+    await refreshIdentityOptions(); renderIdentitiesPanel();
+}
+
+document.getElementById('btnNewIdentity').addEventListener('click', () => {
+    document.getElementById('identEditId').value = '';
+    ['identName', 'identUser', 'identPass', 'identSecret'].forEach(i => document.getElementById(i).value = '');
+    populateIdentTenantOptions(document.getElementById('devGroupSelect').value || 'all');
+    document.getElementById('identityForm').style.display = 'block';
+});
+document.getElementById('btnCancelIdentity').addEventListener('click', () =>
+    document.getElementById('identityForm').style.display = 'none');
+document.getElementById('btnSaveIdentity').addEventListener('click', async () => {
+    const id = document.getElementById('identEditId').value;
+    const payload = {
+        name: document.getElementById('identName').value.trim(),
+        tenant: document.getElementById('identTenant')?.value || document.getElementById('devGroupSelect').value,
+        username: document.getElementById('identUser').value.trim(),
+        password: document.getElementById('identPass').value,
+        enable_secret: document.getElementById('identSecret').value,
+    };
+    if (!payload.name || !payload.username || (!id && !payload.password)) {
+        alert(i18n[currentLang].alertIdentityFields); return;
+    }
+    const res = await apiFetch(id ? '/api/identities/' + id : '/api/identities', {
+        method: id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (res && res.ok) {
+        document.getElementById('identityForm').style.display = 'none';
+        await refreshIdentityOptions(); renderIdentitiesPanel();
+    } else if (res) {
+        const err = await res.json();
+        alert(err.detail || 'Errore');
+    }
+});
+
 // --- BULK ASSIGN IDENTITY TO DEVICES ---
-// Apre un modale che elenca i dispositivi del tenant corrente e permette di
-// selezionare quali assegnare all'identità scelta.
+// Apre un modale che elenca i dispositivi del tenant dell'identità (o del tenant
+// corrente se l'identità è globale) e permette di assegnare l'identità.
 function assignIdentityToDevices(identityId) {
     const ident = (window._tenantIdentities || []).find(x => x.id === identityId);
     if (!ident) return;
-    const tenant = document.getElementById('devGroupSelect').value;
+    const currentTenant = document.getElementById('devGroupSelect')?.value || 'Generale';
     const L = i18n[currentLang];
-    // Dispositivi del tenant corrente (globalDevices è già caricato da appInit)
-    const devices = (window.globalDevices || []).filter(d => d.Group === tenant);
+
+    // Se l'identità è legata a un tenant specifico, vengono elencati SOLO i device di quel tenant.
+    // Se è globale ('all'), vengono elencati i device del tenant corrente (o tutti se devGroupSelect è 'all').
+    const isSpecificTenant = ident.tenant && ident.tenant !== 'all';
+    const targetTenant = isSpecificTenant ? ident.tenant : currentTenant;
+
+    const devices = (window.globalDevices || []).filter(d => {
+        if (isSpecificTenant) return d.Group === ident.tenant;
+        return targetTenant === 'all' || d.Group === targetTenant;
+    });
+
+    const scopeNotice = isSpecificTenant
+        ? (L.assignIdentityScopeSpecific || 'Identità riservata al tenant <strong>{tenant}</strong>. Vengono elencati solo i dispositivi di questa sede.').replace('{tenant}', escapeHtml(ident.tenant))
+        : (L.assignIdentityScopeGlobal || 'Identità globale: selezionabili i dispositivi del tenant corrente.');
+
     const ov = document.createElement('div');
     ov.id = 'assignIdentityModal';
     ov.style.cssText = 'position:fixed; inset:0; z-index:10060; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
@@ -445,10 +540,11 @@ function assignIdentityToDevices(identityId) {
           <h3 style="font-size:16px;"><i class="fa-solid fa-users-rectangle" style="color:var(--primary);"></i> ${escapeHtml(L.assignIdentityTitle || 'Assegna identità')}</h3>
           <i class="fa-solid fa-xmark" onclick="closeAssignIdentityModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
         </div>
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;">
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:4px;">
           ${escapeHtml((L.assignIdentityDesc || 'Seleziona i dispositivi a cui assegnare l\'identità:')).replace('{name}', escapeHtml(ident.name))}
           <strong>${escapeHtml(ident.name)}</strong> (${escapeHtml(ident.username)})
         </p>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">${scopeNotice}</p>
         <div style="max-height:320px; overflow:auto; border:1px solid var(--border); margin-bottom:16px;">
           <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <thead><tr style="background:var(--surface-2);">
@@ -461,7 +557,7 @@ function assignIdentityToDevices(identityId) {
           </table>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-          <button class="btn btn-secondary" onclick="closeAssignIdentityModal()">${escapeHtml(L.btnCancelIdentity || 'Annulla')}</button>
+          <button class="btn btn-secondary" onclick="closeAssignIdentityModal()">${L.btnCancelIdentity || '<i class="fa-solid fa-xmark"></i> Annulla'}</button>
           <button class="btn btn-primary" id="btnConfirmAssignIdentity"><i class="fa-solid fa-check"></i> ${escapeHtml(L.btnConfirmAssign || 'Assegna')}</button>
         </div>
       </div>`;

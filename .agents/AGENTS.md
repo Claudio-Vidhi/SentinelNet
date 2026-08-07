@@ -18,7 +18,7 @@
 - Don't add error handling, fallbacks, or validation for scenarios that cannot happen. Trust internal code and framework guarantees.
 - Only validate at system boundaries (user input, external APIs).
 - Don't use feature flags or backwards-compatibility shims when you can just change code.
-
+- Code comments only in english
 ## FastAPI Refactoring & Destructuring
 - **OpenAPI Parity is Insufficient**: When extracting or refactoring FastAPI routers, do not rely solely on OpenAPI schema parity (`app.openapi()`). Introspection does not execute handler bodies and will mask `NameError` or `ImportError` bugs.
 - **Mandatory Smoke Tests**: Always add a smoke test suite using `TestClient` that actually hits at least one route per router. The goal is to verify the handler executes without a 500 server error (missing imports). 401/403/422 responses are acceptable as they prove the code ran.

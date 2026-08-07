@@ -198,7 +198,7 @@ class TestFullParity(unittest.TestCase):
     )
 
     # FgtLogQuerySchema: vedi TestRouterParity.ALLOWED_CHANGED_SCHEMAS.
-    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema")
+    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema")
 
     @classmethod
     def setUpClass(cls):

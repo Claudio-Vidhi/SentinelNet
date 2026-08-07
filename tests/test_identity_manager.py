@@ -35,6 +35,23 @@ class TestIdentityManager(unittest.TestCase):
         self.im.add_identity("b", "T2", "u", "p", "s")
         self.assertEqual(len(self.im.get_identities(tenant="T1")), 1)
 
+    def test_global_tenant_included(self):
+        self.im.add_identity("specific", "T1", "u1", "p1", "s1")
+        self.im.add_identity("global", "all", "u2", "p2", "s2")
+        t1_idents = self.im.get_identities(tenant="T1")
+        names = [i["name"] for i in t1_idents]
+        self.assertIn("specific", names)
+        self.assertIn("global", names)
+
+    def test_update_preserves_password_when_empty(self):
+        ident = self.im.add_identity("x", "T1", "u1", "p1", "s1")
+        self.im.update_identity(ident["id"], name="x2", tenant="T2", username="u2",
+                                password="", secret="")
+        u, p, s = self.im.get_identity_credentials(ident["id"])
+        self.assertEqual((u, p, s), ("u2", "p1", "s1"))
+        rows = self.im.get_identities(tenant="T2")
+        self.assertEqual(rows[0]["tenant"], "T2")
+
     def test_credentials_roundtrip(self):
         ident = self.im.add_identity("x", "T", "user1", "pw!", "sec!")
         u, p, s = self.im.get_identity_credentials(ident["id"])
