@@ -18,19 +18,14 @@ document.getElementById('devGroupSelect').addEventListener('change', async () =>
 async function populateIdentTenantOptions(selected) {
     const sel = document.getElementById('identTenant');
     if (!sel) return;
-    let fromGlobal = Object.keys(window.globalGroups || {});
-    if (fromGlobal.length <= 1) {
-        try {
-            const res = await apiFetch('/api/groups');
-            if (res && res.ok) {
-                const data = await res.json();
-                if (data.groups) {
-                    window.globalGroups = data.groups;
-                    fromGlobal = Object.keys(data.groups);
-                }
-            }
-        } catch (e) { /* fallback */ }
-    }
+    try {
+        const res = await apiFetch('/api/groups');
+        if (res && res.ok) {
+            const data = await res.json();
+            window.globalGroups = (data && data.groups) ? data.groups : (data || {});
+        }
+    } catch (e) { /* fallback */ }
+    const fromGlobal = Object.keys(window.globalGroups || {});
     const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
     const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
     const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
@@ -439,6 +434,13 @@ function populateProvisioningFormSelects() {
 }
 
 async function loadProvisioningTab() {
+    try {
+        const res = await apiFetch('/api/groups');
+        if (res && res.ok) {
+            const data = await res.json();
+            window.globalGroups = (data && data.groups) ? data.groups : (data || {});
+        }
+    } catch (e) {}
     populateProvisioningFormSelects();
     await refreshIdentityOptions();
     renderIdentitiesPanel();
