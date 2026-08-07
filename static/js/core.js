@@ -35,6 +35,7 @@ function toggleSidebar() {
 // preferenza salvata si segue il sistema operativo, quindi il primo click
 // deve partire dalla polarità effettivamente a schermo, non da un default.
 const THEME_KEY = 'sentinelnet_theme';
+const UI_VARIANT_KEY = 'sentinelnet_ui_variant';
 
 function toggleTheme() {
     const explicit = document.documentElement.getAttribute('data-theme');
@@ -43,6 +44,62 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     try { localStorage.setItem(THEME_KEY, next); } catch (e) { }
+}
+
+function applyUiVariant(variant, saveServer = false) {
+    const valid = ['default', 'design-1', 'design-2', 'design-3'];
+    const selected = valid.includes(variant) ? variant : 'default';
+
+    document.documentElement.setAttribute('data-ui-variant', selected);
+    try { localStorage.setItem(UI_VARIANT_KEY, selected); } catch (e) { }
+
+    let linkEl = document.getElementById('theme-variant-stylesheet');
+    if (selected === 'default') {
+        if (linkEl) linkEl.remove();
+    } else {
+        if (!linkEl) {
+            linkEl = document.createElement('link');
+            linkEl.id = 'theme-variant-stylesheet';
+            linkEl.rel = 'stylesheet';
+            document.head.appendChild(linkEl);
+        }
+        linkEl.href = `/static/css/themes/${selected}.css`;
+    }
+
+    const selectEl = document.getElementById('uiVariantSelect');
+    if (selectEl && selectEl.value !== selected) {
+        selectEl.value = selected;
+    }
+
+    if (saveServer) {
+        fetch('/api/settings/ui-variant', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ui_variant: selected })
+        }).catch(err => console.warn('Save UI variant failed:', err));
+    }
+}
+
+function initUiVariant() {
+    let saved = null;
+    try { saved = localStorage.getItem(UI_VARIANT_KEY); } catch (e) { }
+    if (saved) {
+        applyUiVariant(saved);
+    }
+    fetch('/api/settings/ui-variant')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (data && data.ui_variant) {
+                applyUiVariant(data.ui_variant);
+            }
+        })
+        .catch(() => {});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initUiVariant);
+} else {
+    initUiVariant();
 }
 
 // Canvas e librerie esterne (vis.js, xterm.js) vogliono un colore vero: una
@@ -750,22 +807,24 @@ function renderIdentitiesPanel() {
     body.innerHTML = idents.length ? idents.map(i => {
         let tenantLabel = '';
         if (!i.tenant || i.tenant === 'all') {
-            tenantLabel = `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:11px;">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti (Globale)')}</span>`;
+            tenantLabel = `<span class="badge" style="background:var(--surface-2); color:var(--text-muted); font-size:10.5px; padding:2px 6px; border:1px solid var(--border); text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(i18n[currentLang].optTenantAll || 'Globale')}</span>`;
         } else if (Array.isArray(i.tenant)) {
-            tenantLabel = i.tenant.map(t => `<span class="badge" style="background:var(--surface-2); font-size:11px; margin-right:3px;">${escapeHtml(t)}</span>`).join('');
+            tenantLabel = i.tenant.map(t => `<span class="badge" style="background:color-mix(in srgb, var(--primary) 12%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); font-size:10.5px; padding:2px 6px; margin-right:3px; display:inline-block; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(t)}</span>`).join('');
         } else {
             const parts = String(i.tenant).split(',').map(s => s.trim()).filter(Boolean);
-            tenantLabel = parts.map(t => `<span class="badge" style="background:var(--surface-2); font-size:11px; margin-right:3px;">${escapeHtml(t)}</span>`).join('');
+            tenantLabel = parts.map(t => `<span class="badge" style="background:color-mix(in srgb, var(--primary) 12%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); font-size:10.5px; padding:2px 6px; margin-right:3px; display:inline-block; text-transform:uppercase; letter-spacing:0.02em;">${escapeHtml(t)}</span>`).join('');
         }
-        return `<tr>
-        <td>${escapeHtml(i.name)}</td>
-        <td>${tenantLabel}</td>
-        <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.username)}</td>
-        <td>${i.devices_using}</td>
-        <td>
-          <button class="btn-icon" onclick="assignIdentityToDevices('${i.id}')" title="${escapeHtml(i18n[currentLang].btnAssignIdentityTitle || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle"></i></button>
-          <button class="btn-icon" onclick="editIdentity('${i.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn-icon danger" onclick="deleteIdentity('${i.id}')" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
+        return `<tr style="border-bottom:1px solid color-mix(in srgb, var(--border) 50%, transparent);">
+        <td style="padding:8px 6px; font-weight:600; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${escapeHtml(i.name)}">${escapeHtml(i.name)}</td>
+        <td style="padding:8px 6px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${tenantLabel}</td>
+        <td style="padding:8px 6px; font-family:var(--font-code); font-size:12px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${escapeHtml(i.username)}">${escapeHtml(i.username)}</td>
+        <td style="padding:8px 6px; text-align:center; font-family:var(--font-code); font-size:12px;">${i.devices_using}</td>
+        <td style="padding:8px 6px; text-align:right;">
+          <div style="display:flex; gap:4px; justify-content:flex-end;">
+            <button class="btn-icon" onclick="assignIdentityToDevices('${i.id}')" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="${escapeHtml(i18n[currentLang].btnAssignIdentityTitle || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle" style="font-size:11px;"></i></button>
+            <button class="btn-icon" onclick="editIdentity('${i.id}')" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Edit"><i class="fa-solid fa-pen" style="font-size:11px;"></i></button>
+            <button class="btn-icon danger" onclick="deleteIdentity('${i.id}')" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Delete"><i class="fa-solid fa-trash-can" style="font-size:11px;"></i></button>
+          </div>
         </td></tr>`;
     }).join('')
         : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px; font-size:13px;">${i18n[currentLang].emptyIdentities}</td></tr>`;

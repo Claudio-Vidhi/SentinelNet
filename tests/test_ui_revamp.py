@@ -1570,9 +1570,9 @@ class TestSettingsTabRestyle(unittest.TestCase):
         tab = self._tab(html)
         for cls in ('class="hero"', 'class="hero-card"'):
             self.assertIn(cls, tab)
-        # Five one-concern cards: network exposure, command safety,
+        # Six one-concern cards: ui variant, network exposure, command safety,
         # ping monitor, observability, application (general).
-        self.assertEqual(tab.count("class=\"panel"), 5)
+        self.assertEqual(tab.count("class=\"panel"), 6)
 
     def test_i18n_icon_not_clobbered_by_innerhtml(self):
         # applyI18n does `el.innerHTML = i18n[lang][key]`, so a data-i18n key

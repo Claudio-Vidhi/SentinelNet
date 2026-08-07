@@ -26,6 +26,8 @@ SMOKE_ENDPOINTS = [
     ("delete", "/api/catalog/group/nope", None),
     ("get", "/api/ai/profiles", None),
     ("get", "/api/settings/app", None),
+    ("get", "/api/settings/ui-variant", None),
+    ("post", "/api/settings/ui-variant", {"ui_variant": "design-1"}),
     ("get", "/api/redundancy/groups", None),
 ]
 

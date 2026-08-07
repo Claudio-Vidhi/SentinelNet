@@ -55,6 +55,20 @@
     } catch (e) { /* localStorage non disponibile: si segue il sistema */ }
   </script>
   <script>
+    try {
+      var v = localStorage.getItem('sentinelnet_ui_variant');
+      if (v && v !== 'default') {
+        document.documentElement.setAttribute('data-ui-variant', v);
+        var link = document.createElement('link');
+        link.id = 'theme-variant-stylesheet';
+        link.rel = 'stylesheet';
+        link.href = '/static/css/themes/' + v + '.css';
+        document.head.appendChild(link);
+      }
+    } catch (e) { }
+  </script>
+  <script>
+
     // Ripristina lo stato della sidebar PRIMA del primo paint: applicare la classe
     // più tardi (a DOMContentLoaded) farebbe vedere la sidebar espansa che si
     // richiude. Qui il valore iniziale è già 72px, quindi la transizione non parte.
@@ -621,10 +635,17 @@
 
         <article class="panel requires-write" id="identitiesPanel">
           <h3 style="font-size:16px; margin-bottom:6px;" data-i18n="titleIdentities"><i class="fa-solid fa-id-badge"></i> Identità del Tenant</h3>
-          <p style="font-size:13px; color:var(--text-muted); margin-bottom:12px;" data-i18n="descIdentities">Profili credenziali riusabili, legati al tenant selezionato nel form.</p>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th data-i18n="thIdentName">Nome</th><th data-i18n="thIdentTenant">Tenant</th><th>Username</th><th data-i18n="thIdentDevices">Device</th><th data-i18n="thIdentActions">Azioni</th></tr></thead>
+          <div class="table-wrap" style="overflow-x:hidden;">
+            <table style="width:100%; table-layout:fixed; border-collapse:collapse;">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border);">
+                  <th style="width:25%; padding:8px 6px; text-align:left;" data-i18n="thIdentName">Nome</th>
+                  <th style="width:30%; padding:8px 6px; text-align:left;" data-i18n="thIdentTenant">Tenant</th>
+                  <th style="width:22%; padding:8px 6px; text-align:left;">Username</th>
+                  <th style="width:8%; padding:8px 6px; text-align:center;" data-i18n="thIdentDevices">Device</th>
+                  <th style="width:15%; padding:8px 6px; text-align:right;" data-i18n="thIdentActions">Azioni</th>
+                </tr>
+              </thead>
               <tbody id="identitiesTableBody"></tbody>
             </table>
           </div>
@@ -2827,6 +2848,25 @@
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:70ch;" data-i18n="descSettingsHero">
             Configurazione dell'istanza, raggruppata per ambito: esposizione in rete, sicurezza dei comandi, telemetria e parametri applicativi. Le impostazioni contrassegnate richiedono il riavvio dell'applicazione; le variabili d'ambiente, se impostate, hanno sempre la precedenza.
           </p>
+        </div>
+      </div>
+
+      <!-- Ambito: Variante UI / Design Interfaccia -->
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="font-size:15px; margin-bottom:8px;"><i class="fa-solid fa-palette" style="color:var(--primary);"></i> <span data-i18n="titleUiVariant">Design Interfaccia (UI Variant)</span></h3>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;" data-i18n="descUiVariant">
+          Scegli la variante grafica dell'interfaccia utente. Le modifiche vengono applicate all'istante e salvate per il tuo profilo.
+        </p>
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+          <div class="form-group" style="margin:0; max-width:320px;">
+            <label style="font-size:12px;" data-i18n="lblUiVariantSelect">Seleziona Layout / Design</label>
+            <select id="uiVariantSelect" onchange="applyUiVariant(this.value, true)" style="padding-left:12px;">
+              <option value="default" data-i18n="optUiVariantDefault">Standard (SentinelNet SCADA Mimic)</option>
+              <option value="design-1" data-i18n="optUiVariantDesign1">Design 1 (Impeccable Modern Blue)</option>
+              <option value="design-2" data-i18n="optUiVariantDesign2">Design 2 (Impeccable Cyber Violet)</option>
+              <option value="design-3" data-i18n="optUiVariantDesign3">Design 3 (Impeccable Emerald Dark)</option>
+            </select>
+          </div>
         </div>
       </div>
 
