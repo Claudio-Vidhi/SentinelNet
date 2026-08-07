@@ -8,7 +8,7 @@
 venv/
 ENV/
 
-# Sensitive data (Device credentials and inventories)
+# Sensitive data (Device credentials, inventories, tokens, identities)
 fortigate_tokens.json
 network_hosts.csv
 detected_versions.json
@@ -17,8 +17,10 @@ device_models.json
 users.json
 groups.json
 sites.json
-# Per-installation vendor registry (custom vendors are local, not shared)
+identities.json
+tenant_snmp.json
 vendors.json
+
 # MAC address tracking history (local SQLite DB + WAL/SHM)
 mac_history.db
 mac_history.db-wal
@@ -35,10 +37,23 @@ audit.log
 build/
 dist/
 *.spec
-# Key file
-secret.key
 
+# Key files & Secrets
+secret.key
 jwt_secret.key
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+*secret*.json
+apikey*
+*_api_key*
+.env.local
+credentials.json
+service-account*.json
+app_settings.json
+c_api_key.txt
 
 # Local / IDE files
 .vscode/
@@ -58,33 +73,15 @@ graphify-out/
 .graphifyignore
 CLAUDE.md
 
-# API keys & secrets
-*.key
-*.pem
-*.p12
-*.pfx
-secrets.json
-*secret*.json
-apikey*
-*_api_key*
-.env.local
-credentials.json
-service-account*.json
-identities.json
-
-app_settings.json
-
 # Observability DB (runtime data, never commit)
 observability.db
 observability.db-wal
 observability.db-shm
 
-# Local API key (never commit)
-c_api_key.txt
-
-#others
+# Data folder runtime files & databases
 Semgrep_Code_Combined_Findings_2026_07_19.csv
 data/identities.json
+data/tenant_snmp.json
 data/redundancy.db
 data/redundancy.db-shm
 data/redundancy.db-wal
@@ -99,10 +96,8 @@ data/vendors.json
 HANDOFF.md
 .qwen/settings.json
 
-# Vendored AI skill packages: third-party, reinstallable, ~6.7 MB of files that
-# are not project source. The tracked .claude/launch.json and settings.json stay.
+# Vendored AI skill packages: third-party, reinstallable
 .claude/skills/
 .agents/skills/impeccable/
-# Impeccable live-mode session state (local only)
 .impeccable/live/
 .impeccable/questions/
