@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-08-05T16:33:24.772Z",
         "reason": "Exported standalone audit report: a self-contained HTML document that leaves the app and cannot reference app tokens"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "static/js/config-analyzer.js"
+        ],
+        "createdAt": "2026-08-08T21:04:39.325Z",
+        "reason": "Pre-existing 2px help-bar accent on an inline help strip, not a card; matches existing UI convention"
       }
     ]
   }

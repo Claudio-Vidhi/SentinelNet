@@ -10,9 +10,12 @@ duplication).
 
 Pure and tolerant: ``analyze`` NEVER raises exceptions.
 """
+import logging
 import re
 
 from ._ip import _ip_addr_to_cidr
+
+logger = logging.getLogger(__name__)
 
 # Keys whose value is a secret and must be masked in the envelope.
 _SECRET_KEYS = {
@@ -125,7 +128,12 @@ def analyze(text):
     try:
         return _analyze(text)
     except Exception:
-        return {"vendor": "fortios", "sections": [], "vlan_interfaces": []}
+        # An empty envelope is also what a genuinely empty config produces:
+        # without ``error`` the UI would show a parser crash as "no policies",
+        # i.e. a failed analysis read as a clean firewall.
+        logger.exception("FortiOS analysis failed")
+        return {"vendor": "fortios", "sections": [], "vlan_interfaces": [],
+                "error": True}
 
 
 def _analyze(text):

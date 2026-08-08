@@ -2,8 +2,11 @@
 """Test unitari di config_analyzer multi-vendor (FortiOS / Cisco WLC AireOS).
 Eseguibile direttamente: python test_config_analyzer_multivendor.py"""
 import unittest
+from unittest.mock import patch
 
 from ai import config_analyzer as ca
+from ai import linux_analyzer
+from fw_analyzers import fortios, panos
 
 FORTIOS = '''#config-version=FGT60F-7.4.1-FW-build2463-230830:opmode=0:vdom=0
 config system global
@@ -313,6 +316,29 @@ class IosRegressionTest(unittest.TestCase):
                     "validation"):
             self.assertIn(key, r)
         self.assertEqual(r["interfaces"][0]["access_vlan"], "10")
+
+
+class AnalyzerFailureIsNotACleanConfig(unittest.TestCase):
+    """Un parser che esplode deve dirlo: l'envelope vuoto da solo e'
+    indistinguibile da una configurazione senza policy."""
+
+    def _boom(self, module):
+        with patch.object(module, "_analyze", side_effect=ValueError("boom")):
+            return module.analyze("qualunque cosa")
+
+    def test_fortios_marks_the_failure(self):
+        out = self._boom(fortios)
+        self.assertTrue(out["error"])
+        self.assertEqual(out["sections"], [])
+
+    def test_panos_marks_the_failure(self):
+        self.assertTrue(self._boom(panos)["error"])
+
+    def test_linux_marks_the_failure(self):
+        self.assertTrue(self._boom(linux_analyzer)["error"])
+
+    def test_a_good_parse_carries_no_error_flag(self):
+        self.assertNotIn("error", fortios.analyze(FORTIOS))
 
 
 if __name__ == "__main__":

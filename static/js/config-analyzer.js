@@ -249,7 +249,7 @@
         const card = (view, icon, title, desc) => `
             <div class="hero-card" onclick="caSwitchView('${view}')" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:22px 18px; transition:var(--transition);"
                  onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
-                <div style="font-size:26px; color:var(--primary); margin-bottom:10px;"><i class="fa-solid ${icon}"></i></div>
+                <div style="font-size:var(--font-size-3xl); color:var(--primary); margin-bottom:10px;"><i class="fa-solid ${icon}"></i></div>
                 <div style="font-weight:600; font-size:15px; margin-bottom:6px;">${escapeHtml(title)}</div>
                 <div style="font-size:12px; color:var(--text-muted); line-height:1.5;">${escapeHtml(desc)}</div>
             </div>`;
@@ -559,8 +559,10 @@
                 // Anche l'arco selezionato ha un default vis.js fuori palette
                 // (#2B7CE9): si tiene la tinta dell'arco, schiarita.
                 color: hopHasDefault[hop]
-                    ? { color: '#ffb84d', highlight: '#ffd479' }
-                    : { color: 'rgba(169,159,242,0.65)', highlight: '#d9d2ff' },
+                    ? { color: cssVar('--lamp-warn', '#e0a03c'),
+                        highlight: cssVar('--lamp-warn-ink', '#e8b055') }
+                    : { color: cssVar('--cond-trace', '#7b3fb5'),
+                        highlight: cssVar('--text', '#e8ebe6') },
                 width: hopHasDefault[hop] ? 3 : 2,
                 font: { color: nodeInk, size: 12, strokeWidth: 0, background: cssVar('--surface-2', '#181e23') }
             });
@@ -678,7 +680,7 @@
             }
         });
         if (total === 0) {
-            return { total: 0, body: `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+            return { total: 0, body: `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:var(--lamp-up-wash); border:1px solid var(--success); color:var(--success); font-size:12px;">
                 <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>` };
         }
         return { total, body: sections.join('') };
@@ -711,7 +713,7 @@
         const chips = arr => arr.map(x => `<span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">${escapeHtml(x)}</span>`).join('');
         let body;
         if (total === 0) {
-            body = `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px;">
+            body = `<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:0; background:var(--lamp-up-wash); border:1px solid var(--success); color:var(--success); font-size:12px;">
                 <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>`;
         } else {
             const sections = [];
@@ -948,15 +950,21 @@
         // finche' non gli si scrivono le sue.
         const helpText = L[(sectionMap[activeId] || '').replace('.sec.', '.help.')] || '';
         const helpBar = helpText
-            ? `<div style="margin:-6px 0 14px; padding:9px 12px; border-left:2px solid var(--primary); background:var(--surface-2); border-radius:0 8px 8px 0; font-size:12px; line-height:1.5; color:var(--text-muted);">${escapeHtml(helpText)}</div>`
+            ? `<div style="margin:-6px 0 14px; padding:9px 12px; border-left:2px solid var(--primary); background:var(--surface-2); border-radius:var(--radius); font-size:12px; line-height:1.5; color:var(--text-muted);">${escapeHtml(helpText)}</div>`
             : '';
 
         const openAll = devices.length === 1;
         const body = devices.map(dev => {
             const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
-            const sections = ((dev[envelopeKey] || {}).sections) || [];
+            const envelope = dev[envelopeKey] || {};
+            const sections = envelope.sections || [];
             let inner;
-            if (!sections.length) {
+            if (envelope.error) {
+                // Un envelope vuoto per crash del parser non e' un apparato
+                // pulito: dirlo "vendor non supportato" farebbe leggere
+                // un'analisi fallita come "nessuna policy".
+                inner = `<div style="font-size:12px; color:var(--danger); padding:8px 0;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(L.msgCaAnalyzeFailed)}</div>`;
+            } else if (!sections.length) {
                 inner = `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">${escapeHtml(unsupportedMsg)}</div>`;
             } else {
                 const sec = sections.find(s => s.id === activeId);

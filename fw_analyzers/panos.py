@@ -11,7 +11,10 @@ exported as XML are not handled (out of scope).
 
 Pure and tolerant: ``analyze`` NEVER raises exceptions.
 """
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 _SECRET_ATTRS = {'phash', 'passphrase', 'secret', 'pre-shared-key', 'password'}
 _MASK = '***REDACTED***'
@@ -133,7 +136,10 @@ def analyze(text):
     try:
         return _analyze(text)
     except Exception:
-        return {"vendor": "panos", "sections": []}
+        # See fortios.analyze: an empty envelope alone cannot be told apart
+        # from a clean config, so a crash must be marked as such.
+        logger.exception("PAN-OS analysis failed")
+        return {"vendor": "panos", "sections": [], "error": True}
 
 
 def _analyze(text):

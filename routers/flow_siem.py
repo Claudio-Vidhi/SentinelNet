@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from core import db
 from observability import fieldmap
-from routers.deps import get_current_user, user_group_scope
+from routers.deps import get_current_user, require_operator, user_group_scope
 
 router = APIRouter(prefix="/api/flow-siem", tags=["Flow SIEM"])
 
@@ -377,7 +377,7 @@ _SHUNNED_IPS: Dict[str, dict] = {}
 
 
 @router.post("/shun-ip")
-def shun_ip(payload: ShunIpSchema, current_user=Depends(get_current_user)):
+def shun_ip(payload: ShunIpSchema, current_user=Depends(require_operator)):
     """Registra un IP nella lista di shun temporaneo."""
     _SHUNNED_IPS[payload.ip] = {
         "ts": int(time.time()),

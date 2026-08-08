@@ -310,36 +310,6 @@ def detect_gateway_traceroute(target_ip: str) -> dict:
 
     return {"known": False, "reason": f"Nessun primo hop (gateway) rilevato da traceroute verso {clean_target}"}
 
-    # Ambiguo è un ALTRO MAC sullo stesso indirizzo: o il MAC è cambiato, o due
-    # host se lo contendono. Non lo si risolve qui, ma tacerlo sarebbe peggio.
-    #
-    # Lo stesso MAC che ricompare NON è ambiguità: la chiave di ``arp_entries``
-    # è (mac, ip, source_ip), quindi un host visto da due gateway — normale
-    # dove più apparati fronteggiano la stessa VLAN — produce due righe dello
-    # stesso binding. Elencarle mostrava lo stesso MAC due volte sotto il
-    # titolo "altri binding", cioè un allarme per la configurazione normale.
-    others, seen_macs = [], {best.get("mac")}
-    for x in entries:
-        if x.get("mac") in seen_macs:
-            continue
-        seen_macs.add(x.get("mac"))
-        others.append({"mac": x.get("mac"), "ip": x.get("ip"),
-                       "gateway_ip": x.get("source_ip"),
-                       "last_seen": x.get("last_seen")})
-        if len(others) >= 5:
-            break
-    if others:
-        out["ambiguous"] = others
-
-    if len(candidates) > 1:
-        out["tenants_available"] = [{
-            "tenant": c["tenant"], "site": c["site"], "ip": c["ip"],
-            "mac": c["mac"], "switch_name": c["switch_name"] or c["switch_ip"],
-            "switch_port": c["switch_port"], "last_seen": c["port_last_seen"],
-            "l2_only": c["l2_only"],
-        } for c in candidates]
-    return out
-
 
 def _interface_health(switch_ip: str, port: str) -> dict:
     """Stato e contatori di errore della porta di accesso, dagli eventi

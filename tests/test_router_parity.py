@@ -161,7 +161,11 @@ class TestFullParity(unittest.TestCase):
                     # Monitor ping continuo: schema della configurazione
                     # (enabled + interval_seconds) per POST
                     # /api/settings/ping-monitor (già in NEW_PREFIXES).
-                    "PingMonitorSchema", "UiVariantSchema", "PortControlSchema", "ShunIpSchema", "PruneLogsSchema")
+                    "PingMonitorSchema", "UiVariantSchema", "PortControlSchema", "ShunIpSchema", "PruneLogsSchema",
+                    # Rilevamento del gateway via traceroute: schema del corpo
+                    # di POST /api/diagnose/traceroute-gateway (rotta sotto
+                    # /api/diagnose, gia' in NEW_PREFIXES).
+                    "TracerouteGatewaySchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
@@ -195,6 +199,12 @@ class TestFullParity(unittest.TestCase):
         # una voce per (MAC, tenant) invece che per MAC. Vedi
         # TestRouterParity.ALLOWED_CHANGED_OPERATIONS per il motivo.
         ("get", "/api/mac/locate"),
+        # SIEM: query param ``tenant`` opzionale per lo scoping, sulle tre
+        # rotte di lettura. Aggiunta additiva — omettendolo il comportamento
+        # e' quello storico — ma i parametri dell'operazione cambiano.
+        ("get", "/api/flow-siem/events"),
+        ("get", "/api/flow-siem/histogram"),
+        ("get", "/api/flow-siem/facets"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (
