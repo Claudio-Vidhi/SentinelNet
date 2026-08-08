@@ -1076,7 +1076,7 @@ class TestEndpoint(_Base):
     def test_admin_gets_an_unrestricted_report(self):
         seen = {}
 
-        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None):
+        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None, **kwargs):
             seen["tenants"] = tenants
             seen["max_age_s"] = max_age_s
             return {"client": client, "sections": {}, "complete": False}
@@ -1090,7 +1090,7 @@ class TestEndpoint(_Base):
     def test_operator_is_scoped_to_its_sites(self):
         seen = {}
 
-        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None):
+        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None, **kwargs):
             seen["tenants"] = tenants
             seen["max_age_s"] = max_age_s
             return {"client": client, "sections": {}, "complete": False}
@@ -1104,7 +1104,7 @@ class TestEndpoint(_Base):
     def test_a_chosen_tenant_narrows_the_scope(self):
         seen = {}
 
-        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None):
+        def spy(client, dest, dest_port, protocol, tenants, max_age_s=None, **kwargs):
             seen["tenants"] = tenants
             return {"client": client, "sections": {}, "complete": False}
 
@@ -1232,6 +1232,22 @@ class TestDiagTrunkFrontend(unittest.TestCase):
 
     def test_unreadable_devices_are_named_not_swallowed(self):
         self.assertIn("t.unreadable_devices", self.src)
+
+
+class TestGatewayOverrideAndTraceroute(unittest.TestCase):
+
+    def test_gateway_override_applied(self):
+        res = client_diagnosis.diagnose("192.0.2.10", gateway_ip="192.0.2.254")
+        self.assertEqual(res["sections"]["position"]["gateway_ip"], "192.0.2.254")
+        self.assertEqual(res["sections"]["position"]["gateway_source"], "manual_override")
+
+    def test_tenant_gateway_candidates(self):
+        candidates = client_diagnosis.get_tenant_gateway_candidates("sede-a")
+        self.assertIsInstance(candidates, list)
+
+    def test_detect_gateway_traceroute(self):
+        res = client_diagnosis.detect_gateway_traceroute("192.0.2.1")
+        self.assertIn("known", res)
 
 
 if __name__ == "__main__":
