@@ -920,8 +920,25 @@
         const L = i18n[currentLang];
         document.getElementById('fgKpiThroughput').textContent = fmtRate(d.kpi.throughput_bps);
         const tp = d.kpi.top_path;
-        document.getElementById('fgKpiTopPath').textContent = tp && tp.src
-            ? `${tp.src} → ${tp.dst} (${tp.pct}%)` : '—';
+        const topPathEl = document.getElementById('fgKpiTopPath');
+        if (topPathEl) {
+            if (tp && tp.src) {
+                topPathEl.innerHTML = `
+                    <div class="kpi-top-path" title="${escapeHtml(tp.src)} → ${escapeHtml(tp.dst)} (${escapeHtml(tp.pct)}%)">
+                        <div class="kpi-path-line">
+                            <span class="kpi-path-ip">${escapeHtml(tp.src)}</span>
+                            <span class="kpi-path-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                            <span class="kpi-path-ip">${escapeHtml(tp.dst)}</span>
+                        </div>
+                        <div class="kpi-path-sub">
+                            <span class="kpi-path-pct">(${escapeHtml(tp.pct)}%)</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                topPathEl.textContent = '—';
+            }
+        }
         document.getElementById('fgKpiTalkers').textContent = d.kpi.talkers;
         document.getElementById('fgKpiSpikes').textContent = d.kpi.spikes;
     }

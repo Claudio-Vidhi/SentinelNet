@@ -849,26 +849,121 @@ details[open] > div[id*="Menu"],
 .split-footer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
 
 /* Strumenti: la misura, non la card. Numerale in mono, legenda incisa sopra. */
-.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
-.kpi { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.kpi {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
 .kpi h4 {
   margin: 0;
   font-family: var(--font-legend);
   font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .kpi strong {
   display: block;
   font-family: var(--font-data);
   font-weight: 500;
-  font-size: 30px;
-  line-height: 1.05;
+  font-size: clamp(18px, 1.8vw + 8px, 28px);
+  line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
 }
 .kpi-clickable { cursor: pointer; transition: background var(--transition), border-color var(--transition); }
 .kpi-clickable:hover { background: var(--surface-3); border-color: var(--text-soft); }
 .kpi-clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* Dedicated Top Path KPI layout for Live Flows */
+.kpi-top-path {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+}
+.kpi-path-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.25;
+  min-width: 0;
+}
+.kpi-path-ip {
+  font-family: var(--font-data);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.kpi-path-arrow {
+  font-size: 11px;
+  color: var(--primary, #00d2ff);
+  flex-shrink: 0;
+}
+.kpi-path-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.kpi-path-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+}
+
+/* WLC and sub-tab KPI cards */
+.kpi-card {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--surface-2);
+  border: var(--seam) solid var(--border);
+}
+.kpi-label {
+  margin: 0;
+  font-family: var(--font-legend);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kpi-value {
+  display: block;
+  font-family: var(--font-data);
+  font-weight: 500;
+  font-size: clamp(16px, 1.5vw + 8px, 24px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 /* ---------------------------------------------------------------
    12. SCHEDULE — tabelle
