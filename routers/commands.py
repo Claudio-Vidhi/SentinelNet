@@ -18,6 +18,7 @@ from services import inventory_manager
 from security import user_manager
 from services import site_manager
 from core import core_engine
+from core import data_config
 from security import crypto_vault
 from security.security_manager import log_audit
 from core.app_settings import get_app_settings
@@ -271,6 +272,12 @@ def _ssh_failure_hint(exc) -> str:
     solo testo di paramiko.
     """
     msg = str(exc) or type(exc).__name__
+    if isinstance(exc, paramiko.BadHostKeyException):
+        return (msg + "\r\n[La chiave host SSH non e' quella registrata al "
+                "primo collegamento. Puo' essere un apparato sostituito o "
+                "riconfigurato, oppure qualcuno che si e' interposto sulla "
+                "tratta. Verifica l'apparato prima di rimuovere la voce da "
+                "ssh_known_hosts.]")
     if "banner" in msg.lower():
         return (msg + "\r\n[Il dispositivo ha accettato la connessione e l'ha "
                 "chiusa senza presentarsi: di norma sta rifiutando nuove "
@@ -315,8 +322,17 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         await websocket.close()
         return
 
-    # Scoping: l'utente del token OTP deve poter gestire la sede del dispositivo
+    # L'OTP non passa da ``get_current_user``, quindi i controlli che quello fa
+    # per le rotte HTTP vanno rifatti qui: un account cancellato ha ruolo None
+    # e nessun gruppo, e la sola verifica di scope piu' sotto lo lascerebbe
+    # passare proprio perche' la sua lista di sedi e' vuota.
     _role = user_manager.get_role(username_from_otp)
+    if _role is None or user_manager.is_disabled(username_from_otp):
+        await websocket.send_text("[Accesso Negato] Account non attivo.\r\n")
+        await websocket.close(code=1008)
+        return
+
+    # Scoping: l'utente del token OTP deve poter gestire la sede del dispositivo
     if _role != "admin":
         _allowed = user_manager.get_user_groups(username_from_otp)
         if _allowed and device.get('Group', 'Generale') not in set(_allowed):
@@ -341,12 +357,27 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         return
 
     client = paramiko.SSHClient()
+    # Con un known_hosts caricato, AutoAddPolicy fissa la chiave al primo
+    # contatto e la salva; da li' in poi paramiko solleva BadHostKeyException
+    # se la chiave cambia. Senza, ogni riconnessione riaccetta in silenzio
+    # qualunque chiave, cioe' un MITM sulla tratta non lascia traccia.
+    _known_hosts = data_config.get_path("ssh_known_hosts")
+    try:
+        client.load_host_keys(_known_hosts)
+    except OSError:
+        pass  # primo avvio: il file lo crea AutoAddPolicy al primo salvataggio
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     connected = False
 
+    # paramiko e' bloccante: chiamarlo diretto qui fermerebbe l'event loop —
+    # e con esso ogni altra rotta async — per tutto il timeout di connessione.
+    def _ssh_connect(pwd):
+        client.connect(ip, port=ssh_port, username=username, password=pwd,
+                       look_for_keys=False, allow_agent=False, timeout=10)
+
     try:
         # 2. Primo tentativo di connessione invisibile
-        client.connect(ip, port=ssh_port, username=username, password=password, look_for_keys=False, allow_agent=False, timeout=10)
+        await asyncio.to_thread(_ssh_connect, password)
         connected = True
     except paramiko.AuthenticationException:
         # 3. L'autenticazione è fallita! Chiediamo la password manualmente nel terminale
@@ -370,7 +401,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
 
         # 4. Secondo tentativo con la password appena digitata
         try:
-            client.connect(ip, port=ssh_port, username=username, password=manual_password, look_for_keys=False, allow_agent=False, timeout=10)
+            await asyncio.to_thread(_ssh_connect, manual_password)
             connected = True
         except Exception as e:
             await websocket.send_text(f"\r\n[Accesso Negato] {_ssh_failure_hint(e)}\r\n")

@@ -18,10 +18,12 @@ FortiGateError con il dettaglio di entrambi i tentativi.
 
 import datetime
 import json
+import logging
 import os
 import re
 import threading
 import time
+import warnings
 from typing import Optional, Any, Dict
 
 import requests
@@ -31,6 +33,8 @@ from core import data_config
 from security.crypto_vault import encrypt_password, decrypt_password
 
 TOKENS_FILE = data_config.get_path("fortigate_tokens.json")
+
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
@@ -42,10 +46,17 @@ class FortiGateError(Exception):
 # --- Persistenza token API ---------------------------------------------------
 
 def _load_tokens() -> dict:
+    if not os.path.exists(TOKENS_FILE):
+        # Prima esecuzione: nessun token configurato, caso normale.
+        return {}
     try:
         with open(TOKENS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except (OSError, ValueError):
+        # Un file illeggibile fa cadere ogni FortiGate sul fallback SSH come
+        # se l'API non fosse configurata: senza questo log i due casi sono
+        # indistinguibili.
+        logger.exception("Token store FortiGate illeggibile: %s", TOKENS_FILE)
         return {}
 
 
@@ -172,14 +183,23 @@ def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
     token, port, verify = get_api_config(ip)
     if not token:
         raise FortiGateError(f"Nessun token API configurato per {ip}.")
-    if not verify:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     url = f"https://{ip}:{port}/api/v2/{path.lstrip('/')}"
     try:
-        r = requests.request(method, url,
-                             headers={"Authorization": f"Bearer {token}"},
-                             params=params or {}, json=json_body,
-                             verify=verify, timeout=timeout)
+        # Il silenziamento vale solo per questa richiesta: ``disable_warnings``
+        # spegneva il warning per l'intero processo, quindi il primo apparato
+        # con verify_tls=False nascondeva l'avviso anche a quelli che il
+        # certificato lo verificano.
+        # ponytail: catch_warnings tocca uno stato globale, quindi sotto
+        # richieste concorrenti l'avviso puo' comparire o sparire a sproposito;
+        # se servisse deterministico, filtrare a livello di logging handler.
+        with warnings.catch_warnings():
+            if not verify:
+                warnings.simplefilter(
+                    "ignore", urllib3.exceptions.InsecureRequestWarning)
+            r = requests.request(method, url,
+                                 headers={"Authorization": f"Bearer {token}"},
+                                 params=params or {}, json=json_body,
+                                 verify=verify, timeout=timeout)
     except requests.exceptions.SSLError as e:
         raise FortiGateError(
             f"REST API {ip} non raggiungibile: certificato TLS non attendibile ({e}). "
@@ -907,13 +927,16 @@ def get_full_config(device):
     token, port, verify = get_api_config(ip)
     api_err = None
     if token:
-        if not verify:
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         try:
-            r = requests.get(
-                f"https://{ip}:{port}/api/v2/monitor/system/config/backup",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"scope": "global"}, verify=verify, timeout=60)
+            # Vedi api_request: silenziamento limitato alla singola richiesta.
+            with warnings.catch_warnings():
+                if not verify:
+                    warnings.simplefilter(
+                        "ignore", urllib3.exceptions.InsecureRequestWarning)
+                r = requests.get(
+                    f"https://{ip}:{port}/api/v2/monitor/system/config/backup",
+                    headers={"Authorization": f"Bearer {token}"},
+                    params={"scope": "global"}, verify=verify, timeout=60)
             if r.status_code < 400:
                 return {"source": "api", "data": r.text}
             api_err = f"HTTP {r.status_code}: {r.text[:200]}"

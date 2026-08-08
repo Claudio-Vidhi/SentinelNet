@@ -722,8 +722,13 @@ def collect_one(device: dict, transport=None) -> dict:
     username, password, secret = core_engine.get_device_credentials(device)
     try:
         _, netmiko_type = core_engine.resolve_driver(vendor)
-    except Exception:
-        netmiko_type = "cisco_ios"
+    except ValueError as e:
+        # Un vendor senza driver non e' un Cisco: partire lo stesso con i
+        # comandi IOS restituirebbe una MAC-table letta col parser sbagliato,
+        # cioe' dati inventati presentati come raccolta riuscita. Come fa
+        # arp_collector.collect_from_device, l'errore si propaga.
+        log.warning("MAC collection on %s: %s", ip, e)
+        return {"device": device, "error": str(e), "if_macs": []}
     # Ad-hoc command configured for this device (non-ordinary cases).
     ov = mac_history.get_override(ip) or {}
     dev_transports = inventory_manager.parse_transports(device)

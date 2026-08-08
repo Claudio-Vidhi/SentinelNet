@@ -20,11 +20,14 @@ Tolerant like the other analyzers: no malformed line raises, a missing section
 produces an empty table, not an error.
 """
 
+import logging
 import re
 from typing import Any, Dict, List
 
 from services.netsec_audit.linux_parser import (
     SSHD_EFFECTIVE, LinuxConfig, parse_linux)
+
+logger = logging.getLogger(__name__)
 
 # Artifact sections produced by the extra triage commands.
 _S_HOSTNAME = "HOSTNAME"
@@ -554,7 +557,10 @@ def analyze(text) -> Dict[str, Any]:
     try:
         return _analyze(text)
     except Exception:
-        return {"vendor": "linux", "sections": []}
+        # See fw_analyzers.fortios.analyze: an empty envelope alone cannot be
+        # told apart from a clean host, so a crash must be marked as such.
+        logger.exception("Linux analysis failed")
+        return {"vendor": "linux", "sections": [], "error": True}
 
 
 def _analyze(text) -> Dict[str, Any]:

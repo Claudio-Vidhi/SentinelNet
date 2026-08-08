@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import csv
 import re
@@ -6,6 +7,8 @@ import threading
 from typing import Any, Dict
 from security import crypto_vault
 from core import data_config
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_HOSTS_CSV = data_config.get_path("network_hosts.csv")
 _DEFAULT_GROUPS_JSON = data_config.get_path("groups.json")
@@ -705,7 +708,8 @@ def get_models() -> dict:
         try:
             with open(MODELS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except (OSError, ValueError):
+            logger.exception("Registro modelli illeggibile: %s", MODELS_FILE)
             return {}
     return {}
 
@@ -768,7 +772,12 @@ def get_detected_versions():
                 if isinstance(info, dict) and info.get('version'):
                     info['version'] = _clean_version(info['version'])
             return data
-        except:
+        except (OSError, ValueError):
+            # Un file corrotto azzera le versioni rilevate di ogni apparato:
+            # in UI sembra un'installazione nuova, non una perdita di dati.
+            # ``except:`` nudo prendeva anche KeyboardInterrupt/SystemExit.
+            logger.exception("Inventario versioni illeggibile: %s",
+                             VERSION_DATA_FILE)
             return {}
     return {}
 
