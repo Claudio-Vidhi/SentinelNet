@@ -14,6 +14,62 @@ let _diagTenant = null;    // tenant scelto quando l'indirizzo esiste in piu' se
 function diagnosiTabShown() {
     const el = document.getElementById('diagClientInput');
     if (el) el.focus();
+    loadDiagGatewayCandidates(_diagTenant);
+}
+
+async function loadDiagGatewayCandidates(tenant) {
+    const sel = document.getElementById('diagGatewaySelect');
+    if (!sel) return;
+    try {
+        const url = tenant ? `/api/diagnose/gateway-candidates?tenant=${encodeURIComponent(tenant)}` : '/api/diagnose/gateway-candidates';
+        const res = await apiFetch(url);
+        if (res && res.ok) {
+            const list = await res.json();
+            const options = list.map(g => `<option value="${escapeHtml(g.ip)}">${escapeHtml(g.name || g.ip)} (${escapeHtml(g.ip)})</option>`).join('');
+            sel.innerHTML = `<option value="">Auto (ARP / Subnet)</option>` + options;
+        }
+    } catch (e) {
+        console.error('Error loading gateway candidates:', e);
+    }
+}
+
+function onDiagGatewaySelectChange() {
+    const sel = document.getElementById('diagGatewaySelect');
+    const input = document.getElementById('diagGatewayInput');
+    if (sel && input && sel.value) {
+        input.value = sel.value;
+    }
+}
+
+async function detectGatewayTracerouteUI() {
+    const en = currentLang === 'en';
+    const target = ((document.getElementById('diagClientInput') || {}).value || (document.getElementById('diagDestInput') || {}).value || '').trim();
+    if (!target) {
+        alert(en ? 'Enter a Client or Destination IP first.' : 'Inserisci prima un IP Client o Destinazione.');
+        return;
+    }
+    const input = document.getElementById('diagGatewayInput');
+    if (input) input.placeholder = en ? 'Detecting via traceroute…' : 'Rilevamento via traceroute…';
+    try {
+        const res = await apiFetch('/api/diagnose/traceroute-gateway', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: target })
+        });
+        if (res && res.ok) {
+            const data = await res.json();
+            if (data.known && data.gateway_ip) {
+                if (input) input.value = data.gateway_ip;
+                alert(en ? `Gateway detected via traceroute: ${data.gateway_ip}` : `Gateway rilevato via traceroute: ${data.gateway_ip}`);
+            } else {
+                alert(escapeHtml(data.reason || (en ? 'No gateway hop detected.' : 'Nessun gateway rilevato.')));
+            }
+        }
+    } catch (e) {
+        console.error('Traceroute gateway error:', e);
+    } finally {
+        if (input && !input.value) input.placeholder = 'Es. 192.168.1.1';
+    }
 }
 
 // Ingresso dalla Client Map (e da chiunque altro): riempie e lancia.
@@ -24,6 +80,7 @@ function diagnoseClientInTab(client, dest) {
     const d = document.getElementById('diagDestInput');
     if (c) c.value = client || '';
     if (d && dest !== undefined) d.value = dest || '';
+    loadDiagGatewayCandidates();
     runDiagnosi();
 }
 
@@ -39,6 +96,9 @@ async function runDiagnosi() {
     if (_diagClient !== client.trim()) _diagTenant = null;
     _diagClient = client.trim();
     const dest = ((document.getElementById('diagDestInput') || {}).value || '').trim();
+    const gwInput = ((document.getElementById('diagGatewayInput') || {}).value || '').trim();
+    const gwSelect = ((document.getElementById('diagGatewaySelect') || {}).value || '').trim();
+    const gatewayIp = gwInput || gwSelect || null;
 
     host.innerHTML = `<div class="panel" style="padding:26px; text-align:center; color:var(--text-muted); font-size:13px;">
         <i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>
@@ -48,6 +108,7 @@ async function runDiagnosi() {
 
     const body = { client: _diagClient };
     if (_diagTenant) body.tenant = _diagTenant;
+    if (gatewayIp) body.gateway_ip = gatewayIp;
     if (dest) {
         body.dest = dest;
         body.protocol = (document.getElementById('diagProtoInput') || {}).value || 'TCP';

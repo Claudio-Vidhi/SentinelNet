@@ -118,7 +118,7 @@ def _pos_candidates(entries: list, l2rows: list, prefer_ip=None) -> list:
     return out
 
 
-def _position(client: str, is_mac: bool, tenants) -> dict:
+def _position(client: str, is_mac: bool, tenants, gateway_override: Optional[str] = None) -> dict:
     """Posizione fisica del client: MAC, IP, switch, porta, VLAN, e il gateway
     che ne ha risposto l'ARP.
 
@@ -145,6 +145,18 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
 
     candidates = _pos_candidates(entries, l2rows, None if is_mac else client)
     if not candidates:
+        if gateway_override and gateway_override.strip():
+            gw_ip = gateway_override.strip()
+            return {
+                "known": True,
+                "ip": client if not is_mac else None,
+                "mac": mac,
+                "gateway_ip": gw_ip,
+                "gateway_name": gw_ip,
+                "gateway_type": "Manual / Override Gateway",
+                "gateway_source": "manual_override",
+                "l2_only": True,
+            }
         if is_mac:
             return {"known": False,
                     "reason": "MAC mai visto: né un binding ARP né un "
@@ -158,14 +170,15 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
 
     best = candidates[0]
     out = {"known": True, **{k: v for k, v in best.items() if k != "l2_only"}}
-    if best["l2_only"]:
-        # Quello che si perde è dichiarato, non lasciato a zero: senza binding
-        # non c'è IP e non c'è gateway, quindi le sezioni che dipendono dal
-        # firewall diranno di non sapere — correttamente, perché nessuno sa
-        # quale firewall fronteggi un client di cui non si conosce
-        # l'indirizzo. Quello che resta — switch, porta, VLAN, salute del
-        # collegamento, catena di trunk, cronologia, bounce della porta — è
-        # esattamente ciò che serve a chi sta cercando un cavo.
+
+    if gateway_override and gateway_override.strip():
+        gw_ip = gateway_override.strip()
+        out["gateway_ip"] = gw_ip
+        out["gateway_name"] = gw_ip
+        out["gateway_type"] = "Manual / Override Gateway"
+        out["gateway_source"] = "manual_override"
+
+    if best.get("l2_only") and not (gateway_override and gateway_override.strip()):
         out["l2_only"] = True
         out["binding_reason"] = (
             "nessun binding ARP per questo MAC in questo tenant: IP e gateway "
@@ -180,6 +193,111 @@ def _position(client: str, is_mac: bool, tenants) -> dict:
                               "apparato non gestito")
     else:
         out["port_known"] = True
+
+    if len(candidates) > 1:
+        out["tenants_available"] = candidates
+    others = [e for e in entries if e.get("mac") != best.get("mac")]
+    if others:
+        out["ambiguous"] = [{"mac": e.get("mac"), "last_seen": e.get("last_seen")} for e in others]
+
+    return out
+
+
+def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) -> list:
+    """Gateway e host L3 candidati per un tenant (o scope utente)."""
+    from collectors import mac_history
+    from services import inventory_manager, site_manager
+
+    out = []
+    seen = set()
+    scope_tenants = [tenant] if tenant else tenants
+
+    for e in mac_history.search_arp(tenants=scope_tenants, limit=200):
+        gw_ip = e.get("source_ip")
+        if gw_ip and gw_ip not in seen:
+            seen.add(gw_ip)
+            out.append({
+                "ip": gw_ip,
+                "name": e.get("source_name") or gw_ip,
+                "type": e.get("source_type") or "ARP Gateway",
+                "tenant": e.get("tenant") or "",
+                "source": "arp",
+            })
+
+    devices = inventory_manager.get_all_devices()
+    for d in devices:
+        d_ip = d.get("IP")
+        d_tenant = d.get("Group") or d.get("tenant") or "Generale"
+        if tenant and tenant.strip() and tenant.strip().lower() != "all" and _tenant_key(d_tenant) != _tenant_key(tenant):
+            continue
+        if d_ip and d_ip not in seen:
+            seen.add(d_ip)
+            out.append({
+                "ip": d_ip,
+                "name": d.get("Hostname") or d.get("Name") or d_ip,
+                "type": d.get("Platform") or d.get("Vendor") or "Inventory Device",
+                "tenant": d_tenant,
+                "source": "inventory",
+            })
+
+    for site in site_manager.list_sites():
+        for sub in site.get("subnets") or []:
+            try:
+                import ipaddress
+                net = ipaddress.IPv4Network(str(sub).strip(), strict=False)
+                hosts = list(net.hosts())
+                if hosts:
+                    first_ip = str(hosts[0])
+                    if first_ip not in seen:
+                        seen.add(first_ip)
+                        out.append({
+                            "ip": first_ip,
+                            "name": f"Subnet Gateway ({site.get('name') or site.get('id')})",
+                            "type": "Subnet GW",
+                            "tenant": site.get("id"),
+                            "source": "subnet",
+                        })
+            except ValueError:
+                pass
+
+    return out
+
+
+def detect_gateway_traceroute(target_ip: str) -> dict:
+    """Rileva il primo hop (gateway) verso un target via traceroute/ping-hop."""
+    import re
+    import subprocess
+    import sys
+
+    target_ip = (target_ip or "").strip()
+    if not target_ip:
+        return {"known": False, "reason": "Target IP non specificato"}
+
+    ip_match = re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", target_ip)
+    if not ip_match:
+        return {"known": False, "reason": f"'{target_ip}' non e' un indirizzo IP valido"}
+    clean_target = ip_match.group(0)
+
+    cmd = (['tracert', '-d', '-h', '3', '-w', '800', clean_target] if sys.platform == 'win32'
+           else ['traceroute', '-n', '-m', '3', '-w', '1', clean_target])
+
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        output = res.stdout or ""
+        for line in output.splitlines():
+            m = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", line)
+            for found_ip in m:
+                if found_ip != clean_target and not found_ip.startswith("0.") and not found_ip.startswith("127."):
+                    return {
+                        "known": True,
+                        "gateway_ip": found_ip,
+                        "method": "traceroute",
+                        "output": output[:300]
+                    }
+    except Exception as e:
+        logger.debug("Traceroute fallito per %s: %s", clean_target, e)
+
+    return {"known": False, "reason": f"Nessun primo hop (gateway) rilevato da traceroute verso {clean_target}"}
 
     # Ambiguo è un ALTRO MAC sullo stesso indirizzo: o il MAC è cambiato, o due
     # host se lo contendono. Non lo si risolve qui, ma tacerlo sarebbe peggio.
@@ -1074,7 +1192,8 @@ def _history(position: dict, client: str, is_mac: bool) -> dict:
 
 def diagnose(client: str, dest: Optional[str] = None,
              dest_port: Optional[int] = 443, protocol: str = "TCP",
-             tenants=None, max_age_s: Optional[int] = None) -> dict:
+             tenants=None, max_age_s: Optional[int] = None,
+             gateway_ip: Optional[str] = None) -> dict:
     """Referto completo su un client (IP o MAC), opzionalmente verso ``dest``.
 
     ``tenants``: lista dei tenant visibili al chiamante, oppure ``None`` per
@@ -1094,7 +1213,7 @@ def diagnose(client: str, dest: Optional[str] = None,
     result: dict = {"client": client, "client_type": "mac" if is_mac else "ip",
                     "generated_ts": int(time.time()), "sections": {}}
 
-    _section(result, "position", _position, client, is_mac, tenants)
+    _section(result, "position", _position, client, is_mac, tenants, gateway_ip)
     position = result["sections"]["position"]
 
     # Piu' tenant e nessuno indicato: NON si diagnostica. Un tenant e' una rete
