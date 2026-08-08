@@ -62,7 +62,7 @@ async function detectGatewayTracerouteUI() {
                 if (input) input.value = data.gateway_ip;
                 alert(en ? `Gateway detected via traceroute: ${data.gateway_ip}` : `Gateway rilevato via traceroute: ${data.gateway_ip}`);
             } else {
-                alert(escapeHtml(data.reason || (en ? 'No gateway hop detected.' : 'Nessun gateway rilevato.')));
+                alert(data.reason || (en ? 'No gateway hop detected.' : 'Nessun gateway rilevato.'));
             }
         }
     } catch (e) {

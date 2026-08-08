@@ -264,14 +264,25 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
 
 
 def detect_gateway_traceroute(target_ip: str) -> dict:
-    """Rileva il primo hop (gateway) verso un target via traceroute/ping-hop."""
+    """Rileva il primo hop (gateway) verso un target (IP o MAC) via traceroute/ping-hop."""
     import re
     import subprocess
     import sys
+    from collectors import mac_history
 
     target_ip = (target_ip or "").strip()
     if not target_ip:
-        return {"known": False, "reason": "Target IP non specificato"}
+        return {"known": False, "reason": "Target non specificato"}
+
+    if _MAC_RE.fullmatch(target_ip):
+        arp_entries = mac_history.search_arp(mac=target_ip, limit=5)
+        found_ip = arp_entries[0].get("ip") if arp_entries else None
+        if not found_ip:
+            pos = mac_history.positions_for_mac(target_ip)
+            found_ip = pos[0].get("ip") if pos else None
+        if not found_ip:
+            return {"known": False, "reason": f"MAC '{target_ip}' non ha un IP ARP associato. Inserisci un indirizzo IP."}
+        target_ip = found_ip
 
     ip_match = re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", target_ip)
     if not ip_match:
