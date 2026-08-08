@@ -65,19 +65,21 @@ def _window_to_seconds(window: str) -> int:
     return 86400
 
 
-def _tenant_filter(current_user):
-    """Clausola SQL per lo scope multi-gruppo dell'utente.
+def _tenant_filter(current_user, tenant: Optional[str] = None, table_alias: str = "s"):
+    """Clausola SQL per lo scope multi-gruppo dell'utente ed eventuale filtro tenant specifico."""
+    prefix = f"{table_alias}." if table_alias else ""
+    extra_clause = ""
+    extra_params = []
+    if tenant and tenant.strip() and tenant.strip().lower() != "all":
+        extra_clause += f" AND {prefix}tenant = ?"
+        extra_params.append(tenant.strip())
 
-    Identica a quella di ``routers/observability.py``. Il router Flow SIEM non
-    la applicava affatto: un utente limitato a una sede vedeva gli eventi di
-    tutte le sedi.
-    """
     scope = user_group_scope(current_user)
     if scope is None:
-        return "", ()
+        return extra_clause, tuple(extra_params)
     groups = sorted(scope)
     placeholders = ",".join("?" * len(groups))
-    return f" AND tenant IN ({placeholders})", tuple(groups)
+    return f" AND {prefix}tenant IN ({placeholders}){extra_clause}", tuple(groups) + tuple(extra_params)
 
 
 # L'estrazione vive in observability/fieldmap.py: era duplicata qui e nel
@@ -178,19 +180,23 @@ async def get_flow_siem_events(
     q: Optional[str] = Query(None, description="Sottostringa su IP, azione, device, messaggio"),
     window: str = Query("24h", description="Finestra temporale (15m, 1h, 24h, 7d)"),
     action: Optional[str] = Query(None, description="Filtro: ALLOW / DENY"),
+    tenant: Optional[str] = Query(None, description="Filtro per tenant"),
     limit: int = Query(100, ge=1, le=MAX_LIMIT),
     offset: int = Query(0, ge=0),
     current_user=Depends(get_current_user),
 ):
     """Registro eventi di sicurezza, ordinato dal piu' recente."""
     cutoff = int(time.time()) - _window_to_seconds(window)
-    clause, params = _tenant_filter(current_user)
+    clause, params = _tenant_filter(current_user, tenant=tenant, table_alias="s")
 
     want_deny = action.strip().upper() == "DENY" if action else None
     field, value = _parse_field_query(q)
     needle = None if field else (q.lower() if q else None)
 
     def keep(e: dict) -> bool:
+        if tenant and tenant.strip() and tenant.strip().lower() != "all":
+            if (e.get("tenant") or "").lower() != tenant.strip().lower():
+                return False
         if want_deny is not None and e["is_deny"] != want_deny:
             return False
         if field:
@@ -237,19 +243,15 @@ async def get_flow_siem_events(
 async def get_flow_siem_histogram(
     window: str = Query("24h"),
     buckets: int = Query(30, ge=10, le=100),
+    tenant: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
 ):
-    """Istogramma reale degli eventi per bucket temporale.
-
-    La versione precedente non interrogava affatto il database: i valori erano
-    ``abs(sin(i * 0.4)) * 45`` e i deny il 15% di quelli. Le barre disegnate
-    erano una sinusoide.
-    """
+    """Istogramma reale degli eventi per bucket temporale."""
     window_s = _window_to_seconds(window)
     bucket_sec = max(1, window_s // buckets)
     now = int(time.time())
     start = now - window_s
-    clause, params = _tenant_filter(current_user)
+    clause, params = _tenant_filter(current_user, tenant=tenant, table_alias="")
 
     rows = await db.read(
         f"""SELECT ((ts - ?) / ?) AS bucket_index,
@@ -286,11 +288,12 @@ async def get_flow_siem_histogram(
 @router.get("/facets")
 async def get_flow_siem_facets(
     window: str = Query("24h"),
+    tenant: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
 ):
     """Conteggi aggregati reali (top sorgenti/destinazioni, azioni, threat)."""
     cutoff = int(time.time()) - _window_to_seconds(window)
-    clause, params = _tenant_filter(current_user)
+    clause, params = _tenant_filter(current_user, tenant=tenant, table_alias="s")
 
     # Stessa esclusione delle soppressioni applicata da /events: senza, una
     # faccetta poteva contare eventi che la tabella non mostra piu'.
@@ -344,7 +347,7 @@ async def suppress_flow_siem_alert(payload: AlertSuppressSchema,
     ricompariva al refresh successivo. L'evento va anche verificato nello scope
     dell'utente, altrimenti si potrebbe sopprimere un'allerta di un'altra sede.
     """
-    clause, params = _tenant_filter(current_user)
+    clause, params = _tenant_filter(current_user, table_alias="")
     rows = await db.read(
         f"""SELECT id, tenant FROM syslog_events
             WHERE id = ?{clause} LIMIT 1""",

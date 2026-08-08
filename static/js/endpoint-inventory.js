@@ -74,9 +74,9 @@ function endpointsRender(d) {
     const kpis = document.getElementById('epKpis');
     if (kpis) {
         const c = d.counts || {};
-        const tile = (label, value, color) => `<div class="panel" style="padding:12px 14px;">
-            <div style="font-size:22px; font-weight:800; color:${color || 'var(--text)'};">${escapeHtml(String(value ?? 0))}</div>
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">${escapeHtml(label)}</div>
+        const tile = (label, value, color) => `<div class="kpi">
+            <h4 title="${escapeHtml(label)}">${escapeHtml(label)}</h4>
+            <strong style="color:${color || 'var(--text)'};">${escapeHtml(String(value ?? 0))}</strong>
         </div>`;
         kpis.innerHTML =
             tile(L.epKpiEndpoints, c.endpoints, 'var(--primary)') +

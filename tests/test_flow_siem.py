@@ -200,6 +200,18 @@ class TestFlowSiem(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["dst_ip"], "203.0.113.9")
 
+    def test_explicit_tenant_query_parameter(self):
+        c = self._client("adm_siem")
+        events = c.get("/api/flow-siem/events?window=24h&tenant=sede-a").json()["events"]
+        self.assertTrue(events)
+        self.assertTrue(all(e["tenant"] == "sede-a" for e in events))
+
+        hist = c.get("/api/flow-siem/histogram?window=24h&tenant=sede-a").json()
+        self.assertIn("buckets", hist)
+
+        facets = c.get("/api/flow-siem/facets?window=24h&tenant=sede-a").json()
+        self.assertIn("top_src_ips", facets)
+
     # --- soppressione persistente ------------------------------------------
 
     def test_suppression_persists_and_hides_the_event(self):

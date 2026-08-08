@@ -10,15 +10,30 @@
     let _streamTimer = null;
     let _selectedEventId = null;
 
+    function populateSiemTenantFilter() {
+        const sel = document.getElementById('flowSiemTenant');
+        if (!sel) return;
+        const L = (window.i18n && window.i18n[currentLang]) ? window.i18n[currentLang] : {};
+        const cur = sel.value;
+        const groups = Object.keys(window.globalGroups || {});
+        const labelAll = L.optArpAllTenants || (currentLang === 'en' ? 'Filter by Tenant: All' : 'Filtra per Tenant: Tutti');
+        sel.innerHTML = `<option value="all">${escapeHtml(labelAll)}</option>` +
+            groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        sel.value = groups.includes(cur) ? cur : 'all';
+    }
+
     async function loadFlowSiemTab() {
+        populateSiemTenantFilter();
         const windowVal = document.getElementById('flowSiemWindow') ? document.getElementById('flowSiemWindow').value : '24h';
+        const tenantVal = document.getElementById('flowSiemTenant') ? document.getElementById('flowSiemTenant').value : 'all';
         const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
+        const tenantParam = (tenantVal && tenantVal !== 'all') ? `&tenant=${encodeURIComponent(tenantVal)}` : '';
 
         try {
             const [eventsRes, histRes, facetsRes] = await Promise.all([
-                apiFetch(`/api/flow-siem/events?window=${windowVal}&limit=100${qParam}`),
-                apiFetch(`/api/flow-siem/histogram?window=${windowVal}&buckets=30`),
-                apiFetch(`/api/flow-siem/facets?window=${windowVal}`)
+                apiFetch(`/api/flow-siem/events?window=${windowVal}&limit=100${qParam}${tenantParam}`),
+                apiFetch(`/api/flow-siem/histogram?window=${windowVal}&buckets=30${tenantParam}`),
+                apiFetch(`/api/flow-siem/facets?window=${windowVal}${tenantParam}`)
             ]);
 
             if (eventsRes && eventsRes.ok) {
@@ -53,10 +68,12 @@
             if (_selectedEventId !== null && _selectedEventId !== undefined) return;
 
             const windowVal = document.getElementById('flowSiemWindow') ? document.getElementById('flowSiemWindow').value : '24h';
+            const tenantVal = document.getElementById('flowSiemTenant') ? document.getElementById('flowSiemTenant').value : 'all';
             const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
+            const tenantParam = (tenantVal && tenantVal !== 'all') ? `&tenant=${encodeURIComponent(tenantVal)}` : '';
 
             try {
-                const res = await apiFetch(`/api/flow-siem/events?window=${windowVal}&limit=20${qParam}`);
+                const res = await apiFetch(`/api/flow-siem/events?window=${windowVal}&limit=20${qParam}${tenantParam}`);
                 if (res && res.ok) {
                     const data = await res.json();
                     if (data.events && data.events.length) {

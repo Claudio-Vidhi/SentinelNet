@@ -406,7 +406,7 @@
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:18px;">
+      <div class="kpi-grid" style="margin-top:18px;">
         <div class="kpi">
           <h4 data-i18n="invKpiOnlineLabel">Dispositivi Online</h4>
           <strong id="invKpiOnline">&mdash;</strong>
@@ -1065,7 +1065,7 @@
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
+      <div class="kpi-grid" style="margin-bottom:18px;">
         <div class="kpi">
           <h4 data-i18n="macKpiSightingsLabel">Avvistamenti</h4>
           <strong id="kpiMacSightings">&mdash;</strong>
@@ -1204,7 +1204,7 @@
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr)); margin-bottom:18px;">
+      <div class="kpi-grid" style="margin-bottom:18px;">
         <div class="kpi">
           <h4 data-i18n="arpKpiBindingsLabel">Binding MAC↔IP</h4>
           <strong id="kpiArpBindings">&mdash;</strong>
@@ -3100,9 +3100,10 @@
           <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:24px;">Network Traffic Analytics (Flow SIEM)</h2>
           <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:600px;">Ispezione granulare dei flussi di rete, tailing in tempo reale, aggregazioni per faccette e filtri di sicurezza.</p>
         </div>
-        <div class="hero-card" style="display:flex; align-items:center; gap:12px;">
+        <div class="hero-card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
           <span id="flowSiemStreamBadge" class="status ok"><span class="led led-success"></span>LIVE TAIL</span>
           <button id="btnFlowSiemStream" class="btn btn-sm btn-secondary" onclick="toggleSiemStream()"><i class="fa-solid fa-pause"></i> Pausa Streaming</button>
+          <select id="flowSiemTenant" onchange="loadFlowSiemTab()" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;"></select>
           <select id="flowSiemWindow" onchange="loadFlowSiemTab()" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
             <option value="15m">15m</option>
             <option value="1h">1h</option>
@@ -3239,7 +3240,7 @@
         </div>
       </div>
 
-      <div class="kpi-grid" style="grid-template-columns:repeat(5, minmax(0,1fr)); margin-bottom:18px;">
+      <div class="kpi-grid" style="margin-bottom:18px;">
         <div class="kpi">
           <h4 data-i18n="nsaKpiTotal">Regole Auditate</h4>
           <strong id="auditStatTotal">0</strong>
