@@ -4,7 +4,7 @@
 
 SentinelNet provides network security observability, triage, and configuration auditing across multi-vendor infrastructure including Fortinet FortiGate firewalls, Cisco Wireless LAN Controllers (AireOS and Catalyst 9800), campus switches (Cisco, Aruba, HP), and Linux server infrastructure.
 
-This document formulates operational troubleshooting scenarios, step-by-step resolution workflows, existing SentinelNet features, and identified capability gaps for Network Security Engineers.
+This document formulates operational troubleshooting scenarios, step-by-step resolution workflows, UI navigation procedures, existing SentinelNet features, and identified capability gaps for Network Security Engineers.
 
 ---
 
@@ -19,12 +19,27 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Query FortiGate traffic log stream for recent log entries matching target source/destination pair to check log action, drop reason code, and security event tags (e.g., AV block, Web Filter category drop, IPS trigger).
   5. Validate static routing path on FortiGate for `198.51.100.45` to verify egress interface matches expected policy source/destination interface pair.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Fortigate Management` (`#navFortigate` -> `#tab-fortigate`) under **Inventario**.
+  - **Buttons & Controls**:
+    - Target Select: `Seleziona FortiGate` (`#fgtTargetSelect`)
+    - Subtab: `Policy Lookup` (`#subtab-lookup`) -> Inputs: `Source IP` (`#fgtLookupSrc`), `Destination IP/FQDN` (`#fgtLookupDst`), `Protocol` (`#fgtLookupProto`), `Dest Port` (`#fgtLookupPort`) -> Button: `<i class="fa-solid fa-magnifying-glass"></i> Esegui Lookup` (`#btnPolicyLookupGo`)
+    - Subtab: `Sessioni` (`#subtab-sessions`) -> Inputs: `Source IP` (`#fgtSessionSrcIp`), `Dest IP` (`#fgtSessionDstIp`) -> Button: `<i class="fa-solid fa-filter"></i> Filtra Sessioni` (`#btnFgtSessionsFilter`) -> Action: `<i class="fa-solid fa-skull"></i> Termina Sessioni Filtrate` (`#btnFgtSessionKill`)
+    - Subtab: `Traffic Logs` (`#subtab-logs`) -> Selects: `Log Device` (`#fgtLogDevice`), `Log Subtype` (`#fgtLogSubtype`) -> Button: `<i class="fa-solid fa-sync"></i> Carica Log` (`#btnFgtLogsRefresh`)
+  - **Workflow Step-by-Step**:
+    1. Click **Fortigate Management** in left navigation bar under **Inventario**.
+    2. Choose target firewall `192.0.2.1` from `Seleziona FortiGate` dropdown.
+    3. Click `Policy Lookup` subtab. Fill `Source IP` (`192.0.2.105`), `Destination` (`198.51.100.45`), `Port` (`443`), and click **Esegui Lookup**. Review matched policy ID and action.
+    4. Click `Sessioni` subtab. Enter `192.0.2.105` in `Source IP` filter and click **Filtra Sessioni** to verify active session TCP state.
+    5. Click `Traffic Logs` subtab. Select `disk` log device, set subtype to `forward`, and click **Carica Log** to inspect dropped traffic entries.
+
 - **App Features Present**:
-  - **API Route**: `POST /api/fortigate/{ip}/policy-lookup` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L47-L52))
-  - **API Route**: `POST /api/fortigate/{ip}/sessions/query` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L54-L59))
-  - **API Route**: `POST /api/fortigate/{ip}/traffic-logs/query` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L60-L65))
+  - **API Route**: `POST /api/fortigate/{ip}/policy-lookup` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L264-L270))
+  - **API Route**: `POST /api/fortigate/{ip}/sessions` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L272-L277))
+  - **API Route**: `DELETE /api/fortigate/{ip}/sessions` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L279-L285))
+  - **API Route**: `POST /api/fortigate/{ip}/logs` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L294-L303))
   - **MCP Tools**: `fortigate_policy_lookup`, `fortigate_sessions`, `fortigate_traffic_logs`, `fortigate_policies` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: FortiGate Live Inspector tab (`static/js/fortigate.js`)
+  - **UI Module**: FortiGate Live Inspector tab (`static/js/fortigate-management.js`)
 
 - **Missing Features / Gaps**:
   - **Live Packet Capture**: Lacks real-time CLI sniffer API integration (`diagnose sniffer packet`) to capture raw PCAP payload bytes directly from browser.
@@ -41,11 +56,25 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   3. Review generated FortiOS CLI block for proper object definitions (`config firewall address`), service group syntax (`config firewall service custom`), and policy positioning (`config firewall policy`).
   4. Perform compliance checklist audit against generated snippet to ensure logging is enabled (`set logtraffic all`) and no wildcard source interfaces are used.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Config Analyzer` (`navAssess` -> `#tab-config`) & `Provisioning` (`navChange` -> `#tab-provisioning`)
+  - **Buttons & Controls**:
+    - Select: `Seleziona Backup` (`#configSelectBackup`) / Button: `<i class="fa-solid fa-magnifying-glass-chart"></i> Analizza Config` (`#btnAnalyzeConfig`)
+    - Subtab: `FortiGate CLI Generator` (`#btnProvFgt`)
+    - Form Inputs: `Source Subnet`, `Destination Subnet`, `Service Ports`, `Src Intf`, `Dst Intf`, `Action`
+    - Action Buttons: `<i class="fa-solid fa-file-code"></i> Genera Config` (`#btnProvGenerate`), `<i class="fa-solid fa-download"></i> Scarica .txt` (`#btnProvDownload`)
+  - **Workflow Step-by-Step**:
+    1. Click **Config Analyzer** under **Valuta**, select FortiGate backup file, and click **Analizza Config** to inspect existing objects.
+    2. Click **Provisioning** under **Modifica**, then select **FortiGate CLI Generator** subtab.
+    3. Enter Source Subnet `192.0.2.50/32`, Destination Subnet `198.51.100.20/32`, Ports `22,443`, Source Interface `port2`, Egress Interface `port1`, and Action `accept`.
+    4. Click **Genera Config** to render FortiOS `config firewall policy` syntax.
+    5. Verify `set logtraffic all` setting in output preview and click **Scarica .txt** to save policy block.
+
 - **App Features Present**:
   - **API Route**: `POST /api/provisioner/generate-fortigate-config` ([routers/provisioner.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/provisioner.py))
   - **API Route**: `POST /api/analyzer/config` ([routers/analyzer.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py))
   - **MCP Tools**: `generate_fortigate_config`, `analyze_config` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: Config Generator & Security Analyzer (`static/js/provisioning.js`, `static/js/analyzer.js`)
+  - **UI Module**: Config Generator & Security Analyzer (`static/js/provisioning.js`, `static/js/config-analyzer.js`)
 
 - **Missing Features / Gaps**:
   - **Automated Direct Push**: No automated transactional push mechanism (REST API `CMDB` commit with auto-rollback on connection loss). Manual CLI paste required.
@@ -64,15 +93,28 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Query network ARP tables and FortiGate DHCP leases to resolve MAC address `AA:BB:CC:DD:EE:FF` to IP address `192.0.2.88`.
   5. Render client map displaying switch topology node, edge port ID, hostname, and active IP binding.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Localizzazione Endpoint` (`navInvestigate` -> `#tab-mac`) & `Client Map` (`#tab-clientmap`)
+  - **Buttons & Controls**:
+    - Subtab: `MAC Tracker` (`#tab-mac`) -> Input: `MAC Address` (`#macSearchInput`) -> Button: `<i class="fa-solid fa-magnifying-glass"></i> Cerca MAC` (`#btnMacSearchGo`)
+    - Modal Action: `<i class="fa-solid fa-power-off"></i> Isola Porta` (`#btnPortIsolate`)
+    - Subtab: `Client Map` (`#tab-clientmap`) -> Interactive Topology Graph Node
+  - **Workflow Step-by-Step**:
+    1. Click **Localizzazione Endpoint** in left navigation bar under **Indaga**.
+    2. Enter MAC address `AA:BB:CC:DD:EE:FF` in search input box and click **Cerca MAC**.
+    3. Review results table to locate access switch (`switch-01`), edge port (`GigabitEthernet1/0/14`), VLAN tag, and IP address (`192.0.2.88`).
+    4. Click `Client Map` subtab to render interactive node graph connecting endpoint to access switch port.
+    5. To isolate suspicious host, click **Isola Porta** in details modal (`POST /api/mac/port-control`) to administrative shutdown switch port `GigabitEthernet1/0/14`.
+
 - **App Features Present**:
   - **API Route**: `GET /api/mac/locate` ([routers/mac.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mac.py))
   - **API Route**: `GET /api/mac/mac-to-ip` ([routers/mac.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mac.py))
   - **API Route**: `GET /api/mac/client-map` ([routers/mac.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mac.py))
+  - **API Route**: `POST /api/mac/port-control` ([routers/mac.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mac.py#L241-L255))
   - **MCP Tools**: `locate_mac`, `search_mac`, `mac_to_ip`, `client_map` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: MAC Locator & Client Mapping dashboard (`static/js/mac.js`)
+  - **UI Module**: MAC Locator & Client Mapping dashboard (`static/js/client-map.js`)
 
 - **Missing Features / Gaps**:
-  - **Automated Port Shutdown Remediation**: Lacks single-click API button or MCP tool to execute `shutdown` or change VLAN assignment (Quarantine VLAN) on identified switch port.
   - **802.1X / RADIUS Telemetry Integration**: Does not pull RADIUS authentication history (username, EAP method, posture state) associated with MAC address from Cisco ISE or FreeRADIUS.
 
 ---
@@ -86,11 +128,25 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Flag uncataloged IP/MAC bindings as "Unassigned/Unknown Host".
   5. Store scan results to database for temporal drift analysis.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Localizzazione Endpoint` (`#tab-mac`) -> Panel `Raccolta ARP` & Subtab `Endpoint Inventory` (`#tab-endpoints`)
+  - **Buttons & Controls**:
+    - Select: `Filtra per Tenant` (`#arpScanGroup`) / Multi-select: `Tutti i gateway` (`#arpDeviceMenu`)
+    - Button: `<i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)` (`#btnArpScan`)
+    - Inputs: `IP (anche prefisso)` (`#arpSearchIp`), `MAC` (`#arpSearchMac`) -> Button: `<i class="fa-solid fa-magnifying-glass"></i> Cerca`
+    - Subtab: `Inventario Endpoint` (`#tab-endpoints`) -> Table Filters & Export CSV
+  - **Workflow Step-by-Step**:
+    1. Click **Localizzazione Endpoint** in left nav bar and locate `Raccolta ARP` panel.
+    2. Select target tenant/group from `Filtra per Tenant` dropdown and check gateway routers/firewalls in `Tutti i gateway` menu.
+    3. Click **Raccogli ARP (gateway L3)** button to execute live ARP table gathering.
+    4. Enter CIDR prefix `192.0.2.128/25` in `IP` search field and click **Cerca**.
+    5. Switch to `Inventario Endpoint` subtab to inspect cataloged bindings vs unknown hosts, and export inventory CSV.
+
 - **App Features Present**:
   - **API Route**: `POST /api/arp/scan` ([routers/arp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/arp.py))
   - **API Route**: `GET /api/endpoint-inventory` ([routers/endpoint_inventory.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/endpoint_inventory.py))
   - **MCP Tools**: `arp_scan` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: ARP Scanner & Endpoint Inventory view (`static/js/arp.js`)
+  - **UI Module**: ARP Scanner & Endpoint Inventory view (`static/js/endpoint-inventory.js`)
 
 - **Missing Features / Gaps**:
   - **Active OS Fingerprinting**: Uses ARP ping response only; does not perform active Nmap TCP/UDP OS fingerprinting or HTTP banner grabbing to determine device type.
@@ -109,14 +165,29 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Run automated WLC client diagnostic pipeline to check for status flags (Authentication failure, DHCP timeout, EAPOL handshake failure, low RSSI roaming issue).
   5. Inspect AP summary on `ap-building-a` for client density and Channel Utilization metrics.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Cisco WLC` (`navInventory` -> `#tab-wlc`)
+  - **Buttons & Controls**:
+    - Target Select: `Seleziona Cisco WLC` (`#wlcTargetSelect`)
+    - Button: `<i class="fa-solid fa-rotate"></i> Aggiorna` (`refreshWlcData()`)
+    - Tables: `Access Point Rilevati` (`#wlcApTableBody`), `Client Wireless Associati` (`#wlcClientTableBody`)
+    - Table Action: `<i class="fa-solid fa-stethoscope"></i> Diagnostica` (`wlcDiagnoseClient(mac)`)
+    - Modal Window: `Diagnostica Client Wireless WLC` (`#wlcDiagModal`)
+  - **Workflow Step-by-Step**:
+    1. Click **Cisco WLC** in left navigation bar under **Inventario**.
+    2. Select target controller IP `192.0.2.10` from `Seleziona Cisco WLC` dropdown and click **Aggiorna**.
+    3. Review KPI cards for controller version, connected AP count, and active client count.
+    4. Scroll down to `Client Wireless Associati` table, locate MAC `00:11:22:33:44:55`, and check RSSI/SNR signal levels (`-78 dBm / 14 dB`).
+    5. Click **Diagnostica** button next to client row to launch modal window (`#wlcDiagModal`) and inspect EAPOL handshake, DHCP state, and AP association log.
+
 - **App Features Present**:
   - **API Route**: `GET /api/wlc/{ip}/client/{mac}` ([routers/wlc.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L51-L53))
   - **API Route**: `GET /api/wlc/{ip}/diagnose-client/{mac}` ([routers/wlc.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py))
   - **API Route**: `GET /api/wlc/{ip}/ap-summary` ([routers/wlc.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L43-L45))
   - **MCP Tools**: `wlc_client_detail`, `wlc_diagnose_client`, `wlc_ap_summary` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
+  - **UI Module**: WLC Live Observability view ([`static/js/wlc.js`](file:///c:/Users/vidhi/dev_ved/SentinelNet/static/js/wlc.js))
 
 - **Missing Features / Gaps**:
-  - **Dashboard UI Tab (`wlc.js`)**: Lacks dedicated WLC frontend tab in web dashboard (`templates/dashboard.html`); WLC endpoints are accessible only via REST API, MCP tools, or AI Assistant.
   - **802.11 Roaming Event Timeline**: Does not retain historical log of fast roaming transitions (802.11r/k/v) between APs over time.
   - **AP RF Heatmap Visualization**: Displays tabular AP summary metrics without spatial floor plan coverage overlay.
 
@@ -131,13 +202,25 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Identify detecting APs with highest RSSI to isolate physical location of rogue transmitter.
   5. Check if rogue BSSID is observed on wired MAC address tables to rule out rogue AP connected to internal LAN switch port.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Cisco WLC` (`#tab-wlc`) & `Fortigate Management` (`#tab-fortigate`)
+  - **Buttons & Controls**:
+    - WLC Panel: `Rogue AP Rilevati` (`#wlcRogueTableBody`)
+    - FortiGate Subtab: `Managed FortiAP` (`#subtab-fortiap`)
+  - **Workflow Step-by-Step**:
+    1. Click **Cisco WLC** in left nav bar. Select controller `192.0.2.10`.
+    2. Scroll to `Rogue AP Rilevati` panel to review detected rogue BSSIDs, broadcast SSIDs, radio channels, and signal strength (RSSI).
+    3. Identify monitoring AP reporting strongest RSSI to locate physical building area.
+    4. Switch to **Fortigate Management** tab, select target FortiGate firewall, and open `Managed FortiAP` subtab to cross-verify wireless threat telemetry.
+    5. Open `Localizzazione Endpoint` MAC Tracker to search rogue BSSID and verify if rogue device is plugged into internal switch port.
+
 - **App Features Present**:
   - **API Route**: `GET /api/wlc/{ip}/rogue-aps` ([routers/wlc.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L59-L61))
   - **API Route**: `GET /api/fortigate/{ip}/managed-aps` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py))
   - **MCP Tools**: `wlc_rogue_aps`, `fortigate_managed_aps` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
+  - **UI Module**: WLC Observability & FortiAP Inspector (`static/js/wlc.js`, `static/js/fortigate-management.js`)
 
 - **Missing Features / Gaps**:
-  - **Dashboard UI Tab**: No dedicated WLC UI view in web dashboard; rogue AP telemetry currently relies on MCP tool / API calls.
   - **Active Rogue Containment Trigger**: Cannot send API command to trigger 802.11 deauthentication frame injection / wire containment from WLC.
   - **Automated Switch Port Auto-Block for Wired Rogue**: Cannot automatically disable switch port matching rogue MAC on wired network.
 
@@ -154,11 +237,27 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Perform FortiGate live session query for host `192.0.2.210` to inspect active session counts and concurrent connection rates.
   5. Formulate mitigation plan (rate limiting or shun policy).
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Traffico` (`navInvestigate` -> `#tab-flows` / `#tab-flow-siem`)
+  - **Buttons & Controls**:
+    - Dropdown: `Finestra temporale` (`#flowsWindowSelect` - `15m` / `1h` / `24h`)
+    - Button: `<i class="fa-solid fa-rotate"></i> Aggiorna Traffico` (`#btnFlowsRefresh`)
+    - Table: `Top Talkers` (`#flowsTopTalkersBody`)
+    - Action Button: `<i class="fa-solid fa-ban"></i> Shun IP` (`#btnShunIp`)
+    - Panel: `Correlated Anomalies` (`#anomTableBody`) -> Select: `Stato` (`new` / `ack` / `resolved`)
+  - **Workflow Step-by-Step**:
+    1. Click **Traffico** in left navigation bar under **Indaga**.
+    2. Select `15m` from `Finestra temporale` dropdown and click **Aggiorna Traffico**.
+    3. Inspect `Top Talkers` table sorted by byte volume and packet count to identify bandwidth hog `192.0.2.210`.
+    4. Scroll down to `Correlated Anomalies` panel, select `Nuove` from status dropdown, and check anomaly triggers.
+    5. Click **Shun IP** action button next to IP `192.0.2.210` to add offending host to local shun blacklist (`POST /api/flow-siem/shun-ip`).
+
 - **App Features Present**:
   - **API Route**: `GET /api/flow-siem/top-talkers` ([routers/flow_siem.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/flow_siem.py))
   - **API Route**: `GET /api/flow-siem/anomalies` ([routers/flow_siem.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/flow_siem.py))
+  - **API Route**: `POST /api/flow-siem/shun-ip` ([routers/flow_siem.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/flow_siem.py#L376-L384))
   - **MCP Tools**: `get_top_talkers`, `get_anomalies`, `fortigate_sessions` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: Flow SIEM & Live Traffic Analytics Dashboard (`static/js/flow_siem.js`)
+  - **UI Module**: Flow SIEM & Live Traffic Analytics Dashboard (`static/js/flow-analytics.js`)
 
 - **Missing Features / Gaps**:
   - **Automated ACL / Null-Route Injection**: Lacks one-click automated action to inject BGP Flowspec or local ACL rule to block offending IP `192.0.2.210`.
@@ -175,15 +274,30 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Verify if sessions are stuck in `CLOSE_WAIT` or `SYN_RECV` states indicative of SYN flood or improper TCP termination.
   5. Issue targeted CLI diagnosis command via app CLI runner to clear session table entries for offending source IP.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Fortigate Management` (`#tab-fortigate`)
+  - **Buttons & Controls**:
+    - Subtab: `Stato Sistema` (`#subtab-status`) -> Resource KPI Cards: `CPU %`, `RAM %`, `Session Count`
+    - Subtab: `Sessioni` (`#subtab-sessions`) -> Inputs: `Source IP` (`#fgtSessionSrcIp`), `Dest IP` (`#fgtSessionDstIp`) -> Button: `<i class="fa-solid fa-filter"></i> Filtra Sessioni`
+    - Action Button: `<i class="fa-solid fa-skull"></i> Termina Sessioni Filtrate` (`#btnFgtSessionKill`)
+    - Button: `<i class="fa-solid fa-terminal"></i> Console CLI` (`#btnOpenCli`)
+  - **Workflow Step-by-Step**:
+    1. Click **Fortigate Management** in left nav bar. Select core firewall `192.0.2.1`.
+    2. Check `Stato Sistema` subtab to verify CPU usage (95%) and active session table allocation percentage.
+    3. Click `Sessioni` subtab. Enter session-hog IP `192.0.2.14` into `Source IP` filter field and click **Filtra Sessioni**.
+    4. Review list of open TCP sessions, connection states, and policy rule IDs.
+    5. Click **Termina Sessioni Filtrate** button (`DELETE /api/fortigate/{ip}/sessions`) or click **Console CLI** button to execute `diagnose sys session clear` CLI command.
+
 - **App Features Present**:
   - **API Route**: `GET /api/fortigate/{ip}/status` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py))
-  - **API Route**: `POST /api/fortigate/{ip}/sessions/query` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L54-L59))
+  - **API Route**: `POST /api/fortigate/{ip}/sessions` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L272-L277))
+  - **API Route**: `DELETE /api/fortigate/{ip}/sessions` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L279-L285))
   - **API Route**: `GET /api/fortigate/{ip}/policy-stats` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py))
-  - **API Route**: `POST /api/commands/send` ([routers/commands.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/commands.py))
+  - **API Route**: `POST /api/send-command` ([routers/commands.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/commands.py#L136-L176))
   - **MCP Tools**: `fortigate_status`, `fortigate_sessions`, `fortigate_policy_stats`, `send_cli_command` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
+  - **UI Module**: FortiGate Session Manager (`static/js/fortigate-management.js`)
 
 - **Missing Features / Gaps**:
-  - **Targeted API Session Kill Endpoint**: Direct REST API endpoint to terminate sessions matching criteria (`DELETE /api/fortigate/{ip}/sessions?src=...`) is missing; must execute raw CLI command (`diagnose sys session filter ...`).
   - **Automated Session Threshold Alerts**: Lacks configurable webhooks to trigger paging alerts when session utilization crosses 85% threshold.
 
 ---
@@ -198,6 +312,20 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   3. Review Flow SIEM events matching `192.0.2.77` to inspect outbound connection attempts to distinct external destination IPs across sequential destination ports.
   4. Perform MAC location lookup on `192.0.2.77` to identify physical switch port (`switch-02`, port `Gi1/0/8`) and AP/WLAN if wireless.
   5. Trigger AI-Assisted Triage Diagnosis (`/api/ai/diagnose`) to generate root cause analysis, severity score, and mitigation recommendations.
+
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Incidenti` (`navInvestigate` -> `#tab-incidents`) & `AI Assistant` (`#tab-ai`)
+  - **Buttons & Controls**:
+    - Table: `Registro Incidenti` (`#incidentsTableBody`) -> Select: `Gravità` / `Stato`
+    - Action Button: `<i class="fa-solid fa-bolt-lightning"></i> Triage Rapido` (`#btnRunIncidentTriage`)
+    - Action Button: `<i class="fa-solid fa-robot"></i> Diagnostica AI` (`#btnAiDiagnoseIncident`)
+    - Subtab: `AI Assistant` (`#tab-ai`) -> Prompt Input Box -> Button: `<i class="fa-solid fa-paper-plane"></i> Invia`
+  - **Workflow Step-by-Step**:
+    1. Click **Incidenti** in left navigation bar under **Indaga**.
+    2. Locate high-severity incident record for host `192.0.2.77` in incident list table.
+    3. Click **Triage Rapido** button to run automated heuristic check across MAC location, ARP tables, and flow anomalies.
+    4. Click **Diagnostica AI** button to pass incident payload to AI Triage Engine (`POST /api/ai/diagnose`).
+    5. Review AI-generated diagnostic report containing root-cause analysis, threat severity score, and recommended containment steps.
 
 - **App Features Present**:
   - **API Route**: `GET /api/incidents` ([routers/incidents.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/incidents.py))
@@ -227,12 +355,25 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Cross-reference findings against default Security Audit Checklist template (`/api/audit-checklist`).
   5. Export remediation recommendations and compliance score.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Config Analyzer` (`navAssess` -> `#tab-config`) & `Checklist Audit Firewall` (`#tab-audit-checklist`)
+  - **Buttons & Controls**:
+    - Dropdown / Upload: `Seleziona Backup` (`#configSelectBackup`) / `Carica file config` (`#inputFileConfig`)
+    - Button: `<i class="fa-solid fa-magnifying-glass-chart"></i> Analizza Config` (`#btnAnalyzeConfig`)
+    - Subtab: `Checklist Audit Firewall` (`#tab-audit-checklist`) -> Select: `Seleziona Modello Audit` -> Button: `<i class="fa-solid fa-clipboard-check"></i> Esegui Audit Checklist`
+  - **Workflow Step-by-Step**:
+    1. Click **Config Analyzer** in left navigation bar under **Valuta**.
+    2. Choose target device backup from `Seleziona Backup` dropdown or click `Carica file config` to upload raw config file.
+    3. Click **Analizza Config** button to execute static security checks against configuration file.
+    4. Review security violation cards (unencrypted passwords, permissive Any-to-Any rules, weak SSH/SNMP ciphers).
+    5. Click **Checklist Audit Firewall** tab, choose standard compliance template, and click **Esegui Audit Checklist** to generate audit report.
+
 - **App Features Present**:
   - **API Route**: `POST /api/analyzer/config` ([routers/analyzer.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py))
   - **API Route**: `GET /api/audit-checklist` ([routers/audit_checklist.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/audit_checklist.py))
-  - **API Route**: `GET /api/backup` ([routers/backup.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/backup.py))
+  - **API Route**: `GET /api/download-backup` ([routers/backup.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/backup.py))
   - **MCP Tools**: `analyze_config` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
-  - **UI Module**: Security Compliance & Config Analyzer (`static/js/analyzer.js`, `static/js/audit_checklist.js`)
+  - **UI Module**: Security Compliance & Config Analyzer (`static/js/config-analyzer.js`, `static/js/audit_checklist.js`)
 
 - **Missing Features / Gaps**:
   - **PCI-DSS / CIS Benchmark Mapping Tagging**: Rules are categorized generically; lacks explicit mapping tags to PCI-DSS v4.0, NIST SP 800-53, or CIS Controls sections.
@@ -251,12 +392,27 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   4. Query FortiGate traffic logs for IKE protocol traffic (UDP port `500` / `4500`) matching remote peer gateway `198.51.100.1` to identify Phase 1 negotiation failures (pre-shared key mismatch, proposal mismatch, main/aggressive mode mismatch).
   5. Execute ping monitor test from app server to remote site management interface to test ICMP reachability.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Sedi` (`navAdminister` -> `#tab-sites`) & `Fortigate Management` (`#tab-fortigate`)
+  - **Buttons & Controls**:
+    - Subtab: `Sedi` (`#tab-sites`) -> Site Map & Gateway Overview
+    - Subtab: `Interfacce & VPN` (`#subtab-interfaces`) -> Status Badges: `UP` / `DOWN`
+    - Subtab: `Routing Table` (`#subtab-routes`) -> Table: IPv4 Static & Dynamic Routes
+    - Subtab: `Traffic Logs` (`#subtab-logs`) -> Selects: `Log Subtype: event` / `cli_category: ike`
+  - **Workflow Step-by-Step**:
+    1. Click **Sedi** in left navigation bar under **Amministra** to review multi-site gateway status and IPsec topology between `192.0.2.1` and `198.51.100.1`.
+    2. Click **Fortigate Management** tab and select main gateway `192.0.2.1`.
+    3. Open `Interfacce & VPN` subtab to check whether IPsec virtual interface status badge is `UP` or `DOWN`.
+    4. Open `Routing Table` subtab to verify static route for remote branch subnet `198.51.100.0/24` points to IPsec interface.
+    5. Open `Traffic Logs` subtab, filter by IKE traffic (UDP 500/4500), and inspect event log messages for Phase 1 pre-shared key or proposal negotiation errors.
+
 - **App Features Present**:
   - **API Route**: `GET /api/sites` ([routers/sites.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/sites.py))
   - **API Route**: `GET /api/topology/map` ([routers/topology.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/topology.py))
   - **API Route**: `GET /api/fortigate/{ip}/interfaces` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py))
   - **API Route**: `GET /api/fortigate/{ip}/routes` ([routers/fortigate.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py))
   - **MCP Tools**: `list_sites`, `get_network_map`, `fortigate_interfaces`, `fortigate_routes` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
+  - **UI Module**: Multi-Site Management & FortiGate Interface Inspector (`static/js/site-agent.js`, `static/js/fortigate-management.js`)
 
 - **Missing Features / Gaps**:
   - **IPsec IKE Debug Telemetry API**: Does not execute dynamic `diagnose debug application ike -1` command stream via REST API; relies on traffic logs and interface UP/DOWN status.
@@ -274,14 +430,29 @@ This document formulates operational troubleshooting scenarios, step-by-step res
   3. Verify status of critical collector services (`flow_collector`, `syslog_listener`, `ping_monitor`).
   4. If disk space exceeds 90% threshold due to accumulated flow logs, trigger log rotation or database maintenance cycle.
 
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Impostazioni` (`navAdminister` -> `#tab-settings`) -> Subtab `Observability` (`#tab-obs-settings`)
+  - **Buttons & Controls**:
+    - Subtab: `System Health` (`#subtab-health`)
+    - KPI Cards: `CPU Usage %`, `RAM Usage %`, `Disk Space %`, `DB Size`
+    - Service Badges: `flow_collector`, `syslog_listener`, `ping_monitor`
+    - Action Button: `<i class="fa-solid fa-trash-can"></i> Purge Logs` (`#btnPruneLogs`)
+  - **Workflow Step-by-Step**:
+    1. Click **Impostazioni** in left navigation bar under **Amministra** and open `Observability` panel.
+    2. Click `System Health` subtab to inspect Linux collector node resource utilization (CPU, RAM, Disk space `/var/log`).
+    3. Verify status badges for active background services (`flow_collector`, `syslog_listener`).
+    4. If disk space alert triggers due to log accumulation, enter retention days (e.g. `15`) into prune form.
+    5. Click **Purge Logs** button (`POST /api/observability/prune-logs`) to execute automated log cleanup and restore disk headroom.
+
 - **App Features Present**:
   - **API Route**: `GET /api/observability/linux-health` ([routers/observability.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py))
   - **API Route**: `GET /api/observability/status` ([routers/observability.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py))
+  - **API Route**: `POST /api/observability/prune-logs` ([routers/observability.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py#L699-L705))
   - **MCP Tools**: `linux_health` ([routers/mcp.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mcp.py))
   - **UI Module**: System Health & Observability tab (`static/js/observability.js`)
 
 - **Missing Features / Gaps**:
-  - **Automated Log Purge Trigger**: High disk utilization detected in health check requires manual SSH log deletion; auto-pruning policies based on disk watermark missing.
+  - **Automated Threshold Trigger**: High disk utilization requires operator action; background cron for auto-purging on high disk watermark missing.
 
 ---
 
@@ -289,9 +460,8 @@ This document formulates operational troubleshooting scenarios, step-by-step res
 
 | Domain | Present App Features | Key Missing Features / Gaps |
 | :--- | :--- | :--- |
-| **FortiGate Firewalls** | Policy lookup, live sessions, traffic logs, managed FortiAP/WiFi, config backups, REST/SSH driver | Raw packet capture (`sniffer`), deep UTM sub-log UI parsing, direct API policy modification |
-| **Cisco WLC (AireOS/9800)** | AP summary, wireless client details, WLAN lists, rogue AP detection, client diagnostic path | 802.11 roaming history timeline, RF floorplan heatmaps, wireless rogue active containment trigger |
-| **MAC & IP Tracing** | Multi-vendor switch port locator, ARP ping scanner, MAC-to-IP resolution, client map visualization | Automated switch port shutdown/remediation, 802.1X/RADIUS auth log correlation |
-| **Flow SIEM & Anomalies** | NetFlow/sFlow ingestion, top talkers aggregation, flow anomaly detection engine, SIEM event log | Automated IP shun/block trigger, TLS JA3/SNI encrypted flow inspection, external Threat Intel scoring |
+| **FortiGate Firewalls** | Policy lookup, live sessions, session kill API, traffic logs, managed FortiAP/WiFi, config backups, REST/SSH driver | Raw packet capture (`sniffer`), deep UTM sub-log UI parsing, direct API policy modification |
+| **Cisco WLC (AireOS/9800)** | WLC Observability tab (`wlc.js`), AP summary, wireless client details, WLAN lists, rogue AP detection, client diagnostic path | 802.11 roaming history timeline, RF floorplan heatmaps, wireless rogue active containment trigger |
+| **MAC & IP Tracing** | Multi-vendor switch port locator, switch port shutdown/isolation (`port-control`), ARP ping scanner, MAC-to-IP resolution, client map visualization | 802.1X/RADIUS auth log correlation |
+| **Flow SIEM & Anomalies** | NetFlow/sFlow ingestion, top talkers aggregation, flow anomaly detection engine, SIEM event log, IP shun block (`shun-ip`) | Automated BGP Flowspec injection, TLS JA3/SNI encrypted flow inspection, external Threat Intel scoring |
 | **Config & Compliance** | FortiOS/IOS-XE static analyzer, config backup diffs, ACL generator, security audit checklists | Direct commit push with auto-rollback, PCI-DSS/CIS benchmark tagging, real-time Git drift alerts |
-
