@@ -88,8 +88,16 @@ async def get_gateway_candidates(tenant: Optional[str] = None,
 @router.post("/api/diagnose/traceroute-gateway")
 async def traceroute_gateway(payload: TracerouteGatewaySchema,
                               current_user = Depends(get_current_user)):
-    """Esegue traceroute rapido per rilevare il primo hop / gateway verso un IP."""
-    return await asyncio.to_thread(client_diagnosis.detect_gateway_traceroute, payload.target)
+    """Esegue traceroute rapido per rilevare il primo hop / gateway verso un IP.
+
+    Il target non è un apparato in inventario, quindi non passa da
+    ``assert_device_allowed``: lo scoping lo applica il servizio, che rifiuta un
+    indirizzo fuori dalle sedi del chiamante.
+    """
+    tenants = user_group_scope(current_user)
+    scope = sorted(tenants) if tenants is not None else None
+    return await asyncio.to_thread(client_diagnosis.detect_gateway_traceroute,
+                                   payload.target, scope)
 
 
 @router.post("/api/diagnose/port-bounce")
