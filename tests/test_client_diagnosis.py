@@ -388,6 +388,30 @@ class TestAmbiguousBindings(unittest.TestCase):
             p = client_diagnosis._position("192.0.2.10", False, None)
         self.assertEqual([a["mac"] for a in p["ambiguous"]], ["11:22:33:44:55:66"])
 
+    def test_another_mac_from_two_gateways_is_listed_once(self):
+        # Il caso che il test sopra non copre: e' l'ALTRO mac ad arrivare da due
+        # gateway. Senza dedup lo stesso MAC compare due volte sotto 'altri
+        # binding' e si legge come un conflitto dove non c'e'.
+        rows = [self._entry("aa:bb:cc:dd:ee:ff", "192.0.2.1"),
+                self._entry("11:22:33:44:55:66", "192.0.2.1"),
+                self._entry("11:22:33:44:55:66", "192.0.2.2")]
+        with _client_map(rows):
+            p = client_diagnosis._position("192.0.2.10", False, None)
+        self.assertEqual([a["mac"] for a in p["ambiguous"]], ["11:22:33:44:55:66"])
+
+    def test_the_choice_carries_the_date_it_is_decided_on(self):
+        # Il picker ordina e decide sulla data: i candidati la scrivono in
+        # 'port_last_seen', il frontend legge 'last_seen'. Passarli grezzi
+        # svuota la data in ogni chip senza rompere nulla di visibile qui.
+        rows = [dict(CLIENT, tenant="sede-a", switch_name="", switch_port="Gi1/0/5"),
+                dict(CLIENT, tenant="sede-b", switch_name="SW-B", switch_port="Gi1/0/9")]
+        with _client_map(rows):
+            p = client_diagnosis._position("192.0.2.10", False, None)
+        self.assertEqual([t["last_seen"] for t in p["tenants_available"]],
+                         ["2026-08-01T10:00:00"] * 2)
+        # Senza nome, l'etichetta ripiega sull'IP dell'apparato, non sul vuoto.
+        self.assertEqual(p["tenants_available"][0]["switch_name"], "192.0.2.20")
+
 
 class TestFreshness(unittest.TestCase):
     """Le scansioni ARP/MAC sono manuali: un referto costruito su un dato di tre
@@ -1244,6 +1268,73 @@ class TestGatewayOverrideAndTraceroute(unittest.TestCase):
     def test_tenant_gateway_candidates(self):
         candidates = client_diagnosis.get_tenant_gateway_candidates("sede-a")
         self.assertIsInstance(candidates, list)
+
+
+class TestGatewayCandidatesScoping(unittest.TestCase):
+    """Il picker dei gateway e' l'unica rotta che elenca inventario e sedi a un
+    utente non admin: /api/sites vuole require_admin. Se lo scoping non arriva
+    fino in fondo, un utente di una sede legge gli apparati e le subnet di
+    tutti gli altri clienti."""
+
+    DEVICES = [
+        {"IP": "192.0.2.10", "Hostname": "sw-a", "Group": "sede-a", "Site": "site-a"},
+        {"IP": "198.51.100.10", "Hostname": "sw-b", "Group": "sede-b", "Site": "site-b"},
+    ]
+    SITES = [
+        {"id": "site-a", "name": "Sede A", "subnets": ["192.0.2.0/24"]},
+        {"id": "site-b", "name": "Sede B", "subnets": ["198.51.100.0/24"]},
+    ]
+
+    def _candidates(self, tenant=None, tenants=None):
+        with patch("collectors.mac_history.search_arp", return_value=[]), \
+             patch("services.inventory_manager.get_all_devices",
+                   return_value=self.DEVICES), \
+             patch("services.site_manager.list_sites", return_value=self.SITES):
+            return client_diagnosis.get_tenant_gateway_candidates(tenant, tenants)
+
+    def test_the_user_scope_alone_filters_the_inventory(self):
+        # Il frontend chiama la rotta SENZA '?tenant=' finche' non se ne sceglie
+        # uno: e' il percorso normale, non un caso limite. Se qui si guarda solo
+        # l'argomento singolo, il percorso normale restituisce tutto.
+        ips = [c["ip"] for c in self._candidates(tenant=None, tenants=["sede-a"])]
+        self.assertIn("192.0.2.10", ips)
+        self.assertNotIn("198.51.100.10", ips)
+
+    def test_the_subnet_gateways_of_other_sites_are_not_listed(self):
+        out = self._candidates(tenant=None, tenants=["sede-a"])
+        self.assertEqual([c["tenant"] for c in out if c["source"] == "subnet"],
+                         ["site-a"])
+
+    def test_an_unscoped_profile_still_sees_everything(self):
+        ips = [c["ip"] for c in self._candidates(tenant=None, tenants=None)]
+        self.assertIn("192.0.2.10", ips)
+        self.assertIn("198.51.100.10", ips)
+
+    def test_an_explicit_tenant_narrows_further(self):
+        ips = [c["ip"] for c in self._candidates(tenant="sede-b", tenants=None)]
+        self.assertEqual(ips, ["198.51.100.10", "198.51.100.1"])
+
+
+class TestTracerouteScoping(unittest.TestCase):
+    """Il target del traceroute non e' un apparato in inventario, quindi
+    assert_device_allowed non si applica: senza un confine proprio, chiunque
+    sonda la rete di un altro cliente e ne legge il primo hop."""
+
+    def test_a_target_outside_the_profile_is_refused_before_probing(self):
+        with patch("services.client_diagnosis.resolve_endpoint",
+                   return_value={"known": False}) as resolve, \
+             patch("subprocess.run") as run:
+            res = client_diagnosis.detect_gateway_traceroute("198.51.100.10",
+                                                             tenants=["sede-a"])
+        self.assertFalse(res["known"])
+        resolve.assert_called_once_with("198.51.100.10", ["sede-a"])
+        run.assert_not_called()
+
+    def test_an_unscoped_profile_is_not_gated(self):
+        with patch("services.client_diagnosis.resolve_endpoint") as resolve, \
+             patch("subprocess.run", side_effect=OSError("no traceroute here")):
+            client_diagnosis.detect_gateway_traceroute("198.51.100.10")
+        resolve.assert_not_called()
 
     def test_detect_gateway_traceroute(self):
         res = client_diagnosis.detect_gateway_traceroute("192.0.2.1")

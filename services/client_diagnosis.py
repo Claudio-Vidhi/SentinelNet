@@ -195,10 +195,30 @@ def _position(client: str, is_mac: bool, tenants, gateway_override: Optional[str
         out["port_known"] = True
 
     if len(candidates) > 1:
-        out["tenants_available"] = candidates
-    others = [e for e in entries if e.get("mac") != best.get("mac")]
+        # Il frontend legge 'last_seen' e usa 'switch_name' come etichetta: i
+        # candidati portano 'port_last_seen' e uno 'switch_name' che può essere
+        # vuoto. Senza questa riscrittura data e nome escono in bianco.
+        out["tenants_available"] = [{
+            "tenant": c["tenant"], "site": c["site"], "ip": c["ip"],
+            "mac": c["mac"], "switch_name": c["switch_name"] or c["switch_ip"],
+            "switch_port": c["switch_port"], "last_seen": c["port_last_seen"],
+            "l2_only": c["l2_only"],
+        } for c in candidates]
+
+    # La chiave di 'arp_entries' è (mac, ip, source_ip), quindi un host visto da
+    # due gateway — normale dove più apparati fronteggiano la stessa VLAN —
+    # produce due righe dello stesso binding. Elencarle mostra lo stesso MAC due
+    # volte sotto "altri binding", cioè un allarme per la configurazione normale.
+    others, seen_macs = [], {best.get("mac")}
+    for x in entries:
+        if x.get("mac") in seen_macs:
+            continue
+        seen_macs.add(x.get("mac"))
+        others.append({"mac": x.get("mac"), "last_seen": x.get("last_seen")})
+        if len(others) >= 5:
+            break
     if others:
-        out["ambiguous"] = [{"mac": e.get("mac"), "last_seen": e.get("last_seen")} for e in others]
+        out["ambiguous"] = others
 
     return out
 
@@ -224,12 +244,22 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
                 "source": "arp",
             })
 
+    # Stessa semantica di search_arp: None = nessun limite, lista = restringi.
+    scope_keys = ({_tenant_key(t) for t in scope_tenants}
+                  if scope_tenants is not None else None)
+
+    # Le sedi non portano un tenant: quelle visibili sono quelle dove il
+    # chiamante ha almeno un apparato, quindi si raccolgono qui.
+    allowed_sites = set() if scope_keys is not None else None
+
     devices = inventory_manager.get_all_devices()
     for d in devices:
         d_ip = d.get("IP")
         d_tenant = d.get("Group") or d.get("tenant") or "Generale"
-        if tenant and tenant.strip() and tenant.strip().lower() != "all" and _tenant_key(d_tenant) != _tenant_key(tenant):
+        if scope_keys is not None and _tenant_key(d_tenant) not in scope_keys:
             continue
+        if allowed_sites is not None:
+            allowed_sites.add(d.get("Site") or "central")
         if d_ip and d_ip not in seen:
             seen.add(d_ip)
             out.append({
@@ -241,6 +271,8 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
             })
 
     for site in site_manager.list_sites():
+        if allowed_sites is not None and site.get("id") not in allowed_sites:
+            continue
         for sub in site.get("subnets") or []:
             try:
                 import ipaddress
@@ -263,8 +295,15 @@ def get_tenant_gateway_candidates(tenant: Optional[str] = None, tenants=None) ->
     return out
 
 
-def detect_gateway_traceroute(target_ip: str) -> dict:
-    """Rileva il primo hop (gateway) verso un target (IP o MAC) via traceroute/ping-hop."""
+def detect_gateway_traceroute(target_ip: str, tenants=None) -> dict:
+    """Rileva il primo hop (gateway) verso un target (IP o MAC) via traceroute/ping-hop.
+
+    ``tenants`` è lo scoping del chiamante (None = nessun limite). Il target non
+    è un apparato in inventario, quindi ``assert_device_allowed`` non si applica:
+    il confine è che l'indirizzo deve risultare in una sede del chiamante.
+    Senza, chiunque potrebbe sondare la rete di un altro cliente e leggerne il
+    primo hop.
+    """
     import re
     import subprocess
     import sys
@@ -275,10 +314,10 @@ def detect_gateway_traceroute(target_ip: str) -> dict:
         return {"known": False, "reason": "Target non specificato"}
 
     if _MAC_RE.fullmatch(target_ip):
-        arp_entries = mac_history.search_arp(mac=target_ip, limit=5)
+        arp_entries = mac_history.search_arp(mac=target_ip, tenants=tenants, limit=5)
         found_ip = arp_entries[0].get("ip") if arp_entries else None
         if not found_ip:
-            pos = mac_history.positions_for_mac(target_ip)
+            pos = mac_history.positions_for_mac(target_ip, tenants=tenants)
             found_ip = pos[0].get("ip") if pos else None
         if not found_ip:
             return {"known": False, "reason": f"MAC '{target_ip}' non ha un IP ARP associato. Inserisci un indirizzo IP."}
@@ -288,6 +327,12 @@ def detect_gateway_traceroute(target_ip: str) -> dict:
     if not ip_match:
         return {"known": False, "reason": f"'{target_ip}' non e' un indirizzo IP valido"}
     clean_target = ip_match.group(0)
+
+    if tenants is not None and not resolve_endpoint(clean_target, tenants).get("known"):
+        return {"known": False,
+                "reason": f"'{clean_target}' non risulta in nessuna sede del tuo "
+                          "profilo: non c'è un binding ARP osservato né una "
+                          "subnet dichiarata che lo contenga"}
 
     cmd = (['tracert', '-d', '-h', '3', '-w', '800', clean_target] if sys.platform == 'win32'
            else ['traceroute', '-n', '-m', '3', '-w', '1', clean_target])
