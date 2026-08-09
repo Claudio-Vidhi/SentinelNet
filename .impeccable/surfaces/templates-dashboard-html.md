@@ -50,9 +50,11 @@ a staggered lamp test — the one authored motion, suppressed under
 `prefers-reduced-motion`.
 
 **Unresolved.**
-- The five `.kpi-grid` strips on other tabs (fortigate, flows, provisioning,
-  categories, settings) still read as stat rows rather than instruments; the
-  home surface no longer uses one.
+- ~~The five `.kpi-grid` strips on other tabs still read as stat rows.~~
+  Resolved: the five real strips (devices, mac-tracker, client-map, flows,
+  audit) were converted to `.oneline-foot`, and the class itself was deleted
+  once nothing carried it. The endpoint tiles in `#epKpis` still use `.kpi`.
+  The tab names in the original note were wrong — verify before implementing.
 - No screenshot verification was possible in this environment; the build is
   verified by tests, type check and numeric contrast only.
 - Whether the one-line should become the estate's primary navigation across
