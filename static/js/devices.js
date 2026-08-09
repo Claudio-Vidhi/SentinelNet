@@ -818,7 +818,7 @@
             return `<div style="display:grid; grid-template-columns:130px 1fr 56px 24px 90px;
                         align-items:center; gap:8px; padding:8px 12px;
                         border-bottom:1px solid var(--border); font-size:12px;">
-                <span style="font-family:Menlo,monospace; color:var(--primary);">${escapeHtml(r.ip)}</span>
+                <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(r.ip)}</span>
                 <span>${r.hostname ? escapeHtml(r.hostname) : '<span style="color:var(--text-muted)">—</span>'}</span>
                 <span style="text-transform:uppercase; color:var(--text-muted);">${escapeHtml(r.vendor)}</span>
                 <span style="text-align:center; color:${r.ssh_ok ? 'var(--primary)' : 'var(--danger)'};">${r.ssh_ok ? '✓' : '✗'}</span>
@@ -954,7 +954,7 @@
         const en = currentLang === 'en';
         box.style.display = '';
         if (errorDetail) {
-            box.innerHTML = `<div style="padding:12px 14px; border-radius:0; border:1px solid var(--danger); background:rgba(239,68,68,0.10); font-size:13px; color:var(--danger);">
+            box.innerHTML = `<div style="padding:12px 14px; border-radius:0; border:1px solid var(--danger); background:color-mix(in srgb, var(--danger) 10%, transparent); font-size:13px; color:var(--danger);">
                 <i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(errorDetail)}</div>`;
             return;
         }
@@ -967,7 +967,7 @@
                 <td style="padding:5px 8px; color:var(--danger);">${escapeHtml(String(f.error))}</td>
             </tr>`).join('');
         box.innerHTML = `
-            <div style="padding:12px 14px; border-radius:0; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'rgba(245,158,11,0.10)' : 'rgba(34,197,94,0.10)'}; font-size:13px;">
+            <div style="padding:12px 14px; border-radius:0; border:1px solid ${failed.length ? 'var(--warning)' : 'var(--success)'}; background:${failed.length ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)'}; font-size:13px;">
                 <strong>${ok}</strong> ${en ? 'devices imported' : 'dispositivi importati'}${failed.length ? ` · <strong>${failed.length}</strong> ${en ? 'rows skipped' : 'righe scartate'}` : ''}
             </div>
             ${failed.length ? `

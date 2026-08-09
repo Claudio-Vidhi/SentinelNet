@@ -549,8 +549,8 @@ function assignIdentityToDevices(identityId) {
     ov.innerHTML = `
       <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(620px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <h3 style="font-size:16px;"><i class="fa-solid fa-users-rectangle" style="color:var(--primary);"></i> ${escapeHtml(L.assignIdentityTitle || 'Assegna identità')}</h3>
-          <i class="fa-solid fa-xmark" onclick="closeAssignIdentityModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+          <h3 style="font-size:17px;"><i class="fa-solid fa-users-rectangle" style="color:var(--primary);"></i> ${escapeHtml(L.assignIdentityTitle || 'Assegna identità')}</h3>
+          <i class="fa-solid fa-xmark" onclick="closeAssignIdentityModal()" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
         </div>
         <p style="font-size:13px; color:var(--text-muted); margin-bottom:4px;">
           ${escapeHtml((L.assignIdentityDesc || 'Seleziona i dispositivi a cui assegnare l\'identità:')).replace('{name}', escapeHtml(ident.name))}

@@ -267,7 +267,7 @@
 
             const disabled = !!u.disabled;
             const disabledBadge = disabled
-                ? ` <span class="role-pill" style="background:rgba(255,107,124,0.15); color:var(--danger); border:1px solid rgba(255,107,124,0.35);">${currentLang === 'en' ? 'DISABLED' : 'DISABILITATO'}</span>`
+                ? ` <span class="role-pill" style="background:color-mix(in srgb, var(--danger) 15%, transparent); color:var(--danger); border:1px solid color-mix(in srgb, var(--danger) 35%, transparent);">${currentLang === 'en' ? 'DISABLED' : 'DISABILITATO'}</span>`
                 : '';
             const toggleText = disabled
                 ? (currentLang === 'en' ? 'Enable' : 'Abilita')

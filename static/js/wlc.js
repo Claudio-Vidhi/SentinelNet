@@ -102,7 +102,7 @@ function renderWlcStatus(d) {
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
             <div class="kpi-card">
                 <div class="kpi-label">Controller IP</div>
-                <div class="kpi-value" style="font-size:16px;">${escapeHtml(currentWlcIp)}</div>
+                <div class="kpi-value" style="font-size:15px;">${escapeHtml(currentWlcIp)}</div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-label">Uptime / Versione</div>
@@ -224,7 +224,7 @@ async function wlcDiagnoseClient(mac) {
         const modalBody = document.getElementById('wlcDiagModalBody');
         if (modalBody) {
             modalBody.innerHTML = `
-                <div style="font-family:var(--font-code); background:var(--surface-3); padding:12px; border-radius:4px; max-height:400px; overflow-y:auto; font-size:12px;">
+                <div style="font-family:var(--font-code); background:var(--surface-3); padding:12px; border-radius:0; max-height:400px; overflow-y:auto; font-size:12px;">
                     <pre>${escapeHtml(JSON.stringify(diag, null, 2))}</pre>
                 </div>
             `;

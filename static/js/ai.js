@@ -370,7 +370,7 @@
             const keyChip = !needsKey
                 ? `<span title="${escapeHtml(L.lblAiLocalLlm || 'LLM locale')}"><i class="fa-solid fa-house-laptop"></i></span>`
                 : (p.api_key_set
-                    ? `<span style="color:var(--success, #4caf50);" title="${escapeHtml(L.lblAiKeySet || 'API key impostata')}"><i class="fa-solid fa-key"></i></span>`
+                    ? `<span style="color:var(--success);" title="${escapeHtml(L.lblAiKeySet || 'API key impostata')}"><i class="fa-solid fa-key"></i></span>`
                     : `<span style="color:var(--warning, var(--lamp-warn));" title="${escapeHtml(L.lblAiKeyMissing || 'API key mancante')}"><i class="fa-solid fa-triangle-exclamation"></i></span>`);
             return `<div class="ai-profile-card${p.id === editing ? ' editing' : ''}" onclick="selectAiProfileCard('${escapeHtml(jsStr(p.id))}')">
                 <div class="ai-prof-top">
@@ -627,7 +627,7 @@
 
     function showAiConfigConfirmModal(p, card) {
         const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10000; display:flex; align-items:center; justify-content:center;';
+        overlay.style.cssText = 'position:fixed; inset:0; background:var(--scrim); z-index:10000; display:flex; align-items:center; justify-content:center;';
         overlay.innerHTML = `
             <div style="background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:0; max-width:560px; width:92%; padding:18px;">
                 <h4 style="margin:0 0 10px 0;">${currentLang==='en' ? 'Confirm configuration push' : 'Conferma invio configurazione'}</h4>
@@ -708,7 +708,7 @@
         div.style.alignItems = isUser ? 'flex-end' : 'flex-start';
         const label = isUser ? (i18n[currentLang].lblAiChatYou || 'Tu') : (meta || (i18n[currentLang].lblAiChatAssistant || 'AI'));
         div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${escapeHtml(label)}</div>
-            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--accent, #3b82f6)' : 'var(--surface-3)'}; color:${isUser ? '#fff' : 'inherit'}; border-radius:0; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
+            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--primary)' : 'var(--surface-3)'}; color:${isUser ? 'var(--on-lamp)' : 'inherit'}; border-radius:0; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         return div;

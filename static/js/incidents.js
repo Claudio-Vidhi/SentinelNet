@@ -438,7 +438,7 @@
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px;">
                 <div>
                     <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">${L('incCauseTitle')}</div>
-                    <div style="font-size:18px; font-family:var(--font-display);">${escapeHtml(jsStr(inc.cause_kind || '--'))}</div>
+                    <div style="font-size:17px; font-family:var(--font-display);">${escapeHtml(jsStr(inc.cause_kind || '--'))}</div>
                 </div>
                 <div style="min-width:160px;">
                     <div style="font-size:11px; color:var(--text-muted); text-align:right;">Confidenza ${escapeHtml(jsStr(inc.confidence ?? '--'))}%</div>
@@ -523,7 +523,7 @@
             ? `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(jsStr(inc.ai_narrative))}</div>
                <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(inc.ai_narrative_ts))}</div>`
             : `<div style="font-size:12px; color:var(--text-muted);">${L('incNoNarrative')}</div>`;
-        return `<div style="margin-top:18px; padding:12px; border-radius:0; border:1px dashed var(--primary); background:rgba(99,102,241,0.06);">
+        return `<div style="margin-top:18px; padding:12px; border-radius:0; border:1px dashed var(--primary); background:color-mix(in srgb, var(--primary) 6%, transparent);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
                 <span style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--primary);">
                     <i class="fa-solid fa-robot"></i> ${L('incAiRestated')}
@@ -592,7 +592,7 @@
         box.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px;">
                 <div>
-                    <h3 style="margin:0; font-family:var(--font-display); font-size:20px;">${escapeHtml(jsStr(inc.title || inc.entity_key))}</h3>
+                    <h3 style="margin:0; font-family:var(--font-display); font-size:21px;">${escapeHtml(jsStr(inc.title || inc.entity_key))}</h3>
                     <div style="font-size:12px; color:var(--text-muted);">
                         ${escapeHtml(jsStr(inc.entity_key))} · tenant ${escapeHtml(jsStr(inc.tenant))} ·
                         ${L('incFromTo').replace('{a}', escapeHtml(fmtTime(inc.opened_ts))).replace('{b}', escapeHtml(fmtTime(inc.last_event_ts)))}

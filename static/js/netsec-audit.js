@@ -216,7 +216,7 @@
                 <div style="font-size:12px; line-height:1.55; color:var(--text);">${escapeHtml(text)}</div>
             </div>` : '';
         return `
-            <div style="border-left:3px solid var(--primary); padding:2px 0 2px 12px; margin-bottom:14px;">
+            <div style="padding:2px 0 2px 12px; margin-bottom:14px;">
                 ${section(en ? 'Why it matters' : 'Perché conta', g.why, 'var(--primary)')}
                 ${section(en ? 'Impact of the fix' : 'Impatto del rimedio', g.impact, 'var(--warning)')}
                 ${section(en ? 'Factory default' : 'Valore di fabbrica', g.default, 'var(--text-muted)')}

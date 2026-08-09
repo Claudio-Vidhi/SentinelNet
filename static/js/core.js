@@ -894,8 +894,8 @@ async function showPortConfig(switchIp, port, switchName) {
     ov.innerHTML = `
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <h3 style="font-size:16px;"><i class="fa-solid fa-ethernet" style="color:var(--primary);"></i> ${escapeHtml(L.portConfigTitle)}</h3>
-                    <i class="fa-solid fa-xmark" onclick="closePortConfigModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+                    <h3 style="font-size:17px;"><i class="fa-solid fa-ethernet" style="color:var(--primary);"></i> ${escapeHtml(L.portConfigTitle)}</h3>
+                    <i class="fa-solid fa-xmark" onclick="closePortConfigModal()" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
                 </div>
                 <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(switchName || switchIp)} — ${escapeHtml(port)}</div>
                 ${body}

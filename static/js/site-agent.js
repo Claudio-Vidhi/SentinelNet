@@ -69,12 +69,12 @@
                 pendingCfg.reqInterval != null ? `Intervallo: ${escapeHtml(String(pendingCfg.reqInterval))}s` : null
             ].filter(Boolean).join(', ');
             if (j.status === 'error') {
-                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:0; background:rgba(220,53,69,0.12); border:1px solid var(--danger); font-size:11px; color:var(--danger);">
+                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:0; background:color-mix(in srgb, var(--danger) 12%, transparent); border:1px solid var(--danger); font-size:11px; color:var(--danger);">
                     <i class="fa-solid fa-triangle-exclamation"></i> <strong>Ultima richiesta di configurazione FALLITA</strong>${reqBits ? ` (${reqBits})` : ''}.
                     <div style="margin-top:4px; font-family:var(--font-code); white-space:pre-wrap;">${escapeHtml(j.result || 'Errore sconosciuto')}</div>
                 </div>`;
             } else {
-                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:0; background:rgba(255,193,7,0.12); border:1px solid var(--warning); font-size:11px; color:var(--warning);">
+                pendingCfgHtml = `<div style="margin-top:10px; padding:8px 10px; border-radius:0; background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid var(--warning); font-size:11px; color:var(--warning);">
                     <i class="fa-solid fa-hourglass-half"></i> <strong>Modifica in attesa di applicazione dall'agente</strong>${reqBits ? ` (${reqBits})` : ''}.
                     Verrà applicata al prossimo ciclo di polling dell'agente (ritardo massimo atteso: ~${escapeHtml(String(curInterval))}s, in base all'intervallo attualmente applicato).
                 </div>`;
@@ -164,7 +164,7 @@
                 delle credenziali di default. Per impostare credenziali reali usa l'inventario locale sull'agente.
             </div>
             <div style="margin-top:8px; display:flex; justify-content:flex-end;">
-                <button class="btn btn-sm" onclick="saveAgentInventory('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--warning); color:#000; font-weight:700;">
+                <button class="btn btn-sm" onclick="saveAgentInventory('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--warning); color:var(--on-lamp); font-weight:700;">
                     <i class="fa-solid fa-upload"></i> Salva Inventario Remoto
                 </button>
             </div>

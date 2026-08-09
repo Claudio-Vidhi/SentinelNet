@@ -364,7 +364,7 @@
             if (_flowsSource === 'syslog') {
                 const res = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
                 if (!res || !res.ok) {
-                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">${currentLang === 'en' ? 'Error loading syslog events.' : 'Errore nel caricamento degli eventi syslog.'}</td></tr>`;
+                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger);">${currentLang === 'en' ? 'Error loading syslog events.' : 'Errore nel caricamento degli eventi syslog.'}</td></tr>`;
                     return;
                 }
                 _flowsSyslogData = (await res.json()).events || [];
@@ -379,7 +379,7 @@
             const srcParam = _flowsSource === 'all' ? '' : `&source=${_flowsSource}`;
             const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}${telemetryParam()}`);
             if (!res || !res.ok) {
-                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">${currentLang === 'en' ? 'Error loading flows.' : 'Errore nel caricamento dei flussi.'}</td></tr>`;
+                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger);">${currentLang === 'en' ? 'Error loading flows.' : 'Errore nel caricamento dei flussi.'}</td></tr>`;
                 return;
             }
             const flows = (await res.json()).flows || [];

@@ -875,7 +875,7 @@ details[open] > div[id*="Menu"],
   display: block;
   font-family: var(--font-data);
   font-weight: 500;
-  font-size: clamp(18px, 1.8vw + 8px, 28px);
+  font-size: clamp(17px, 1.8vw + 8px, 30px);
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -915,7 +915,7 @@ details[open] > div[id*="Menu"],
 }
 .kpi-path-arrow {
   font-size: 11px;
-  color: var(--primary, #00d2ff);
+  color: var(--primary);
   flex-shrink: 0;
 }
 .kpi-path-sub {
@@ -959,7 +959,7 @@ details[open] > div[id*="Menu"],
   display: block;
   font-family: var(--font-data);
   font-weight: 500;
-  font-size: clamp(16px, 1.5vw + 8px, 24px);
+  font-size: clamp(15px, 1.5vw + 8px, 25px);
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -1204,7 +1204,7 @@ tr.row-dirty td:first-child { border-left: 1px solid var(--lamp-warn); }
 }
 
 .modal-close {
-  cursor: pointer; color: var(--text-soft); font-size: 16px;
+  cursor: pointer; color: var(--text-soft); font-size: 17px;
   background: none; border: 0; padding: 4px;
   transition: color var(--transition);
 }
@@ -1539,6 +1539,9 @@ details.mac-switch > summary:hover,
 }
 .oneline-foot b { font-family: var(--font-data); font-size: 13px; font-weight: 500; color: var(--text); letter-spacing: 0; }
 .oneline-foot i { font-family: var(--font-data); font-style: normal; font-size: 11px; color: var(--text-soft); letter-spacing: 0; }
+/* Il dato secondario segue il valore: senza separatore "0 0%" si legge come
+   due numeri accostati invece che come valore e sua annotazione. */
+.oneline-foot i::before { content: "· "; }
 .oneline-empty { padding: 24px 4px; color: var(--text-soft); font-family: var(--font-prose); font-size: 13px; text-transform: none; letter-spacing: 0; }
 
 /* Legenda dello schema: il contratto dei simboli, sempre a vista */
@@ -1659,7 +1662,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   body.sidebar-collapsed .brand-row { flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
   body.sidebar-collapsed .aside-actions { flex-direction: column; align-items: center; gap: 6px; }
   body.sidebar-collapsed .aside-header h2 { font-size: 0; gap: 0; }
-  body.sidebar-collapsed .aside-header h2 i { font-size: 18px; }
+  body.sidebar-collapsed .aside-header h2 i { font-size: 17px; }
   body.sidebar-collapsed .brand-chip,
   body.sidebar-collapsed .aside-tagline,
   body.sidebar-collapsed #langSelect,

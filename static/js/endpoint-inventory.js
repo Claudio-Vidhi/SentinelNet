@@ -96,7 +96,7 @@ function endpointsRender(d) {
     }
 
     const banner = _epTruncated
-        ? `<div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px;">
+        ? `<div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent); color:var(--warning); font-size:12px;">
             <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
                 L.epTruncated.replace('{shown}', String(_epRows.length)).replace('{total}', String(d.total)))}</div>`
         : '';
@@ -305,7 +305,7 @@ function endpointsPortsRender(d) {
     </tr>`).join('');
 
     host.innerHTML = `
-        <div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px;">
+        <div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent); color:var(--warning); font-size:12px;">
             <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.epPortsFreeWarn)}
             ${ageDays === null ? '' : `<div style="margin-top:4px; color:var(--text-muted);">${escapeHtml(L.epPortsAge)} — ${escapeHtml(String(ageDays))}g</div>`}
         </div>

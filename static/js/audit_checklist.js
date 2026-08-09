@@ -34,7 +34,7 @@
         if (!engagements || engagements.length === 0) {
             container.innerHTML = `
                 <div style="text-align:center; padding:30px 10px; color:var(--text-muted);">
-                    <i class="fa-solid fa-folder-open" style="font-size:32px; margin-bottom:10px; opacity:0.5;"></i>
+                    <i class="fa-solid fa-folder-open" style="font-size:30px; margin-bottom:10px; opacity:0.5;"></i>
                     <p style="margin:0 0 10px; font-size:14px;">Nessun audit di manutenzione registrato.</p>
                     <button class="btn btn-primary btn-small" style="width:auto;" onclick="openNewAuditModal()"><i class="fa-solid fa-plus"></i> Avvia Primo Audit</button>
                 </div>
@@ -208,8 +208,8 @@
             `;
 
             secItems.forEach(item => {
-                const prereqBadge = item.is_prerequisite ? '<span style="background:rgba(250, 127, 170, 0.25); color:var(--danger); border:1px solid var(--danger); font-size:10px; padding:2px 8px; border-radius:0; font-weight:bold; margin-left:6px;">PREREQUISITO</span>' : '';
-                const evBadge = item.requires_evidence ? '<span style="background:rgba(169, 159, 242, 0.25); color:var(--primary); border:1px solid var(--primary); font-size:10px; padding:2px 8px; border-radius:0; font-weight:bold; margin-left:6px;">EVIDENZA RICHIESTA</span>' : '';
+                const prereqBadge = item.is_prerequisite ? '<span style="background:color-mix(in srgb, var(--danger) 25%, transparent); color:var(--danger); border:1px solid var(--danger); font-size:10px; padding:2px 8px; border-radius:0; font-weight:bold; margin-left:6px;">PREREQUISITO</span>' : '';
+                const evBadge = item.requires_evidence ? '<span style="background:color-mix(in srgb, var(--primary) 25%, transparent); color:var(--primary); border:1px solid var(--primary); font-size:10px; padding:2px 8px; border-radius:0; font-weight:bold; margin-left:6px;">EVIDENZA RICHIESTA</span>' : '';
 
                 html += `
                     <div style="border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px; background:var(--surface-3);">
@@ -224,7 +224,7 @@
                                     <option value="conforme" ${item.status === 'conforme' ? 'selected' : ''} style="color:var(--success);">CONFORME</option>
                                     <option value="parziale" ${item.status === 'parziale' ? 'selected' : ''} style="color:var(--warning);">PARZIALE</option>
                                     <option value="non_conforme" ${item.status === 'non_conforme' ? 'selected' : ''} style="color:var(--danger);">NON CONFORME</option>
-                                    <option value="da_verificare" ${item.status === 'da_verificare' ? 'selected' : ''} style="color:#60a5fa;">DA VERIFICARE</option>
+                                    <option value="da_verificare" ${item.status === 'da_verificare' ? 'selected' : ''} style="color:var(--primary);">DA VERIFICARE</option>
                                     <option value="non_applicabile" ${item.status === 'non_applicabile' ? 'selected' : ''}>NON APPLICABILE</option>
                                 </select>
                                 <select id="sev_${item.item_ref}" style="padding:5px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
@@ -236,7 +236,7 @@
                                 </select>
                             </div>
                         </div>
-                        <div style="font-size:13px; color:var(--text); line-height:1.5; margin-bottom:12px; background:var(--surface-2); padding:10px 14px; border-radius:0; border-left:3px solid var(--primary);">
+                        <div style="font-size:13px; color:var(--text); line-height:1.5; margin-bottom:12px; background:var(--surface-2); padding:10px 14px; border-radius:0; border:1px solid var(--border);">
                             <strong style="color:var(--primary);">Perché è importante:</strong> ${escapeHtml(item.guidance_why || '')}<br>
                             <strong style="color:var(--primary);">Cosa cercare:</strong> ${escapeHtml(item.guidance_good || '')}
                         </div>

@@ -244,13 +244,13 @@
                 <td style="padding:6px 8px;">${e.proto ? `<span class="badge">${escapeHtml(e.proto)}</span>` : dash}</td>
                 <td style="padding:6px 8px; font-weight:700; color:${actionCol};">${escapeHtml(e.action || 'N/D')}</td>
                 <td style="padding:6px 8px; font-family:var(--font-code);">${volume}</td>
-                <td style="padding:6px 8px;"><span class="badge" style="background:${isDeny ? 'rgba(239, 68, 68, 0.15)' : 'var(--surface-3)'}; color:${isDeny ? 'var(--danger)' : 'var(--text)'};">${escapeHtml(e.threat_flag)}</span></td>
+                <td style="padding:6px 8px;"><span class="badge" style="background:${isDeny ? 'color-mix(in srgb, var(--danger) 15%, transparent)' : 'var(--surface-3)'}; color:${isDeny ? 'var(--danger)' : 'var(--text)'};">${escapeHtml(e.threat_flag)}</span></td>
             </tr>
             ${isSelected ? `<tr style="background:var(--surface-2);"><td colspan="7" style="padding:12px;">
                 <div style="font-family:var(--font-code); font-size:11px; background:var(--surface); padding:10px; border-radius:0; border:1px solid var(--border); margin-bottom:8px;">
                     <strong>Raw SIEM Flow Event Payload (JSON):</strong>
                     <pre style="margin:4px 0 0; white-space:pre-wrap;">${escapeHtml(JSON.stringify(e, null, 2))}</pre>
-                    ${isDeny ? `<div style="margin-top:8px; padding:8px 12px; border-radius:0; background:rgba(59, 130, 246, 0.1); border:1px solid rgba(59, 130, 246, 0.25); color:var(--text); font-size:11px; font-family:var(--font-main, sans-serif);">
+                    ${isDeny ? `<div style="margin-top:8px; padding:8px 12px; border-radius:0; background:color-mix(in srgb, var(--primary) 10%, transparent); border:1px solid color-mix(in srgb, var(--primary) 25%, transparent); color:var(--text); font-size:11px; font-family:var(--font-main, sans-serif);">
                         <i class="fa-solid fa-circle-info" style="color:var(--primary); margin-right:4px;"></i>
                         <strong>Nota sull'Azione DENY / BLOCKED:</strong> SentinelNet è una piattaforma di osservabilità passiva (raccoglie telemetria). L'azione <code>DENY</code> indica che il <strong>firewall/router apparato di rete</strong> di origine ha bloccato il pacchetto ed emesso il relativo log.
                     </div>` : ''}
