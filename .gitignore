@@ -88,6 +88,8 @@ data/redundancy.db-wal
 data/agent_jobs.db
 data/agent_jobs.db-shm
 data/agent_jobs.db-wal
+# Host key store: one line per managed device, with its management IP
+data/ssh_known_hosts
 checklist_x_c.docx
 
 # Security findings: never public while issues are open (see CLAUDE.md)
@@ -101,3 +103,4 @@ HANDOFF.md
 .agents/skills/impeccable/
 .impeccable/live/
 .impeccable/questions/
+data/ssh_known_hosts
