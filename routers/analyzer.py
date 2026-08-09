@@ -50,11 +50,14 @@ def config_analyzer_all(group: str = "all", current_user = Depends(get_current_u
 def config_analyzer_device(ip: str, current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     device = next((d for d in inventory_manager.get_all_devices() if d.get('IP') == ip), None)
-    if device is not None and scope is not None:
-        if device.get('Group', 'Generale') not in scope:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Dispositivo non consentito per il tuo profilo.")
+    # An IP absent from inventory is out of scope, not unscoped: analyze_device()
+    # reads the freshest backup off disk regardless of inventory, and backups
+    # outlive the device row. Same answer download_backup already gives.
+    if scope is not None and (device is None
+                              or device.get('Group', 'Generale') not in scope):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Dispositivo non consentito per il tuo profilo.")
     result = config_analyzer.analyze_device(ip)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
