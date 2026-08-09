@@ -188,12 +188,8 @@ function endpointsExport(format) {
         blob = new Blob([JSON.stringify(_epRows, null, 2)], { type: 'application/json' });
         name = `sentinelnet-endpoints-${stamp}.json`;
     } else {
-        const cell = v => {
-            const s = Array.isArray(v) ? v.join(' ') : (v === null || v === undefined ? '' : String(v));
-            return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-        };
         const lines = [_EP_COLS.join(',')];
-        _epRows.forEach(r => lines.push(_EP_COLS.map(k => cell(r[k])).join(',')));
+        _epRows.forEach(r => lines.push(_EP_COLS.map(k => csvCell(r[k])).join(',')));
         // BOM: senza, Excel legge gli accenti come mojibake.
         blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
         name = `sentinelnet-endpoints-${stamp}.csv`;

@@ -131,6 +131,15 @@ function escapeHtml(s) {
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Neutralizza la formula injection nei CSV: i valori che iniziano con = + - @ TAB CR
+// possono essere interpretati come formule da Excel/LibreOffice. L'apostrofo iniziale
+// forza il testo; la quotatura CSV avviene dopo per mantenere l'apostrofo nella cella.
+function csvCell(v) {
+    let s = Array.isArray(v) ? v.join(' ') : (v === null || v === undefined ? '' : String(v));
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return /[",;\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
 // ===== Ordinamento generico colonne per TUTTE le tabelle =====
 // Click sull'intestazione: ordina crescente/decrescente. Le celle editabili
 // (input/select) ordinano per valore del campo

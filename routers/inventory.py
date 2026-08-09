@@ -102,6 +102,23 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         "groups": groups
     }
 
+# Excel e LibreOffice eseguono come formula qualunque cella che cominci per
+# questi caratteri. Hostname e versione li scrive l'APPARATO, quindi chi
+# controlla un apparato scriverebbe una formula nel foglio di chi esporta
+# l'inventario. La quotatura CSV non c'entra e non basta: sono due problemi
+# diversi, e il modulo csv risolve solo il primo.
+_CSV_FORMULA_LEADERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value):
+    """Neutralizza una cella che il foglio di calcolo eseguirebbe.
+
+    L'apostrofo in testa e' la neutralizzazione standard: il foglio mostra il
+    testo e non lo valuta."""
+    s = "" if value is None else str(value)
+    return "'" + s if s[:1] in _CSV_FORMULA_LEADERS else s
+
+
 @router.get("/api/export/devices")
 def export_devices_csv(current_user = Depends(get_current_user)):
     import csv, io
@@ -119,14 +136,14 @@ def export_devices_csv(current_user = Depends(get_current_user)):
     writer.writeheader()
     for d in devices:
         scan = versions.get(d["IP"], {})
-        writer.writerow({
+        writer.writerow({k: _csv_cell(v) for k, v in {
             "Hostname": d.get("Hostname") or d.get("IP"),
             "IP":       d["IP"],
             "Vendor":   d.get("Vendor", ""),
             "Group":    d.get("Group", ""),
             "Version":  scan.get("version", "Non Scansionato"),
             "Status":   scan.get("status", "unknown"),
-        })
+        }.items()})
     content = output.getvalue()
     log_audit(f"Export CSV dispositivi richiesto dall'utente '{current_user.get('sub')}'.")
     from fastapi.responses import Response as FastResponse
