@@ -512,6 +512,10 @@ def probe_device(device):
                 hostname = net_connect.find_prompt().strip().rstrip('#>').strip()
         return {"status": "success", "hostname": hostname or None}
     except Exception as e:
+        # Senza questa riga la scansione dice "0 SSH ok" e nient'altro:
+        # credenziali sbagliate e "non e' un server SSH" diventano lo stesso
+        # esito muto. Una riga per host con la 22 aperta, non per host vivo.
+        logging.warning("Probe di %s fallito: %s", device['IP'], e)
         return {"status": "error", "message": str(e)}
 
 
