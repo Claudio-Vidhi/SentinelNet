@@ -594,7 +594,8 @@ def client_map(mac: Optional[str] = None, ip: Optional[str] = None, tenants=None
     out = []
     for e in entries:
         access = best.get((e["mac"], e["tenant"]))  # per-tenant join: same MAC, same tenant
-        assigned = assignments.get(e["ip"]) or {}
+        assigned = assignments.get(
+            inventory_manager._akey(e["tenant"], e["ip"])) or {}
         out.append({
             **e,
             "client_type": assigned.get("category") or "client",
@@ -775,7 +776,9 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
 
         # Client type: certain ONLY if assigned by hand in the "Devices and
         # categories" tab. Never inherit the gateway's type.
-        assigned = next((assignments[ip] for ip in ips if assignments.get(ip)), {})
+        assigned = next((assignments[k] for k in
+                         (inventory_manager._akey(tenant, ip) for ip in ips)
+                         if assignments.get(k)), {})
         results.append({
             "mac": mac, "tenant": tenant,
             "oui_vendor": next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), ""),

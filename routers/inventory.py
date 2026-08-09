@@ -267,7 +267,10 @@ def promote_device(payload: PromoteDeviceSchema, current_user = Depends(require_
         payload.ip, payload.vendor, "custom", "", "", "", payload.group
     )
     # Trasferisce l'eventuale classificazione manuale dal nodo scoperto all'IP.
-    inventory_manager.migrate_assignment(payload.node_id, payload.ip)
+    # Il nodo scoperto sta sotto 'Generale' (non era in inventario, quindi non
+    # aveva una sede); da qui in poi appartiene alla sede in cui è stato promosso.
+    inventory_manager.migrate_assignment(payload.node_id, payload.ip,
+                                         new_tenant=payload.group)
     # Eredita ciò che è già stato scoperto via CDP/LLDP: categoria, modello,
     # versione e hostname, così il dispositivo promosso non riparte "vuoto".
     meta = {}
