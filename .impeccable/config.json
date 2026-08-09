@@ -1,7 +1,9 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      "static/vendor/**"
+    ],
     "ignoreValues": [
       {
         "rule": "design-system-color",
@@ -20,6 +22,17 @@
         ],
         "createdAt": "2026-08-08T21:04:39.325Z",
         "reason": "Pre-existing 2px help-bar accent on an inline help strip, not a card; matches existing UI convention"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "*",
+        "files": [
+          "static/css/themes/design-1.css",
+          "static/css/themes/design-2.css",
+          "static/css/themes/design-3.css"
+        ],
+        "createdAt": "2026-08-09T10:20:00.000Z",
+        "reason": "Alternate UI variants the user can select (settings route ui-variant, picker in dashboard.html, covered by test_ui_variant.py). Each one IS its own palette by definition, so measuring it against the Mimic Panel tokens flags the feature rather than a defect. Font-size rules still apply here: the type ramp is shared across variants, the colours are not"
       }
     ]
   }
