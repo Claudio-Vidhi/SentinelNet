@@ -128,11 +128,17 @@ app.add_middleware(
 )
 
 _CSP = (
+    # No remote origin is allowed. Fonts, FontAwesome, vis.js and xterm.js all
+    # live under static/: an isolated management LAN cannot resolve
+    # cdnjs/unpkg/jsdelivr anyway, so those origins loaded nothing and only
+    # widened the surface — with an XSS they are permitted destinations to
+    # exfiltrate to, or to pull code from. Adding a CDN tag now fails
+    # tests/test_csp.py, which is the point: decide about the isolated site
+    # first.
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
-    # Fonts are served from static/fonts/: Google origins are no longer needed.
-    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
-    "font-src 'self' https://cdnjs.cloudflare.com; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "font-src 'self'; "
     "img-src 'self' data:; "
     "connect-src 'self' ws: wss:; "
     "frame-ancestors 'none'; "
