@@ -23,6 +23,12 @@ from collectors.mac_collector import expand_iface
 DB_PATH = data_config.get_path("mac_history.db")
 RETENTION_DAYS_DEFAULT = 30
 
+# Serializes WRITERS only. SQLite allows one writer at a time, so without this
+# two concurrent scans would race past busy_timeout and raise "database is
+# locked". Readers do NOT take it: the database is in WAL mode, where readers
+# never block a writer nor each other, and every function here opens its own
+# connection. Holding it on reads made a full endpoint_inventory() stall every
+# other query in the process for as long as it ran.
 _lock = threading.Lock()
 _init_done = False
 
@@ -59,6 +65,12 @@ def _connect():
 
 def init_db():
     global _init_done
+    # Every read starts here, so taking the lock just to test a boolean would
+    # put back exactly the serialization removed everywhere else. Reading the
+    # flag is atomic under the GIL; the second check inside the lock is what
+    # stops two threads from both running the DDL on a cold start.
+    if _init_done:
+        return
     with _lock:
         if _init_done:
             return
@@ -140,6 +152,10 @@ def init_db():
                          ON arp_entries(mac, ip, source_ip)""")
             c.execute("CREATE INDEX IF NOT EXISTS ix_arp_mac ON arp_entries(mac)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_arp_ip  ON arp_entries(ip)")
+            # Every user-scoped read filters on tenant, and without this the
+            # plan is SCAN arp_entries — mac_sightings has had ix_tenant since
+            # the beginning, this table never did.
+            c.execute("CREATE INDEX IF NOT EXISTS ix_arp_tenant ON arp_entries(tenant)")
             _migrate_unexpanded_interfaces(c)
         _init_done = True
 
@@ -168,7 +184,7 @@ def _migrate_unexpanded_interfaces(c):
 
 def get_retention_days() -> int:
     init_db()
-    with _lock, _connect() as c:
+    with _connect() as c:
         row = c.execute("SELECT value FROM mac_settings WHERE key='retention_days'").fetchone()
     try:
         return int(row["value"]) if row else RETENTION_DAYS_DEFAULT
@@ -190,7 +206,7 @@ def set_retention_days(days: int) -> int:
 def get_override(switch_ip: str):
     """Returns {command, fmt} for the device, or None if not configured."""
     init_db()
-    with _lock, _connect() as c:
+    with _connect() as c:
         row = c.execute("SELECT command, fmt FROM mac_cmd_overrides WHERE switch_ip=?",
                         (switch_ip,)).fetchone()
     return {"command": row["command"], "fmt": row["fmt"]} if row else None
@@ -217,7 +233,7 @@ def delete_override(switch_ip: str) -> bool:
 
 def list_overrides() -> list:
     init_db()
-    with _lock, _connect() as c:
+    with _connect() as c:
         rows = c.execute("SELECT switch_ip, command, fmt FROM mac_cmd_overrides "
                          "ORDER BY switch_ip").fetchall()
     return [dict(r) for r in rows]
@@ -322,7 +338,7 @@ def get_switch_if_macs() -> dict:
     """Returns { normalized_mac: {switch_ip, switch_name, interface} } for
     read-time classification of sightings as infrastructure."""
     init_db()
-    with _lock, _connect() as c:
+    with _connect() as c:
         rows = c.execute("SELECT mac, switch_ip, switch_name, interface "
                          "FROM switch_if_macs").fetchall()
     return {r["mac"]: {"switch_ip": r["switch_ip"], "switch_name": r["switch_name"],
@@ -403,7 +419,7 @@ def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: O
         args.extend(list(tenants))
     q.append("ORDER BY last_seen DESC LIMIT ?")
     args.append(max(1, min(5000, limit)))
-    with _lock, _connect() as c:
+    with _connect() as c:
         rows = c.execute(" ".join(q), args).fetchall()
     return [dict(r) for r in rows]
 
@@ -428,7 +444,7 @@ def vlans_for_ips(ip_tenant_map: dict) -> dict:
         return {}
     init_db()
     out = {}
-    with _lock, _connect() as c:
+    with _connect() as c:
         for ip, tenant in pairs:
             row = c.execute(
                 """SELECT vlan FROM arp_entries
@@ -501,7 +517,7 @@ def client_history(mac: str, tenants=None, limit: int = 50) -> dict:
             args.extend(tenant_list)
         sql += " ORDER BY last_seen DESC LIMIT ?"
         args.append(cap)
-        with _lock, _connect() as c:
+        with _connect() as c:
             return [dict(r) for r in c.execute(sql, args).fetchall()]
 
     positions = _q(
@@ -532,7 +548,7 @@ def _access_positions_for(macs, tenants=None) -> dict:
     rows = []
     tenant_list = list(tenants) if tenants is not None else None
     CHUNK = 400                                       # < SQLite ~999 param limit
-    with _lock, _connect() as c:
+    with _connect() as c:
         for i in range(0, len(macs), CHUNK):
             batch = macs[i:i + CHUNK]
             # is_uplink is NOT filtered in SQL: the value written at collection
@@ -600,7 +616,7 @@ def arp_stats(tenants=None) -> dict:
             return {"bindings": 0, "unique_macs": 0, "sources": 0}
         where = " WHERE tenant IN (%s)" % ",".join("?" * len(tenants))
         args = list(tenants)
-    with _lock, _connect() as c:
+    with _connect() as c:
         total = c.execute("SELECT COUNT(*) n FROM arp_entries" + where, args).fetchone()["n"]
         macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM arp_entries" + where, args).fetchone()["n"]
         sources = c.execute("SELECT COUNT(DISTINCT source_ip) n FROM arp_entries" + where, args).fetchone()["n"]
@@ -687,7 +703,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         args.extend(["%" + q + "%"] * 4)
     clause = (" WHERE " + " AND ".join(where)) if where else ""
 
-    with _lock, _connect() as c:
+    with _connect() as c:
         rows = [dict(r) for r in c.execute(
             "SELECT mac, oui_vendor, vlan, switch_ip, switch_name, interface, "
             "port_channel, is_uplink, uplink_to, tenant, site, first_seen, "
@@ -706,7 +722,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
     macs = list(dict.fromkeys(r["mac"] for r in rows))
     arp: dict = {}
     CHUNK = 400                                   # < SQLite ~999 param limit
-    with _lock, _connect() as c:
+    with _connect() as c:
         for i in range(0, len(macs), CHUNK):
             batch = macs[i:i + CHUNK]
             sql = ("SELECT mac, ip, tenant FROM arp_entries WHERE mac IN (%s)"
@@ -851,7 +867,7 @@ def search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Opt
     q.append("ORDER BY last_seen DESC LIMIT ?")
     args.append(max(1, min(5000, limit)))
 
-    with _lock, _connect() as c:
+    with _connect() as c:
         rows = c.execute(" ".join(q), args).fetchall()
     return [_row_to_dict(r) for r in rows]
 
@@ -871,7 +887,7 @@ def stats(tenants=None) -> dict:
     if tenants is not None:
         where = " WHERE tenant IN (%s)" % ",".join("?" * len(tenants))
         args = list(tenants)
-    with _lock, _connect() as c:
+    with _connect() as c:
         total = c.execute("SELECT COUNT(*) n FROM mac_sightings" + where, args).fetchone()["n"]
         macs = c.execute("SELECT COUNT(DISTINCT mac) n FROM mac_sightings" + where, args).fetchone()["n"]
         switches = c.execute("SELECT COUNT(DISTINCT switch_ip) n FROM mac_sightings" + where, args).fetchone()["n"]
@@ -993,7 +1009,7 @@ def port_occupancy(switch_ip: str, tenants=None) -> dict:
     if tenant_list is not None and not tenant_list:
         return unknown
 
-    with _lock, _connect() as c:
+    with _connect() as c:
         ifaces = [dict(r) for r in c.execute(
             "SELECT interface, MAX(last_seen) AS last_seen FROM switch_if_macs "
             "WHERE switch_ip=? GROUP BY interface ORDER BY interface",
