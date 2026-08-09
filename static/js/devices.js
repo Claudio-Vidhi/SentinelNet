@@ -145,7 +145,9 @@
                 </td>
                 <td>
                   <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                    <span class="badge" id="badge_${safeIp}">${escapeHtml(d.Group)}</span>
+                    ${/* Il badge duplicava la select: chi puo' cambiare tenant lo
+                          legge gia' dalla select, al viewer resta il solo badge. */''}
+                    ${isViewer ? `<span class="badge" id="badge_${safeIp}">${escapeHtml(d.Group)}</span>` : ''}
                     ${isViewer ? '' : `<select
                       id="grpsel_${safeIp}"
                       onchange="reassignDevice('${d.IP}', this.value, this)"
@@ -159,7 +161,7 @@
                   </div>
                 </td>
                 <td><span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span></td>
-                <td style="font-family:monospace; font-size:12px;">
+                <td style="font-family:monospace; font-size:12px; white-space:nowrap;">
                   ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
                   ${isViewer ? '' : `<button onclick="renameDevice('${d.IP}')"
                       title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}"
@@ -169,7 +171,7 @@
                 </td>
                 <td><strong>${d.IP}</strong></td>
                 <td>${escapeHtml(d.Vendor.toUpperCase())}</td>
-                <td><code>${escapeHtml(versionText)}</code></td>
+                <td style="white-space:nowrap;"><code>${escapeHtml(versionText)}</code></td>
                 <td class="actions-cell">
                     ${isViewer ? '<span style="color:var(--text-muted)">—</span>' : `
                     <button class="btn btn-secondary btn-small"
