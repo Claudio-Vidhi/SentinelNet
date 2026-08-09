@@ -883,13 +883,18 @@ details[open] > div[id*="Menu"],
 .kpi-clickable:hover { background: var(--surface-3); border-color: var(--text-soft); }
 .kpi-clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-/* Dedicated Top Path KPI layout for Live Flows */
+/* Top Path in the Live Flows one-line cartiglio. Row, not column: this was a
+   card layout (column + width:100%) and inside .oneline-foot it made its own
+   item three lines tall, so the strip inherited that height and the other
+   three labels stayed pinned to the top edge. */
 .kpi-top-path {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  /* inline-flex, non flex: dentro lo <span> dell'etichetta un contenitore di
+     blocco manda il valore a capo da solo. */
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
   min-width: 0;
-  width: 100%;
 }
 .kpi-path-line {
   display: flex;
@@ -905,8 +910,9 @@ details[open] > div[id*="Menu"],
 .kpi-path-ip {
   font-family: var(--font-data);
   font-size: 15px;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* Un indirizzo spezzato a meta' non e' piu' un indirizzo: se non entra,
+     va a capo la riga intera (il title= porta il valore completo). */
+  white-space: nowrap;
 }
 .kpi-path-arrow {
   font-size: 11px;
@@ -915,9 +921,8 @@ details[open] > div[id*="Menu"],
 }
 .kpi-path-sub {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
-  margin-top: 2px;
 }
 .kpi-path-pct {
   font-size: 12px;
