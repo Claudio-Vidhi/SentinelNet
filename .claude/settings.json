@@ -12,7 +12,11 @@
       "Write(./*_api_key*)",
       "Read(./data/users.json)",
       "Edit(./data/**)",
-      "Write(./data/**)"
+      "Write(./data/**)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(chmod 777:*)",
+      "Bash(ssh:*)"
     ]
   },
   "hooks": {
