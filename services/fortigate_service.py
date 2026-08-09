@@ -228,7 +228,10 @@ def api_get(ip: str, path: str, params: Optional[dict] = None, timeout: int = 30
 
 
 def get_ha_status(device: dict) -> dict:
-    return api_get(device["IP"], "monitor/system/ha-status")
+    # `monitor/system/ha-status` NON esiste: su 7.4.12 risponde HTTP 404 e la
+    # vista HA finiva in errore 502 invece che in un pannello vuoto. I path
+    # reali, verificati sul box: ha-peer, ha-statistics, ha-checksums.
+    return api_get(device["IP"], "monitor/system/ha-peer")
 
 
 def get_ha_checksums(device: dict) -> dict:

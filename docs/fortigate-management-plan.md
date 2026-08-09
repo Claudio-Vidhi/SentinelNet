@@ -287,30 +287,36 @@ The `sottotipo filtrato` badge means the client-side reconciliation had to fire 
 should stay hidden, because the server-side filter is honoured. If it appears, that FortiOS
 build ignores `filter=subtype==` too.
 
-### Still unverified against hardware
+### Verified against a box (FortiOS 7.4.12)
 
-These paths have never returned a non-empty answer on a real box; a wrong path degrades
-silently into an empty panel. **An empty panel is not automatically a failure** — a box
+Every path below has now answered on a real appliance — standalone, and without licences
+for the optional features. **An empty panel is not automatically a failure**: a box
 without SD-WAN, without a WiFi controller, or on a licence lacking IPS legitimately 404s
 and renders an empty state with the reason in the `title` attribute. Hover it to tell a
 real absence from a typo.
 
-| Sub-tab → view | Path |
-|---|---|
-| Panoramica | `monitor/system/resource/usage`, `monitor/system/time` |
-| Panoramica | `monitor/system/ha-status`, `monitor/system/ha-checksums` |
-| Rete → VPN | `monitor/vpn/ipsec` |
-| Firewall → Gruppi indirizzi | `cmdb/firewall/addrgrp` |
-| Firewall → Gruppi servizi | `cmdb/firewall.service/group` |
-| Firewall → VIP | `cmdb/firewall/vip` |
-| Firewall → IP pool | `cmdb/firewall/ippool` |
-| Firewall → Profili sicurezza | `cmdb/antivirus/profile`, `cmdb/ips/sensor`, `cmdb/webfilter/profile`, `cmdb/application/list` |
-| Sicurezza → Admin | `cmdb/system/admin` |
-| Sicurezza → Utenti bannati | `monitor/user/banned` |
-| Sicurezza → Revisioni config | `monitor/system/config-revision` |
-| Sicurezza → Certificati | `monitor/system/available-certificates` |
+| Sub-tab → view | Path | Esito |
+|---|---|---|
+| Panoramica | `monitor/system/resource/usage`, `monitor/system/time` | dati reali |
+| Panoramica | `monitor/system/ha-peer`, `monitor/system/ha-checksums` | vuoti (box standalone) |
+| Rete → VPN | `monitor/vpn/ipsec` | vuoto (nessun tunnel) |
+| Firewall → Gruppi indirizzi | `cmdb/firewall/addrgrp` | dati reali |
+| Firewall → Gruppi servizi | `cmdb/firewall.service/group` | dati reali |
+| Firewall → VIP | `cmdb/firewall/vip` | vuoto (nessun VIP) |
+| Firewall → IP pool | `cmdb/firewall/ippool` | vuoto (nessun pool) |
+| Firewall → Profili sicurezza | `cmdb/antivirus/profile`, `cmdb/ips/sensor`, `cmdb/webfilter/profile`, `cmdb/application/list` | dati reali |
+| Sicurezza → Admin | `cmdb/system/admin` | dati reali |
+| Sicurezza → Utenti bannati | `monitor/user/banned` | vuoto (nessun ban) |
+| Sicurezza → Revisioni config | `monitor/system/config-revision` | dati reali |
+| Sicurezza → Certificati | `monitor/system/available-certificates` | dati reali |
 
-Only `monitor/virtual-wan/health-check` and the `log/*` paths above are confirmed.
+**`monitor/system/ha-status` NON esiste.** Era una nostra ipotesi e su 7.4.12 risponde
+404: la vista HA non degradava in pannello vuoto, tornava 502 su qualsiasi FortiGate. I
+path HA che esistono davvero, provati sul box: `ha-peer`, `ha-statistics`, `ha-checksums`.
+`get_ha_status()` ora usa `ha-peer`.
+
+Resta non verificata **la forma dei membri**: un'unità standalone risponde con lista
+vuota, quindi solo un cluster vero prova il parsing di `parse_ha_status()`.
 
 ### Frontend gotchas found the hard way
 
