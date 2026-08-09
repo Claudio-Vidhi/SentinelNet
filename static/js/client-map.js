@@ -173,11 +173,7 @@
             const r = await apiFetch('/api/mac/stats' + qs);
             if (!r || !r.ok) return;
             const s = await r.json();
-            const el = document.getElementById('macStats');
-            if (el) el.textContent = currentLang==='en'
-                ? `${s.sightings} sightings · ${s.unique_macs} MAC · ${s.switches} switches · retention ${s.retention_days}d`
-                : `${s.sightings} avvistamenti · ${s.unique_macs} MAC · ${s.switches} switch · retention ${s.retention_days}g`;
-            // KPI tiles nella hero card: stessa risposta, nessuna chiamata aggiuntiva.
+            // KPI del cartiglio: stessa risposta, nessuna chiamata aggiuntiva.
             const kSight = document.getElementById('kpiMacSightings'); if (kSight) kSight.textContent = s.sightings;
             const kUniq = document.getElementById('kpiMacUniqueMacs'); if (kUniq) kUniq.textContent = s.unique_macs;
             const kSw = document.getElementById('kpiMacSwitches'); if (kSw) kSw.textContent = s.switches;

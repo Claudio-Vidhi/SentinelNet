@@ -86,8 +86,8 @@ def remove_stale_backups(ip: str):
             if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
                 try:
                     os.remove(os.path.join(root, f))
-                except Exception:
-                    pass
+                except OSError as e:
+                    logging.warning(f"Backup obsoleto non rimosso ({f}): {e}")
 
 def get_device_credentials(device):
     profile = device.get('Profile', 'custom').lower()

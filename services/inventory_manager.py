@@ -122,13 +122,13 @@ def safe_json_write(filepath: str, data: dict):
                 if os.path.exists(temp):
                     try:
                         os.remove(temp)
-                    except:
+                    except OSError:
                         pass
     except Exception as e:
         if os.path.exists(temp):
             try:
                 os.remove(temp)
-            except:
+            except OSError:
                 pass
         raise e
 
@@ -289,13 +289,13 @@ def safe_write_hosts_csv(devices):
             if os.path.exists(temp_filename):
                 try:
                     os.remove(temp_filename)
-                except:
+                except OSError:
                     pass
     except Exception as e:
         if os.path.exists(temp_filename):
             try:
                 os.remove(temp_filename)
-            except:
+            except OSError:
                 pass
         raise e
 
