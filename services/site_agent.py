@@ -166,11 +166,19 @@ class Agent:
         t.start()
 
     def _syslog_flush_loop(self):
+        # Un push che fallisce sempre svuota l'inoltro syslog senza che si veda:
+        # si stampa il cambio di stato, non ogni giro (uno ogni 2s).
+        failing = False
         while self.syslog_worker_running:
             try:
                 self.push_syslog()
-            except Exception:
-                pass
+                if failing:
+                    print("[agent] push syslog ripristinato.")
+                    failing = False
+            except Exception as e:
+                if not failing:
+                    print(f"[agent] push syslog fallito, inoltro fermo: {e}")
+                    failing = True
             time.sleep(2)
 
     # --- HTTP helper ---

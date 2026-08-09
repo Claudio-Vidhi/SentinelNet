@@ -4,6 +4,7 @@
 import threading
 import uuid
 import time
+import logging
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -34,10 +35,13 @@ def _run_scan_job(job_id: str, req: SubnetScanRequest):
         "password": core_engine.DEFAULT_PASSWORD,
         "secret":   core_engine.DEFAULT_SECRET,
     }
-    def _progress(done: int):
+    def _progress(done: int, total: int):
+        # Il totale cresce quando comincia il triage: gli host vivi si sanno
+        # solo dopo i ping, e senza aggiornarlo la barra resterebbe al 100%.
         with _scan_jobs_lock:
             if job_id in _scan_jobs:
                 _scan_jobs[job_id]["progress"] = done
+                _scan_jobs[job_id]["total"]    = total
 
     try:
         results = scan_subnet(
@@ -59,13 +63,17 @@ def _run_scan_job(job_id: str, req: SubnetScanRequest):
                             req.group,
                         )
                         r["added"] = True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Resta added=False nel risultato: senza log l'utente
+                        # non ha modo di sapere perche'.
+                        logging.warning(
+                            "Scan: aggiunta di %s all'inventario fallita: %s", r["ip"], e
+                        )
 
         with _scan_jobs_lock:
             _scan_jobs[job_id]["status"]   = "done"
             _scan_jobs[job_id]["results"]  = results
-            _scan_jobs[job_id]["progress"] = len(results)
+            _scan_jobs[job_id]["progress"] = _scan_jobs[job_id]["total"]
 
     except Exception as exc:
         with _scan_jobs_lock:

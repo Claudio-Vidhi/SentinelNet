@@ -769,10 +769,13 @@
                 return;
             }
             const data = await res.json();
-            const pct  = totalHosts > 0 ? Math.round((data.progress / totalHosts) * 100) : 0;
+            // Il totale arriva dal server e cresce quando parte il triage SSH:
+            // usare quello di partenza inchioderebbe la barra al 100%.
+            const total = data.total || totalHosts;
+            const pct  = total > 0 ? Math.round((data.progress / total) * 100) : 0;
             document.getElementById('subnetScanProgressBar').style.transform = `scaleX(${pct / 100})`;
             document.getElementById('subnetScanStatus').textContent =
-                currentLang === 'en' ? `Scanning in progress — ${data.progress}/${totalHosts} hosts processed...` : `Scansione in corso — ${data.progress}/${totalHosts} host elaborati...`;
+                currentLang === 'en' ? `Scanning in progress — ${data.progress}/${total} hosts processed...` : `Scansione in corso — ${data.progress}/${total} host elaborati...`;
 
             if (data.status !== 'running') {
                 clearInterval(_scanJobInterval); _scanJobInterval = null;

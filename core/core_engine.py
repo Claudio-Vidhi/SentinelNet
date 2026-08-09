@@ -469,6 +469,52 @@ def run_backup_and_triage(device):
         return {"status": "error", "message": str(e)}
 
 
+def probe_device(device):
+    """Discovery probe: connects, verifies credentials, reads the hostname.
+
+    Deliberately NOT run_backup_and_triage. A subnet scan touches every host
+    with port 22 open, and the full backup is 22+ commands, each with its own
+    read timeout: a single host that answers on 22 without being the declared
+    vendor costs minutes, and the whole scan looks frozen. Here the cost per
+    host is bounded by the connection plus one command.
+
+    Returns {"status": "success", "hostname": str|None} or
+            {"status": "error", "message": str}.
+    """
+    vendor = device['Vendor'].lower()
+    try:
+        _, netmiko_type = resolve_driver(vendor)
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+
+    username, password, secret = get_device_credentials(device)
+    cli_kind, cli_port = get_cli_transport(device)
+    device_params = {
+        'device_type': _cli_device_type(netmiko_type, cli_kind),
+        'host': device['IP'],
+        'port': cli_port,
+        'username': username,
+        'password': password,
+        'secret': secret,
+        'timeout': 15,
+        'auth_timeout': 10,
+        'banner_timeout': 10,
+    }
+    try:
+        with ConnectHandler(**device_params) as net_connect:
+            if netmiko_type == 'linux':
+                # Senza questa, le sequenze di "shell integration" cambiano il
+                # prompt a ogni comando e ogni lettura va in timeout.
+                sanitize_session(net_connect)
+                out = net_connect.send_command("hostname", read_timeout=10)
+                hostname = (out if isinstance(out, str) else str(out or "")).strip()
+            else:
+                hostname = net_connect.find_prompt().strip().rstrip('#>').strip()
+        return {"status": "success", "hostname": hostname or None}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 def send_custom_command(device, command: str, bypass_blacklist: bool = False):
     # bypass_blacklist=True when the caller (API) has already authorized the
     # command based on role (admin, or blacklist disabled for operators).
