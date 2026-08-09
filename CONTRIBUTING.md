@@ -69,6 +69,23 @@ await db.read("SELECT ... WHERE tenant = ?", (user.group,))
 
 For devices: `assert_group_allowed` / `assert_device_allowed`.
 
+An IP with no inventory row is **out of scope, not unscoped**. A route that
+serves a stored artifact addressed by IP — a backup, its parsed analysis — must
+deny it, because the artifact is read off disk by IP and outlives the device row
+it belonged to. `assert_device_allowed` returns `None` for an unknown device and
+raises nothing, so the caller owns that decision:
+
+```python
+# ✅ correct: unknown IP is refused
+if scope is not None and (device is None
+                          or device.get('Group', 'Generale') not in scope):
+    raise HTTPException(status_code=403, detail="...")
+
+# ❌ wrong: an IP absent from inventory skips the check entirely
+if device is not None and scope is not None:
+    ...
+```
+
 ## 5. Single-process assumption
 
 The SQLite writer is single-process. Do not start the app with `--workers > 1`
