@@ -2,6 +2,7 @@
 """Router Commands. Estratto da app_server.py (fase 6.6)."""
 
 import asyncio
+import logging
 import re
 import threading
 import time
@@ -464,8 +465,8 @@ async def ws_terminal(websocket: WebSocket, ip: str):
                             chan.send(ch.encode("utf-8"))
             except WebSocketDisconnect:
                 pass
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f"Terminale WS ({ip}): pompa web→ssh terminata: {e}")
 
         # Task per leggere lo schermo dello Switch verso il Web
         async def ssh_to_ws():
@@ -475,8 +476,8 @@ async def ws_terminal(websocket: WebSocket, ip: str):
                         data = chan.recv(1024).decode('utf-8', errors='ignore')
                         await websocket.send_text(data)
                     await asyncio.sleep(0.01) # Previene il blocco del thread
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning(f"Terminale WS ({ip}): pompa ssh→web terminata: {e}")
 
         # Avviamo i listener in parallelo
         task1 = asyncio.create_task(ws_to_ssh())

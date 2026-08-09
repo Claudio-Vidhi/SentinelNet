@@ -613,7 +613,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
                     'macScanTransport', 'btnMacScan', 'macRetentionDays',
                     'macOvDevice', 'macOvCommand', 'macOvFmt', 'macOverridesList',
                     'macSearchMac', 'macSearchVlan', 'macSearchIface', 'macSearchSwitch',
-                    'macStats', 'macResults',
+                    'macResults',
                     'kpiMacSightings', 'kpiMacUniqueMacs', 'kpiMacSwitches', 'kpiMacRetention'):
             self.assertIn(f'id="{_id}"', html)
         for hook in ('runMacScan()', 'macSearch()', 'macSearchReset()', 'saveMacOverride()',

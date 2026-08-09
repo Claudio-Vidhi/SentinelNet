@@ -2,6 +2,7 @@
 """Router Triage. Estratto da app_server.py (fase 6.6): percorsi, metodi,
 parametri e risposte identici al monolite."""
 
+import logging
 import threading
 from typing import Optional, List, Dict
 from concurrent.futures import ThreadPoolExecutor
@@ -166,8 +167,8 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
                 vendor = data[ip].get('vendor', vendor)
                 version = data[ip].get('version', version)
             inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f"Stato ping non persistito in detected_versions.json: {e}")
 
     log_audit(
         f"Ping check completato su {len(devices)} dispositivi "
@@ -201,8 +202,8 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
             if dev:
                 vendor = dev.get("Vendor", vendor)
         inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning(f"Stato ping non persistito per '{ip}': {e}")
 
     log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {'raggiungibile' if alive else 'non raggiungibile'}.")
     return {"ip": ip, "reachable": alive}
