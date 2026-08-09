@@ -430,6 +430,69 @@ class TestRotte(_Base):
         self.assertEqual(ctx.exception.status_code, 404)
 
 
+class TestLetturaSenzaLock(_Base):
+    """Il lock serializza gli SCRITTORI: SQLite ne ammette uno solo. I lettori
+    non lo prendono — il DB e' in WAL, dove un lettore non blocca ne' lo
+    scrittore ne' gli altri lettori. Tenerlo anche in lettura faceva si' che un
+    endpoint_inventory() completo fermasse ogni altra query del processo per
+    tutta la sua durata.
+
+    Prova deterministica: si tiene il lock nel thread principale e si verifica
+    che una lettura in un altro thread arrivi in fondo lo stesso. Misurare i
+    tempi sarebbe instabile; questo o passa o va in timeout."""
+
+    def _read_while_locked(self, fn):
+        import threading
+        done, box = threading.Event(), {}
+
+        def run():
+            try:
+                box["res"] = fn()
+            except Exception as e:      # pragma: no cover - solo diagnostica
+                box["err"] = e
+            finally:
+                done.set()
+
+        with mac_history._lock:
+            threading.Thread(target=run, daemon=True).start()
+            arrived = done.wait(timeout=10)
+        self.assertTrue(arrived, f"{fn.__name__} ha atteso il lock di scrittura")
+        self.assertNotIn("err", box, f"lettura fallita: {box.get('err')}")
+        return box["res"]
+
+    def test_endpoint_inventory_non_attende_il_lock(self):
+        self._read_while_locked(mac_history.endpoint_inventory)
+
+    def test_search_arp_non_attende_il_lock(self):
+        self._read_while_locked(mac_history.search_arp)
+
+    def test_search_non_attende_il_lock(self):
+        self._read_while_locked(mac_history.search)
+
+    def test_stats_non_attende_il_lock(self):
+        self._read_while_locked(mac_history.stats)
+
+    def test_le_scritture_il_lock_lo_prendono_ancora(self):
+        # Il complemento: se anche gli scrittori smettessero di prenderlo, due
+        # scansioni concorrenti tornerebbero a corrersi addosso su SQLite.
+        import threading
+        started = threading.Event()
+
+        def write():
+            started.set()
+            mac_history.set_retention_days(21)
+
+        with mac_history._lock:
+            t = threading.Thread(target=write, daemon=True)
+            t.start()
+            started.wait(timeout=5)
+            t.join(timeout=0.5)
+            self.assertTrue(t.is_alive(), "una scrittura NON deve passare "
+                                          "mentre il lock e' tenuto")
+        t.join(timeout=10)
+        self.assertEqual(mac_history.get_retention_days(), 21)
+
+
 class TestRotteRegistrate(unittest.TestCase):
     def test_le_rotte_sono_nell_app(self):
         import app_server
