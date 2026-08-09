@@ -36,7 +36,7 @@ audit.log
 # PyInstaller / Compilation output
 build/
 dist/
-*.spec
+
 
 # Key files & Secrets
 secret.key
