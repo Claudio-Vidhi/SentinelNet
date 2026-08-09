@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from security import crypto_vault
 from services import inventory_manager
-from core.core_engine import is_reachable, run_backup_and_triage
+from core.core_engine import is_reachable, probe_device
 
 
 def parse_network(address: str) -> list[str]:
@@ -70,21 +70,24 @@ def scan_subnet(
          ip, reachable, ssh_ok, hostname, vendor, added.
 
     credentials must contain: username, password, secret (plain text).
-    progress_cb, if given, is called with the number of hosts pinged so far.
+    progress_cb, if given, is called as cb(done, total) for every completed
+    unit of work. The triage of phase 2 is far slower than the ping of phase 1
+    and counts too: stopping at the end of the ping leaves the caller pinned at
+    100% for the whole scan.
     """
     hosts = parse_network(address)
 
     # Phase 1 — concurrent ping
     alive: set[str] = set()
+    done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         ping_futures = {pool.submit(_ping, ip): ip for ip in hosts}
-        done = 0
         for fut in as_completed(ping_futures):
             done += 1
             if fut.result():
                 alive.add(ping_futures[fut])
             if progress_cb:
-                progress_cb(done)
+                progress_cb(done, len(hosts))
 
     # Seed result table for every host
     results: dict[str, dict] = {
@@ -119,11 +122,15 @@ def scan_subnet(
             'Enable Secret': enc_secret,
             'Group':         'Discovered',
         }
-        res      = run_backup_and_triage(device)
-        hostname = res.get('hostname')
-        return ip, True, hostname, False
+        res = probe_device(device)
+        # La 22 aperta non e' una credenziale valida: ssh_ok segue l'esito del
+        # login, altrimenti auto_add mette in inventario apparati inaccessibili.
+        if res.get('status') != 'success':
+            return ip, False, None, False
+        return ip, True, res.get('hostname'), False
 
     # Phase 2 — SSH + triage on alive hosts
+    total = len(hosts) + len(alive)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         triage_futures = {pool.submit(_triage, ip): ip for ip in alive}
         for fut in as_completed(triage_futures):
@@ -131,6 +138,9 @@ def scan_subnet(
             results[ip]['ssh_ok']   = ssh_ok
             results[ip]['hostname'] = hostname
             results[ip]['added']    = added
+            done += 1
+            if progress_cb:
+                progress_cb(done, total)
 
     # Phase 3 — optional inventory registration
     if credentials.get('auto_add'):

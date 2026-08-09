@@ -4,6 +4,7 @@ parametri e risposte identici al monolite."""
 
 import asyncio
 import json
+import logging
 import os
 from typing import Optional, List, Dict, Any
 
@@ -161,8 +162,10 @@ def reset_topology(current_user = Depends(require_operator)):
                     try:
                         os.remove(os.path.join(root, f))
                         deleted_count += 1
-                    except Exception:
-                        pass
+                    except OSError as e:
+                        # Il file resta: il conteggio dell'audit sarebbe una
+                        # mezza verita' senza questa riga.
+                        logging.warning("Reset topologia: %s non rimosso: %s", f, e)
     
     # Svuota detected_versions.json
     inventory_manager.safe_json_write(inventory_manager.VERSION_DATA_FILE, {})

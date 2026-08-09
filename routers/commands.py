@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+import os
 import re
 import threading
 import time
@@ -26,6 +27,26 @@ from core.app_settings import get_app_settings
 from routers.deps import get_current_user, require_operator, assert_device_allowed, assert_group_allowed, user_group_scope
 
 router = APIRouter(tags=["Commands"])
+
+
+def _prepare_host_keys(client):
+    """Aggancia il client al known_hosts locale con AutoAddPolicy.
+
+    Con un known_hosts caricato, AutoAddPolicy fissa la chiave al primo
+    contatto e la salva; da li' in poi paramiko solleva BadHostKeyException se
+    la chiave cambia. Senza, ogni riconnessione riaccetta in silenzio qualunque
+    chiave, cioe' un MITM sulla tratta non lascia traccia.
+
+    Il file va creato se manca: AutoAddPolicy salva con save_host_keys(), che
+    ricarica il file prima di riscriverlo e su file assente solleva
+    FileNotFoundError — a connessione gia' avviata, quindi come "errore di
+    connessione" al primo contatto con ogni apparato.
+    """
+    path = data_config.get_path("ssh_known_hosts")
+    if not os.path.exists(path):
+        open(path, "a").close()
+    client.load_host_keys(path)
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 _ws_tokens: dict[str, tuple[str, float]] = {}  # otp -> (username, timestamp)
 
@@ -358,16 +379,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         return
 
     client = paramiko.SSHClient()
-    # Con un known_hosts caricato, AutoAddPolicy fissa la chiave al primo
-    # contatto e la salva; da li' in poi paramiko solleva BadHostKeyException
-    # se la chiave cambia. Senza, ogni riconnessione riaccetta in silenzio
-    # qualunque chiave, cioe' un MITM sulla tratta non lascia traccia.
-    _known_hosts = data_config.get_path("ssh_known_hosts")
-    try:
-        client.load_host_keys(_known_hosts)
-    except OSError:
-        pass  # primo avvio: il file lo crea AutoAddPolicy al primo salvataggio
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    _prepare_host_keys(client)
     connected = False
 
     # paramiko e' bloccante: chiamarlo diretto qui fermerebbe l'event loop —
@@ -492,6 +504,6 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         client.close()
         try:
             await websocket.close()
-        except:
-            pass
+        except Exception:
+            pass  # gia' chiuso dal client: nulla da fare
 

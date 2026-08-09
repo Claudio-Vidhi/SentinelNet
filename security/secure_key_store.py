@@ -15,6 +15,7 @@ la precedenza e non toccano il disco.
 import os
 import sys
 import ctypes
+import logging
 
 from core import data_config
 
@@ -88,8 +89,12 @@ def _store(path: str, key: bytes):
         try:
             _atomic_write(path, _MAGIC + _protect(key))
             return
-        except OSError:
-            pass  # DPAPI non disponibile: ripiega su file in chiaro
+        except OSError as e:
+            # DPAPI non disponibile: ripiega su file in chiaro. È un
+            # declassamento di sicurezza, non deve restare invisibile.
+            logging.warning(
+                "DPAPI non disponibile (%s): chiave salvata in chiaro in %s", e, path
+            )
     _atomic_write(path, key)
 
 
@@ -111,8 +116,10 @@ def load_or_create(path: str, generator) -> bytes:
         if _IS_WINDOWS:
             try:
                 _atomic_write(path, _MAGIC + _protect(raw))
-            except OSError:
-                pass
+            except OSError as e:
+                logging.warning(
+                    "Chiave legacy in chiaro non migrata a DPAPI (%s): %s", e, path
+                )
         return raw
 
     key = generator()
