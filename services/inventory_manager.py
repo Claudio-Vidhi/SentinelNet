@@ -534,6 +534,31 @@ BUILTIN_CATEGORIES = {
 def _norm_cat_key(key: str) -> str:
     return re.sub(r'[^a-z0-9_-]', '', (key or '').strip().lower().replace(' ', '-'))
 
+def _tenant_key(value) -> str:
+    """Same normalization used by the diagnosis join: empty tenant is
+    'Generale', so an installation without groups produces one label and not
+    two for the same network."""
+    return (value or "").strip() or "Generale"
+
+
+def _akey(tenant, node_id: str) -> str:
+    """Key of a manual assignment: tenant AND node, never the node alone.
+
+    Keyed by node alone, two customers on the same RFC 1918 address shared one
+    label: whoever classified 192.0.2.50 in one site renamed it in every other
+    site too. A tenant is a network of its own, exactly as in mac_sightings.
+    """
+    return f"{_tenant_key(tenant)}|{node_id}"
+
+
+def tenant_for_node(node_id: str) -> str:
+    """The site a node belongs to, from inventory. A node that is not a managed
+    device (discovered via CDP/LLDP and never promoted) has no site of its own
+    and lands in 'Generale'."""
+    d = next((d for d in get_all_devices() if d['IP'] == node_id), None)
+    return _tenant_key(d.get('Group') if d else None)
+
+
 def _load_categories() -> dict:
     if os.path.exists(CATEGORIES_FILE):
         try:
@@ -545,6 +570,15 @@ def _load_categories() -> dict:
         data = {}
     data.setdefault("categories", {})
     data.setdefault("assignments", {})
+    # Assignments written before the key carried the tenant. Resolved once,
+    # from the site the device has in inventory; the rewritten file has no bare
+    # keys left, so this does not run again.
+    legacy = [k for k in data["assignments"] if "|" not in k]
+    if legacy:
+        for old in legacy:
+            data["assignments"][_akey(tenant_for_node(old), old)] = \
+                data["assignments"].pop(old)
+        safe_json_write(CATEGORIES_FILE, data)
     return data
 
 def get_device_categories() -> dict:
@@ -632,53 +666,38 @@ def delete_subcategory(category: str, subcategory: str) -> bool:
         safe_json_write(CATEGORIES_FILE, data)
         return True
 
-def set_device_category(node_id: str, category: str, subcategory: str = "") -> bool:
-    """Assegna manualmente un dispositivo (per id-nodo) a una categoria.
-    Categoria vuota = rimuove l'assegnazione (torna alla classificazione auto)."""
-    node_id = (node_id or '').strip()
-    if not node_id:
-        return False
-    with _io_lock:
-        data = _load_categories()
-        if not category:
-            data["assignments"].pop(node_id, None)
-        else:
-            cat = _norm_cat_key(category)
-            valid = set(BUILTIN_CATEGORIES) | set(data["categories"])
-            if cat not in valid:
-                return False
-            data["assignments"][node_id] = {
-                "category": cat,
-                "subcategory": subcategory.strip(),
-            }
-        safe_json_write(CATEGORIES_FILE, data)
-        return True
-
 _META_FIELDS = ("category", "subcategory", "vendor", "model", "ha_group", "name", "ver")
 
-def migrate_assignment(old_id: str, new_id: str):
+def migrate_assignment(old_id: str, new_id: str, old_tenant=None, new_tenant=None):
     """Sposta l'assegnazione manuale da un id-nodo a un altro (es. quando un
-    dispositivo scoperto viene promosso a gestito e cambia id in IP)."""
+    dispositivo scoperto viene promosso a gestito e cambia id in IP).
+
+    Il nodo scoperto non ha una sede propria, quindi di norma parte da
+    'Generale' e arriva nella sede in cui il dispositivo viene promosso."""
     with _io_lock:
         data = _load_categories()
-        a = data["assignments"].pop(old_id, None)
+        a = data["assignments"].pop(_akey(old_tenant, old_id), None)
         if a:
-            data["assignments"][new_id] = a
+            data["assignments"][_akey(new_tenant, new_id)] = a
             safe_json_write(CATEGORIES_FILE, data)
 
-def set_device_meta(node_id: str, **fields) -> bool:
+def set_device_meta(node_id: str, tenant=None, **fields) -> bool:
     """Aggiorna in modo incrementale gli attributi manuali di un dispositivo
     (category/subcategory/vendor/model). Stringa vuota = rimuove quel campo.
-    category='' riporta il dispositivo alla classificazione automatica."""
+    category='' riporta il dispositivo alla classificazione automatica.
+
+    ``tenant`` non indicato = si ricava dalla sede che il dispositivo ha in
+    inventario, cosi' il chiamante non deve conoscerla."""
     node_id = (node_id or '').strip()
     if not node_id:
         return False
     provided = {k: v for k, v in fields.items() if k in _META_FIELDS and v is not None}
     if not provided:
         return False
+    key = _akey(tenant if tenant is not None else tenant_for_node(node_id), node_id)
     with _io_lock:
         data = _load_categories()
-        entry = dict(data["assignments"].get(node_id, {}))
+        entry = dict(data["assignments"].get(key, {}))
         for k, v in provided.items():
             v = v.strip() if isinstance(v, str) else v
             if k == "category" and v:
@@ -692,9 +711,9 @@ def set_device_meta(node_id: str, **fields) -> bool:
             else:
                 entry.pop(k, None)
         if entry:
-            data["assignments"][node_id] = entry
+            data["assignments"][key] = entry
         else:
-            data["assignments"].pop(node_id, None)
+            data["assignments"].pop(key, None)
         safe_json_write(CATEGORIES_FILE, data)
         return True
 

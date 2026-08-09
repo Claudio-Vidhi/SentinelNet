@@ -1641,8 +1641,9 @@ def _generate_network_map(group_filter=None) -> dict:
     except Exception:
         category_assignments = {}
 
-    def apply_category(node_id, auto_type):
-        a = category_assignments.get(node_id)
+    def apply_category(node_id, auto_type, tenant=None):
+        from services.inventory_manager import _akey
+        a = category_assignments.get(_akey(tenant, node_id))
         return a.get("category", auto_type) if a and a.get("category") else auto_type
 
     # Read backup files. Backups are organized in subfolders per group
@@ -1728,7 +1729,7 @@ def _generate_network_map(group_filter=None) -> dict:
             "label":       label,
             "group":       d.get('Group', 'Generale'),
             "status":      status,
-            "device_type": apply_category(ip, auto_type),
+            "device_type": apply_category(ip, auto_type, d.get('Group')),
             "vendor":      vendor,
             "version":     versions.get(ip, {}).get("version"),
             "vtp_mode":    pinfo.get("vtp_mode"),
@@ -1810,6 +1811,10 @@ def _generate_network_map(group_filter=None) -> dict:
                     "label":       base_neigh_id,
                     "group":       source_group,
                     "status":      "discovered",
+                    # Not the neighbour's site: a discovered node is not in
+                    # inventory, so tenant_for_node() files it under 'Generale'
+                    # and it must be read back from there. It acquires a site
+                    # when it is promoted, and migrate_assignment moves it.
                     "device_type": apply_category(target_ip, auto_type),
                     "vendor":      guess_vendor(neigh_plat or "", neigh_desc or "", base_neigh_id) or "discovered",
                     "version":     neigh_ver,

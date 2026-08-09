@@ -112,8 +112,11 @@ class DbTest(unittest.TestCase):
             [{"mac": "aa:bb:cc:00:09:11", "ip": "192.168.31.111"},
              {"mac": "aa:bb:cc:00:09:12", "ip": "192.168.31.6"}],
             source_ip="192.168.31.1", source_type="switch")
+        # La chiave porta il tenant: questi binding non ne hanno uno, quindi
+        # 'Generale'. Senza il tenant, due clienti sullo stesso indirizzo
+        # privato si dividevano la stessa etichetta.
         with mock.patch("services.inventory_manager.get_category_assignments",
-                        return_value={"192.168.31.6": {"category": "switch"}}):
+                        return_value={"Generale|192.168.31.6": {"category": "switch"}}):
             rows = {r["ip"]: r for r in self.mh.client_map()}
         self.assertEqual(rows["192.168.31.111"]["client_type"], "client")
         self.assertEqual(rows["192.168.31.6"]["client_type"], "switch")
