@@ -10,6 +10,7 @@ are deleted at the end of each scan, so the DB does not grow indefinitely.
 The storage layer is independent of the transport used to collect the data
 (NETCONF/RESTCONF/CLI): it simply receives a list of sightings.
 """
+import copy
 import os
 import re
 import sqlite3
@@ -653,6 +654,48 @@ def _age_days(iso: str, now=None):
     return ((now or datetime.now(timezone.utc)) - ts).total_seconds() / 86400.0
 
 
+# Referto gia' calcolato, per (filtri + stato dei dati). I sette KPI non sono
+# esprimibili in SQL — dipendono da reclassify_sightings(), dal filtro dei MAC
+# di interfaccia, da ep_kb.classify_mac()/is_stable_identity(), dal join ARP e
+# da _age_days() — quindi per contarli onestamente bisogna materializzare ogni
+# riga del tenant. Ma la risposta cambia solo quando una scansione scrive: fra
+# una scansione e l'altra si ricalcolava tutto ad ogni apertura di tab, ad ogni
+# filtro e ad ogni refresh. Qui si paga una volta per versione dei dati, e i
+# KPI restano ESATTI: nessuna approssimazione da dichiarare all'utente.
+# ponytail: dizionario con tetto, non una cache con TTL e invalidazione.
+_INVENTORY_CACHE: dict = {}
+_INVENTORY_CACHE_MAX = 8
+
+
+def _inventory_stamp() -> tuple:
+    """Versione dei dati che l'inventario legge, al costo di una query.
+
+    Conteggio, ultimo avvistamento e MAX(id) per tabella. Il MAX(id) non e'
+    ridondante: conteggio e timestamp da soli COLLIDONO quando la retention
+    cancella N righe e una scansione ne riscrive altrettante con lo stesso
+    last_seen, e il referto vecchio passerebbe per buono. Gli id sono
+    AUTOINCREMENT, quindi crescono anche dopo una cancellazione.
+
+    Nel mucchio anche il file delle assegnazioni manuali, che decide
+    ``client_type`` e non sta nel database."""
+    from services import inventory_manager
+    with _connect() as c:
+        row = c.execute(
+            "SELECT (SELECT COUNT(*) FROM mac_sightings),"
+            "       (SELECT MAX(last_seen) FROM mac_sightings),"
+            "       (SELECT MAX(id) FROM mac_sightings),"
+            "       (SELECT COUNT(*) FROM arp_entries),"
+            "       (SELECT MAX(last_seen) FROM arp_entries),"
+            "       (SELECT MAX(id) FROM arp_entries),"
+            "       (SELECT COUNT(*) FROM switch_if_macs),"
+            "       (SELECT MAX(last_seen) FROM switch_if_macs)").fetchone()
+    try:
+        assign_mtime = os.path.getmtime(inventory_manager.CATEGORIES_FILE)
+    except OSError:
+        assign_mtime = 0.0
+    return tuple(row) + (assign_mtime,)
+
+
 def endpoint_inventory(tenants=None, site: Optional[str] = None,
                        switch_ip: Optional[str] = None, vlan: Optional[str] = None,
                        q: Optional[str] = None, stale_days: int = 7,
@@ -684,6 +727,12 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
     # [] = "no tenant visible", which is not None = "no restriction".
     if tenant_list is not None and not tenant_list:
         return empty
+
+    cache_key = (tuple(sorted(tenant_list)) if tenant_list is not None else None,
+                 site, switch_ip, vlan, q, stale_days, limit, _inventory_stamp())
+    hit = _INVENTORY_CACHE.get(cache_key)
+    if hit is not None:
+        return copy.deepcopy(hit)
 
     where, args = [], []
     if tenant_list is not None:
@@ -807,8 +856,17 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         "random": sum(1 for e in results if "RANDOM" in e["flags"]),
     }
     cap = max(1, min(20000, limit))
-    return {"results": results[:cap], "total": total,
-            "truncated": total > cap, "counts": counts}
+    out = {"results": results[:cap], "total": total,
+           "truncated": total > cap, "counts": counts}
+
+    # Una versione nuova dei dati rende inutili TUTTE le voci vecchie: si
+    # svuota invece di far crescere il dizionario di referti gia' scaduti.
+    if _INVENTORY_CACHE and next(iter(_INVENTORY_CACHE))[-1] != cache_key[-1]:
+        _INVENTORY_CACHE.clear()
+    if len(_INVENTORY_CACHE) >= _INVENTORY_CACHE_MAX:
+        _INVENTORY_CACHE.pop(next(iter(_INVENTORY_CACHE)))
+    _INVENTORY_CACHE[cache_key] = copy.deepcopy(out)
+    return out
 
 
 # --- Historical search ---

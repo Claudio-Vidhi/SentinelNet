@@ -702,3 +702,68 @@ class TestTabFrontend(unittest.TestCase):
                     "epActPortCfg"):
             self.assertGreaterEqual(self.src.count(key + ":"), 2,
                                     f"chiave {key} assente in una delle lingue")
+
+class TestInventarioMemoizzato(_Base):
+    """Il referto si ricalcola quando i dati cambiano, non ad ogni chiamata.
+
+    I sette KPI non sono esprimibili in SQL: per contarli onestamente bisogna
+    materializzare ogni riga del tenant. La domanda aperta era se renderli
+    approssimati; la risposta e no, basta non rifare lo stesso lavoro fra
+    una scansione e laltra. Questi test fissano il patto: stessa versione
+    dei dati = stesso referto senza ricalcolo, dati nuovi = referto nuovo.
+    """
+
+    def setUp(self):
+        super().setUp()
+        mac_history._INVENTORY_CACHE.clear()
+        self.addCleanup(mac_history._INVENTORY_CACHE.clear)
+
+    def _conta_ricalcoli(self):
+        vero = mac_history.reclassify_sightings
+        self.calls = 0
+
+        def spia(rows):
+            self.calls += 1
+            return vero(rows)
+
+        p = patch("collectors.mac_history.reclassify_sightings", side_effect=spia)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_stessa_versione_dei_dati_niente_ricalcolo(self):
+        self._sighting(mac=MAC_A)
+        self._conta_ricalcoli()
+        primo = mac_history.endpoint_inventory(tenants=["sede-a"])
+        secondo = mac_history.endpoint_inventory(tenants=["sede-a"])
+        self.assertEqual(self.calls, 1, "il secondo referto ha rifatto il lavoro")
+        self.assertEqual(primo, secondo)
+
+    def test_un_avvistamento_nuovo_invalida_il_referto(self):
+        self._sighting(mac=MAC_A)
+        self._conta_ricalcoli()
+        prima = mac_history.endpoint_inventory(tenants=["sede-a"])
+        self.assertEqual(prima["counts"]["endpoints"], 1)
+
+        self._sighting(mac=MAC_VM, interface="GigabitEthernet1/0/9")
+        dopo = mac_history.endpoint_inventory(tenants=["sede-a"])
+        self.assertEqual(self.calls, 2, "la scrittura non ha invalidato il referto")
+        self.assertEqual(dopo["counts"]["endpoints"], 2)
+
+    def test_chi_riceve_il_referto_non_puo_corromperlo(self):
+        self._sighting(mac=MAC_A)
+        primo = mac_history.endpoint_inventory(tenants=["sede-a"])
+        primo["results"].clear()
+        primo["counts"]["endpoints"] = 999
+        secondo = mac_history.endpoint_inventory(tenants=["sede-a"])
+        self.assertEqual(secondo["counts"]["endpoints"], 1)
+        self.assertEqual(len(secondo["results"]), 1)
+
+    def test_filtri_diversi_referti_diversi(self):
+        """La chiave e (filtri + versione): due filtri non devono confondersi."""
+        self._sighting(mac=MAC_A, tenant="sede-a")
+        self._sighting(mac=MAC_VM, tenant="sede-b", interface="GigabitEthernet1/0/9")
+        a = mac_history.endpoint_inventory(tenants=["sede-a"])
+        b = mac_history.endpoint_inventory(tenants=["sede-b"])
+        self.assertEqual(a["counts"]["endpoints"], 1)
+        self.assertEqual(b["counts"]["endpoints"], 1)
+        self.assertNotEqual(a["results"][0]["mac"], b["results"][0]["mac"])
