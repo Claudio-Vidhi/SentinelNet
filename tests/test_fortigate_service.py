@@ -61,7 +61,8 @@ class TestHaGetters(unittest.TestCase):
         mock_api_get.return_value = {"results": {}}
         dev = {"IP": "10.0.0.1"}
         fgs.get_ha_status(dev)
-        mock_api_get.assert_called_with("10.0.0.1", "monitor/system/ha-status")
+        # ha-status non esiste in FortiOS 7.4: verificato 404 sul box di lab.
+        mock_api_get.assert_called_with("10.0.0.1", "monitor/system/ha-peer")
         fgs.get_ha_checksums(dev)
         mock_api_get.assert_called_with("10.0.0.1", "monitor/system/ha-checksums")
 
