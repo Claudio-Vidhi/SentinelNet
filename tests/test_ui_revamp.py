@@ -226,7 +226,9 @@ class TestComponentLayer(unittest.TestCase):
         # Task 2: CSS selectors live in static/css/dashboard.css now, not
         # inline in dashboard.html -- frontend_source() concatenates both.
         html = frontend_source()
-        for cls in (".hero-card", ".kpi-grid", ".filterbar",
+        # .kpi-grid was dropped with the last markup that carried it: the
+        # endpoint tiles sit in #epKpis, which grids itself inline.
+        for cls in (".hero-card", ".filterbar",
                     ".status", ".led-success", ".split-footer",
                     ".nav-group", ".preview-badge"):
             self.assertIn(cls, html, f"missing component class {cls}")
