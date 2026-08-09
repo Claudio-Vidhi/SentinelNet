@@ -649,8 +649,8 @@
 
         // rank: la porta d'accesso più recente è la più probabile (primo elemento).
         const sightRow = (s, accent, badge) => `
-            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-left:3px solid ${accent}; border-radius:0; margin-bottom:6px; background:var(--surface-2);">
-                <i class="fa-solid fa-network-wired" style="color:var(--primary);"></i>
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:0; margin-bottom:6px; background:var(--surface-2);">
+                <i class="fa-solid fa-network-wired" style="color:${accent};"></i>
                 <div style="flex:1;">
                     <div style="font-weight:700; font-size:13px;">${escapeHtml(s.switch_name || s.switch_ip)}
                         <span style="color:var(--text-muted); font-family:var(--font-code); font-size:11px;">${escapeHtml(s.switch_ip)}</span>${badge||''}</div>
@@ -662,7 +662,11 @@
                 <span style="font-size:11px; color:var(--text-muted);">${escapeHtml(fmtMacTime(s.last_seen))}</span>
             </div>`;
 
-        const mostRecent = ` <span class="role-pill" style="background:rgba(59,225,136,0.15); color:var(--success); border:1px solid rgba(59,225,136,0.35);">${en?'most recent':'più recente'}</span>`;
+        // Le tinte seguono i token semantici: i letterali rgba di prima erano
+        // di una palette morta e non cambiavano con il tema.
+        const tint = (tok, pct) => `color-mix(in srgb, var(${tok}) ${pct}%, transparent)`;
+
+        const mostRecent = ` <span class="role-pill" style="background:${tint('--success',15)}; color:var(--success); border:1px solid ${tint('--success',35)};">${en?'most recent':'più recente'}</span>`;
 
         // Una sezione per tenant: stesso renderer, ciclato. Due modali o due
         // renderer sarebbero due copie da tenere allineate.
@@ -685,21 +689,21 @@
             if (isSwitchIf) {
                 const swName = g.origin_switch || '';
                 const swIf = g.origin_interface || '';
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--primary',12)}; border:1px solid ${tint('--primary',35)}; color:var(--primary); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
                     <span>${escapeHtml(jsStr(en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`))}</span></div>`;
             } else if (status === 'ambiguous') {
                 // Ambiguo significa più porte plausibili NELLA STESSA rete: qui
                 // una scansione più fresca serve davvero.
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-triangle-exclamation" style="margin-top:2px;"></i>
                     <span>${en?`Multiple possible access ports (${g.access_count}) in this tenant. The most recent is the likeliest; run a fresh MAC Scan to disambiguate.`:`Più porte d'accesso possibili (${g.access_count}) in questo tenant. La più recente è la più probabile; esegui una MAC Scan aggiornata per disambiguare.`}</span></div>`;
             } else if (status === 'transit_only') {
-                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.35); color:var(--warning); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--warning',12)}; border:1px solid ${tint('--warning',35)}; color:var(--warning); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-info" style="margin-top:2px;"></i>
                     <span>${en?'Only seen in transit on uplinks – the device is behind an unmanaged/unscanned switch. Scan more switches to find the access port.':'Visto solo in transito sugli uplink – il dispositivo è dietro uno switch non gestito/non scansionato. Scansiona altri switch per trovare la porta di accesso.'}</span></div>`;
             } else if (status === 'resolved' && origin.length) {
-                banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:0; background:rgba(59,225,136,0.12); border:1px solid rgba(59,225,136,0.35); color:var(--success); font-size:12px; margin-bottom:14px;">
+                banner = `<div style="display:flex; gap:8px; align-items:center; padding:10px 12px; border-radius:0; background:${tint('--success',12)}; border:1px solid ${tint('--success',35)}; color:var(--success); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-circle-check"></i>
                     <span>${en?'Single access port resolved.':'Porta di accesso univoca risolta.'}</span></div>`;
             }
@@ -721,7 +725,7 @@
         // Più sedi: si dice che il MAC esiste in più reti. NON si consiglia una
         // riscansione — non c'entra niente, e ognuna di queste posizioni è vera.
         const multiBanner = multi
-            ? `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:rgba(139,124,255,0.12); border:1px solid rgba(139,124,255,0.35); color:var(--primary); font-size:12px; margin-bottom:4px;">
+            ? `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--primary',12)}; border:1px solid ${tint('--primary',35)}; color:var(--primary); font-size:12px; margin-bottom:4px;">
                 <i class="fa-solid fa-layer-group" style="margin-top:2px;"></i>
                 <span>${en?`This MAC exists in ${entries.length} tenants. Each position below is true for its own network — they are not alternatives to pick from.`:`Questo MAC esiste in ${entries.length} tenant. Ogni posizione qui sotto è vera per la sua rete — non sono alternative fra cui scegliere.`}</span></div>`
             : '';
@@ -734,8 +738,8 @@
         ov.innerHTML = `
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <h3 style="font-size:16px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
-                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:18px;"></i>
+                    <h3 style="font-size:17px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
+                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
                 </div>
                 <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(jsStr(macStr))}</div>
 
