@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-05T00:00:00Z",
+  "generatedAt": "2026-08-09T00:00:00Z",
   "title": "Design System: SentinelNet",
   "extensions": {
     "colorMeta": {
@@ -122,6 +122,21 @@
           "oklch(0.72 0.013 240)",
           "oklch(0.84 0.009 240)",
           "oklch(0.95 0.005 240)"
+        ]
+      },
+      "on-lamp": {
+        "role": "neutral",
+        "displayName": "On Lamp",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": [
+          "oklch(0.15 0 0)",
+          "oklch(0.26 0 0)",
+          "oklch(0.37 0 0)",
+          "oklch(0.48 0 0)",
+          "oklch(0.60 0 0)",
+          "oklch(0.73 0 0)",
+          "oklch(0.86 0 0)",
+          "oklch(1 0 0)"
         ]
       },
       "conductor-a": {
@@ -453,7 +468,8 @@
       "Don't let a background: shorthand overwrite a surface — use background-color, or the plate grain is silently erased.",
       "Don't create a stacking context (isolation, z-index on a wrapper, transform on an ancestor) around content that contains dropdowns or modals.",
       "Don't load a font, icon or library from a CDN without a local fallback: isolated management LANs are a confirmed deployment.",
-      "Don't hide a first-viewport element behind a role gate without leaving an explanation in its place."
+      "Don't hide a first-viewport element behind a role gate without leaving an explanation in its place.",
+      "Don't use the on-lamp ink on a wash — a wash sits over a plate, so the -ink lamp variants apply there."
     ]
   }
 }
