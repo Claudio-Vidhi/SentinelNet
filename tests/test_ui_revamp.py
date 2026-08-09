@@ -335,8 +335,9 @@ class TestDevicesTabRestyle(unittest.TestCase):
         tab_start = html.index('<div id="tab-devices"')
         tab_end = html.index('<!-- TAB 2:')
         tab_html = html[tab_start:tab_end]
-        for cls in ('class="hero"', 'class="hero-card"', 'class="kpi-grid"',
-                    'class="kpi"', 'class="filterbar"', 'class="search-wrap"',
+        # La striscia KPI ora e' un cartiglio oneline-foot, non card .kpi-grid
+        for cls in ('class="hero"', 'class="hero-card"', 'class="oneline-foot"',
+                    'class="filterbar"', 'class="search-wrap"',
                     'class="table-wrap"'):
             self.assertIn(cls, tab_html)
 
@@ -707,7 +708,8 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         tab_html = html[tab_start:tab_end]
         for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"', 'class="table-wrap"'):
             self.assertIn(cls, tab_html)
-        self.assertGreaterEqual(tab_html.count('class="kpi-grid"'), 2)
+        # una striscia oneline-foot per tab (mac + clientmap)
+        self.assertGreaterEqual(tab_html.count('class="oneline-foot"'), 2)
         self.assertGreaterEqual(tab_html.count('class="panel'), 4)
         # both tabs individually still present within that combined span
         self.assertIn('<div id="tab-clientmap"', tab_html)
