@@ -1,10 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m py_compile config_analyzer.py app_server.py)",
-      "Bash(pip uninstall *)",
-      "Bash(python \"C:\\\\Users\\\\vidhi\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-vidhi-dev-ved-SentinelNet\\\\6885d7ed-5302-44a1-af95-527cbac3a9f3\\\\scratchpad\\\\t.py\")",
-      "Bash(python -c ' *)"
+      "Bash(python -m py_compile config_analyzer.py app_server.py)"
+    ],
+    "deny": [
+      "Read(./q_api_key.txt)",
+      "Read(./g_api_key.txt)",
+      "Read(./c_api_key.txt)",
+      "Read(./*_api_key*)",
+      "Edit(./*_api_key*)",
+      "Write(./*_api_key*)",
+      "Read(./data/users.json)",
+      "Edit(./data/**)",
+      "Write(./data/**)"
     ]
   },
   "hooks": {

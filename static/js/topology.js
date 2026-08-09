@@ -2156,13 +2156,9 @@
     function exportCategoriesCsv() {
         const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
         const nodes = getFilteredCategoryNodes();
-        const esc = (v) => {
-            v = String(v == null ? '' : v);
-            return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-        };
-        const lines = [['Group', ...cols.map(colLabel)].map(esc).join(',')];
+        const lines = [['Group', ...cols.map(colLabel)].map(csvCell).join(',')];
         nodes.forEach(n => {
-            lines.push([n.group, ...cols.map(c => catCellValue(c.key, n))].map(esc).join(','));
+            lines.push([n.group, ...cols.map(c => catCellValue(c.key, n))].map(csvCell).join(','));
         });
         const blob = new Blob(["﻿" + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
