@@ -1,8 +1,6 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(python -m py_compile config_analyzer.py app_server.py)"
-    ],
+    "allow": [],
     "deny": [
       "Read(./q_api_key.txt)",
       "Read(./g_api_key.txt)",
