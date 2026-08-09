@@ -277,7 +277,6 @@
 
 /* Solco inciso: chiaro sopra, scuro sotto. Su fondo scuro si inverte da sé
    perché i due token cambiano insieme al tema. */
-.is-engraved,
 .panel, .hero-card, .kpi, .vuln-card, .modal, .login-card,
 aside, main, .table-container, .table-wrap, .template-box {
   box-shadow: inset 0 1px 0 var(--engrave-hi), inset 0 -1px 0 var(--engrave-lo);
@@ -340,7 +339,7 @@ body {
 
 /* Numerali tabulari ovunque compaia una misura */
 .kpi strong, table, .fgt-meter-num, .template-box, .count-badge,
-.ds-num, .mono, code, pre { font-variant-numeric: tabular-nums; }
+.mono, code, pre { font-variant-numeric: tabular-nums; }
 
 a {
   color: var(--text);
@@ -395,15 +394,13 @@ h4 { font-size: 15px; line-height: 1.2; }
 /* Targa incisa: l'intestazione di ogni bay. Piccola, spaziata, in incasso. */
 .plate,
 .panel > h3:first-child,
-.hero-card > h2,
-.vuln-header > h3 {
+.hero-card > h2 {
   font-family: var(--font-legend);
   text-transform: uppercase;
 }
 
 .panel > h3:first-child,
-.modal-header h3,
-.vuln-header > h3 {
+.modal-header h3 {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -676,8 +673,7 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
    --------------------------------------------------------------- */
 .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
 
-.form-group label,
-.plate-label {
+.form-group label {
   font-family: var(--font-legend);
   font-size: 10px;
   font-weight: 600;
@@ -852,7 +848,6 @@ details[open] > div[id*="Menu"],
 .split-footer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
 
 /* Strumenti: la misura, non la card. Numerale in mono, legenda incisa sopra. */
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .kpi {
   padding: 12px 14px 14px;
   display: flex;
@@ -1103,6 +1098,7 @@ tr.row-dirty td:first-child { border-left: 1px solid var(--lamp-warn); }
   letter-spacing: 0.02em;
 }
 
+
 .preview-badge {
   font-size: 9px;
   padding: 1px 5px;
@@ -1134,14 +1130,6 @@ tr.row-dirty td:first-child { border-left: 1px solid var(--lamp-warn); }
 .severity-HIGH     { background: var(--sev-high-wash);     color: var(--sev-high);     border-color: var(--sev-high); }
 .severity-MEDIUM   { background: var(--sev-medium-wash);   color: var(--sev-medium);   border-color: var(--sev-medium); }
 .severity-LOW      { background: var(--sev-low-wash);      color: var(--sev-low);      border-color: var(--sev-low); }
-
-.vuln-header {
-  display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  margin: -14px -16px 12px;
-  padding: 8px 16px;
-  background-color: var(--surface-3);
-  border-bottom: var(--seam) solid var(--border);
-}
 
 /* ---------------------------------------------------------------
    15. STRUMENTI — misure con la propria scala
@@ -1642,13 +1630,11 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 @media (min-width: 1700px) {
   main .hero { max-width: 1560px; }
   main .subtab-bar { max-width: 1560px; }
-  main .kpi-grid { max-width: 1560px; }
   main .panel:not(:has(table)) { max-width: 1560px; }
 }
 
 @media (max-width: 1200px) {
   .hero { grid-template-columns: 1fr; }
-  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 1100px) {
@@ -1685,7 +1671,6 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   aside { position: static; height: auto; max-height: none; }
   main { padding: 14px; }
   .sidebar-toggle { display: none; }
-  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .oneline-body { min-width: 0; }
   .oneline-bays { flex-wrap: wrap; gap: 10px 0; }
   .oneline-bay { flex: 1 1 44%; min-width: 132px; }
@@ -1694,13 +1679,11 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 @media (max-width: 900px) {
   #tab-ai .ai-chat-shell { grid-template-columns: 1fr; height: auto; }
   #tab-ai .ai-conv-sidebar { border-right: 0; border-bottom: var(--seam) solid var(--border); max-height: 220px; }
-  #tab-ai .ai-chat-messages { min-height: 320px; }
   #tab-ai .ai-profile-layout { grid-template-columns: 1fr; }
   #tab-ai .ai-profile-form { border-left: 0; padding-left: 0; border-top: var(--seam) solid var(--border); padding-top: 14px; }
 }
 
 @media (max-width: 620px) {
-  .kpi-grid { grid-template-columns: 1fr; }
   .panel { padding: 12px 14px 14px; }
   .panel > h3:first-child { margin: -12px -14px 12px; padding: 8px 14px; }
   .hero-card { padding: 14px 16px 16px; }
