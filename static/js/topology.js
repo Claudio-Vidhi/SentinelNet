@@ -611,7 +611,7 @@
             }
 
             const pcBadge = isPC ? `
-              <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.3); padding:2px 7px; border-radius:0; margin-bottom:8px;">
+              <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); padding:2px 7px; border-radius:0; margin-bottom:8px;">
                 <i class="fa-solid fa-link"></i> ${currentLang === 'en' ? 'AGGREGATED' : 'AGGREGATO'} · ${escapeHtml(l.pc_name || (currentLang === 'en' ? 'Port-Channel / LAG' : 'Port-Channel / LAG'))}${l.member_count > 1 ? ` · ${l.member_count} ${currentLang === 'en' ? 'members' : 'membri'}` : ''}
               </div>` : '';
 
@@ -663,13 +663,17 @@
                 },
                 color: emphasize
                     ? { color: "rgba(255, 184, 77, 0.85)", highlight: "#ffb84d", hover: "#ffd27d" }
-                    : { color: "rgba(106, 95, 193, 0.45)", highlight: "var(--text-muted)", hover: "#c4bdf7" },
+                    // vis.js disegna su canvas: un "var(--x)" qui non e' un colore,
+                    // e' una stringa che il browser non risolve. Serve cssVar().
+                    : { color: "rgba(106, 95, 193, 0.45)", highlight: cssVar('--text-muted', '#8d9bb0'), hover: "#c4bdf7" },
                 dashes: emphasize ? [8, 4] : false,
                 arrows: { to: { enabled: false } },
                 width: emphasize ? 5 : 3.5,
                 hoverWidth: 1.5,
                 // ponytail: dati "piatti" (no oggetti color vis.js) usati solo dall'export Visio
-                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : 'var(--text-soft)' }
+                // Il colore finisce nel .vsdx: Visio vuole un #RRGGBB, e un
+                // "var(--x)" cadeva nel fallback viola di _hex_to_rgb_fraction().
+                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : cssVar('--text-soft', '#8d9bb0') }
             };
         });
 
@@ -1987,9 +1991,9 @@
                     ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="deleteCategory('${escapeHtml(k)}')"></i>` : '';
                 const subChips = c.subcategories.length
                     ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" onclick="deleteSubcategory('${escapeHtml(k)}','${escapeHtml(s)}')" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
-                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:0; padding:14px;">
+                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px;">
                     ${delBtn}
-                    <div style="font-size:26px; font-weight:900; color:${color};">${n}</div>
+                    <div style="font-size:25px; font-weight:900; color:${color};">${n}</div>
                     <div style="font-size:12px; font-weight:700; color:var(--text); margin-top:2px;">${escapeHtml(c.label)}</div>
                     ${subChips}
                 </div>`;
@@ -2342,7 +2346,7 @@
         ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
         ov.innerHTML = `
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(480px,92vw); box-shadow:var(--shadow-float);">
-                <h3 style="font-size:16px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${currentLang==='en'?'Resolve CDP/LLDP conflict':'Risolvi conflitto CDP/LLDP'}</h3>
+                <h3 style="font-size:17px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${currentLang==='en'?'Resolve CDP/LLDP conflict':'Risolvi conflitto CDP/LLDP'}</h3>
                 <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${currentLang==='en'?'The same device was discovered with different names. Choose the name and version to keep.':'Lo stesso dispositivo è stato rilevato con nomi diversi. Scegli nome e versione da mantenere.'}</p>
                 ${rows}
                 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
@@ -2684,7 +2688,7 @@
                 return {
                     source: e.from, target: e.to,
                     label: ex.isPortChannel ? (ex.pcName || 'Port-Channel') : '',
-                    color: ex.color || 'var(--text-soft)'
+                    color: ex.color || cssVar('--text-soft', '#8d9bb0')
                 };
             });
         }
