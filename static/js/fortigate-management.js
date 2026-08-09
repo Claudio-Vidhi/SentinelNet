@@ -484,7 +484,7 @@ function renderFgtResources(host, usage, badge) {
         return `<div class="panel" style="margin:0; padding:14px;">
             <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px;">
               <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700; letter-spacing:.04em;">${escapeHtml(lbl(label))}</span>
-              <span style="font-family:var(--font-display); font-size:22px;">${escapeHtml(jsStr(cur == null ? '—' : String(cur) + unit))}</span>
+              <span style="font-family:var(--font-display); font-size:21px;">${escapeHtml(jsStr(cur == null ? '—' : String(cur) + unit))}</span>
             </div>
             <div style="margin:10px 0 8px; min-height:48px;">${pts.length
                 ? _fgtSparkline(pts, kind, 240, 48)
@@ -1078,7 +1078,7 @@ async function renderFgtOverview() {
     // stringa escapata o l'uscita di un formattatore (che escapa da sé).
     const tile = (label, bodyHtml) => `<div class="panel" style="margin:0; padding:14px;">
         <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700; letter-spacing:.04em;">${escapeHtml(label)}</div>
-        <div style="margin-top:8px; font-family:var(--font-display); font-size:22px; line-height:1.2;">${bodyHtml}</div>
+        <div style="margin-top:8px; font-family:var(--font-display); font-size:21px; line-height:1.2;">${bodyHtml}</div>
       </div>`;
     const plain = v => escapeHtml(jsStr(v == null || v === '' ? '—' : String(v)));
     // Una percentuale come barra: 62 da solo non dice se sia molto o poco.

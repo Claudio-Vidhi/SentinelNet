@@ -291,7 +291,7 @@
                 devCard.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                         <div>
-                            <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
+                            <span style="font-size:17px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
                             <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
                             <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
                         </div>
@@ -328,7 +328,7 @@
         const sectionHeader = document.createElement("div");
         sectionHeader.innerHTML = `
             <div style="border-top: 1px solid var(--border); margin: 25px 0 15px 0; padding-top: 20px;">
-                <h3 style="font-size:16px; margin-bottom:6px;">
+                <h3 style="font-size:17px; margin-bottom:6px;">
                     ${i18n[currentLang].discoveredNeighborsTitle}
                 </h3>
                 <p style="font-size:13px; color:var(--text-muted);">
@@ -364,7 +364,7 @@
                         <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
                         <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
                     </div>
-                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:0; font-weight:700;">DISCOVERED</span>
+                    <span style="font-size:11px; background:color-mix(in srgb, var(--warning) 15%, transparent); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); padding:3px 8px; border-radius:0; font-weight:700;">DISCOVERED</span>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
                     <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
