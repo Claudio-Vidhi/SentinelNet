@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 import sys
@@ -26,14 +27,22 @@ def restrict_permissions(path: str):
     """Restricts the file permissions to the current user only (best effort)."""
     try:
         if sys.platform == "win32":
-            subprocess.run(
+            # icacls non solleva su fallimento: senza guardare il returncode
+            # l'irrigidimento delle ACL fallisce in silenzio e il file resta
+            # coi permessi ereditati dalla cartella.
+            res = subprocess.run(
                 ["icacls", path, "/inheritance:r",
                  "/grant:r", f"{os.environ.get('USERNAME', '')}:F"],
                 capture_output=True, timeout=15)
+            if res.returncode != 0:
+                logging.warning(
+                    "ACL non ristrette su %s: icacls uscito con %s (%s)",
+                    path, res.returncode,
+                    res.stderr.decode(errors="ignore").strip()[:200])
         else:
             os.chmod(path, 0o600)
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError) as e:
+        logging.warning("ACL non ristrette su %s: %s", path, e)
 
 
 def get_path(filename: str) -> str:
@@ -206,7 +215,19 @@ def _migrate_legacy_files():
             try:
                 os.makedirs(DATA_DIR, exist_ok=True)
                 os.replace(src, dst)
-            except Exception:
+            except OSError as e:
+                if name in _SENSITIVE_FILES:
+                    # Se secret.key non arriva in DATA_DIR, load_or_create la
+                    # legge come primo avvio e ne genera una NUOVA: tutte le
+                    # password gia' cifrate in inventario diventano
+                    # indecifrabili, decrypt_password ritorna "" e ogni
+                    # apparato prova ad autenticarsi con password vuota.
+                    # Non ripartire e' meglio che ripartire senza chiave.
+                    raise RuntimeError(
+                        f"Migrazione di '{name}' in {DATA_DIR} fallita: {e}. "
+                        f"Spostare il file a mano prima di riavviare."
+                    ) from e
+                logging.error("Migrazione di '%s' fallita: %s", name, e)
                 continue
         if name in _SENSITIVE_FILES and os.path.exists(dst):
             restrict_permissions(dst)
