@@ -86,6 +86,11 @@ def start_subnet_scan(
     background_tasks: BackgroundTasks,
     current_user = Depends(require_operator),
 ):
+    # Con auto_add i risultati finiscono in inventario dentro payload.group:
+    # senza questo controllo un operatore di una sede pianta apparati in
+    # un'altra. assert_group_allowed era importato ma non chiamato.
+    assert_group_allowed(current_user, payload.group)
+
     try:
         hosts = parse_network(payload.network)
     except ValueError as exc:
