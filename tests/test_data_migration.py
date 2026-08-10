@@ -38,6 +38,24 @@ class TestSensitiveMigrationFailsClosed(unittest.TestCase):
             self._run_with_failing_replace("audit.log")
         self.assertTrue(any("audit.log" in m for m in logs.output))
 
+    def test_migration_still_works_when_nothing_fails(self):
+        """Le due prove sopra guardano solo i fallimenti: senza questa, un
+        `raise` incondizionato le lascerebbe verdi e romperebbe ogni avvio."""
+        with tempfile.TemporaryDirectory() as cwd, \
+             tempfile.TemporaryDirectory() as ddir:
+            src = os.path.join(cwd, "secret.key")
+            with open(src, "wb") as f:
+                f.write(b"placeholder")
+            with mock.patch.object(data_config, "DATA_DIR", ddir), \
+                 mock.patch("os.getcwd", return_value=cwd):
+                data_config._migrate_legacy_files()
+
+            self.assertFalse(os.path.exists(src), "l'originale doveva spostarsi")
+            dst = os.path.join(ddir, "secret.key")
+            self.assertTrue(os.path.exists(dst), "il file non e' arrivato")
+            with open(dst, "rb") as f:
+                self.assertEqual(f.read(), b"placeholder")
+
 
 if __name__ == "__main__":
     unittest.main()
