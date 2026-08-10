@@ -36,6 +36,17 @@ def _wlc_query(ip: str, current_user, service: str, mac: Optional[str] = None):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+@router.get("/api/wlc/{ip}/overview")
+def wlc_overview(ip: str, current_user = Depends(get_current_user)):
+    """Tutto quello che serve al tab Live in una sola sessione SSH, gia'
+    strutturato (AP, client, WLAN, rogue AP)."""
+    device = _wlc_device(ip, current_user)
+    try:
+        return wlc_service.overview(device)
+    except wlc_service.WlcError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.get("/api/wlc/{ip}/status")
 def wlc_status(ip: str, current_user = Depends(get_current_user)):
     return _wlc_query(ip, current_user, "status")
@@ -70,4 +81,7 @@ def wlc_diagnose_client(ip: str, mac: str, current_user = Depends(get_current_us
     WLAN + rogue AP), sezioni best-effort."""
     device = _wlc_device(ip, current_user)
     log_audit(f"Diagnosi client WiFi '{mac}' su WLC '{ip}' da '{current_user.get('sub')}'.")
-    return wlc_service.diagnose_wifi_client(device, mac)
+    try:
+        return wlc_service.diagnose_wifi_client(device, mac)
+    except wlc_service.WlcError as e:
+        raise HTTPException(status_code=502, detail=str(e))
