@@ -36,6 +36,16 @@ class TestKnownHostsBootstrap(unittest.TestCase):
             with open(path, encoding="utf-8") as f:
                 self.assertIn("192.0.2.1", f.read())
 
+    def test_the_terminal_actually_uses_it(self):
+        """La prova sopra copre l'helper, non il suo uso: se qualcuno rimette
+        il blocco inline nel terminale WS, l'helper resta verde e il bug
+        torna. Qui si guarda che la rotta lo chiami davvero."""
+        import inspect
+        source = inspect.getsource(commands)
+        self.assertIn("_prepare_host_keys(client)", source)
+        # E che non sia tornato il ripiego che nascondeva l'errore.
+        self.assertNotIn("except OSError:\n        pass  # primo avvio", source)
+
 
 class TestScanProgress(unittest.TestCase):
     """La fase lenta e' il triage SSH, non il ping: se il progresso si ferma
@@ -79,7 +89,13 @@ class TestScanIsDiscoveryOnly(unittest.TestCase):
         return probe, {r["ip"]: r for r in results}
 
     def test_probe_instead_of_backup(self):
-        probe, rows = self._scan({"status": "success", "hostname": "switch-01"})
+        # Il backup non deve partire NEMMENO in aggiunta alla sonda:
+        # assert_called_once() sulla sonda resterebbe verde se qualcuno
+        # rimettesse il backup accanto, che e' proprio la regressione temuta.
+        from core import core_engine
+        with mock.patch.object(core_engine, "run_backup_and_triage") as backup:
+            probe, rows = self._scan({"status": "success", "hostname": "switch-01"})
+            backup.assert_not_called()
         probe.assert_called_once()
         self.assertTrue(rows["192.0.2.1"]["ssh_ok"])
         self.assertEqual(rows["192.0.2.1"]["hostname"], "switch-01")

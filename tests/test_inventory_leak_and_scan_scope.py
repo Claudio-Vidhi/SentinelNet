@@ -53,6 +53,13 @@ class TestLocalDevicesHidesCredentials(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         devices = r.json()["devices"]
         self.assertEqual(len(devices), 1)
+
+        # Sul VALORE, non sui nomi dei campi: se qualcuno rinomina la colonna o
+        # ne aggiunge una nuova col segreto dentro, un controllo per chiave
+        # passerebbe mentre il dato esce lo stesso.
+        self.assertNotIn("<ciphertext>", r.text,
+                         "un segreto cifrato e' finito nella risposta")
+
         for secret in ("Password", "Enable Secret", "SNMP Community"):
             self.assertNotIn(secret, devices[0],
                              f"'{secret}' non deve uscire dalla rotta")
