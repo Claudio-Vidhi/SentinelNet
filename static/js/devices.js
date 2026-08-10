@@ -732,6 +732,12 @@
         document.getElementById('subnetScanStatus').textContent = '';
         document.getElementById('scanNetworkInput').value = '';
         document.getElementById('scanPortsInput').value = '22';
+        // Il vendor torna "non impostato" a ogni apertura, come rete e porte.
+        // renderScanResults invece conserva la scelta (le serve per sopravvivere
+        // al ridisegno dopo la verifica): senza questo azzeramento il vendor
+        // dell'ultima scansione si applicherebbe da solo alla successiva, che e'
+        // di nuovo un vendor che l'utente non ha scelto.
+        document.getElementById('scanVerifyVendorSelect').innerHTML = buildScanVendorOptions('');
         document.getElementById('btnAvviaScan').disabled = false;
         document.getElementById('subnetScanModal').style.display = 'flex';
     }

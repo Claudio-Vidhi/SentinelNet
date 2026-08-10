@@ -240,6 +240,15 @@ class TestScanWindowVendorIsHonoured(unittest.TestCase):
         helper = self.core[self.core.index("function buildScanVendorOptions"):]
         self.assertIn('<option value="">', helper[:helper.index("\n}")])
 
+    def test_reopening_the_window_clears_the_vendor(self):
+        # Trovato provando in browser: riaprendo la finestra il vendor restava
+        # quello della scansione precedente e finiva sul dispositivo nuovo senza
+        # che nessuno lo scegliesse. Rete e porte si azzerano, il vendor deve
+        # fare lo stesso.
+        start = self.devices.index("function openSubnetScanModal")
+        body = self.devices[start:self.devices.index("\n    }", start)]
+        self.assertIn("buildScanVendorOptions('')", body)
+
     def test_every_populator_keeps_the_empty_option(self):
         # Piu' punti riempiono questa select; se uno usa buildVendorOptions la
         # voce vuota sparisce al primo refresh e il vendor torna indovinato.
