@@ -150,12 +150,30 @@ Riga di risultato:
 ```
 
 **Controllo tenant, obbligatorio.** Prima di decifrare qualunque credenziale,
-l'identità richiesta dev'essere fra quelle visibili al tenant del chiamante
-(`get_identities(tenant)` filtra già così, `security/identity_manager.py:86`).
-Senza questo controllo un operatore ottiene la password di un altro tenant
+l'identità richiesta dev'essere fra quelle utilizzabili dal chiamante. Senza
+questo controllo un operatore ottiene la password di un altro tenant
 indovinandone l'id, che è un `uuid4().hex` ma resta un id opaco passato
 dall'utente. Identità non visibile → 404, non 403: non si conferma l'esistenza
 di risorse di altri tenant.
+
+Il meccanismo non è `get_identities(tenant)`: lì `tenant` è un parametro di
+query che arriva dal client (`routers/provisioner.py:310`), non un attributo
+del chiamante, e `routers/deps.py` non ha alcun campo tenant per utente. I
+tenant di un utente **sono** il suo scope di sede, `user_group_scope(current_user)`
+(`routers/deps.py:91`), che ritorna `None` per gli admin; tenant e sede sono lo
+stesso spazio di nomi (`routers/ai.py:695` valida un tenant contro
+`inventory_manager.get_all_groups()`, `routers/arp.py:58` assegna
+`tenants = user_group_scope(current_user)`).
+
+Serve quindi una funzione pubblica in `security/identity_manager.py`, dove vive
+già la regola di corrispondenza (`_matches_tenant`):
+
+```python
+identity_visible_to(identity_id: str, tenants) -> bool
+```
+
+`tenants` è un set di sedi oppure `None` (chiamante senza restrizioni). Le
+identità globali (`'all'`) sono visibili a tutti; id sconosciuto → `False`.
 
 Ogni verifica va a `log_audit`, con utente, identità e numero di IP: è
 l'operazione che genera i tentativi di autenticazione, dev'essere tracciata.
