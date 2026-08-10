@@ -777,6 +777,16 @@ function buildVendorOptions(selected) {
     ).join("");
 }
 
+// Vendor select della finestra di scansione. Ha in piu' la voce vuota, che le
+// altre select non hanno: aggiungere un dispositivo scoperto senza scegliere un
+// vendor deve scrivere "nessun vendor", non il primo della lista. Senza questa
+// voce la select non sa dire "non scelto" e il vendor tornerebbe indovinato.
+function buildScanVendorOptions(selected) {
+    const L = (typeof i18n !== "undefined" && i18n[currentLang]) || {};
+    return `<option value="">${escapeHtml(L.optScanNoVendor || "— non impostato —")}</option>`
+         + buildVendorOptions(selected);
+}
+
 function renderVendorTable() {
     const body = document.getElementById('vendorTableBody');
     if (!body) return;

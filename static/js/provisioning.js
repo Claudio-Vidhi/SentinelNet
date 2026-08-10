@@ -483,7 +483,7 @@ function populateProvisioningFormSelects() {
     const devVendorSel = document.getElementById('devVendor');
     if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
     const scanVendorSel = document.getElementById('scanVerifyVendorSelect');
-    if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
+    if (scanVendorSel) scanVendorSel.innerHTML = buildScanVendorOptions(scanVendorSel.value);
     updateDevSecretField();
     renderVendorTable();
 

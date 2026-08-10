@@ -582,7 +582,7 @@
         const devVendorSel = document.getElementById('devVendor');
         if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
         const scanVendorSel = document.getElementById('scanVerifyVendorSelect');
-        if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
+        if (scanVendorSel) scanVendorSel.innerHTML = buildScanVendorOptions(scanVendorSel.value);
     }
 
     async function addVendor() {
@@ -835,12 +835,14 @@
         const n = selectedScanIps().length;
         const L = i18n[currentLang];
         const identity = document.getElementById('scanIdentitySelect').value;
+        const vendor = document.getElementById('scanVerifyVendorSelect').value;
         const verifyBtn = document.getElementById('btnScanVerify');
         const addBtn = document.getElementById('btnScanAddSelected');
         verifyBtn.textContent = (L.btnScanVerify || 'Verifica selezionati ({n})').replace('{n}', n);
         addBtn.textContent = (L.btnScanAddSelected || 'Aggiungi selezionati ({n})').replace('{n}', n);
-        // Verify authenticates: it needs both a selection and a chosen identity.
-        verifyBtn.disabled = n === 0 || !identity;
+        // Verify authenticates: it needs a selection, an identity AND a vendor
+        // (probe_device resolves the driver from it — there is no sane default).
+        verifyBtn.disabled = n === 0 || !identity || !vendor;
         addBtn.disabled = n === 0;
     }
 
@@ -899,7 +901,8 @@
         document.getElementById('scanActionsBar').style.display = 'flex';
         populateScanIdentitySelect();
         const vendorSel = document.getElementById('scanVerifyVendorSelect');
-        vendorSel.innerHTML = buildVendorOptions(vendorSel.value || 'cisco');
+        vendorSel.innerHTML = buildScanVendorOptions(vendorSel.value);
+        vendorSel.onchange = refreshScanActionButtons;
         refreshScanActionButtons();
     }
 
@@ -992,15 +995,19 @@
 
         for (const ip of ips) {
             const row = _scanRows.find(r => r.ip === ip);
-            // A verified row knows its vendor and which identity opened it, so
-            // it lands managed. An unverified one is IP only: guessing a vendor
-            // is exactly what this screen stopped doing.
+            // Il vendor e' quello scelto nella finestra, verifica o no: sceglierlo
+            // e' l'utente che lo dice, non il programma che lo indovina. Vuoto
+            // resta vuoto — la select ha la voce apposta.
+            // L'identita' invece si scrive solo se ha davvero aperto la sessione:
+            // legarla a un dispositivo su cui non ha fatto login sarebbe una
+            // credenziale dichiarata e mai provata.
             const verified = row && row.verify && row.verify.ok;
-            const body = verified
-                ? { ip, vendor: vendorSel, profile: `identity:${identityId}`,
-                    username: '', password: '', enable_secret: '', group }
-                : { ip, vendor: '', profile: 'default',
-                    username: '', password: '', enable_secret: '', group };
+            const body = {
+                ip,
+                vendor: vendorSel,
+                profile: (verified && identityId) ? `identity:${identityId}` : 'default',
+                username: '', password: '', enable_secret: '', group,
+            };
             await apiFetch('/api/add-device', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
