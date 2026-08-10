@@ -50,7 +50,7 @@
 
 The two existing test classes (`TestScanProgress`, `TestScanIsDiscoveryOnly`) call `scan_subnet` with `vendor_hint=` / `credentials=` and will fail to even call the new signature. They are rewritten here, in the same task, because they are the test cycle for this deliverable.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Replace `tests/test_scan_and_hostkeys.py` lines 50-108 (both classes `TestScanProgress` and `TestScanIsDiscoveryOnly`, keeping `TestKnownHostsBootstrap` above and the `unittest.main()` footer below) with:
 
@@ -134,12 +134,12 @@ class TestScanProgress(unittest.TestCase):
         self.assertEqual({t for _, t in calls}, {6})
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run python tests/test_scan_and_hostkeys.py -v`
 Expected: FAIL — `TypeError: scan_subnet() got an unexpected keyword argument 'ports'` (and `missing ... 'vendor_hint'`).
 
-- [ ] **Step 3: Rewrite the scanner**
+- [x] **Step 3: Rewrite the scanner**
 
 In `collectors/network_scanner.py`, delete these two import lines:
 
@@ -205,17 +205,17 @@ def scan_subnet(
     return found
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run python tests/test_scan_and_hostkeys.py -v`
 Expected: PASS, all classes including `TestKnownHostsBootstrap`.
 
-- [ ] **Step 5: Verify nothing else calls the old signature**
+- [x] **Step 5: Verify nothing else calls the old signature**
 
 Run: `uv run pyrefly check`
 Expected: errors in `routers/scan.py` only (it still passes `vendor_hint=`/`credentials=`). That file is Task 2. If any *other* file appears, stop and report it — the spec assumed `routers/scan.py` is the sole caller.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Note: this commit leaves `routers/scan.py` calling the old signature. That is intentional — Task 2 is the other half and lands immediately after. Do not run the full suite as a gate here; run it at the end of Task 2.
 
@@ -240,7 +240,7 @@ host con la 22 aperta."
 - Consumes: `scan_subnet(address, ports, max_workers=50, progress_cb=None)` from Task 1
 - Produces: `POST /api/scan-subnet` accepting `{"network": str, "ports": list[int]}`; `_scan_jobs[job_id]` dict shape `{"status", "results", "progress", "total", "started_at"}` (unchanged) — Task 4 reuses it
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/test_scan_verify.py`:
 
@@ -329,12 +329,12 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `uv run python tests/test_scan_verify.py -v`
 Expected: FAIL — `test_default_is_port_22` errors with `AttributeError: 'SubnetScanRequest' object has no attribute 'ports'`, and `test_vendor_and_auto_add_are_gone` fails on `auto_add`.
 
-- [ ] **Step 3: Rewrite the request model and the job**
+- [x] **Step 3: Rewrite the request model and the job**
 
 In `routers/scan.py`, change the typing import on line 8 to:
 
@@ -396,12 +396,12 @@ In `start_subnet_scan` (lines 83-119), delete the `assert_group_allowed(current_
 
 Finally fix the imports at the top: `inventory_manager` (line 17), `assert_group_allowed` (line 14) and `from core import core_engine` (line 16) are all unused by this module now — remove them. Task 4 imports `probe_device` explicitly rather than going through `core_engine`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run python tests/test_scan_verify.py -v`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Run the full gate**
+- [x] **Step 5: Run the full gate**
 
 ```bash
 uv run pyrefly check
@@ -409,7 +409,7 @@ uv run python -m unittest discover -s tests
 ```
 Expected: pyrefly 0 errors; suite green. `tests/test_scan_and_hostkeys.py` from Task 1 must still pass here.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 graphify update .
@@ -436,7 +436,7 @@ all'inventario."
 
 **Why this lives here:** `routers/deps.py` has no per-user tenant field — a caller's tenants are their *site scope*, `user_group_scope(current_user)` (`routers/deps.py:91`), which returns `None` for admin. Tenant and site are the same namespace in this codebase (`routers/ai.py:695` validates a tenant against `inventory_manager.get_all_groups()`; `routers/arp.py:58` assigns `tenants = user_group_scope(current_user)`). The matching rule itself already exists as `_matches_tenant`; this function is the public, set-aware wrapper so the router never imports a private.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/test_scan_verify.py`, above the `if __name__` footer:
 
@@ -477,12 +477,12 @@ class TestIdentityVisibility(unittest.TestCase):
         self.assertFalse(self.im.identity_visible_to("deadbeef", None))
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `uv run python tests/test_scan_verify.py TestIdentityVisibility -v`
 Expected: FAIL — `AttributeError: module 'security.identity_manager' has no attribute 'identity_visible_to'`.
 
-- [ ] **Step 3: Add the function**
+- [x] **Step 3: Add the function**
 
 In `security/identity_manager.py`, insert after `get_identity_credentials` (after line 106):
 
@@ -501,12 +501,12 @@ def identity_visible_to(identity_id: str, tenants) -> bool:
     return any(_matches_tenant(row.get("tenant"), t) for t in tenants)
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `uv run python tests/test_scan_verify.py TestIdentityVisibility -v`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 uv run pyrefly check
@@ -532,7 +532,7 @@ le credenziali."
 - Consumes: `identity_manager.identity_visible_to(identity_id, tenants)` (Task 3), `identity_manager.get_identity_credentials(identity_id) -> tuple[str, str, str] | None`, `core_engine.probe_device(device) -> {"status": str, "hostname": str|None} | {"status": "error", "message": str}`, `deps.user_group_scope(current_user) -> set[str] | None`, `_scan_jobs` / `_scan_jobs_lock` (Task 2)
 - Produces: `POST /api/scan-verify` returning `{"job_id": str, "status": "started", "total_hosts": int}`; polled through the **existing** `GET /api/scan-subnet/{job_id}`, whose `results` for a verify job are rows `{"ip": str, "ok": bool, "hostname": str|None, "error": str|None}`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/test_scan_verify.py`, above the `if __name__` footer:
 
@@ -625,12 +625,12 @@ class TestScanVerify(ScanApiTestCase):
         self.assertEqual(r.status_code, 422)
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `uv run python tests/test_scan_verify.py TestScanVerify -v`
 Expected: FAIL — all requests return 404 (`/api/scan-verify` does not exist), so `test_successful_verify_returns_hostname` fails on `KeyError: 'job_id'`.
 
-- [ ] **Step 3: Implement the endpoint**
+- [x] **Step 3: Implement the endpoint**
 
 In `routers/scan.py`, extend the imports at the top:
 
@@ -741,12 +741,12 @@ def start_scan_verify(
     return {"job_id": job_id, "status": "started", "total_hosts": len(payload.ips)}
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run python tests/test_scan_verify.py -v`
 Expected: PASS, all classes (`TestScanPortValidation`, `TestIdentityVisibility`, `TestScanVerify`).
 
-- [ ] **Step 5: Run the full gate**
+- [x] **Step 5: Run the full gate**
 
 ```bash
 uv run pyrefly check
@@ -754,7 +754,7 @@ uv run python -m unittest discover -s tests
 ```
 Expected: 0 errors, suite green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 graphify update .
