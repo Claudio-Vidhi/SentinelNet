@@ -212,7 +212,11 @@ class TestFullParity(unittest.TestCase):
     )
 
     # FgtLogQuerySchema: vedi TestRouterParity.ALLOWED_CHANGED_SCHEMAS.
-    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema")
+    # SubnetScanRequest: la scansione e' diventata solo scoperta (ping + porte
+    # TCP configurabili): vendor, group, auto_add e use_default_creds sono
+    # rimossi, il login vive in /api/scan-verify con un'identita' esplicita.
+    ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema",
+                               "SubnetScanRequest")
 
     @classmethod
     def setUpClass(cls):

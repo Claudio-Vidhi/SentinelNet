@@ -6,7 +6,10 @@
    mentre due righe piu' sotto la community SNMP veniva tolta apposta.
 2. POST /api/scan-subnet accettava un group arbitrario: assert_group_allowed
    era importato e mai chiamato, quindi con auto_add un operatore di una sede
-   piantava apparati nell'inventario di un'altra.
+   piantava apparati nell'inventario di un'altra. Risolto alla radice: la
+   scansione e' solo scoperta (ping + porte TCP) e non scrive piu' nulla
+   nell'inventario; l'unica via d'ingresso resta /api/add-device, che ha il
+   suo controllo di sede.
 """
 
 import os
@@ -67,9 +70,12 @@ class TestLocalDevicesHidesCredentials(unittest.TestCase):
         self.assertEqual(devices[0]["IP"], "192.0.2.10")
 
 
-class TestScanSubnetGroupScope(unittest.TestCase):
+class TestScanWritesNothingToInventory(unittest.TestCase):
+    """Il buco 2 era group + auto_add: ora la scansione e' solo scoperta e non
+    scrive nell'inventario, quindi non c'e' piu' un group da difendere qui.
+    Il controllo di sede vive su /api/add-device (test_rbac_scope)."""
 
-    def _scan(self, group, groups):
+    def _scan(self, body):
         from fastapi.testclient import TestClient
         import app_server
         from routers.deps import get_current_user
@@ -78,20 +84,25 @@ class TestScanSubnetGroupScope(unittest.TestCase):
             lambda: {"sub": "tester", "role": "operator"}
         try:
             with patch("routers.deps.user_manager.get_user_groups",
-                       return_value=groups), \
+                       return_value=["sede-a"]), \
                  patch("routers.scan._run_scan_job"):
-                return TestClient(app_server.app).post(
-                    "/api/scan-subnet",
-                    json={"network": "192.0.2.0/29", "vendor": "linux",
-                          "group": group, "auto_add": True})
+                return TestClient(app_server.app).post("/api/scan-subnet", json=body)
         finally:
             app_server.app.dependency_overrides.pop(get_current_user, None)
 
-    def test_group_outside_scope_is_denied(self):
-        self.assertEqual(self._scan("sede-b", ["sede-a"]).status_code, 403)
+    def test_legacy_keys_are_accepted_and_ignored(self):
+        # Chiavi vecchie nel payload non devono ne' errorare ne' risuscitare
+        # la scrittura in inventario: pydantic le ignora.
+        r = self._scan({"network": "192.0.2.0/29", "vendor": "linux",
+                        "group": "sede-b", "auto_add": True})
+        self.assertEqual(r.status_code, 200)
 
-    def test_own_group_is_allowed(self):
-        self.assertEqual(self._scan("sede-a", ["sede-a"]).status_code, 200)
+    def test_router_has_no_inventory_access(self):
+        # Strutturale: se il modulo non nomina inventory_manager non esiste
+        # payload che faccia scrivere la scansione nell'inventario.
+        import inspect
+        from routers import scan
+        self.assertNotIn("inventory_manager", inspect.getsource(scan))
 
 
 class TestProvisionerPushIsAdminOnly(unittest.TestCase):
