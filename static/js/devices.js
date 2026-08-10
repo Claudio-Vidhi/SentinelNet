@@ -170,7 +170,13 @@
                       <i class="fa-solid fa-pen"></i></button>`}
                 </td>
                 <td><strong>${d.IP}</strong></td>
-                <td>${escapeHtml(d.Vendor.toUpperCase())}</td>
+                <td>${d.Vendor
+                    ? escapeHtml(d.Vendor.toUpperCase())
+                    : `<span style="color:var(--warning); font-style:italic;" title="${
+                        escapeHtml(currentLang === 'en'
+                            ? 'No vendor set: backup and triage will fail until you edit this device.'
+                            : "Vendor non impostato: backup e triage falliranno finche' non modifichi il dispositivo.")
+                      }">${escapeHtml(currentLang === 'en' ? 'not set' : 'non impostato')}</span>`}</td>
                 <td style="white-space:nowrap;"><code>${escapeHtml(versionText)}</code></td>
                 <td class="actions-cell">
                     ${isViewer ? '<span style="color:var(--text-muted)">—</span>' : `
@@ -575,7 +581,7 @@
         renderVendorTable();
         const devVendorSel = document.getElementById('devVendor');
         if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
-        const scanVendorSel = document.getElementById('scanVendorSelect');
+        const scanVendorSel = document.getElementById('scanVerifyVendorSelect');
         if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
     }
 
@@ -696,6 +702,17 @@
 
     // --- SUBNET SCANNER ---
 
+    // Discovery rows currently on screen. verify is null until the user runs
+    // the optional verify step (see verifySelectedScanRows).
+    let _scanRows = [];
+
+    function addScanPort(port) {
+        const input = document.getElementById('scanPortsInput');
+        const ports = input.value.split(',').map(s => s.trim()).filter(Boolean);
+        if (!ports.includes(String(port))) ports.push(String(port));
+        input.value = ports.join(',');
+    }
+
     function openSubnetScanModal() {
         // Populate group select from current globalGroups cache
         const sel = document.getElementById('scanGroupSelect');
@@ -708,11 +725,13 @@
             sel.appendChild(opt);
         });
 
+        _scanRows = [];
         document.getElementById('subnetScanResults').style.display = 'none';
+        document.getElementById('scanActionsBar').style.display = 'none';
         document.getElementById('subnetScanResultsTable').innerHTML = '';
         document.getElementById('subnetScanStatus').textContent = '';
         document.getElementById('scanNetworkInput').value = '';
-        document.getElementById('scanAutoAdd').checked = false;
+        document.getElementById('scanPortsInput').value = '22';
         document.getElementById('btnAvviaScan').disabled = false;
         document.getElementById('subnetScanModal').style.display = 'flex';
     }
@@ -722,40 +741,55 @@
         document.getElementById('subnetScanModal').style.display = 'none';
     }
 
+    function scanStartButtonIdle() {
+        const b = document.getElementById('btnAvviaScan');
+        b.disabled = false;
+        b.innerHTML = currentLang === 'en'
+            ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan'
+            : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+    }
+
     async function startSubnetScan() {
         if (_scanJobInterval) { clearInterval(_scanJobInterval); _scanJobInterval = null; }
 
         const network = document.getElementById('scanNetworkInput').value.trim();
-        const vendor  = document.getElementById('scanVendorSelect').value;
-        const group   = document.getElementById('scanGroupSelect').value;
-        const autoAdd = document.getElementById('scanAutoAdd').checked;
         if (!network) { document.getElementById('scanNetworkInput').focus(); return; }
+        const ports = document.getElementById('scanPortsInput').value
+            .split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
 
         const btn = document.getElementById('btnAvviaScan');
         btn.disabled = true;
-        btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Starting...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Avvio...';
+        btn.innerHTML = currentLang === 'en'
+            ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Starting...'
+            : '<i class="fa-solid fa-circle-notch fa-spin"></i> Avvio...';
+        _scanRows = [];
         document.getElementById('subnetScanResults').style.display = 'block';
-        document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Starting scan...' : 'Avvio scansione...';
+        document.getElementById('scanActionsBar').style.display = 'none';
         document.getElementById('subnetScanResultsTable').innerHTML = '';
         document.getElementById('subnetScanProgressBar').style.transform = 'scaleX(0)';
+        document.getElementById('subnetScanStatus').textContent =
+            currentLang === 'en' ? 'Starting scan...' : 'Avvio scansione...';
 
         const res = await apiFetch('/api/scan-subnet', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ network, vendor, group, auto_add: autoAdd, use_default_creds: true }),
+            body: JSON.stringify({ network, ports }),
         });
         if (!res || !res.ok) {
             const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
             document.getElementById('subnetScanStatus').textContent =
-                (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || (currentLang === 'en' ? 'unable to start scan.' : 'impossibile avviare la scansione.'));
-            btn.disabled = false;
-            btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan' : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+                (currentLang === 'en' ? 'Error: ' : 'Errore: ') +
+                (err.detail || (currentLang === 'en' ? 'unable to start scan.' : 'impossibile avviare la scansione.'));
+            scanStartButtonIdle();
             return;
         }
         const { job_id, total_hosts } = await res.json();
-        document.getElementById('subnetScanStatus').textContent =
-            currentLang === 'en' ? `Scan started — ${total_hosts} hosts to verify...` : `Scansione avviata — ${total_hosts} host da verificare...`;
-        btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
+        document.getElementById('subnetScanStatus').textContent = currentLang === 'en'
+            ? `Scan started — ${total_hosts} hosts to check...`
+            : `Scansione avviata — ${total_hosts} host da verificare...`;
+        btn.innerHTML = currentLang === 'en'
+            ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...'
+            : '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
         pollScanJob(job_id, total_hosts);
     }
 
@@ -764,89 +798,217 @@
             const res = await apiFetch(`/api/scan-subnet/${jobId}`);
             if (!res || !res.ok) {
                 clearInterval(_scanJobInterval); _scanJobInterval = null;
-                document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
-                const b = document.getElementById('btnAvviaScan');
-                b.disabled = false;
-                b.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan' : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+                document.getElementById('subnetScanStatus').textContent =
+                    currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
+                scanStartButtonIdle();
                 return;
             }
             const data = await res.json();
-            // Il totale arriva dal server e cresce quando parte il triage SSH:
-            // usare quello di partenza inchioderebbe la barra al 100%.
             const total = data.total || totalHosts;
-            const pct  = total > 0 ? Math.round((data.progress / total) * 100) : 0;
+            const pct = total > 0 ? Math.round((data.progress / total) * 100) : 0;
             document.getElementById('subnetScanProgressBar').style.transform = `scaleX(${pct / 100})`;
-            document.getElementById('subnetScanStatus').textContent =
-                currentLang === 'en' ? `Scanning in progress — ${data.progress}/${total} hosts processed...` : `Scansione in corso — ${data.progress}/${total} host elaborati...`;
+            document.getElementById('subnetScanStatus').textContent = currentLang === 'en'
+                ? `Scanning — ${data.progress}/${total} hosts processed...`
+                : `Scansione in corso — ${data.progress}/${total} host elaborati...`;
 
             if (data.status !== 'running') {
                 clearInterval(_scanJobInterval); _scanJobInterval = null;
-                const b = document.getElementById('btnAvviaScan');
-                b.disabled = false;
-                b.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan' : '<i class="fa-solid fa-satellite-dish"></i> Avvia Scansione';
+                scanStartButtonIdle();
                 document.getElementById('subnetScanProgressBar').style.transform = 'scaleX(1)';
                 if (data.status === 'error') {
-                    document.getElementById('subnetScanStatus').textContent = currentLang === 'en' ? 'Scan finished with error.' : 'Scansione terminata con errore.';
+                    document.getElementById('subnetScanStatus').textContent =
+                        currentLang === 'en' ? 'Scan finished with error.' : 'Scansione terminata con errore.';
                     return;
                 }
-                renderScanResults(data.results || []);
+                _scanRows = (data.results || []).map(r => ({ ...r, verify: null }));
+                renderScanResults(_scanRows);
             }
         }, 2000);
     }
 
-    function renderScanResults(results) {
-        const reachable = results.filter(r => r.reachable);
-        const sshOk     = results.filter(r => r.ssh_ok);
-        const added     = results.filter(r => r.added);
-        document.getElementById('subnetScanStatus').textContent =
-            currentLang === 'en'
-                ? `Completed — ${reachable.length} reachable, ${sshOk.length} SSH ok, ${added.length} added to inventory.`
-                : `Completata — ${reachable.length} raggiungibili, ${sshOk.length} SSH ok, ${added.length} aggiunti all'inventario.`;
-
-        if (sshOk.length === 0) {
-            const noHostText = currentLang === 'en' ? 'No hosts responding via SSH.' : 'Nessun host risponde via SSH.';
-            document.getElementById('subnetScanResultsTable').innerHTML =
-                `<div style="padding:14px; color:var(--text-muted); font-size:13px;">${noHostText}</div>`;
-            return;
-        }
-        const rows = sshOk.map(r => {
-            const addText = currentLang === 'en' ? 'Add' : 'Aggiungi';
-            const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
-            const addCell = (!r.added)
-                ? `<button class="btn btn-primary btn-small"
-                       style="margin:0; padding:3px 8px; width:auto;"
-                       data-ip="${escapeHtml(r.ip)}" data-hn="${escapeHtml(r.hostname || '')}" data-vendor="${escapeHtml(r.vendor)}"
-                       onclick="addDiscoveredDevice(this.dataset.ip, this.dataset.hn, this.dataset.vendor, this)">
-                       ${addText}
-                   </button>`
-                : `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
-            return `<div style="display:grid; grid-template-columns:130px 1fr 56px 24px 90px;
-                        align-items:center; gap:8px; padding:8px 12px;
-                        border-bottom:1px solid var(--border); font-size:12px;">
-                <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(r.ip)}</span>
-                <span>${r.hostname ? escapeHtml(r.hostname) : '<span style="color:var(--text-muted)">—</span>'}</span>
-                <span style="text-transform:uppercase; color:var(--text-muted);">${escapeHtml(r.vendor)}</span>
-                <span style="text-align:center; color:${r.ssh_ok ? 'var(--primary)' : 'var(--danger)'};">${r.ssh_ok ? '✓' : '✗'}</span>
-                ${addCell}
-              </div>`;
-        }).join('');
-        document.getElementById('subnetScanResultsTable').innerHTML = rows;
-        if (added.length > 0) appInit();
+    function selectedScanIps() {
+        return Array.from(document.querySelectorAll('.scan-row-cb:checked'))
+            .map(cb => cb.dataset.ip);
     }
 
-    async function addDiscoveredDevice(ip, hostname, vendor, btnEl) {
-        const group = document.getElementById('scanGroupSelect').value;
-        const res = await apiFetch('/api/add-device', {
+    function refreshScanActionButtons() {
+        const n = selectedScanIps().length;
+        const L = i18n[currentLang];
+        const identity = document.getElementById('scanIdentitySelect').value;
+        const verifyBtn = document.getElementById('btnScanVerify');
+        const addBtn = document.getElementById('btnScanAddSelected');
+        verifyBtn.textContent = (L.btnScanVerify || 'Verifica selezionati ({n})').replace('{n}', n);
+        addBtn.textContent = (L.btnScanAddSelected || 'Aggiungi selezionati ({n})').replace('{n}', n);
+        // Verify authenticates: it needs both a selection and a chosen identity.
+        verifyBtn.disabled = n === 0 || !identity;
+        addBtn.disabled = n === 0;
+    }
+
+    function renderScanResults(rows) {
+        const L = i18n[currentLang];
+        document.getElementById('subnetScanStatus').textContent =
+            (L.scanFoundCount || 'Trovati {n} host').replace('{n}', rows.length);
+
+        if (rows.length === 0) {
+            document.getElementById('subnetScanResultsTable').innerHTML =
+                `<div style="padding:14px; color:var(--text-muted); font-size:13px;">${
+                    escapeHtml(L.scanNoHosts || 'Nessun host ha risposto.')}</div>`;
+            document.getElementById('scanActionsBar').style.display = 'none';
+            return;
+        }
+
+        const header = `<div style="display:grid; grid-template-columns:28px 130px 48px 1fr 1fr;
+                    align-items:center; gap:8px; padding:8px 12px; position:sticky; top:0;
+                    background:var(--surface-3); border-bottom:1px solid var(--border);
+                    font-size:11px; text-transform:uppercase; color:var(--text-muted);">
+            <input type="checkbox" id="scanSelectAll" onchange="toggleAllScanRows(this)"
+                   style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
+            <span>IP</span>
+            <span>${escapeHtml(L.scanColPing || 'Ping')}</span>
+            <span>${escapeHtml(L.scanColPorts || 'Porte aperte')}</span>
+            <span>${escapeHtml(L.scanColVerify || 'Verifica')}</span>
+          </div>`;
+
+        const body = rows.map(r => {
+            const ports = r.open_ports.length
+                ? escapeHtml(jsStr(r.open_ports.join(', ')))
+                : '<span style="color:var(--text-muted)">—</span>';
+            let verifyCell = '<span style="color:var(--text-muted)">—</span>';
+            if (r.verify && r.verify.ok) {
+                verifyCell = `<span style="color:var(--primary)">✓ ${
+                    escapeHtml(jsStr(r.verify.hostname || ''))}</span>`;
+            } else if (r.verify) {
+                verifyCell = `<span style="color:var(--danger)" title="${
+                    escapeHtml(jsStr(r.verify.error || ''))}">✗ ${
+                    escapeHtml(jsStr((r.verify.error || '').slice(0, 40)))}</span>`;
+            }
+            return `<div style="display:grid; grid-template-columns:28px 130px 48px 1fr 1fr;
+                        align-items:center; gap:8px; padding:8px 12px;
+                        border-bottom:1px solid var(--border); font-size:12px;">
+                <input type="checkbox" class="scan-row-cb" data-ip="${escapeHtml(jsStr(r.ip))}"
+                       onchange="refreshScanActionButtons()"
+                       style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
+                <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(jsStr(r.ip))}</span>
+                <span style="color:${r.alive ? 'var(--primary)' : 'var(--text-muted)'};">${r.alive ? '✓' : '✗'}</span>
+                <span style="font-family:var(--font-code);">${ports}</span>
+                <span>${verifyCell}</span>
+              </div>`;
+        }).join('');
+
+        document.getElementById('subnetScanResultsTable').innerHTML = header + body;
+        document.getElementById('scanActionsBar').style.display = 'flex';
+        populateScanIdentitySelect();
+        const vendorSel = document.getElementById('scanVerifyVendorSelect');
+        vendorSel.innerHTML = buildVendorOptions(vendorSel.value || 'cisco');
+        refreshScanActionButtons();
+    }
+
+    function toggleAllScanRows(master) {
+        document.querySelectorAll('.scan-row-cb').forEach(cb => { cb.checked = master.checked; });
+        refreshScanActionButtons();
+    }
+
+    async function populateScanIdentitySelect() {
+        const sel = document.getElementById('scanIdentitySelect');
+        const L = i18n[currentLang];
+        const res = await apiFetch('/api/identities');
+        const identities = (res && res.ok) ? (await res.json()).identities || [] : [];
+        // Empty value = no identity chosen: verify stays disabled, add still works.
+        sel.innerHTML = `<option value="">${
+            escapeHtml(L.optScanNoIdentity || '— nessuna (solo scoperta) —')}</option>` +
+            identities.map(i => `<option value="${escapeHtml(jsStr(i.id))}">${
+                escapeHtml(jsStr(i.name))} (${escapeHtml(jsStr(i.username))})</option>`).join('');
+        sel.onchange = refreshScanActionButtons;
+    }
+
+    async function verifySelectedScanRows() {
+        const ips = selectedScanIps();
+        const identityId = document.getElementById('scanIdentitySelect').value;
+        const vendor = document.getElementById('scanVerifyVendorSelect').value;
+        if (!ips.length || !identityId) return;
+
+        const L = i18n[currentLang];
+        document.getElementById('btnScanVerify').disabled = true;
+
+        const res = await apiFetch('/api/scan-verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip, vendor, profile: 'default', username: '', password: '', enable_secret: '', group }),
+            body: JSON.stringify({ ips, vendor, identity_id: identityId }),
         });
-        if (!res || !res.ok) return;
-        const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
-        if (btnEl) {
-            btnEl.outerHTML = `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
+        if (!res || !res.ok) {
+            const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
+            document.getElementById('subnetScanStatus').textContent =
+                (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || '');
+            refreshScanActionButtons();
+            return;
+        }
+        const { job_id } = await res.json();
+
+        // Same job machinery and same polling endpoint as the scan, but a job
+        // of its own: the discovery job may already have been collected.
+        const interval = setInterval(async () => {
+            const poll = await apiFetch(`/api/scan-subnet/${job_id}`);
+            if (!poll || !poll.ok) {
+                clearInterval(interval);
+                document.getElementById('subnetScanStatus').textContent =
+                    currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
+                refreshScanActionButtons();
+                return;
+            }
+            const data = await poll.json();
+            document.getElementById('subnetScanStatus').textContent =
+                (L.scanVerifyRunning || 'Verifica in corso — {done}/{total}...')
+                    .replace('{done}', data.progress).replace('{total}', data.total);
+
+            if (data.status !== 'running') {
+                clearInterval(interval);
+                if (data.status === 'error') {
+                    document.getElementById('subnetScanStatus').textContent =
+                        currentLang === 'en' ? 'Verify finished with error.' : 'Verifica terminata con errore.';
+                    refreshScanActionButtons();
+                    return;
+                }
+                // Merge by IP into the rows already on screen.
+                const selected = new Set(ips);
+                (data.results || []).forEach(v => {
+                    const row = _scanRows.find(r => r.ip === v.ip);
+                    if (row) row.verify = v;
+                });
+                renderScanResults(_scanRows);
+                // renderScanResults rebuilds the table, so restore the selection.
+                document.querySelectorAll('.scan-row-cb').forEach(cb => {
+                    cb.checked = selected.has(cb.dataset.ip);
+                });
+                refreshScanActionButtons();
+            }
+        }, 2000);
+    }
+
+    async function addSelectedScanRows() {
+        const group = document.getElementById('scanGroupSelect').value;
+        const vendorSel = document.getElementById('scanVerifyVendorSelect').value;
+        const identityId = document.getElementById('scanIdentitySelect').value;
+        const ips = selectedScanIps();
+
+        for (const ip of ips) {
+            const row = _scanRows.find(r => r.ip === ip);
+            // A verified row knows its vendor and which identity opened it, so
+            // it lands managed. An unverified one is IP only: guessing a vendor
+            // is exactly what this screen stopped doing.
+            const verified = row && row.verify && row.verify.ok;
+            const body = verified
+                ? { ip, vendor: vendorSel, profile: `identity:${identityId}`,
+                    username: '', password: '', enable_secret: '', group }
+                : { ip, vendor: '', profile: 'default',
+                    username: '', password: '', enable_secret: '', group };
+            await apiFetch('/api/add-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
         }
         appInit();
+        closeSubnetScanModal();
     }
 
     async function downloadBackup(ip) {
