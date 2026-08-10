@@ -83,6 +83,12 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
     devices_enriched = []
     for d in devices:
         dev_copy = dict(d)
+        # Stesso principio della community qui sotto, applicato alle credenziali
+        # SSH: cifrate o no, non hanno motivo di arrivare al browser. La UI non
+        # le legge (l'export CSV si costruisce la sua whitelist di colonne), e
+        # un viewer non deve poter scaricare il cifrato dell'intera flotta.
+        dev_copy.pop("Password", None)
+        dev_copy.pop("Enable Secret", None)
         dev_copy["redundancy"] = redundancy_service.device_redundancy_badge(d["IP"])
         # La community non esce mai da qui, nemmeno cifrata: alla UI serve
         # sapere SE il polling SNMP è configurato, non quale sia il segreto.
