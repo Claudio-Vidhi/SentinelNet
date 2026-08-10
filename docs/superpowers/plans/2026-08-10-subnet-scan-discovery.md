@@ -779,7 +779,7 @@ un id. 404 e non 403, per non confermarne l'esistenza."
 **Interfaces:**
 - Produces: element ids consumed by Task 6 and 7 — `scanNetworkInput`, `scanPortsInput`, `scanGroupSelect`, `btnAvviaScan`, `subnetScanStatus`, `subnetScanProgressBar`, `subnetScanResults`, `subnetScanResultsTable`, `scanSelectAll`, `scanIdentitySelect`, `scanVerifyVendorSelect`, `btnScanVerify`, `btnScanAddSelected`, `scanActionsBar`
 
-- [ ] **Step 1: Replace the modal body**
+- [x] **Step 1: Replace the modal body**
 
 In `templates/dashboard.html`, inside `<div class="modal-overlay" id="subnetScanModal">`, widen the modal to `width: 720px` and replace everything from the `<div class="form-group">` holding `scanNetworkInput` down to (and including) the `btnAvviaScan` button with:
 
@@ -866,7 +866,7 @@ Then, still inside `#subnetScanResults` and immediately after the `subnetScanRes
 
 Delete the old `scanVendorSelect` form-group and the whole `scanAutoAdd` checkbox block.
 
-- [ ] **Step 2: Add the strings**
+- [x] **Step 2: Add the strings**
 
 In `static/js/i18n.js`, in the IT block near line 928, delete the `lblScanAutoAdd` line and add alongside `titleSubnetScan`:
 
@@ -902,14 +902,14 @@ and in the EN block near line 2291, likewise deleting its `lblScanAutoAdd`:
         scanVerifyRunning: 'Verifying — {done}/{total}...',
 ```
 
-- [ ] **Step 3: Verify the template still renders**
+- [x] **Step 3: Verify the template still renders**
 
 ```bash
 uv run python -c "import app_server"
 ```
 Expected: no exception. Then start the app and open the Devices tab → Subnet Scan: the modal shows Network, Ports with four chips, Group, and the Start button. The actions bar is hidden (no results yet).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add templates/dashboard.html static/js/i18n.js
@@ -930,7 +930,7 @@ sotto i risultati. Via il selettore vendor a monte e la checkbox auto-add."
 - Consumes: element ids from Task 5; `POST /api/scan-subnet` and `GET /api/scan-subnet/{job_id}` from Task 2; existing helpers `apiFetch`, `escapeHtml`, `jsStr`, `appInit`, `buildVendorOptions`, `globalGroups`, `currentLang`, `i18n`
 - Produces: module-scope `_scanRows` (array of `{ip, alive, open_ports, verify}` where `verify` is `null` until Task 7 fills it); functions `addScanPort(port)`, `selectedScanIps()`, `refreshScanActionButtons()`, `renderScanResults(rows)` — Task 7 calls all four
 
-- [ ] **Step 1: Replace the scanner section**
+- [x] **Step 1: Replace the scanner section**
 
 In `static/js/devices.js`, replace everything from `// --- SUBNET SCANNER ---` (line 697) through the end of `addDiscoveredDevice` (line 850) with:
 
@@ -1174,7 +1174,9 @@ In `static/js/devices.js`, replace everything from `// --- SUBNET SCANNER ---` (
     }
 ```
 
-- [ ] **Step 2: Update the exports**
+- [x] **Step 2: Update the exports** — N/A: devices.js has no IIFE and no export
+  block; its indentation is cosmetic, so top-level `function` declarations are
+  already global. Nothing to update.
 
 The `onclick` handlers need module functions on `window`. Find the export block at the bottom of `static/js/devices.js` (where `openSubnetScanModal`, `startSubnetScan`, `addDiscoveredDevice` etc. are assigned) and update it: remove `addDiscoveredDevice`, add `addScanPort`, `toggleAllScanRows`, `refreshScanActionButtons`, `addSelectedScanRows`, `verifySelectedScanRows`. `populateScanIdentitySelect` is only called from within the module and does not need exporting.
 
@@ -1187,7 +1189,7 @@ Start the app, open Devices → Subnet Scan. Enter a small network you own (e.g.
 - both bottom buttons show a live count; Add is enabled with a selection, Verify stays disabled (the identity select is an empty stub until Task 7)
 - Add on an unverified row creates a device with an empty vendor in the Devices table
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add static/js/devices.js
@@ -1209,7 +1211,7 @@ non esiste piu'."
 - Consumes: `_scanRows`, `selectedScanIps()`, `refreshScanActionButtons()`, `renderScanResults(rows)` from Task 6; `POST /api/scan-verify` + `GET /api/scan-subnet/{job_id}` from Task 4; `GET /api/identities` (existing, `routers/provisioner.py:310`)
 - Produces: nothing downstream — this is the last behavioural task
 
-- [ ] **Step 1: Replace the stubs**
+- [x] **Step 1: Replace the stubs**
 
 In `static/js/devices.js`, replace the two placeholder functions:
 
@@ -1309,7 +1311,7 @@ Start the app. Create an identity under Provisioning with credentials valid for 
 - Add on a verified row creates a device with the chosen vendor and profile `identity:<id>`
 - confirm in the audit log that the verify produced one line naming the identity and host count, and that the discovery phase produced **no** authentication attempt
 
-- [ ] **Step 3: Full gate and commit**
+- [x] **Step 3: Full gate and commit**
 
 ```bash
 uv run pyrefly check
@@ -1336,7 +1338,7 @@ endpoint di polling della scansione, risultati fusi per IP."
 
 Adding a device without verifying now writes an empty vendor. `DeviceSchema.vendor` is a required `str` but accepts `""`, and `add_or_update_device` does not validate it, so the row saves fine and then fails on the first backup with `resolve_driver`'s `ValueError`. Without this task those rows look normal until they break.
 
-- [ ] **Step 1: Mark the rows**
+- [x] **Step 1: Mark the rows**
 
 In the device table row builder in `static/js/devices.js`, find where `d.Vendor` is rendered into its cell and replace that expression with:
 
@@ -1354,7 +1356,7 @@ In the device table row builder in `static/js/devices.js`, find where `d.Vendor`
 
 Add a discovered host without verifying it, then look at the Devices table: the vendor cell reads "non impostato" in the warning colour with a tooltip explaining what will fail. Edit the device, set a vendor, and confirm the cell goes back to normal.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add static/js/devices.js
