@@ -8,10 +8,14 @@ async function loadWlcTab() {
     if (!select) return;
 
     try {
-        const res = await apiFetch('/api/devices');
+        // /api/local-devices, non /api/devices: quest'ultima non e' mai
+        // esistita, la fetch tornava 404 e la select restava vuota. La risposta
+        // e' una busta {devices, detected_versions, groups}, non un array.
+        const res = await apiFetch('/api/local-devices');
         if (!res || !res.ok) return;
-        const devices = await res.json();
-        
+        const data = await res.json();
+        const devices = data.devices || [];
+
         select.innerHTML = '<option value="">-- Seleziona Cisco WLC --</option>';
         const wlcVendors = ['cisco_wlc', 'cisco_9800', 'cisco'];
         
