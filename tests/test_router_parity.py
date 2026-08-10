@@ -148,7 +148,7 @@ class TestFullParity(unittest.TestCase):
                     # e stato letto dal tab Impostazioni.
                     "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant",
                     "/api/observability/prune-logs",
-                    "/api/mac/port-control", "/api/wlc/{ip}/ap-summary", "/api/wlc/{ip}/client-summary", "/api/wlc/{ip}/client/{mac}", "/api/wlc/{ip}/rogue-aps", "/api/wlc/{ip}/status",
+                    "/api/mac/port-control", "/api/wlc/{ip}/ap-summary", "/api/wlc/{ip}/client-summary", "/api/wlc/{ip}/client/{mac}", "/api/wlc/{ip}/rogue-aps", "/api/wlc/{ip}/status", "/api/wlc/{ip}/overview",
                     # La scansione non tenta piu' il login: l'autenticazione e'
                     # diventata un passo esplicito e opzionale, su un endpoint suo.
                     "/api/scan-verify")

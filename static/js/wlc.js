@@ -57,40 +57,27 @@ async function refreshWlcData() {
     if (statusBox) statusBox.innerHTML = '<div class="spinner"></div> Caricamento stato WLC...';
     
     try {
-        const [statusRes, apRes, clientRes, wlanRes, rogueRes] = await Promise.all([
-            apiFetch(`/api/wlc/${currentWlcIp}/status`),
-            apiFetch(`/api/wlc/${currentWlcIp}/ap-summary`),
-            apiFetch(`/api/wlc/${currentWlcIp}/client-summary`),
-            apiFetch(`/api/wlc/${currentWlcIp}/wlan-summary`),
-            apiFetch(`/api/wlc/${currentWlcIp}/rogue-aps`)
-        ]);
-
-        if (statusRes && statusRes.ok) {
-            const statusData = await statusRes.json();
-            renderWlcStatus(statusData);
-        } else {
-            if (statusBox) statusBox.innerHTML = '<span style="color:var(--danger)">Impossibile connettersi al WLC.</span>';
+        // Una sola chiamata: il backend apre una sola sessione SSH e risponde
+        // con aps/clients/wlans/rogues gia' strutturati. Le cinque fetch
+        // parallele di prima aprivano cinque login SSH (AireOS ne accetta 5 in
+        // tutto) e tornavano testo CLI grezzo, che nessuna tabella sapeva
+        // leggere: il tab restava vuoto su qualunque piattaforma.
+        const res = await apiFetch(`/api/wlc/${currentWlcIp}/overview`);
+        if (!res || !res.ok) {
+            let msg = 'Impossibile connettersi al WLC.';
+            try {
+                const err = await res.json();
+                if (err.detail) msg = escapeHtml(err.detail);
+            } catch (_) { /* risposta non JSON: resta il messaggio generico */ }
+            if (statusBox) statusBox.innerHTML = `<span style="color:var(--danger)">${msg}</span>`;
+            return;
         }
-
-        if (apRes && apRes.ok) {
-            const apData = await apRes.json();
-            renderWlcAps(apData);
-        }
-
-        if (clientRes && clientRes.ok) {
-            const clientData = await clientRes.json();
-            renderWlcClients(clientData);
-        }
-
-        if (wlanRes && wlanRes.ok) {
-            const wlanData = await wlanRes.json();
-            renderWlcWlans(wlanData);
-        }
-
-        if (rogueRes && rogueRes.ok) {
-            const rogueData = await rogueRes.json();
-            renderWlcRogues(rogueData);
-        }
+        const data = await res.json();
+        renderWlcStatus(data);
+        renderWlcAps(data);
+        renderWlcClients(data);
+        renderWlcWlans(data);
+        renderWlcRogues(data);
 
     } catch (e) {
         console.error('Errore refresh WLC:', e);
@@ -107,10 +94,12 @@ function renderWlcStatus(d) {
             <div class="kpi-card">
                 <div class="kpi-label">Controller IP</div>
                 <div class="kpi-value" style="font-size:15px;">${escapeHtml(currentWlcIp)}</div>
+                <div class="kpi-label">${escapeHtml(d.platform === 'aireos' ? 'AireOS' : (d.platform === 'iosxe' ? 'IOS-XE / 9800' : ''))}</div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-label">Uptime / Versione</div>
-                <div class="kpi-value" style="font-size:14px;">${escapeHtml(d.version || d.uptime || 'N/A')}</div>
+                <div class="kpi-label">Versione / Uptime</div>
+                <div class="kpi-value" style="font-size:14px;">${escapeHtml(d.version || 'N/A')}</div>
+                <div class="kpi-label">${escapeHtml(d.uptime || '')}</div>
             </div>
             <div class="kpi-card">
                 <div class="kpi-label">AP Collegati</div>
@@ -224,18 +213,27 @@ async function wlcDiagnoseClient(mac) {
             return;
         }
         const diag = await res.json();
-        
-        const modalBody = document.getElementById('wlcDiagModalBody');
-        if (modalBody) {
-            modalBody.innerHTML = `
-                <div style="font-family:var(--font-code); background:var(--surface-3); padding:12px; border-radius:0; max-height:400px; overflow-y:auto; font-size:12px;">
-                    <pre>${escapeHtml(JSON.stringify(diag, null, 2))}</pre>
-                </div>
-            `;
-            openModal('wlcDiagModal');
-        } else {
-            alert(`Diagnostica Client ${mac}:\n` + JSON.stringify(diag, null, 2));
-        }
+
+        // Il modal si apriva con openModal(), che non esiste in nessun file:
+        // il ReferenceError finiva nel catch e la finestra non compariva mai.
+        // Il resto della UI apre i modal cosi'.
+        const sections = diag.sections || {};
+        const labels = [['client_detail', 'Dettaglio client'],
+                        ['ap_summary', 'Access Point'],
+                        ['wlan_summary', 'WLAN'],
+                        ['rogue_aps', 'Rogue AP vicini']];
+        document.getElementById('wlcDiagModalBody').innerHTML = labels.map(([key, label]) => {
+            const s = sections[key] || {};
+            const body = s.error ? `Errore: ${s.error}` : (s.data || '(nessun output)');
+            return `
+                <div style="margin-bottom:16px;">
+                    <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(label)}
+                        <span style="font-weight:400; font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-left:8px;">${escapeHtml(s.command || '')}</span>
+                    </div>
+                    <pre style="font-family:var(--font-code); background:var(--surface-3); padding:12px; margin:0; max-height:260px; overflow:auto; font-size:12px; white-space:pre;">${escapeHtml(body)}</pre>
+                </div>`;
+        }).join('');
+        document.getElementById('wlcDiagModal').style.display = 'flex';
     } catch (e) {
         console.error('Errore diagnostica client WLC:', e);
         showToast('Errore diagnostica: ' + e.message, 'error');
