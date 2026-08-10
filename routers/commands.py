@@ -157,7 +157,7 @@ def _run_bulk_job(job_id: str, req: BulkCommandRequest):
             _bulk_jobs[job_id]["status"] = "done"
 
 @router.post("/api/send-command")
-def send_command(payload: CommandRequest, current_user = Depends(require_operator)):
+async def send_command(payload: CommandRequest, current_user = Depends(require_operator)):
     # Validazione blacklist di sicurezza dei comandi CLI (admin: bypass; operatori: da impostazione)
     blacklist_bypass = not is_command_safe(payload.command)
     if not command_allowed(payload.command, current_user):
@@ -170,7 +170,7 @@ def send_command(payload: CommandRequest, current_user = Depends(require_operato
         log_audit(f"Comando in blacklist '{payload.command}' consentito su '{payload.ip}' "
                   f"all'utente '{current_user.get('sub')}' {_bypass_note(current_user)}.")
 
-    devices = inventory_manager.get_all_devices()
+    devices = await asyncio.to_thread(inventory_manager.get_all_devices)
     target_device = next((d for d in devices if d['IP'] == payload.ip), None)
     if target_device:
         assert_group_allowed(current_user, target_device.get('Group', 'Generale'))
@@ -178,14 +178,19 @@ def send_command(payload: CommandRequest, current_user = Depends(require_operato
         # Dispositivo di una sede agent: il centrale non lo raggiunge via SSH.
         # Il comando passa dalla coda di relay e si attende (breve) l'esito
         # dell'agente, restituendo la stessa forma della via diretta.
-        site = site_manager.get_site(target_device.get('Site') or 'central')
+        site = await asyncio.to_thread(site_manager.get_site,
+                                       target_device.get('Site') or 'central')
         if site and site.get('mode') == 'agent':
-            job = site_manager.enqueue_job(site['id'], payload.ip, payload.command,
-                                           requested_by=current_user.get('sub'))
+            job = await asyncio.to_thread(
+                site_manager.enqueue_job, site['id'], payload.ip, payload.command,
+                requested_by=current_user.get('sub'))
+            # L'attesa e' su asyncio, non su time.sleep: la rotta e' async, e
+            # un'attesa sincrona qui terrebbe occupato per 90s uno dei ~40
+            # thread condivisi da TUTTE le rotte sync dell'app.
             deadline = time.time() + 90       # l'agente fa polling (default 60s)
             while time.time() < deadline:
-                time.sleep(2)
-                j = site_manager.get_job(job['id'])
+                await asyncio.sleep(2)
+                j = await asyncio.to_thread(site_manager.get_job, job['id'])
                 if j and j['status'] in ('done', 'error'):
                     if j['status'] == 'done':
                         return {"status": "success", "output": j.get('result', '')}
@@ -193,8 +198,10 @@ def send_command(payload: CommandRequest, current_user = Depends(require_operato
             return {"status": "queued", "job_id": job['id'],
                     "message": "Comando accodato per la sede agent; esito non ancora "
                                "disponibile (consulta /api/command-jobs/{job_id})."}
-        res = core_engine.send_custom_command(target_device, payload.command,
-                                              bypass_blacklist=blacklist_bypass)
+        # Sessione SSH da 15-60s: fuori dal loop, o blocca l'intera app.
+        res = await asyncio.to_thread(core_engine.send_custom_command,
+                                      target_device, payload.command,
+                                      bypass_blacklist=blacklist_bypass)
         return res
     raise HTTPException(status_code=404, detail="Dispositivo non presente in inventario")
 

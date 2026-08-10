@@ -7,7 +7,7 @@ import time
 import logging
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from security.security_manager import log_audit
@@ -83,7 +83,6 @@ def _run_scan_job(job_id: str, req: SubnetScanRequest):
 @router.post("/api/scan-subnet")
 def start_subnet_scan(
     payload: SubnetScanRequest,
-    background_tasks: BackgroundTasks,
     current_user = Depends(require_operator),
 ):
     # Con auto_add i risultati finiscono in inventario dentro payload.group:
@@ -106,7 +105,12 @@ def start_subnet_scan(
             "started_at": time.time(),
         }
 
-    background_tasks.add_task(_run_scan_job, job_id, payload)
+    # Thread dedicato, non BackgroundTasks: Starlette esegue i task sincroni
+    # nello stesso threadpool (~40 slot) di tutte le rotte sync, e una /24
+    # tiene occupato uno slot per l'intera scansione. Stesso schema di
+    # start_bulk_command in routers/commands.py.
+    threading.Thread(target=_run_scan_job, args=(job_id, payload),
+                     daemon=True).start()
 
     log_audit(
         f"Scansione subnet '{payload.network}' avviata dall'utente "
