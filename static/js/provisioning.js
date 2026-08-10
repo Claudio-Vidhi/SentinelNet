@@ -475,13 +475,14 @@ function updateDevSecretField() {
     if (hint) hint.style.display = vendor === 'linux' ? 'block' : 'none';
 }
 
-// Popola le select del form di Provisioning Apparato (devVendor, scanVendorSelect,
-// devGroupSelect). Estratto da appInit() perché ora serve anche quando si apre
-// la tab dedicata tab-provisioning senza passare da un reload completo.
+// Popola le select del form di Provisioning Apparato (devVendor,
+// scanVerifyVendorSelect, devGroupSelect). Estratto da appInit() perché ora
+// serve anche quando si apre la tab dedicata tab-provisioning senza passare da
+// un reload completo.
 function populateProvisioningFormSelects() {
     const devVendorSel = document.getElementById('devVendor');
     if (devVendorSel) devVendorSel.innerHTML = buildVendorOptions(devVendorSel.value || 'cisco');
-    const scanVendorSel = document.getElementById('scanVendorSelect');
+    const scanVendorSel = document.getElementById('scanVerifyVendorSelect');
     if (scanVendorSel) scanVendorSel.innerHTML = buildVendorOptions(scanVendorSel.value || 'cisco');
     updateDevSecretField();
     renderVendorTable();
