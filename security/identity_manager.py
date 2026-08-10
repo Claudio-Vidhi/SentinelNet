@@ -106,6 +106,20 @@ def get_identity_credentials(identity_id: str):
     return None
 
 
+def identity_visible_to(identity_id: str, tenants) -> bool:
+    """True if a caller whose allowed sites are ``tenants`` may use this
+    identity. ``tenants`` is a set of site names, or None for an unrestricted
+    caller (admin) — the same shape routers/deps.py:user_group_scope returns.
+    Global identities ('all') are visible to everyone. Unknown id -> False."""
+    with _lock:
+        row = next((r for r in _load() if r["id"] == identity_id), None)
+    if row is None:
+        return False
+    if tenants is None:
+        return True
+    return any(_matches_tenant(row.get("tenant"), t) for t in tenants)
+
+
 def add_identity(name: str, tenant, username: str,
                  password: str, secret: str) -> dict:
     ident = {
