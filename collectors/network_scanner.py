@@ -4,7 +4,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from security import crypto_vault
-from services import inventory_manager
 from core.core_engine import is_reachable, probe_device
 
 
@@ -142,29 +141,7 @@ def scan_subnet(
             if progress_cb:
                 progress_cb(done, total)
 
-    # Phase 3 — optional inventory registration
-    if credentials.get('auto_add'):
-        existing_ips = {d['IP'] for d in inventory_manager.get_all_devices()}
-        for r in results.values():
-            if not r['ssh_ok'] or r['ip'] in existing_ips:
-                continue
-            try:
-                inventory_manager.add_or_update_device(
-                    r['ip'],
-                    vendor_hint,
-                    'default',
-                    credentials.get('username', ''),
-                    credentials.get('password', ''),
-                    credentials.get('secret', ''),
-                    credentials.get('group', 'Discovered'),
-                )
-                if r.get('hostname'):
-                    inventory_manager.update_device_hostname(r['ip'], r['hostname'])
-                r['added'] = True
-            except Exception:
-                pass
-    else:
-        for r in results.values():
-            r['added'] = False
-
+    # La registrazione in inventario vive in routers/scan.py, unico chiamante,
+    # che non passa mai 'auto_add' qui dentro: il ramo era morto e ingoiava in
+    # silenzio i fallimenti di add_or_update_device.
     return list(results.values())
