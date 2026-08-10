@@ -47,65 +47,83 @@ class TestKnownHostsBootstrap(unittest.TestCase):
         self.assertNotIn("except OSError:\n        pass  # primo avvio", source)
 
 
-class TestScanProgress(unittest.TestCase):
-    """La fase lenta e' il triage SSH, non il ping: se il progresso si ferma
-    alla fine dei ping la barra resta al 100% mentre il lavoro continua."""
-
-    def test_progress_covers_triage_phase(self):
-        calls = []
-
-        with mock.patch.object(ns, "_ping", side_effect=lambda ip: ip.endswith(".1")), \
-             mock.patch.object(ns, "is_reachable", return_value=True), \
-             mock.patch.object(ns, "probe_device",
-                               return_value={"status": "success", "hostname": "switch-01"}), \
-             mock.patch.object(ns.crypto_vault, "encrypt_password", return_value="enc"):
-            ns.scan_subnet(
-                address="192.0.2.0/29",
-                vendor_hint="cisco",
-                credentials={"username": "u", "password": "p", "secret": "s"},
-                progress_cb=lambda done, total: calls.append((done, total)),
-            )
-
-        # 6 host utili nella /29, 1 vivo -> 6 ping + 1 triage.
-        self.assertEqual(calls[-1], (7, 7))
-        self.assertEqual(max(t for _, t in calls), 7)
-
-
 class TestScanIsDiscoveryOnly(unittest.TestCase):
-    """La scansione tocca ogni host con la 22 aperta: il backup completo (22+
-    comandi, ognuno col suo timeout) rende un solo host non collaborativo
-    costoso minuti. La scansione sonda, non fa backup."""
+    """Discovery must never authenticate. A subnet sweep that logs in produces
+    an auth-failure burst on every host that does not use those credentials."""
 
-    def _scan(self, probe_result):
-        with mock.patch.object(ns, "_ping", side_effect=lambda ip: ip.endswith(".1")), \
-             mock.patch.object(ns, "is_reachable", return_value=True), \
-             mock.patch.object(ns, "probe_device", return_value=probe_result) as probe, \
-             mock.patch.object(ns.crypto_vault, "encrypt_password", return_value="enc"):
-            results = ns.scan_subnet(
-                address="192.0.2.0/29",
-                vendor_hint="linux",
-                credentials={"username": "u", "password": "p", "secret": "s"},
-            )
-        return probe, {r["ip"]: r for r in results}
-
-    def test_probe_instead_of_backup(self):
-        # Il backup non deve partire NEMMENO in aggiunta alla sonda:
-        # assert_called_once() sulla sonda resterebbe verde se qualcuno
-        # rimettesse il backup accanto, che e' proprio la regressione temuta.
+    def test_scan_never_opens_an_ssh_session(self):
         from core import core_engine
-        with mock.patch.object(core_engine, "run_backup_and_triage") as backup:
-            probe, rows = self._scan({"status": "success", "hostname": "switch-01"})
-            backup.assert_not_called()
-        probe.assert_called_once()
-        self.assertTrue(rows["192.0.2.1"]["ssh_ok"])
-        self.assertEqual(rows["192.0.2.1"]["hostname"], "switch-01")
+        with mock.patch.object(ns, "_ping", return_value=True), \
+             mock.patch.object(ns, "is_reachable", return_value=False), \
+             mock.patch.object(core_engine, "probe_device") as probe, \
+             mock.patch.object(core_engine, "run_backup_and_triage") as backup:
+            ns.scan_subnet(address="192.0.2.0/29", ports=[22])
+        probe.assert_not_called()
+        backup.assert_not_called()
 
-    def test_failed_login_is_not_ssh_ok(self):
-        # La 22 aperta non e' una credenziale valida: con auto_add finirebbero
-        # in inventario apparati su cui non si entra.
-        _, rows = self._scan({"status": "error", "message": "Authentication failed"})
-        self.assertFalse(rows["192.0.2.1"]["ssh_ok"])
-        self.assertIsNone(rows["192.0.2.1"]["hostname"])
+    def test_host_found_by_port_with_ping_failing(self):
+        # ICMP is dropped by most firewalls: a ping pre-filter hides real devices.
+        with mock.patch.object(ns, "_ping", return_value=False), \
+             mock.patch.object(ns, "is_reachable",
+                               side_effect=lambda ip, port, timeout=1: ip.endswith(".1") and port == 443):
+            rows = ns.scan_subnet(address="192.0.2.0/29", ports=[22, 443])
+        by_ip = {r["ip"]: r for r in rows}
+        self.assertEqual(list(by_ip), ["192.0.2.1"])
+        self.assertFalse(by_ip["192.0.2.1"]["alive"])
+        self.assertEqual(by_ip["192.0.2.1"]["open_ports"], [443])
+
+    def test_host_found_by_ping_with_no_open_ports(self):
+        with mock.patch.object(ns, "_ping", side_effect=lambda ip: ip.endswith(".2")), \
+             mock.patch.object(ns, "is_reachable", return_value=False):
+            rows = ns.scan_subnet(address="192.0.2.0/29", ports=[22])
+        self.assertEqual([r["ip"] for r in rows], ["192.0.2.2"])
+        self.assertTrue(rows[0]["alive"])
+        self.assertEqual(rows[0]["open_ports"], [])
+
+    def test_silent_host_is_absent(self):
+        with mock.patch.object(ns, "_ping", return_value=False), \
+             mock.patch.object(ns, "is_reachable", return_value=False):
+            rows = ns.scan_subnet(address="192.0.2.0/29", ports=[22])
+        self.assertEqual(rows, [])
+
+    def test_empty_port_list_is_ping_only(self):
+        with mock.patch.object(ns, "_ping", side_effect=lambda ip: ip.endswith(".1")), \
+             mock.patch.object(ns, "is_reachable") as reach:
+            rows = ns.scan_subnet(address="192.0.2.0/29", ports=[])
+        reach.assert_not_called()
+        self.assertEqual([r["ip"] for r in rows], ["192.0.2.1"])
+
+    def test_port_connect_timeout_is_one_second(self):
+        # is_reachable defaults to 2s (core_engine.py:210). On a silent /24 with
+        # 3 ports that is 1524 seconds of connect budget across the pool.
+        seen = []
+        with mock.patch.object(ns, "_ping", return_value=True), \
+             mock.patch.object(ns, "is_reachable",
+                               side_effect=lambda ip, port, timeout: seen.append(timeout) or False):
+            ns.scan_subnet(address="192.0.2.0/30", ports=[22])
+        self.assertEqual(set(seen), {1})
+
+    def test_results_are_sorted_by_ip(self):
+        # as_completed yields in completion order; the UI table must be stable.
+        with mock.patch.object(ns, "_ping", return_value=True), \
+             mock.patch.object(ns, "is_reachable", return_value=False):
+            rows = ns.scan_subnet(address="192.0.2.0/28", ports=[])
+        self.assertEqual([r["ip"] for r in rows], sorted(
+            (r["ip"] for r in rows), key=lambda s: tuple(int(o) for o in s.split("."))))
+
+
+class TestScanProgress(unittest.TestCase):
+    """One phase now: no triage, so the total no longer grows mid-run."""
+
+    def test_progress_is_single_phase(self):
+        calls = []
+        with mock.patch.object(ns, "_ping", return_value=True), \
+             mock.patch.object(ns, "is_reachable", return_value=False):
+            ns.scan_subnet(address="192.0.2.0/29", ports=[22],
+                           progress_cb=lambda done, total: calls.append((done, total)))
+        # 6 usable hosts in a /29, one unit of work each.
+        self.assertEqual(calls[-1], (6, 6))
+        self.assertEqual({t for _, t in calls}, {6})
 
 
 if __name__ == "__main__":
