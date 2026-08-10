@@ -87,5 +87,28 @@ class TestScanSubnetGroupScope(unittest.TestCase):
         self.assertEqual(self._scan("sede-a", ["sede-a"]).status_code, 200)
 
 
+class TestProvisionerPushIsAdminOnly(unittest.TestCase):
+    """Le push di provisioning accettano host e credenziali dal chiamante e
+    scrivono una config day-0 su un apparato che NON e' in inventario: nessun
+    assert_device_allowed puo' coprirle, quindi con require_operator un
+    operatore di sede aveva raggio d'azione su tutta la rete. Test strutturale
+    sulle dipendenze della rotta: nessun payload da inventare."""
+
+    PATHS = ("/api/provisioner/push-ssh", "/api/provisioner/push-serial",
+             "/api/provisioner/fgt/push-ssh", "/api/provisioner/fgt/push-serial")
+
+    def test_push_endpoints_require_admin(self):
+        import app_server
+        from routers.deps import require_admin
+
+        for path in self.PATHS:
+            route = next((r for r in app_server.app.routes
+                          if getattr(r, "path", None) == path), None)
+            self.assertIsNotNone(route, f"rotta {path} non trovata")
+            calls = {d.call for d in route.dependant.dependencies}
+            self.assertIn(require_admin, calls,
+                          f"{path} deve dipendere da require_admin")
+
+
 if __name__ == "__main__":
     unittest.main()

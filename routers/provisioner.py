@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from security.security_manager import log_audit
-from routers.deps import require_operator
+from routers.deps import require_operator, require_admin
 from services import switch_provisioner
 from services import fortigate_provisioner
 from services import fortigate_service
@@ -175,7 +175,7 @@ def provisioner_download(payload: SwitchProvisionSchema, materialized: bool = Fa
     )
 
 @router.post("/api/provisioner/push-ssh")
-def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depends(require_operator)):
+def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depends(require_admin)):
     """Genera la config e la applica via SSH (Netmiko) su un apparato raggiungibile."""
     config_text = switch_provisioner.build_config(payload.dict())
     result = switch_provisioner.push_via_ssh(
@@ -197,7 +197,7 @@ def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depen
     return result
 
 @router.post("/api/provisioner/push-serial")
-def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user = Depends(require_operator)):
+def provisioner_push_serial(payload: SwitchProvisionSerialSchema, current_user = Depends(require_admin)):
     """Genera la config e la applica via console/seriale (pyserial) per il
     provisioning day-0 senza connettivita' di rete."""
     config_text = switch_provisioner.build_config(payload.dict())
@@ -243,7 +243,7 @@ def fgt_provisioner_download(payload: FortiGateProvisionSchema, materialized: bo
     )
 
 @router.post("/api/provisioner/fgt/push-ssh")
-def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user = Depends(require_operator)):
+def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user = Depends(require_admin)):
     """Genera la config FortiOS e la applica sul device: REST API prima (se un
     token e' salvato per l'host, stesso pattern dell'osservabilità), con
     fallback SSH (Netmiko 'fortinet'). 'method' nel risultato indica il canale
@@ -279,7 +279,7 @@ def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user 
     return result
 
 @router.post("/api/provisioner/fgt/push-serial")
-def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current_user = Depends(require_operator)):
+def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current_user = Depends(require_admin)):
     """Genera la config FortiOS e la applica via console/seriale (day-0)."""
     config_text = fortigate_provisioner.build_config(payload.dict())
     result = fortigate_provisioner.push_via_serial(
