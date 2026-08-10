@@ -80,6 +80,94 @@ class TestScanPortValidation(ScanApiTestCase):
         self.assertNotIn("DEFAULT_PASSWORD", source)
 
 
+class TestScanVerify(ScanApiTestCase):
+    """The only step that authenticates. It runs on the rows a human ticked,
+    with an identity that human chose."""
+
+    def setUp(self):
+        from security import identity_manager
+        self.im = identity_manager
+        self.ident_id = self.im.add_identity("scan-test", "all", "u", "p", "s")["id"]
+
+    def tearDown(self):
+        self.im.delete_identity(self.ident_id)
+
+    def _verify(self, body, probe_result=None):
+        from core import core_engine
+        probe_result = probe_result or {"status": "success", "hostname": "switch-01"}
+        with mock.patch.object(core_engine, "probe_device", return_value=probe_result) as probe:
+            r = self._client().post("/api/scan-verify", json=body)
+            if r.status_code == 200:
+                job_id = r.json()["job_id"]
+                # The job runs on a real thread; poll until it settles.
+                for _ in range(100):
+                    poll = self._client().get(f"/api/scan-subnet/{job_id}")
+                    if poll.json()["status"] != "running":
+                        return r, probe, poll.json()
+                    time.sleep(0.05)
+                self.fail("verify job never finished")
+        return r, probe, None
+
+    def test_successful_verify_returns_hostname(self):
+        _, probe, job = self._verify({
+            "ips": ["192.0.2.10"], "vendor": "cisco", "identity_id": self.ident_id,
+        })
+        probe.assert_called_once()
+        self.assertEqual(job["results"], [
+            {"ip": "192.0.2.10", "ok": True, "hostname": "switch-01", "error": None},
+        ])
+
+    def test_failed_login_reports_the_reason(self):
+        _, _, job = self._verify(
+            {"ips": ["192.0.2.10"], "vendor": "cisco", "identity_id": self.ident_id},
+            probe_result={"status": "error", "message": "Authentication failed"},
+        )
+        row = job["results"][0]
+        self.assertFalse(row["ok"])
+        self.assertIsNone(row["hostname"])
+        self.assertEqual(row["error"], "Authentication failed")
+
+    def test_probe_receives_the_chosen_vendor_and_encrypted_credentials(self):
+        _, probe, _ = self._verify({
+            "ips": ["192.0.2.10"], "vendor": "linux", "identity_id": self.ident_id,
+        })
+        device = probe.call_args.args[0]
+        self.assertEqual(device["Vendor"], "linux")
+        self.assertEqual(device["IP"], "192.0.2.10")
+        # probe_device -> get_device_credentials decrypts, so it must get ciphertext.
+        self.assertNotEqual(device["Password"], "p")
+
+    def test_identity_outside_scope_is_404_and_never_decrypts(self):
+        from routers import scan
+        scoped = self.im.add_identity("altra-sede", "SiteZ", "u", "p", "s")["id"]
+        try:
+            with mock.patch.object(scan, "user_group_scope", return_value={"SiteA"}), \
+                 mock.patch.object(self.im, "get_identity_credentials") as creds:
+                r = self._client().post("/api/scan-verify", json={
+                    "ips": ["192.0.2.10"], "vendor": "cisco", "identity_id": scoped,
+                })
+            self.assertEqual(r.status_code, 404)
+            creds.assert_not_called()
+        finally:
+            self.im.delete_identity(scoped)
+
+    def test_unknown_identity_is_404(self):
+        r, _, _ = self._verify({
+            "ips": ["192.0.2.10"], "vendor": "cisco", "identity_id": "deadbeef",
+        })
+        self.assertEqual(r.status_code, 404)
+
+    def test_malformed_ip_is_rejected(self):
+        r, _, _ = self._verify({
+            "ips": ["not-an-ip"], "vendor": "cisco", "identity_id": self.ident_id,
+        })
+        self.assertEqual(r.status_code, 422)
+
+    def test_empty_ip_list_is_rejected(self):
+        r, _, _ = self._verify({"ips": [], "vendor": "cisco", "identity_id": self.ident_id})
+        self.assertEqual(r.status_code, 422)
+
+
 class TestIdentityVisibility(unittest.TestCase):
     """A caller restricted to some sites must not borrow another site's
     credentials by guessing an identity id."""
