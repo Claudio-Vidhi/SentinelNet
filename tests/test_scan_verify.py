@@ -204,5 +204,52 @@ class TestIdentityVisibility(unittest.TestCase):
         self.assertFalse(self.im.identity_visible_to("deadbeef", None))
 
 
+class TestScanWindowVendorIsHonoured(unittest.TestCase):
+    """Il vendor scelto nella finestra di scansione finiva nel dispositivo solo
+    se la riga era stata verificata: chi sceglieva un vendor e premeva Aggiungi
+    senza verificare si ritrovava il dispositivo senza vendor. La scelta
+    dell'utente non e' un'ipotesi da scartare."""
+
+    @classmethod
+    def setUpClass(cls):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cls.base = base
+        with open(os.path.join(base, "static", "js", "devices.js"), encoding="utf-8") as f:
+            cls.devices = f.read()
+        with open(os.path.join(base, "static", "js", "core.js"), encoding="utf-8") as f:
+            cls.core = f.read()
+
+    def _add_fn(self):
+        start = self.devices.index("async function addSelectedScanRows")
+        return self.devices[start:self.devices.index("\n    }", start)]
+
+    def test_add_never_discards_the_selected_vendor(self):
+        body = self._add_fn()
+        self.assertIn("vendor: vendorSel", body)
+        # Il ramo che buttava via la scelta.
+        self.assertNotIn("vendor: ''", body)
+
+    def test_identity_still_requires_a_successful_verify(self):
+        # Il vendor lo dice l'utente, l'identita' invece dev'essersi dimostrata:
+        # scriverla su un dispositivo su cui non ha fatto login sarebbe una
+        # credenziale dichiarata e mai provata.
+        self.assertIn("(verified && identityId)", self._add_fn())
+
+    def test_scan_vendor_select_can_say_not_set(self):
+        self.assertIn("function buildScanVendorOptions", self.core)
+        helper = self.core[self.core.index("function buildScanVendorOptions"):]
+        self.assertIn('<option value="">', helper[:helper.index("\n}")])
+
+    def test_every_populator_keeps_the_empty_option(self):
+        # Piu' punti riempiono questa select; se uno usa buildVendorOptions la
+        # voce vuota sparisce al primo refresh e il vendor torna indovinato.
+        with open(os.path.join(self.base, "static", "js", "provisioning.js"), encoding="utf-8") as f:
+            provisioning = f.read()
+        for name, src in (("devices.js", self.devices), ("provisioning.js", provisioning)):
+            for line in src.split("\n"):
+                if "scanVerifyVendorSelect" in line and "buildVendorOptions(" in line:
+                    self.fail(f"{name}: la select di scansione perde la voce vuota: {line.strip()}")
+
+
 if __name__ == "__main__":
     unittest.main()
