@@ -4,77 +4,45 @@
 import threading
 import uuid
 import time
-import logging
-from typing import Optional, List, Dict, Any
+from typing import Annotated, Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from security.security_manager import log_audit
-from routers.deps import get_current_user, require_operator, assert_group_allowed
+from routers.deps import get_current_user, require_operator
 from collectors.network_scanner import parse_network, scan_subnet
-from core import core_engine
-from services import inventory_manager
 
 router = APIRouter(tags=["Scan"])
 
 class SubnetScanRequest(BaseModel):
     network: str
-    vendor: str = "cisco"
-    group: str = "Generale"
-    auto_add: bool = False
-    use_default_creds: bool = True
+    # Ports are user input and each one costs len(hosts) TCP connects: cap the
+    # list, or 254 x 65535 connects are one POST away. Empty = ping-only sweep.
+    ports: List[Annotated[int, Field(ge=1, le=65535)]] = Field(
+        default_factory=lambda: [22], max_length=16
+    )
 
 _scan_jobs: dict[str, dict] = {}
 
 _scan_jobs_lock = threading.Lock()
 
 def _run_scan_job(job_id: str, req: SubnetScanRequest):
-    credentials = {
-        "username": core_engine.DEFAULT_USERNAME,
-        "password": core_engine.DEFAULT_PASSWORD,
-        "secret":   core_engine.DEFAULT_SECRET,
-    }
     def _progress(done: int, total: int):
-        # Il totale cresce quando comincia il triage: gli host vivi si sanno
-        # solo dopo i ping, e senza aggiornarlo la barra resterebbe al 100%.
         with _scan_jobs_lock:
             if job_id in _scan_jobs:
                 _scan_jobs[job_id]["progress"] = done
-                _scan_jobs[job_id]["total"]    = total
 
     try:
         results = scan_subnet(
             address=req.network,
-            vendor_hint=req.vendor,
-            credentials=credentials,
+            ports=req.ports,
             progress_cb=_progress,
         )
-
-        if req.auto_add:
-            for r in results:
-                if r["ssh_ok"] and not r["added"]:
-                    try:
-                        inventory_manager.add_or_update_device(
-                            r["ip"], r["vendor"], "custom",
-                            credentials["username"],
-                            credentials["password"],
-                            credentials["secret"],
-                            req.group,
-                        )
-                        r["added"] = True
-                    except Exception as e:
-                        # Resta added=False nel risultato: senza log l'utente
-                        # non ha modo di sapere perche'.
-                        logging.warning(
-                            "Scan: aggiunta di %s all'inventario fallita: %s", r["ip"], e
-                        )
-
         with _scan_jobs_lock:
             _scan_jobs[job_id]["status"]   = "done"
             _scan_jobs[job_id]["results"]  = results
             _scan_jobs[job_id]["progress"] = _scan_jobs[job_id]["total"]
-
     except Exception as exc:
         with _scan_jobs_lock:
             _scan_jobs[job_id]["status"] = "error"
@@ -85,11 +53,6 @@ def start_subnet_scan(
     payload: SubnetScanRequest,
     current_user = Depends(require_operator),
 ):
-    # Con auto_add i risultati finiscono in inventario dentro payload.group:
-    # senza questo controllo un operatore di una sede pianta apparati in
-    # un'altra. assert_group_allowed era importato ma non chiamato.
-    assert_group_allowed(current_user, payload.group)
-
     try:
         hosts = parse_network(payload.network)
     except ValueError as exc:
@@ -113,8 +76,8 @@ def start_subnet_scan(
                      daemon=True).start()
 
     log_audit(
-        f"Scansione subnet '{payload.network}' avviata dall'utente "
-        f"'{current_user.get('sub')}' (job_id: {job_id}, host totali: {len(hosts)})."
+        f"Scansione subnet '{payload.network}' (porte: {payload.ports}) avviata "
+        f"dall'utente '{current_user.get('sub')}' (job_id: {job_id}, host totali: {len(hosts)})."
     )
     return {"job_id": job_id, "status": "started", "total_hosts": len(hosts)}
 
