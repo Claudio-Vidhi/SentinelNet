@@ -1,8 +1,13 @@
 # UI Tab & Feature Overlap Analysis
 
-> **Status**: analysis only — no code changed. Verified on 2026-08-08 against
-> `templates/dashboard.html`, `static/js/*.js`, and `static/js/i18n.js`.
-> Companion document: `docs/netsec_troubleshooting_qa_corrected.md`.
+> **Status**: analysis only — no code changed. Re-verified on 2026-08-11 against
+> `HEAD = e14c0c1` (`templates/dashboard.html`, `static/js/*.js`, `static/js/i18n.js`).
+> Companion document: `docs/netsec_troubleshooting_qa_v3.md`.
+>
+> Re-verification result: counts and merge candidates hold (28 `tab-content`, 21 nav items,
+> 13 `.subtab-bar` copies, 11 tenant selectors, `resetTopology()` twice, `client-map.js`
+> serving both MAC Tracker and Client Map). Three claims were corrected — see B4
+> (no drift), the target-IA arithmetic, and the FortiGate pill count.
 
 Goal: identify repetitive tabs, low-value standalone surfaces, and features
 implemented more than once in different tabs that could live in a single tab.
@@ -24,7 +29,7 @@ implemented more than once in different tabs that could live in a single tab.
 | **Inventario** | Network Inventory | `#tab-devices` |
 | | Topologia | `#tab-map` (Port-Channel report), `#tab-map-interactive` (2D map) |
 | | Dispositivi & Categorie | `#tab-categories` |
-| | Fortigate Management (admin) | `#tab-fortigate` (7 panes, ~30 pills) |
+| | Fortigate Management (admin) | `#tab-fortigate` (7 panes `#fgtPane-*` switched by the `#fgtSub-*` button bar, 25 pills `#fgtPill-*`) |
 | | Cisco WLC | `#tab-wlc` |
 | **Valuta** | Threat Intel (EUVD) | `#tab-security` (Matcher / Vendor Watch views) |
 | | Config Analyzer | `#tab-config` (9 pills) |
@@ -183,9 +188,13 @@ switched tab and lost the filter" confusion.
 
 The same `.subtab-bar` button row is copy-pasted in every subtab:
 endpoint group ×4, flows group ×2, provisioning ×2, map ×2, mcp ×2, plus the
-FortiGate pane bar. The copies already drifted: `loadClientMapTab()` /
-`loadEndpointsTab()` fire on some buttons but not on the `#tab-diagnosi`
-copies.
+FortiGate pane bar — 13 `.subtab-bar` instances in `dashboard.html`.
+
+*(Correction, 2026-08-11: an earlier version of this document claimed the four
+endpoint copies had drifted. They have not — all four are byte-identical.
+`loadClientMapTab()` / `loadEndpointsTab()` fire on the Client Map and Endpoint
+buttons in every copy; the MAC Tracker and Diagnosi buttons carry no loader in
+any copy, by design. The cost here is maintenance surface, not a live bug.)*
 
 Recommendation: render the subtab bar once (single container or template
 fragment); consolidate per A1–A5 first, which deletes most copies anyway.
@@ -197,9 +206,12 @@ fragment); consolidate per A1–A5 first, which deletes most copies anyway.
 - Incident queue in `#tab-incidents` (status new/ack/resolved,
   `#incStatusFilter`).
 
-Incidents are correlations of anomalies/events; operators see "two inboxes"
-for one alert stream. Today nothing links an anomaly row to the incident it
-was folded into.
+- And a **third** surface on Home: `#homeAnomBody`, an anomaly list next to the
+  fleet attention queue.
+
+Incidents are correlations of anomalies/events; operators see two or three
+"inboxes" for one alert stream. Today nothing links an anomaly row to the
+incident it was folded into.
 
 Recommendation: not necessarily a merge (different granularity), but add a
 deep link anomaly → incident, and consider an "Incidenti" pill inside the
@@ -261,7 +273,7 @@ the Valuta group. Merging the first two (A4) leaves a clean pair:
 
 | Before | After |
 | :--- | :--- |
-| 28 `tab-content` surfaces | **22** |
+| 28 `tab-content` surfaces | **21** (the five merges below remove 7 surfaces) |
 | 21 nav items | **20** (Dispositivi & Categorie folded into Network Inventory) |
 | 13 duplicated subtab bars | **~6** |
 | Client diagnosis ×3 UIs | 1 cross-vendor surface (+ optional contextual prefills) |
