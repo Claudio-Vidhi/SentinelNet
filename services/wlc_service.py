@@ -250,6 +250,28 @@ def parse_sysinfo(text: str) -> dict:
     return out
 
 
+def parse_ap_autorf(text: str) -> dict:
+    """Channel, channel width and 5 GHz load from 'show ap auto-rf 802.11a
+    <ap>' (AireOS). 'show ap summary' carries none of it, and the width is the
+    first thing to look at on a slow cell: only auto-rf prints it."""
+    out = {}
+    for line in (text or "").splitlines():
+        m = re.match(r"^\s*(.*?)\s*(?:\.{2,}|:)\s*(\S.*?)\s*$", line)
+        if not m or not m.group(1).strip():
+            continue
+        label, value = m.group(1).strip().lower(), m.group(2)
+        if "channel width" in label and "channel_width" not in out:
+            out["channel_width"] = value
+        elif "current channel" in label and "energy" not in label \
+                and "channel" not in out:
+            out["channel"] = value
+        elif "channel utilization" in label and "channel_utilization" not in out:
+            out["channel_utilization"] = value
+        elif "noise profile" in label and "noise_profile" not in out:
+            out["noise_profile"] = value
+    return out
+
+
 def parse_client_detail(text: str) -> dict:
     """IP, RSSI e SNR dal dettaglio di un client. AireOS scrive
     'Etichetta.......... valore', IOS-XE 'Etichetta : valore'."""
@@ -274,6 +296,14 @@ def parse_client_detail(text: str) -> dict:
 # il bottone Diagnostica li copre uno per uno.
 _CLIENT_DETAIL_LIMIT = 40
 
+# Stessa logica per l'auto-RF: un comando per AP.
+_AP_AUTORF_LIMIT = 40
+_AP_AUTORF_CMD = "show ap auto-rf 802.11a {ap}"
+# Il nome AP arriva dall'output del controller e finisce dentro un comando: si
+# accettano solo i caratteri di un nome AP legittimo, cosi' una riga malformata
+# non puo' allungare la CLI con un secondo comando.
+_AP_NAME_RE = re.compile(r"^[\w.:@-]{1,32}$")
+
 
 def overview(device: dict) -> dict:
     """Fotografia del controller in una sola sessione SSH: AP, client, WLAN e
@@ -297,7 +327,18 @@ def overview(device: dict) -> dict:
                 client.update(parse_client_detail(_send(conn, cmd, 60)))
             except Exception:
                 continue
+        aps = _table_rows(raw["ap_summary"], _AP_FIELDS)
         if platform == "aireos":
+            # Canale e larghezza di canale non stanno in 'show ap summary':
+            # l'auto-RF della radio 5 GHz e' l'unico posto che li stampa.
+            for ap in aps[:_AP_AUTORF_LIMIT]:
+                name = ap.get("name", "")
+                if not _AP_NAME_RE.match(name):
+                    continue
+                try:
+                    ap.update(parse_ap_autorf(_send(conn, _AP_AUTORF_CMD.format(ap=name))))
+                except Exception:
+                    continue
             info = parse_sysinfo(sysinfo)
             version = info.get("product version", "")
             uptime = info.get("system up time", "")
@@ -311,7 +352,6 @@ def overview(device: dict) -> dict:
             m = re.search(r"uptime is (.+)", ver_txt)
             uptime = m.group(1).strip() if m else ""
 
-    aps = _table_rows(raw["ap_summary"], _AP_FIELDS)
     wlans = _table_rows(raw["wlan_summary"], _WLAN_FIELDS)
     rogues = _table_rows(raw["rogue_aps"], _ROGUE_FIELDS)
     # 'show client summary' da' solo il WLAN ID: il nome arriva dalla tabella

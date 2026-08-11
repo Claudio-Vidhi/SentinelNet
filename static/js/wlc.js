@@ -2,10 +2,17 @@
 // WLC Live Observability module for SentinelNet
 
 let currentWlcIp = '';
+// Only inventory controllers: the vendor is the sole reliable recognition
+// (the SSH driver to use depends on it). A hostname containing "wlc" is not a
+// WLC, and the old "if nothing matches show everything" fallback let the user
+// pick switches that the backend then rejected with 400.
+const WLC_VENDORS = ['cisco_wlc', 'cisco_9800'];
+let wlcInventory = [];
 
 async function loadWlcTab() {
+    const tenantSel = document.getElementById('wlcTenantSelect');
     const select = document.getElementById('wlcTargetSelect');
-    if (!select) return;
+    if (!tenantSel || !select) return;
 
     try {
         // /api/local-devices, non /api/devices: quest'ultima non e' mai
@@ -16,29 +23,35 @@ async function loadWlcTab() {
         const data = await res.json();
         const devices = data.devices || [];
 
-        select.innerHTML = '<option value="">-- Seleziona Cisco WLC --</option>';
-        const wlcVendors = ['cisco_wlc', 'cisco_9800', 'cisco'];
-        
-        const wlcDevices = devices.filter(d => 
-            wlcVendors.includes((d.Vendor || '').toLowerCase()) ||
-            (d.Hostname || '').toLowerCase().includes('wlc')
-        );
+        wlcInventory = devices.filter(d => WLC_VENDORS.includes((d.Vendor || '').toLowerCase()));
 
-        const listToUse = wlcDevices.length > 0 ? wlcDevices : devices;
-        listToUse.forEach(d => {
-            const opt = document.createElement('option');
-            opt.value = d.IP;
-            opt.textContent = `${d.Hostname || d.IP} (${d.IP}) - ${d.Vendor || 'Cisco'}`;
-            select.appendChild(opt);
-        });
-
-        if (select.options.length > 1) {
-            select.selectedIndex = 1;
-            onWlcTargetChanged();
-        }
+        // Only tenants that own at least one WLC: picking an empty one would be
+        // a dead end.
+        const tenants = [...new Set(wlcInventory.map(d => d.Group || 'Generale'))].sort();
+        const curTenant = tenantSel.value;
+        tenantSel.innerHTML = '<option value="">-- Seleziona tenant --</option>' +
+            tenants.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        tenantSel.value = tenants.includes(curTenant) ? curTenant : '';
+        onWlcTenantChanged();
     } catch (e) {
         console.error('Errore caricamento lista WLC:', e);
     }
+}
+
+// The device is chosen inside a tenant: with no tenant the select stays empty
+// and disabled.
+function onWlcTenantChanged() {
+    const tenantSel = document.getElementById('wlcTenantSelect');
+    const select = document.getElementById('wlcTargetSelect');
+    if (!tenantSel || !select) return;
+
+    const tenant = tenantSel.value;
+    const devs = tenant ? wlcInventory.filter(d => (d.Group || 'Generale') === tenant) : [];
+    select.disabled = !tenant;
+    select.innerHTML = `<option value="">${tenant ? '-- Seleziona Cisco WLC --' : '-- Scegli prima un tenant --'}</option>` +
+        devs.map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)}) - ${escapeHtml(d.Vendor)}</option>`).join('');
+    select.value = '';
+    onWlcTargetChanged();
 }
 
 function onWlcTargetChanged() {
@@ -47,7 +60,19 @@ function onWlcTargetChanged() {
     currentWlcIp = select.value;
     if (currentWlcIp) {
         refreshWlcData();
+        return;
     }
+    const statusBox = document.getElementById('wlcStatusBox');
+    if (statusBox) statusBox.innerHTML = '';
+    wlcClients = [];
+    const searchBox = document.getElementById('wlcClientSearch');
+    if (searchBox) searchBox.value = '';
+    const countBox = document.getElementById('wlcClientCount');
+    if (countBox) countBox.textContent = '';
+    ['wlcApTableBody', 'wlcClientTableBody', 'wlcWlanTableBody', 'wlcRogueTableBody'].forEach(id => {
+        const tb = document.getElementById(id);
+        if (tb) tb.innerHTML = '';
+    });
 }
 
 async function refreshWlcData() {
@@ -109,8 +134,28 @@ function renderWlcStatus(d) {
                 <div class="kpi-label">Clienti Wireless Attivi</div>
                 <div class="kpi-value" style="color:var(--success);">${d.client_count != null ? d.client_count : (d.clients ? d.clients.length : '0')}</div>
             </div>
+            ${renderWlcQualityKpi(d.clients || [])}
         </div>
     `;
+}
+
+// Quadro d'insieme della qualita' radio: solo i client di cui il controller ha
+// dato RSSI/SNR (il dettaglio si raccoglie fino a un tetto per non allungare il
+// refresh oltre la validita' del dato).
+function renderWlcQualityKpi(clients) {
+    const rated = clients.map(c => wlcQuality(c.rssi, c.snr)).filter(Boolean);
+    if (rated.length === 0) return '';
+    const count = label => rated.filter(q => q.label === label).length;
+    const weak = count('Sufficiente') + count('Scarsa');
+    const color = count('Scarsa') ? 'var(--danger)' : (weak ? 'var(--warning)' : 'var(--success)');
+    return `
+            <div class="kpi-card">
+                <div class="kpi-label">Qualita' Wi-Fi (${rated.length} client misurati)</div>
+                <div class="kpi-value" style="font-size:15px; color:${color};">${weak
+                    ? `${weak} sotto soglia`
+                    : 'Nessun client critico'}</div>
+                <div class="kpi-label">${count('Ottima')} ottima &middot; ${count('Buona')} buona &middot; ${count('Sufficiente')} sufficiente &middot; ${count('Scarsa')} scarsa</div>
+            </div>`;
 }
 
 function renderWlcAps(apData) {
@@ -119,10 +164,12 @@ function renderWlcAps(apData) {
     const aps = Array.isArray(apData) ? apData : (apData.aps || []);
     
     if (aps.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Nessun Access Point rilevato</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Nessun Access Point rilevato</td></tr>';
         return;
     }
 
+    // Canale, larghezza e utilizzo arrivano dall'auto-RF 5 GHz (solo AireOS):
+    // dove il controller non li da', la cella resta un trattino.
     tbody.innerHTML = aps.map(ap => `
         <tr>
             <td style="font-weight:700;">${escapeHtml(ap.name || ap.ap_name || '-')}</td>
@@ -130,35 +177,83 @@ function renderWlcAps(apData) {
             <td>${escapeHtml(ap.mac || ap.ethernet_mac || '-')}</td>
             <td><span class="badge ${ap.status === 'UP' || ap.joined ? 'badge-success' : 'badge-danger'}">${escapeHtml(ap.status || 'JOINED')}</span></td>
             <td>${escapeHtml(ap.clients || ap.client_count || '0')}</td>
+            <td title="${escapeHtml(ap.channel_utilization ? 'Utilizzo canale ' + ap.channel_utilization : '')}">${
+                escapeHtml(ap.channel || '-')}${ap.channel_width ? ' @ ' + escapeHtml(ap.channel_width) : ''}</td>
             <td>${escapeHtml(ap.model || '-')}</td>
         </tr>
     `).join('');
 }
 
+// Wi-Fi quality from the client's own radio figures. Thresholds are the usual
+// design targets: -67 dBm / 25 dB SNR is what voice and seamless roaming need,
+// below -80 dBm / 15 dB the link survives but retransmits. A level counts only
+// when BOTH figures clear it: a good SNR does not make up for a weak signal,
+// nor the other way round. A missing figure does not block the other one.
+const WLC_QUALITY_LEVELS = [
+    { label: 'Ottima',      cls: 'badge-success', rssi: -65, snr: 25 },
+    { label: 'Buona',       cls: 'badge-success', rssi: -72, snr: 20 },
+    { label: 'Sufficiente', cls: 'badge-warning', rssi: -80, snr: 15 },
+];
+const WLC_QUALITY_POOR = { label: 'Scarsa', cls: 'badge-danger' };
+
+function wlcQuality(rssi, snr) {
+    const r = parseFloat(rssi), s = parseFloat(snr);
+    if (!isFinite(r) && !isFinite(s)) return null;
+    return WLC_QUALITY_LEVELS.find(l => (!isFinite(r) || r >= l.rssi) && (!isFinite(s) || s >= l.snr))
+        || WLC_QUALITY_POOR;
+}
+
+// Ultimi client ricevuti dall'overview: la ricerca filtra questi, non le sole
+// righe gia' disegnate (la tabella e' troncata a 100).
+let wlcClients = [];
+
 function renderWlcClients(clientData) {
+    wlcClients = Array.isArray(clientData) ? clientData : (clientData.clients || []);
+    renderWlcClientRows();
+}
+
+function onWlcClientSearch() {
+    renderWlcClientRows();
+}
+
+function renderWlcClientRows() {
     const tbody = document.getElementById('wlcClientTableBody');
     if (!tbody) return;
-    const clients = Array.isArray(clientData) ? clientData : (clientData.clients || []);
-    
+    const q = (document.getElementById('wlcClientSearch')?.value || '').trim().toLowerCase();
+    const clients = q
+        ? wlcClients.filter(c => [c.mac, c.mac_address, c.ip, c.ip_address, c.ap_name, c.ap,
+                                  c.wlan, c.ssid, c.status].some(v => (v || '').toLowerCase().includes(q)))
+        : wlcClients;
+
+    const countBox = document.getElementById('wlcClientCount');
+    if (countBox) countBox.textContent = `${clients.length} / ${wlcClients.length}`;
+
     if (clients.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Nessun client associato</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">${
+            q ? 'Nessun client corrisponde alla ricerca' : 'Nessun client associato'}</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = clients.slice(0, 100).map(c => `
+    tbody.innerHTML = clients.slice(0, 100).map(c => {
+        const qual = wlcQuality(c.rssi, c.snr);
+        const badge = qual
+            ? `<span class="badge ${qual.cls}" title="RSSI ${escapeHtml(c.rssi || 'n/d')} dBm / SNR ${escapeHtml(c.snr || 'n/d')} dB">${qual.label}</span>`
+            : '<span style="color:var(--text-muted);" title="Dettaglio radio non raccolto per questo client: usa Diagnostica">n/d</span>';
+        return `
         <tr>
             <td style="font-family:var(--font-code); font-weight:700;">${escapeHtml(c.mac || c.mac_address || '-')}</td>
             <td>${escapeHtml(c.ip || c.ip_address || '-')}</td>
             <td>${escapeHtml(c.ap_name || c.ap || '-')}</td>
             <td>${escapeHtml(c.wlan || c.ssid || '-')}</td>
             <td>${escapeHtml(c.rssi || '-')} dBm / ${escapeHtml(c.snr || '-')} dB</td>
+            <td>${badge}</td>
             <td>
                 <button class="btn btn-sm btn-secondary" onclick="wlcDiagnoseClient('${escapeHtml(c.mac || c.mac_address)}')">
                     <i class="fa-solid fa-stethoscope"></i> Diagnostica
                 </button>
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 }
 
 function renderWlcWlans(wlanData) {
