@@ -8,6 +8,10 @@
 venv/
 ENV/
 
+# Test run artifacts
+.coverage
+htmlcov/
+
 # Sensitive data (Device credentials, inventories, tokens, identities)
 fortigate_tokens.json
 network_hosts.csv
