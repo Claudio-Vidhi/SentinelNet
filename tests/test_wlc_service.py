@@ -74,6 +74,22 @@ ROGUE_SUMMARY = _table(
     [("aa:bb:cc:99:88:01", "Unclassified", 1, 0, "Mon Jan  1 10:00:00", "Alert")])
 
 
+AP_AUTORF = """AP Name.......................................... ap-01
+MAC Address...................................... aa:bb:cc:dd:ee:01
+  Radio Type..................................... RADIO_TYPE_80211a
+  Noise Information
+    Noise Profile................................ PASSED
+  Load Information
+    Channel Utilization.......................... 12 %
+    Attached Client Count........................ 4
+  Channel Assignment Information
+    Current Channel.............................. 36
+    Channel Width................................ 40 Mhz
+    Current Channel Average Energy............... -83 dBm
+    Recommended Best Channel..................... 36
+"""
+
+
 class PlatformTest(unittest.TestCase):
     def test_vendor_hint(self):
         self.assertEqual(wlc.platform_of(AIREOS), "aireos")
@@ -272,6 +288,29 @@ class ClientDetailTest(unittest.TestCase):
         self.assertEqual(wlc.parse_client_detail(""), {})
 
 
+class ApAutoRfTest(unittest.TestCase):
+    """Canale e larghezza di canale: 'show ap summary' non li ha, l'auto-RF
+    della radio 5 GHz si."""
+
+    def test_parses_channel_width_and_load(self):
+        out = wlc.parse_ap_autorf(AP_AUTORF)
+        self.assertEqual(out["channel"], "36")
+        self.assertEqual(out["channel_width"], "40 Mhz")
+        self.assertEqual(out["channel_utilization"], "12 %")
+        self.assertEqual(out["noise_profile"], "PASSED")
+
+    def test_average_energy_is_not_the_current_channel(self):
+        # 'Current Channel Average Energy' contiene 'current channel': senza
+        # l'esclusione il canale diventava '-83 dBm'.
+        out = wlc.parse_ap_autorf(
+            "    Current Channel Average Energy............... -83 dBm\n"
+            "    Current Channel.............................. 149\n")
+        self.assertEqual(out["channel"], "149")
+
+    def test_empty(self):
+        self.assertEqual(wlc.parse_ap_autorf(""), {})
+
+
 class OverviewTest(unittest.TestCase):
     def _conn(self):
         return _FakeConn({"show ap summary": AP_SUMMARY,
@@ -279,7 +318,8 @@ class OverviewTest(unittest.TestCase):
                           "show wlan summary": WLAN_SUMMARY,
                           "show rogue ap summary": ROGUE_SUMMARY,
                           "show client detail aa:bb:cc:11:22:01":
-                              CLIENT_DETAIL_AIREOS})
+                              CLIENT_DETAIL_AIREOS,
+                          "show ap auto-rf 802.11a ap-01": AP_AUTORF})
 
     def test_clients_get_ip_rssi_snr_from_detail(self):
         # 'show client summary' non ha quelle colonne: senza il dettaglio per
@@ -309,6 +349,37 @@ class OverviewTest(unittest.TestCase):
         self.assertNotIn("rssi", out["clients"][1])
         self.assertEqual(
             sum(1 for c in conn.sent if c.startswith("show client detail")), 1)
+
+    def test_aps_get_channel_and_width_from_autorf(self):
+        conn = self._conn()
+        with _patch_session("aireos", conn, SYSINFO):
+            out = wlc.overview(AIREOS)
+        self.assertEqual(out["aps"][0]["channel"], "36")
+        self.assertEqual(out["aps"][0]["channel_width"], "40 Mhz")
+
+    def test_autorf_is_capped_and_skipped_on_iosxe(self):
+        conn = self._conn()
+        with mock.patch.object(wlc, "_AP_AUTORF_LIMIT", 1):
+            with _patch_session("aireos", conn, SYSINFO):
+                wlc.overview(AIREOS)
+        self.assertEqual(
+            sum(1 for c in conn.sent if c.startswith("show ap auto-rf")), 1)
+
+        # Il comando e' della CLI AireOS: un 9800 risponderebbe con un errore.
+        conn = self._conn()
+        with _patch_session("iosxe", conn, ""):
+            wlc.overview(C9800)
+        self.assertFalse([c for c in conn.sent if c.startswith("show ap auto-rf")])
+
+    def test_ap_name_is_not_pasted_into_the_command_unchecked(self):
+        # Il nome arriva dall'output del controller: una riga malformata non
+        # deve poter allungare la CLI con un secondo comando.
+        conn = _FakeConn({"show ap summary": _table(
+            AP_COLS, [("ap-01;show run", 2, "AIR-EXAMPLE-1",
+                       "aa:bb:cc:dd:ee:01", "loc", "IT", "192.0.2.21", 0)])})
+        with _patch_session("aireos", conn, SYSINFO):
+            wlc.overview(AIREOS)
+        self.assertFalse([c for c in conn.sent if c.startswith("show ap auto-rf")])
 
     def test_aireos_overview(self):
         conn = self._conn()

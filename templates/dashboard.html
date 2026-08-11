@@ -1267,8 +1267,13 @@
           <p style="margin:0; color:var(--text-muted); font-size:13px;">Monitoraggio in tempo reale di Access Point Cisco, client wireless associati, WLAN/SSID e rilevamento Rogue AP.</p>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
-          <select id="wlcTargetSelect" onchange="onWlcTargetChanged()" style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
-            <option value="">-- Seleziona Cisco WLC --</option>
+          <!-- Tenant first, controller second: the second select lists only the
+               WLCs of the chosen tenant (vendor cisco_wlc / cisco_9800). -->
+          <select id="wlcTenantSelect" onchange="onWlcTenantChanged()" style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
+            <option value="">-- Seleziona tenant --</option>
+          </select>
+          <select id="wlcTargetSelect" onchange="onWlcTargetChanged()" disabled style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
+            <option value="">-- Scegli prima un tenant --</option>
           </select>
           <button class="btn btn-primary" onclick="refreshWlcData()" style="width:auto;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
         </div>
@@ -1286,10 +1291,10 @@
           <div class="table-wrap" style="max-height:280px; overflow-y:auto;">
             <table style="width:100%; border-collapse:collapse;">
               <thead style="position:sticky; top:0; background:var(--surface-2); font-size:12px;">
-                <tr><th>Nome AP</th><th>IP</th><th>MAC Ethernet</th><th>Stato</th><th>Clienti</th><th>Modello</th></tr>
+                <tr><th>Nome AP</th><th>IP</th><th>MAC Ethernet</th><th>Stato</th><th>Clienti</th><th title="Radio 5 GHz, da 'show ap auto-rf 802.11a' (AireOS)">Canale 5 GHz / Larghezza</th><th>Modello</th></tr>
               </thead>
               <tbody id="wlcApTableBody">
-                <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Nessun dato AP.</td></tr>
+                <tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Nessun dato AP.</td></tr>
               </tbody>
             </table>
           </div>
@@ -1297,14 +1302,19 @@
 
         <!-- Client Summary & Search -->
         <div class="panel">
-          <h3 style="font-size:15px; margin:0 0 12px;"><i class="fa-solid fa-users-viewfinder" style="color:var(--success); margin-right:8px;"></i>Client Wireless Associati</h3>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <h3 style="font-size:15px; margin:0; flex:1 1 auto;"><i class="fa-solid fa-users-viewfinder" style="color:var(--success); margin-right:8px;"></i>Client Wireless Associati</h3>
+            <span id="wlcClientCount" style="font-size:12px; color:var(--text-muted); font-family:var(--font-code);"></span>
+            <input id="wlcClientSearch" type="search" oninput="onWlcClientSearch()" placeholder="Cerca MAC, IP, AP, SSID..."
+                   style="flex:0 1 260px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+          </div>
           <div class="table-wrap" style="max-height:300px; overflow-y:auto;">
             <table style="width:100%; border-collapse:collapse;">
               <thead style="position:sticky; top:0; background:var(--surface-2); font-size:12px;">
-                <tr><th>MAC Client</th><th>IP Address</th><th>AP Collegato</th><th>WLAN / SSID</th><th>RSSI / SNR</th><th>Azioni</th></tr>
+                <tr><th>MAC Client</th><th>IP Address</th><th>AP Collegato</th><th>WLAN / SSID</th><th>RSSI / SNR</th><th>Qualita'</th><th>Azioni</th></tr>
               </thead>
               <tbody id="wlcClientTableBody">
-                <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Nessun client attivo.</td></tr>
+                <tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Nessun client attivo.</td></tr>
               </tbody>
             </table>
           </div>
