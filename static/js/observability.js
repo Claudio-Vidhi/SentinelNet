@@ -137,6 +137,51 @@
     // chiede l'utente, e resta a un click di distanza.
     let _flowsHideTelemetry = localStorage.getItem('sentinelnet_flows_hide_telemetry') === '1';
 
+    // Single source of truth for the Traffico tab. Every view reads the window
+    // and the tenant from here: the tab used to carry three independent window
+    // selects (flows, protocol chart, SIEM), so a 15m top talker could sit next
+    // to a 24h chart with nothing on screen saying so.
+    const trafState = {
+        window: '1h',
+        metric: 'bytes',
+        autoRefresh: true,
+        hideTelemetry: _flowsHideTelemetry,
+    };
+    let _trafView = 'overview';
+
+    // Loader per vista: registrato dal task che porta dentro il contenuto.
+    // Cambiare pill carica solo la vista che si apre, non tutte e quattro.
+    const TRAF_LOADERS = {};
+
+    function trafSwitchView(view) {
+        if (!document.getElementById('trafPane-' + view)) return;
+        _trafView = view;
+        for (const v of ['overview', 'flows', 'search', 'anomalies']) {
+            const pane = document.getElementById('trafPane-' + v);
+            const pill = document.getElementById('trafPill-' + v);
+            if (pane) pane.style.display = (v === view) ? '' : 'none';
+            if (pill) pill.classList.toggle('active', v === view);
+        }
+        const loader = TRAF_LOADERS[view];
+        if (loader) loader();
+    }
+
+    function trafSetWindow(value) {
+        trafState.window = value;
+        trafRefresh();
+    }
+
+    function trafSetMetric(value) {
+        trafState.metric = value;
+        trafRefresh();
+    }
+
+    function trafRefresh() {
+        loadTopTalkers();
+        loadObsProtocolDist();
+        loadAnomalies();
+    }
+
     function telemetryParam() { return _flowsHideTelemetry ? '&exclude_telemetry=true' : ''; }
 
     function flowsColHidden(id) { return _flowsHiddenCols.has(id); }
@@ -164,6 +209,7 @@
 
     function setFlowsHideTelemetry(hide) {
         _flowsHideTelemetry = !!hide;
+        trafState.hideTelemetry = _flowsHideTelemetry;
         localStorage.setItem('sentinelnet_flows_hide_telemetry', _flowsHideTelemetry ? '1' : '0');
         loadTopTalkers();          // ricarica anche il flowgraph e la KPI strip
         loadObsProtocolDist();
@@ -291,8 +337,14 @@
 
     function flowsTabShown() {
         renderFlowsSourceChips();
-        const teleCb = document.getElementById('flowsHideTelemetry');
-        if (teleCb) teleCb.checked = _flowsHideTelemetry;
+        // Header controls mirror trafState, not the other way round.
+        const teleCb = document.getElementById('trafHideTelemetry');
+        if (teleCb) teleCb.checked = trafState.hideTelemetry;
+        const winSel = document.getElementById('trafWindow');
+        if (winSel) winSel.value = trafState.window;
+        const metricSel = document.getElementById('trafMetric');
+        if (metricSel) metricSel.value = trafState.metric;
+        trafSwitchView(_trafView);
         loadTopTalkers();
         loadAnomalies();
         startFlowsAutoRefresh();
@@ -330,7 +382,7 @@
         stopFlowsAutoRefresh();
         flowsRefreshTimer = setInterval(() => {
             const active = document.getElementById('tab-flows')?.classList.contains('active');
-            const auto = document.getElementById('flowsAutoRefresh')?.checked;
+            const auto = document.getElementById('trafAutoRefresh')?.checked;
             if (active && auto && !document.hidden) loadTopTalkers();
         }, 30000);
     }
@@ -359,8 +411,8 @@
         flowsFetchInFlight = true;
         const tbody = document.getElementById('flowsTableBody');
         try {
-            const w = document.getElementById('flowsWindow').value;
-            const m = document.getElementById('flowsMetric').value;
+            const w = trafState.window;
+            const m = trafState.metric;
             if (_flowsSource === 'syslog') {
                 const res = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
                 if (!res || !res.ok) {
@@ -368,7 +420,7 @@
                     return;
                 }
                 _flowsSyslogData = (await res.json()).events || [];
-                document.getElementById('flowsLastUpdate').textContent =
+                document.getElementById('trafLastUpdate').textContent =
                     (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
                 rebuildFlowsTenantList(_flowsSyslogData);
                 renderFlowsThead();
@@ -384,7 +436,7 @@
             }
             const flows = (await res.json()).flows || [];
             _flowsRawData = flows;                     // cache for filtering
-            document.getElementById('flowsLastUpdate').textContent =
+            document.getElementById('trafLastUpdate').textContent =
                 (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
 
             // "Tutte le origini": il syslog non è un flusso, va caricato a parte
@@ -417,7 +469,7 @@
     function rebuildFlowsTenantList(flows) {
         // Extract distinct tenants from flows, maintaining order of appearance
         const tenants = [...new Set(flows.map(f => f.tenant))].sort();
-        const listDiv = document.getElementById('flowsTenantList');
+        const listDiv = document.getElementById('trafTenantList');
         if (!listDiv) return;
 
         // Preserve checked state for tenants that still exist
@@ -439,7 +491,7 @@
         `).join('');
 
         // Update "Tutti" checkbox state
-        const allCheckbox = document.getElementById('flowsTenantAll');
+        const allCheckbox = document.getElementById('trafTenantAll');
         if (allCheckbox) {
             allCheckbox.checked = tenants.length > 0 && tenants.every(t => newSelected.has(t));
             _flowsAllTenantsChecked = allCheckbox.checked;
@@ -450,12 +502,12 @@
     }
 
     function updateFlowsTenantSelection() {
-        const checkboxes = Array.from(document.querySelectorAll('#flowsTenantList input[type="checkbox"]'));
+        const checkboxes = Array.from(document.querySelectorAll('#trafTenantList input[type="checkbox"]'));
         const selected = new Set(checkboxes.filter(cb => cb.checked).map(cb => cb.value));
         _flowsSelectedTenants = selected;
 
         // Update "Tutti" checkbox
-        const allCheckbox = document.getElementById('flowsTenantAll');
+        const allCheckbox = document.getElementById('trafTenantAll');
         const totalTenants = checkboxes.length;
         const checkedCount = checkboxes.filter(cb => cb.checked).length;
         if (allCheckbox) {
@@ -467,9 +519,9 @@
         renderFlowsTable();
     }
 
-    function toggleFlowsTenantAll() {
-        const allCheckbox = document.getElementById('flowsTenantAll');
-        const checkboxes = Array.from(document.querySelectorAll('#flowsTenantList input[type="checkbox"]'));
+    function toggleTrafTenantAll() {
+        const allCheckbox = document.getElementById('trafTenantAll');
+        const checkboxes = Array.from(document.querySelectorAll('#trafTenantList input[type="checkbox"]'));
         const shouldCheck = allCheckbox.checked;
         checkboxes.forEach(cb => cb.checked = shouldCheck);
         _flowsSelectedTenants = shouldCheck ? new Set(checkboxes.map(cb => cb.value)) : new Set();
@@ -479,7 +531,7 @@
     }
 
     function updateFlowsTenantButtonLabel(totalTenants) {
-        const btn = document.getElementById('flowsTenantBtn');
+        const btn = document.getElementById('trafTenantBtn');
         if (!btn) return;
         const L = i18n[currentLang];
         let label = 'Tenants';
@@ -559,7 +611,7 @@
         if (_flowsSource === 'syslog') { renderSyslogTable(); renderSyslogAllSection(); return; }
         renderSyslogAllSection();
         const tbody = document.getElementById('flowsTableBody');
-        const m = document.getElementById('flowsMetric').value;
+        const m = trafState.metric;
         const L = i18n[currentLang];
         const hlTitle = escapeHtml(L.titleHighlightTopology || 'Evidenzia nella topologia');
 
@@ -702,16 +754,16 @@
         loadAnomalies();
     }
 
-    function toggleFlowsTenantDropdown() {
-        const dropdown = document.getElementById('flowsTenantDropdown');
+    function toggleTrafTenantDropdown() {
+        const dropdown = document.getElementById('trafTenantDropdown');
         if (!dropdown) return;
         dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
     }
 
     // Close dropdown on outside click
     document.addEventListener('click', function(e) {
-        const dropdown = document.getElementById('flowsTenantDropdown');
-        const btn = document.getElementById('flowsTenantBtn');
+        const dropdown = document.getElementById('trafTenantDropdown');
+        const btn = document.getElementById('trafTenantBtn');
         if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
             dropdown.style.display = 'none';
         }
@@ -892,7 +944,7 @@
         if (_fgFetchInFlight) return;
         _fgFetchInFlight = true;
         try {
-            const w = window_ || document.getElementById('flowsWindow')?.value || '15m';
+            const w = window_ || trafState.window;
             const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}${telemetryParam()}`);
             if (!res || !res.ok) return;
             _fgData = await res.json();
@@ -1029,8 +1081,7 @@
     async function loadObsProtocolDist() {
         const card = document.getElementById('obsProtocolCard');
         if (!card) return;
-        const winSelect = document.getElementById('obsChartWindow');
-        const win = winSelect ? winSelect.value : '24h';
+        const win = trafState.window;
         const res = await apiFetch(`/api/observability/protocol-distribution?window=${win}${telemetryParam()}`);
         if (!res || !res.ok) return;
         _obsProtocolData = await res.json();
@@ -1484,6 +1535,12 @@
     }
 
     // Expose functions globally for UI
+    window.trafSwitchView = trafSwitchView;
+    window.trafSetWindow = trafSetWindow;
+    window.trafSetMetric = trafSetMetric;
+    window.trafRefresh = trafRefresh;
+    window.toggleTrafTenantDropdown = toggleTrafTenantDropdown;
+    window.toggleTrafTenantAll = toggleTrafTenantAll;
     window.setObsChartType = setObsChartType;
     window.loadObsProtocolDist = loadObsProtocolDist;
     window.openObsInspectModal = openObsInspectModal;

@@ -1482,10 +1482,60 @@
 
     <!-- TAB: Live Flows -->
     <div id="tab-flows" class="tab-content">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-flows'); flowsTabShown();" data-i18n="tabFlows"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
+      <!-- Header unico del tab: finestra, metrica, tenant e interruttori valgono
+           per tutte e quattro le viste. Prima la stessa finestra esisteva tre
+           volte e nessuna parlava con le altre. -->
+      <div class="filterbar" style="align-items:center; margin:0 0 12px;">
+        <select id="trafWindow" onchange="trafSetWindow(this.value)" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
+          <option value="1h" selected data-i18n="optWin1h">Ultima ora</option>
+          <option value="24h" data-i18n="optWin24h">Ultime 24 ore</option>
+          <option value="7d" data-i18n="optWin7d">Ultimi 7 giorni</option>
+        </select>
+        <select id="trafMetric" onchange="trafSetMetric(this.value)" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+          <option value="bytes" data-i18n="optByBytes">Per byte</option>
+          <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
+        </select>
+        <div style="position:relative; display:inline-block;">
+          <button id="trafTenantBtn" class="btn" onclick="toggleTrafTenantDropdown()" style="padding:6px 12px;">
+            <i class="fa-solid fa-filter"></i> Tenants
+          </button>
+          <div id="trafTenantDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:220px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
+            <div style="padding:8px;">
+              <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; font-weight:500;">
+                <input type="checkbox" id="trafTenantAll" onchange="toggleTrafTenantAll()" style="accent-color:var(--primary);">
+                <span data-i18n="optArpAllTenants">Tutti i tenant</span>
+              </label>
+              <div id="trafTenantList" style="margin-top:6px;"></div>
+            </div>
+          </div>
+        </div>
+        <button class="btn" onclick="trafRefresh()"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
+          <input type="checkbox" id="trafAutoRefresh" checked style="accent-color:var(--primary);">
+          <span data-i18n="lblFlowsAutoRefresh">Auto-aggiornamento (30s, in pausa se la scheda non è visibile)</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
+          <input type="checkbox" id="trafHideTelemetry" onchange="setFlowsHideTelemetry(this.checked)" style="accent-color:var(--primary);">
+          <span data-i18n="lblFlowsHideTelemetry">Escludi traffico di telemetria (NetFlow/IPFIX/sFlow/Syslog/SNMP)</span>
+        </label>
+        <span id="trafLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
+        <button class="btn requires-write" onclick="analyzeFlowsWithAi()" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
+          <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
+        </button>
       </div>
+
+      <div id="trafPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button type="button" class="ca-pill active" id="trafPill-overview" onclick="trafSwitchView('overview')" data-i18n="trafPillOverview">Panoramica</button>
+        <button type="button" class="ca-pill" id="trafPill-flows" onclick="trafSwitchView('flows')" data-i18n="trafPillFlows">Flussi</button>
+        <button type="button" class="ca-pill" id="trafPill-search" onclick="trafSwitchView('search')" data-i18n="trafPillSearch">Ricerca</button>
+        <button type="button" class="ca-pill" id="trafPill-anomalies" onclick="trafSwitchView('anomalies')" data-i18n="trafPillAnomalies">Anomalie</button>
+      </div>
+
+      <div id="trafPane-overview" class="traf-pane"></div>
+      <div id="trafPane-flows" class="traf-pane" style="display:none;"></div>
+      <div id="trafPane-search" class="traf-pane" style="display:none;"></div>
+      <div id="trafPane-anomalies" class="traf-pane" style="display:none;"></div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
           <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleFlows">Live Flows (Top Talkers)</h2>
@@ -1532,14 +1582,8 @@
               <button id="btnChartTypeBar" class="btn btn-sm" onclick="setObsChartType('bar')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
               <button id="btnChartTypeTrend" class="btn btn-sm" onclick="setObsChartType('trend')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
             </div>
-            <!-- Window Selector & Inspect Button -->
+            <!-- La finestra e' quella del tab: la card non ne ha piu' una sua. -->
             <button class="btn btn-sm btn-secondary" onclick="openObsInspectModal('all')" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
-            <select id="obsChartWindow" onchange="loadObsProtocolDist()" style="padding:5px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-              <option value="15m">15m</option>
-              <option value="1h">1h</option>
-              <option value="24h" selected>24h</option>
-              <option value="7d">7d</option>
-            </select>
           </div>
         </div>
         <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; overflow:hidden;">
@@ -1580,45 +1624,6 @@
       </div>
 
       <div class="panel" style="margin-bottom:18px;">
-        <div class="filterbar" style="align-items:center; margin-top:0;">
-        <select id="flowsWindow" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
-          <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
-          <option value="1h" data-i18n="optWin1h">Ultima ora</option>
-          <option value="24h" data-i18n="optWin24h">Ultime 24 ore</option>
-          <option value="7d" data-i18n="optWin7d">Ultimi 7 giorni</option>
-        </select>
-        <select id="flowsMetric" onchange="loadTopTalkers()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
-          <option value="bytes" data-i18n="optByBytes">Per byte</option>
-          <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
-        </select>
-        <div style="position:relative; display:inline-block;">
-          <button id="flowsTenantBtn" class="btn" onclick="toggleFlowsTenantDropdown()" style="padding:6px 12px;">
-            <i class="fa-solid fa-filter"></i> Tenants
-          </button>
-          <div id="flowsTenantDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:220px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
-            <div style="padding:8px;">
-              <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; font-weight:500;">
-                <input type="checkbox" id="flowsTenantAll" onchange="toggleFlowsTenantAll()" style="accent-color:var(--primary);">
-                <span data-i18n="optArpAllTenants">Tutti i tenant</span>
-              </label>
-              <div id="flowsTenantList" style="margin-top:6px;"></div>
-            </div>
-          </div>
-        </div>
-        <button class="btn" onclick="loadTopTalkers()"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
-          <input type="checkbox" id="flowsAutoRefresh" checked style="accent-color:var(--primary);">
-          <span data-i18n="lblFlowsAutoRefresh">Auto-aggiornamento (30s, in pausa se la scheda non è visibile)</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
-          <input type="checkbox" id="flowsHideTelemetry" onchange="setFlowsHideTelemetry(this.checked)" style="accent-color:var(--primary);">
-          <span data-i18n="lblFlowsHideTelemetry">Escludi traffico di telemetria (NetFlow/IPFIX/sFlow/Syslog/SNMP)</span>
-        </label>
-        <span id="flowsLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
-        <button class="btn requires-write" onclick="analyzeFlowsWithAi()" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
-          <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
-        </button>
-        </div>
         <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, var(--lamp-warn)); margin-top:10px;"></div>
         <div class="filterbar" style="gap:6px; align-items:center;">
           <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>

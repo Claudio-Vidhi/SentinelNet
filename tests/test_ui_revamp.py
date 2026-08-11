@@ -1635,16 +1635,18 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # flowsSelectAll is emitted only by renderFlowsTable(), which moved to
         # static/js/observability.js.
         html = frontend_source()
+        # I controlli di finestra/metrica/tenant sono passati all'header unico
+        # del tab (prefisso traf*): erano triplicati, uno per pannello.
         for _id in ('flowsTableHead', 'flowsTableBody', 'anomTableBody',
-                    'flowsWindow', 'flowsMetric', 'flowsTenantBtn',
-                    'flowsTenantDropdown', 'flowsTenantAll', 'flowsTenantList',
-                    'flowsAutoRefresh', 'flowsLastUpdate', 'flowsObsBanner',
+                    'trafWindow', 'trafMetric', 'trafTenantBtn',
+                    'trafTenantDropdown', 'trafTenantAll', 'trafTenantList',
+                    'trafAutoRefresh', 'trafLastUpdate', 'flowsObsBanner',
                     'flowsAiNote', 'flowsSourceChips', 'flowsColsBtn',
                     'flowsColsDropdown', 'anomStatus', 'anomIpFilterChip',
                     'flowDetailPanel', 'flowDetailPanelBody'):
             self.assertIn(f'id="{_id}"', html)
         for hook in ('flowsTabShown()', 'loadTopTalkers()', 'loadAnomalies()',
-                     'toggleFlowsTenantDropdown()', 'toggleFlowsTenantAll()',
+                     'toggleTrafTenantDropdown()', 'toggleTrafTenantAll()',
                      'toggleFlowsColsDropdown()', 'analyzeFlowsWithAi()',
                      'clearAnomIpFilter()', 'closeFlowDetailPanel()'):
             self.assertIn(hook, html)
