@@ -1063,9 +1063,6 @@
         <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleMacScanPanel">Scansione MAC</h3>
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <select id="macScanGroup" onchange="populateMacScanDevices(); macSearch(); refreshMacStats(false);" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
-              <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
-            </select>
             <details id="macDeviceMenu" style="position:relative;">
               <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
                 <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
@@ -1174,9 +1171,6 @@
              il tenant; questo evita raccolte ARP indiscriminate su apparati non previsti. -->
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <select id="arpScanGroup" onchange="populateArpScanDevices()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
-              <option value="all" data-i18n="optFilterAll">Filtra per Tenant: Tutti</option>
-            </select>
             <details id="arpDeviceMenu" style="position:relative;">
               <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
                 <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
@@ -1203,19 +1197,6 @@
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpIp">IP (anche prefisso)</label>
             <input id="arpSearchIp" class="ui-input" type="text" placeholder="10.0.0." style="width:140px;">
-          </div>
-          <div>
-            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterTenant">Tenant</label>
-            <!-- Multi-selezione tenant a checkbox (nessun tenant di default): evita di
-                 mostrare tutti i binding di tutti i tenant senza una scelta esplicita. -->
-            <details id="arpTenantMenu" style="position:relative;">
-              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px; width:160px;">
-                <i class="fa-solid fa-building" style="color:var(--text-muted);"></i>
-                <span id="arpTenantSummary" data-i18n="arpPickTenantHint" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Seleziona un tenant per visualizzare i binding</span>
-                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted); margin-left:auto;"></i>
-              </summary>
-              <div id="arpTenantList" style="position:absolute; top:110%; left:0; z-index:60; min-width:200px; max-height:260px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:var(--shadow-float);"></div>
-            </details>
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
@@ -1308,10 +1289,6 @@
             <label for="epFilterQ" data-i18n="epFilterQ"></label>
             <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;"
                    onkeydown="if(event.key==='Enter')endpointsApplyFilters();">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterTenant" data-i18n="epThTenant"></label>
-            <select id="epFilterTenant" onchange="endpointsApplyFilters()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"></select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="epFilterStale" data-i18n="epFilterStale"></label>

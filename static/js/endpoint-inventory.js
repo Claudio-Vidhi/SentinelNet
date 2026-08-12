@@ -9,7 +9,6 @@ let _epRows = [];          // righe a schermo: sono queste che l'export porta vi
 let _epTruncated = false;
 
 function loadEndpointsTab() {
-    populateEndpointsTenantFilter();
     endpointsApplyFilters();
 }
 
@@ -27,20 +26,6 @@ async function endpointsApplyFilters() {
     if (_epMode === 'ports') endpointsMode('ports');
 }
 
-// Stesso schema di loadThreatIntel() in threat-intel.js: "all" per default,
-// poi un'opzione per ogni tenant noto. Senza questo la select restava vuota
-// per sempre e il filtro tenant non spediva mai il parametro.
-function populateEndpointsTenantFilter() {
-    const sel = document.getElementById('epFilterTenant');
-    if (!sel) return;
-    const L = i18n[currentLang];
-    const cur = sel.value;
-    const groups = Object.keys(globalGroups || {});
-    sel.innerHTML = `<option value="all">${escapeHtml(L.optArpAllTenants)}</option>` +
-        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-    sel.value = groups.includes(cur) ? cur : 'all';
-}
-
 async function endpointsSearch() {
     const host = document.getElementById('epResults');
     if (!host) return;
@@ -48,7 +33,7 @@ async function endpointsSearch() {
     const L = i18n[currentLang];
 
     const q = ((document.getElementById('epFilterQ') || {}).value || '').trim();
-    const tenant = (document.getElementById('epFilterTenant') || {}).value || '';
+    const tenant = locTenant();
     const staleDays = parseInt((document.getElementById('epFilterStale') || {}).value, 10) || 7;
 
     host.innerHTML = `<div class="panel" style="padding:26px; text-align:center; color:var(--text-muted); font-size:13px;">
@@ -243,7 +228,7 @@ function endpointsMode(mode) {
     // Stesso filtro di macFilteredDevices() in client-map.js.
     if (picker) {
         const cur = picker.value;
-        const tenant = (document.getElementById('epFilterTenant') || {}).value || 'all';
+        const tenant = locTenant();
         let devs = globalDevices || [];
         if (tenant && tenant !== 'all') devs = devs.filter(d => d.Group === tenant);
         const label = d => d.Hostname || d.IP;

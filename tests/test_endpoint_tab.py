@@ -74,12 +74,39 @@ class TestPanesHoldTheContent(unittest.TestCase):
         return self.html[start:rest if rest != -1 else len(self.html)]
 
     def test_each_pane_holds_its_own_panels(self):
-        self.assertIn('id="macScanGroup"', self._pane("mac"))
+        # macScanGroup/arpTenantMenu/epFilterTenant were the four per-pane
+        # tenant controls Task 3 replaced with the single #locTenant; the
+        # markers here moved to other pane-specific ids that Task 3 leaves
+        # untouched.
+        self.assertIn('id="macDeviceMenu"', self._pane("mac"))
         self.assertIn('id="kpiMacSightings"', self._pane("mac"))
-        self.assertIn('id="arpTenantMenu"', self._pane("clientmap"))
+        self.assertIn('id="arpDeviceMenu"', self._pane("clientmap"))
         self.assertIn('id="kpiArpBindings"', self._pane("clientmap"))
         self.assertIn('id="diagClientInput"', self._pane("diagnosi"))
-        self.assertIn('id="epFilterTenant"', self._pane("inventory"))
+        self.assertIn('id="epFilterQ"', self._pane("inventory"))
+
+
+class TestOneTenantSelector(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _read("templates", "dashboard.html")
+        cls.cm = _read("static", "js", "client-map.js")
+        cls.ei = _read("static", "js", "endpoint-inventory.js")
+
+    def test_the_four_old_controls_are_gone(self):
+        # An orphaned select stays clickable and filters nothing.
+        for old in ("macScanGroup", "arpScanGroup", "arpTenantMenu",
+                    "arpTenantSummary", "arpTenantList", "epFilterTenant"):
+            self.assertNotIn(f'id="{old}"', self.html)
+
+    def test_nothing_reads_them_any_more(self):
+        for old in ("macScanGroup", "arpScanGroup", "arpTenantSummary",
+                    "arpTenantList", "epFilterTenant"):
+            self.assertNotIn(old, self.cm, f"{old} still read in client-map.js")
+            self.assertNotIn(old, self.ei, f"{old} still read in endpoint-inventory.js")
+
+    def test_the_accessor_exists(self):
+        self.assertIn("function locTenant(", self.cm)
 
 
 if __name__ == "__main__":
