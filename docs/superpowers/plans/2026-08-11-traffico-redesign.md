@@ -256,14 +256,27 @@ assert.ok(!/window=7d/.test(src), 'finestra anomalie ancora cablata');
 
 ### Task 6: Docs, graph, browser sign-off
 
+> **Cosa ha trovato la verifica a browser** (tre difetti che ne' i test ne' due
+> revisioni statiche avevano visto):
+> 1. `Aggiorna` e `Analizza con AI` occupavano tutta la larghezza — `.btn` e'
+>    `width:100%` in questo design system se il chiamante non dice altro.
+> 2. `#flowSiemScopeNote` compariva vuota con zero tenant selezionati: il ramo
+>    "non filtrato" scattava anche a selezione vuota.
+> 3. Il titolo diceva ancora "Flussi Live (Top Talker)" su un tab con quattro
+>    viste — e il fallback EN nel markup lo avrebbe mostrato al caricamento
+>    prima di applyI18n().
+>
+> Istanza usa e getta su porta 8765 con `SENTINELNET_DATA_DIR` in una cartella
+> temporanea: il `data/` reale non e' stato toccato.
+
 The docs name element ids that this plan deletes. They go stale the moment Task 5 lands, so they are part of the work, not follow-up.
 
-- [ ] **Step 1:** `docs/netsec_troubleshooting_qa_v3.md` §4 — rewrite the "UI Navigation & Operational Workflow" block for Q4.1 with the new pills/panes and the single header; drop `#flowsWindow`, `#flowSiemWindow`, `#flowsTenantBtn`, `#flowSiemTenant` from the ID lists.
-- [ ] **Step 2:** `docs/ui_tab_overlap_analysis.md` — mark §A3 done with the commit range; update the target-IA table (28 → 27 surfaces once Traffico merges; the other four merges are still open); drop `#flowsWindow`/`#flowSiemWindow` from the eleven-selector list in §B3, which becomes ten.
-- [ ] **Step 3:** `graphify update .`
-- [ ] **Step 4:** Browser verification of all four views at desktop and narrow width, both themes. Record what was actually opened — `docs/superpowers/plans/2026-08-10-subnet-scan-discovery.md` closed with browser checks still pending; do not repeat that.
-- [ ] **Step 5:** `uv run pyrefly check`, full `unittest discover`, both JS test files.
-- [ ] Commit: `docs(traffico): allinea le guide alla nuova struttura del tab`
+- [x] **Step 1:** `docs/netsec_troubleshooting_qa_v3.md` §4 — rewrite the "UI Navigation & Operational Workflow" block for Q4.1 with the new pills/panes and the single header; drop `#flowsWindow`, `#flowSiemWindow`, `#flowsTenantBtn`, `#flowSiemTenant` from the ID lists.
+- [x] **Step 2:** `docs/ui_tab_overlap_analysis.md` — mark §A3 done with the commit range; update the target-IA table (28 → 27 surfaces once Traffico merges; the other four merges are still open); drop `#flowsWindow`/`#flowSiemWindow` from the eleven-selector list in §B3, which becomes ten.
+- [x] **Step 3:** `graphify update .`
+- [x] **Step 4:** Browser verification of all four views at desktop and narrow width, both themes. Record what was actually opened — `docs/superpowers/plans/2026-08-10-subnet-scan-discovery.md` closed with browser checks still pending; do not repeat that.
+- [x] **Step 5:** `uv run pyrefly check`, full `unittest discover`, both JS test files.
+- [x] Commit: `docs(traffico): allinea le guide alla nuova struttura del tab`
 
 ---
 

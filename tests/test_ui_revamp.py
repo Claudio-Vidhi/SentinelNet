@@ -1698,13 +1698,15 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         html = _html()
         tab = self._tab(html)
         # EN default in the markup...
-        self.assertIn('data-i18n="titleFlows">Live Flows (Top Talkers)', tab)
+        self.assertIn('data-i18n="titleFlows">Traffic', tab)
         self.assertNotIn('Flussi Live', tab)
         # ...EN canonical in the en map, Italian retained in the it map.
         # i18n dict e stato spostato in static/js/i18n.js (Task 3).
         src = frontend_source()
-        self.assertIn("titleFlows: 'Live Flows (Top Talkers)',", src)
-        self.assertIn("titleFlows: 'Flussi Live (Top Talker)',", src)
+        self.assertIn("titleFlows: 'Traffic',", src)
+        # Il tab non e' piu' solo i flussi: tiene Panoramica, Flussi,
+        # Ricerca e Anomalie, e il titolo lo dice.
+        self.assertIn("titleFlows: 'Traffico',", src)
         self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Live Flows\',', src)
         self.assertIn('tabFlows: \'<i class="fa-solid fa-wave-square"></i> Flussi Live\',', src)
 

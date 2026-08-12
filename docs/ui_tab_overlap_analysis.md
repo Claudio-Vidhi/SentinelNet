@@ -8,6 +8,10 @@
 > 13 `.subtab-bar` copies, 11 tenant selectors, `resetTopology()` twice, `client-map.js`
 > serving both MAC Tracker and Client Map). Three claims were corrected — see B4
 > (no drift), the target-IA arithmetic, and the FortiGate pill count.
+>
+> **A3 has since been implemented** (2026-08-11): the tree is now at 27 `tab-content`
+> surfaces, 11 `.subtab-bar` copies and 10 tenant selectors. The counts above are the
+> pre-merge baseline the rest of this analysis is written against.
 
 Goal: identify repetitive tabs, low-value standalone surfaces, and features
 implemented more than once in different tabs that could live in a single tab.
@@ -23,7 +27,7 @@ implemented more than once in different tabs that could live in a single tab.
 | :--- | :--- | :--- |
 | **Indaga** | Home | `#tab-home` |
 | | Incidenti (preview) | `#tab-incidents` |
-| | Traffico | `#tab-flows` (Flussi Live), `#tab-flow-siem` (Flow SIEM) |
+| | Traffico | `#tab-flows` — **merged 2026-08-11**: 4 pills `#trafPill-*` over panes `#trafPane-*` (Panoramica / Flussi / Ricerca / Anomalie), one header for window+tenant |
 | | Localizzazione Endpoint | `#tab-mac` (MAC Tracker), `#tab-clientmap` (Client Map), `#tab-diagnosi` (Diagnosi Client), `#tab-endpoints` (Endpoint Inventory) |
 | | AI Assistant | `#tab-ai` |
 | **Inventario** | Network Inventory | `#tab-devices` |
@@ -96,7 +100,7 @@ the WLC row button only as *contextual shortcuts* that prefill the same
 diagnosis surface — or drop them. Today an operator gets three different
 result formats for the same question.
 
-### A3. Traffico: 2 subtabs → 1 tab with pills
+### A3. Traffico: 2 subtabs → 1 tab with pills — **DONE** (2026-08-11, `942632b`..`f1f40ca`)
 
 `#tab-flows` (Flussi Live) and `#tab-flow-siem` (Flow SIEM) consume the same
 observability pipeline and duplicate both controls and output:
@@ -172,13 +176,14 @@ Recommendation: categories as a pill/column-mode of Network Inventory (or at
 minimum move category editing into the inventory row actions). The standalone
 tab mostly duplicates the device list.
 
-### B3. Eleven independent tenant/site selectors
+### B3. Ten independent tenant/site selectors
 
 Every tab builds its own: `#filterGroupSelect`, `#topologyGroupSelect`,
 `#interactiveGroupSelect`, `#categoriesGroupSelect`, `#threatGroupSelect`,
-`#macScanGroup`, `#arpScanGroup`, `#arpTenantMenu`, `#flowsTenantBtn`,
-`#flowSiemTenant`, `#configGroupSelect`. No global tenant context; state is
-lost at every tab switch.
+`#macScanGroup`, `#arpScanGroup`, `#arpTenantMenu`, `#trafTenantBtn`,
+`#configGroupSelect` — ten since A3 merged `#flowsTenantBtn` and
+`#flowSiemTenant` into one. No global tenant context; state is lost at every
+tab switch.
 
 Recommendation: a global tenant selector (sidebar or top bar) that prefills
 each tab's filter. Removes ~10 controls and a class of "I filtered but
@@ -273,7 +278,7 @@ the Valuta group. Merging the first two (A4) leaves a clean pair:
 
 | Before | After |
 | :--- | :--- |
-| 28 `tab-content` surfaces | **21** (the five merges below remove 7 surfaces) |
+| 28 `tab-content` surfaces | **21** (the five merges below remove 7; A3 already removed 1, so the tree is at 27) |
 | 21 nav items | **20** (Dispositivi & Categorie folded into Network Inventory) |
 | 13 duplicated subtab bars | **~6** |
 | Client diagnosis ×3 UIs | 1 cross-vendor surface (+ optional contextual prefills) |
