@@ -122,6 +122,17 @@ const trafState = { tenant: 'all', window: '1h', metric: 'bytes',
 
 ---
 
+### Task 2 + Task 3 (done together): every panel moves into its pane
+
+> **Deviation.** Tasks 2 and 3 shipped in one commit. Task 1 deleted the subtab bar,
+> which was the *only* entry point to `#tab-flow-siem` — the twin tab was left
+> unreachable. Restoring a temporary link would have been a shim; moving the Ricerca
+> view in, as Task 3 always intended, was the real fix, so it could not wait.
+> Anomalie's markup moved here too; its behaviour fixes (window, incident link)
+> remain Task 4.
+>
+> ECC `code-reviewer` ran over the diff: APPROVE, 0 critical/high/medium.
+
 ### Task 2: Panoramica and Flussi move into their panes
 
 **Files:**
@@ -134,7 +145,7 @@ const trafState = { tenant: 'all', window: '1h', metric: 'bytes',
 - Flussi pane receives: `#flowsSourceChips`, `#flowsColsBtn`/`#flowsColsDropdown`, `#flowsTableHead`/`#flowsTableBody`, `#flowsSyslogAllSection` (+ head/body/count), and the `#flowDetailPanel` drawer stays a page-level sibling
 - Deleted: `#flowDetailInline` and its wrapper panel, `#obsChartWindow`, `#flowsWindow`, `#flowsMetric`, `#flowsTenantBtn`/`#flowsTenantDropdown`/`#flowsTenantAll`/`#flowsTenantList`, `#flowsAutoRefresh`, `#flowsHideTelemetry`, `#flowsLastUpdate` (all replaced by the `#traf*` header equivalents)
 
-- [ ] **Step 1: Extend the test first**
+- [x] **Step 1: Extend the test first**
 
 Add to `tests/test_traffico_tab.py`:
 
@@ -147,17 +158,17 @@ def test_replaced_controls_are_gone(self):
     finestra che nessuno legge piu'."""
 ```
 
-- [ ] **Step 2: Move the markup**
+- [x] **Step 2: Move the markup**
 
 Panoramica pane, in order: banner, KPI strip, top talker table, protocol card (chart + `#fgProtoTableBody` inside it), tenant summary. Flussi pane: chips + columns dropdown + flows table + syslog section. Delete the `#flowDetailInline` panel and the two-column hero wrapper.
 
-- [ ] **Step 3: Repoint the loaders at `trafState`**
+- [x] **Step 3: Repoint the loaders at `trafState`**
 
 `loadTopTalkers()`, `loadObsProtocolDist()` and `renderFlowsTable()` stop reading `document.getElementById('flowsWindow'|'obsChartWindow'|'flowsMetric')` and read `trafState`. `telemetryParam()` reads `trafState.hideTelemetry`. `setObsChartType()` keeps working on the chart type only — the chart type is a per-card display option, not tab state, so it stays local.
 
 `flowsTabShown()` becomes: ensure the tenant list is populated, then `trafSwitchView(currentView || 'overview')`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
   - Both test files green; `test_router_parity.py` green untouched.
   - Browser: changing the header window updates KPI, top talkers, protocol chart and the flows table together. The protocol card no longer has its own window.
   - Commit: `feat(traffico): Panoramica e Flussi nelle loro viste, una sola finestra`
@@ -177,13 +188,13 @@ Panoramica pane, in order: banner, KPI strip, top talker table, protocol card (c
 - Deleted: `#tab-flow-siem`, both `.subtab-bar` copies, `#flowSiemTenant`, `#flowSiemWindow`
 - `loadFlowSiemTab()` keeps its name and its four fetches; it takes window/tenant from `trafState`
 
-- [ ] **Step 1: Test** — assert `id="tab-flow-siem"` is absent from `dashboard.html`, and that `flowSiemTenant`/`flowSiemWindow` are gone while the six ids above survive.
+- [x] **Step 1: Test** — assert `id="tab-flow-siem"` is absent from `dashboard.html`, and that `flowSiemTenant`/`flowSiemWindow` are gone while the six ids above survive.
 
-- [ ] **Step 2: Move the markup** into `#trafPane-search`. Drop the hero card: its title text is now the tab's, its stream controls go on one row above the histogram. Revisit the `240px 1fr` grid and the `min-height:450px` on the log — inside a pane with a pill bar the old value overflows (spec §Punti aperti).
+- [x] **Step 2: Move the markup** into `#trafPane-search`. Drop the hero card: its title text is now the tab's, its stream controls go on one row above the histogram. Revisit the `240px 1fr` grid and the `min-height:450px` on the log — inside a pane with a pill bar the old value overflows (spec §Punti aperti).
 
-- [ ] **Step 3: Repoint** `populateSiemTenantFilter()` — it no longer fills a `<select>`, the header owns the tenant list; the function is deleted if nothing else calls it. `loadFlowSiemTab()` reads `trafState`. The live-tail timer must pause when the Ricerca pane is not the visible one, not just when the tab is hidden.
+- [x] **Step 3: Repoint** `populateSiemTenantFilter()` — it no longer fills a `<select>`, the header owns the tenant list; the function is deleted if nothing else calls it. `loadFlowSiemTab()` reads `trafState`. The live-tail timer must pause when the Ricerca pane is not the visible one, not just when the tab is hidden.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
   - Tests green. Browser: live tail runs only while Ricerca is open; switching tenant in the header refilters events, facets and histogram.
   - Commit: `feat(traffico): la Ricerca SIEM diventa una vista, il tab gemello sparisce`
 

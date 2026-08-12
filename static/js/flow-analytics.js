@@ -10,24 +10,29 @@
     let _streamTimer = null;
     let _selectedEventId = null;
 
-    function populateSiemTenantFilter() {
-        const sel = document.getElementById('flowSiemTenant');
-        if (!sel) return;
-        const L = (window.i18n && window.i18n[currentLang]) ? window.i18n[currentLang] : {};
-        const cur = sel.value;
-        const groups = Object.keys(window.globalGroups || {});
-        const labelAll = L.optArpAllTenants || (currentLang === 'en' ? 'Filter by Tenant: All' : 'Filtra per Tenant: Tutti');
-        sel.innerHTML = `<option value="all">${escapeHtml(labelAll)}</option>` +
-            groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-        sel.value = groups.includes(cur) ? cur : 'all';
+    // The header lets several tenants be ticked, but /api/flow-siem/* scopes to
+    // one tenant server-side, and facets/histogram are aggregated there — they
+    // cannot be narrowed client-side afterwards. One tenant selected: filter.
+    // More than one: show the caller's whole scope and say so on screen.
+    function siemTenantParam() {
+        const picked = window.trafSelectedTenants ? [...window.trafSelectedTenants()] : [];
+        const note = document.getElementById('flowSiemScopeNote');
+        const scoped = picked.length === 1;
+        if (note) {
+            note.style.display = scoped ? 'none' : '';
+            note.textContent = picked.length > 1
+                ? (currentLang === 'en'
+                    ? `Showing every tenant in your scope: this view filters one tenant at a time (${picked.length} selected).`
+                    : `Mostra tutti i tenant del tuo profilo: questa vista ne filtra uno alla volta (${picked.length} selezionati).`)
+                : '';
+        }
+        return scoped ? `&tenant=${encodeURIComponent(picked[0])}` : '';
     }
 
     async function loadFlowSiemTab() {
-        populateSiemTenantFilter();
-        const windowVal = document.getElementById('flowSiemWindow') ? document.getElementById('flowSiemWindow').value : '24h';
-        const tenantVal = document.getElementById('flowSiemTenant') ? document.getElementById('flowSiemTenant').value : 'all';
+        const windowVal = window.trafState ? window.trafState.window : '1h';
         const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
-        const tenantParam = (tenantVal && tenantVal !== 'all') ? `&tenant=${encodeURIComponent(tenantVal)}` : '';
+        const tenantParam = siemTenantParam();
 
         try {
             const [eventsRes, histRes, facetsRes] = await Promise.all([
@@ -60,17 +65,18 @@
     function startSiemStreamTimer() {
         if (_streamTimer) clearInterval(_streamTimer);
         _streamTimer = setInterval(async () => {
-            if (!_isStreaming || !document.getElementById('tab-flow-siem')?.classList.contains('active')) return;
+            const tabOn = document.getElementById('tab-flows')?.classList.contains('active');
+            const paneOn = document.getElementById('trafPane-search')?.style.display !== 'none';
+            if (!_isStreaming || !tabOn || !paneOn) return;
 
             // Con un dettaglio aperto NON si aggiorna la tabella: il refresh la
             // ricostruisce e sposta la riga che l'utente sta leggendo. Lo
             // streaming riprende alla chiusura del dettaglio.
             if (_selectedEventId !== null && _selectedEventId !== undefined) return;
 
-            const windowVal = document.getElementById('flowSiemWindow') ? document.getElementById('flowSiemWindow').value : '24h';
-            const tenantVal = document.getElementById('flowSiemTenant') ? document.getElementById('flowSiemTenant').value : 'all';
+            const windowVal = window.trafState ? window.trafState.window : '1h';
             const qParam = _activeQuery ? `&q=${encodeURIComponent(_activeQuery)}` : '';
-            const tenantParam = (tenantVal && tenantVal !== 'all') ? `&tenant=${encodeURIComponent(tenantVal)}` : '';
+            const tenantParam = siemTenantParam();
 
             try {
                 const res = await apiFetch(`/api/flow-siem/events?window=${windowVal}&limit=20${qParam}${tenantParam}`);
@@ -302,6 +308,7 @@
 
     // Expose functions globally
     window.loadFlowSiemTab = loadFlowSiemTab;
+    window.siemTenantParam = siemTenantParam;
     window.toggleSiemStream = toggleSiemStream;
     window.filterSiemEvents = filterSiemEvents;
     window.applySiemFilter = applySiemFilter;

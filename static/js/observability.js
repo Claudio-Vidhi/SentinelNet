@@ -151,7 +151,12 @@
 
     // Loader per vista: registrato dal task che porta dentro il contenuto.
     // Cambiare pill carica solo la vista che si apre, non tutte e quattro.
-    const TRAF_LOADERS = {};
+    const TRAF_LOADERS = {
+        overview:  () => { loadTopTalkers(); loadObsProtocolDist(); },
+        flows:     () => loadTopTalkers(),
+        search:    () => loadFlowSiemTab(),
+        anomalies: () => loadAnomalies(),
+    };
 
     function trafSwitchView(view) {
         if (!document.getElementById('trafPane-' + view)) return;
@@ -177,9 +182,8 @@
     }
 
     function trafRefresh() {
-        loadTopTalkers();
-        loadObsProtocolDist();
-        loadAnomalies();
+        const loader = TRAF_LOADERS[_trafView];
+        if (loader) loader();
     }
 
     function telemetryParam() { return _flowsHideTelemetry ? '&exclude_telemetry=true' : ''; }
@@ -345,8 +349,6 @@
         const metricSel = document.getElementById('trafMetric');
         if (metricSel) metricSel.value = trafState.metric;
         trafSwitchView(_trafView);
-        loadTopTalkers();
-        loadAnomalies();
         startFlowsAutoRefresh();
         checkObsStatusBanner();
     }
@@ -383,7 +385,7 @@
         flowsRefreshTimer = setInterval(() => {
             const active = document.getElementById('tab-flows')?.classList.contains('active');
             const auto = document.getElementById('trafAutoRefresh')?.checked;
-            if (active && auto && !document.hidden) loadTopTalkers();
+            if (active && auto && !document.hidden) trafRefresh();
         }, 30000);
     }
 
@@ -395,7 +397,7 @@
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden &&
             document.getElementById('tab-flows')?.classList.contains('active')) {
-            loadTopTalkers();
+            trafRefresh();
         }
     });
 
@@ -960,7 +962,6 @@
             renderFlowGraphTenant();
             renderFlowGraphProtocols();
             renderFlowGraphTalkers();
-            renderFlowDetailInline();
         } finally {
             _fgFetchInFlight = false;
         }
@@ -1086,7 +1087,6 @@
         if (!res || !res.ok) return;
         _obsProtocolData = await res.json();
         renderObsProtocolChart();
-        renderFlowDetailInline();
     }
 
     function renderObsProtocolChart() {
@@ -1501,15 +1501,6 @@
         return html;
     }
 
-    // Pannello "Dettaglio Flussi" inline, sempre visibile nel tab Flussi Live:
-    // stessa ripartizione telemetria del modale, riaggregata alla larghezza intera.
-    function renderFlowDetailInline() {
-        const box = document.getElementById('flowDetailInline');
-        if (!box) return;
-        const html = buildFlowTelemetryDetailHtml('all');
-        box.innerHTML = html || '<div style="grid-column:1 / -1; padding:20px; text-align:center; color:var(--text-muted);">Nessun dettaglio disponibile per la finestra selezionata.</div>';
-    }
-
     async function openObsInspectModal(protoKey = 'all') {
         const modal = document.getElementById('obsInspectModal');
         const title = document.getElementById('obsInspectTitle');
@@ -1535,6 +1526,8 @@
     }
 
     // Expose functions globally for UI
+    window.trafSelectedTenants = () => new Set(_flowsSelectedTenants);
+    window.trafState = trafState;
     window.trafSwitchView = trafSwitchView;
     window.trafSetWindow = trafSetWindow;
     window.trafSetMetric = trafSetMetric;

@@ -229,7 +229,7 @@
           <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
           <span class="preview-badge">preview</span>
         </button>
-        <button class="nav-item" data-tabs="tab-flows tab-flow-siem" onclick="switchTab('tab-flows', this); flowsTabShown();">
+        <button class="nav-item" data-tabs="tab-flows" onclick="switchTab('tab-flows', this); flowsTabShown();">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
         </button>
         <button class="nav-item" data-tabs="tab-mac tab-clientmap tab-diagnosi tab-endpoints" onclick="switchTab('tab-mac', this)">
@@ -1482,6 +1482,15 @@
 
     <!-- TAB: Live Flows -->
     <div id="tab-flows" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleFlows">Live Flows (Top Talkers)</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descFlows">
+            Aggregated network flows (IPFIX/NetFlow/sFlow) per site, with anomalies correlated to security events. Listeners are configured in Settings → Observability.
+          </p>
+        </div>
+      </div>
+
       <!-- Header unico del tab: finestra, metrica, tenant e interruttori valgono
            per tutte e quattro le viste. Prima la stessa finestra esisteva tre
            volte e nessuna parlava con le altre. -->
@@ -1525,6 +1534,7 @@
         </button>
       </div>
 
+      <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, var(--lamp-warn)); margin-bottom:12px;"></div>
       <div id="trafPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
         <button type="button" class="ca-pill active" id="trafPill-overview" onclick="trafSwitchView('overview')" data-i18n="trafPillOverview">Panoramica</button>
         <button type="button" class="ca-pill" id="trafPill-flows" onclick="trafSwitchView('flows')" data-i18n="trafPillFlows">Flussi</button>
@@ -1532,19 +1542,7 @@
         <button type="button" class="ca-pill" id="trafPill-anomalies" onclick="trafSwitchView('anomalies')" data-i18n="trafPillAnomalies">Anomalie</button>
       </div>
 
-      <div id="trafPane-overview" class="traf-pane"></div>
-      <div id="trafPane-flows" class="traf-pane" style="display:none;"></div>
-      <div id="trafPane-search" class="traf-pane" style="display:none;"></div>
-      <div id="trafPane-anomalies" class="traf-pane" style="display:none;"></div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleFlows">Live Flows (Top Talkers)</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descFlows">
-            Aggregated network flows (IPFIX/NetFlow/sFlow) per site, with anomalies correlated to security events. Listeners are configured in Settings → Observability.
-          </p>
-        </div>
-      </div>
-
+      <div id="trafPane-overview" class="traf-pane">
       <div id="flowsObsBanner" style="display:none; padding:10px 14px; margin-bottom:12px; border:1px solid var(--warning, var(--lamp-warn)); border-radius:0; color:var(--warning, var(--lamp-warn)); font-size:13px;"></div>
 
       <!-- KPI strip -->
@@ -1556,13 +1554,20 @@
       </div>
 
       <div class="panel" style="margin-bottom:18px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
-          <div>
-            <h3 style="margin:0; font-size:17px;"><i class="fa-solid fa-magnifying-glass-chart"></i> <span data-i18n="titleFlowDetailInline">Dettaglio Flussi</span></h3>
-            <p style="margin:4px 0 0; font-size:12px; color:var(--text-muted);" data-i18n="hintFlowDetailInline">Ripartizione della telemetria per protocollo nella finestra selezionata.</p>
-          </div>
+        <h3 style="margin:0 0 10px; font-size:17px;"><i class="fa-solid fa-ranking-star"></i> <span data-i18n="titleTopTalkersTable">Top talker</span></h3>
+        <div class="table-wrap" style="max-height:260px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr>
+              <th style="text-align:left; padding:6px 8px;" data-i18n="thFgSource">Sorgente</th>
+              <th style="text-align:left;" data-i18n="thFgTarget">Destinazione</th>
+              <th style="text-align:left;" data-i18n="thFgVlan">VLAN</th>
+              <th style="text-align:left;" data-i18n="thFgRate">Rate</th>
+            </tr></thead>
+            <tbody id="fgTalkersTableBody">
+              <tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlowGraphData">Nessun dato disponibile per il grafo dei flussi.</td></tr>
+            </tbody>
+          </table>
         </div>
-        <div id="flowDetailInline" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:14px;"></div>
       </div>
 
       <!-- Panel: Ingest Protocol Distribution Graph (3 Graph Types: Donut, Bar, Trend) -->
@@ -1606,25 +1611,9 @@
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:17px;"><i class="fa-solid fa-ranking-star"></i> <span data-i18n="titleTopTalkersTable">Top talker</span></h3>
-        <div class="table-wrap" style="max-height:260px;">
-          <table style="width:100%; border-collapse:collapse; font-size:12px;">
-            <thead><tr>
-              <th style="text-align:left; padding:6px 8px;" data-i18n="thFgSource">Sorgente</th>
-              <th style="text-align:left;" data-i18n="thFgTarget">Destinazione</th>
-              <th style="text-align:left;" data-i18n="thFgVlan">VLAN</th>
-              <th style="text-align:left;" data-i18n="thFgRate">Rate</th>
-            </tr></thead>
-            <tbody id="fgTalkersTableBody">
-              <tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-muted);" data-i18n="msgNoFlowGraphData">Nessun dato disponibile per il grafo dei flussi.</td></tr>
-            </tbody>
-          </table>
-        </div>
       </div>
-
+      <div id="trafPane-flows" class="traf-pane" style="display:none;">
       <div class="panel" style="margin-bottom:18px;">
-        <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, var(--lamp-warn)); margin-top:10px;"></div>
         <div class="filterbar" style="gap:6px; align-items:center;">
           <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
           <div style="position:relative; display:inline-block; margin-left:auto;">
@@ -1657,6 +1646,61 @@
         </div>
       </div>
 
+      </div>
+      <div id="trafPane-search" class="traf-pane" style="display:none;">
+      <div class="filterbar" style="align-items:center; margin:0 0 12px;">
+        <span id="flowSiemStreamBadge" class="status ok"><span class="led led-success"></span>LIVE TAIL</span>
+        <button id="btnFlowSiemStream" class="btn btn-sm btn-secondary" onclick="toggleSiemStream()"><i class="fa-solid fa-pause"></i> Pausa Streaming</button>
+        <span id="flowSiemScopeNote" style="display:none; font-size:12px; color:var(--text-muted);"></span>
+      </div>
+      <div class="panel" style="margin-bottom:18px;">
+        <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);"><i class="fa-solid fa-chart-bar"></i> Event Rate Histogram (Events / sec)</h4>
+        <div style="position:relative; width:100%; height:100px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">
+          <canvas id="flowSiemHistCanvas" style="width:100%; height:100%; display:block;"></canvas>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <div style="display:flex; gap:10px; align-items:center;">
+          <div class="input-wrapper" style="flex:1;">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="flowSiemQueryInput" type="text" placeholder="Ricerca libera (es. 10.0.1.45, DENY, TCP) oppure campo:valore (es. src_ip:10.0.1.45, action:DENY)" onkeyup="filterSiemEvents()" style="width:100%; padding-left:36px;">
+          </div>
+          <button class="btn btn-primary btn-small" onclick="filterSiemEvents()"><i class="fa-solid fa-filter"></i> Filtra</button>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 240px 1fr; gap:18px;">
+        <div class="panel" style="padding:14px;">
+          <h4 style="margin:0 0 12px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-list-check"></i> Faccette Aggregate</h4>
+          <div id="flowSiemFacets"></div>
+        </div>
+
+        <!-- Il pannello si allunga fino all'altezza della colonna faccette (la
+             riga di griglia e' unica): senza flex la tabella restava alta 450px
+             e il resto del pannello era spazio vuoto. -->
+        <div class="panel" style="padding:14px; display:flex; flex-direction:column;">
+          <h4 style="margin:0 0 10px; font-size:14px;"><i class="fa-solid fa-table-list"></i> Registro Flussi Triage</h4>
+          <div class="table-container" style="flex:1; min-height:450px; overflow-y:auto;">
+            <table>
+              <thead style="position:sticky; top:0; z-index:1;">
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Sorgente</th>
+                  <th>Destinazione</th>
+                  <th>Proto</th>
+                  <th>Azione</th>
+                  <th>Volume</th>
+                  <th>Threat Flag</th>
+                </tr>
+              </thead>
+              <tbody id="flowSiemTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      </div>
+      <div id="trafPane-anomalies" class="traf-pane" style="display:none;">
       <div class="panel">
       <h3 id="anomSectionTitle" style="margin:0 0 10px; font-size:17px;" data-i18n="titleCorrelatedAnomalies">Correlated anomalies</h3>
       <div class="filterbar" style="gap:10px; align-items:center; margin-top:0;">
@@ -1684,6 +1728,7 @@
             <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);" data-i18n="msgNoAnomalies">Nessuna anomalia.</td></tr>
           </tbody>
         </table>
+      </div>
       </div>
       </div>
     </div>
@@ -3091,77 +3136,6 @@
     </div>
 
     <!-- TAB: Flow SIEM Analytics (preview) -->
-    <div id="tab-flow-siem" class="tab-content">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-flows'); flowsTabShown();" data-i18n="tabFlows"></button>
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-flow-siem'); loadFlowSiemTab();"><i class="fa-solid fa-chart-line"></i> Flow SIEM</button>
-      </div>
-      <div class="hero" style="margin-bottom:18px;">
-        <div class="hero-card" style="flex:1;">
-          <h2 style="margin:4px 0 8px; font-family:var(--font-display); font-size:25px;">Network Traffic Analytics (Flow SIEM)</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:600px;">Ispezione granulare dei flussi di rete, tailing in tempo reale, aggregazioni per faccette e filtri di sicurezza.</p>
-        </div>
-        <div class="hero-card" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-          <span id="flowSiemStreamBadge" class="status ok"><span class="led led-success"></span>LIVE TAIL</span>
-          <button id="btnFlowSiemStream" class="btn btn-sm btn-secondary" onclick="toggleSiemStream()"><i class="fa-solid fa-pause"></i> Pausa Streaming</button>
-          <select id="flowSiemTenant" onchange="loadFlowSiemTab()" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;"></select>
-          <select id="flowSiemWindow" onchange="loadFlowSiemTab()" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
-            <option value="15m">15m</option>
-            <option value="1h">1h</option>
-            <option value="24h" selected>24h</option>
-            <option value="7d">7d</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:18px;">
-        <h4 style="margin:0 0 10px; font-size:14px; color:var(--text-muted);"><i class="fa-solid fa-chart-bar"></i> Event Rate Histogram (Events / sec)</h4>
-        <div style="position:relative; width:100%; height:100px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">
-          <canvas id="flowSiemHistCanvas" style="width:100%; height:100%; display:block;"></canvas>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:18px;">
-        <div style="display:flex; gap:10px; align-items:center;">
-          <div class="input-wrapper" style="flex:1;">
-            <i class="fa-solid fa-magnifying-glass"></i>
-            <input id="flowSiemQueryInput" type="text" placeholder="Ricerca libera (es. 10.0.1.45, DENY, TCP) oppure campo:valore (es. src_ip:10.0.1.45, action:DENY)" onkeyup="filterSiemEvents()" style="width:100%; padding-left:36px;">
-          </div>
-          <button class="btn btn-primary btn-small" onclick="filterSiemEvents()"><i class="fa-solid fa-filter"></i> Filtra</button>
-        </div>
-      </div>
-
-      <div style="display:grid; grid-template-columns: 240px 1fr; gap:18px;">
-        <div class="panel" style="padding:14px;">
-          <h4 style="margin:0 0 12px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-list-check"></i> Faccette Aggregate</h4>
-          <div id="flowSiemFacets"></div>
-        </div>
-
-        <!-- Il pannello si allunga fino all'altezza della colonna faccette (la
-             riga di griglia e' unica): senza flex la tabella restava alta 450px
-             e il resto del pannello era spazio vuoto. -->
-        <div class="panel" style="padding:14px; display:flex; flex-direction:column;">
-          <h4 style="margin:0 0 10px; font-size:14px;"><i class="fa-solid fa-table-list"></i> Registro Flussi Triage</h4>
-          <div class="table-container" style="flex:1; min-height:450px; overflow-y:auto;">
-            <table>
-              <thead style="position:sticky; top:0; z-index:1;">
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Sorgente</th>
-                  <th>Destinazione</th>
-                  <th>Proto</th>
-                  <th>Azione</th>
-                  <th>Volume</th>
-                  <th>Threat Flag</th>
-                </tr>
-              </thead>
-              <tbody id="flowSiemTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- TAB: Incidenti (preview) -->
     <div id="tab-incidents" class="tab-content">
       <div class="hero" style="margin-bottom:18px;">

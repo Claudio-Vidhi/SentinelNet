@@ -1493,7 +1493,10 @@ class TestSettingsTabRestyle(unittest.TestCase):
 
     def _tab(self, html):
         start = html.index('<div id="tab-settings"')
-        end = html.find('<div id="tab-flow-siem"', start)
+        # Il confine era #tab-flow-siem, che non esiste piu' dopo la fusione
+        # del tab Traffico: senza un confine valido la fetta si mangiava anche
+        # Incidenti e NetSec Audit, e il conteggio dei pannelli saliva a 14.
+        end = html.find('<div id="tab-incidents"', start)
         if end == -1:
             end = html.index("</main>", start)
         return html[start:end]
@@ -1725,9 +1728,13 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
     def test_component_classes_applied(self):
         tab = self._tab(_html())
         self.assertIn('<div class="hero" style="grid-template-columns:1fr;', tab)
-        # Cards: flow graph, obs protocol dist, tenant summary, protocol breakdown, top talkers, correlated anomalies.
-        self.assertEqual(tab.count('<div class="panel"'), 5)
-        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 4)
+        # Il tab ora tiene anche le viste Ricerca e Anomalie: ai pannelli di
+        # prima (top talker, ripartizione protocolli, tabella flussi) si
+        # aggiungono istogramma, query, faccette e registro della Ricerca.
+        # Il pannello "Dettaglio Flussi" inline non c'e' piu': era la terza
+        # copia della stessa ripartizione per protocollo.
+        self.assertEqual(tab.count('<div class="panel"'), 8)
+        self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 5)
         # All tables wrapped: flows, syslog-in-all-sources, protocol breakdown,
         # top talkers, correlated anomalies.
         self.assertEqual(tab.count('class="table-wrap"'), 5)
