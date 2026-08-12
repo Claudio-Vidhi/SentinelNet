@@ -4,7 +4,12 @@
 // perche' due copie dello stesso referto sarebbero due copie da tenere
 // allineate. Il pulsante della Client Map porta qui, non apre piu' nulla.
 //
-// Ogni valore che arriva dagli apparati passa da escapeHtml(jsStr(x)).
+// Ogni valore che arriva dagli apparati passa da escapeHtml(x). jsStr in piu'
+// serve SOLO dentro una stringa JS — qui l'unico caso e' l'onclick di
+// diagnosiPickTenant, dove escapeHtml produce &#39; che il parser HTML
+// ritrasforma in ' prima che JS legga la stringa. In testo HTML jsStr
+// aggiungeva soltanto backslash visibili, e si leggevano proprio nei messaggi
+// di rifiuto delle azioni sulla porta.
 
 let _diagClient = null;    // client a schermo, per il "rilancia"
 let _diagMac = '';         // MAC risolto: il bounce e il WLC lavorano per MAC
@@ -140,9 +145,9 @@ function _diagCard(icon, title, section, bodyFn, extra) {
     const color = err ? 'var(--danger)' : (known ? 'var(--success)' : 'var(--warning)');
     let body;
     if (err) {
-        body = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(jsStr(err))}</div>`;
+        body = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(err)}</div>`;
     } else if (!known) {
-        body = `<div style="color:var(--text-muted); font-size:12px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(jsStr((section && section.reason) || (en ? 'not known' : 'non noto')))}</div>`;
+        body = `<div style="color:var(--text-muted); font-size:12px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml((section && section.reason) || (en ? 'not known' : 'non noto'))}</div>`;
     } else {
         body = bodyFn(section);
     }
@@ -155,7 +160,7 @@ function _diagCard(icon, title, section, bodyFn, extra) {
 
 const _kv = (k, v) => `<div style="display:flex; gap:8px; font-size:12px; padding:2px 0; flex-wrap:wrap;">
     <span style="color:var(--text-muted); min-width:150px;">${escapeHtml(k)}</span>
-    <span style="font-family:var(--font-code);">${escapeHtml(jsStr(v === null || v === undefined || v === '' ? '—' : String(v)))}</span></div>`;
+    <span style="font-family:var(--font-code);">${escapeHtml(v === null || v === undefined || v === '' ? '—' : String(v))}</span></div>`;
 
 function _diagAge(s) {
     if (s === null || s === undefined) return '—';
@@ -177,7 +182,7 @@ function _diagFreshness(f) {
     const ages = f.ages || {};
     return `<div style="display:flex; align-items:center; gap:8px; font-size:11px; color:${color}; margin-bottom:12px;">
         <i class="fa-solid ${icon}"></i>
-        <span>${escapeHtml(jsStr(f.reason || ''))}</span>
+        <span>${escapeHtml(f.reason || '')}</span>
         <span style="font-family:var(--font-code);">
             ${escapeHtml(en ? 'binding' : 'binding')} ${escapeHtml(_diagAge(ages.binding_s))} ·
             ${escapeHtml(en ? 'port' : 'porta')} ${escapeHtml(_diagAge(ages.port_s))}
@@ -215,14 +220,14 @@ function renderDiagnosi(d, dest) {
         _kv(en ? 'Access switch' : 'Switch di accesso', `${p.switch_name || ''} ${p.switch_ip || ''}`.trim()) +
         _kv(en ? 'Port / VLAN' : 'Porta / VLAN', `${p.switch_port || '—'} / ${p.port_vlan || '—'}`) +
         _kv('Gateway', `${p.gateway_name || ''} ${p.gateway_ip || ''} (${p.gateway_type || '—'})`.trim()) +
-        (p.port_known === false ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;">${escapeHtml(jsStr(p.port_reason || ''))}</div>` : '') +
+        (p.port_known === false ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;">${escapeHtml(p.port_reason || '')}</div>` : '') +
         // Senza ARP la posizione fisica c'e' lo stesso: va detto cosa manca e
         // perche' le sezioni del firewall non risponderanno, altrimenti si
         // legge come un guasto invece che come un limite di visibilita'.
         (p.l2_only ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;">
             <i class="fa-solid fa-layer-group" style="margin-right:6px;"></i>
-            <b>${escapeHtml(en ? 'L2 only' : 'Solo L2')}</b> — ${escapeHtml(jsStr(p.binding_reason || ''))}</div>` : '') +
-        (p.ambiguous ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Other bindings for this address' : 'Altri binding per questo indirizzo')}: ${p.ambiguous.map(a => escapeHtml(jsStr(a.mac))).join(', ')}</div>` : '')
+            <b>${escapeHtml(en ? 'L2 only' : 'Solo L2')}</b> — ${escapeHtml(p.binding_reason || '')}</div>` : '') +
+        (p.ambiguous ? `<div style="color:var(--warning); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Other bindings for this address' : 'Altri binding per questo indirizzo')}: ${p.ambiguous.map(a => escapeHtml(a.mac)).join(', ')}</div>` : '')
     );
 
     const l2 = _diagCard('fa-ethernet', en ? 'L2 link health' : 'Salute del collegamento L2', s.l2_health, h => {
@@ -238,44 +243,44 @@ function renderDiagnosi(d, dest) {
                       (i.error_window_s ? ` (${i.error_window_s}s)` : ''));
             if (i.erroring) out += `<div style="color:var(--danger); font-size:12px; margin-top:6px;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Error counters are rising: suspect cabling, transceiver or duplex mismatch.' : 'I contatori di errore stanno salendo: sospetta cablaggio, transceiver o duplex mismatch.')}</div>`;
         } else {
-            out += `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(jsStr(i.reason || i.error || ''))}</div>`;
+            out += `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(i.reason || i.error || '')}</div>`;
         }
         if (h.vlan_mismatch) out += `<div style="color:var(--warning); font-size:12px; margin-top:6px;">
             <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(en ? 'Port moved VLAN' : 'Porta spostata di VLAN')}:
-            ${escapeHtml(jsStr(h.vlan_mismatch.mac_table))} → <b>${escapeHtml(jsStr(h.vlan_mismatch.live))}</b>.
-            ${escapeHtml(jsStr(h.vlan_mismatch.note))}</div>`;
+            ${escapeHtml(h.vlan_mismatch.mac_table)} → <b>${escapeHtml(h.vlan_mismatch.live)}</b>.
+            ${escapeHtml(h.vlan_mismatch.note)}</div>`;
         return out + _diagTrunk(h.trunk || {});
     }, _diagBounceControl());
 
     const history = _diagCard('fa-clock-rotate-left', en ? 'History' : 'Cronologia', s.history, hs => {
         if (hs.empty) return `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(en ? 'Never seen before this scan.' : 'Mai visto prima di questa scansione.')}</div>`;
         const pos = (hs.positions || []).map(p => `<div style="font-size:12px; padding:3px 0; display:flex; gap:10px; flex-wrap:wrap;">
-            <span style="font-family:var(--font-code);">${escapeHtml(jsStr(p.switch_name || p.switch_ip))} ${escapeHtml(jsStr(p.interface))}</span>
-            <span style="color:var(--text-muted);">VLAN ${escapeHtml(jsStr(p.vlan || '—'))}</span>
-            <span style="color:var(--text-muted);">${escapeHtml(jsStr(p.first_seen))} → ${escapeHtml(jsStr(p.last_seen))}</span>
-            <span class="badge" style="font-size:10px;">×${escapeHtml(jsStr(p.seen_count))}</span></div>`).join('');
+            <span style="font-family:var(--font-code);">${escapeHtml(p.switch_name || p.switch_ip)} ${escapeHtml(p.interface)}</span>
+            <span style="color:var(--text-muted);">VLAN ${escapeHtml(p.vlan || '—')}</span>
+            <span style="color:var(--text-muted);">${escapeHtml(p.first_seen)} → ${escapeHtml(p.last_seen)}</span>
+            <span class="badge" style="font-size:10px;">×${escapeHtml(p.seen_count)}</span></div>`).join('');
         const ips = (hs.addresses || []).map(a => `<div style="font-size:12px; padding:3px 0; display:flex; gap:10px; flex-wrap:wrap;">
-            <span style="font-family:var(--font-code);">${escapeHtml(jsStr(a.ip))}</span>
-            <span style="color:var(--text-muted);">via ${escapeHtml(jsStr(a.source_name || a.source_ip))}</span>
-            <span style="color:var(--text-muted);">${escapeHtml(jsStr(a.first_seen))} → ${escapeHtml(jsStr(a.last_seen))}</span>
-            <span class="badge" style="font-size:10px;">×${escapeHtml(jsStr(a.seen_count))}</span></div>`).join('');
+            <span style="font-family:var(--font-code);">${escapeHtml(a.ip)}</span>
+            <span style="color:var(--text-muted);">via ${escapeHtml(a.source_name || a.source_ip)}</span>
+            <span style="color:var(--text-muted);">${escapeHtml(a.first_seen)} → ${escapeHtml(a.last_seen)}</span>
+            <span class="badge" style="font-size:10px;">×${escapeHtml(a.seen_count)}</span></div>`).join('');
         return `<div style="font-size:12px; font-weight:600; margin-bottom:4px;">${escapeHtml(en ? 'Positions' : 'Posizioni')}</div>${pos || '—'}
             <div style="font-size:12px; font-weight:600; margin:10px 0 4px;">${escapeHtml(en ? 'Addresses' : 'Indirizzi')}</div>${ips || '—'}
-            <div style="color:var(--text-muted); font-size:11px; margin-top:8px;">${escapeHtml(en ? 'Retention' : 'Retention')}: ${escapeHtml(jsStr(hs.retention_days))} ${escapeHtml(en ? 'days' : 'giorni')}. ${escapeHtml(en ? 'Rows aggregate: repeated moves between the same two ports are not counted separately.' : 'Le righe aggregano: i rimbalzi fra le stesse due porte non si contano singolarmente.')}</div>`;
+            <div style="color:var(--text-muted); font-size:11px; margin-top:8px;">${escapeHtml(en ? 'Retention' : 'Retention')}: ${escapeHtml(hs.retention_days)} ${escapeHtml(en ? 'days' : 'giorni')}. ${escapeHtml(en ? 'Rows aggregate: repeated moves between the same two ports are not counted separately.' : 'Le righe aggregano: i rimbalzi fra le stesse due porte non si contano singolarmente.')}</div>`;
     });
 
     const path = _diagCard('fa-route', en ? 'Traffic path' : 'Percorso del traffico', s.path, p =>
         (p.hops || []).map(h => `<div style="font-size:12px; padding:3px 0; ${h.known ? '' : 'color:var(--warning);'}">
-            <i class="fa-solid ${h.known ? 'fa-circle-check' : 'fa-circle-question'}" style="margin-right:8px;"></i>${escapeHtml(jsStr(h.label || h.kind))}</div>`).join('')
+            <i class="fa-solid ${h.known ? 'fa-circle-check' : 'fa-circle-question'}" style="margin-right:8px;"></i>${escapeHtml(h.label || h.kind)}</div>`).join('')
     );
 
     const relay = s.firewall && s.firewall.policy_lookup;
     const relayNote = relay ? `<div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
         ${relay.known
             ? `<div style="font-size:12px; font-weight:600; margin-bottom:4px;">${escapeHtml(en ? 'Matching policy (via relay)' : 'Policy che matcherebbe (via relay)')}</div>
-               <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(relay.data, null, 2)))}</pre>`
+               <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(JSON.stringify(relay.data, null, 2))}</pre>`
             : `<div style="color:${relay.pending ? 'var(--warning)' : 'var(--text-muted)'}; font-size:12px;">
-                 <i class="fa-solid ${relay.pending ? 'fa-hourglass-half' : 'fa-circle-info'}" style="margin-right:6px;"></i>${escapeHtml(jsStr(relay.reason || ''))}</div>`}
+                 <i class="fa-solid ${relay.pending ? 'fa-hourglass-half' : 'fa-circle-info'}" style="margin-right:6px;"></i>${escapeHtml(relay.reason || '')}</div>`}
     </div>` : '';
 
     const fw = _diagCard('fa-shield-halved', 'Firewall', s.firewall, f => {
@@ -284,26 +289,26 @@ function renderDiagnosi(d, dest) {
         const pl = sub.policy_lookup;
         if (pl && pl.data) {
             out += `<div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:12px; font-weight:600;">${escapeHtml(en ? 'Matching policy' : 'Policy che matcherebbe')}</div>`;
-            out += `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(pl.data, null, 2)))}</pre>`;
+            out += `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:180px; overflow:auto;">${escapeHtml(JSON.stringify(pl.data, null, 2))}</pre>`;
         }
         const failed = Object.keys(sub).filter(k => sub[k] && sub[k].error);
-        if (failed.length) out += `<div style="color:var(--text-muted); font-size:11px; margin-top:8px;">${escapeHtml(en ? 'Sections unavailable' : 'Sezioni non disponibili')}: ${escapeHtml(jsStr(failed.join(', ')))}</div>`;
+        if (failed.length) out += `<div style="color:var(--text-muted); font-size:11px; margin-top:8px;">${escapeHtml(en ? 'Sections unavailable' : 'Sezioni non disponibili')}: ${escapeHtml(failed.join(', '))}</div>`;
         out += `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:11px; color:var(--text-muted);">${escapeHtml(en ? 'Raw FortiGate output' : 'Output grezzo del FortiGate')}</summary>
-            <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(sub, null, 2)))}</pre></details>`;
+            <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(JSON.stringify(sub, null, 2))}</pre></details>`;
         return out;
     }, relayNote);
 
     const across = !s.across_sites ? '' : _diagCard('fa-tower-broadcast',
         en ? 'Across sites' : 'Fra sedi', s.across_sites, a => {
-        if (a.same_site === null) return `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(jsStr(a.note || ''))}</div>`;
+        if (a.same_site === null) return `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(a.note || '')}</div>`;
         let out = _kv(en ? 'Source site' : 'Sede sorgente', a.source.site) +
                   _kv(en ? 'Destination site' : 'Sede destinazione', `${a.destination.site || '—'}`);
-        if (a.same_site) return out + `<div style="color:var(--text-muted); font-size:12px; margin-top:6px;">${escapeHtml(jsStr(a.note || ''))}</div>`;
+        if (a.same_site) return out + `<div style="color:var(--text-muted); font-size:12px; margin-top:6px;">${escapeHtml(a.note || '')}</div>`;
         const fe = a.far_end_policy || {};
         out += `<div style="margin-top:8px; font-size:12px; font-weight:600;">${escapeHtml(en ? 'Far-end firewall policy' : 'Policy del firewall remoto')}</div>`;
         out += fe.data
-            ? `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:160px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(fe.data, null, 2)))}</pre>`
-            : `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(jsStr(fe.reason || fe.error || ''))}</div>`;
+            ? `<pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:160px; overflow:auto;">${escapeHtml(JSON.stringify(fe.data, null, 2))}</pre>`
+            : `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(fe.reason || fe.error || '')}</div>`;
         if (a.route) {
             const rd = a.route.data || {};
             out += _kv(en ? 'Route to destination' : 'Rotta verso la destinazione',
@@ -319,8 +324,8 @@ function renderDiagnosi(d, dest) {
         let out = _kv(en ? 'Total' : 'Totale', b.total);
         if (b.total && b.by_policy.length) {
             out += `<div style="margin-top:8px; font-size:12px;">` + b.by_policy.map(p =>
-                `<div style="padding:2px 0;"><span class="badge" style="font-size:10px;">policy ${escapeHtml(jsStr(p.policy_id))}</span>
-                 <span style="color:var(--text-muted);">${escapeHtml(jsStr(p.subtype))}</span> — ${escapeHtml(jsStr(p.count))}</div>`).join('') + `</div>`;
+                `<div style="padding:2px 0;"><span class="badge" style="font-size:10px;">policy ${escapeHtml(p.policy_id)}</span>
+                 <span style="color:var(--text-muted);">${escapeHtml(p.subtype)}</span> — ${escapeHtml(p.count)}</div>`).join('') + `</div>`;
         }
         if (b.truncated) out += `<div style="color:var(--warning); font-size:11px; margin-top:6px;">${escapeHtml(en ? 'Scan capped: this is a minimum, not a total.' : 'Scansione troncata: e\' un minimo, non un totale.')}</div>`;
         return out;
@@ -328,7 +333,7 @@ function renderDiagnosi(d, dest) {
 
     host.innerHTML = `
         <div class="panel" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding:12px 16px;">
-            <span style="font-family:var(--font-code); font-size:14px; color:var(--primary);">${escapeHtml(jsStr(d.client))}</span>
+            <span style="font-family:var(--font-code); font-size:14px; color:var(--primary);">${escapeHtml(d.client)}</span>
             ${badge}
             <div style="flex:1; min-width:20px;"></div>
             <button onclick="runDiagnosi()" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> ${escapeHtml(en ? 'Re-run' : 'Rilancia')}</button>
@@ -352,11 +357,11 @@ function _diagTenantChoice(d) {
         const where = [t.switch_name, t.switch_port].filter(Boolean).join(' ');
         return `<button onclick="diagnosiPickTenant('${escapeHtml(jsStr(t.tenant))}')"
             class="btn btn-secondary btn-small" style="width:auto; margin:0; text-align:left;"
-            title="${escapeHtml(jsStr(`${t.ip || ''} ${where}`.trim()))}">
-            <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(jsStr(t.tenant))}
+            title="${escapeHtml(`${t.ip || ''} ${where}`.trim())}">
+            <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(t.tenant)}
             <span style="color:var(--text-muted); font-weight:400;">
-                ${escapeHtml(jsStr(t.ip || (en ? 'no IP' : 'senza IP')))}${where ? ' · ' + escapeHtml(jsStr(where)) : ''}
-                · ${escapeHtml(jsStr(String(t.last_seen || '').replace('T', ' ').slice(0, 16)))}
+                ${escapeHtml(t.ip || (en ? 'no IP' : 'senza IP'))}${where ? ' · ' + escapeHtml(where) : ''}
+                · ${escapeHtml(String(t.last_seen || '').replace('T', ' ').slice(0, 16))}
             </span>
         </button>`;
     }).join('');
@@ -388,7 +393,7 @@ function _diagTrunk(t) {
     let out = `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border); font-size:12px; font-weight:600;">
         ${escapeHtml(en ? 'VLAN along the trunk chain' : 'VLAN lungo la catena di trunk')}</div>`;
     if (!t.known) {
-        return out + `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(jsStr(t.reason || t.error || ''))}</div>`;
+        return out + `<div style="color:var(--text-muted); font-size:12px;">${escapeHtml(t.reason || t.error || '')}</div>`;
     }
     // Provenienza del gateway dedotto: letta anche a catena riuscita, non
     // solo nel ramo degradato sotto — e' il caso di successo per cui la
@@ -402,24 +407,24 @@ function _diagTrunk(t) {
             : (en ? 'derived from the configuration' : 'dedotto dalla configurazione');
         out += `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
             <i class="fa-solid fa-route" style="margin-right:6px;"></i>${escapeHtml(en ? 'VLAN gateway' : 'Gateway della VLAN')}:
-            ${escapeHtml(jsStr(t.gateway_device || ''))}${t.gateway_vlan_ip ? ' (' + escapeHtml(jsStr(t.gateway_vlan_ip)) + ')' : ''} — ${how}${age}</div>`;
+            ${escapeHtml(t.gateway_device || '')}${t.gateway_vlan_ip ? ' (' + escapeHtml(t.gateway_vlan_ip) + ')' : ''} — ${how}${age}</div>`;
     }
     if (!t.chain_known) {
         out += `<div style="font-size:12px;">${t.ok
             ? escapeHtml(en ? 'allowed on this switch' : 'ammessa su questo switch')
             : `<span style="color:var(--danger);">${escapeHtml(en ? 'MISSING on this switch' : 'MANCANTE su questo switch')}</span>`}</div>
-            <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(jsStr(t.scope || ''))}</div>`;
+            <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(t.scope || '')}</div>`;
         // Ignoto non e' assente: se la deduzione del gateway e' fallita per
         // apparati non letti, quella e' la ragione da mostrare — non lo
         // scope generico sopra, che qui direbbe "nessun gateway noto" anche
         // quando la risposta e' solo ignota.
         if (t.route_owner_reason) {
-            out += `<div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(jsStr(t.route_owner_reason))}</div>`;
+            out += `<div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(t.route_owner_reason)}</div>`;
         }
         if (t.unreadable_devices && t.unreadable_devices.length) {
             out += `<div style="color:var(--warning); font-size:11px; margin-top:4px;">${escapeHtml(en
                 ? 'some devices could not be read: ' : 'alcuni apparati non sono stati letti: ')}${
-                t.unreadable_devices.map(d => escapeHtml(jsStr(d))).join(', ')}</div>`;
+                t.unreadable_devices.map(d => escapeHtml(d)).join(', ')}</div>`;
         }
         return out;
     }
@@ -430,11 +435,11 @@ function _diagTrunk(t) {
         const [ic, col] = icons[h.verdict] || icons.unknown;
         return `<div style="font-size:12px; padding:3px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <i class="fa-solid ${ic}" style="color:${col};"></i>
-            <span style="font-family:var(--font-code);">${escapeHtml(jsStr(h.device))}</span>
-            <span style="color:var(--text-muted);">${escapeHtml(jsStr(h.egress || '—'))}</span>
-            <span style="color:var(--text-muted);">${escapeHtml(jsStr(h.allowed || h.reason || ''))}</span></div>`;
+            <span style="font-family:var(--font-code);">${escapeHtml(h.device)}</span>
+            <span style="color:var(--text-muted);">${escapeHtml(h.egress || '—')}</span>
+            <span style="color:var(--text-muted);">${escapeHtml(h.allowed || h.reason || '')}</span></div>`;
     }).join('');
-    if (t.reason) out += `<div style="color:var(--danger); font-size:12px; margin-top:6px;">${escapeHtml(jsStr(t.reason))}</div>`;
+    if (t.reason) out += `<div style="color:var(--danger); font-size:12px; margin-top:6px;">${escapeHtml(t.reason)}</div>`;
     return out;
 }
 
@@ -479,7 +484,7 @@ async function diagnoseWifi() {
     const res = await apiFetch(`/api/wlc/${encodeURIComponent(ip)}/diagnose-client/${encodeURIComponent(_diagMac)}`);
     if (!res || !res.ok) {
         const e = res ? await res.json().catch(() => ({})) : {};
-        host.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(jsStr(e.detail || (en ? 'WiFi diagnosis failed.' : 'Diagnosi WiFi fallita.')))}</div>`;
+        host.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(e.detail || (en ? 'WiFi diagnosis failed.' : 'Diagnosi WiFi fallita.'))}</div>`;
         return;
     }
     const d = await res.json();
@@ -495,7 +500,7 @@ async function diagnoseWifi() {
     host.innerHTML = _kv('WLC', d.wlc) + _kv(en ? 'Platform' : 'Piattaforma', d.platform) +
         _kv('MAC', d.client_mac) + rows +
         `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:11px; color:var(--text-muted);">${escapeHtml(en ? 'Raw controller output' : 'Output grezzo del controller')}</summary>
-         <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(sections, null, 2)))}</pre></details>`;
+         <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(JSON.stringify(sections, null, 2))}</pre></details>`;
 }
 
 // --- Azioni sulla porta ----------------------------------------------------
@@ -512,7 +517,7 @@ function _diagBounceControl() {
     return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(en ? 'Act on port' : 'Agisci sulla porta')}
-                <b style="font-family:var(--font-code);">${escapeHtml(jsStr(_diagSwitch.port))}</b></span>
+                <b style="font-family:var(--font-code);">${escapeHtml(_diagSwitch.port)}</b></span>
             <input id="diagBounceConfirm" placeholder="${escapeHtml(en ? 'type the port name' : 'digita il nome della porta')}"
                    style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:4px 10px; font-size:12px; color:var(--text); width:190px;">
             <button onclick="diagBouncePort()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
@@ -543,7 +548,7 @@ async function _diagPortControl(action) {
     });
     if (!res || !res.ok) {
         const e = res ? await res.json().catch(() => ({})) : {};
-        out.innerHTML = `<span style="color:var(--danger);">${escapeHtml(jsStr(e.detail || (en ? 'Refused.' : 'Rifiutato.')))}</span>`;
+        out.innerHTML = `<span style="color:var(--danger);">${escapeHtml(e.detail || (en ? 'Refused.' : 'Rifiutato.'))}</span>`;
         return;
     }
     out.innerHTML = action === 'shutdown'
@@ -586,11 +591,11 @@ async function diagBouncePort() {
     });
     if (!res || !res.ok) {
         const e = res ? await res.json().catch(() => ({})) : {};
-        out.innerHTML = `<span style="color:var(--danger);">${escapeHtml(jsStr(e.detail || (en ? 'Bounce refused.' : 'Bounce rifiutato.')))}</span>`;
+        out.innerHTML = `<span style="color:var(--danger);">${escapeHtml(e.detail || (en ? 'Bounce refused.' : 'Bounce rifiutato.'))}</span>`;
         return;
     }
     const r = await res.json();
     out.innerHTML = r.up_ok
         ? `<span style="color:var(--success);">${escapeHtml(en ? 'Port bounced.' : 'Porta riavviata.')}</span>`
-        : `<span style="color:var(--danger);">${escapeHtml(jsStr(r.error || (en ? 'PORT LEFT DOWN.' : 'PORTA RIMASTA GIU.')))}</span>`;
+        : `<span style="color:var(--danger);">${escapeHtml(r.error || (en ? 'PORT LEFT DOWN.' : 'PORTA RIMASTA GIU.'))}</span>`;
 }
