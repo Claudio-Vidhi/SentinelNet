@@ -498,26 +498,75 @@ async function diagnoseWifi() {
          <pre style="font-family:var(--font-code); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:10px; margin:6px 0 0; white-space:pre-wrap; font-size:11px; max-height:260px; overflow:auto;">${escapeHtml(jsStr(JSON.stringify(sections, null, 2)))}</pre></details>`;
 }
 
-// --- Port bounce -----------------------------------------------------------
-// L'unica scrittura della tab. Il nome della porta va digitato: una conferma
+// --- Azioni sulla porta ----------------------------------------------------
+// Le uniche scritture della tab. Il nome della porta va digitato: una conferma
 // che si puo' dare col mouse senza leggere non e' una conferma.
+//
+// Riavvia e Isola non sono la stessa cosa e i bottoni lo dicono: il bounce
+// torna su da solo, l'isolamento resta giu' finche' qualcuno non lo toglie.
+// Riattiva invece non chiede la conferma digitata: e' la via di ritorno, e
+// rendere difficile disfare un isolamento e' esso stesso un guasto.
 function _diagBounceControl() {
     if (!_diagSwitch) return '';
     const en = currentLang === 'en';
     return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(en ? 'Bounce the port' : 'Spegni e riaccendi la porta')}
+            <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(en ? 'Act on port' : 'Agisci sulla porta')}
                 <b style="font-family:var(--font-code);">${escapeHtml(jsStr(_diagSwitch.port))}</b></span>
             <input id="diagBounceConfirm" placeholder="${escapeHtml(en ? 'type the port name' : 'digita il nome della porta')}"
                    style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:4px 10px; font-size:12px; color:var(--text); width:190px;">
             <button onclick="diagBouncePort()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
                 <i class="fa-solid fa-power-off"></i> ${escapeHtml(en ? 'Bounce' : 'Riavvia porta')}</button>
+            <button onclick="diagIsolatePort()" class="btn btn-danger btn-small" style="width:auto; margin:0;">
+                <i class="fa-solid fa-plug-circle-xmark"></i> ${escapeHtml(en ? 'Isolate' : 'Isola porta')}</button>
+            <button onclick="diagRestorePort()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
+                <i class="fa-solid fa-plug-circle-check"></i> ${escapeHtml(en ? 'Re-enable' : 'Riattiva porta')}</button>
         </div>
         <div id="diagBounceOut" style="font-size:12px; margin-top:6px;"></div>
         <div style="color:var(--text-muted); font-size:11px; margin-top:4px;">
-            ${escapeHtml(en ? 'Admin only. Refused if the position is stale — a stale port belongs to someone else.'
-                            : 'Solo admin. Rifiutato se la posizione e\' vecchia: una porta vecchia e\' di qualcun altro.')}</div>
+            ${escapeHtml(en ? 'Admin only. Bounce and isolate are refused on an uplink or a stale position — a stale port belongs to someone else. Isolate leaves the port DOWN until re-enabled.'
+                            : 'Solo admin. Riavvio e isolamento sono rifiutati su un uplink o su una posizione vecchia: una porta vecchia e\' di qualcun altro. L\'isolamento lascia la porta GIU\' finche\' non la si riattiva.')}</div>
     </div>`;
+}
+
+// Isolamento e riattivazione passano dalla stessa rotta: cambia l'azione e,
+// con essa, cosa il server pretende prima di eseguirla.
+async function _diagPortControl(action) {
+    const en = currentLang === 'en';
+    const out = document.getElementById('diagBounceOut');
+    if (!out || !_diagSwitch) return;
+    out.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(en ? 'Working…' : 'In corso…')}`;
+    const res = await apiFetch('/api/mac/port-control', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: _diagSwitch.ip, port: _diagSwitch.port,
+                               action: action, client_mac: _diagMac })
+    });
+    if (!res || !res.ok) {
+        const e = res ? await res.json().catch(() => ({})) : {};
+        out.innerHTML = `<span style="color:var(--danger);">${escapeHtml(jsStr(e.detail || (en ? 'Refused.' : 'Rifiutato.')))}</span>`;
+        return;
+    }
+    out.innerHTML = action === 'shutdown'
+        ? `<span style="color:var(--warning);">${escapeHtml(en ? 'Port isolated: it stays DOWN until re-enabled.' : 'Porta isolata: resta GIU\' finche\' non la riattivi.')}</span>`
+        : `<span style="color:var(--success);">${escapeHtml(en ? 'Port re-enabled.' : 'Porta riattivata.')}</span>`;
+}
+
+async function diagIsolatePort() {
+    const en = currentLang === 'en';
+    const out = document.getElementById('diagBounceOut');
+    const typed = ((document.getElementById('diagBounceConfirm') || {}).value || '').trim();
+    if (!out || !_diagSwitch) return;
+    if (typed.toLowerCase() !== String(_diagSwitch.port).toLowerCase()) {
+        out.innerHTML = `<span style="color:var(--warning);">${escapeHtml(en ? 'Type the exact port name to confirm.' : 'Digita il nome esatto della porta per confermare.')}</span>`;
+        return;
+    }
+    await _diagPortControl('shutdown');
+}
+
+// Nessuna conferma digitata: riaccendere una porta non fa danni, non poterla
+// riaccendere si.
+async function diagRestorePort() {
+    await _diagPortControl('no-shutdown');
 }
 
 async function diagBouncePort() {

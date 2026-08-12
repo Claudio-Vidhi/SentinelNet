@@ -109,5 +109,90 @@ class TestBounceCommands(unittest.TestCase):
         self.assertIn("NON riaccesa", res["error"])
 
 
+class TestPortIsolation(unittest.TestCase):
+    """L'isolamento persistente: stessi cancelli del bounce, ma la porta resta
+    giu'. Un rifiuto qui e' sempre meglio di un ramo di rete staccato."""
+
+    def _call(self, action="shutdown", client_mac="aa:bb:cc:dd:ee:ff",
+              port="GigabitEthernet1/0/5", uplinks=None, verify=None):
+        from fastapi import HTTPException
+        from routers import mac as mac_router
+        from services import client_diagnosis as cd, port_action as pa
+
+        payload = mac_router.PortControlSchema(
+            ip="192.0.2.20", port=port, action=action, client_mac=client_mac)
+        sent = {}
+
+        def _fake_set(device, interface, up):
+            sent.update(interface=interface, up=up)
+            return {"output": "ok", "admin_up": up}
+
+        with patch.object(mac_router, "assert_device_allowed", return_value=SWITCH), \
+             patch.object(mac_router, "log_audit"), \
+             patch.object(mac_router, "user_group_scope", return_value=None), \
+             patch.object(mac_router.mac_history, "topology_uplinks",
+                          return_value=(uplinks or {}, set())), \
+             patch.object(cd, "verify_port",
+                          return_value=verify or {"ok": True, "age_s": 30}) as vp, \
+             patch.object(pa, "set_admin_state", side_effect=_fake_set):
+            try:
+                out = mac_router.mac_port_control(payload, {"sub": "adm"})
+            except HTTPException as e:
+                return e, sent, vp
+        return out, sent, vp
+
+    def test_an_uplink_is_refused(self):
+        # Spegnere una porta che va verso un altro apparato non isola un
+        # client: stacca tutto quello che ci sta dietro.
+        from core import core_engine
+        uplinks = {"192.0.2.20": {
+            core_engine._normalize_iface("GigabitEthernet1/0/48"): "switch-02"}}
+        err, sent, _ = self._call(port="Gi1/0/48", uplinks=uplinks)
+        self.assertEqual(err.status_code, 409)
+        self.assertIn("uplink", err.detail)
+        self.assertIn("switch-02", err.detail)
+        self.assertEqual(sent, {})          # niente e' arrivato all'apparato
+
+    def test_shutdown_without_the_client_mac_is_refused(self):
+        # Senza MAC non c'e' nulla da verificare: la porta sarebbe spenta
+        # sulla fiducia in una MAC table di eta' ignota.
+        err, sent, _ = self._call(client_mac=None)
+        self.assertEqual(err.status_code, 400)
+        self.assertIn("client_mac", err.detail)
+        self.assertEqual(sent, {})
+
+    def test_a_stale_position_is_refused(self):
+        err, sent, _ = self._call(
+            verify={"ok": False, "reason": "posizione vecchia di 7200s "
+                                           "(soglia 900s): rilancia una scansione MAC"})
+        self.assertEqual(err.status_code, 409)
+        self.assertIn("scansione MAC", err.detail)
+        self.assertEqual(sent, {})
+
+    def test_shutdown_reaches_the_device_when_both_gates_pass(self):
+        out, sent, _ = self._call()
+        self.assertEqual(out["action"], "shutdown")
+        self.assertEqual(sent, {"interface": "GigabitEthernet1/0/5", "up": False})
+
+    def test_reenabling_asks_neither_mac_nor_freshness(self):
+        # E' la via di ritorno: deve funzionare anche quando la posizione del
+        # client non si sa piu'. Un isolamento che non si toglie e' un guasto.
+        out, sent, vp = self._call(action="no-shutdown", client_mac=None)
+        self.assertEqual(out["action"], "no-shutdown")
+        self.assertEqual(sent, {"interface": "GigabitEthernet1/0/5", "up": True})
+        vp.assert_not_called()
+
+    def test_the_route_is_admin_only(self):
+        # Entra in modalita' di configurazione e lascia la porta giu': stessa
+        # categoria del bounce, non quella di una lettura.
+        import inspect
+        from routers import mac as mac_router
+        from routers.deps import require_admin
+
+        dep = inspect.signature(
+            mac_router.mac_port_control).parameters["current_user"].default
+        self.assertIs(dep.dependency, require_admin)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -94,5 +94,42 @@ class TestObservabilityHealthAndPruneAreReachable(unittest.TestCase):
         self.assertIn("days", body)
 
 
+class TestPortIsolationIsReachable(unittest.TestCase):
+    """POST /api/mac/port-control."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.js = _read("static", "js", "diagnosi.js")
+
+    def test_route_exists(self):
+        self.assertTrue(_route_exists("POST", "/api/mac/port-control"))
+
+    def test_isolate_and_restore_buttons_exist(self):
+        self.assertIn("diagIsolatePort()", self.js)
+        self.assertIn("diagRestorePort()", self.js)
+        self.assertIn("/api/mac/port-control", self.js)
+
+    def test_isolating_needs_the_port_name_typed_but_restoring_does_not(self):
+        # Isolare lascia la porta giu': si conferma digitando il nome. Riattivare
+        # e' la via di ritorno e non deve avere ostacoli, altrimenti
+        # l'isolamento diventa esso stesso il guasto.
+        iso = self.js[self.js.index("async function diagIsolatePort"):]
+        iso = iso[:iso.index("\n}")]
+        self.assertIn("diagBounceConfirm", iso)
+        self.assertIn("_diagPortControl('shutdown')", iso)
+
+        res = self.js[self.js.index("async function diagRestorePort"):]
+        res = res[:res.index("\n}")]
+        self.assertNotIn("diagBounceConfirm", res)
+        self.assertIn("_diagPortControl('no-shutdown')", res)
+
+    def test_the_client_mac_travels_with_the_request(self):
+        # Senza MAC il server rifiuta lo spegnimento: e' cio' su cui verifica
+        # che la porta sia ancora quella di quel client.
+        body = self.js[self.js.index("async function _diagPortControl"):]
+        body = body[:body.index("\n}")]
+        self.assertIn("client_mac: _diagMac", body)
+
+
 if __name__ == "__main__":
     unittest.main()

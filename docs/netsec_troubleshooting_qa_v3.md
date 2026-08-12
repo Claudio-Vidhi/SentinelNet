@@ -12,7 +12,7 @@
 | :--- | :--- |
 | **Cisco WLC** | Tab now loads through a single consolidated route `GET /api/wlc/{ip}/overview` (one SSH session: AP + client + WLAN + rogue). Controller selection is **tenant-first** (`#wlcTenantSelect` → `#wlcTargetSelect`). AP table gained a 5 GHz channel/width column from `show ap auto-rf 802.11a`; client table gained a quality column and a live search box. The per-object routes (`/status`, `/ap-summary`, …) still exist for API/MCP consumers; the UI no longer calls them one by one. Route line numbers shifted (status is now L50, not L39). |
 | **FortiGate** | New aggregated client diagnosis: `POST /api/fortigate/{ip}/diagnose-client` + pill **Diagnosi Client** (`#fgtPill-clientDiagnosis`) + MCP `fortigate_diagnose_client`. |
-| **Client Diagnosis (new §9)** | The `#tab-diagnosi` tab and `routers/diagnosis.py` (`/api/diagnose/client`, `/gateway-candidates`, `/traceroute-gateway`, `/port-bounce`) were not covered at all by either previous document. **`/api/diagnose/port-bounce` does have a UI button** — so "no port action has a UI" is no longer true in general (`/api/mac/port-control` still has none). |
+| **Client Diagnosis (new §9)** | The `#tab-diagnosi` tab and `routers/diagnosis.py` (`/api/diagnose/client`, `/gateway-candidates`, `/traceroute-gateway`, `/port-bounce`) were not covered at all by either previous document. **`/api/diagnose/port-bounce` does have a UI button** — and since 2026-08-12 so does `/api/mac/port-control` (Isola / Riattiva porta, same block). |
 | **NetSec Audit** | Config **file upload / drag-and-drop now exists** in the UI (`#auditDropZone`, `#auditFileInput` → `config_text`), plus PDF export (`#btnPdfNetsec`), benchmark select, severity/category filters and a score/grade badge. The corrected doc's gap "no ad-hoc config file upload UI" is **withdrawn**. |
 | **Subnet scan** | Scan is now **discovery-only**; credential verification is a separate opt-in step `POST /api/scan-verify` using stored identities. Relevant to unknown-host workflows (§2.2). |
 | **Line numbers** | Many shifted, notably `POST /api/send-command` (now `routers/commands.py:159`) and the `netsec-audit` routes (`analyzer.py:97` / `:137`). |
@@ -28,7 +28,8 @@
   *(Both earlier documents, and the first draft of this one, called `#fgtSub-*` the panes — those are
   the bar buttons; the containers are `#fgtPane-*`.)*
 - Routes that exist **API-only, with no UI button**: `POST /api/flow-siem/shun-ip` (deferred by the
-  owner, see `docs/Improvements`) and `POST /api/mac/port-control`.
+  owner, see `docs/Improvements`). `POST /api/mac/port-control` **got its buttons on 2026-08-12**
+  (Isola / Riattiva porta, in the Diagnosi port-action block).
   `DELETE /api/fortigate/{ip}/sessions` and `POST /api/observability/prune-logs` **got their buttons on
   2026-08-11** — session kill sits next to the Sessioni form (`#btnFgtSessionKill`, refuses an empty
   filter set, which would have killed every session), the purge sits in Settings -> Observability.
@@ -180,8 +181,8 @@ customer values.
   4. For the full L2+L3 report on that host, use the **Diagnosi Client** tab (§9) — it resolves port,
      VLAN, gateway, path and firewall policy in one shot.
   5. Containment: `POST /api/diagnose/port-bounce` (admin, **has a UI button** in Diagnosi) bounces the
-     access port; `POST /api/mac/port-control` performs an administrative shutdown and remains
-     **API/MCP-only**.
+     access port; `POST /api/mac/port-control` (admin, **has UI buttons** in the same block) shuts it
+     down and leaves it down until someone re-enables it.
 
 - **UI Navigation & Operational Workflow**:
   - **Tab group** `Localizzazione Endpoint` (`navInvestigate`), subtabs `#tab-mac` (MAC Tracker),
@@ -196,7 +197,8 @@ customer values.
   - `GET /api/mac/search` ([routers/mac.py:139](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mac.py#L139)),
     `GET /api/mac/locate` (L158), `GET /api/mac/switch/{ip}` (L190), `GET /api/mac/stats` (L195)
   - `POST /api/mac/scan` (L105) — on-demand MAC-table collection
-  - `POST /api/mac/port-control` (L241) — **API/MCP-only**
+  - `POST /api/mac/port-control` (L241) — admin; persistent isolation, refused on an uplink or a
+    stale position; re-enabling asks for neither
   - MAC→IP / Client Map: `GET /api/arp/search` ([routers/arp.py:53](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/arp.py#L53)),
     `GET /api/arp/client-map` (L62), `GET /api/arp/stats` (L85)
   - **MCP**: `locate_mac`, `search_mac`, `mac_to_ip` (→ `/api/arp/search`), `client_map`
@@ -206,8 +208,8 @@ customer values.
 - **Missing Features / Gaps**:
   - **802.1X / RADIUS Telemetry**: no RADIUS auth history (username, EAP method, posture) per MAC from
     Cisco ISE or FreeRADIUS.
-  - **Port Shutdown UI**: `/api/mac/port-control` still has no button (the Diagnosi tab exposes only
-    the bounce, which is shut + no-shut, not a lasting isolation).
+  - *(closed 2026-08-12)* **Port Shutdown UI**: the Diagnosi port-action block now has Isola / Riattiva
+    porta next to the bounce.
 
 ---
 
@@ -318,7 +320,7 @@ customer values.
 - **Missing Features / Gaps**:
   - **Active Rogue Containment**: no deauth / wireless containment trigger from the app.
   - **Wired Rogue Auto-Block**: no automatic port disable for a rogue MAC seen on a switch (manual path:
-    MAC Tracker → Diagnosi → port bounce, or `POST /api/mac/port-control` via API).
+    MAC Tracker → Diagnosi → bounce or isolate).
 
 ---
 
@@ -631,8 +633,8 @@ customer values.
     an hour ago" view.
   - **Wireless Leg**: a wireless client is diagnosed from the wired/gateway side; the WLC client
     diagnostic (§3.1) is a separate tab and is not merged into this report.
-  - **Persistent Isolation**: bounce only; a lasting quarantine still needs `/api/mac/port-control`
-    via API/MCP.
+  - *(closed 2026-08-12)* **Persistent Isolation**: Isola porta shuts the access port and leaves it
+    down; Riattiva porta is the way back and asks for no confirmation.
 
 ---
 
@@ -642,8 +644,8 @@ customer values.
 | :--- | :--- | :--- |
 | **FortiGate** | Policy lookup, sessions (+kill API), traffic/event/UTM logs, policies with hit counts & last-used, interfaces/ARP/DHCP/routes/VPN/SD-WAN, managed FortiAP, **aggregated client diagnosis**, full-config fetch, day-0 generation + push (SSH/serial/REST), REST driver with SSH fallback | Packet capture (`sniffer`), deep UTM sub-log parsing, session-kill & CLI-console UI buttons |
 | **Cisco WLC** | **Tenant-scoped controller selection**, single-call `overview` (AP/clients/WLAN/rogue), **2.4 & 5 GHz auto-RF channel, width and utilization**, client quality + live search, rogue table, per-client diagnostics modal | Roaming (802.11r/k/v) timeline, RF floor-plan heatmap, 6 GHz auto-RF (needs the IOS-XE path), active rogue containment |
-| **MAC / ARP / Endpoints** | MAC search & locate, on-demand MAC scan, ARP collection from L3 gateways, client map, endpoint inventory with exports, **discovery-only subnet scan + opt-in credential verification** | 802.1X/RADIUS correlation, DHCP-snooping cross-check, OS fingerprinting, port-shutdown UI |
-| **Client Diagnosis** | **L2+L3 single-client report, gateway auto/traceroute detection, tenant-scoped, admin port bounce with staleness guard** | Historical replay, merged wireless leg, persistent quarantine |
+| **MAC / ARP / Endpoints** | MAC search & locate, on-demand MAC scan, ARP collection from L3 gateways, client map, endpoint inventory with exports, **discovery-only subnet scan + opt-in credential verification** | 802.1X/RADIUS correlation, DHCP-snooping cross-check, OS fingerprinting |
+| **Client Diagnosis** | **L2+L3 single-client report, gateway auto/traceroute detection, tenant-scoped, admin port bounce and persistent isolation with uplink + staleness guards** | Historical replay, merged wireless leg |
 | **Flow SIEM & Anomalies** | Top talkers, protocol distribution, flow graph, syslog/events, anomaly triage with status, Flow SIEM events/histogram/facets/suppression, shun API | Shun UI button, ACL/Flowspec auto-injection, JA3/SNI inspection, external threat intel |
 | **Config & Compliance** | Config Analyzer (structural, FortiOS↔PAN-OS converter), **NetSec Audit with CIS/NIST 800-53/PCI-DSS v4.0, config upload & PDF report**, checklist engagements with evidence, backup storage/download | Git drift alerting, scheduled/recurring audits with score trend, policy-object provisioning form, transactional push with rollback |
 | **Incidents & AI** | Rule-based incident engine (reasoning, evidence, timeline, status), AI narrative per incident, AI Assistant chat with device/tenant attachments, triage & ping endpoints | External threat-intel enrichment, SOAR webhook export |

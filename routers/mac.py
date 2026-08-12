@@ -235,25 +235,69 @@ def mac_delete_override(payload: MacOverrideDeleteSchema, current_user = Depends
 class PortControlSchema(BaseModel):
     ip: str
     port: str
-    action: str = "shutdown"   # shutdown | no-shutdown
+    action: str = "shutdown"          # shutdown | no-shutdown
+    client_mac: Optional[str] = None  # obbligatorio per 'shutdown': vedi sotto
 
 
 @router.post("/api/mac/port-control")
-def mac_port_control(payload: PortControlSchema, current_user = Depends(require_operator)):
-    """Cambia lo stato amministrativo di una porta switch (shutdown / no shutdown)."""
-    import re
+def mac_port_control(payload: PortControlSchema, current_user = Depends(require_admin)):
+    """Isolamento persistente di una porta di accesso (shutdown / no shutdown).
+
+    A differenza del bounce questa porta resta giù finché qualcuno non la
+    riaccende, quindi i cancelli sono gli stessi ma più stretti:
+
+    * ``require_admin`` — si entra in modalità di configurazione, come il bounce.
+    * **Uplink**: una porta che va verso un altro apparato non è la porta di un
+      client. Spegnerla non isola un endpoint, stacca un ramo intero di rete.
+    * **Freschezza**: la porta arriva da una MAC table scansionata a mano. Su un
+      dato vecchio la porta di oggi è di qualcun altro, e l'isolamento colpisce
+      l'utente sbagliato — per questo lo spegnimento vuole il ``client_mac`` e
+      lo verifica, mentre la riaccensione non chiede nulla: è la via di ritorno
+      e deve funzionare sempre, anche quando il resto non si sa più.
+    """
+    from services import client_diagnosis, port_action
+
     device = assert_device_allowed(current_user, payload.ip)
     if not device:
         raise HTTPException(status_code=404, detail=f"Device '{payload.ip}' non trovato o non consentito.")
     if payload.action not in ("shutdown", "no-shutdown"):
         raise HTTPException(status_code=400, detail="Azione non valida. Utilizzare 'shutdown' o 'no-shutdown'.")
-    if not re.match(r"^[a-zA-Z0-9/\.\-]+$", payload.port.strip()):
-        raise HTTPException(status_code=400, detail="Nome interfaccia porta non valido.")
+    port = payload.port.strip()
 
-    cmd_action = "shutdown" if payload.action == "shutdown" else "no shutdown"
-    cmd_block = f"interface {payload.port.strip()}\n{cmd_action}\nexit"
+    if payload.action == "shutdown":
+        uplinks, _known = mac_history.topology_uplinks()
+        neighbour = uplinks.get(payload.ip, {}).get(core_engine._normalize_iface(port))
+        if neighbour:
+            log_audit(f"Isolamento RIFIUTATO su '{payload.ip}' porta '{port}' da "
+                      f"'{current_user.get('sub')}': porta verso '{neighbour}', e' un uplink.")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"'{port}' va verso '{neighbour}': e' un uplink, non una porta "
+                       f"d'accesso. Spegnerla staccherebbe tutto quello che ci sta dietro.")
+        if not payload.client_mac:
+            raise HTTPException(
+                status_code=400,
+                detail="client_mac obbligatorio per lo spegnimento: senza il MAC non si "
+                       "puo' verificare che la porta sia ancora quella di quel client.")
+        pos = client_diagnosis.verify_port(payload.client_mac, payload.ip, port,
+                                           user_group_scope(current_user))
+        if not pos["ok"]:
+            log_audit(f"Isolamento RIFIUTATO su '{payload.ip}' porta '{port}' per il client "
+                      f"'{payload.client_mac}' (utente '{current_user.get('sub')}'): {pos['reason']}.")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=pos["reason"])
 
-    res = core_engine.send_custom_command(device, cmd_block, bypass_blacklist=True)
-    log_audit(f"Port control per '{payload.ip}' porta '{payload.port}' -> '{payload.action}' da '{current_user.get('sub')}'.")
-    return {"status": "success", "ip": payload.ip, "port": payload.port, "action": payload.action, "output": res}
+    log_audit(f"Port control AVVIATO da '{current_user.get('sub')}' su '{payload.ip}' "
+              f"porta '{port}' -> '{payload.action}'.")
+    try:
+        res = port_action.set_admin_state(device, port, up=payload.action == "no-shutdown")
+    except port_action.PortActionError as e:
+        log_audit(f"Port control NON ESEGUITO su '{payload.ip}' porta '{port}': {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log_audit(f"Port control FALLITO su '{payload.ip}' porta '{port}': {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+    log_audit(f"Port control ESEGUITO su '{payload.ip}' porta '{port}' -> '{payload.action}'.")
+    return {"status": "success", "ip": payload.ip, "port": port,
+            "action": payload.action, "output": res.get("output", "")}
 
