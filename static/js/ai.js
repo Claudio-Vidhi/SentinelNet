@@ -103,7 +103,7 @@
         box.innerHTML = aiConversations.map(c => `
             <div class="ai-conv-item${c.id === aiConvId ? ' active' : ''}" onclick="openAiConversation(${Number(c.id)})">
                 <i class="fa-regular fa-comment" style="font-size:11px;"></i>
-                <span class="ai-conv-title" title="${escapeHtml(jsStr(c.title || untitled))}">${escapeHtml(jsStr(c.title || untitled))}</span>
+                <span class="ai-conv-title" title="${escapeHtml(c.title || untitled)}">${escapeHtml(c.title || untitled)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${escapeHtml(fmtAiConvTime(c.updated_ts))}</span>
                 <button class="ai-conv-del" onclick="event.stopPropagation(); deleteAiConversation(${Number(c.id)})"
                         title="${escapeHtml(i18n[currentLang].btnAiDeleteChat || 'Elimina conversazione')}">
@@ -375,12 +375,12 @@
             return `<div class="ai-profile-card${p.id === editing ? ' editing' : ''}" onclick="selectAiProfileCard('${escapeHtml(jsStr(p.id))}')">
                 <div class="ai-prof-top">
                     <i class="${AI_PROVIDER_ICONS[p.provider] || 'fa-solid fa-robot'}" style="color:var(--primary); width:14px;"></i>
-                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(jsStr(p.name))}</span>
+                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(p.name)}</span>
                     ${active ? `<span class="chip" style="font-size:9px; padding:2px 6px;">${escapeHtml(L.lblAiProfileActive || 'ATTIVO')}</span>` : ''}
                 </div>
                 <div class="ai-prof-meta">
                     ${keyChip}
-                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(jsStr(p.model || L.optAiModelCustom || '—'))}</span>
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(p.model || L.optAiModelCustom || '—')}</span>
                 </div>
                 ${active ? '' : `<button type="button" class="ai-prof-activate" onclick="event.stopPropagation(); activateAiProfileCard('${escapeHtml(jsStr(p.id))}')">${escapeHtml(L.btnAiActivateProfile || 'Rendi attivo')}</button>`}
             </div>`;

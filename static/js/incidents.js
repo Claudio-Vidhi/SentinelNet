@@ -3,7 +3,7 @@
 // La conclusione mostrata in testa e' SEMPRE quella deterministica del backend
 // (causa, confidenza, regole attivate, fonti). La narrativa AI, quando richiesta,
 // vive in un blocco separato e dichiaratamente generato: non e' la conclusione.
-// Escaping: escapeHtml(jsStr(x)) su ogni valore interpolato (jsStr in mcp-client.js).
+// Escaping: escapeHtml(x) su ogni valore interpolato (jsStr in mcp-client.js).
 
 (function () {
     let _incidents = [];
@@ -107,7 +107,7 @@
                 // Un solo tenant: l'intestazione di sede sarebbe rumore.
                 const head = tenants.length > 1
                     ? `<div style="margin:14px 0 6px; font-size:12px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:.4px;">
-                           <i class="fa-solid fa-building"></i> ${escapeHtml(jsStr(t))}
+                           <i class="fa-solid fa-building"></i> ${escapeHtml(t)}
                            <span style="font-weight:400; color:var(--text-muted); text-transform:none;">· ${devices.length} ${L('incDevices')}</span>
                        </div>`
                     : '';
@@ -135,8 +135,8 @@
 
         return `<details ${interesting ? 'open' : ''} style="margin-bottom:8px; border:1px solid var(--border); border-radius:0; background:var(--surface-2);">
             <summary style="cursor:pointer; padding:8px 10px; font-size:13px;">
-                <strong style="font-family:var(--font-code);">${escapeHtml(jsStr(name || ip))}</strong>
-                ${name ? `<span style="color:var(--text-muted); font-size:11px; font-family:var(--font-code);"> ${escapeHtml(jsStr(ip))}</span>` : ''}
+                <strong style="font-family:var(--font-code);">${escapeHtml(name || ip)}</strong>
+                ${name ? `<span style="color:var(--text-muted); font-size:11px; font-family:var(--font-code);"> ${escapeHtml(ip)}</span>` : ''}
                 <span style="color:var(--text-muted); font-size:11px;"> · ${list.length} ${L('incIfaces')}</span>
                 ${down ? badge(down + ' down', 'var(--danger)') : ''}
                 ${unstable ? badge(unstable + ' ' + L('incUnstable'), 'var(--warning)') : ''}
@@ -157,16 +157,16 @@
                 .toISOString().slice(0, 16) : '';
         return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 0 10px; font-size:11px; color:var(--text-muted);">
             <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-                <input type="checkbox" id="dvx-${escapeHtml(jsStr(ip))}" ${rule ? 'checked' : ''}
-                       onchange="saveDeviceSuppression('${jsStr(tenant)}','${jsStr(ip)}')"
+                <input type="checkbox" id="dvx-${escapeHtml(ip)}" ${rule ? 'checked' : ''}
+                       onchange="saveDeviceSuppression('${escapeHtml(jsStr(tenant))}','${escapeHtml(jsStr(ip))}')"
                        style="accent-color:var(--warning);">
                 <span>${L('incDevExpectedDown')}</span>
             </label>
-            <input type="datetime-local" id="dvu-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr(until))}"
-                   onchange="saveDeviceSuppression('${jsStr(tenant)}','${jsStr(ip)}')"
+            <input type="datetime-local" id="dvu-${escapeHtml(ip)}" value="${escapeHtml(until)}"
+                   onchange="saveDeviceSuppression('${escapeHtml(jsStr(tenant))}','${escapeHtml(jsStr(ip))}')"
                    title="${L('incUntilHint')}"
                    style="padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
-            <input type="text" id="dvn-${escapeHtml(jsStr(ip))}" value="${escapeHtml(jsStr((rule || {}).note || ''))}" placeholder="${L('incReasonPl')}"
+            <input type="text" id="dvn-${escapeHtml(ip)}" value="${escapeHtml((rule || {}).note || '')}" placeholder="${L('incReasonPl')}"
                    style="flex:1; min-width:140px; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
         </div>`;
     }
@@ -174,7 +174,7 @@
     function renderInterfaceTable(list, soglia, ore) {
         const dot = st => {
             const isDown = String(st || '').toLowerCase() === 'down';
-            return `<span style="color:${isDown ? 'var(--danger)' : 'var(--success)'}; font-size:11px;">${escapeHtml(jsStr(st || '?'))}</span>`;
+            return `<span style="color:${isDown ? 'var(--danger)' : 'var(--success)'}; font-size:11px;">${escapeHtml(st || '?')}</span>`;
         };
         // L'instabilita' va MOSTRATA anche quando non e' diventata un
         // incidente: la regola guarda la finestra di correlazione, questa
@@ -198,7 +198,7 @@
         return `<table style="width:100%; border-collapse:collapse; font-size:12px;">
             <thead><tr>${cols.map(th).join('')}</tr></thead>
             <tbody>${list.map(r => `<tr${r.scope === 'device' ? ' style="opacity:.55;"' : ''}>
-                <td style="padding:5px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(jsStr(r.interface))}</td>
+                <td style="padding:5px 8px; border-bottom:1px solid var(--border); font-family:var(--font-code);">${escapeHtml(r.interface)}</td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">${dot(r.link)}</td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">${dot(r.admin_status)}</td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">${flap(r.transitions)}</td>
@@ -207,11 +207,11 @@
                            ${r.scope === 'device' ? `disabled title="${L('incCoveredByDevice')}"` : ''}
                            onchange="saveInterfaceExpectation(${r._i})" style="accent-color:var(--primary);"></td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
-                    <input type="datetime-local" id="ifu-${r._i}" value="${escapeHtml(jsStr(local(r.to_ts)))}"
+                    <input type="datetime-local" id="ifu-${r._i}" value="${escapeHtml(local(r.to_ts))}"
                            onchange="saveInterfaceExpectation(${r._i})"
                            style="padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
-                    <input type="text" id="ifn-${r._i}" value="${escapeHtml(jsStr(r.note || ''))}" placeholder="${L('incReasonPl')}"
+                    <input type="text" id="ifn-${r._i}" value="${escapeHtml(r.note || '')}" placeholder="${L('incReasonPl')}"
                            style="width:100%; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
             </tr>`).join('')}</tbody></table>`;
     }
@@ -248,10 +248,10 @@
         return `<div style="margin-top:12px; font-size:11px;">
             <div style="color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-bottom:6px;">${L('incSuppDeclared')}</div>
             ${list.map(r => `<div style="padding:4px 0; border-bottom:1px solid var(--border); ${r.expired ? 'opacity:.45; text-decoration:line-through;' : ''}">
-                <code>${escapeHtml(jsStr(r.device_ip || ''))}</code>${r.interface ? ':' + escapeHtml(jsStr(r.interface)) : ` <em>${L('incSuppWholeDevice')}</em>`}
-                — ${escapeHtml(jsStr(when(r)))}
-                ${r.note ? ' · ' + escapeHtml(jsStr(r.note)) : ''}
-                <span style="color:var(--text-muted);">· ${escapeHtml(jsStr(r.by || ''))}</span>
+                <code>${escapeHtml(r.device_ip || '')}</code>${r.interface ? ':' + escapeHtml(r.interface) : ` <em>${L('incSuppWholeDevice')}</em>`}
+                — ${escapeHtml(when(r))}
+                ${r.note ? ' · ' + escapeHtml(r.note) : ''}
+                <span style="color:var(--text-muted);">· ${escapeHtml(r.by || '')}</span>
             </div>`).join('')}
         </div>`;
     }
@@ -295,32 +295,32 @@
             box.innerHTML = (data.rules || []).map(r => `
                 <div style="padding:10px; border:1px solid var(--border); border-radius:0; margin-bottom:8px; background:var(--surface-2);">
                     <div style="display:flex; justify-content:space-between; gap:12px; align-items:baseline;">
-                        <strong style="font-size:13px;">${escapeHtml(jsStr(r.title))}</strong>
-                        <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(jsStr(r.id))} v${escapeHtml(jsStr(r.version))}</span>
+                        <strong style="font-size:13px;">${escapeHtml(r.title)}</strong>
+                        <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(r.id)} v${escapeHtml(r.version)}</span>
                     </div>
-                    <div style="font-size:12px; color:var(--text-muted); margin:4px 0 6px;">${escapeHtml(jsStr(r.description))}</div>
+                    <div style="font-size:12px; color:var(--text-muted); margin:4px 0 6px;">${escapeHtml(r.description)}</div>
                     <div style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
-                        consuma: ${escapeHtml(jsStr((r.inputs || []).join(', ')))} ·
-                        produce: ${escapeHtml(jsStr((r.outputs || []).join(', ')))}
+                        consuma: ${escapeHtml((r.inputs || []).join(', '))} ·
+                        produce: ${escapeHtml((r.outputs || []).join(', '))}
                     </div>
                     ${r.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
-                        <strong>${L('incInvestigate')}</strong> ${escapeHtml(jsStr(r.investigation))}</div>` : ''}
+                        <strong>${L('incInvestigate')}</strong> ${escapeHtml(r.investigation)}</div>` : ''}
                     ${r.remediation ? `<div style="font-size:12px; margin-bottom:8px;">
-                        <strong>${L('incRemediation')}</strong> ${escapeHtml(jsStr(r.remediation))}</div>` : ''}
+                        <strong>${L('incRemediation')}</strong> ${escapeHtml(r.remediation)}</div>` : ''}
                     ${(r.parameters || []).length ? `<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
                         ${r.parameters.map(p => `<div>
-                            <label style="font-size:11px; color:var(--text-muted); display:block;" title="${escapeHtml(jsStr(p.description || ''))}">
-                                ${escapeHtml(jsStr(p.name))} (${escapeHtml(jsStr(p.min))}–${escapeHtml(jsStr(p.max))})
+                            <label style="font-size:11px; color:var(--text-muted); display:block;" title="${escapeHtml(p.description || '')}">
+                                ${escapeHtml(p.name)} (${escapeHtml(p.min)}–${escapeHtml(p.max)})
                             </label>
-                            <input type="number" id="rp-${escapeHtml(jsStr(r.id))}-${escapeHtml(jsStr(p.name))}"
-                                   value="${escapeHtml(jsStr((r.effective || {})[p.name] ?? p.default))}"
-                                   min="${escapeHtml(jsStr(p.min))}" max="${escapeHtml(jsStr(p.max))}"
+                            <input type="number" id="rp-${escapeHtml(r.id)}-${escapeHtml(p.name)}"
+                                   value="${escapeHtml((r.effective || {})[p.name] ?? p.default)}"
+                                   min="${escapeHtml(p.min)}" max="${escapeHtml(p.max)}"
                                    style="width:110px; padding:5px 8px; border-radius:0; border:1px solid var(--border);
                                           background:var(--surface-2); color:var(--text); font-size:12px;">
                         </div>`).join('')}
                         <button class="btn btn-secondary btn-small" style="width:auto;"
-                                onclick="saveRuleParameters('${jsStr(r.id)}')">${L('incSaveThresholds')}</button>
-                        <span id="rp-status-${escapeHtml(jsStr(r.id))}" style="font-size:11px; color:var(--text-muted);"></span>
+                                onclick="saveRuleParameters('${escapeHtml(jsStr(r.id))}')">${L('incSaveThresholds')}</button>
+                        <span id="rp-status-${escapeHtml(r.id)}" style="font-size:11px; color:var(--text-muted);"></span>
                     </div>` : `<div style="font-size:11px; color:var(--text-muted);">${L('incNoThresholds')}</div>`}
                 </div>`).join('');
         } catch (e) { box.innerHTML = ''; }
@@ -388,14 +388,14 @@
                         border:1px solid ${active ? 'var(--primary)' : 'var(--border)'}; background:var(--surface-2);">
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
                     <span style="width:8px; height:8px; border-radius:50%; background:${sevColor(inc.severity)};"></span>
-                    <strong style="font-size:13px;">${escapeHtml(jsStr(inc.title || inc.entity_key))}</strong>
+                    <strong style="font-size:13px;">${escapeHtml(inc.title || inc.entity_key)}</strong>
                 </div>
                 <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">
-                    ${escapeHtml(jsStr(inc.event_count))} eventi · ${escapeHtml(jsStr(inc.status))}
+                    ${escapeHtml(inc.event_count)} eventi · ${escapeHtml(inc.status)}
                     ${inc.closed_ts ? '· chiuso' : '· aperto'} · ${escapeHtml(fmtTime(inc.last_event_ts))}
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:11px; color:var(--text-muted); min-width:70px;">${escapeHtml(jsStr(inc.confidence ?? '--'))}% conf.</span>
+                    <span style="font-size:11px; color:var(--text-muted); min-width:70px;">${escapeHtml(inc.confidence ?? '--')}% conf.</span>
                     <div style="flex:1;">${confidenceBar(inc.confidence)}</div>
                 </div>
             </div>`;
@@ -424,9 +424,9 @@
     function renderReasoning(inc) {
         const r = inc.reasoning || {};
         const rules = (r.rules_fired || []).map(x =>
-            `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
+            `<span class="badge" style="font-size:11px;">${escapeHtml(x)}</span>`).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
         const sources = (r.sources_used || []).map(x =>
-            `<span class="badge" style="font-size:11px;">${escapeHtml(jsStr(x))}</span>`).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
+            `<span class="badge" style="font-size:11px;">${escapeHtml(x)}</span>`).join(' ') || `<span style="color:var(--text-muted);">${L('incNone')}</span>`;
         const byRole = r.evidence_by_role || {};
         const roleCounts = Object.keys(byRole).map(role => {
             const meta = ROLE_META[role] || { color: 'var(--text-muted)', label: role };
@@ -438,10 +438,10 @@
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px;">
                 <div>
                     <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700;">${L('incCauseTitle')}</div>
-                    <div style="font-size:17px; font-family:var(--font-display);">${escapeHtml(jsStr(inc.cause_kind || '--'))}</div>
+                    <div style="font-size:17px; font-family:var(--font-display);">${escapeHtml(inc.cause_kind || '--')}</div>
                 </div>
                 <div style="min-width:160px;">
-                    <div style="font-size:11px; color:var(--text-muted); text-align:right;">Confidenza ${escapeHtml(jsStr(inc.confidence ?? '--'))}%</div>
+                    <div style="font-size:11px; color:var(--text-muted); text-align:right;">Confidenza ${escapeHtml(inc.confidence ?? '--')}%</div>
                     ${confidenceBar(inc.confidence)}
                 </div>
             </div>
@@ -449,8 +449,8 @@
             <div style="font-size:12px; margin-bottom:6px;"><strong>${L('incSourcesCorrob')}</strong> ${sources}</div>
             <div style="font-size:12px; margin-bottom:6px;"><strong>${L('incEvidenceByRole')}</strong> ${roleCounts}</div>
             <div style="font-size:11px; color:var(--text-muted);">
-                ${L('incConfBasis').replace('{b}', escapeHtml(jsStr(r.base_confidence ?? '--'))).replace('{s}', escapeHtml(jsStr(r.confidence_step ?? '--')))}
-                ${L('incRuleRef')} ${escapeHtml(jsStr(r.rule_id || '--'))} v${escapeHtml(jsStr(r.rule_version || '--'))}
+                ${L('incConfBasis').replace('{b}', escapeHtml(r.base_confidence ?? '--')).replace('{s}', escapeHtml(r.confidence_step ?? '--'))}
+                ${L('incRuleRef')} ${escapeHtml(r.rule_id || '--')} v${escapeHtml(r.rule_version || '--')}
                 ${r.rule_params && Object.keys(r.rule_params).length
                     ? '· soglie ' + escapeHtml(JSON.stringify(r.rule_params)) : ''}
             </div>
@@ -466,10 +466,10 @@
         return `<div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border);">
             ${rule.investigation ? `<div style="font-size:12px; margin-bottom:4px;">
                 <i class="fa-solid fa-magnifying-glass" style="color:var(--primary);"></i>
-                <strong>${L('incInvestigate')}</strong> ${escapeHtml(jsStr(rule.investigation))}</div>` : ''}
+                <strong>${L('incInvestigate')}</strong> ${escapeHtml(rule.investigation)}</div>` : ''}
             ${rule.remediation ? `<div style="font-size:12px;">
                 <i class="fa-solid fa-screwdriver-wrench" style="color:var(--success);"></i>
-                <strong>${L('incRemediation')}</strong> ${escapeHtml(jsStr(rule.remediation))}</div>` : ''}
+                <strong>${L('incRemediation')}</strong> ${escapeHtml(rule.remediation)}</div>` : ''}
         </div>`;
     }
 
@@ -507,10 +507,10 @@
                     </div>
                     <div style="font-size:13px; ${retracted ? 'text-decoration:line-through;' : ''}
                                 color:${e.severity !== null && e.severity !== undefined ? sevColor(e.severity) : 'var(--text)'};">
-                        ${escapeHtml(jsStr(e.text))}
+                        ${escapeHtml(e.text)}
                     </div>
                     ${why ? `<div style="font-size:11px; color:var(--warning); margin-top:2px;">
-                                <i class="fa-solid fa-rotate-left"></i> ${escapeHtml(jsStr(why))}</div>` : ''}
+                                <i class="fa-solid fa-rotate-left"></i> ${escapeHtml(why)}</div>` : ''}
                     ${prov ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;" title="${L('incProvTitle')}">
                                 <i class="fa-solid fa-fingerprint"></i> ${escapeHtml(prov)}</div>` : ''}
                     ${attrs ? `<div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-top:2px; word-break:break-all;">${escapeHtml(attrs)}</div>` : ''}
@@ -520,7 +520,7 @@
 
     function renderAiBlock(inc) {
         const body = inc.ai_narrative
-            ? `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(jsStr(inc.ai_narrative))}</div>
+            ? `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(inc.ai_narrative)}</div>
                <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(inc.ai_narrative_ts))}</div>`
             : `<div style="font-size:12px; color:var(--text-muted);">${L('incNoNarrative')}</div>`;
         return `<div style="margin-top:18px; padding:12px; border-radius:0; border:1px dashed var(--primary); background:color-mix(in srgb, var(--primary) 6%, transparent);">
@@ -543,8 +543,8 @@
                 <i class="fa-solid fa-clock-rotate-left"></i> Conclusioni precedenti (superate)
             </div>
             ${history.map(h => `<div style="font-size:12px; color:var(--text-muted); text-decoration:line-through;">
-                ${escapeHtml(fmtTime(h.concluded_ts))} — ${escapeHtml(jsStr(h.cause_kind))}
-                (${escapeHtml(jsStr(h.confidence))}%)
+                ${escapeHtml(fmtTime(h.concluded_ts))} — ${escapeHtml(h.cause_kind)}
+                (${escapeHtml(h.confidence)}%)
             </div>`).join('')}
         </div>`;
     }
@@ -570,13 +570,13 @@
             }[h.kind] || 'fa-circle-dot');
             return `<div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; font-size:12px; color:${color}; ${unknown ? 'border-style:dashed;' : ''}">
                 <i class="fa-solid ${icon}"></i>
-                <span>${escapeHtml(jsStr(h.label || h.kind))}</span>
+                <span>${escapeHtml(h.label || h.kind)}</span>
             </div>`;
         }).join('<i class="fa-solid fa-angle-right" style="color:var(--text-muted); align-self:center;"></i>');
         const warn = path.complete ? '' :
             `<div style="font-size:11px; color:var(--warning); margin-top:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${L('incPathPartial')}</div>`;
         return `<h4 style="margin:12px 0 10px; font-size:14px; color:var(--primary);"><i class="fa-solid fa-diagram-project"></i> ${L('incPathTitle')}
-                    <span style="font-weight:normal; font-size:12px; color:var(--text-muted);">${escapeHtml(jsStr(DIRECTION_KEY[path.direction] ? L(DIRECTION_KEY[path.direction]) : (path.direction || '')))}</span></h4>
+                    <span style="font-weight:normal; font-size:12px; color:var(--text-muted);">${escapeHtml(DIRECTION_KEY[path.direction] ? L(DIRECTION_KEY[path.direction]) : (path.direction || ''))}</span></h4>
                 <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">${hops}</div>${warn}`;
     }
 
@@ -592,9 +592,9 @@
         box.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px;">
                 <div>
-                    <h3 style="margin:0; font-family:var(--font-display); font-size:21px;">${escapeHtml(jsStr(inc.title || inc.entity_key))}</h3>
+                    <h3 style="margin:0; font-family:var(--font-display); font-size:21px;">${escapeHtml(inc.title || inc.entity_key)}</h3>
                     <div style="font-size:12px; color:var(--text-muted);">
-                        ${escapeHtml(jsStr(inc.entity_key))} · tenant ${escapeHtml(jsStr(inc.tenant))} ·
+                        ${escapeHtml(inc.entity_key)} · tenant ${escapeHtml(inc.tenant)} ·
                         ${L('incFromTo').replace('{a}', escapeHtml(fmtTime(inc.opened_ts))).replace('{b}', escapeHtml(fmtTime(inc.last_event_ts)))}
                     </div>
                 </div>
@@ -636,12 +636,12 @@
             if (!res) return;
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                if (body) body.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(jsStr(err.detail || L('incErrGeneration')))}</div>`;
+                if (body) body.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(err.detail || L('incErrGeneration'))}</div>`;
                 return;
             }
             const data = await res.json();
             if (body) {
-                body.innerHTML = `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(jsStr(data.ai_narrative))}</div>
+                body.innerHTML = `<div style="font-size:13px; white-space:pre-wrap;">${escapeHtml(data.ai_narrative)}</div>
                                   <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generato il ${escapeHtml(fmtTime(data.ai_narrative_ts))}</div>`;
             }
         } catch (e) {

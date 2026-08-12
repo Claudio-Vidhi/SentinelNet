@@ -65,7 +65,7 @@
             <button type="button" class="btn btn-secondary btn-small requires-write"
                 style="margin:0; padding:4px 8px; color:var(--warning);"
                 title="${escapeHtml(L.titleCaTriage)}"
-                onclick="caTriageDevice('${jsStr(dev.ip)}', this, event)"><i class="fa-solid fa-bolt-lightning"></i></button>
+                onclick="caTriageDevice('${escapeHtml(jsStr(dev.ip))}', this, event)"><i class="fa-solid fa-bolt-lightning"></i></button>
         </span>`;
     }
 
@@ -867,7 +867,7 @@
     // stamparli tutti rende la colonna piu' larga dello schermo. L'elenco intero
     // resta nel DOM (ricerca del browser, copia-incolla), solo nascosto.
     function caMultiCell(values) {
-        const all = values.map(v => escapeHtml(jsStr(v)));
+        const all = values.map(v => escapeHtml(v));
         if (!all.length) return '—';
         // Nascondere un solo valore non fa guadagnare spazio: costa un clic e basta.
         if (all.length <= CA_CELL_PREVIEW + 1) return all.join(', ');
@@ -913,7 +913,7 @@
                 } else if (c.key === 'trusthost' && (v === null || v === undefined || v === '')) {
                     cell = escapeHtml(L.lblCaTrusthostAny);
                 } else {
-                    cell = (v === null || v === undefined || v === '') ? '—' : escapeHtml(jsStr(v));
+                    cell = (v === null || v === undefined || v === '') ? '—' : escapeHtml(v);
                 }
                 return `<td style="font-family:var(--font-code); font-size:12px;">${cell}</td>`;
             }).join('');
@@ -941,7 +941,7 @@
         if (!sectionIds.includes(activeId)) activeId = sectionIds[0];
         const subPills = sectionIds.map(id => {
             const lbl = L[sectionMap[id]] || sectionMap[id];
-            return `<button class="ca-pill${activeId === id ? ' active' : ''}" onclick="${switchFn}('${jsStr(id)}')">${escapeHtml(lbl)}</button>`;
+            return `<button class="ca-pill${activeId === id ? ' active' : ''}" onclick="${switchFn}('${escapeHtml(jsStr(id))}')">${escapeHtml(lbl)}</button>`;
         }).join('');
         const subBar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">${subPills}</div>`;
         // Riga di aiuto della sezione attiva. La chiave si ricava da quella

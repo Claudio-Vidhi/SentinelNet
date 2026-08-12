@@ -370,8 +370,8 @@
                                 <div style="color:var(--text-muted); font-size:11px; margin-top:2px;">${escapeHtml(i.guidance_why || '')}</div>
                             </td>
                             <td style="padding:8px 14px; text-align:right; white-space:nowrap;">
-                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0 3px;" onclick="openTemplateItemModal('${jsStr(i.ref)}')"><i class="fa-solid fa-pen"></i></button>
-                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="deleteTemplateItem('${jsStr(i.ref)}')"><i class="fa-solid fa-trash"></i></button>
+                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0 3px;" onclick="openTemplateItemModal('${escapeHtml(jsStr(i.ref))}')"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="deleteTemplateItem('${escapeHtml(jsStr(i.ref))}')"><i class="fa-solid fa-trash"></i></button>
                             </td>
                         </tr>
                     `).join("")}

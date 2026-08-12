@@ -1,5 +1,5 @@
 // Inventario endpoint: elenco dei client scoperti, filtrabile ed esportabile.
-// Ogni valore che arriva dagli apparati passa da escapeHtml(jsStr(x)).
+// Ogni valore che arriva dagli apparati passa da escapeHtml(x).
 //
 // La vista e' DERIVATA: nessuna annotazione salvata, nessuno stato da tenere
 // allineato a una rete che cambia da sola. Quello che si vede e' quello che
@@ -111,14 +111,14 @@ function endpointsRender(d) {
         : `<span style="color:var(--text-muted); font-size:12px; margin-right:8px; opacity:0.35;"><i class="fa-solid ${icon}"></i></span>`;
 
     const body = _epRows.map(r => `<tr style="cursor:pointer;" onclick="endpointsDiagnose('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(r.tenant || ''))}')">
-        <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(r.mac))}</td>
-        <td style="font-size:12px;">${escapeHtml(jsStr(r.oui_vendor || '—'))}</td>
-        <td style="font-size:12px;">${escapeHtml(jsStr(r.tenant || '—'))} <span style="color:var(--text-muted);">/ ${escapeHtml(jsStr(r.site || '—'))}</span></td>
-        <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml(jsStr((r.ips || []).join(', ') || '—'))}</td>
-        <td style="font-size:12px;">${escapeHtml(jsStr(r.switch_name || r.switch_ip || '—'))} <span style="color:var(--text-muted);">${escapeHtml(jsStr(r.interface || ''))}</span></td>
-        <td style="font-size:12px;">${escapeHtml(jsStr(r.vlan || '—'))}</td>
-        <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(jsStr(_epTime(r.first_seen)))}</td>
-        <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(jsStr(_epTime(r.last_seen)))}</td>
+        <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}</td>
+        <td style="font-size:12px;">${escapeHtml(r.oui_vendor || '—')}</td>
+        <td style="font-size:12px;">${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.site || '—')}</span></td>
+        <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml((r.ips || []).join(', ') || '—')}</td>
+        <td style="font-size:12px;">${escapeHtml(r.switch_name || r.switch_ip || '—')} <span style="color:var(--text-muted);">${escapeHtml(r.interface || '')}</span></td>
+        <td style="font-size:12px;">${escapeHtml(r.vlan || '—')}</td>
+        <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(_epTime(r.first_seen))}</td>
+        <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(_epTime(r.last_seen))}</td>
         <td>${(r.flags || []).map(_epFlag).join(' ')}</td>
         <td style="white-space:nowrap;">${
             act('fa-stethoscope', L.epActDiagnose,
@@ -160,7 +160,7 @@ const _EP_FLAG_COLOR = {
 
 function _epFlag(f) {
     const color = _EP_FLAG_COLOR[f] || 'var(--text-muted)';
-    return `<span style="font-size:10px; color:${color}; border:1px solid ${color}; border-radius:0; padding:0 4px; white-space:nowrap;">${escapeHtml(jsStr(f))}</span>`;
+    return `<span style="font-size:10px; color:${color}; border:1px solid ${color}; border-radius:0; padding:0 4px; white-space:nowrap;">${escapeHtml(f)}</span>`;
 }
 
 function _epTime(iso) {
@@ -249,7 +249,7 @@ function endpointsMode(mode) {
         const label = d => d.Hostname || d.IP;
         picker.innerHTML = devs.slice()
             .sort((a, b) => label(a).localeCompare(label(b)))
-            .map(d => `<option value="${escapeHtml(jsStr(d.IP))}">${escapeHtml(jsStr(label(d)))} — ${escapeHtml(jsStr(d.IP))}</option>`)
+            .map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(label(d))} — ${escapeHtml(d.IP)}</option>`)
             .join('');
         // Un apparato senza elenco interfacce risponde comunque, dichiarando
         // 'elenco porte non disponibile': meglio di non poterlo nemmeno
@@ -298,10 +298,10 @@ function endpointsPortsRender(d) {
     const stateLabel = { occupied: L.epStateOccupied, uplink: L.epStateUplink, free: L.epStateFree };
 
     const rows = (d.ports || []).map(p => `<tr>
-        <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(jsStr(p.interface))}${
+        <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(p.interface)}${
             p.physical ? '' : ' <span style="font-size:10px; color:var(--text-muted); border:1px solid var(--border); border-radius:0; padding:0 4px;">virt</span>'}</td>
-        <td><span style="font-size:10px; color:${stateColor[p.state]}; border:1px solid ${stateColor[p.state]}; border-radius:0; padding:1px 5px;">${escapeHtml(jsStr(stateLabel[p.state] || p.state))}</span></td>
-        <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml(jsStr((p.macs || []).join(', ') || (p.uplink_to ? '→ ' + p.uplink_to : '—')))}</td>
+        <td><span style="font-size:10px; color:${stateColor[p.state]}; border:1px solid ${stateColor[p.state]}; border-radius:0; padding:1px 5px;">${escapeHtml(stateLabel[p.state] || p.state)}</span></td>
+        <td style="font-family:var(--font-code); font-size:11px;">${escapeHtml((p.macs || []).join(', ') || (p.uplink_to ? '→ ' + p.uplink_to : '—'))}</td>
     </tr>`).join('');
 
     host.innerHTML = `
