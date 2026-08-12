@@ -879,24 +879,24 @@
 
         const body = rows.map(r => {
             const ports = r.open_ports.length
-                ? escapeHtml(jsStr(r.open_ports.join(', ')))
+                ? escapeHtml(r.open_ports.join(', '))
                 : '<span style="color:var(--text-muted)">—</span>';
             let verifyCell = '<span style="color:var(--text-muted)">—</span>';
             if (r.verify && r.verify.ok) {
                 verifyCell = `<span style="color:var(--primary)">✓ ${
-                    escapeHtml(jsStr(r.verify.hostname || ''))}</span>`;
+                    escapeHtml(r.verify.hostname || '')}</span>`;
             } else if (r.verify) {
                 verifyCell = `<span style="color:var(--danger)" title="${
-                    escapeHtml(jsStr(r.verify.error || ''))}">✗ ${
-                    escapeHtml(jsStr((r.verify.error || '').slice(0, 40)))}</span>`;
+                    escapeHtml(r.verify.error || '')}">✗ ${
+                    escapeHtml((r.verify.error || '').slice(0, 40))}</span>`;
             }
             return `<div style="display:grid; grid-template-columns:28px 130px 48px 1fr 1fr;
                         align-items:center; gap:8px; padding:8px 12px;
                         border-bottom:1px solid var(--border); font-size:12px;">
-                <input type="checkbox" class="scan-row-cb" data-ip="${escapeHtml(jsStr(r.ip))}"
+                <input type="checkbox" class="scan-row-cb" data-ip="${escapeHtml(r.ip)}"
                        onchange="refreshScanActionButtons()"
                        style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
-                <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(jsStr(r.ip))}</span>
+                <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(r.ip)}</span>
                 <span style="color:${r.alive ? 'var(--primary)' : 'var(--text-muted)'};">${r.alive ? '✓' : '✗'}</span>
                 <span style="font-family:var(--font-code);">${ports}</span>
                 <span>${verifyCell}</span>
@@ -925,8 +925,8 @@
         // Empty value = no identity chosen: verify stays disabled, add still works.
         sel.innerHTML = `<option value="">${
             escapeHtml(L.optScanNoIdentity || '— nessuna (solo scoperta) —')}</option>` +
-            identities.map(i => `<option value="${escapeHtml(jsStr(i.id))}">${
-                escapeHtml(jsStr(i.name))} (${escapeHtml(jsStr(i.username))})</option>`).join('');
+            identities.map(i => `<option value="${escapeHtml(i.id)}">${
+                escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('');
         sel.onchange = refreshScanActionButtons;
     }
 

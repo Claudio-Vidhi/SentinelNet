@@ -691,7 +691,7 @@
                 const swIf = g.origin_interface || '';
                 banner = `<div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:0; background:${tint('--primary',12)}; border:1px solid ${tint('--primary',35)}; color:var(--primary); font-size:12px; margin-bottom:14px;">
                     <i class="fa-solid fa-microchip" style="margin-top:2px;"></i>
-                    <span>${escapeHtml(jsStr(en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`))}</span></div>`;
+                    <span>${escapeHtml(en?`This MAC belongs to interface ${swIf} of ${swName}`:`Questo MAC appartiene all'interfaccia ${swIf} di ${swName}`)}</span></div>`;
             } else if (status === 'ambiguous') {
                 // Ambiguo significa più porte plausibili NELLA STESSA rete: qui
                 // una scansione più fresca serve davvero.
@@ -712,7 +712,7 @@
             // sola sarebbe rumore, e la schermata resta quella di sempre.
             const head = multi && g.tenant
                 ? `<div style="margin:18px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); font-size:13px; font-weight:700; color:var(--primary);">
-                    <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(jsStr(g.tenant))}</div>`
+                    <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(g.tenant)}</div>`
                 : '';
 
             return `${head}${banner}
@@ -741,7 +741,7 @@
                     <h3 style="font-size:17px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
                     <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
                 </div>
-                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(jsStr(macStr))}</div>
+                <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(macStr)}</div>
 
                 ${sectionsHtml}
 

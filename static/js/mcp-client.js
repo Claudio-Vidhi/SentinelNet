@@ -1,6 +1,6 @@
 // ===== MCP Client (PREVIEW) tab — SentinelNet come client verso server MCP esterni =====
 // Gating: la tab e il flag sono admin-only (rispecchia tab-mcp). Le stringhe
-// derivate dal server esterno passano sempre da escapeHtml(jsStr(x)).
+// derivate dal server esterno passano sempre da escapeHtml(x).
 
 const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
@@ -53,7 +53,7 @@ function renderMcpClientServers(servers) {
         return;
     }
     list.innerHTML = servers.map(s => {
-        const nm = escapeHtml(jsStr(s.name));
+        const nm = escapeHtml(s.name);
         return `<div style="border:1px solid var(--border); border-radius:0; padding:12px; margin-bottom:10px; background:var(--surface);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
               <span><strong>${escapeHtml(s.name)}</strong> <code style="font-size:11px; color:var(--text-muted);">${escapeHtml(s.url)}</code>
@@ -111,9 +111,9 @@ async function mcpClientListTools(name) {
     const tools = data.tools || [];
     if (!target) return;
     if (!tools.length) { target.innerHTML = `<span style="color:var(--text-muted); font-size:12px;">${escapeHtml(L.mcpNoTools)}</span>`; return; }
-    const nm = escapeHtml(jsStr(name));
+    const nm = escapeHtml(name);
     target.innerHTML = tools.map((t, i) => {
-        const tn = escapeHtml(jsStr(t.name));
+        const tn = escapeHtml(t.name);
         const schema = t.inputSchema ? escapeHtml(JSON.stringify(t.inputSchema, null, 2)) : '';
         return `<div style="border:1px solid var(--border); border-radius:0; padding:10px; margin-bottom:8px;">
           <div><code style="font-size:12px;">${escapeHtml(t.name)}</code></div>

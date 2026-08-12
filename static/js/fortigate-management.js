@@ -3,7 +3,7 @@
 // preview. Questa è l'unica proprietaria della UI token/oggetti FortiGate:
 // il duplicato che viveva in tab-provisioner (provisioning.js) è stato
 // rimosso. Le stringhe derivate dal FortiGate passano sempre da
-// escapeHtml(jsStr(x)) (jsStr definito in mcp-client.js).
+// escapeHtml(x) (jsStr definito in mcp-client.js).
 
 // Registro delle viste di sola lettura. Ogni voce dice DOVE prendere i dati
 // e QUALI colonne mostrarne: un solo loader e un solo renderer li servono
@@ -267,7 +267,7 @@ function renderFgtDataset(key) {
     // non è la stessa cosa di "il firewall ha risposto", e finora la UI lo
     // nascondeva.
     const badge = st.source === 'ssh'
-        ? `<div style="margin-bottom:8px;"><span class="status warn" title="${escapeHtml(jsStr(st.apiError || ''))}">
+        ? `<div style="margin-bottom:8px;"><span class="status warn" title="${escapeHtml(st.apiError || '')}">
              <i class="fa-solid fa-terminal"></i> ${escapeHtml(L.badgeFgtSshFallback || (en ? 'CLI fallback — REST failed' : 'Fallback CLI — REST fallita'))}</span></div>`
         : '';
 
@@ -279,7 +279,7 @@ function renderFgtDataset(key) {
     const qEcho = (eq.log_type || eq.log_subtype || eq.log_device)
         ? `<div style="margin-bottom:8px; font-size:11px; color:var(--text-muted);">
              ${escapeHtml(L.lblFgtLogEffective || (en ? 'Executed query' : 'Query eseguita'))}:
-             <code style="font-family:var(--font-code);">log/${escapeHtml(jsStr(eq.log_device || '?'))}/${escapeHtml(jsStr(eq.log_type || '?'))}/${escapeHtml(jsStr(eq.log_subtype || '?'))}</code>
+             <code style="font-family:var(--font-code);">log/${escapeHtml(eq.log_device || '?')}/${escapeHtml(eq.log_type || '?')}/${escapeHtml(eq.log_subtype || '?')}</code>
              ${eq.subtype_enforced ? `<span class="status warn" style="margin-left:8px;"
                   title="${escapeHtml(L.msgFgtSubtypeEnforcedHint || (en ? 'FortiOS returned other subtypes for this path; rows were filtered on the log subtype field so the view matches the FortiGate GUI 1:1.' : 'FortiOS ha restituito altri sottotipi per questo percorso; le righe sono state filtrate sul campo subtype perché la vista corrisponda 1:1 alla GUI del FortiGate.'))}">${escapeHtml(L.badgeFgtSubtypeEnforced || (en ? 'subtype filtered' : 'sottotipo filtrato'))}</span>` : ''}
              ${eq.days_queried ? `<span style="margin-left:8px;">${escapeHtml(
@@ -308,7 +308,7 @@ function renderFgtDataset(key) {
               ${escapeHtml(counter)} ${escapeHtml(L.lblFgtLines || (en ? 'lines' : 'righe'))}</summary>
             <pre style="font-family:var(--font-code); font-size:12px; background:var(--surface);
             border:1px solid var(--border); border-radius:0; padding:12px; margin:0;
-            white-space:pre-wrap; max-height:420px; overflow:auto;">${escapeHtml(jsStr(lines.join('\n')))}</pre>
+            white-space:pre-wrap; max-height:420px; overflow:auto;">${escapeHtml(lines.join('\n'))}</pre>
           </details>`;
         return;
     }
@@ -327,7 +327,7 @@ function renderFgtDataset(key) {
 
 function _fgtEmpty(msg, title) {
     return `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;"
-        ${title ? `title="${escapeHtml(jsStr(title))}"` : ''}>${escapeHtml(msg)}</div>`;
+        ${title ? `title="${escapeHtml(title)}"` : ''}>${escapeHtml(msg)}</div>`;
 }
 
 function _fgtCell(v) {
@@ -364,7 +364,7 @@ function _fgtSectionRows(body) {
 // Terzo elemento opzionale di una voce `cols`. Ricevono il valore GREZZO del
 // dispositivo e restituiscono HTML: sono l'unico punto della tab in cui si
 // costruisce markup attorno a un dato del FortiGate, quindi ognuno DEVE far
-// passare il valore da escapeHtml(jsStr(...)) prima di interpolarlo. Un
+// passare il valore da escapeHtml(...) prima di interpolarlo. Un
 // formattatore che dimentica di farlo è una XSS con sorgente il firewall.
 
 // Stati che il FortiOS scrive in mille modi diversi per dire la stessa cosa.
@@ -378,7 +378,7 @@ const FGT_FMT = {
         if (v === null || v === undefined || v === '') return '—';
         const raw = String(typeof v === 'boolean' ? v : v).toLowerCase().trim();
         const kind = _FGT_OK.includes(raw) ? 'ok' : _FGT_BAD.includes(raw) ? 'bad' : 'warn';
-        return `<span class="status ${kind}">${escapeHtml(jsStr(String(v)))}</span>`;
+        return `<span class="status ${kind}">${escapeHtml(String(v))}</span>`;
     },
     // Barra 0-100. FortiOS restituisce spesso [{current: N}] invece di N.
     meter(v) {
@@ -387,26 +387,26 @@ const FGT_FMT = {
         const pct = Math.max(0, Math.min(100, n));
         const kind = pct >= 90 ? 'bad' : pct >= 75 ? 'warn' : 'ok';
         return `<span class="fgt-meter"><span class="fgt-meter-bar"><span class="fgt-meter-fill ${kind}"
-            style="width:${pct}%"></span></span><span class="fgt-meter-num">${escapeHtml(jsStr(pct.toFixed(0)))}%</span></span>`;
+            style="width:${pct}%"></span></span><span class="fgt-meter-num">${escapeHtml(pct.toFixed(0))}%</span></span>`;
     },
     // Epoch (secondi o millisecondi) -> data locale. 1786009452 non dice
     // niente a chi guarda una scadenza DHCP.
     time(v) {
         const n = Number(v);
-        if (!isFinite(n) || n <= 0) return _fgtCell(v) === '—' ? '—' : escapeHtml(jsStr(_fgtCell(v)));
+        if (!isFinite(n) || n <= 0) return _fgtCell(v) === '—' ? '—' : escapeHtml(_fgtCell(v));
         // Sotto ~10^11 è in secondi, sopra in millisecondi.
         const d = new Date(n < 1e11 ? n * 1000 : n);
-        if (isNaN(d.getTime())) return escapeHtml(jsStr(String(v)));
-        return `<span title="${escapeHtml(jsStr(String(v)))}">${escapeHtml(jsStr(d.toLocaleString()))}</span>`;
+        if (isNaN(d.getTime())) return escapeHtml(String(v));
+        return `<span title="${escapeHtml(String(v))}">${escapeHtml(d.toLocaleString())}</span>`;
     },
     // Contatori di byte: 14680064 non si legge, 14.0 MB sì.
     bytes(v) {
         const n = Number(v);
-        if (!isFinite(n)) return _fgtCell(v) === '—' ? '—' : escapeHtml(jsStr(_fgtCell(v)));
+        if (!isFinite(n)) return _fgtCell(v) === '—' ? '—' : escapeHtml(_fgtCell(v));
         const u = ['B', 'KB', 'MB', 'GB', 'TB'];
         let i = 0, x = n;
         while (x >= 1024 && i < u.length - 1) { x /= 1024; i++; }
-        return escapeHtml(jsStr((i ? x.toFixed(1) : String(x)) + ' ' + u[i]));
+        return escapeHtml((i ? x.toFixed(1) : String(x)) + ' ' + u[i]);
     },
 };
 
@@ -430,7 +430,7 @@ function _fgtRows(data, spec) {
 function _fgtFmtCell(row, key, fmt) {
     const v = row ? row[key] : undefined;
     if (fmt && FGT_FMT[fmt]) return FGT_FMT[fmt](v);
-    return escapeHtml(jsStr(_fgtCell(v)));
+    return escapeHtml(_fgtCell(v));
 }
 
 // --- Risorse di sistema: piccoli multipli con sparkline ---------------------
@@ -485,8 +485,8 @@ function _fgtSparkline(points, kind, w, h) {
     const tip = last ? `${when(last[0])} — ${last[1]}${unit}` : '';
     return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" width="100%" height="${h}"
         style="display:block; overflow:visible;" role="img"
-        aria-label="${escapeHtml(jsStr(`${vals.length} campioni, min ${Math.min(...vals)}${unit}, max ${Math.max(...vals)}${unit}`))}">
-        <title>${escapeHtml(jsStr(tip))}</title>
+        aria-label="${escapeHtml(`${vals.length} campioni, min ${Math.min(...vals)}${unit}, max ${Math.max(...vals)}${unit}`)}">
+        <title>${escapeHtml(tip)}</title>
         <line x1="0" y1="${y(avg).toFixed(1)}" x2="${w}" y2="${y(avg).toFixed(1)}"
               stroke="var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>
         <polyline points="${line}" fill="none" stroke="${stroke}" stroke-width="2"
@@ -520,12 +520,12 @@ function renderFgtResources(host, usage, badge) {
         const unit = kind === 'pct' ? '%' : '';
         const cur = e.current;
         const stat = (name, v) => `<span style="color:var(--text-muted);">${escapeHtml(name)}
-            <strong style="color:var(--text); font-variant-numeric:tabular-nums;">${escapeHtml(jsStr(
-                v == null ? '—' : String(v) + unit))}</strong></span>`;
+            <strong style="color:var(--text); font-variant-numeric:tabular-nums;">${escapeHtml(
+                v == null ? '—' : String(v) + unit)}</strong></span>`;
         return `<div class="panel" style="margin:0; padding:14px;">
             <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px;">
               <span style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700; letter-spacing:.04em;">${escapeHtml(lbl(label))}</span>
-              <span style="font-family:var(--font-display); font-size:21px;">${escapeHtml(jsStr(cur == null ? '—' : String(cur) + unit))}</span>
+              <span style="font-family:var(--font-display); font-size:21px;">${escapeHtml(cur == null ? '—' : String(cur) + unit)}</span>
             </div>
             <div style="margin:10px 0 8px; min-height:48px;">${pts.length
                 ? _fgtSparkline(pts, kind, 240, 48)
@@ -541,7 +541,7 @@ function renderFgtResources(host, usage, badge) {
         const e = _fgtResEntry(usage[k]);
         const h = (e.historical || {})[fgtResWindow] || {};
         const u = kind === 'pct' ? '%' : '';
-        const c = v => `<td style="padding:6px 12px; font-family:var(--font-code); font-size:12px; font-variant-numeric:tabular-nums;">${escapeHtml(jsStr(v == null ? '—' : String(v) + u))}</td>`;
+        const c = v => `<td style="padding:6px 12px; font-family:var(--font-code); font-size:12px; font-variant-numeric:tabular-nums;">${escapeHtml(v == null ? '—' : String(v) + u)}</td>`;
         return `<tr style="border-bottom:1px solid var(--border);">
             <td style="padding:6px 12px; font-weight:600;">${escapeHtml(lbl(label))}</td>
             ${c(e.current)}${c(h.min)}${c(h.average)}${c(h.max)}</tr>`;
@@ -570,10 +570,10 @@ function _fgtKvTable(obj, errors) {
     const rows = Object.entries(obj || {}).map(([k, v]) => {
         const err = errors && errors[k];
         const warn = err ? 'color:var(--warning);' : '';
-        const title = err ? ` title="${escapeHtml(jsStr(err))}"` : '';
+        const title = err ? ` title="${escapeHtml(err)}"` : '';
         return `<tr style="border-bottom:1px solid var(--border);">
-           <td style="padding:8px 12px; font-weight:600; width:32%;">${escapeHtml(jsStr(k))}</td>
-           <td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${warn}"${title}>${escapeHtml(jsStr(_fgtCell(v)))}</td>
+           <td style="padding:8px 12px; font-weight:600; width:32%;">${escapeHtml(k)}</td>
+           <td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${warn}"${title}>${escapeHtml(_fgtCell(v))}</td>
          </tr>`;
     }).join('');
     return `<div class="table-wrap" style="margin-top:0;"><table style="width:100%; font-size:13px; border-collapse:collapse;"><tbody>${rows}</tbody></table></div>`;
@@ -699,7 +699,7 @@ function renderFgtPrevTokensTable(tokens) {
         const verifyTls = conf.verify_tls !== false ? 'Sì' : 'No';
         const status = '<span class="status ok"><i class="fa-solid fa-check"></i> Configurato</span>';
         return `<tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:8px 12px;">${escapeHtml(jsStr(ip))}</td>
+            <td style="padding:8px 12px;">${escapeHtml(ip)}</td>
             <td style="padding:8px 12px;">${port}</td>
             <td style="padding:8px 12px;">${verifyTls}</td>
             <td style="padding:8px 12px;">${status}</td>
@@ -796,7 +796,7 @@ async function testFgtPrevToken() {
 // selettore in testa alla tab imposta il target attivo lato server; il
 // modale "Gestisci FortiGate" elenca/aggiunge/modifica/rimuove i target e
 // ne testa la connessione. Stringhe derivate dal FortiGate/inventario
-// passano sempre da escapeHtml(jsStr(x)).
+// passano sempre da escapeHtml(x).
 
 // L'IP su cui operano tutte le viste: il target attivo scelto in testa alla tab.
 function fgtCurrentTarget() {
@@ -825,8 +825,8 @@ function renderFgtTargetSelect() {
         return;
     }
     sel.innerHTML = fgtTargetsCache.map(t => {
-        const label = `${t.name ? jsStr(t.name) : jsStr(t.ip)} (${jsStr(t.ip)})`;
-        return `<option value="${escapeHtml(jsStr(t.ip))}" ${t.active ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+        const label = `${t.name || t.ip} (${t.ip})`;
+        return `<option value="${escapeHtml(t.ip)}" ${t.active ? 'selected' : ''}>${escapeHtml(label)}</option>`;
     }).join('');
 }
 
@@ -892,8 +892,8 @@ function renderFgtMgrTable() {
     emptyMsg.style.display = 'none';
 
     tbody.innerHTML = fgtTargetsCache.map(t => {
-        const ip = escapeHtml(jsStr(t.ip));
-        const name = escapeHtml(jsStr(t.name || ''));
+        const ip = escapeHtml(t.ip);
+        const name = escapeHtml(t.name || '');
         const tlsBadge = t.verify_tls
             ? `<span class="status ok">${escapeHtml(L.badgeFgtTestOk || 'OK')}</span>`
             : `<span class="status warn">off</span>`;
@@ -1011,9 +1011,9 @@ async function testFgtMgrTarget(ip, btn) {
     const data = res ? await res.json().catch(() => ({ ok: false })) : { ok: false };
     if (resultSpan) {
         if (data.ok) {
-            resultSpan.innerHTML = `<span class="status ok">${escapeHtml(L.badgeFgtTestOk || 'OK')}${data.version ? ' v' + escapeHtml(jsStr(data.version)) : ''}</span>`;
+            resultSpan.innerHTML = `<span class="status ok">${escapeHtml(L.badgeFgtTestOk || 'OK')}${data.version ? ' v' + escapeHtml(data.version) : ''}</span>`;
         } else {
-            resultSpan.innerHTML = `<span class="status bad" title="${escapeHtml(jsStr(data.error || ''))}">${escapeHtml(L.badgeFgtTestFail || 'Fallito')}</span>`;
+            resultSpan.innerHTML = `<span class="status bad" title="${escapeHtml(data.error || '')}">${escapeHtml(L.badgeFgtTestFail || 'Fallito')}</span>`;
         }
     }
 }
@@ -1121,7 +1121,7 @@ async function renderFgtOverview() {
         <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted); font-weight:700; letter-spacing:.04em;">${escapeHtml(label)}</div>
         <div style="margin-top:8px; font-family:var(--font-display); font-size:21px; line-height:1.2;">${bodyHtml}</div>
       </div>`;
-    const plain = v => escapeHtml(jsStr(v == null || v === '' ? '—' : String(v)));
+    const plain = v => escapeHtml(v == null || v === '' ? '—' : String(v));
     // Una percentuale come barra: 62 da solo non dice se sia molto o poco.
     const gauge = v => `<div style="font-size:13px;">${FGT_FMT.meter(v)}</div>`;
 

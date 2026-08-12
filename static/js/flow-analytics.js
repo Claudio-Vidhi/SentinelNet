@@ -188,7 +188,7 @@
                     <i class="fa-solid ${icon}"></i> ${title}
                 </h5>
                 ${(items || []).map(item => `
-                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:0; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" onclick="applySiemFilter('${jsStr(item.value)}', '${field}')" title="${escapeHtml(field)}:${escapeHtml(item.value)}">
+                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:0; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" onclick="applySiemFilter('${escapeHtml(jsStr(item.value))}', '${field}')" title="${escapeHtml(field)}:${escapeHtml(item.value)}">
                         <span style="font-family:var(--font-code); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:130px;">${escapeHtml(item.value)}</span>
                         <span class="badge" style="font-size:10px;">${item.count}</span>
                     </div>
