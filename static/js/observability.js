@@ -64,7 +64,79 @@
                     <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
                 </button>
             </div>
-            <div id="obsSettingsError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>`;
+            <div id="obsSettingsError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>
+            <div id="obsHealthBox" style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border);"></div>`;
+        loadObsHealth();
+    }
+
+    // Stato della pipeline: finora esisteva solo come rotta, e per sapere se un
+    // listener era davvero in ascolto bisognava chiamarla a mano.
+    async function loadObsHealth() {
+        const box = document.getElementById('obsHealthBox');
+        if (!box) return;
+        const L = i18n[currentLang];
+        const en = currentLang === 'en';
+        const res = await apiFetch('/api/observability/health');
+        if (!res || !res.ok) { box.innerHTML = ''; return; }
+        const h = await res.json();
+        const listeners = h.listeners || {};
+        const badges = Object.keys(listeners).map(name => {
+            const active = listeners[name] && listeners[name].active;
+            return `<span class="status ${active ? 'ok' : 'warn'}" style="margin-right:6px;">
+                        <span class="led ${active ? 'led-success' : 'led-warning'}"></span>${escapeHtml(name)}
+                    </span>`;
+        }).join('') || `<span style="color:var(--text-muted); font-size:12px;">${escapeHtml(en ? 'no listener' : 'nessun listener')}</span>`;
+        const mb = (h.db_size_bytes || 0) / (1024 * 1024);
+        box.innerHTML = `
+            <h4 style="margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);">
+                <i class="fa-solid fa-heart-pulse" style="color:var(--primary);"></i>
+                ${escapeHtml(L.obsHealthTitle || (en ? 'Pipeline health' : 'Stato della pipeline'))}
+            </h4>
+            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; margin-bottom:12px;">
+                <span>${escapeHtml(en ? 'Enabled' : 'Abilitata')}:
+                    <span class="status ${h.enabled ? 'ok' : 'warn'}">${h.enabled ? (en ? 'yes' : 'si') : 'no'}</span></span>
+                <span>${escapeHtml(en ? 'Listeners' : 'Listener')}: ${badges}</span>
+                <span>DB: <b>${mb.toFixed(1)} MB</b></span>
+                <span>${escapeHtml(en ? 'Schema' : 'Schema')}: <b>${escapeHtml(String(h.schema_version ?? '—'))}</b></span>
+            </div>
+            <p style="margin:0 0 8px; font-size:12px; color:var(--text-muted);">
+                ${escapeHtml(en
+                    ? 'A background job already prunes by the retention set below, per table. This is a one-off purge with a horizon of your choosing.'
+                    : 'Un job in background pota gia’ secondo la retention impostata piu’ sotto, tabella per tabella. Questa e’ una pulizia una-tantum con l’orizzonte che scegli.')}
+            </p>
+            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                <div class="form-group" style="margin-bottom:0; max-width:170px;">
+                    <label for="obsPruneDays">${escapeHtml(L.obsPruneDays || (en ? 'Keep last (days)' : 'Conserva (giorni)'))}</label>
+                    <input id="obsPruneDays" type="number" min="1" max="3650" value="30" style="padding-left:12px;">
+                </div>
+                <button class="btn btn-danger btn-small" style="width:auto; margin:0;" onclick="pruneObsLogs()">
+                    <i class="fa-solid fa-broom"></i> ${escapeHtml(L.obsPruneRun || (en ? 'Purge older logs' : 'Elimina i log vecchi'))}
+                </button>
+            </div>`;
+    }
+
+    // Cancellazione definitiva: syslog_events e flow_aggregates oltre la soglia.
+    async function pruneObsLogs() {
+        const en = currentLang === 'en';
+        const days = parseInt(document.getElementById('obsPruneDays')?.value, 10);
+        if (!days || days < 1) {
+            showToast(en ? 'Enter a retention in days.' : 'Indica una retention in giorni.', 'warning');
+            return;
+        }
+        const question = en
+            ? `Permanently delete syslog events and flow aggregates older than ${days} days?`
+            : `Eliminare definitivamente eventi syslog e aggregati di flusso piu' vecchi di ${days} giorni?`;
+        if (!confirm(question)) return;
+        const res = await apiFetch('/api/observability/prune-logs', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ days })
+        });
+        if (!res || !res.ok) {
+            showToast(en ? 'Purge failed.' : 'Eliminazione non riuscita.', 'error');
+            return;
+        }
+        showToast(en ? 'Old logs purged.' : 'Log vecchi eliminati.', 'success');
+        loadObsHealth();
     }
 
     async function saveObsSettings() {
@@ -1560,6 +1632,8 @@
     }
 
     // Expose functions globally for UI
+    window.loadObsHealth = loadObsHealth;
+    window.pruneObsLogs = pruneObsLogs;
     window.anomOpenIncident = anomOpenIncident;
     window.openTrafficoAnomalies = openTrafficoAnomalies;
     window.trafSelectedTenants = () => new Set(_flowsSelectedTenants);
