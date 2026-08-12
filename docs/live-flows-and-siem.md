@@ -90,8 +90,8 @@ Non-negotiable rules:
   concurrent readers).
 - `get_observability_connection()` is **only** for migrations and tests, and is
   forbidden on async paths (grep gate in review). One deliberate exception:
-  `obs_anomaly_status()` uses it inside `asyncio.to_thread` because it needs an
-  atomic read-then-write transaction.
+  `set_incident_status()` (`routers/incidents.py`) uses it inside
+  `asyncio.to_thread` because it needs an atomic read-then-write transaction.
 
 See [ADR-0004](adr/0004-single-process-sqlite-writer.md).
 
@@ -157,7 +157,7 @@ All in [routers/observability.py](../routers/observability.py), all scoped by
 | `GET /api/observability/protocol-distribution` | user | Totals, time trend and drill-down breakdown |
 | `GET /api/observability/syslog` | user | Latest normalized syslog events |
 | `GET /api/observability/anomalies` | user | Correlated events, paginated, filtered by status |
-| `POST /api/observability/anomalies/{id}/status` | operator | Status transition |
+| `POST /api/observability/anomalies/{id}/status` | operator | **Deprecated** alias of `POST /api/incidents/{id}/status`, which it delegates to |
 | `GET/POST /api/observability/config` | **admin** | Listener config, applied hot |
 | `GET /api/observability/health` | **admin** | Active listeners, metrics, DB size |
 | `POST /api/observability/api-poll` | operator | One-shot REST poll |

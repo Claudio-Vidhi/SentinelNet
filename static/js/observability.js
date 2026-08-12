@@ -1026,8 +1026,10 @@
         trafSwitchView('anomalies');
     }
 
+    // L'id di un'anomalia e' l'id del suo incidente: la transizione va sulla
+    // rotta degli incidenti. Quella sotto /observability e' un alias deprecato.
     async function anomTransition(id, fromStatus, toStatus) {
-        const res = await apiFetch(`/api/observability/anomalies/${id}/status`, {
+        const res = await apiFetch(`/api/incidents/${id}/status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ from_status: fromStatus, status: toStatus })
