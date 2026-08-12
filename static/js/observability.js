@@ -860,7 +860,10 @@
     async function loadAnomalies() {
         const tbody = document.getElementById('anomTableBody');
         const status = document.getElementById('anomStatus').value;
-        const res = await apiFetch(`/api/observability/anomalies?status=${encodeURIComponent(status)}&window=7d&limit=100`);
+        // The window comes from the tab header like every other view. It used
+        // to be a hardcoded 7d, so this panel silently showed a week while the
+        // rest of the tab showed the selected range.
+        const res = await apiFetch(`/api/observability/anomalies?status=${encodeURIComponent(status)}&window=${encodeURIComponent(trafState.window)}&limit=100`);
         if (!res || !res.ok) return;
         let rows = (await res.json()).anomalies || [];
 
@@ -906,6 +909,12 @@
             } else if (a.status === 'ack') {
                 actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'ack', 'resolved')">${lblResolve}</button>`);
             }
+            // The id this route returns IS the incident id: /api/observability/
+            // anomalies reads FROM incidents. The two surfaces are one queue,
+            // so the link costs nothing but the anchor.
+            if (a.id != null) {
+                actions.push(`<button class="btn" style="font-size:11px; padding:3px 8px;" title="${en ? 'Open the incident' : 'Apri l\'incidente'}" onclick="anomOpenIncident(${Number(a.id)})"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>`);
+            }
             return `<tr style="font-size:12px; border-top:1px solid var(--border);">
                 <td style="padding:6px 8px;">${when}</td>
                 <td>${escapeHtml(a.tenant)}</td>
@@ -918,6 +927,31 @@
                 <td style="display:flex; gap:4px;">${actions.join('')}</td>
             </tr>`;
         }).join('');
+    }
+
+    // Anomaly row -> the incident it belongs to. The Incidenti tab is
+    // admin-only, so a viewer gets told rather than sent to an empty tab.
+    function anomOpenIncident(id) {
+        const nav = document.getElementById('navIncidents');
+        if (!nav || nav.offsetParent === null) {
+            showToast(currentLang === 'en'
+                ? 'The Incidents tab is not available for your role.'
+                : 'Il tab Incidenti non e\' disponibile per il tuo ruolo.', 'warning');
+            return;
+        }
+        switchTab('tab-incidents', nav);
+        loadIncidentsTab();
+        openIncident(id);
+    }
+
+    // Home counts the anomalies, Traffico shows them. One queue, one table.
+    function openTrafficoAnomalies() {
+        const nav = document.querySelector('[data-tabs="tab-flows"]');
+        switchTab('tab-flows', nav || undefined);
+        const status = document.getElementById('anomStatus');
+        if (status) status.value = 'new';
+        flowsTabShown();
+        trafSwitchView('anomalies');
     }
 
     async function anomTransition(id, fromStatus, toStatus) {
@@ -1526,6 +1560,8 @@
     }
 
     // Expose functions globally for UI
+    window.anomOpenIncident = anomOpenIncident;
+    window.openTrafficoAnomalies = openTrafficoAnomalies;
     window.trafSelectedTenants = () => new Set(_flowsSelectedTenants);
     window.trafState = trafState;
     window.trafSwitchView = trafSwitchView;

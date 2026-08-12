@@ -283,7 +283,7 @@ class TestHomeTab(unittest.TestCase):
         self.assertIn('data-i18n="tabHome"', html)
         # runtime-populated ids
         for eid in ('homeKpiOnline', 'homeKpiAttention',
-                    'homeAttentionBody', 'homeAnomBody'):
+                    'homeAttentionBody', 'homeAnomSummary'):
             self.assertIn(f'id="{eid}"', html)
         # Home wires only to REAL endpoints
         self.assertIn('/api/local-devices', html)
