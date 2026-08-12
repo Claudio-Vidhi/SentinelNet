@@ -232,7 +232,7 @@
         <button class="nav-item" data-tabs="tab-flows" onclick="switchTab('tab-flows', this); flowsTabShown();">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
         </button>
-        <button class="nav-item" data-tabs="tab-mac tab-clientmap tab-diagnosi tab-endpoints" onclick="switchTab('tab-mac', this)">
+        <button class="nav-item" data-tabs="tab-endpoint" onclick="switchTab('tab-endpoint', this)">
           <span class="nav-left" data-i18n="tabEndpointLoc"><i class="fa-solid fa-map-pin"></i> Localizzazione Endpoint</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-ai', this)">
@@ -1028,6 +1028,33 @@
         </div>
         <div id="vwDrawer" style="display:none; position:fixed; top:0; right:0; bottom:0; width:min(480px, 90vw); background:var(--surface); border-left:1px solid var(--border); z-index:1000; padding:20px; overflow-y:auto;"></div>
       </div>
+    </div>
+
+    <!-- TAB: Endpoint group — MAC tracker, client map, diagnosi, inventory -->
+    <div id="tab-endpoint" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <h2 id="locTitle" style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleMacTracker">MAC Address Tracker</h2>
+          <p id="locDesc" style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descMacTracker"></p>
+        </div>
+      </div>
+
+      <div class="filterbar" style="align-items:center; gap:10px; margin-bottom:14px;">
+        <span style="font-size:12px; color:var(--text-muted);" data-i18n="locTenantLabel">Tenant</span>
+        <select id="locTenant" onchange="locTenantChanged()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;"></select>
+      </div>
+
+      <div id="locPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button type="button" class="ca-pill active" id="locPill-mac" onclick="locSwitchView('mac')" data-i18n="tabMacTracker">Tracker MAC</button>
+        <button type="button" class="ca-pill" id="locPill-clientmap" onclick="locSwitchView('clientmap')" data-i18n="tabClientMap">Client Map</button>
+        <button type="button" class="ca-pill" id="locPill-diagnosi" onclick="locSwitchView('diagnosi')" data-i18n="tabDiagnosi">Diagnosi Client</button>
+        <button type="button" class="ca-pill" id="locPill-inventory" onclick="locSwitchView('inventory')" data-i18n="tabEndpoints">Endpoint Inventory</button>
+      </div>
+
+      <div id="locPane-mac" class="loc-pane"></div>
+      <div id="locPane-clientmap" class="loc-pane" style="display:none;"></div>
+      <div id="locPane-diagnosi" class="loc-pane" style="display:none;"></div>
+      <div id="locPane-inventory" class="loc-pane" style="display:none;"></div>
     </div>
 
     <!-- TAB: MAC Address Tracker (storico MAC -> porta/vlan) -->
