@@ -287,7 +287,10 @@ customer values.
 - **Missing Features / Gaps**:
   - **802.11 Roaming Event Timeline**: no history of 802.11r/k/v transitions between APs.
   - **AP RF Heatmap**: tabular RF data only, no floor-plan overlay.
-  - **2.4 / 6 GHz auto-RF**: only the 5 GHz radio (`802.11a`) channel/width is parsed today.
+  - **6 GHz auto-RF**: both AireOS radios are parsed now (`802.11a` and `802.11b`,
+    one column each in the AP table). 6 GHz is not reachable from this code path:
+    AireOS stops at 802.11ax 2.4/5 GHz, so it would need the IOS-XE branch, which
+    fetches no auto-RF at all.
 
 ---
 
@@ -359,7 +362,9 @@ customer values.
   - `GET /api/observability/top` ([routers/observability.py:78](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py#L78)) — top talkers
   - `GET /api/observability/protocol-distribution` (L115), `GET /api/observability/syslog` (L274),
     `GET /api/observability/events` (L295), `GET /api/observability/flowgraph` (L448)
-  - `GET /api/observability/anomalies` (L340), `POST /api/observability/anomalies/{event_id}/status` (L385)
+  - `GET /api/observability/anomalies` (L340), `POST /api/observability/anomalies/{event_id}/status`
+    (L385) — the latter is **deprecated** and delegates to `POST /api/incidents/{id}/status`;
+    the Traffico tab calls the incidents route directly
   - Flow SIEM (prefix `/api/flow-siem`, [routers/flow_siem.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/flow_siem.py)):
     `GET /events` (L178), `GET /histogram` (L242), `GET /facets` (L288), `POST /alerts/suppress` (L341),
     `POST /shun-ip` (L379), `GET /shun-list` (L390)
@@ -636,7 +641,7 @@ customer values.
 | Domain | Present App Features | Key Missing Features / Gaps |
 | :--- | :--- | :--- |
 | **FortiGate** | Policy lookup, sessions (+kill API), traffic/event/UTM logs, policies with hit counts & last-used, interfaces/ARP/DHCP/routes/VPN/SD-WAN, managed FortiAP, **aggregated client diagnosis**, full-config fetch, day-0 generation + push (SSH/serial/REST), REST driver with SSH fallback | Packet capture (`sniffer`), deep UTM sub-log parsing, session-kill & CLI-console UI buttons |
-| **Cisco WLC** | **Tenant-scoped controller selection**, single-call `overview` (AP/clients/WLAN/rogue), **5 GHz auto-RF channel & width**, client quality + live search, rogue table, per-client diagnostics modal | Roaming (802.11r/k/v) timeline, RF floor-plan heatmap, 2.4/6 GHz auto-RF parsing, active rogue containment |
+| **Cisco WLC** | **Tenant-scoped controller selection**, single-call `overview` (AP/clients/WLAN/rogue), **2.4 & 5 GHz auto-RF channel, width and utilization**, client quality + live search, rogue table, per-client diagnostics modal | Roaming (802.11r/k/v) timeline, RF floor-plan heatmap, 6 GHz auto-RF (needs the IOS-XE path), active rogue containment |
 | **MAC / ARP / Endpoints** | MAC search & locate, on-demand MAC scan, ARP collection from L3 gateways, client map, endpoint inventory with exports, **discovery-only subnet scan + opt-in credential verification** | 802.1X/RADIUS correlation, DHCP-snooping cross-check, OS fingerprinting, port-shutdown UI |
 | **Client Diagnosis** | **L2+L3 single-client report, gateway auto/traceroute detection, tenant-scoped, admin port bounce with staleness guard** | Historical replay, merged wireless leg, persistent quarantine |
 | **Flow SIEM & Anomalies** | Top talkers, protocol distribution, flow graph, syslog/events, anomaly triage with status, Flow SIEM events/histogram/facets/suppression, shun API | Shun UI button, ACL/Flowspec auto-injection, JA3/SNI inspection, external threat intel |

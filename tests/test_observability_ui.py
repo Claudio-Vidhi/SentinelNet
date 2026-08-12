@@ -122,9 +122,9 @@ class TestAnomalyTransitions(_Base):
     def test_audit_entry_emitted(self):
         eid = _seed_event()
         c = self._client("op_a")
-        with patch("routers.observability.__builtins__", create=True):
-            pass
-        with patch("security.security_manager.log_audit") as mock_audit:
+        # La rotta delega a routers.incidents, che importa log_audit a livello
+        # di modulo: il patch va sul nome legato lì, non su quello d'origine.
+        with patch("routers.incidents.log_audit") as mock_audit:
             r = c.post(f"/api/observability/anomalies/{eid}/status", headers=CSRF,
                        json={"from_status": "new", "status": "ack"})
         self.assertEqual(r.status_code, 200)

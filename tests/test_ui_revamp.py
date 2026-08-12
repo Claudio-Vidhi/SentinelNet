@@ -1690,7 +1690,10 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         for ep in ('/api/observability/top?window=',
                    '/api/observability/syslog?window=',
                    '/api/observability/anomalies?status=',
-                   '/api/observability/anomalies/${id}/status',
+                   # La transizione va sulla rotta degli incidenti: l'id di
+                   # un'anomalia e' l'id del suo incidente, e l'alias sotto
+                   # /observability e' deprecato.
+                   '/api/incidents/${id}/status',
                    '/api/observability/health'):
             self.assertIn(ep, html)
 

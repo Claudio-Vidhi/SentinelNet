@@ -379,59 +379,23 @@ async def obs_anomalies(
             "anomalies": [dict(r) for r in rows]}
 
 
-_ALLOWED_TRANSITIONS = {("new", "ack"), ("new", "resolved"), ("ack", "resolved")}
-
-
-@router.post("/api/observability/anomalies/{event_id}/status")
+@router.post("/api/observability/anomalies/{event_id}/status", deprecated=True)
 async def obs_anomaly_status(
     event_id: int,
     payload: dict,
     current_user = Depends(require_operator),
 ):
-    """Transizione di stato di un'anomalia: new→ack, new→resolved,
-    ack→resolved. Concorrenza ottimistica: la transizione avviene solo se lo
-    stato corrente è ancora quello di partenza.
+    """DEPRECATA: usare ``POST /api/incidents/{id}/status``.
 
-    Dalla v7 ``event_id`` è l'id dell'INCIDENTE (vedi ``obs_anomalies``)."""
-    new_status = (payload or {}).get("status")
-    from_status = (payload or {}).get("from_status")
-    if (from_status, new_status) not in _ALLOWED_TRANSITIONS:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Status transition not allowed: "
-                   f"'{from_status}' → '{new_status}'.")
+    Dalla v7 ``event_id`` è l'id dell'INCIDENTE (vedi ``obs_anomalies``), e
+    questa rotta scriveva la stessa tabella con una seconda copia della
+    transizione: due implementazioni dello stesso controllo di scope, libere
+    di divergere. Ora delega a quella degli incidenti — l'URL resta in piedi
+    per i client esterni che lo chiamano ancora.
 
-    scope = user_group_scope(current_user)
-
-    def _transition():
-        conn = db.get_observability_connection()
-        try:
-            row = conn.execute(
-                "SELECT tenant, status FROM incidents WHERE id = ?",
-                (event_id,)).fetchone()
-            # Fuori scope o inesistente → 404 identico (non confermare l'esistenza).
-            if row is None or (scope is not None and row["tenant"] not in scope):
-                return "not_found"
-            cur = conn.execute(
-                "UPDATE incidents SET status = ? WHERE id = ? AND status = ?",
-                (new_status, event_id, from_status))
-            conn.commit()
-            return "ok" if cur.rowcount == 1 else "stale"
-        finally:
-            conn.close()
-
-    import asyncio as _asyncio
-    result = await _asyncio.to_thread(_transition)
-    if result == "not_found":
-        raise HTTPException(status_code=404, detail="Event not found.")
-    if result == "stale":
-        raise HTTPException(
-            status_code=409,
-            detail="The event status changed in the meantime: reload the list.")
-    from security.security_manager import log_audit
-    log_audit(f"Incidente #{event_id}: stato '{from_status}' → "
-              f"'{new_status}' da '{current_user.get('sub')}'.")
-    return {"status": "success", "id": event_id, "new_status": new_status}
+    L'import è locale perché ``routers.incidents`` importa questo modulo."""
+    from routers.incidents import set_incident_status
+    return await set_incident_status(event_id, payload, current_user)
 
 
 def _synthetic_vlan(tenant: str) -> int:
