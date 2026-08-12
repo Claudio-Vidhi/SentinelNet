@@ -7,6 +7,54 @@
 // bottoni di riga) vivono in core.js: chiamata cross-modulo a runtime,
 // nessun cambio di comportamento.
 
+// The endpoint group is one tab with four panes. Each pane loads on its first
+// activation, not when the tab opens: opening Endpoint must not fire three
+// collections at once.
+let _locView = 'mac';
+const _locLoaded = { mac: false, clientmap: false, diagnosi: false, inventory: false };
+
+const LOC_LOADERS = {
+    mac: () => loadMacTracker(),
+    clientmap: () => loadClientMapTab(),
+    diagnosi: () => diagnosiTabShown(),
+    inventory: () => loadEndpointsTab(),
+};
+
+// Title and description belong to the pane, not to four separate heroes.
+const LOC_HEADINGS = {
+    mac:        ['titleMacTracker', 'descMacTracker'],
+    clientmap:  ['titleClientMap', 'descClientMap'],
+    diagnosi:   ['titleDiagnosi', 'descDiagnosi'],
+    inventory:  ['titleEndpoints', 'descEndpoints'],
+};
+
+function locSwitchView(view) {
+    if (!document.getElementById('locPane-' + view)) return;
+    _locView = view;
+    for (const v of ['mac', 'clientmap', 'diagnosi', 'inventory']) {
+        const pane = document.getElementById('locPane-' + v);
+        const pill = document.getElementById('locPill-' + v);
+        if (pane) pane.style.display = (v === view) ? '' : 'none';
+        if (pill) pill.classList.toggle('active', v === view);
+    }
+    const [titleKey, descKey] = LOC_HEADINGS[view];
+    const title = document.getElementById('locTitle');
+    const desc = document.getElementById('locDesc');
+    const L = i18n[currentLang] || {};
+    if (title) { title.setAttribute('data-i18n', titleKey); title.textContent = L[titleKey] || ''; }
+    if (desc) { desc.setAttribute('data-i18n', descKey); desc.textContent = L[descKey] || ''; }
+    if (!_locLoaded[view]) {
+        _locLoaded[view] = true;
+        LOC_LOADERS[view]();
+    }
+}
+
+// Tenant change redraws only the pane on screen; the others redraw when opened.
+function locTenantChanged() {
+    for (const v of Object.keys(_locLoaded)) _locLoaded[v] = (v === _locView);
+    LOC_LOADERS[_locView]();
+}
+
     // --- MAC ADDRESS TRACKER (storico MAC -> switch/porta/vlan) ---
 
     function loadMacTracker() {
