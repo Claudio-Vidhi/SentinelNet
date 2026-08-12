@@ -19,7 +19,7 @@
         const note = document.getElementById('flowSiemScopeNote');
         const scoped = picked.length === 1;
         if (note) {
-            note.style.display = scoped ? 'none' : '';
+            note.style.display = picked.length > 1 ? '' : 'none';
             note.textContent = picked.length > 1
                 ? (currentLang === 'en'
                     ? `Showing every tenant in your scope: this view filters one tenant at a time (${picked.length} selected).`

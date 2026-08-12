@@ -328,15 +328,28 @@ customer values.
      `GET /api/flow-siem/shun-list`.
 
 - **UI Navigation & Operational Workflow**:
-  - **Tab** `Traffico` (`navInvestigate`) with subtabs `Flussi` (`#tab-flows`) and `Flow SIEM`
-    (`#tab-flow-siem`).
-  - `#tab-flows`: window `#flowsWindow` (15m/1h/24h/7d), metric `#flowsMetric`, tenant dropdown
-    `#flowsTenantBtn`/`#flowsTenantDropdown`/`#flowsTenantList`, refresh (no ID,
-    `onclick="loadTopTalkers()"`), KPI strip `#fgKpiStrip`, top talkers `#fgTalkersTableBody`, protocols
-    `#fgProtoTableBody`, flows `#flowsTableBody`, observability banner `#flowsObsBanner`; anomalies
-    panel with `#anomStatus`, `#anomTableBody`, `#anomIpFilterChip`, `loadAnomalies()`.
-  - `#tab-flow-siem`: `#flowSiemWindow`, `#flowSiemTenant`, `#flowSiemQueryInput`,
-    `#btnFlowSiemStream`, `#flowSiemHistCanvas`, `#flowSiemFacets`, `#flowSiemTableBody`.
+  - **Tab** `Traffico` (`navInvestigate` -> `#tab-flows`). Since 2026-08-11 it is **one tab with four
+    views**; the twin tab `#tab-flow-siem` no longer exists.
+  - **Header, shared by every view**: window `#trafWindow` (15m/1h/24h/7d, default `1h`), metric
+    `#trafMetric`, tenant dropdown `#trafTenantBtn` / `#trafTenantDropdown` / `#trafTenantAll` /
+    `#trafTenantList`, refresh (`trafRefresh()`), `#trafAutoRefresh`, `#trafHideTelemetry`,
+    `#trafLastUpdate`, `analyzeFlowsWithAi()`. One window and one tenant selection drive all four
+    views — there is no per-panel window any more.
+  - **View pills** `#trafPill-overview|flows|search|anomalies` (`trafSwitchView(view)`) switching panes
+    `#trafPane-overview|flows|search|anomalies`. Only the view being opened loads.
+  - **Panoramica**: banner `#flowsObsBanner`, KPI strip `#fgKpiStrip`, top talkers
+    `#fgTalkersTableBody`, protocol card `#obsProtocolCanvas` (donut/bar/trend +
+    `openObsInspectModal()`), protocol table `#fgProtoTableBody`, tenant summary `#fgTenantSummary`.
+  - **Flussi**: source chips `#flowsSourceChips`, columns `#flowsColsBtn`/`#flowsColsDropdown`, table
+    `#flowsTableHead`/`#flowsTableBody`, syslog section `#flowsSyslogAllSection`, detail drawer
+    `#flowDetailPanel`.
+  - **Ricerca** (the former Flow SIEM): `#flowSiemStreamBadge`, `#btnFlowSiemStream`,
+    `#flowSiemHistCanvas`, `#flowSiemQueryInput`, `#flowSiemFacets`, `#flowSiemTableBody`, plus
+    `#flowSiemScopeNote` — `/api/flow-siem/*` scopes to a single tenant server-side, so with more than
+    one tenant ticked the view says on screen that it is showing the caller's whole scope.
+  - **Anomalie**: `#anomStatus`, `#anomTableBody`, `#anomIpFilterChip`, `loadAnomalies()`. Each row
+    links to its incident (`anomOpenIncident()`) — the `id` returned by `/api/observability/anomalies`
+    **is** the incident id, because that route selects `FROM incidents`.
 
 - **App Features Present**:
   - `GET /api/observability/top` ([routers/observability.py:78](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py#L78)) — top talkers
