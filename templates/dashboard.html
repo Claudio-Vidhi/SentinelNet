@@ -1051,29 +1051,7 @@
         <button type="button" class="ca-pill" id="locPill-inventory" onclick="locSwitchView('inventory')" data-i18n="tabEndpoints">Endpoint Inventory</button>
       </div>
 
-      <div id="locPane-mac" class="loc-pane"></div>
-      <div id="locPane-clientmap" class="loc-pane" style="display:none;"></div>
-      <div id="locPane-diagnosi" class="loc-pane" style="display:none;"></div>
-      <div id="locPane-inventory" class="loc-pane" style="display:none;"></div>
-    </div>
-
-    <!-- TAB: MAC Address Tracker (storico MAC -> porta/vlan) -->
-    <div id="tab-mac" class="tab-content">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
-      </div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleMacTracker">MAC Address Tracker</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descMacTracker">
-            Ricerca e storico degli indirizzi MAC nell'infrastruttura: su quale switch, interfaccia/port-channel e VLAN un dispositivo è (o è stato) connesso.
-          </p>
-        </div>
-      </div>
-
+      <div id="locPane-mac" class="loc-pane">
       <div class="oneline-foot" style="margin-bottom:18px;">
         <span><span data-i18n="macKpiSightingsLabel">Avvistamenti</span> <b id="kpiMacSightings">&mdash;</b></span>
         <span class="kpi-clickable" onclick="focusMacResults()" title="" data-i18n-title="macKpiUniqueHint" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusMacResults();}"><span data-i18n="macKpiUniqueLabel">MAC Univoci</span> <i class="fa-solid fa-arrow-down-long" style="font-size:11px; color:var(--primary); margin-left:4px;"></i> <b id="kpiMacUniqueMacs">&mdash;</b></span>
@@ -1181,25 +1159,8 @@
       <div class="table-wrap">
         <div id="macResults"></div>
       </div>
-    </div>
-
-    <!-- TAB: Client Map (MAC <-> IP dai gateway L3) -->
-    <div id="tab-clientmap" class="tab-content">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
       </div>
-      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
-        <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleClientMap">Client Map — MAC ↔ IP</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descClientMap">
-            Corrispondenza MAC ↔ IP dei client, letta dalle tabelle ARP di chi ruota le VLAN (switch L3 o firewall), incrociata con la porta di accesso rilevata dal MAC Tracker. Gli apparati che non ruotano VLAN vengono ignorati automaticamente.
-          </p>
-        </div>
-      </div>
-
+      <div id="locPane-clientmap" class="loc-pane" style="display:none;">
       <div class="oneline-foot" style="margin-bottom:18px;">
         <span><span data-i18n="arpKpiBindingsLabel">Binding MAC↔IP</span> <b id="kpiArpBindings">&mdash;</b></span>
         <span><span data-i18n="arpKpiUniqueLabel">MAC Univoci</span> <b id="kpiArpUniqueMacs">&mdash;</b></span>
@@ -1274,6 +1235,99 @@
         <div class="table-wrap">
           <div id="arpResults" style="overflow-x:auto;"></div>
         </div>
+      </div>
+      </div>
+      <div id="locPane-diagnosi" class="loc-pane" style="display:none;">
+      <div class="panel" style="margin-bottom:16px;">
+        <h3 style="font-size:15px; margin-bottom:12px;">
+          <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i>
+          <span data-i18n="titleDiagnosi"></span>
+        </h3>
+        <div class="diag-form" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagClientInput" data-i18n="lblDiagClient"></label>
+            <input id="diagClientInput" type="text" placeholder="192.0.2.10 / aa:bb:cc:dd:ee:ff"
+                   style="padding-left:12px; font-size:13px;"
+                   onkeydown="if(event.key==='Enter')runDiagnosi();">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagDestInput" data-i18n="lblDiagDest"></label>
+            <input id="diagDestInput" type="text" style="padding-left:12px; font-size:13px;"
+                   onkeydown="if(event.key==='Enter')runDiagnosi();">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="diagGatewayInput" style="margin-bottom:0; font-size:12px; font-weight:600;">Gateway L3</label>
+              <button class="btn btn-sm btn-secondary" type="button" onclick="detectGatewayTracerouteUI()" style="padding:2px 6px; font-size:10px; width:auto; border-radius:0;" title="Rileva il primo hop tramite traceroute">
+                <i class="fa-solid fa-route" style="color:var(--primary);"></i> Traceroute
+              </button>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <select id="diagGatewaySelect" onchange="onDiagGatewaySelectChange()" style="flex:1; padding:6px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                <option value="">Auto (ARP / Subnet)</option>
+              </select>
+              <input id="diagGatewayInput" type="text" placeholder="Es. 192.168.1.1" style="flex:1; padding-left:8px; font-size:12px;" onkeydown="if(event.key==='Enter')runDiagnosi();">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagProtoInput" data-i18n="lblFgtProto"></label>
+            <select id="diagProtoInput" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <option value="TCP">TCP</option>
+              <option value="UDP">UDP</option>
+              <option value="ICMP">ICMP</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="diagPortInput" data-i18n="colFgtSessDport"></label>
+            <input id="diagPortInput" type="number" min="1" max="65535" value="443"
+                   style="padding-left:12px; font-size:13px;">
+          </div>
+          <button class="btn btn-secondary" style="width:auto;" onclick="runDiagnosi()"
+                  data-i18n="btnDiagRun"></button>
+        </div>
+      </div>
+      <div id="diagResult"></div>
+      </div>
+      <div id="locPane-inventory" class="loc-pane" style="display:none;">
+      <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
+        <button id="epModeListBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0; border-color:var(--primary); color:var(--primary);"
+                onclick="endpointsMode('list')" data-i18n="epModeList"></button>
+        <button id="epModePortsBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0;"
+                onclick="endpointsMode('ports')" data-i18n="epModePorts"></button>
+        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"
+                onchange="endpointsPorts()"></select>
+      </div>
+      <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3 style="font-size:15px; margin-bottom:12px;">
+          <i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i>
+          <span data-i18n="titleEndpoints"></span>
+        </h3>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterQ" data-i18n="epFilterQ"></label>
+            <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;"
+                   onkeydown="if(event.key==='Enter')endpointsApplyFilters();">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterTenant" data-i18n="epThTenant"></label>
+            <select id="epFilterTenant" onchange="endpointsApplyFilters()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterStale" data-i18n="epFilterStale"></label>
+            <input id="epFilterStale" type="number" min="1" max="3650" value="7"
+                   style="padding-left:12px; font-size:13px;"
+                   onchange="endpointsApplyFilters()"
+                   onkeydown="if(event.key==='Enter')endpointsApplyFilters();">
+          </div>
+          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsApplyFilters()">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('csv')" data-i18n="epExportCsv"></button>
+          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('json')" data-i18n="epExportJson"></button>
+        </div>
+      </div>
+      <div id="epResults"></div>
       </div>
     </div>
 
@@ -1388,114 +1442,6 @@
           <button class="btn btn-secondary" onclick="document.getElementById('wlcDiagModal').style.display='none'">Chiudi</button>
         </div>
       </div>
-    </div>
-
-    <!-- TAB: Diagnosi Client — referto L2+L3 su un singolo client -->
-    <div id="tab-diagnosi" class="tab-content">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
-      </div>
-      <div class="panel" style="margin-bottom:16px;">
-        <h3 style="font-size:15px; margin-bottom:12px;">
-          <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i>
-          <span data-i18n="titleDiagnosi"></span>
-        </h3>
-        <div class="diag-form" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagClientInput" data-i18n="lblDiagClient"></label>
-            <input id="diagClientInput" type="text" placeholder="192.0.2.10 / aa:bb:cc:dd:ee:ff"
-                   style="padding-left:12px; font-size:13px;"
-                   onkeydown="if(event.key==='Enter')runDiagnosi();">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagDestInput" data-i18n="lblDiagDest"></label>
-            <input id="diagDestInput" type="text" style="padding-left:12px; font-size:13px;"
-                   onkeydown="if(event.key==='Enter')runDiagnosi();">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <label for="diagGatewayInput" style="margin-bottom:0; font-size:12px; font-weight:600;">Gateway L3</label>
-              <button class="btn btn-sm btn-secondary" type="button" onclick="detectGatewayTracerouteUI()" style="padding:2px 6px; font-size:10px; width:auto; border-radius:0;" title="Rileva il primo hop tramite traceroute">
-                <i class="fa-solid fa-route" style="color:var(--primary);"></i> Traceroute
-              </button>
-            </div>
-            <div style="display:flex; gap:6px;">
-              <select id="diagGatewaySelect" onchange="onDiagGatewaySelectChange()" style="flex:1; padding:6px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-                <option value="">Auto (ARP / Subnet)</option>
-              </select>
-              <input id="diagGatewayInput" type="text" placeholder="Es. 192.168.1.1" style="flex:1; padding-left:8px; font-size:12px;" onkeydown="if(event.key==='Enter')runDiagnosi();">
-            </div>
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagProtoInput" data-i18n="lblFgtProto"></label>
-            <select id="diagProtoInput" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-              <option value="TCP">TCP</option>
-              <option value="UDP">UDP</option>
-              <option value="ICMP">ICMP</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="diagPortInput" data-i18n="colFgtSessDport"></label>
-            <input id="diagPortInput" type="number" min="1" max="65535" value="443"
-                   style="padding-left:12px; font-size:13px;">
-          </div>
-          <button class="btn btn-secondary" style="width:auto;" onclick="runDiagnosi()"
-                  data-i18n="btnDiagRun"></button>
-        </div>
-      </div>
-      <div id="diagResult"></div>
-    </div>
-
-    <!-- TAB: Endpoint Inventory -->
-    <div id="tab-endpoints" class="tab-content">
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mac');" data-i18n="tabMacTracker"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-clientmap'); loadClientMapTab();" data-i18n="tabClientMap"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-diagnosi');" data-i18n="tabDiagnosi"></button>
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-endpoints'); loadEndpointsTab();" data-i18n="tabEndpoints"></button>
-      </div>
-      <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
-        <button id="epModeListBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0; border-color:var(--primary); color:var(--primary);"
-                onclick="endpointsMode('list')" data-i18n="epModeList"></button>
-        <button id="epModePortsBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0;"
-                onclick="endpointsMode('ports')" data-i18n="epModePorts"></button>
-        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"
-                onchange="endpointsPorts()"></select>
-      </div>
-      <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
-      <div class="panel" style="margin-bottom:16px;">
-        <h3 style="font-size:15px; margin-bottom:12px;">
-          <i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i>
-          <span data-i18n="titleEndpoints"></span>
-        </h3>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; align-items:end;">
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterQ" data-i18n="epFilterQ"></label>
-            <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;"
-                   onkeydown="if(event.key==='Enter')endpointsApplyFilters();">
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterTenant" data-i18n="epThTenant"></label>
-            <select id="epFilterTenant" onchange="endpointsApplyFilters()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"></select>
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label for="epFilterStale" data-i18n="epFilterStale"></label>
-            <input id="epFilterStale" type="number" min="1" max="3650" value="7"
-                   style="padding-left:12px; font-size:13px;"
-                   onchange="endpointsApplyFilters()"
-                   onkeydown="if(event.key==='Enter')endpointsApplyFilters();">
-          </div>
-          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsApplyFilters()">
-            <i class="fa-solid fa-magnifying-glass"></i>
-          </button>
-          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('csv')" data-i18n="epExportCsv"></button>
-          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('json')" data-i18n="epExportJson"></button>
-        </div>
-      </div>
-      <div id="epResults"></div>
     </div>
 
     <!-- TAB: Live Flows -->
