@@ -610,8 +610,10 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
     so both are covered here per the brief's ARP-target-selection preserve-IDs."""
 
     def test_preserve_ids_mac(self):
+        # macScanGroup was replaced by the single #locTenant select (Task 3,
+        # endpoint tab merge) shared across all four panes.
         html = _html()
-        for _id in ('macScanGroup', 'macDeviceMenu', 'macDeviceSummary', 'macDeviceList',
+        for _id in ('macDeviceMenu', 'macDeviceSummary', 'macDeviceList',
                     'macScanTransport', 'btnMacScan', 'macRetentionDays',
                     'macOvDevice', 'macOvCommand', 'macOvFmt', 'macOverridesList',
                     'macSearchMac', 'macSearchVlan', 'macSearchIface', 'macSearchSwitch',
@@ -619,7 +621,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
                     'kpiMacSightings', 'kpiMacUniqueMacs', 'kpiMacSwitches', 'kpiMacRetention'):
             self.assertIn(f'id="{_id}"', html)
         for hook in ('runMacScan()', 'macSearch()', 'macSearchReset()', 'saveMacOverride()',
-                     'saveMacRetention()', 'populateMacScanDevices(); macSearch(); refreshMacStats(false);'):
+                     'saveMacRetention()'):
             self.assertIn(hook, html)
         # RBAC preserved: scan is requires-write, retention is requires-admin
         self.assertIn('id="btnMacScan"', html)
@@ -636,18 +638,19 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         self.assertIn('requires-write', html[details_tag:adhoc_idx])
 
     def test_preserve_ids_clientmap_arp_multiselect(self):
-        # Tenant filter for the Client Map search is itself a multi-select
-        # (arpTenantList / arpTenantSummary, checkbox-driven via onArpTenantToggle
-        # in static/js/client-map.js), not the single arpFilterTenant <select> --
-        # same pattern as the MAC-tracker device multiselect.
+        # Tenant filter for the Client Map search used to be its own multi-select
+        # (arpTenantList / arpTenantSummary, checkbox-driven via onArpTenantToggle).
+        # Task 3 (endpoint tab merge) replaced it with the single #locTenant select
+        # shared across all four panes. The ARP-target device multiselect this
+        # test guards (arpDeviceList / arp-dev-cb) is untouched by that change.
         html = frontend_source()
-        for _id in ('arpScanGroup', 'arpDeviceMenu', 'arpDeviceSummary', 'arpDeviceList',
-                    'btnArpScan', 'arpSearchMac', 'arpSearchIp', 'arpTenantList',
-                    'arpTenantSummary', 'arpFilterGateway', 'arpStats', 'arpScanSummary',
+        for _id in ('arpDeviceMenu', 'arpDeviceSummary', 'arpDeviceList',
+                    'btnArpScan', 'arpSearchMac', 'arpSearchIp',
+                    'arpFilterGateway', 'arpStats', 'arpScanSummary',
                     'arpResults', 'kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'):
             self.assertIn(f'id="{_id}"', html)
         for hook in ('runArpScan()', 'arpClientSearch()', 'arpSearchReset()',
-                     'populateArpScanDevices()', 'onArpTenantToggle(this)'):
+                     'populateArpScanDevices()'):
             self.assertIn(hook, html)
         # RBAC: the scan action stays write-gated
         self.assertIn('id="btnArpScan"', html)
@@ -1789,11 +1792,13 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         IT DOES NOT REPRODUCE -- the structure makes it impossible, and this
         test pins that structure so a future refactor cannot reintroduce it.
 
-        The tenant filter is now a checkbox multiselect (arpTenantList, same
-        pattern as the MAC-tracker device picker): toggling a tenant runs
-        onArpTenantToggle() -> populateArpGatewayFilter(); arpClientSearch();
+        Task 3 (endpoint tab merge) replaced the tenant checkbox multiselect
+        with the single #locTenant select shared by all four panes: changing
+        it runs locTenantChanged() -> LOC_LOADERS[_locView]() -> (on the
+        Client Map pane) loadClientMapTab() -> populateArpGatewayFilter();
+        arpClientSearch();
 
-          arpClientSearch() -> for each selected tenant, ONE server-filtered GET
+          arpClientSearch() -> for the selected tenant, ONE server-filtered GET
                              /api/arp/client-map?...&tenant=<t>, collected into a
                              single `byTenant` map keyed by tenant
                              -> renderArpResults(tenants, byTenant)
@@ -1810,16 +1815,19 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         makes the reported bug unrepresentable; it cannot prove the rendered
         DOM is correct. Runtime confirmation is the manual gate's job.
         """
-        html = frontend_source()  # tenant multiselect logic lives in client-map.js
-        # One filter-application path: toggling a tenant reconciles the gateway
-        # list and then re-runs the single search.
-        self.assertIn('onArpTenantToggle(this)', html)
-        toggle = html[html.index('function onArpTenantToggle(cb)'):
-                      html.index('function updateArpTenantSummary()')]
-        self.assertIn('populateArpGatewayFilter();', toggle)
-        self.assertIn('arpClientSearch();', toggle)
-        # The tenant is applied SERVER-side, once per selected tenant, into ONE
-        # byTenant map that both the renderer and the KPI calc consume.
+        html = frontend_source()  # tenant + ARP client-map logic lives in client-map.js
+        # One filter-application path: changing the tenant reconciles the
+        # gateway list and then re-runs the single search.
+        self.assertIn('function locTenantChanged()', html)
+        changed = html[html.index('function locTenantChanged()'):
+                        html.index('function loadMacTracker()')]
+        self.assertIn('LOC_LOADERS[_locView]()', changed)
+        loader = html[html.index('function loadClientMapTab()'):
+                       html.index('function arpFilteredDevices()')]
+        self.assertIn('populateArpGatewayFilter();', loader)
+        self.assertIn('arpClientSearch();', loader)
+        # The tenant is applied SERVER-side, once, into ONE byTenant map that
+        # both the renderer and the KPI calc consume.
         search = html[html.index('async function arpClientSearch()'):
                       html.index('function arpSearchReset()')]
         self.assertIn("params.set('tenant', t)", search)

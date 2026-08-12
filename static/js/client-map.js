@@ -28,9 +28,33 @@ const LOC_HEADINGS = {
     inventory:  ['titleEndpoints', 'descEndpoints'],
 };
 
+// One tenant for the whole group. Empty select means "every tenant in scope".
+function locTenant() {
+    const el = document.getElementById('locTenant');
+    return (el && el.value) || 'all';
+}
+
+// Same fill as the old per-pane tenant selects (fillGroupSel), but only once:
+// the four panes shared one tenant list, no reason to rebuild it per pane.
+let _locTenantFilled = false;
+function populateLocTenant() {
+    const sel = document.getElementById('locTenant');
+    if (!sel) return;
+    const cur = sel.value;
+    const groups = Object.keys(globalGroups || {});
+    const L = i18n[currentLang] || {};
+    sel.innerHTML = `<option value="all">${L.optFilterAll || 'Filtra per Tenant: Tutti'}</option>` +
+        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+    sel.value = groups.includes(cur) ? cur : 'all';
+}
+
 function locSwitchView(view) {
     if (!document.getElementById('locPane-' + view)) return;
     _locView = view;
+    if (!_locTenantFilled) {
+        _locTenantFilled = true;
+        populateLocTenant();
+    }
     for (const v of ['mac', 'clientmap', 'diagnosi', 'inventory']) {
         const pane = document.getElementById('locPane-' + v);
         const pill = document.getElementById('locPill-' + v);
@@ -58,14 +82,6 @@ function locTenantChanged() {
     // --- MAC ADDRESS TRACKER (storico MAC -> switch/porta/vlan) ---
 
     function loadMacTracker() {
-        const sel = document.getElementById('macScanGroup');
-        if (sel) {
-            const cur = sel.value;
-            const groups = Object.keys(globalGroups || {});
-            sel.innerHTML = `<option value="all">${currentLang==='en'?'Filter by Tenant: All':'Filtra per Tenant: Tutti'}</option>` +
-                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-            sel.value = groups.includes(cur) ? cur : 'all';
-        }
         populateMacScanDevices();
         loadMacOverrides();
         refreshMacStats(true);
@@ -126,8 +142,7 @@ function locTenantChanged() {
     // Dispositivi filtrati per il tenant selezionato (globalDevices è già scoped
     // per utente lato server; qui si applica solo il filtro del tenant scelto).
     function macFilteredDevices() {
-        const g = document.getElementById('macScanGroup');
-        const group = g ? g.value : 'all';
+        const group = locTenant();
         let devs = globalDevices || [];
         if (group && group !== 'all') devs = devs.filter(d => d.Group === group);
         return devs;
@@ -215,8 +230,7 @@ function locTenantChanged() {
 
     async function refreshMacStats(fillRetention) {
         try {
-            const g = document.getElementById('macScanGroup');
-            const grp = g ? g.value : 'all';
+            const grp = locTenant();
             const qs = (grp && grp !== 'all') ? ('?tenant=' + encodeURIComponent(grp)) : '';
             const r = await apiFetch('/api/mac/stats' + qs);
             if (!r || !r.ok) return;
@@ -234,7 +248,7 @@ function locTenantChanged() {
     async function runMacScan() {
         const btn = document.getElementById('btnMacScan');
         const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
-        const group = val('macScanGroup') || 'all';
+        const group = locTenant();
         const transport = val('macScanTransport') || '';
         const ips = selectedMacDevices();
         const payload = { group, transport };
@@ -273,7 +287,7 @@ function locTenantChanged() {
         if (g('macSearchVlan'))   params.set('vlan', g('macSearchVlan'));
         if (g('macSearchIface'))  params.set('interface', g('macSearchIface'));
         if (g('macSearchSwitch')) params.set('switch', g('macSearchSwitch'));
-        const grp = g('macScanGroup');
+        const grp = locTenant();
         if (grp && grp !== 'all') params.set('tenant', grp);
         const res = await apiFetch('/api/mac/search?' + params.toString());
         if (!res || !res.ok) return;
@@ -297,27 +311,14 @@ function locTenantChanged() {
     // --- CLIENT MAP: MAC <-> IP dalle ARP dei gateway L3 ---
 
     function loadClientMapTab() {
-        const L = i18n[currentLang];
-        const groups = Object.keys(globalGroups || {});
-        const fillGroupSel = (id, allLabel) => {
-            const sel = document.getElementById(id);
-            if (!sel) return;
-            const cur = sel.value;
-            sel.innerHTML = `<option value="all">${allLabel}</option>` +
-                groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-            sel.value = groups.includes(cur) ? cur : 'all';
-        };
-        fillGroupSel('arpScanGroup', L.optFilterAll || 'Filtra per Tenant: Tutti');
-        populateArpTenantFilter();
         populateArpScanDevices();
         populateArpGatewayFilter();
         arpClientSearch();
     }
 
-    // Dispositivi filtrati per il tenant scelto nel selettore di scansione.
-    function arpFilteredDevices(groupSelId) {
-        const g = document.getElementById(groupSelId);
-        const group = g ? g.value : 'all';
+    // Dispositivi filtrati per il tenant selezionato.
+    function arpFilteredDevices() {
+        const group = locTenant();
         let devs = globalDevices || [];
         if (group && group !== 'all') devs = devs.filter(d => (d.Group || 'Generale') === group);
         return devs;
@@ -328,7 +329,7 @@ function locTenantChanged() {
         const box = document.getElementById('arpDeviceList');
         if (box) {
             const L = i18n[currentLang];
-            const devs = arpFilteredDevices('arpScanGroup');
+            const devs = arpFilteredDevices();
             const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
                 <input type="checkbox" id="arpDevAll" onchange="toggleAllArpDevices(this.checked)" style="accent-color:var(--primary);">
                 <strong>${L.optMacAllDevices || 'Tutti i dispositivi'}</strong></label>`;
@@ -365,62 +366,13 @@ function locTenantChanged() {
             : `${sel} ${i18n[currentLang].lblAiDevSelected || 'selezionati'}`;
     }
 
-    // Multi-selezione tenant per la ricerca binding: nessuno selezionato di default,
-    // ordine di selezione mantenuto per renderizzare le tabelle nello stesso ordine.
-    let arpSelectedTenantOrder = [];
-
-    function populateArpTenantFilter() {
-        const box = document.getElementById('arpTenantList');
-        if (!box) return;
-        const groups = Object.keys(globalGroups || {});
-        // Scarta selezioni di tenant non più esistenti.
-        arpSelectedTenantOrder = arpSelectedTenantOrder.filter(t => groups.includes(t));
-        const L = i18n[currentLang];
-        box.innerHTML = groups.map(g => `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
-            <input type="checkbox" class="arp-tenant-cb" value="${escapeHtml(g)}" onchange="onArpTenantToggle(this)" ${arpSelectedTenantOrder.includes(g) ? 'checked' : ''} style="accent-color:var(--primary);">
-            <span>${escapeHtml(g)}</span></label>`).join('') ||
-            `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${L.msgAiNoDevices || 'Nessun tenant'}</div>`;
-        updateArpTenantSummary();
-    }
-
-    function selectedArpTenants() {
-        return arpSelectedTenantOrder.slice();
-    }
-
-    function onArpTenantToggle(cb) {
-        const name = cb.value;
-        if (cb.checked) {
-            if (!arpSelectedTenantOrder.includes(name)) arpSelectedTenantOrder.push(name);
-        } else {
-            arpSelectedTenantOrder = arpSelectedTenantOrder.filter(t => t !== name);
-        }
-        updateArpTenantSummary();
-        populateArpGatewayFilter();
-        arpClientSearch();
-    }
-
-    function updateArpTenantSummary() {
-        const sum = document.getElementById('arpTenantSummary');
-        if (!sum) return;
-        sum.textContent = arpSelectedTenantOrder.length === 0
-            ? (i18n[currentLang].arpPickTenantHint || 'Seleziona un tenant per visualizzare i binding')
-            : arpSelectedTenantOrder.join(', ');
-    }
-
-    // Dispositivi filtrati per i tenant selezionati nel filtro di ricerca.
-    function arpFilteredDevicesByTenants(tenants) {
-        let devs = globalDevices || [];
-        if (tenants && tenants.length) devs = devs.filter(d => tenants.includes(d.Group || 'Generale'));
-        return devs;
-    }
-
-    // Il filtro gateway elenca i device dei tenant scelti nel filtro di vista.
+    // Il filtro gateway elenca i device del tenant scelto nel filtro di vista.
     function populateArpGatewayFilter() {
         const sel = document.getElementById('arpFilterGateway');
         if (!sel) return;
         const cur = sel.value;
         const L = i18n[currentLang];
-        const devs = arpFilteredDevicesByTenants(selectedArpTenants());
+        const devs = arpFilteredDevices();
         sel.innerHTML = `<option value="">${L.optArpAllGateways || 'Tutti i gateway'}</option>` +
             devs.map(d => {
                 const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
@@ -435,8 +387,7 @@ function locTenantChanged() {
         const oldHtml = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
         try {
-            const groupSel = document.getElementById('arpScanGroup');
-            const payload = { group: groupSel ? groupSel.value : 'all' };
+            const payload = { group: locTenant() };
             const ips = selectedArpDevices();
             if (ips.length) payload.ips = ips;
             const res = await apiFetch('/api/arp/scan', {
@@ -494,25 +445,11 @@ function locTenantChanged() {
             : `${bindings} binding · ${macs.size} MAC · ${gws.size} gateway`);
     }
 
-    function clearArpKpis() {
-        ['kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'].forEach(id => {
-            const el = document.getElementById(id); if (el) el.textContent = '—';
-        });
-        const stats = document.getElementById('arpStats'); if (stats) stats.innerText = '';
-    }
-
     async function arpClientSearch() {
         const mac = document.getElementById('arpSearchMac').value.trim();
         const ip = document.getElementById('arpSearchIp').value.trim();
-        const tenants = selectedArpTenants();
+        const tenants = [locTenant()];
         const gw = document.getElementById('arpFilterGateway')?.value || '';
-        const box = document.getElementById('arpResults');
-        if (!tenants.length) {
-            // Nessun tenant scelto: nessuna fetch, solo il placeholder e KPI vuoti.
-            if (box) box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${escapeHtml(i18n[currentLang].arpPickTenantHint || 'Seleziona un tenant per visualizzare i binding')}</p>`;
-            clearArpKpis();
-            return;
-        }
         const byTenant = {};
         for (const t of tenants) {
             const params = new URLSearchParams();

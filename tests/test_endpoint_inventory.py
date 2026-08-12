@@ -590,9 +590,14 @@ class TestTabFrontend(unittest.TestCase):
 
     def test_la_select_del_tenant_ricarica_da_sola(self):
         """Senza onchange la select non era agganciata a niente: cambiare
-        tenant lasciava a schermo i dispositivi di quello precedente."""
-        self.assertIn('id="epFilterTenant" onchange="endpointsApplyFilters()"',
-                      self.src)
+        tenant lasciava a schermo i dispositivi di quello precedente.
+
+        Task 3 (endpoint tab merge) ha spostato il tenant dal select
+        epFilterTenant dedicato al solo #locTenant condiviso dalle quattro
+        pane: cambiarlo chiama locTenantChanged(), che ricarica la pane
+        aperta (endpointsApplyFilters() per l'Inventario Endpoint)."""
+        self.assertIn('id="locTenant" onchange="locTenantChanged()"', self.src)
+        self.assertIn("inventory: () => loadEndpointsTab()", self.src)
 
     def test_nessun_filtro_scavalca_la_modalita(self):
         """Un controllo di filtro che chiama endpointsSearch() ridipinge
@@ -601,8 +606,9 @@ class TestTabFrontend(unittest.TestCase):
         dash = self._file("templates/dashboard.html")
 
         self.assertNotIn("endpointsSearch()", dash)
-        # ricerca (invio), tenant (change), soglia (change e invio), pulsante.
-        self.assertEqual(dash.count("endpointsApplyFilters()"), 5)
+        # ricerca (invio), soglia (change e invio), pulsante. Il tenant
+        # (Task 3) non ha piu' un onchange proprio: passa da locTenantChanged().
+        self.assertEqual(dash.count("endpointsApplyFilters()"), 4)
 
     def test_applica_filtri_ridisegna_nella_modalita_corrente(self):
         """Con il tenant cambiato gli switch sono altri: in modalita' porte il
@@ -643,11 +649,15 @@ class TestTabFrontend(unittest.TestCase):
 
     def test_il_filtro_tenant_viene_popolato_al_caricamento_della_tab(self):
         """La select epFilterTenant restava vuota per sempre: nessuno la
-        popolava, quindi il parametro tenant non veniva mai spedito."""
-        body = self._fn("function loadEndpointsTab(")
-        self.assertIn("populateEndpointsTenantFilter()", body)
-        self.assertIn("function populateEndpointsTenantFilter(", self.src)
-        self.assertIn("getElementById('epFilterTenant')", self.src)
+        popolava, quindi il parametro tenant non veniva mai spedito.
+
+        Task 3 (endpoint tab merge) ha spostato il popolamento sul solo
+        #locTenant condiviso dalle quattro pane (client-map.js), riempito
+        una volta sola al primo cambio di vista, non piu' per pane."""
+        self.assertIn("function populateLocTenant(", self.src)
+        self.assertIn("getElementById('locTenant')", self.src)
+        body = self._fn("function locSwitchView(view)")
+        self.assertIn("populateLocTenant()", body)
 
     def test_i_kpi_si_svuotano_in_modalita_porte(self):
         """Sei numeri validi per l'intero inventario non possono restare a
