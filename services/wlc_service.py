@@ -251,9 +251,10 @@ def parse_sysinfo(text: str) -> dict:
 
 
 def parse_ap_autorf(text: str) -> dict:
-    """Channel, channel width and 5 GHz load from 'show ap auto-rf 802.11a
+    """Channel, channel width and radio load from 'show ap auto-rf 802.11a|b
     <ap>' (AireOS). 'show ap summary' carries none of it, and the width is the
-    first thing to look at on a slow cell: only auto-rf prints it."""
+    first thing to look at on a slow cell: only auto-rf prints it. Both bands
+    print the same labels: the caller knows which radio it asked for."""
     out = {}
     for line in (text or "").splitlines():
         m = re.match(r"^\s*(.*?)\s*(?:\.{2,}|:)\s*(\S.*?)\s*$", line)
@@ -296,9 +297,13 @@ def parse_client_detail(text: str) -> dict:
 # il bottone Diagnostica li copre uno per uno.
 _CLIENT_DETAIL_LIMIT = 40
 
-# Stessa logica per l'auto-RF: un comando per AP.
+# Stessa logica per l'auto-RF: due comandi per AP, uno per radio.
 _AP_AUTORF_LIMIT = 40
-_AP_AUTORF_CMD = "show ap auto-rf 802.11a {ap}"
+# Suffisso della chiave e comando. La radio 5 GHz tiene le chiavi senza
+# suffisso: e' quella che il tab mostrava da sempre. La 6 GHz non esiste su
+# AireOS (si ferma all'11ax 2.4/5), quindi non c'e' un terzo comando.
+_AP_AUTORF_CMDS = (("", "show ap auto-rf 802.11a {ap}"),
+                   ("_24", "show ap auto-rf 802.11b {ap}"))
 # Il nome AP arriva dall'output del controller e finisce dentro un comando: si
 # accettano solo i caratteri di un nome AP legittimo, cosi' una riga malformata
 # non puo' allungare la CLI con un secondo comando.
@@ -330,15 +335,19 @@ def overview(device: dict) -> dict:
         aps = _table_rows(raw["ap_summary"], _AP_FIELDS)
         if platform == "aireos":
             # Canale e larghezza di canale non stanno in 'show ap summary':
-            # l'auto-RF della radio 5 GHz e' l'unico posto che li stampa.
+            # l'auto-RF delle radio e' l'unico posto che li stampa. La 2.4 GHz
+            # e' una radio a se': stesso AP, canale e utilizzo diversi, ed e'
+            # la banda dove la congestione morde per prima.
             for ap in aps[:_AP_AUTORF_LIMIT]:
                 name = ap.get("name", "")
                 if not _AP_NAME_RE.match(name):
                     continue
-                try:
-                    ap.update(parse_ap_autorf(_send(conn, _AP_AUTORF_CMD.format(ap=name))))
-                except Exception:
-                    continue
+                for suffix, cmd in _AP_AUTORF_CMDS:
+                    try:
+                        radio = parse_ap_autorf(_send(conn, cmd.format(ap=name)))
+                    except Exception:
+                        continue
+                    ap.update({k + suffix: v for k, v in radio.items()})
             info = parse_sysinfo(sysinfo)
             version = info.get("product version", "")
             uptime = info.get("system up time", "")
