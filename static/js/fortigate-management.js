@@ -144,6 +144,47 @@ let fgtDatasetRows = {};   // key -> { rows, source, apiError, error }
 // errore della tab: su un FortiGate senza SD-WAN o senza controller WiFi
 // il 502 è la risposta giusta, e la vista si rende vuota con il motivo nel
 // title invece di sparare un toast rosso.
+// Session kill: same filters as the sessions view, DELETE instead of POST.
+// The route accepts an empty filter set and would then drop every session on
+// the firewall, so an empty form is refused here rather than sent.
+async function fgtKillSessions() {
+    const ip = fgtCurrentTarget();
+    if (!ip) return;
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    const en = currentLang === 'en';
+    const src = _fgtVal('fgtSessSrc');
+    const dst = _fgtVal('fgtSessDst');
+    const port = _fgtVal('fgtSessPort');
+    if (!src && !dst && !port) {
+        showToast(L.msgFgtKillNeedsFilter || (en
+            ? 'Set at least one filter: an empty filter would kill every session.'
+            : 'Indica almeno un filtro: senza, verrebbero terminate tutte le sessioni.'), 'warning');
+        return;
+    }
+    const shown = [src && `src=${src}`, dst && `dst=${dst}`, port && `dport=${port}`]
+        .filter(Boolean).join(', ');
+    const question = en
+        ? `Kill the sessions matching ${shown} on ${ip}?`
+        : `Terminare le sessioni che corrispondono a ${shown} su ${ip}?`;
+    if (!confirm(question)) return;
+    const body = {};
+    if (src) body.src_ip = src;
+    if (dst) body.dst_ip = dst;
+    if (port) body.dst_port = parseInt(port, 10);
+    const res = await apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/sessions`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!res || !res.ok) {
+        const e = res ? await res.json().catch(() => ({})) : {};
+        showToast(e.detail || (en ? 'Session kill failed.' : 'Terminazione sessioni non riuscita.'), 'error');
+        return;
+    }
+    showToast(en ? 'Sessions killed.' : 'Sessioni terminate.', 'success');
+    loadFgtDataset('sessions');
+}
+
 async function loadFgtDataset(key) {
     const spec = FGT_DATASETS[key];
     if (!spec) return;

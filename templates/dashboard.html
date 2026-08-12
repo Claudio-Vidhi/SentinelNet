@@ -2630,9 +2630,17 @@
                 <input id="fgtSessPort" type="number" min="1" max="65535" style="padding-left:12px; font-size:13px;">
               </div>
             </div>
-            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('sessions')" data-i18n="btnFgtSessLoad">
-              <i class="fa-solid fa-rotate"></i> Carica sessioni
-            </button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('sessions')" data-i18n="btnFgtSessLoad">
+                <i class="fa-solid fa-rotate"></i> Carica sessioni
+              </button>
+              <!-- Termina le sessioni che corrispondono ai filtri qui sopra.
+                   Senza filtri non parte: azzererebbe la tabella sessioni. -->
+              <button type="button" id="btnFgtSessionKill" class="btn btn-danger requires-write" style="width:auto;"
+                      onclick="fgtKillSessions()" data-i18n="btnFgtSessKill">
+                <i class="fa-solid fa-ban"></i> Termina sessioni
+              </button>
+            </div>
           </div>
           <div id="fgtForm-logs" style="display:none; margin-bottom:12px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">

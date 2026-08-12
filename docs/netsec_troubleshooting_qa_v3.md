@@ -27,8 +27,11 @@
   pills `#fgtPill-*` rendering into `#fgtView-*`. There is no `#subtab-*` family anywhere.
   *(Both earlier documents, and the first draft of this one, called `#fgtSub-*` the panes — those are
   the bar buttons; the containers are `#fgtPane-*`.)*
-- Routes that exist **API-only, with no UI button**: `DELETE /api/fortigate/{ip}/sessions`,
-  `POST /api/flow-siem/shun-ip`, `POST /api/mac/port-control`, `POST /api/observability/prune-logs`.
+- Routes that exist **API-only, with no UI button**: `POST /api/flow-siem/shun-ip` (deferred by the
+  owner, see `docs/Improvements`) and `POST /api/mac/port-control`.
+  `DELETE /api/fortigate/{ip}/sessions` and `POST /api/observability/prune-logs` **got their buttons on
+  2026-08-11** — session kill sits next to the Sessioni form (`#btnFgtSessionKill`, refuses an empty
+  filter set, which would have killed every session), the purge sits in Settings -> Observability.
 - These routes named by the original document **do not exist**: `/api/fortigate/{ip}/managed-aps`,
   `/api/mac/mac-to-ip`, `/api/mac/client-map`, `/api/endpoint-inventory`, `/api/flow-siem/top-talkers`,
   `/api/flow-siem/anomalies`, `/api/analyzer/config`, `/api/triage/status`, `/api/ai/diagnose`,
@@ -106,7 +109,8 @@ customer values.
   - **Live Packet Capture**: no `diagnose sniffer packet` integration; no PCAP from the UI.
   - **UTM Detailed Event Breakdown**: UTM sub-log fields (AppCtrl, AV, SSL-inspection failure reasons)
     are not parsed into dedicated cards.
-  - **Session Kill UI**: `DELETE …/sessions` has no button; API/MCP only.
+  - *(Withdrawn 2026-08-11: "Session Kill UI" — the button exists in the Sessioni form and refuses to
+    run with all three filters empty.)*
   - *(Not a gap: policy hit-count telemetry — it exists, see `policies-with-stats`.)*
 
 ---
@@ -396,7 +400,7 @@ customer values.
   - **MCP**: `fortigate_status`, `fortigate_sessions`, `fortigate_policy_stats`, `send_cli_command`
 
 - **Missing Features / Gaps**:
-  - **Session Kill / CLI Console UI**: both API/MCP-only.
+  - **CLI Console UI**: no embedded console in the tab (session kill got its button on 2026-08-11).
   - **Session Threshold Alerts**: no webhook/paging when session utilisation crosses a threshold.
 
 ---
@@ -565,13 +569,21 @@ customer values.
   - `GET /api/observability/health` ([routers/observability.py:671](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py#L671))
   - `GET /api/observability/api-context` (L642), `POST /api/observability/api-poll` (L661)
   - `GET/POST /api/observability/config` (L597/L604)
-  - `POST /api/observability/prune-logs` (L699) — **API-only**
+  - `POST /api/observability/prune-logs` (L699) — one-off purge, wired to the Settings panel since
+    2026-08-11; the scheduled per-table retention is `observability/rollup.py:71` `retention_loop()`
   - `GET /api/ping-monitor/status` ([routers/settings.py:177](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/settings.py#L177))
   - **MCP**: `linux_health` (→ `/api/observability/api-context`, **disabled by default**)
 
 - **Missing Features / Gaps**:
-  - **Health UI**: no System Health panel, no listener/service badges, no prune button.
-  - **Auto-Purge Watermark**: pruning needs an explicit call; no background trigger on disk/DB growth.
+  - *(Withdrawn 2026-08-11: "Health UI" and "no prune button" — Settings -> Observability now renders
+    pipeline state (enabled, per-listener badges, DB size, schema version) from
+    `GET /api/observability/health`, with a one-off purge wired to `POST /api/observability/prune-logs`.)*
+  - *(Correction: pruning was never "explicit call only". `observability/rollup.py:71`
+    `retention_loop()` runs periodically from the listener manager and prunes each table by its
+    configured `retention_days` (Settings -> Applicazione -> Retention dati observability). The manual
+    purge is an on-demand extra, not the only path.)*
+  - **Size/Disk Watermark**: retention is time-based only. Nothing reacts to the DB growing past a size
+    threshold — a burst inside the retention window still fills the disk.
 
 ---
 
