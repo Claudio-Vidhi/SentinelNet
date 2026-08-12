@@ -164,12 +164,13 @@ function renderWlcAps(apData) {
     const aps = Array.isArray(apData) ? apData : (apData.aps || []);
     
     if (aps.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">Nessun Access Point rilevato</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">Nessun Access Point rilevato</td></tr>';
         return;
     }
 
-    // Canale, larghezza e utilizzo arrivano dall'auto-RF 5 GHz (solo AireOS):
-    // dove il controller non li da', la cella resta un trattino.
+    // Canale, larghezza e utilizzo arrivano dall'auto-RF (solo AireOS), una
+    // colonna per radio: dove il controller non li da', la cella resta un
+    // trattino. Le chiavi con suffisso _24 sono la radio 2.4 GHz.
     tbody.innerHTML = aps.map(ap => `
         <tr>
             <td style="font-weight:700;">${escapeHtml(ap.name || ap.ap_name || '-')}</td>
@@ -179,6 +180,8 @@ function renderWlcAps(apData) {
             <td>${escapeHtml(ap.clients || ap.client_count || '0')}</td>
             <td title="${escapeHtml(ap.channel_utilization ? 'Utilizzo canale ' + ap.channel_utilization : '')}">${
                 escapeHtml(ap.channel || '-')}${ap.channel_width ? ' @ ' + escapeHtml(ap.channel_width) : ''}</td>
+            <td title="${escapeHtml(ap.channel_utilization_24 ? 'Utilizzo canale ' + ap.channel_utilization_24 : '')}">${
+                escapeHtml(ap.channel_24 || '-')}${ap.channel_width_24 ? ' @ ' + escapeHtml(ap.channel_width_24) : ''}</td>
             <td>${escapeHtml(ap.model || '-')}</td>
         </tr>
     `).join('');

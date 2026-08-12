@@ -125,6 +125,16 @@ class TestWlcClientSearchAndQuality(unittest.TestCase):
         self.assertIn("Qualita'", head)
         self.assertIn("wlcQuality(", self.src)
 
+    def test_ap_table_has_a_column_per_radio(self):
+        # Le due radio hanno canale e larghezza propri: una colonna sola
+        # mostrava solo i 5 GHz, e la congestione sta quasi sempre sui 2.4.
+        head = self.html[self.html.index("wlcApTableBody") - 900:
+                         self.html.index("wlcApTableBody")]
+        self.assertIn("Canale 5 GHz", head)
+        self.assertIn("Canale 2.4 GHz", head)
+        self.assertIn("ap.channel_24", self.src)
+        self.assertIn("ap.channel_width_24", self.src)
+
     @unittest.skipUnless(shutil.which("node"), "node non disponibile")
     def test_quality_thresholds_run_for_real(self):
         # Le soglie sono la logica: una tabella di livelli sbagliata supera

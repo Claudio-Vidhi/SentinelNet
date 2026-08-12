@@ -90,6 +90,22 @@ MAC Address...................................... aa:bb:cc:dd:ee:01
 """
 
 
+AP_AUTORF_24 = """AP Name.......................................... ap-01
+MAC Address...................................... aa:bb:cc:dd:ee:01
+  Radio Type..................................... RADIO_TYPE_80211b/g
+  Noise Information
+    Noise Profile................................ FAILED
+  Load Information
+    Channel Utilization.......................... 74 %
+    Attached Client Count........................ 11
+  Channel Assignment Information
+    Current Channel.............................. 6
+    Channel Width................................ 20 Mhz
+    Current Channel Average Energy............... -71 dBm
+    Recommended Best Channel..................... 11
+"""
+
+
 class PlatformTest(unittest.TestCase):
     def test_vendor_hint(self):
         self.assertEqual(wlc.platform_of(AIREOS), "aireos")
@@ -319,7 +335,8 @@ class OverviewTest(unittest.TestCase):
                           "show rogue ap summary": ROGUE_SUMMARY,
                           "show client detail aa:bb:cc:11:22:01":
                               CLIENT_DETAIL_AIREOS,
-                          "show ap auto-rf 802.11a ap-01": AP_AUTORF})
+                          "show ap auto-rf 802.11a ap-01": AP_AUTORF,
+                          "show ap auto-rf 802.11b ap-01": AP_AUTORF_24})
 
     def test_clients_get_ip_rssi_snr_from_detail(self):
         # 'show client summary' non ha quelle colonne: senza il dettaglio per
@@ -357,13 +374,42 @@ class OverviewTest(unittest.TestCase):
         self.assertEqual(out["aps"][0]["channel"], "36")
         self.assertEqual(out["aps"][0]["channel_width"], "40 Mhz")
 
+    def test_the_two_radios_do_not_overwrite_each_other(self):
+        # Stesso AP, due radio: la 2.4 GHz ha canale, larghezza e utilizzo
+        # suoi. Senza il suffisso il secondo comando cancellava il primo e il
+        # tab mostrava il canale 2.4 sotto l'intestazione 5 GHz.
+        conn = self._conn()
+        with _patch_session("aireos", conn, SYSINFO):
+            out = wlc.overview(AIREOS)
+        ap = out["aps"][0]
+        self.assertEqual(ap["channel"], "36")
+        self.assertEqual(ap["channel_width"], "40 Mhz")
+        self.assertEqual(ap["channel_utilization"], "12 %")
+        self.assertEqual(ap["channel_24"], "6")
+        self.assertEqual(ap["channel_width_24"], "20 Mhz")
+        self.assertEqual(ap["channel_utilization_24"], "74 %")
+        self.assertEqual(ap["noise_profile_24"], "FAILED")
+
+    def test_a_radio_that_does_not_answer_leaves_the_other_alone(self):
+        # Un AP con la sola radio 5 GHz attiva: il comando 802.11b torna
+        # vuoto e non deve azzerare le chiavi gia' raccolte.
+        conn = _FakeConn({"show ap summary": AP_SUMMARY,
+                          "show ap auto-rf 802.11a ap-01": AP_AUTORF,
+                          "show ap auto-rf 802.11b ap-01": ""})
+        with _patch_session("aireos", conn, SYSINFO):
+            out = wlc.overview(AIREOS)
+        ap = out["aps"][0]
+        self.assertEqual(ap["channel"], "36")
+        self.assertNotIn("channel_24", ap)
+
     def test_autorf_is_capped_and_skipped_on_iosxe(self):
         conn = self._conn()
         with mock.patch.object(wlc, "_AP_AUTORF_LIMIT", 1):
             with _patch_session("aireos", conn, SYSINFO):
                 wlc.overview(AIREOS)
+        # Il tetto e' per AP: un AP, una coppia di comandi (5 GHz + 2.4 GHz).
         self.assertEqual(
-            sum(1 for c in conn.sent if c.startswith("show ap auto-rf")), 1)
+            sum(1 for c in conn.sent if c.startswith("show ap auto-rf")), 2)
 
         # Il comando e' della CLI AireOS: un 9800 risponderebbe con un errore.
         conn = self._conn()
