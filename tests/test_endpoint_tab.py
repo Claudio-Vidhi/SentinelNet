@@ -51,5 +51,36 @@ class TestEndpointShell(unittest.TestCase):
         self.assertIn("switchTab('tab-endpoint', this)", self.html)
 
 
+class TestPanesHoldTheContent(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = _read("templates", "dashboard.html")
+
+    def test_the_old_tabs_are_gone(self):
+        for old in ("tab-mac", "tab-clientmap", "tab-diagnosi", "tab-endpoints"):
+            self.assertNotIn(f'<div id="{old}" class="tab-content">', self.html)
+
+    def test_the_subtab_bar_is_not_duplicated_any_more(self):
+        # The bar was copy-pasted into all four tabs; one pill bar replaces it.
+        # Do NOT count the 'ti-subtab' class globally: Provisioning, Topologia
+        # and Threat Intel share it. Assert instead that no button anywhere
+        # still switches to one of the four merged tabs.
+        for old in ("tab-mac", "tab-clientmap", "tab-diagnosi", "tab-endpoints"):
+            self.assertNotIn(f"switchTab('{old}')", self.html)
+
+    def _pane(self, view):
+        start = self.html.index(f'id="locPane-{view}"')
+        rest = self.html.find('id="locPane-', start + 1)
+        return self.html[start:rest if rest != -1 else len(self.html)]
+
+    def test_each_pane_holds_its_own_panels(self):
+        self.assertIn('id="macScanGroup"', self._pane("mac"))
+        self.assertIn('id="kpiMacSightings"', self._pane("mac"))
+        self.assertIn('id="arpTenantMenu"', self._pane("clientmap"))
+        self.assertIn('id="kpiArpBindings"', self._pane("clientmap"))
+        self.assertIn('id="diagClientInput"', self._pane("diagnosi"))
+        self.assertIn('id="epFilterTenant"', self._pane("inventory"))
+
+
 if __name__ == "__main__":
     unittest.main()
