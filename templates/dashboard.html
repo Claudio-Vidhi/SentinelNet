@@ -376,19 +376,10 @@
 
       <div class="panel requires-admin" style="margin-top:18px;">
         <h3 style="margin:0 0 6px; font-size:17px;" data-i18n="homeAnomTitle"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Anomalie recenti</h3>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th data-i18n="homeAnomKind">Tipo</th>
-                <th data-i18n="homeAnomFlow">Flusso</th>
-                <th data-i18n="homeAnomSeverity">Severit&agrave;</th>
-                <th data-i18n="homeAnomWhen">Quando</th>
-              </tr>
-            </thead>
-            <tbody id="homeAnomBody"></tbody>
-          </table>
-        </div>
+        <!-- Le anomalie si leggono in Traffico. Qui si contano soltanto: la
+             stessa coda in tre tabelle diverse erano tre inbox per un flusso
+             di allarmi solo. -->
+        <div id="homeAnomSummary"></div>
       </div>
     </div>
 
@@ -3875,28 +3866,28 @@
 
 
     async function loadHomeAnomalies() {
-        const body = document.getElementById('homeAnomBody');
-        if (!body) return;
-        const res = await apiFetch('/api/observability/anomalies?limit=5');
+        const box = document.getElementById('homeAnomSummary');
+        if (!box) return;
+        const L = i18n[currentLang];
+        // Una sola chiamata: la striscia eventi vuole le righe recenti, il
+        // riepilogo vuole quante ne restano da lavorare.
+        const res = await apiFetch('/api/observability/anomalies?status=all&limit=100');
         if (!res || !res.ok) return;
-        const data = await res.json();
-        const rows = data.anomalies || [];
+        const rows = (await res.json()).anomalies || [];
+        renderEventStrip(rows.slice(0, 5));
         if (rows.length === 0) {
-            body.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted); text-align:center; padding:16px;">${i18n[currentLang].homeNoAnomalies}</td></tr>`;
+            box.innerHTML = `<p style="color:var(--text-muted); margin:0; padding:8px 0;">${escapeHtml(L.homeNoAnomalies)}</p>`;
             return;
         }
-        renderEventStrip(rows);
-        body.innerHTML = rows.map(a => {
-            const sev = (a.severity || '').toString().toLowerCase();
-            const cls = (sev === 'high' || sev === 'critical') ? 'bad' : (sev === 'medium' ? 'warn' : 'ok');
-            const when = a.created_ts ? new Date(a.created_ts * 1000).toLocaleString() : '';
-            return `<tr>
-                <td>${escapeHtml((a.kind || '').toString())}</td>
-                <td><code>${escapeHtml((a.src_ip || '').toString())}</code> &rarr; <code>${escapeHtml((a.dst_ip || '').toString())}</code></td>
-                <td><span class="status ${cls}">${escapeHtml((a.severity || '—').toString())}</span></td>
-                <td style="color:var(--text-muted); font-size:12px;">${escapeHtml(when)}</td>
-            </tr>`;
-        }).join('');
+        const openCount = rows.filter(a => a.status === 'new').length;
+        box.innerHTML = `
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:4px 0;">
+                <span class="status ${openCount ? 'warn' : 'ok'}" style="font-size:15px;">${openCount}</span>
+                <span style="font-size:13px; color:var(--text-muted);">${escapeHtml(L.homeAnomOpenCount)}</span>
+                <button class="btn btn-small" style="width:auto; margin:0;" onclick="openTrafficoAnomalies()">
+                    <i class="fa-solid fa-arrow-right"></i> ${escapeHtml(L.homeAnomOpenLink)}
+                </button>
+            </div>`;
     }
 
     // Una sezione che non si puo' mostrare spiega perche', invece di sparire.

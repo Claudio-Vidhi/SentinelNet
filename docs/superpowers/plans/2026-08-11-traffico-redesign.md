@@ -212,7 +212,7 @@ Panoramica pane, in order: banner, KPI strip, top talker table, protocol card (c
 - `loadAnomalies()` sends `window=${trafState.window}` — the literal `window=7d` at `:806` is removed
 - Each row links to its incident: the `id` field of `/api/observability/anomalies` **is the incident id** (`routers/observability.py:340` selects `i.id FROM incidents i`). The link calls `switchTab('tab-incidents')` and opens that incident. No API change.
 
-- [ ] **Step 1: Write the failing JS test**
+- [x] **Step 1: Write the failing JS test**
 
 `tests/js/test_traffico_window.mjs`, in the style of `tests/js/test_wlc_quality.mjs` (read the source, eval the slice, assert):
 
@@ -223,11 +223,11 @@ Panoramica pane, in order: banner, KPI strip, top talker table, protocol card (c
 assert.ok(!/window=7d/.test(src), 'finestra anomalie ancora cablata');
 ```
 
-- [ ] **Step 2: Move the panel**, wire `#anomStatus` to reload within the header window, keep `clearAnomIpFilter()` and the chip working.
+- [x] **Step 2: Move the panel**, wire `#anomStatus` to reload within the header window, keep `clearAnomIpFilter()` and the chip working.
 
-- [ ] **Step 3: Add the incident link** on each row (icon or the id itself), guarded: render it only when `id` is present.
+- [x] **Step 3: Add the incident link** on each row (icon or the id itself), guarded: render it only when `id` is present.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
   - `node tests/js/test_traffico_window.mjs` green; python tests green.
   - Browser: the anomaly count changes when the header window changes; clicking through lands on the right incident detail.
   - Commit: `fix(traffico): le anomalie seguono la finestra del tab e portano all'incidente`
@@ -235,6 +235,10 @@ assert.ok(!/window=7d/.test(src), 'finestra anomalie ancora cablata');
 ---
 
 ### Task 5: Home stops keeping its own anomaly list
+
+> **Note.** Home also feeds `renderEventStrip()` from the same response, so the fetch stays
+> (one call, `status=all&limit=100`): the strip takes the five most recent rows, the summary
+> counts the ones still in `new`. The four column-header i18n keys died with the table.
 
 **Files:**
 - Modify: `templates/dashboard.html` (`#homeAnomBody` block)
@@ -244,9 +248,9 @@ assert.ok(!/window=7d/.test(src), 'finestra anomalie ancora cablata');
 - `#homeAnomBody` is replaced by a summary line + deep link: `switchTab('tab-flows')` then `trafSwitchView('anomalies')`, status filter preset to `new`
 - The count still comes from `/api/observability/anomalies?status=new` — one number, not a table
 
-- [ ] **Step 1:** Replace the table with the count + link.
-- [ ] **Step 2:** Verify the link lands on Traffico with the Anomalie pill active and the status filter on `Nuove`.
-- [ ] Commit: `refactor(home): le anomalie si contano qui, si leggono in Traffico`
+- [x] **Step 1:** Replace the table with the count + link.
+- [x] **Step 2:** Verify the link lands on Traffico with the Anomalie pill active and the status filter on `Nuove`.
+- [x] Commit: `refactor(home): le anomalie si contano qui, si leggono in Traffico`
 
 ---
 
