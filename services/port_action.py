@@ -51,6 +51,50 @@ def _build(device_type: str, interface: str):
             [c.format(i=interface) for c in up])
 
 
+def _params(device: dict):
+    """(device_type netmiko, parametri di connessione). Condiviso dalle due
+    azioni: il bounce e lo spegnimento persistente parlano allo stesso
+    apparato nello stesso modo, e una sola copia non puo' divergere."""
+    from core import core_engine
+
+    vendor = (device.get("Vendor") or "").lower()
+    try:
+        _, netmiko_type = core_engine.resolve_driver(vendor)
+    except ValueError as e:
+        raise PortActionError(str(e))
+    cli_kind, port = core_engine.get_cli_transport(device)
+    username, password, secret = core_engine.get_device_credentials(device)
+    return netmiko_type, {
+        "device_type": core_engine._cli_device_type(netmiko_type, cli_kind),
+        "host": device["IP"], "port": port, "username": username,
+        "password": password, "secret": secret,
+        "timeout": 20, "auth_timeout": 15, "banner_timeout": 15}
+
+
+def set_admin_state(device: dict, interface: str, up: bool) -> dict:
+    """Spegne (o riaccende) UNA interfaccia e la lascia cosi'.
+
+    Il bounce ripristina da solo; questo no: e' l'isolamento che deve reggere
+    finche' qualcuno non lo toglie. Passa dagli stessi comandi per vendor del
+    bounce — un 'shutdown' mandato a un ProCurve non spegne niente e fa
+    credere all'operatore che il client sia isolato.
+    """
+    from netmiko import ConnectHandler
+
+    netmiko_type, params = _params(device)
+    down, up_cmds = _build(netmiko_type, interface)
+    cmds = up_cmds if up else down
+
+    with ConnectHandler(**params) as conn:
+        try:
+            conn.enable()
+        except Exception:                      # noqa: BLE001 - non tutti hanno enable
+            pass
+        output = conn.send_config_set(cmds)
+    return {"interface": interface, "commands": cmds, "output": output,
+            "admin_up": up}
+
+
 def bounce(device: dict, interface: str, wait_s: float = 2.0) -> dict:
     """Spegne e riaccende UNA interfaccia. Ritorna l'esito dei due passaggi.
 
@@ -62,22 +106,10 @@ def bounce(device: dict, interface: str, wait_s: float = 2.0) -> dict:
     l'ha trovata.
     """
     import time
-    from core import core_engine
     from netmiko import ConnectHandler
 
-    vendor = (device.get("Vendor") or "").lower()
-    try:
-        _, netmiko_type = core_engine.resolve_driver(vendor)
-    except ValueError as e:
-        raise PortActionError(str(e))
-    cli_kind, port = core_engine.get_cli_transport(device)
+    netmiko_type, params = _params(device)
     down, up = _build(netmiko_type, interface)
-
-    username, password, secret = core_engine.get_device_credentials(device)
-    params = {"device_type": core_engine._cli_device_type(netmiko_type, cli_kind),
-              "host": device["IP"], "port": port, "username": username,
-              "password": password, "secret": secret,
-              "timeout": 20, "auth_timeout": 15, "banner_timeout": 15}
 
     out: dict = {"interface": interface, "commands": {"down": down, "up": up}}
     with ConnectHandler(**params) as conn:
