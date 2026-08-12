@@ -261,8 +261,12 @@ class TestPanesHoldTheContent(unittest.TestCase):
             self.assertNotIn(f'<div id="{old}" class="tab-content">', self.html)
 
     def test_the_subtab_bar_is_not_duplicated_any_more(self):
-        # It was copy-pasted into all four tabs; one pill bar replaces it.
-        self.assertEqual(0, self.html.count('class="btn btn-secondary ti-subtab'))
+        # The bar was copy-pasted into all four tabs; one pill bar replaces it.
+        # Do NOT count the 'ti-subtab' class globally: Provisioning, Topologia
+        # and Threat Intel share it. Assert instead that no button anywhere
+        # still switches to one of the four merged tabs.
+        for old in ("tab-mac", "tab-clientmap", "tab-diagnosi", "tab-endpoints"):
+            self.assertNotIn(f"switchTab('{old}')", self.html)
 
     def _pane(self, view):
         start = self.html.index(f'id="locPane-{view}"')
