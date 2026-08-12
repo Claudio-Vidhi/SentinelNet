@@ -90,6 +90,41 @@ class TestTrafficoStructure(unittest.TestCase):
         # switchTab('tab-flows') esistente continuano a funzionare.
         self.assertIn('id="tab-flows"', self.html)
 
+    def test_replaced_controls_are_gone(self):
+        # Un controllo sostituito ma non cancellato resta cliccabile e muove
+        # una finestra che nessuno legge piu'.
+        for element_id in ("flowsWindow", "flowsMetric", "flowsTenantBtn",
+                           "flowsAutoRefresh", "flowsHideTelemetry",
+                           "flowsLastUpdate", "obsChartWindow",
+                           "flowDetailInline", "flowSiemWindow",
+                           "flowSiemTenant"):
+            self.assertNotIn(f'id="{element_id}"', self.html,
+                             f"'{element_id}' e' stato sostituito ma non cancellato")
+
+    def test_the_twin_tab_is_gone_and_nothing_points_at_it(self):
+        # Il tab gemello si raggiungeva solo dalla sua stessa subtab bar:
+        # cancellare la barra senza cancellare il tab lo rende irraggiungibile.
+        self.assertNotIn("tab-flow-siem", self.html)
+
+    def test_the_moved_panels_live_inside_their_pane(self):
+        # Spostare un pannello fuori dal suo pane lo renderebbe visibile in
+        # tutte e quattro le viste.
+        for pane, ids in (
+            ("overview", ("fgKpiStrip", "fgTalkersTableBody", "obsProtocolCanvas",
+                          "fgProtoTableBody", "fgTenantSummary", "flowsObsBanner")),
+            ("flows", ("flowsTableBody", "flowsSourceChips", "flowsSyslogAllSection")),
+            ("search", ("flowSiemHistCanvas", "flowSiemQueryInput", "flowSiemTableBody",
+                        "flowSiemFacets")),
+            ("anomalies", ("anomTableBody", "anomStatus")),
+        ):
+            start = self.html.index(f'id="trafPane-{pane}"')
+            end = self.html.index('id="trafPane-', start + 10) if pane != "anomalies" \
+                else self.html.index('id="flowDetailPanel"', start)
+            body = self.html[start:end]
+            for element_id in ids:
+                self.assertIn(f'id="{element_id}"', body,
+                              f"'{element_id}' non e' dentro il pane '{pane}'")
+
 
 class TestTrafficoCallsRealRoutes(unittest.TestCase):
     """Ogni apiFetch dei moduli del tab deve colpire una rotta registrata.
