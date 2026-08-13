@@ -79,9 +79,9 @@ async function detectGatewayTracerouteUI() {
 
 // Ingresso dalla Client Map (e da chiunque altro): riempie e lancia.
 function diagnoseClientInTab(client, dest) {
+    _diagTenant = null;
     switchTab('tab-endpoint');
     locSwitchView('diagnosi');
-    _diagTenant = null;
     const c = document.getElementById('diagClientInput');
     const d = document.getElementById('diagDestInput');
     if (c) c.value = client || '';

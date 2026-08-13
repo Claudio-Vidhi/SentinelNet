@@ -523,10 +523,13 @@ function locTenantChanged() {
             const body = rows.length
                 ? table(rows.map(rowHtml).join(''))
                 : `<p style="color:var(--text-muted); font-size:12px;">${en ? 'No bindings for this tenant.' : 'Nessun binding per questo tenant.'}</p>`;
+            // 'all' is the sentinel locTenant() returns for "no tenant chosen" (the pane's
+            // default), not a real tenant name: label it via i18n instead of printing it raw.
+            const tenantLabel = t === 'all' ? i18n[currentLang].optFilterAll : escapeHtml(t);
             return `
             <div style="margin-bottom:18px;">
                 <h4 style="margin:0 0 8px 0; font-size:13px; display:flex; align-items:center; gap:8px;">
-                    <i class="fa-solid fa-building" style="color:var(--primary);"></i> ${escapeHtml(t)}
+                    <i class="fa-solid fa-building" style="color:var(--primary);"></i> ${tenantLabel}
                     <span style="color:var(--text-muted); font-weight:400; font-size:12px;">(${rows.length})</span>
                 </h4>
                 ${body}

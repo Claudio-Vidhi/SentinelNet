@@ -20,7 +20,7 @@ implemented more than once in different tabs that could live in a single tab.
 
 ## Current information architecture
 
-5 nav groups, 21 nav items, **28 `tab-content` surfaces**
+5 nav groups, 21 nav items, **23 `tab-content` surfaces**
 (subtabs are full `tab-content` divs with a duplicated subtab bar).
 
 | Group | Nav item | Tab surfaces inside |
@@ -106,7 +106,7 @@ of scope, deliberately:
 | :--- | :--- | :--- |
 | Fortigate Management → Traffico pane | pill `#fgtPill-clientDiagnosis` (`fgtDiagClient/Dst/Port/Proto` fields) | `POST /api/fortigate/{ip}/diagnose-client` |
 | Cisco WLC tab | **Diagnostica** button per client row → `#wlcDiagModal` | `GET /api/wlc/{ip}/diagnose-client/{mac}` |
-| Localizzazione Endpoint → Diagnosi Client | `#tab-diagnosi` form | `POST /api/diagnose/client` (cross-vendor) — and it *also* calls `GET /api/wlc/{ip}/diagnose-client/{mac}` internally (`diagnosi.js` L479) |
+| Localizzazione Endpoint → Diagnosi Client | `#locPane-diagnosi` pane (inside `#tab-endpoint`) | `POST /api/diagnose/client` (cross-vendor) — and it *also* calls `GET /api/wlc/{ip}/diagnose-client/{mac}` internally (`diagnosi.js`) |
 
 Three UIs, same operator intent ("why can't this client reach X?").
 The cross-vendor `#tab-diagnosi` is the superset (it delegates to WLC
@@ -194,33 +194,29 @@ Recommendation: categories as a pill/column-mode of Network Inventory (or at
 minimum move category editing into the inventory row actions). The standalone
 tab mostly duplicates the device list.
 
-### B3. Ten independent tenant/site selectors
+### B3. Eight independent tenant/site selectors
 
 Every tab builds its own: `#filterGroupSelect`, `#topologyGroupSelect`,
 `#interactiveGroupSelect`, `#categoriesGroupSelect`, `#threatGroupSelect`,
-`#macScanGroup`, `#arpScanGroup`, `#arpTenantMenu`, `#trafTenantBtn`,
-`#configGroupSelect` — ten since A3 merged `#flowsTenantBtn` and
-`#flowSiemTenant` into one. No global tenant context; state is lost at every
-tab switch.
+`#locTenant`, `#trafTenantBtn`, `#configGroupSelect` — eight since A1 merged
+`#macScanGroup`, `#arpScanGroup` and `#arpTenantMenu` into one `#locTenant`,
+and A3 merged `#flowsTenantBtn` and `#flowSiemTenant` into one. No global
+tenant context; state is lost at every tab switch.
 
 Recommendation: a global tenant selector (sidebar or top bar) that prefills
 each tab's filter. Removes ~10 controls and a class of "I filtered but
 switched tab and lost the filter" confusion.
 
-### B4. Subtab bar markup duplicated 13 times
+### B4. Subtab bar markup duplicated 7 times
 
-The same `.subtab-bar` button row is copy-pasted in every subtab:
-endpoint group ×4, flows group ×2, provisioning ×2, map ×2, mcp ×2, plus the
-FortiGate pane bar — 13 `.subtab-bar` instances in `dashboard.html`.
-
-*(Correction, 2026-08-11: an earlier version of this document claimed the four
-endpoint copies had drifted. They have not — all four are byte-identical.
-`loadClientMapTab()` / `loadEndpointsTab()` fire on the Client Map and Endpoint
-buttons in every copy; the MAC Tracker and Diagnosi buttons carry no loader in
-any copy, by design. The cost here is maintenance surface, not a live bug.)*
+The same `.subtab-bar` button row is copy-pasted in every remaining subtab:
+provisioning ×2, map ×2, mcp ×2, plus the FortiGate pane bar — 7
+`.subtab-bar` instances in `dashboard.html`. The endpoint group's four copies
+(merged into pills by A1) and the flows group's two copies (merged by A3) are
+gone.
 
 Recommendation: render the subtab bar once (single container or template
-fragment); consolidate per A1–A5 first, which deletes most copies anyway.
+fragment); consolidate per A4–A5 first, which deletes most remaining copies.
 
 ### B5. Two alert queues with the same status model
 
@@ -296,7 +292,7 @@ the Valuta group. Merging the first two (A4) leaves a clean pair:
 
 | Before | After |
 | :--- | :--- |
-| 28 `tab-content` surfaces | **21** (the five merges below remove 7; A3 already removed 1, so the tree is at 27) |
+| 28 `tab-content` surfaces | **21** (the five merges below remove 7; A1 and A3 are already done, so the tree is at 23) |
 | 21 nav items | **20** (Dispositivi & Categorie folded into Network Inventory) |
 | 13 duplicated subtab bars | **~6** |
 | Client diagnosis ×3 UIs | 1 cross-vendor surface (+ optional contextual prefills) |
@@ -304,7 +300,7 @@ the Valuta group. Merging the first two (A4) leaves a clean pair:
 
 Merge summary:
 
-1. `tab-mac` + `tab-clientmap` + `tab-diagnosi` + `tab-endpoints` → 1 tab (A1, A2)
+1. ~~`tab-mac` + `tab-clientmap` + `tab-diagnosi` + `tab-endpoints` → 1 tab~~ — **DONE** (A1); A2's three-diagnosis-UI consolidation is still open
 2. `tab-flows` + `tab-flow-siem` → 1 tab (A3)
 3. `tab-config` + `tab-netsec-audit` → 1 tab (A4)
 4. `tab-map` + `tab-map-interactive` → 1 tab (A5)

@@ -1360,21 +1360,18 @@ div.vis-tooltip {
 
 /* details/summary condivisi */
 details.mac-switch > summary::-webkit-details-marker,
-#tab-mac #macDeviceMenu > summary::-webkit-details-marker,
-#tab-clientmap #arpDeviceMenu > summary::-webkit-details-marker,
-#tab-clientmap #arpTenantMenu > summary::-webkit-details-marker,
+#tab-endpoint #macDeviceMenu > summary::-webkit-details-marker,
+#tab-endpoint #arpDeviceMenu > summary::-webkit-details-marker,
 #tab-ai details > summary::-webkit-details-marker { display: none; }
 details.mac-switch > summary, #tab-ai details > summary { list-style: none; cursor: pointer; }
 details.mac-switch > summary .mac-chev { transition: transform var(--transition); color: var(--text-soft); }
 details.mac-switch[open] > summary .mac-chev { transform: rotate(90deg); }
 details.mac-switch > summary:hover,
 #tab-ai details > summary:hover { background: var(--surface-3); }
-#tab-mac #macDeviceMenu[open] > summary .fa-chevron-down,
-#tab-clientmap #arpDeviceMenu[open] > summary .fa-chevron-down,
-#tab-clientmap #arpTenantMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
-#tab-mac #macDeviceList label:hover,
-#tab-clientmap #arpDeviceList label:hover,
-#tab-clientmap #arpTenantList label:hover { background: var(--surface-3); }
+#tab-endpoint #macDeviceMenu[open] > summary .fa-chevron-down,
+#tab-endpoint #arpDeviceMenu[open] > summary .fa-chevron-down { transform: rotate(180deg); }
+#tab-endpoint #macDeviceList label:hover,
+#tab-endpoint #arpDeviceList label:hover { background: var(--surface-3); }
 
 /* Chat assistente */
 #tab-ai .ai-chat-shell { display: grid; grid-template-columns: 248px 1fr; grid-template-rows: minmax(0, 1fr); height: min(calc(100vh - 240px), 760px); min-height: 520px; }

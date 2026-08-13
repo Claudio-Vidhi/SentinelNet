@@ -237,7 +237,7 @@
             if (u.role === 'admin') {
                 tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All tabs (admin)' : 'Tutte le tab (admin)'}</span>`;
             } else {
-                const allowed = Array.isArray(u.allowed_tabs) ? u.allowed_tabs : [];
+                const allowed = normalizeAllowedTabs(u.allowed_tabs);
                 const tabsSummary = allowed.length === 0
                     ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All tabs' : 'Tutte le tab'}</span>`
                     : `<span style="color:var(--primary);">${allowed.length} ${currentLang === 'en' ? 'tab(s)' : 'tab'}</span>`;
