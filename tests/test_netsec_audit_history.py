@@ -231,6 +231,10 @@ class TestHistoryUi(unittest.TestCase):
         from services.netsec_audit import history
         self.assertEqual(0, history.prune(0))
 
+    def test_apply_role_ui_passes_active_user_credentials(self):
+        self.assertIn("applyRoleUI(currentUsername, currentRole)", self.js)
+
+
 
 
 

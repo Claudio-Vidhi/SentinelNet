@@ -849,7 +849,7 @@ ${partialBanner}
                     </td>
                 </tr>`;
             }).join('');
-            if (typeof applyRoleUI === 'function') applyRoleUI();
+            if (typeof applyRoleUI === 'function') applyRoleUI(currentUsername, currentRole);
         } catch (e) {
             console.error('loadAuditHistory error:', e);
             tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'Error loading history.' : 'Errore nel caricamento dello storico.'}</td></tr>`;

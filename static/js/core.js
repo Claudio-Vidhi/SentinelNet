@@ -534,8 +534,9 @@ function normalizeAllowedTabs(tabs) {
 }
 
 function applyRoleUI(username, role, allowedTabs) {
-    currentUsername = username || '';
-    currentRole = role || 'viewer';
+    if (username !== undefined && username !== null) currentUsername = username;
+    if (role !== undefined && role !== null) currentRole = role;
+    if (!currentRole) currentRole = 'viewer';
     document.body.classList.remove('role-admin', 'role-operator', 'role-viewer');
     document.body.classList.add('role-' + currentRole);
     const badge = document.getElementById('userBadgeLabel');
