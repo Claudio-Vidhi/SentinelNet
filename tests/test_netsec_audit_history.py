@@ -53,3 +53,71 @@ class TestSchema(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+import json
+from fastapi.testclient import TestClient
+from security import user_manager
+
+PASS = "PasswordSicura1!"
+CSRF = {"X-Requested-With": "SentinelNet"}
+CONFIG = "hostname switch-01\nno ip http server\n"
+
+
+class TestSaving(unittest.TestCase):
+    """The client asks to keep a run; it never supplies the result."""
+
+    @classmethod
+    def setUpClass(cls):
+        db.migrate()
+        try:
+            user_manager.create_user("adm_audit_hist", PASS, role="admin", groups=None)
+        except Exception:
+            pass
+        import app_server
+        c = TestClient(app_server.app)
+        r = c.post("/api/auth/login", json={"username": "adm_audit_hist", "password": PASS})
+        assert r.status_code == 200, r.text
+        cls.client = c
+
+    def test_a_scan_without_the_flag_stores_nothing(self):
+        before = self._count()
+        r = self.client.post("/api/netsec-audit/scan", headers=CSRF,
+                             json={"config_text": CONFIG, "benchmark": "cis"})
+        self.assertEqual(200, r.status_code)
+        self.assertEqual(before, self._count())
+
+    def test_a_scan_with_the_flag_stores_the_servers_own_result(self):
+        r = self.client.post("/api/netsec-audit/scan", headers=CSRF,
+                             json={"config_text": CONFIG, "benchmark": "cis",
+                                   "save": True})
+        self.assertEqual(200, r.status_code)
+        row = self._latest()
+        self.assertEqual(r.json()["score"], row["score"])
+        self.assertEqual(r.json()["rules"], json.loads(row["result_json"])["rules"])
+
+    def test_a_forged_score_in_the_request_is_ignored(self):
+        # The score is computed server-side. A client that sends one must not
+        # be able to store it — otherwise the history is worthless as evidence.
+        r = self.client.post("/api/netsec-audit/scan", headers=CSRF,
+                             json={"config_text": CONFIG, "benchmark": "cis",
+                                   "save": True, "score": 100, "grade": "A"})
+        self.assertEqual(200, r.status_code)
+        self.assertEqual(r.json()["score"], self._latest()["score"])
+        self.assertNotEqual(100, self._latest()["score"])
+
+    def _count(self):
+        conn = db.get_observability_connection()
+        try:
+            return conn.execute("SELECT COUNT(*) c FROM netsec_audit_runs").fetchone()["c"]
+        finally:
+            conn.close()
+
+    def _latest(self):
+        conn = db.get_observability_connection()
+        try:
+            return conn.execute("SELECT * FROM netsec_audit_runs "
+                                "ORDER BY id DESC LIMIT 1").fetchone()
+        finally:
+            conn.close()
+
