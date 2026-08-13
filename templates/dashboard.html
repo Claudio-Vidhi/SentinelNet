@@ -3052,13 +3052,13 @@
                 <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
                 <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
               </select>
-              <div style="margin-top:8px;">
-                <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
-                  <input type="checkbox" id="auditSaveRun" onchange="toggleAuditSaveNameInput()">
+              <div style="margin-top:10px;">
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; margin-bottom:4px;">
+                  <input type="checkbox" id="auditSaveRun">
                   <span data-i18n="auditSaveRunLabel">Conserva questa esecuzione nello storico</span>
                 </label>
-                <div id="auditSaveNameContainer" style="display:none; margin-top:6px;">
-                  <input type="text" id="auditRunName" placeholder="Nome / Etichetta Audit (opzionale)" data-i18n-placeholder="auditRunNamePh" style="width:100%; padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                <div id="auditSaveNameContainer" style="margin-top:4px;">
+                  <input type="text" id="auditRunName" oninput="toggleAuditSaveNameInput()" placeholder="Nome / Etichetta Audit (opzionale, es. Audit Q3)" data-i18n-placeholder="auditRunNamePh" style="width:100%; padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
                 </div>
               </div>
             </div>
