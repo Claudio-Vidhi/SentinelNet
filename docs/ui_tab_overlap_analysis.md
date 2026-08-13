@@ -51,11 +51,13 @@ implemented more than once in different tabs that could live in a single tab.
 
 ## A. High priority — merge into one tab
 
-### A1. Localizzazione Endpoint: 4 subtabs → 1 tab with pills — **DONE** (2026-08-12, `c3eb863`..`a76d817`)
+### A1. Localizzazione Endpoint: 4 subtabs → 1 tab with pills — **DONE** (2026-08-12, `c3eb863`..`ba3ed11`)
 
-The four subtabs are four views over the same endpoint telemetry:
+The four subtabs were four views over the same endpoint telemetry. The table
+below is the **pre-merge** state, kept as the record of what was merged; the
+ids in it no longer exist.
 
-| Subtab | Data source | Content |
+| Subtab (pre-merge) | Data source | Content |
 | :--- | :--- | :--- |
 | `#tab-mac` | `/api/mac/scan`, `/api/mac/search`, `/api/mac/stats`, `/api/mac/overrides` | L2: MAC → switch/port/VLAN |
 | `#tab-clientmap` | `/api/arp/scan`, `/api/arp/client-map` + the **same** `/api/mac/*` calls | L3: MAC ↔ IP, cross-referenced with tracker ports |
@@ -109,7 +111,7 @@ of scope, deliberately:
 | Localizzazione Endpoint → Diagnosi Client | `#locPane-diagnosi` pane (inside `#tab-endpoint`) | `POST /api/diagnose/client` (cross-vendor) — and it *also* calls `GET /api/wlc/{ip}/diagnose-client/{mac}` internally (`diagnosi.js`) |
 
 Three UIs, same operator intent ("why can't this client reach X?").
-The cross-vendor `#tab-diagnosi` is the superset (it delegates to WLC
+The cross-vendor `#locPane-diagnosi` is the superset (it delegates to WLC
 diagnosis and adds traceroute/port-bounce).
 
 Recommendation: keep the cross-vendor diagnosis as the **single** entry point
