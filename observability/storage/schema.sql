@@ -322,3 +322,32 @@ CREATE TABLE IF NOT EXISTS ai_conversations (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_conv_user
     ON ai_conversations(username, updated_ts DESC);
+
+
+-- Saved NetSec Audit runs. Opt-in: the scan route writes here only when the
+-- caller asked to keep the run. The whole result document is kept, because a
+-- score without the findings behind it cannot be acted on later, and re-running
+-- against a config that has since changed answers a different question.
+CREATE TABLE IF NOT EXISTS netsec_audit_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts              INTEGER NOT NULL,
+    -- NULL for a pasted config: nothing to scope it by, so only unrestricted
+    -- users see it.
+    tenant          TEXT,
+    device_name     TEXT,
+    device_ip       TEXT,
+    benchmark       TEXT NOT NULL,
+    benchmark_title TEXT NOT NULL,
+    vendor          TEXT NOT NULL,
+    lang            TEXT NOT NULL,
+    -- NULL when every rule came back UNKNOWN: score_rules() returns None
+    -- rather than inventing a number, and 0 would read as "everything failed".
+    score           INTEGER,
+    summary_json    TEXT NOT NULL,
+    result_json     TEXT NOT NULL,
+    actor           TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_netsec_audit_runs_tenant_ts
+    ON netsec_audit_runs (tenant, ts DESC);
+
