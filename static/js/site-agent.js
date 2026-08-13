@@ -139,7 +139,7 @@
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Intervallo Polling Inventario (sec)</label>
                     <input id="agentCfgInterval" type="number" value="${curInterval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
                 </div>
-                <button class="btn btn-sm" onclick="triggerAgentConfigSave('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--primary); color:#fff;">
+                <button class="btn btn-sm" onclick="triggerAgentConfigSave('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--cta); color:var(--cta-text);">
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
                 </button>
             </div>
