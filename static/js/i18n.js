@@ -909,6 +909,13 @@ const i18n = {
         threatEyebrow: '<i class="fa-solid fa-shield-virus"></i> Sicurezza',
         titleThreatIntel: "Vulnerability Matcher (NIST NVD)",
         descThreatIntel: "Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con il National Vulnerability Database (NVD NIST).",
+        lblThreatSeverity: "Severità:",
+        optSevAll: "Tutte le severità",
+        optSevCritical: "Solo Critica (CRITICAL)",
+        optSevHigh: "Alta e superiore (HIGH+)",
+        optSevMedium: "Media e superiore (MEDIUM+)",
+        optSevLow: "Tutte (inclusa LOW)",
+        vwLblSeverity: "Severità",
 
         // Tab 6
         importEyebrow: '<i class="fa-solid fa-file-csv"></i> Import',
@@ -2308,6 +2315,13 @@ const i18n = {
         threatEyebrow: '<i class="fa-solid fa-shield-virus"></i> Security',
         titleThreatIntel: "Vulnerability Matcher (NIST NVD)",
         descThreatIntel: "Checks in real time the firmware vulnerabilities detected on active devices by comparing them with the National Vulnerability Database (NVD NIST).",
+        lblThreatSeverity: "Severity:",
+        optSevAll: "All severities",
+        optSevCritical: "Critical only (CRITICAL)",
+        optSevHigh: "High and above (HIGH+)",
+        optSevMedium: "Medium and above (MEDIUM+)",
+        optSevLow: "All (including LOW)",
+        vwLblSeverity: "Severity",
 
         // Tab 6
         importEyebrow: '<i class="fa-solid fa-file-csv"></i> Import',
