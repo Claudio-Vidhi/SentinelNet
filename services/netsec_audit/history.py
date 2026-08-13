@@ -13,8 +13,16 @@ from typing import Optional
 from core import db
 
 
+def _ensure_run_name_column(conn):
+    try:
+        conn.execute("ALTER TABLE netsec_audit_runs ADD COLUMN run_name TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
+
 def save(result: dict, *, tenant: Optional[str], device_name: Optional[str],
-         device_ip: Optional[str], actor: str) -> int:
+         device_ip: Optional[str], actor: str, run_name: Optional[str] = None) -> int:
     summary = result.get("summary") or {}
     # None means "not determinable" (every rule UNKNOWN). It stays None: coercing
     # it to 0 would record a perfect failure where the engine recorded no verdict.
@@ -22,16 +30,17 @@ def save(result: dict, *, tenant: Optional[str], device_name: Optional[str],
     score = int(raw) if isinstance(raw, (int, float)) else None
     conn = db.get_observability_connection()
     try:
+        _ensure_run_name_column(conn)
         cur = conn.execute(
             "INSERT INTO netsec_audit_runs (ts, tenant, device_name, device_ip, "
             "benchmark, benchmark_title, vendor, lang, score, "
-            "summary_json, result_json, actor) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "summary_json, result_json, actor, run_name) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (int(time.time()), tenant, device_name, device_ip,
              result.get("benchmark", ""), result.get("benchmark_title", ""),
              result.get("vendor", ""), result.get("lang", ""),
              score,
-             json.dumps(summary), json.dumps(result), actor))
+             json.dumps(summary), json.dumps(result), actor, run_name))
         conn.commit()
         return int(cur.lastrowid or 0)
     finally:

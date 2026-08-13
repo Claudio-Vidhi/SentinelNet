@@ -98,6 +98,7 @@ class NetSecAuditSchema(BaseModel):
     # Keep this run in the history. The result stored is the one computed here;
     # nothing about the outcome is ever read from the request.
     save: bool = False
+    run_name: Optional[str] = None
 
 
 @router.get("/api/netsec-audit/benchmarks")
@@ -181,7 +182,8 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
             device = assert_device_allowed(current_user, payload.device_ip)
             tenant = (device or {}).get("Group") or None
         run_id = history.save(result, tenant=tenant, device_name=dev_name,
-                              device_ip=payload.device_ip, actor=current_user.get("sub", ""))
+                              device_ip=payload.device_ip, actor=current_user.get("sub", ""),
+                              run_name=payload.run_name)
         history.prune(int(get_app_settings().get("audit_history_days") or 365))
         log_audit(f"Audit '{payload.benchmark}' salvato nello storico (#{run_id}) "
                   f"da '{current_user.get('sub')}'.")
@@ -206,7 +208,7 @@ async def netsec_audit_history(tenant: Optional[str] = None,
         tenants = scope
 
     sql = ("SELECT id, ts, tenant, device_name, device_ip, benchmark, "
-           "benchmark_title, vendor, lang, score, summary_json, actor "
+           "benchmark_title, vendor, lang, score, summary_json, actor, run_name "
            "FROM netsec_audit_runs WHERE 1=1")
     params: list = []
     if tenants is not None:

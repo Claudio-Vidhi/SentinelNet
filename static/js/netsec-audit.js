@@ -368,6 +368,7 @@
         }
 
         const saveRun = document.getElementById('auditSaveRun') ? document.getElementById('auditSaveRun').checked : false;
+        const runName = (saveRun && document.getElementById('auditRunName')) ? document.getElementById('auditRunName').value.trim() : null;
 
         try {
             const res = await apiFetch('/api/netsec-audit/scan', {
@@ -380,7 +381,8 @@
                     lang: currentLang,
                     device_ip: uploaded ? null : deviceIp,
                     config_text: uploaded ? _droppedConfigText : null,
-                    save: saveRun
+                    save: saveRun,
+                    run_name: runName
                 })
             });
 
@@ -477,6 +479,8 @@
         const devSel = document.getElementById('auditDeviceSelect');
         const deviceIp = devSel ? devSel.value : 'all';
         const uploaded = (deviceIp === UPLOADED_VALUE);
+        const saveRun = document.getElementById('auditSaveRun') ? document.getElementById('auditSaveRun').checked : false;
+        const runName = (saveRun && document.getElementById('auditRunName')) ? document.getElementById('auditRunName').value.trim() : null;
         try {
             const res = await apiFetch('/api/netsec-audit/scan', {
                 method: 'POST',
@@ -486,7 +490,8 @@
                     device_ip: uploaded ? null : deviceIp,
                     lang: lang,
                     config_text: uploaded ? _droppedConfigText : null,
-                    save: document.getElementById('auditSaveRun') ? document.getElementById('auditSaveRun').checked : false
+                    save: saveRun,
+                    run_name: runName
                 })
             });
             if (res && res.ok) return await res.json();
@@ -824,6 +829,10 @@ ${partialBanner}
             tbody.innerHTML = runs.map(r => {
                 const dt = new Date(r.ts * 1000).toLocaleString();
                 const dev = escapeHtml(r.device_name || r.device_ip || (currentLang === 'en' ? 'Pasted config' : 'Config incollata'));
+                const runName = r.run_name ? escapeHtml(r.run_name) : null;
+                const devDisplay = runName
+                    ? `<strong style="color:var(--text); font-size:12px;">${runName}</strong><br><span style="font-size:11px; color:var(--text-muted);">${dev}</span>`
+                    : `<span style="font-size:12px; font-weight:600;">${dev}</span>`;
                 const bench = escapeHtml(r.benchmark_title || r.benchmark || '');
                 const vendor = escapeHtml(r.vendor || '—');
                 const hasScore = (r.score !== null && r.score !== undefined);
@@ -837,7 +846,7 @@ ${partialBanner}
                 const actor = escapeHtml(r.actor || '—');
                 return `<tr>
                     <td style="font-size:12px;">${escapeHtml(dt)}</td>
-                    <td style="font-size:12px; font-weight:600;">${dev}</td>
+                    <td style="font-size:12px;">${devDisplay}</td>
                     <td style="font-size:12px;">${bench}</td>
                     <td style="font-size:12px;">${vendor}</td>
                     <td style="font-size:12px; font-weight:700;">${scoreStr}</td>
@@ -853,6 +862,34 @@ ${partialBanner}
         } catch (e) {
             console.error('loadAuditHistory error:', e);
             tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'Error loading history.' : 'Errore nel caricamento dello storico.'}</td></tr>`;
+        }
+    }
+
+    function toggleAuditSaveNameInput() {
+        const chk = document.getElementById('auditSaveRun');
+        const box = document.getElementById('auditSaveNameContainer');
+        if (box) box.style.display = (chk && chk.checked) ? 'block' : 'none';
+    }
+
+    function switchNetSecSubtab(sub) {
+        const btnScan = document.getElementById('subtabBtnAuditScan');
+        const btnChecklist = document.getElementById('subtabBtnChecklist');
+        const paneScan = document.getElementById('netsecSubtabScan');
+        const paneChecklist = document.getElementById('netsecSubtabChecklist');
+        if (!btnScan || !btnChecklist || !paneScan || !paneChecklist) return;
+
+        if (sub === 'checklist') {
+            btnScan.classList.remove('active');
+            btnChecklist.classList.add('active');
+            paneScan.style.display = 'none';
+            paneChecklist.style.display = 'block';
+            if (typeof loadAuditChecklistTab === 'function') loadAuditChecklistTab();
+        } else {
+            btnChecklist.classList.remove('active');
+            btnScan.classList.add('active');
+            paneChecklist.style.display = 'none';
+            paneScan.style.display = 'block';
+            loadAuditHistory();
         }
     }
 
@@ -907,5 +944,7 @@ ${partialBanner}
     window.loadAuditHistory = loadAuditHistory;
     window.openAuditRun = openAuditRun;
     window.deleteAuditRun = deleteAuditRun;
+    window.toggleAuditSaveNameInput = toggleAuditSaveNameInput;
+    window.switchNetSecSubtab = switchNetSecSubtab;
 })();
 
