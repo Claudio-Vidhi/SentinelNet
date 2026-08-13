@@ -92,6 +92,9 @@ class NetSecAuditSchema(BaseModel):
     # Lingua del REPORT, indipendente da quella dell'interfaccia: un audit si
     # consegna, e il destinatario puo' non leggere la lingua di chi lo esegue.
     lang: str = "it"        # 'it' | 'en'
+    # Keep this run in the history. The result stored is the one computed here;
+    # nothing about the outcome is ever read from the request.
+    save: bool = False
 
 
 @router.get("/api/netsec-audit/benchmarks")
@@ -159,10 +162,25 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
             detail="Nessuna configurazione da analizzare: seleziona un dispositivo "
                    "specifico con un backup disponibile, oppure carica un file di "
                    "configurazione.")
-    return netsec_audit.run_netsec_audit(
+    result = netsec_audit.run_netsec_audit(
         config_text=text,
         device_name=dev_name,
         benchmark=payload.benchmark,
         lang=payload.lang,
     )
+    if payload.save:
+        from services.netsec_audit import history
+        from core.app_settings import get_app_settings
+        from security.security_manager import log_audit
 
+        tenant = None
+        if payload.device_ip and payload.device_ip != "all":
+            device = assert_device_allowed(current_user, payload.device_ip)
+            tenant = (device or {}).get("Group") or None
+        run_id = history.save(result, tenant=tenant, device_name=dev_name,
+                              device_ip=payload.device_ip, actor=current_user.get("sub", ""))
+        history.prune(int(get_app_settings().get("audit_history_days") or 365))
+        log_audit(f"Audit '{payload.benchmark}' salvato nello storico (#{run_id}) "
+                  f"da '{current_user.get('sub')}'.")
+        result["saved_id"] = run_id
+    return result
