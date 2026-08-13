@@ -282,8 +282,10 @@
             // Card SELEZIONABILI: la query EUVD parte SOLO quando l'utente sceglie
             // un singolo dispositivo (pulsante Analizza), non su tutti insieme.
             onlineDevices.forEach(d => {
-                const scan = data.detected_versions[d.IP];
+                const scan = data.detected_versions[d.IP] || {};
                 const safeIpId = d.IP.replace(/\./g, '-');
+                const model = d.Model || scan.model || 'Non Rilevato';
+                const modelLabel = model !== 'Non Rilevato' ? `<span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Modello: <code>${escapeHtml(model)}</code></span>` : '';
 
                 const devCard = document.createElement("div");
                 devCard.className = "vuln-card";
@@ -293,13 +295,14 @@
                         <div>
                             <span style="font-size:17px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
                             <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
-                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
+                            ${modelLabel}
+                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version || 'Non Rilevata')}</code></span>
                         </div>
                         <div style="display:flex; align-items:center; gap:12px;">
                             <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
                             <button id="btn-mgd-${safeIpId}"
-                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
-                                onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
+                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version || '')}" data-model="${escapeHtml(model)}"
+                                onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this, this.dataset.model)"
                                 style="padding:8px 14px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
                                 ${i18n[currentLang].btnAnalyzeVuln}
                             </button>
@@ -452,11 +455,13 @@
     }
 
     // Analisi vulnerabilità di UN singolo dispositivo gestito (scelto dall'utente).
-    async function runManagedVulnCheck(ip, vendor, version, btnEl) {
+    async function runManagedVulnCheck(ip, vendor, version, btnEl, model) {
         const safeIpId = ip.replace(/\./g, '-');
         btnEl.disabled = true;
         btnEl.innerHTML = i18n[currentLang].scanningEuvd;
-        await runEuvdQuery(safeIpId, vendor, version);
+        const validModel = (model && model !== 'Non Rilevato') ? model : '';
+        const queryText = (validModel ? (validModel + ' ' + (version || '')) : (version || '')).trim();
+        await runEuvdQuery(safeIpId, vendor, queryText);
         btnEl.disabled = false;
         btnEl.innerHTML = i18n[currentLang].btnRescan;
     }

@@ -773,11 +773,17 @@ def resolve_euvd_term(vendor_display: str) -> str:
 # --- UTILITIES PER RILEVAMENTO VERSIONI (Richieste dal Core Engine e Server) ---
 
 def _clean_version(v):
-    """Normalizza una versione: tiene solo il primo token della prima riga, così
-    valori storici sporchi (es. '17.03.03\\nCisco IOS Software [Amsterdam]')
-    diventano '17.03.03'. Conserva parentesi/lettere ('15.2(4)E7')."""
+    """Normalizza una versione: estrae il token versione pulito conservando
+    lettere e parentesi."""
     if not v or not isinstance(v, str):
         return v
+    try:
+        from core.core_engine import extract_version
+        ext = extract_version(v)
+        if ext:
+            return ext
+    except Exception:
+        pass
     first = v.splitlines()[0].strip()
     m = re.match(r'^([\w().\-/]+)', first)
     return m.group(1) if m else first
@@ -788,22 +794,32 @@ def get_detected_versions():
             with open(VERSION_DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             for info in data.values():
-                if isinstance(info, dict) and info.get('version'):
-                    info['version'] = _clean_version(info['version'])
+                if isinstance(info, dict):
+                    if info.get('version'):
+                        info['version'] = _clean_version(info['version'])
+                    if not info.get('model'):
+                        info['model'] = 'Non Rilevato'
             return data
         except (OSError, ValueError):
             # Un file corrotto azzera le versioni rilevate di ogni apparato:
             # in UI sembra un'installazione nuova, non una perdita di dati.
-            # ``except:`` nudo prendeva anche KeyboardInterrupt/SystemExit.
             logger.exception("Inventario versioni illeggibile: %s",
                              VERSION_DATA_FILE)
             return {}
     return {}
 
-def update_version_inventory(ip, vendor, version, status="online"):
+def update_version_inventory(ip, vendor, version, status="online", model=None):
     with _io_lock:
         data = get_detected_versions()
-        data[ip] = {"vendor": vendor, "version": version, "status": status}
+        entry = data.get(ip, {})
+        if not isinstance(entry, dict):
+            entry = {}
+        entry.update({"vendor": vendor, "version": version, "status": status})
+        if model and model != "Non Rilevato":
+            entry["model"] = model
+        elif "model" not in entry:
+            entry["model"] = "Non Rilevato"
+        data[ip] = entry
         safe_json_write(VERSION_DATA_FILE, data)
 
 def update_device_hostname(ip: str, hostname: str):
