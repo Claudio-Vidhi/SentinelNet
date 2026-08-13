@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 """Router Analyzer. Estratto da app_server.py (fase 6.6)."""
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from core import db
 from ai import config_analyzer
 from services import inventory_manager
-from routers.deps import get_current_user, user_group_scope, assert_device_allowed
+from routers.deps import get_current_user, user_group_scope, assert_device_allowed, require_admin
+from security.security_manager import log_audit
 
 router = APIRouter(tags=["Analyzer"])
 
@@ -184,3 +187,93 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
                   f"da '{current_user.get('sub')}'.")
         result["saved_id"] = run_id
     return result
+
+
+@router.get("/api/netsec-audit/history")
+async def netsec_audit_history(tenant: Optional[str] = None,
+                               device_ip: Optional[str] = None,
+                               benchmark: Optional[str] = None,
+                               limit: int = 100,
+                               current_user = Depends(get_current_user)):
+    """Saved runs, newest first. Summary columns only — the stored document is
+    fetched one run at a time."""
+    scope = user_group_scope(current_user)
+    if tenant:
+        if scope is not None and tenant not in scope:
+            raise HTTPException(status_code=403, detail=f"Tenant '{tenant}' non consentito.")
+        tenants = [tenant]
+    else:
+        tenants = scope
+
+    sql = ("SELECT id, ts, tenant, device_name, device_ip, benchmark, "
+           "benchmark_title, vendor, lang, score, summary_json, actor "
+           "FROM netsec_audit_runs WHERE 1=1")
+    params: list = []
+    if tenants is not None:
+        # A run on a pasted config has no tenant; only unrestricted users see it.
+        sql += " AND tenant IN (%s)" % ",".join("?" for _ in tenants)
+        params.extend(tenants)
+    if device_ip:
+        sql += " AND device_ip = ?"
+        params.append(device_ip)
+    if benchmark:
+        sql += " AND benchmark = ?"
+        params.append(benchmark)
+    sql += " ORDER BY ts DESC LIMIT ?"
+    params.append(max(1, min(int(limit), 500)))
+
+    rows = await db.read(sql, tuple(params))
+    out = []
+    for r in rows:
+        item = dict(r)
+        if item.get("summary_json"):
+            try:
+                item["summary"] = json.loads(item["summary_json"])
+            except Exception:
+                item["summary"] = {}
+            del item["summary_json"]
+        out.append(item)
+    return {"runs": out, "count": len(out)}
+
+
+@router.get("/api/netsec-audit/history/{run_id}")
+async def netsec_audit_history_detail(run_id: int,
+                                      current_user = Depends(get_current_user)):
+    """Single audit run detail. Returns full result document.
+    Out-of-scope and non-existent both return 404."""
+    scope = user_group_scope(current_user)
+    rows = await db.read("SELECT * FROM netsec_audit_runs WHERE id = ?", (run_id,))
+    if not rows:
+        raise HTTPException(status_code=404, detail="Audit non trovato.")
+    row = dict(rows[0])
+    row_tenant = row.get("tenant")
+    if scope is not None and (row_tenant is None or row_tenant not in scope):
+        raise HTTPException(status_code=404, detail="Audit non trovato.")
+    try:
+        return json.loads(row["result_json"])
+    except Exception:
+        raise HTTPException(status_code=500, detail="Impossibile leggere il risultato memorizzato.")
+
+
+@router.delete("/api/netsec-audit/history/{run_id}")
+async def netsec_audit_history_delete(run_id: int,
+                                      current_user = Depends(require_admin)):
+    """Delete a saved audit run. Admin only.
+    Out-of-scope and non-existent both return 404."""
+    scope = user_group_scope(current_user)
+    rows = await db.read("SELECT tenant FROM netsec_audit_runs WHERE id = ?", (run_id,))
+    if not rows:
+        raise HTTPException(status_code=404, detail="Audit non trovato.")
+    row_tenant = dict(rows[0]).get("tenant")
+    if scope is not None and (row_tenant is None or row_tenant not in scope):
+        raise HTTPException(status_code=404, detail="Audit non trovato.")
+
+    conn = db.get_observability_connection()
+    try:
+        conn.execute("DELETE FROM netsec_audit_runs WHERE id = ?", (run_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    log_audit(f"Audit run #{run_id} eliminato dallo storico da '{current_user.get('sub')}'.")
+    return {"status": "ok", "deleted": run_id}

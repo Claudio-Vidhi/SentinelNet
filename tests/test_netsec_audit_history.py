@@ -121,3 +121,77 @@ class TestSaving(unittest.TestCase):
         finally:
             conn.close()
 
+
+class TestReading(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        db.migrate()
+        try:
+            user_manager.create_user("adm_audit_hist_rd", PASS, role="admin", groups=None)
+        except Exception:
+            pass
+        try:
+            user_manager.create_user("user_sede_a", PASS, role="operator", groups=["sede-a"])
+        except Exception:
+            pass
+        import app_server
+        c = TestClient(app_server.app)
+        r = c.post("/api/auth/login", json={"username": "adm_audit_hist_rd", "password": PASS})
+        assert r.status_code == 200, r.text
+        cls.client = c
+
+        c2 = TestClient(app_server.app)
+        r2 = c2.post("/api/auth/login", json={"username": "user_sede_a", "password": PASS})
+        assert r2.status_code == 200, r2.text
+        cls.client_sede_a = c2
+
+    def test_the_list_does_not_ship_every_result_document(self):
+        # The listing is a table of scores; sending each full rules[] with it
+        # turns a page load into megabytes.
+        r = self.client.get("/api/netsec-audit/history", headers=CSRF)
+        self.assertEqual(200, r.status_code)
+        for row in r.json()["runs"]:
+            self.assertNotIn("result_json", row)
+            self.assertIn("score", row)
+
+    def test_the_detail_returns_the_stored_document_unchanged(self):
+        saved = self.client.post("/api/netsec-audit/scan", headers=CSRF,
+                                 json={"config_text": CONFIG, "benchmark": "cis",
+                                       "save": True}).json()
+        r = self.client.get(f"/api/netsec-audit/history/{saved['saved_id']}",
+                            headers=CSRF)
+        self.assertEqual(200, r.status_code)
+        self.assertEqual(saved["rules"], r.json()["rules"])
+
+    def test_out_of_scope_and_missing_answer_the_same_404(self):
+        # Confirming existence to someone who may not see it leaks the fact
+        # that another tenant was audited. Same rule as CONTRIBUTING.md §4.
+        r = self.client.get("/api/netsec-audit/history/999999", headers=CSRF)
+        self.assertEqual(404, r.status_code)
+
+    def test_delete_is_admin_only(self):
+        # Deleting evidence is not an operator action.
+        import inspect
+        from routers import analyzer
+        from routers.deps import require_admin
+        dep = inspect.signature(
+            analyzer.netsec_audit_history_delete).parameters["current_user"].default
+        self.assertIs(dep.dependency, require_admin)
+
+    def test_scoped_user_cannot_access_other_tenant_history(self):
+        # Insert run for tenant sede-b directly into DB
+        from services.netsec_audit import history
+        res = {"benchmark": "cis", "benchmark_title": "CIS", "vendor": "cisco", "lang": "it", "score": 80, "summary": {}, "rules": []}
+        run_id = history.save(res, tenant="sede-b", device_name="switch-02", device_ip="192.0.2.2", actor="admin")
+
+        # user_sede_a asks for run_id -> 404
+        r = self.client_sede_a.get(f"/api/netsec-audit/history/{run_id}", headers=CSRF)
+        self.assertEqual(404, r.status_code)
+
+        # user_sede_a lists history -> run_id not in list
+        r2 = self.client_sede_a.get("/api/netsec-audit/history", headers=CSRF)
+        self.assertEqual(200, r2.status_code)
+        ids = [row["id"] for row in r2.json()["runs"]]
+        self.assertNotIn(run_id, ids)
+
+
