@@ -494,6 +494,9 @@ function populateProvisioningFormSelects() {
             `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
         ).join('');
     }
+    if (typeof window.populateGenCfgTenants === 'function') {
+        window.populateGenCfgTenants();
+    }
 }
 
 async function loadProvisioningTab() {
