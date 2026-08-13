@@ -71,8 +71,9 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
 
     raise HTTPException(status_code=404, detail="File di backup non trovato per questo dispositivo.")
 
+
 @router.get("/api/search")
-async def proxy_nvd_search(request: Request, current_user = Depends(get_current_user)):
+async def proxy_enisa_search(request: Request, current_user = Depends(get_current_user)):
     from urllib.parse import parse_qs, urlencode
     raw = parse_qs(request.url.query, keep_blank_values=True)
 
