@@ -19,7 +19,7 @@ from core import db  # noqa: E402
 EXPECTED_COLUMNS = {
     "id", "ts", "tenant", "device_name", "device_ip", "benchmark",
     "benchmark_title", "vendor", "lang", "score",
-    "summary_json", "result_json", "actor",
+    "summary_json", "result_json", "actor", "run_name",
 }
 
 
@@ -105,6 +105,13 @@ class TestSaving(unittest.TestCase):
         self.assertEqual(200, r.status_code)
         self.assertEqual(r.json()["score"], self._latest()["score"])
         self.assertNotEqual(100, self._latest()["score"])
+
+    def test_custom_run_name_saved_and_returned(self):
+        r = self.client.post("/api/netsec-audit/scan", headers=CSRF,
+                             json={"config_text": CONFIG, "benchmark": "cis",
+                                   "save": True, "run_name": "Audit Trimestrale Q3"})
+        self.assertEqual(200, r.status_code)
+        self.assertEqual("Audit Trimestrale Q3", self._latest()["run_name"])
 
     def _count(self):
         conn = db.get_observability_connection()

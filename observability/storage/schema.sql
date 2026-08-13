@@ -345,7 +345,8 @@ CREATE TABLE IF NOT EXISTS netsec_audit_runs (
     score           INTEGER,
     summary_json    TEXT NOT NULL,
     result_json     TEXT NOT NULL,
-    actor           TEXT NOT NULL
+    actor           TEXT NOT NULL,
+    run_name        TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_netsec_audit_runs_tenant_ts
