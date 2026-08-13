@@ -101,6 +101,9 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
             (d.get("Group") or "Generale") in _snmp_default_tenants
         dev_copy["snmp_enabled"] = (own or inherited) and not disabled
         dev_copy["snmp_inherited"] = inherited
+        v_info = versions.get(d["IP"], {})
+        dev_copy["Version"] = d.get("Version") or v_info.get("version") or "Non Rilevata"
+        dev_copy["Model"] = d.get("Model") or v_info.get("model") or "Non Rilevato"
         devices_enriched.append(dev_copy)
     return {
         "devices": devices_enriched,
