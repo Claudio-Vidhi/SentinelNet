@@ -194,7 +194,8 @@ function endpointsDiagnose(mac, tenant) {
     if (input) input.value = mac;
     _diagClient = mac;
     _diagTenant = tenant || null;
-    switchTab('tab-diagnosi');
+    switchTab('tab-endpoint');
+    locSwitchView('diagnosi');
     runDiagnosi();
 }
 
