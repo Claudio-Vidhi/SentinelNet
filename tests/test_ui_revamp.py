@@ -1004,9 +1004,9 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         for cls in ('class="hero"', 'class="hero-card"',
                     'class="filterbar"', 'class="panel'):
             self.assertIn(cls, tab_html)
-        # tre panel card: profili, generatore di config, chat (quest'ultima
-        # porta anche .ai-chat-shell, quindi si conta il prefisso della classe)
-        self.assertGreaterEqual(tab_html.count('class="panel'), 3)
+        # due panel card in #tab-ai: profili e chat (il generatore di config
+        # e' stato spostato nella scheda Provisioner)
+        self.assertGreaterEqual(tab_html.count('class="panel'), 2)
         # active-profile badge reclassed to the .chip state-badge component
         self.assertIn('id="aiActiveProfileBadge" class="chip"', tab_html)
 
