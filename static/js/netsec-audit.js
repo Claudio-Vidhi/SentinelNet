@@ -866,9 +866,11 @@ ${partialBanner}
     }
 
     function toggleAuditSaveNameInput() {
+        const input = document.getElementById('auditRunName');
         const chk = document.getElementById('auditSaveRun');
-        const box = document.getElementById('auditSaveNameContainer');
-        if (box) box.style.display = (chk && chk.checked) ? 'block' : 'none';
+        if (input && input.value.trim() !== '' && chk) {
+            chk.checked = true;
+        }
     }
 
     function switchNetSecSubtab(sub) {
