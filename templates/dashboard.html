@@ -1937,6 +1937,12 @@
           Genera con l'AI una proposta di configurazione per un nuovo switch: da un dispositivo template oppure dai parametri comuni dell'ambiente del tenant (VLAN, VTP, NTP, syslog, AAA...).
         </p>
         <div class="filterbar" style="margin-top:0; align-items:flex-end; flex-wrap:wrap; gap:10px;">
+          <div class="form-group" style="min-width:180px; margin:0;">
+            <label data-i18n="lblGenCfgProfile">Profilo AI</label>
+            <select id="genCfgProfileSelect" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+              <option value="" data-i18n="optGenCfgActiveProfile">-- usa profilo AI attivo --</option>
+            </select>
+          </div>
           <div class="form-group" style="min-width:170px; margin:0;">
             <label data-i18n="lblGenCfgTenant">Tenant</label>
             <select id="genCfgTenant" onchange="populateGenCfgTemplates()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
