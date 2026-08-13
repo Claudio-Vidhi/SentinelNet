@@ -271,7 +271,7 @@
             const label = s === 'all' ? (L.chipAllSources || 'Tutte le origini') : FLOWS_SOURCE_LABELS[s];
             return `<button class="btn btn-small" onclick="setFlowsSource('${s}')"
                 style="padding:5px 14px; border-radius:0; font-size:12px;
-                       ${active ? 'background:var(--primary); color:#fff; border-color:var(--primary);' : ''}">${label}</button>`;
+                       ${active ? 'background:var(--cta); color:var(--cta-text); border-color:var(--cta);' : ''}">${label}</button>`;
         }).join('');
         const colsBtn = document.getElementById('flowsColsBtn');
         if (colsBtn) colsBtn.style.display = _flowsSource === 'syslog' ? 'none' : '';
@@ -1177,8 +1177,8 @@
             const btn = document.getElementById('btnChartType' + t.charAt(0).toUpperCase() + t.slice(1));
             if (!btn) return;
             if (t === type) {
-                btn.style.background = 'var(--primary)';
-                btn.style.color = '#fff';
+                btn.style.background = 'var(--cta)';
+                btn.style.color = 'var(--cta-text)';
             } else {
                 btn.style.background = 'transparent';
                 btn.style.color = 'var(--text)';
