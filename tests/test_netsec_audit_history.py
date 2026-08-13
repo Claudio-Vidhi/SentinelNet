@@ -227,5 +227,10 @@ class TestHistoryUi(unittest.TestCase):
         body = body[:body.index("\n}") + 2]
         self.assertIn("confirm(", body)
 
+    def test_zero_days_keeps_everything(self):
+        from services.netsec_audit import history
+        self.assertEqual(0, history.prune(0))
+
+
 
 

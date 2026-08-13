@@ -22,11 +22,13 @@ _APP_ADV_ENV = {
     "retention_flows_days": "SENTINELNET_OBS_RETENTION_FLOWS_DAYS",
     "retention_syslog_days": "SENTINELNET_OBS_RETENTION_SYSLOG_DAYS",
     "retention_events_days": "SENTINELNET_OBS_RETENTION_EVENTS_DAYS",
+    "audit_history_days": "SENTINELNET_AUDIT_HISTORY_DAYS",
 }
 _APP_ADV_INT_KEYS = {"port", "retention_flows_days", "retention_syslog_days",
-                     "retention_events_days"}
+                     "retention_events_days", "audit_history_days"}
 _APP_ADV_DEFAULTS = {"port": PORT, "retention_flows_days": 30,
-                     "retention_syslog_days": 7, "retention_events_days": 90}
+                     "retention_syslog_days": 7, "retention_events_days": 90,
+                     "audit_history_days": 365}
 
 router = APIRouter(tags=["Settings"])
 

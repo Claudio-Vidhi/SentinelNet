@@ -477,12 +477,12 @@ customer values.
     `Config Analyzer` (`#tab-config`), `Checklist Audit Firewall` (`#navAuditChecklist` →
     `#tab-audit-checklist`, admin-only).
   - **NetSec Audit controls** (rendered by `static/js/netsec-audit.js` into the empty `#tab-netsec-audit`):
-    benchmark `#auditBenchmarkSelect`, device `#auditDeviceSelect`, **config upload / drag-and-drop
+    benchmark `#auditBenchmarkSelect`, device `#auditDeviceSelect`, opt-in history retention `#auditSaveRun`, **config upload / drag-and-drop
     `#auditDropZone` + `#auditFileInput` + `#auditDropText`** (sent as `config_text`), run
     `#btnRunAuditScan`, score `#auditScoreValue` + `#auditGradeBadge`, filters `#auditSevFilter` /
     `#auditCatFilter`, results `#auditRulesTableBody`, requirements view `#auditBenchmarkReqs` /
     `#auditBenchmarkReqsBody`, partial-coverage warning `#auditPartialWarning`, report language
-    `#auditReportLang`, PDF export `#btnPdfNetsec`.
+    `#auditReportLang`, PDF export `#btnPdfNetsec`, audit history `#auditHistoryPanel` / `#auditHistoryBody`.
   - **Config Analyzer**: `#configGroupSelect`, `#caSearch`, `#caPills`, `#caResults` — auto-loads,
     no upload, no analyze button.
   - **Audit Checklist**: engagements `#auditEngagementList`, new audit modal `openNewAuditModal()`.
@@ -490,7 +490,9 @@ customer values.
 
 - **App Features Present**:
   - `GET /api/netsec-audit/benchmarks` ([routers/analyzer.py:97](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py#L97)),
-    `POST /api/netsec-audit/scan` (L137, accepts `device_ip` **or** `config_text`)
+    `POST /api/netsec-audit/scan` (accepts `device_ip` **or** `config_text`, optional `save: true`),
+    `GET /api/netsec-audit/history` (saved runs), `GET /api/netsec-audit/history/{run_id}` (stored document),
+    `DELETE /api/netsec-audit/history/{run_id}` (admin-only run delete).
   - `GET /api/config-analyzer` (L44), `/{ip}` (L49), `POST /api/config-analyzer/convert` (L67)
   - Audit checklist (prefix `/api/audit-checklist`,
     [routers/audit_checklist.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/audit_checklist.py)):

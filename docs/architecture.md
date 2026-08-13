@@ -312,7 +312,7 @@ and audit log unchanged.
 | [observability/](../observability/) | The whole §2 pipeline, plus `ingesters/` |
 | [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner |
 | [routers/](../routers/) | ~24 FastAPI routers, one per area |
-| [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` |
+| [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history) |
 | [security/](../security/) | JWT/RBAC/audit, credential encryption, keystore, identities, redaction |
 | [ai/](../ai/) | Multi-provider assistant, config analyzer, MCP server and client |
 | [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract |
