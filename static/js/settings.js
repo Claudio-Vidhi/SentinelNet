@@ -181,6 +181,7 @@
         { id: 'tab-endpoint', key: 'tabEndpointLoc' },
         { id: 'tab-flows', key: 'tabFlows' },
         { id: 'tab-config', key: 'tabConfigAnalyzer' },
+        { id: 'tab-netsec-audit', key: 'tabNetSecAudit' },
         { id: 'tab-ai', key: 'tabAiAssistant' },
         { id: 'tab-provisioning', key: 'tabProvisioning' },
         { id: 'tab-provisioner', key: 'tabProvisioner' },
