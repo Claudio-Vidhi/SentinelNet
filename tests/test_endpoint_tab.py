@@ -136,5 +136,23 @@ class TestEntryPoints(unittest.TestCase):
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
+class TestTheTwoCountersAreDistinguishable(unittest.TestCase):
+    """Both counters were labelled 'MAC Univoci' and both were correct: one
+    counts MACs seen in switch MAC tables, the other MACs with a known ARP
+    binding. The merge puts them in different panes, which hides the clash
+    instead of resolving it."""
+
+    def test_the_labels_differ_in_both_languages(self):
+        src = _read("static", "js", "i18n.js")
+        for line in src.splitlines():
+            if "macKpiUniqueLabel" in line or "arpKpiUniqueLabel" in line:
+                self.assertNotIn("MAC Univoci", line)
+                self.assertNotIn("Unique MACs", line)
+        self.assertIn("MAC visti sugli switch", src)
+        self.assertIn("MACs seen on switches", src)
+        self.assertIn("MAC con un IP noto", src)
+        self.assertIn("MACs with a known IP", src)
+
+
 if __name__ == "__main__":
     unittest.main()
