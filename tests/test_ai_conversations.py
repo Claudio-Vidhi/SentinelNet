@@ -132,6 +132,17 @@ class TestAiConversations(unittest.TestCase):
         self.assertEqual(401, TestClient(app_server.app)
                          .get("/api/ai/conversations").status_code)
 
+    def test_ai_generate_config_profile_selection(self):
+        c = self._client("alice")
+        # Invalid profile_id returns 400
+        r = c.post("/api/ai/generate-config", json={
+            "tenant": "Generale",
+            "hostname": "SW-TEST",
+            "profile_id": "nonexistent_profile_id_123"
+        })
+        self.assertEqual(400, r.status_code)
+        self.assertIn("Profilo AI specificato non trovato", r.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

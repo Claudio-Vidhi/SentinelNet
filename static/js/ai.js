@@ -222,6 +222,18 @@
     }
 
     // ===== Generazione config nuovo switch (AI) =====
+    function populateGenCfgProfiles() {
+        const sel = document.getElementById('genCfgProfileSelect');
+        if (!sel) return;
+        const cur = sel.value;
+        const profiles = aiProfilesCache || [];
+        sel.innerHTML = `<option value="">${i18n[currentLang].optGenCfgActiveProfile || '-- usa profilo AI attivo --'}</option>` +
+            profiles.map(p =>
+                `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || 'Senza nome')} (${escapeHtml(p.provider || 'auto')}${p.model ? ' - ' + escapeHtml(p.model) : ''})</option>`
+            ).join('');
+        if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+    }
+
     function populateGenCfgTenants() {
         const sel = document.getElementById('genCfgTenant');
         if (!sel) return;
@@ -231,6 +243,7 @@
         ).join('');
         if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
         populateGenCfgTemplates();
+        populateGenCfgProfiles();
     }
 
     function populateGenCfgTemplates() {
@@ -260,6 +273,7 @@
             mgmt_ip: (document.getElementById('genCfgMgmtIp')?.value || '').trim(),
             template_ip: document.getElementById('genCfgTemplate')?.value || null,
             notes: (document.getElementById('genCfgNotes')?.value || '').trim(),
+            profile_id: document.getElementById('genCfgProfileSelect')?.value || null,
         };
         if (btn) btn.disabled = true;
         if (statusEl) statusEl.textContent = L.msgGenCfgWorking || 'Generazione in corso…';
@@ -324,6 +338,7 @@
                     : `<option value="">${i18n[currentLang].optAiNoProfile}</option>`);
                 activeSel.value = aiActiveProfileId;
             }
+            populateGenCfgProfiles();
             const badge = document.getElementById('aiActiveProfileBadge');
             if (badge) {
                 const active = aiProfilesCache.find(p => p.id === aiActiveProfileId);
@@ -774,3 +789,9 @@
             await persistAiConversation();
         }
     }
+
+    window.populateGenCfgProfiles = populateGenCfgProfiles;
+    window.populateGenCfgTenants = populateGenCfgTenants;
+    window.populateGenCfgTemplates = populateGenCfgTemplates;
+    window.generateSwitchConfig = generateSwitchConfig;
+    window.copyGenCfgOutput = copyGenCfgOutput;

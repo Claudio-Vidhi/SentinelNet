@@ -605,6 +605,7 @@ class AiGenerateConfigSchema(BaseModel):
     mgmt_ip: str = ""
     template_ip: Optional[str] = None  # se valorizzato: usa la sua running-config come template
     notes: str = ""                    # richieste aggiuntive libere dell'utente
+    profile_id: Optional[str] = None   # opzionale: ID del profilo AI da utilizzare
 
 # Prefissi di comandi globali IOS considerati "parametri d'ambiente" comuni
 # (servizi condivisi a livello di tenant: NTP, syslog, AAA, VTP, DNS, SNMP...).
@@ -679,13 +680,20 @@ def ai_generate_config(payload: AiGenerateConfigSchema, current_user = Depends(g
     tenant: da un dispositivo template (running-config) oppure dai parametri
     comuni dell'ambiente. Stessa autenticazione/profilo di /api/ai/chat; il
     contesto rispetta il budget caratteri del modello."""
-    profile = _get_active_ai_profile()
-    if profile is None:
-        raise HTTPException(status_code=400, detail="Nessun profilo AI configurato/attivo. Un amministratore deve crearne uno prima.")
+    if payload.profile_id:
+        profiles, active_id = _get_ai_profiles_raw()
+        profile = _find_ai_profile(profiles, payload.profile_id)
+        if profile is None:
+            raise HTTPException(status_code=400, detail="Profilo AI specificato non trovato.")
+    else:
+        profile = _get_active_ai_profile()
+        if profile is None:
+            raise HTTPException(status_code=400, detail="Nessun profilo AI configurato/attivo. Un amministratore deve crearne uno prima.")
+
     provider = profile.get("provider", "")
     api_key = crypto_vault.decrypt_password(profile.get("api_key_enc", "")) if profile.get("api_key_enc") else None
     if provider != "ollama" and not api_key:
-        raise HTTPException(status_code=400, detail="API key non configurata per il profilo AI attivo.")
+        raise HTTPException(status_code=400, detail=f"API key non configurata per il profilo AI '{profile.get('name', 'selezionato')}'.")
 
     tenant = (payload.tenant or "").strip()
     hostname = (payload.hostname or "").strip()
