@@ -109,3 +109,7 @@ HANDOFF.md
 .impeccable/questions/
 data/ssh_known_hosts
 cont.txt
+
+# Workspace della subagent-driven-development: ledger, brief, report e diff
+# di lavorazione. Scratch rigenerabile, la storia git e il record vero.
+.superpowers/

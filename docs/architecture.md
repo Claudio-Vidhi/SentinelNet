@@ -237,7 +237,7 @@ agent-mode sites the firewall half goes through the REST relay
 queues the request and says so, and the next run collects the answer.
 
 Exposed as `POST /api/diagnose/client`, the MCP tool `diagnose_client`, and a
-per-row button on the Client Map tab.
+per-row button in the Client Map pane of the Endpoint tab.
 
 One principle recurs: **what isn't known is stated**. A synthetic VLAN in the
 flow graph is marked `vlan_real: false` and the UI shows an asterisk; an
