@@ -142,7 +142,7 @@
         return 0;
     }
 
-    // Interroga /api/search (proxy EUVD autenticato) con i filtri correnti.
+    // Interroga /api/search (proxy NVD autenticato) con i filtri correnti.
     async function vwFetch() {
         const statusEl = document.getElementById('vwStatus');
         const bodyEl = document.getElementById('vwBody');
@@ -151,6 +151,8 @@
 
         const params = new URLSearchParams();
         if (vwState.vendor) params.set('vendor', vwState.vendor);
+        const selectedSev = document.getElementById('vwSeverity')?.value;
+        if (selectedSev) params.set('severity', selectedSev);
         const minScore = document.getElementById('vwMinScore').value;
         if (minScore) params.set('fromScore', minScore);
         params.set('size', '40');
@@ -175,15 +177,43 @@
         }
     }
 
-    // Filtro testuale lato client sulle righe già caricate (come euvd_dashboard: applySearchFilter()).
+    // Filtro testuale e per severità lato client sulle righe già caricate.
     function vwApplyTextFilter() {
         const q = (document.getElementById('vwText').value || '').trim().toLowerCase();
-        vwState.filtered = q
-            ? vwState.data.filter(r => [r.cve, r.euvd, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1)
-            : vwState.data;
+        const selectedSev = document.getElementById('vwSeverity')?.value;
+        const sevRanks = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+        const targetRank = selectedSev ? (sevRanks[selectedSev] || 0) : 0;
+
+        vwState.filtered = vwState.data.filter(r => {
+            if (targetRank > 0) {
+                const rRank = sevRanks[r.severity] || 0;
+                if (rRank < targetRank) return false;
+            }
+            if (q) {
+                return [r.cve, r.euvd, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1;
+            }
+            return true;
+        });
         vwRenderTable();
         const statusEl = document.getElementById('vwStatus');
         if (statusEl) statusEl.textContent = vwState.filtered.length + ' ' + i18n[currentLang].vwStatusRows;
+    }
+
+    function applyThreatSeverityFilter() {
+        const selSev = document.getElementById('threatSeveritySelect')?.value || 'all';
+        const cards = document.querySelectorAll('#securityTriageContainer div[data-sev]');
+        const sevRanks = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+        const targetRank = selSev !== 'all' ? (sevRanks[selSev] || 0) : 0;
+
+        cards.forEach(card => {
+            const cardSev = (card.getAttribute('data-sev') || '').toUpperCase();
+            const cardRank = sevRanks[cardSev] || 0;
+            if (targetRank === 0 || cardRank >= targetRank) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
     }
 
     function vwRenderTable() {

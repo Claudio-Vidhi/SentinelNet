@@ -983,10 +983,18 @@
       <div id="tiViewMatcher">
         <!-- Controlli: scelta sede + avvio manuale della scansione -->
         <div class="panel" style="margin-bottom:18px;">
-          <div class="filterbar" style="margin-top:0; align-items:center;">
+          <div class="filterbar" style="margin-top:0; align-items:center; gap:12px; flex-wrap:wrap;">
             <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
             <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
+            </select>
+            <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatSeverity">Severità:</label>
+            <select id="threatSeveritySelect" onchange="applyThreatSeverityFilter()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+              <option value="all" data-i18n="optSevAll">Tutte le severità</option>
+              <option value="CRITICAL" data-i18n="optSevCritical">Solo Critica (CRITICAL)</option>
+              <option value="HIGH" data-i18n="optSevHigh">Alta e superiore (HIGH+)</option>
+              <option value="MEDIUM" data-i18n="optSevMedium">Media e superiore (MEDIUM+)</option>
+              <option value="LOW" data-i18n="optSevLow">Tutte (inclusa LOW)</option>
             </select>
             <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
               <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
@@ -1006,8 +1014,16 @@
         <div class="panel" style="margin-bottom:14px;">
           <div id="vwVendorBtns" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;"></div>
           <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+            <div class="form-group" style="margin:0;"><label data-i18n="vwLblSeverity">Severità</label>
+              <select id="vwSeverity" style="padding:6px 10px;">
+                <option value="" data-i18n="optSevAll">Tutte</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="HIGH">HIGH+</option>
+                <option value="MEDIUM">MEDIUM+</option>
+                <option value="LOW">LOW</option>
+              </select></div>
             <div class="form-group" style="margin:0;"><label data-i18n="vwLblMinCvss">CVSS min</label>
-              <select id="vwMinScore"><option value="">—</option><option>7</option><option>8</option><option selected>9</option></select></div>
+              <select id="vwMinScore"><option value="">—</option><option>4</option><option>7</option><option>8</option><option selected>9</option></select></div>
             <div class="form-group" style="margin:0;"><label>EPSS min %</label>
               <input id="vwMinEpss" type="number" min="0" max="100" value="" style="width:90px; padding-left:10px;"></div>
             <label style="display:flex; align-items:center; gap:6px; font-size:13px;">

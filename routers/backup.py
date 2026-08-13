@@ -119,7 +119,10 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
             pass
     nvd_params["startIndex"] = str(start_index)
 
-    if "fromScore" in raw:
+    severity_param = raw.get("severity", raw.get("cvssV3Severity", [""]))[0].strip().upper()
+    if severity_param in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
+        nvd_params["cvssV3Severity"] = severity_param
+    elif "fromScore" in raw:
         try:
             score_num = float(raw["fromScore"][0])
             if score_num >= 9.0:
