@@ -178,7 +178,7 @@
         { id: 'tab-map-interactive', key: 'tabInteractive' },
         { id: 'tab-categories', key: 'tabCategories' },
         { id: 'tab-security', key: 'tabSecurity' },
-        { id: 'tab-mac', key: 'tabMacTracker' },
+        { id: 'tab-endpoint', key: 'tabEndpointLoc' },
         { id: 'tab-flows', key: 'tabFlows' },
         { id: 'tab-config', key: 'tabConfigAnalyzer' },
         { id: 'tab-ai', key: 'tabAiAssistant' },

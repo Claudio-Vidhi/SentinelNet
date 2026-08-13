@@ -522,6 +522,17 @@ function roleLabel(role) {
     return currentLang === 'en' ? 'Viewer' : 'Visualizzatore';
 }
 
+// Tab permissions are stored per user in users.json and predate the endpoint
+// merge, where four tabs became one. A saved 'tab-mac' must keep revealing the
+// group, so the old id is aliased on READ. The stored file is never rewritten:
+// it is the user's data, not ours.
+function normalizeAllowedTabs(tabs) {
+    if (!Array.isArray(tabs) || tabs.length === 0) return [];
+    const LEGACY = { 'tab-mac': 'tab-endpoint', 'tab-clientmap': 'tab-endpoint',
+                     'tab-diagnosi': 'tab-endpoint', 'tab-endpoints': 'tab-endpoint' };
+    return [...new Set(tabs.map(t => LEGACY[t] || t))];
+}
+
 function applyRoleUI(username, role, allowedTabs) {
     currentUsername = username || '';
     currentRole = role || 'viewer';
@@ -535,11 +546,12 @@ function applyRoleUI(username, role, allowedTabs) {
             `<span class="role-pill role-pill-${currentRole}">${roleLabel(currentRole)}</span>`;
     }
     // ponytail: restrizione solo lato frontend (nasconde i pulsanti); vuoto = tutte le tab.
-    if (Array.isArray(allowedTabs) && allowedTabs.length > 0) {
+    const allowed = normalizeAllowedTabs(allowedTabs);
+    if (allowed.length > 0) {
         document.querySelectorAll('.nav-item').forEach(btn => {
             const m = btn.getAttribute('onclick').match(/switchTab\('([^']+)'/);
             const tabId = m && m[1];
-            if (tabId && !allowedTabs.includes(tabId)) btn.style.display = 'none';
+            if (tabId && !allowed.includes(tabId)) btn.style.display = 'none';
         });
     }
 }
@@ -728,7 +740,7 @@ function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-security' && !appLoading) {
         loadThreatIntel();
     }
-    else if (tabId === 'tab-mac') loadMacTracker();
+    else if (tabId === 'tab-endpoint') locSwitchView(_locView);
     else if (tabId === 'tab-config') loadConfigAnalyzer();
     else if (tabId === 'tab-ai') loadAiTab();
     else if (tabId === 'tab-users') loadUsers();

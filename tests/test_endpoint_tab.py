@@ -8,6 +8,8 @@ tab permission still resolves to the merged tab.
 """
 
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -107,6 +109,31 @@ class TestOneTenantSelector(unittest.TestCase):
 
     def test_the_accessor_exists(self):
         self.assertIn("function locTenant(", self.cm)
+
+
+class TestEntryPoints(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.core = _read("static", "js", "core.js")
+        cls.settings = _read("static", "js", "settings.js")
+
+    def test_no_entry_point_names_the_old_tabs(self):
+        for src, name in ((_read("static", "js", "diagnosi.js"), "diagnosi.js"),
+                          (_read("static", "js", "endpoint-inventory.js"), "endpoint-inventory.js"),
+                          (self.core, "core.js")):
+            self.assertNotIn("switchTab('tab-diagnosi')", src, name)
+            self.assertNotIn("tabId === 'tab-mac'", src, name)
+
+    def test_assignable_tabs_offers_the_merged_tab(self):
+        self.assertIn("{ id: 'tab-endpoint', key: 'tabEndpointLoc' }", self.settings)
+        self.assertNotIn("{ id: 'tab-mac'", self.settings)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_a_saved_permission_still_resolves(self):
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_loc_permission.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
 
 
 if __name__ == "__main__":
