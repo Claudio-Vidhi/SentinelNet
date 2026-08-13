@@ -39,6 +39,7 @@
         renderAuditOverview();
         renderAuditRulesTable();
         setupConfigDropzone();
+        loadAuditHistory();
     }
 
     // Popola #auditDeviceSelect con l'inventario reale (già filtrato per sede
@@ -366,18 +367,20 @@
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Audit in corso...`;
         }
 
+        const saveRun = document.getElementById('auditSaveRun') ? document.getElementById('auditSaveRun').checked : false;
+
         try {
             const res = await apiFetch('/api/netsec-audit/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     benchmark: benchmark,
-                    device_ip: deviceIp,
                     // La tabella a schermo segue la lingua dell'interfaccia;
                     // il report esportato ha un proprio selettore.
                     lang: currentLang,
                     device_ip: uploaded ? null : deviceIp,
-                    config_text: uploaded ? _droppedConfigText : null
+                    config_text: uploaded ? _droppedConfigText : null,
+                    save: saveRun
                 })
             });
 
@@ -392,6 +395,9 @@
                 _auditVendor = data.vendor || null;
                 renderAuditOverview();
                 renderAuditRulesTable();
+                if (data.saved_id) {
+                    loadAuditHistory();
+                }
             } else if (res) {
                 // Es. 404 "Nessun backup trovato per <ip>." — dettaglio già in
                 // italiano lato backend, mostrato all'utente invece di essere
@@ -479,7 +485,8 @@
                     benchmark: benchmarkKey,
                     device_ip: uploaded ? null : deviceIp,
                     lang: lang,
-                    config_text: uploaded ? _droppedConfigText : null
+                    config_text: uploaded ? _droppedConfigText : null,
+                    save: document.getElementById('auditSaveRun') ? document.getElementById('auditSaveRun').checked : false
                 })
             });
             if (res && res.ok) return await res.json();
@@ -799,6 +806,96 @@ ${partialBanner}
         `;
     }
 
+    async function loadAuditHistory() {
+        const tbody = document.getElementById('auditHistoryBody');
+        if (!tbody) return;
+        try {
+            const res = await apiFetch('/api/netsec-audit/history');
+            if (!res || !res.ok) {
+                tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'Error loading history.' : 'Errore nel caricamento dello storico.'}</td></tr>`;
+                return;
+            }
+            const data = await res.json();
+            const runs = (data && data.runs) || [];
+            if (!runs.length) {
+                tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'No saved audits in history.' : 'Nessun audit salvato nello storico.'}</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = runs.map(r => {
+                const dt = new Date(r.ts * 1000).toLocaleString();
+                const dev = escapeHtml(r.device_name || r.device_ip || (currentLang === 'en' ? 'Pasted config' : 'Config incollata'));
+                const bench = escapeHtml(r.benchmark_title || r.benchmark || '');
+                const vendor = escapeHtml(r.vendor || '—');
+                const hasScore = (r.score !== null && r.score !== undefined);
+                const scoreStr = hasScore ? `${r.score}%` : '—';
+                const gradeStr = !hasScore
+                    ? (currentLang === 'en' ? 'NOT ASSESSABLE' : 'NON DETERMINABILE')
+                    : (r.score >= 80 ? 'GRADE A' : r.score >= 60 ? 'GRADE B' : 'GRADE C - RISK DETECTED');
+                const gradeColor = !hasScore
+                    ? 'var(--text-muted)'
+                    : (r.score >= 80 ? 'var(--success)' : r.score >= 60 ? 'var(--warning)' : 'var(--danger)');
+                const actor = escapeHtml(r.actor || '—');
+                return `<tr>
+                    <td style="font-size:12px;">${escapeHtml(dt)}</td>
+                    <td style="font-size:12px; font-weight:600;">${dev}</td>
+                    <td style="font-size:12px;">${bench}</td>
+                    <td style="font-size:12px;">${vendor}</td>
+                    <td style="font-size:12px; font-weight:700;">${scoreStr}</td>
+                    <td style="font-size:11px; font-weight:700; color:${gradeColor};">${escapeHtml(gradeStr)}</td>
+                    <td style="font-size:12px; color:var(--text-muted);">${actor}</td>
+                    <td>
+                        <button class="btn btn-secondary" onclick="openAuditRun(${r.id})" style="padding:2px 8px; font-size:11px; margin:0 4px 0 0;" data-i18n="auditHistoryOpen">Apri</button>
+                        <button class="btn btn-secondary requires-admin" onclick="deleteAuditRun(${r.id})" style="padding:2px 8px; font-size:11px; margin:0; color:var(--danger);" data-i18n="auditHistoryDelete">Elimina</button>
+                    </td>
+                </tr>`;
+            }).join('');
+            if (typeof applyRoleUI === 'function') applyRoleUI();
+        } catch (e) {
+            console.error('loadAuditHistory error:', e);
+            tbody.innerHTML = `<tr><td colspan="8" style="padding:15px; text-align:center; color:var(--text-muted);">${currentLang === 'en' ? 'Error loading history.' : 'Errore nel caricamento dello storico.'}</td></tr>`;
+        }
+    }
+
+    async function openAuditRun(id) {
+        try {
+            const res = await apiFetch(`/api/netsec-audit/history/${id}`);
+            if (!res || !res.ok) {
+                showToast(currentLang === 'en' ? 'Unable to load audit run.' : 'Impossibile caricare la run di audit.', 'error');
+                return;
+            }
+            const data = await res.json();
+            _auditRules = data.rules || [];
+            _auditSummary = data.summary || null;
+            _auditScore = (data.score === undefined) ? null : data.score;
+            _auditVendor = data.vendor || null;
+            renderAuditOverview();
+            renderAuditRulesTable();
+            showToast(currentLang === 'en' ? 'Audit run loaded from history.' : 'Run di audit caricata dallo storico.', 'info');
+        } catch (e) {
+            console.error('openAuditRun error:', e);
+            showToast(currentLang === 'en' ? 'Unable to load audit run.' : 'Impossibile caricare la run di audit.', 'error');
+        }
+    }
+
+    async function deleteAuditRun(id) {
+        const msg = currentLang === 'en'
+            ? 'Permanently delete this audit from history?'
+            : 'Eliminare definitivamente questo audit dallo storico?';
+        if (!confirm(msg)) return;
+        try {
+            const res = await apiFetch(`/api/netsec-audit/history/${id}`, { method: 'DELETE' });
+            if (res && res.ok) {
+                showToast(currentLang === 'en' ? 'Audit run deleted.' : 'Run di audit eliminata.', 'info');
+                loadAuditHistory();
+            } else {
+                showToast(currentLang === 'en' ? 'Failed to delete audit run.' : 'Eliminazione della run non riuscita.', 'error');
+            }
+        } catch (e) {
+            console.error('deleteAuditRun error:', e);
+            showToast(currentLang === 'en' ? 'Failed to delete audit run.' : 'Eliminazione della run non riuscita.', 'error');
+        }
+    }
+
     // Expose functions globally
     window.renderBenchmarkRequirements = renderBenchmarkRequirements;
     window.loadNetSecAuditTab = loadNetSecAuditTab;
@@ -807,4 +904,8 @@ ${partialBanner}
     window.renderAuditRulesTable = renderAuditRulesTable;
     window.toggleAuditDetail = toggleAuditDetail;
     window.clearUploadedConfig = clearUploadedConfig;
+    window.loadAuditHistory = loadAuditHistory;
+    window.openAuditRun = openAuditRun;
+    window.deleteAuditRun = deleteAuditRun;
 })();
+

@@ -195,3 +195,37 @@ class TestReading(unittest.TestCase):
         self.assertNotIn(run_id, ids)
 
 
+class TestHistoryUi(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "templates", "dashboard.html"), encoding="utf-8") as f:
+            cls.html = f.read()
+        with open(os.path.join(root, "static", "js", "netsec-audit.js"), encoding="utf-8") as f:
+            cls.js = f.read()
+
+    def test_the_save_checkbox_exists_and_defaults_off(self):
+        self.assertIn('id="auditSaveRun"', self.html)
+        idx = self.html.index('id="auditSaveRun"')
+        tag = self.html[self.html.rindex("<input", 0, idx):self.html.index(">", idx)]
+        self.assertNotIn("checked", tag)
+
+    def test_the_scan_request_carries_the_flag_and_no_result_fields(self):
+        body = self.js[self.js.rindex("/api/netsec-audit/scan"):]
+        body = body[:body.index("});") + 3]
+        self.assertIn("save:", body)
+        for forged in ("score:", "grade:", "rules:"):
+            self.assertNotIn(forged, body)
+
+    def test_the_history_panel_is_wired(self):
+        self.assertIn('id="auditHistoryBody"', self.html)
+        self.assertIn("function loadAuditHistory", self.js)
+        self.assertIn("/api/netsec-audit/history", self.js)
+
+    def test_delete_asks_first(self):
+        body = self.js[self.js.index("function deleteAuditRun"):]
+        body = body[:body.index("\n}") + 2]
+        self.assertIn("confirm(", body)
+
+
+
