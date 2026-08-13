@@ -517,10 +517,7 @@
                     `;
                     const cardsEl = document.getElementById(`vulncards-${effectiveResultsId}`);
                     items.slice(0, 3).forEach((v, idx) => {
-                        const enisaId    = v.id || v.enisaId || "EUVD-Unknown";
-                        // Il CVE è dentro 'aliases' (stringa multi-riga: CVE/GHSA/...).
-                        const cveMatch   = /CVE-\d{4}-\d{3,}/i.exec(v.aliases || "");
-                        const cveId      = cveMatch ? cveMatch[0] : (v.cveId || v.cve || "N/A");
+                        const cveId = v.cveId || v.cve || v.id || "CVE-Unknown";
                         const description = v.description || v.summary || i18n[currentLang].descriptionNotAvailable;
                         // Il punteggio CVSS è nel campo 'baseScore' (numero, può essere 0).
                         const score      = (v.baseScore != null && v.baseScore !== "")
@@ -541,8 +538,7 @@
                             <div data-sev="${severity.toLowerCase()}" data-exploited="${exploitedFlag}" style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 0; font-size:13px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
                                     <div style="display:flex; align-items:center; gap:8px;">
-                                        <strong style="color:var(--primary);">${escapeHtml(enisaId)}</strong>
-                                        <span style="color:var(--text-muted);">(CVE: ${escapeHtml(cveId)})</span>
+                                        <strong style="color:var(--primary);">${escapeHtml(cveId)}</strong>
                                         <button onclick="toggleVulnDesc('${descId}', this)"
                                             style="padding:2px 7px; border-radius:0; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
                                             <i class="fa-solid fa-chevron-up"></i>
