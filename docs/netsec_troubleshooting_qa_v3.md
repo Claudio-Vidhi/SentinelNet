@@ -12,7 +12,7 @@
 | :--- | :--- |
 | **Cisco WLC** | Tab now loads through a single consolidated route `GET /api/wlc/{ip}/overview` (one SSH session: AP + client + WLAN + rogue). Controller selection is **tenant-first** (`#wlcTenantSelect` → `#wlcTargetSelect`). AP table gained a 5 GHz channel/width column from `show ap auto-rf 802.11a`; client table gained a quality column and a live search box. The per-object routes (`/status`, `/ap-summary`, …) still exist for API/MCP consumers; the UI no longer calls them one by one. Route line numbers shifted (status is now L50, not L39). |
 | **FortiGate** | New aggregated client diagnosis: `POST /api/fortigate/{ip}/diagnose-client` + pill **Diagnosi Client** (`#fgtPill-clientDiagnosis`) + MCP `fortigate_diagnose_client`. |
-| **Client Diagnosis (new §9)** | The `#tab-diagnosi` tab and `routers/diagnosis.py` (`/api/diagnose/client`, `/gateway-candidates`, `/traceroute-gateway`, `/port-bounce`) were not covered at all by either previous document. **`/api/diagnose/port-bounce` does have a UI button** — and since 2026-08-12 so does `/api/mac/port-control` (Isola / Riattiva porta, same block). |
+| **Client Diagnosis (new §9)** | The Diagnosi Client pane (`#locPane-diagnosi`, formerly its own `#tab-diagnosi` tab — merged into `#tab-endpoint` on 2026-08-12) and `routers/diagnosis.py` (`/api/diagnose/client`, `/gateway-candidates`, `/traceroute-gateway`, `/port-bounce`) were not covered at all by either previous document. **`/api/diagnose/port-bounce` does have a UI button** — and since 2026-08-12 so does `/api/mac/port-control` (Isola / Riattiva porta, same block). |
 | **NetSec Audit** | Config **file upload / drag-and-drop now exists** in the UI (`#auditDropZone`, `#auditFileInput` → `config_text`), plus PDF export (`#btnPdfNetsec`), benchmark select, severity/category filters and a score/grade badge. The corrected doc's gap "no ad-hoc config file upload UI" is **withdrawn**. |
 | **Subnet scan** | Scan is now **discovery-only**; credential verification is a separate opt-in step `POST /api/scan-verify` using stored identities. Relevant to unknown-host workflows (§2.2). |
 | **Line numbers** | Many shifted, notably `POST /api/send-command` (now `routers/commands.py:159`) and the `netsec-audit` routes (`analyzer.py:97` / `:137`). |
@@ -185,9 +185,10 @@ customer values.
      down and leaves it down until someone re-enables it.
 
 - **UI Navigation & Operational Workflow**:
-  - **Tab group** `Localizzazione Endpoint` (`navInvestigate`), subtabs `#tab-mac` (MAC Tracker),
-    `#tab-clientmap` (Client Map), `#tab-diagnosi` (Diagnosi Client), `#tab-endpoints` (Inventario
-    Endpoint) — the four share one subtab bar.
+  - **Tab** `Localizzazione Endpoint` (`navInvestigate`), `#tab-endpoint` — one tab, four pills
+    `#locPill-mac` (MAC Tracker), `#locPill-clientmap` (Client Map), `#locPill-diagnosi` (Diagnosi
+    Client), `#locPill-inventory` (Inventario Endpoint) over panes `#locPane-mac` / `#locPane-clientmap`
+    / `#locPane-diagnosi` / `#locPane-inventory`, sharing one header and tenant selector.
   - **MAC Tracker**: `#macSearchMac` (partial/OUI ok), `#macSearchVlan`, `#macSearchIface`,
     `#macSearchSwitch`; search button (no ID, `onclick="macSearch()"`, i18n `btnMacSearchGo`); reset
     `macSearchReset()`; results `#macResults`; stats chip `#macStats`.
@@ -227,12 +228,13 @@ customer values.
   5. Results are persisted for temporal comparison.
 
 - **UI Navigation & Operational Workflow**:
-  - The ARP collection panel lives in **Client Map** (`#tab-clientmap`), **not** in `#tab-mac`.
-  - Controls: tenant `#arpScanGroup`, gateway multi-select `#arpDeviceMenu`, `#btnArpScan`
+  - The ARP collection panel lives in **Client Map** (`#locPane-clientmap`), **not** in the MAC Tracker
+    pane (`#locPane-mac`).
+  - Controls: gateway multi-select `#arpDeviceMenu`, `#btnArpScan`
     (`runArpScan()`), filters `#arpSearchMac` / `#arpSearchIp` (`arpClientSearch()`), KPIs
     `#kpiArpBindings`, `#kpiArpUniqueMacs`, `#kpiArpGateways`.
-  - **Inventario Endpoint** (`#tab-endpoints`): mode buttons `#epModeListBtn` / `#epModePortsBtn`,
-    switch select `#epPortsSwitch`, filters `#epFilterQ`, `#epFilterTenant`, `#epFilterStale`,
+  - **Inventario Endpoint** (`#locPane-inventory`): mode buttons `#epModeListBtn` / `#epModePortsBtn`,
+    switch select `#epPortsSwitch`, filters `#epFilterQ`, `#epFilterStale`,
     exports `endpointsExport('csv'|'json')`, KPIs `#epKpis`, results `#epResults`.
 
 - **App Features Present**:
@@ -611,7 +613,8 @@ customer values.
      now belongs to another host.
 
 - **UI Navigation & Operational Workflow**:
-  - **Tab**: `Diagnosi Client` (`#tab-diagnosi`, under **Localizzazione Endpoint**).
+  - **Tab**: `Diagnosi Client` (`#locPane-diagnosi`, pill `#locPill-diagnosi` under **Localizzazione
+    Endpoint** / `#tab-endpoint`).
   - **Controls**: `#diagClientInput` (IP or MAC), `#diagDestInput`, gateway `#diagGatewaySelect` +
     `#diagGatewayInput` + `Traceroute` (`detectGatewayTracerouteUI()`), `#diagProtoInput`,
     `#diagPortInput`, run (`runDiagnosi()`), report `#diagResult`, and the port action
