@@ -429,6 +429,7 @@
         { key: 'retention_flows_days',  type: 'number', lbl: 'lblAppRetFlows',  grp: 'appAdvGrpRetention' },
         { key: 'retention_syslog_days', type: 'number', lbl: 'lblAppRetSyslog', grp: 'appAdvGrpRetention' },
         { key: 'retention_events_days', type: 'number', lbl: 'lblAppRetEvents', grp: 'appAdvGrpRetention' },
+        { key: 'audit_history_days',   type: 'number', lbl: 'lblAppRetAuditHist', grp: 'appAdvGrpRetention' },
     ];
 
     async function loadAppAdvSettings() {
