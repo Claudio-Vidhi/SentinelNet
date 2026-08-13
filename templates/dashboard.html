@@ -3194,6 +3194,10 @@
                 <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
                 <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
               </select>
+              <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:8px;">
+                <input type="checkbox" id="auditSaveRun">
+                <span data-i18n="auditSaveRunLabel">Conserva questa esecuzione nello storico</span>
+              </label>
             </div>
           </div>
 
@@ -3275,6 +3279,31 @@
               </tr>
             </thead>
             <tbody id="auditRulesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Storico Audit -->
+      <div id="auditHistoryPanel" class="panel" style="margin-top:16px; padding:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h4 style="margin:0; font-size:15px; color:var(--primary);" data-i18n="auditHistoryTitle"><i class="fa-solid fa-clock-rotate-left"></i> Storico Esecuzioni Audit</h4>
+          <button class="btn btn-secondary" onclick="loadAuditHistory()" style="width:auto; margin:0; padding:4px 10px; font-size:12px;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="auditHistThDate">Data / Ora</th>
+                <th data-i18n="auditHistThDevice">Dispositivo</th>
+                <th data-i18n="auditHistThBench">Benchmark</th>
+                <th data-i18n="auditHistThVendor">Vendor</th>
+                <th data-i18n="auditHistThScore">Punteggio</th>
+                <th data-i18n="auditHistThGrade">Giudizio</th>
+                <th data-i18n="auditHistThActor">Eseguito da</th>
+                <th data-i18n="auditHistThActions">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="auditHistoryBody"></tbody>
           </table>
         </div>
       </div>
