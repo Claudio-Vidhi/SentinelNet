@@ -28,6 +28,7 @@ async function populateIdentTenantOptions(selected) {
     const fromGlobal = Object.keys(window.globalGroups || {});
     const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
     const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
+    if (typeof window.populateGenCfgTenants === 'function') window.populateGenCfgTenants();
 
     // Single select options
     const options = [`<option value="all">${escapeHtml(i18n[currentLang].optTenantAll || 'Tutti i tenant (Globale)')}</option>`]
