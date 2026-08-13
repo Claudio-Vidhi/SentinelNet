@@ -22,3 +22,16 @@ assert.deepStrictEqual(
 assert.deepStrictEqual(normalizeAllowedTabs([]), []);
 
 console.log('ok - legacy tab-mac permission still resolves');
+
+// The admin user editor (settings.js) has a second reader of allowed_tabs,
+// independent from applyRoleUI(). If it reads u.allowed_tabs raw instead of
+// through normalizeAllowedTabs(), a user saved with a legacy id like
+// 'tab-mac' renders with the endpoint checkbox unchecked, and the next save
+// silently revokes that permission. Assert the editor routes through the
+// same normalizer.
+const settingsSrc = readFileSync(new URL('../../static/js/settings.js', import.meta.url), 'utf8');
+assert.ok(
+    /normalizeAllowedTabs\(\s*u\.allowed_tabs\s*\)/.test(settingsSrc),
+    'settings.js admin user editor must read allowed_tabs through normalizeAllowedTabs()');
+
+console.log('ok - settings.js user editor normalizes allowed_tabs too');
