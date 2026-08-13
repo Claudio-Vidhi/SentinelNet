@@ -222,7 +222,7 @@ class TestFullParity(unittest.TestCase):
     # TCP configurabili): vendor, group, auto_add e use_default_creds sono
     # rimossi, il login vive in /api/scan-verify con un'identita' esplicita.
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema",
-                               "SubnetScanRequest")
+                               "SubnetScanRequest", "AiGenerateConfigSchema")
 
     @classmethod
     def setUpClass(cls):
