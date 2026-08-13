@@ -28,7 +28,7 @@ implemented more than once in different tabs that could live in a single tab.
 | **Indaga** | Home | `#tab-home` |
 | | Incidenti (preview) | `#tab-incidents` |
 | | Traffico | `#tab-flows` — **merged 2026-08-11**: 4 pills `#trafPill-*` over panes `#trafPane-*` (Panoramica / Flussi / Ricerca / Anomalie), one header for window+tenant |
-| | Localizzazione Endpoint | `#tab-mac` (MAC Tracker), `#tab-clientmap` (Client Map), `#tab-diagnosi` (Diagnosi Client), `#tab-endpoints` (Endpoint Inventory) |
+| | Localizzazione Endpoint | `#tab-endpoint` — **merged 2026-08-12**: 4 pills `#locPill-*` over panes `#locPane-*` (MAC Tracker / Client Map / Diagnosi Client / Endpoint Inventory), one header and tenant selector |
 | | AI Assistant | `#tab-ai` |
 | **Inventario** | Network Inventory | `#tab-devices` |
 | | Topologia | `#tab-map` (Port-Channel report), `#tab-map-interactive` (2D map) |
@@ -51,7 +51,7 @@ implemented more than once in different tabs that could live in a single tab.
 
 ## A. High priority — merge into one tab
 
-### A1. Localizzazione Endpoint: 4 subtabs → 1 tab with pills
+### A1. Localizzazione Endpoint: 4 subtabs → 1 tab with pills — **DONE** (2026-08-12, `c3eb863`..`a76d817`)
 
 The four subtabs are four views over the same endpoint telemetry:
 
@@ -81,6 +81,24 @@ Evidence of redundancy:
 Recommendation: one **Endpoint** tab with pills
 `Ricerca` (unified MAC/IP search returning port + binding in one row),
 `Raccolta` (MAC scan + ARP collection side by side), `Diagnosi`, `Inventario`.
+
+Shipped as: one `#tab-endpoint` tab, four pills `#locPill-*` over panes
+`#locPane-*` (`mac` / `clientmap` / `diagnosi` / `inventory`), one shared
+header and tenant selector. Two pieces of the recommendation above stayed out
+of scope, deliberately:
+
+- **The Ricerca/Raccolta re-cut.** The merge kept the four original views as
+  panes instead of re-cutting them into a unified `Ricerca` (search) and
+  `Raccolta` (collection) pair. A row with only a MAC-side binding or only an
+  ARP-side binding isn't an edge case to special-case in a unified search —
+  it's most endpoints, since the two scans target different device
+  populations (MAC on access switches, ARP on L3 gateways). Unifying the
+  scans themselves would mean scanning devices the other scan was never
+  aimed at.
+- **§A2's three diagnosis surfaces.** Only the cross-vendor `#tab-diagnosi`
+  pane (now `#locPane-diagnosi`) is inside this group. The FortiGate pill and
+  the WLC row button stay where they are — collapsing them reaches into two
+  tabs outside the endpoint group, which is a separate change.
 
 ### A2. Client diagnosis is implemented three times
 

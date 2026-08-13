@@ -108,9 +108,19 @@ def _parse(html, watch_ids=()):
 # document (verified against templates/dashboard.html).
 TAB_IDS_IN_DOC_ORDER = [
     "tab-home", "tab-devices", "tab-groups", "tab-map", "tab-map-interactive",
-    "tab-categories", "tab-security", "tab-mac", "tab-clientmap", "tab-flows",
+    "tab-categories", "tab-security", "tab-endpoint", "tab-flows",
     "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-users",
     "tab-sites", "tab-mcp", "tab-settings",
+]
+
+# #tab-endpoint used to be four sibling tabs (#tab-mac, #tab-clientmap,
+# #tab-diagnosi, #tab-endpoints). The merge replaced them with four sibling
+# panes inside one tab, in this doc order (verified against
+# templates/dashboard.html). A dropped </div> could re-nest one pane inside
+# another exactly as the Task 14 mutation re-nested #provCiscoSection --
+# these panes get the same three-way guard as the top-level tabs.
+PANE_IDS_IN_DOC_ORDER = [
+    "locPane-mac", "locPane-clientmap", "locPane-diagnosi", "locPane-inventory",
 ]
 
 
@@ -127,7 +137,8 @@ class TestTabNestingBalance(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = _html()
-        cls.watch_ids = set(TAB_IDS_IN_DOC_ORDER) | {"provFgtSection", "provCiscoSection"}
+        cls.watch_ids = (set(TAB_IDS_IN_DOC_ORDER) | set(PANE_IDS_IN_DOC_ORDER)
+                          | {"provFgtSection", "provCiscoSection"})
         cls.parsed = _parse(cls.html, watch_ids=cls.watch_ids)
         # cumulative char offset of the start of each line, for slicing.
         cls.line_offsets = []
@@ -201,6 +212,64 @@ class TestTabNestingBalance(unittest.TestCase):
                     f"#{a} closes at {end_a} but #{b} opens at {start_b} -- "
                     f"#{b} is nested inside #{a} instead of being its sibling")
 
+    def test_every_pane_opens_once_and_closes(self):
+        # Pane-level equivalent of test_every_tab_body_opens_once_and_closes:
+        # the four old tab bodies became four panes, not four fewer things
+        # to guard.
+        for pane_id in PANE_IDS_IN_DOC_ORDER:
+            with self.subTest(pane=pane_id):
+                self.assertEqual(self.parsed.push_counts.get(pane_id), 1,
+                                  f"#{pane_id} should open exactly once")
+                span = self.parsed.spans.get(pane_id)
+                self.assertIsNotNone(span, f"#{pane_id} not found in rendered HTML")
+                self.assertIsNotNone(
+                    span["end"],
+                    f"#{pane_id} <div> is never closed before end-of-document -- "
+                    f"a missing </div> upstream is swallowing its close tag")
+
+    def test_each_pane_is_internally_balanced(self):
+        # Pane-level equivalent of test_each_tab_body_is_internally_balanced.
+        for pane_id in PANE_IDS_IN_DOC_ORDER:
+            with self.subTest(pane=pane_id):
+                span = self.parsed.spans[pane_id]
+                if span["end"] is None:
+                    self.fail(f"#{pane_id} <div> never closes -- cannot slice "
+                              f"it for an internal-balance re-check (see "
+                              f"test_every_pane_opens_once_and_closes)")
+                start = self._offset(span["start"])
+                end = self._offset(span["end"])
+                end = self.html.index(">", end) + 1  # include the closing </div>
+                fragment = self.html[start:end]
+                sub = _parse(fragment)
+                self.assertEqual(sub.errors, [],
+                                  f"#{pane_id} internal markup has mismatched tags: {sub.errors}")
+                self.assertEqual(sub.stack, [],
+                                  f"#{pane_id} internal markup left tag(s) open: {sub.stack}")
+
+    def test_panes_are_siblings_never_nested_inside_tab_endpoint(self):
+        # Pane-level equivalent of test_tabs_are_siblings_never_nested: no
+        # pane may be an ancestor of another, and all four must fall inside
+        # #tab-endpoint's own span (they're panes OF that tab, not stray
+        # top-level content).
+        tab = self.parsed.spans["tab-endpoint"]
+        self.assertIsNotNone(tab["end"], "#tab-endpoint never closes")
+        for pane_id in PANE_IDS_IN_DOC_ORDER:
+            span = self.parsed.spans[pane_id]
+            with self.subTest(pane=pane_id):
+                self.assertGreater(span["start"], tab["start"],
+                                    f"#{pane_id} opens before #tab-endpoint does")
+                self.assertLess(span["end"], tab["end"],
+                                 f"#{pane_id} closes after #tab-endpoint does -- "
+                                 f"it isn't contained in the tab")
+        for a, b in zip(PANE_IDS_IN_DOC_ORDER, PANE_IDS_IN_DOC_ORDER[1:]):
+            with self.subTest(prev=a, next=b):
+                end_a = self.parsed.spans[a]["end"]
+                start_b = self.parsed.spans[b]["start"]
+                self.assertLess(
+                    end_a, start_b,
+                    f"#{a} closes at {end_a} but #{b} opens at {start_b} -- "
+                    f"#{b} is nested inside #{a} instead of being its sibling")
+
     def test_prov_fgt_and_cisco_sections_are_siblings(self):
         # Pins the exact Task 14 mutation target: deleting the </div> that
         # closes #provFgtSection nests #provCiscoSection inside it. Both
@@ -244,8 +313,10 @@ class TestSidebarIA(unittest.TestCase):
                     "navChange", "navAdminister"):
             self.assertIn(f'data-i18n="{key}"', html,
                           f"gruppo di nav {key} assente")
-        # every existing tab still reachable (tab-home is deferred to Task 3)
-        for tab in ("tab-devices", "tab-mac", "tab-clientmap", "tab-flows",
+        # every existing tab still reachable (tab-home is deferred to Task 3).
+        # tab-mac and tab-clientmap merged into tab-endpoint (with tab-diagnosi
+        # and tab-endpoints, which were never individually listed here).
+        for tab in ("tab-devices", "tab-endpoint", "tab-flows",
                     "tab-map", "tab-map-interactive", "tab-categories", "tab-security",
                     "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-groups",
                     "tab-users", "tab-sites", "tab-mcp", "tab-settings"):
@@ -254,11 +325,9 @@ class TestSidebarIA(unittest.TestCase):
         self.assertIn('requires-admin', html)
         self.assertIn('requires-write', html)
         # Hook di caricamento: OGNI controllo che porta al tab deve portarselo
-        # dietro, non solo uno. Un tab accorpato ha piu' punti d'ingresso (una
-        # striscia di sotto-tab per corpo): se uno solo perde l'hook, entrare da
-        # quel lato mostra il tab senza averlo caricato.
-        for tab, hook in (("tab-clientmap", "loadClientMapTab"),
-                          ("tab-flows", "flowsTabShown")):
+        # dietro, non solo uno. tab-flows still has several sub-tab entry
+        # points that each carry their own inline hook.
+        for tab, hook in (("tab-flows", "flowsTabShown"),):
             entries = re.findall(
                 r"onclick=\"switchTab\('" + tab + r"'(?:, this)?\);([^\"]*)\"", html)
             self.assertTrue(entries, f"{tab}: nessun controllo lo apre")
@@ -266,6 +335,25 @@ class TestSidebarIA(unittest.TestCase):
                 self.assertIn(
                     f"{hook}()", rest,
                     f"{tab}: il punto d'ingresso #{i} non chiama {hook}()")
+        # tab-endpoint centralised its load hook inside switchTab() itself
+        # (dispatch on tabId, not one onclick-embedded hook per caller), so
+        # every plain switchTab('tab-endpoint') always redraws the open pane.
+        # But callers that need a SPECIFIC pane (not whatever was last open)
+        # must still carry that pane's hook with them explicitly -- the same
+        # multi-entry-point risk the comment above describes, just moved from
+        # markup onclick attributes into JS function bodies.
+        js = frontend_source()
+        for fn, view in (("function diagnoseClientInTab(", "diagnosi"),
+                          ("function endpointsDiagnose(", "diagnosi")):
+            start = js.index(fn)
+            body_end = js.index("\n}", start)
+            body = js[start:body_end]
+            self.assertIn("switchTab('tab-endpoint')", body,
+                          f"{fn}: non apre piu' il tab endpoint")
+            self.assertIn(
+                f"locSwitchView('{view}')", body,
+                f"{fn}: non porta esplicitamente sulla pillola {view} -- "
+                f"atterrerebbe su qualunque pannello fosse aperto prima")
         # old flat tab strip is gone
         self.assertNotIn('class="tab-nav"', html)
 
@@ -591,7 +679,9 @@ class TestThreatIntelTabRestyle(unittest.TestCase):
     def test_security_tab_uses_component_classes(self):
         html = _html()
         tab_start = html.index('<div id="tab-security"')
-        tab_end = html.index('<!-- TAB: MAC Address Tracker')
+        # Bound on the next tab's own div: the endpoint group (formerly the
+        # MAC Address Tracker tab) directly follows Threat Intel.
+        tab_end = html.index('<div id="tab-endpoint"')
         tab_html = html[tab_start:tab_end]
         for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"', 'class="panel'):
             self.assertIn(cls, tab_html)
@@ -705,19 +795,23 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
 
     def test_mac_and_clientmap_tabs_use_component_classes(self):
         html = _html()
-        tab_start = html.index('<div id="tab-mac"')
+        # #tab-mac and #tab-clientmap merged into two of the four panes
+        # inside #tab-endpoint (Task 1/2 of the endpoint tab merge).
+        tab_start = html.index('<div id="tab-endpoint"')
         # Bound on the next tab's own div, not on a comment: the comment that
         # used to sit here was mislabelled ("Config Analyzer" above #tab-flows)
-        # and Task 20 corrected it, which silently broke this slice.
-        tab_end = html.index('<div id="tab-flows"')
+        # and Task 20 corrected it, which silently broke this slice. #tab-wlc
+        # (not #tab-flows) now directly follows the merged endpoint tab.
+        tab_end = html.index('<div id="tab-wlc"')
         tab_html = html[tab_start:tab_end]
         for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"', 'class="table-wrap"'):
             self.assertIn(cls, tab_html)
-        # una striscia oneline-foot per tab (mac + clientmap)
+        # una striscia oneline-foot per pane (mac + clientmap)
         self.assertGreaterEqual(tab_html.count('class="oneline-foot"'), 2)
         self.assertGreaterEqual(tab_html.count('class="panel'), 4)
-        # both tabs individually still present within that combined span
-        self.assertIn('<div id="tab-clientmap"', tab_html)
+        # both panes individually still present within the merged tab
+        self.assertIn('<div id="locPane-mac"', tab_html)
+        self.assertIn('<div id="locPane-clientmap"', tab_html)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
@@ -2756,7 +2850,7 @@ class TestRedundancyUi(unittest.TestCase):
         # sarebbero due copie da tenere allineate: il pulsante di riga porta
         # alla tab, la modale non esiste piu'.
         source = frontend_source()
-        self.assertIn('id="tab-diagnosi"', source)
+        self.assertIn('id="locPane-diagnosi"', source)
         self.assertIn("function renderDiagnosi", source)
         self.assertIn("diagnoseClientInTab(", source)
         self.assertNotIn("closeDiagnosisModal", source)

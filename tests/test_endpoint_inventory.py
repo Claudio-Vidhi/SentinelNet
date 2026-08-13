@@ -532,14 +532,22 @@ class TestTabFrontend(unittest.TestCase):
             return fh.read()
 
     def test_la_tab_esiste_ed_e_raggiungibile(self):
-        self.assertIn('id="tab-endpoints"', self.src)
-        self.assertIn("switchTab('tab-endpoints')", self.src)
+        # #tab-endpoints was folded into the #locPane-inventory pane of the
+        # merged #tab-endpoint; it's reachable via the inventory pill, not
+        # its own switchTab() call any more.
+        self.assertIn('id="locPane-inventory"', self.src)
+        self.assertIn("locSwitchView('inventory')", self.src)
 
     def test_e_la_quarta_sorella_del_gruppo_client(self):
-        """Le altre tre sotto-tab devono puntarle, altrimenti si raggiunge
-        solo da una direzione."""
-        self.assertIn('data-tabs="tab-mac tab-clientmap tab-diagnosi tab-endpoints"',
-                      self.src)
+        """Le altre tre pillole devono stare nello stesso gruppo #locPills,
+        altrimenti si raggiunge solo da una direzione."""
+        self.assertIn('data-tabs="tab-endpoint"', self.src)
+        pills_start = self.src.index('id="locPills"')
+        pills_end = self.src.index('</div>', pills_start)
+        pills_html = self.src[pills_start:pills_end]
+        for view in ("mac", "clientmap", "diagnosi", "inventory"):
+            self.assertIn(f'id="locPill-{view}"', pills_html)
+            self.assertIn(f"locSwitchView('{view}')", pills_html)
 
     def test_lo_script_e_incluso(self):
         self.assertIn('src="/static/js/endpoint-inventory.js"', self.src)
