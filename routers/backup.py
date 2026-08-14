@@ -174,17 +174,6 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
     severity_param = raw.get("severity", raw.get("cvssV3Severity", [""]))[0].strip().upper()
     if severity_param in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
         nvd_params["cvssV3Severity"] = severity_param
-    elif "fromScore" in raw:
-        try:
-            score_num = float(raw["fromScore"][0])
-            if score_num >= 9.0:
-                nvd_params["cvssV3Severity"] = "CRITICAL"
-            elif score_num >= 7.0:
-                nvd_params["cvssV3Severity"] = "HIGH"
-            elif score_num >= 4.0:
-                nvd_params["cvssV3Severity"] = "MEDIUM"
-        except ValueError:
-            pass
 
     if "cvssV4Severity" in raw and raw["cvssV4Severity"][0].strip().upper() in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
         nvd_params["cvssV4Severity"] = raw["cvssV4Severity"][0].strip().upper()
@@ -235,6 +224,28 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
         total = data.get("totalResults", 0)
         vulnerabilities = data.get("vulnerabilities", [])
 
+        # If date window produced fewer than 5 results and user didn't specify strict dates,
+        # fetch the most recent slice across all time using startIndex
+        if len(vulnerabilities) < 5 and "pubStartDate" in nvd_params and not raw.get("fromDate") and not raw.get("toDate"):
+            fallback_params = dict(nvd_params)
+            fallback_params.pop("pubStartDate", None)
+            fallback_params.pop("pubEndDate", None)
+            fallback_params["resultsPerPage"] = "1"
+            fallback_params["startIndex"] = "0"
+            r0_url = f"{NVD_BASE_URL}?{urlencode(fallback_params)}"
+            r0_resp = await run_in_threadpool(requests.get, r0_url, headers=headers, timeout=20)
+            if r0_resp.status_code == 200:
+                tot_count = r0_resp.json().get("totalResults", 0)
+                if tot_count > 0:
+                    fallback_params["resultsPerPage"] = str(results_per_page)
+                    fallback_params["startIndex"] = str(max(0, tot_count - results_per_page))
+                    fb_url = f"{NVD_BASE_URL}?{urlencode(fallback_params)}"
+                    fb_resp = await run_in_threadpool(requests.get, fb_url, headers=headers, timeout=20)
+                    if fb_resp.status_code == 200:
+                        fb_data = fb_resp.json()
+                        total = fb_data.get("totalResults", 0)
+                        vulnerabilities = fb_data.get("vulnerabilities", [])
+
         items = []
         cve_ids = []
         for elem in vulnerabilities:
@@ -262,10 +273,15 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
 
             active_metric = cvss_v31 or cvss_v30 or cvss_v40 or cvss_v2
             if active_metric and isinstance(active_metric, list) and len(active_metric) > 0:
-                m_obj = active_metric[0]
-                cvss_data = m_obj.get("cvssData", {})
+                primary = next((m for m in active_metric if isinstance(m, dict) and m.get("type") == "Primary"), None)
+                if primary:
+                    m_obj = primary
+                else:
+                    m_obj = max(active_metric, key=lambda m: (m.get("cvssData", {}).get("baseScore", 0) or 0) if isinstance(m, dict) else 0)
+
+                cvss_data = m_obj.get("cvssData", {}) if isinstance(m_obj, dict) else {}
                 base_score = cvss_data.get("baseScore")
-                severity = cvss_data.get("baseSeverity") or m_obj.get("baseSeverity") or "MEDIUM"
+                severity = cvss_data.get("baseSeverity") or (m_obj.get("baseSeverity") if isinstance(m_obj, dict) else None) or "MEDIUM"
 
             published = cve.get("published", "")
             cisa_k = bool(cve.get("cisaExploitAdd"))
@@ -273,6 +289,12 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
             refs = [r.get("url") for r in cve.get("references", []) if r.get("url")]
 
             extracted_prods = []
+            for aff in cve.get("affected", []):
+                for ad in aff.get("affectedData", []):
+                    p = ad.get("product")
+                    if p and p not in extracted_prods:
+                        extracted_prods.append(p)
+
             for config in cve.get("configurations", []):
                 for node in config.get("nodes", []):
                     for cpe_match in node.get("cpeMatch", []):
