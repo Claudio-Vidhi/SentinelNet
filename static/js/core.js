@@ -585,6 +585,13 @@ bindEnterKey(['wizUser', 'wizPass'], 'btnRegisterAdmin');
 bindEnterKey(['newGroupName'], 'btnCreateGroup');
 bindEnterKey(['scanNetworkInput'], 'btnAvviaScan');
 
+document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
+document.getElementById('sidebarToggle')?.addEventListener('click', toggleSidebar);
+document.getElementById('btnLogout')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    logout();
+});
+
 // Chiusura modali: click sullo sfondo oppure tasto Escape.
 // Il modale CLI non si chiude con Escape: il tasto serve dentro al terminale SSH.
 document.getElementById('subnetScanModal').addEventListener('click', e => {
@@ -913,11 +920,18 @@ function renderVendorTable() {
                 ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
                 : (isSystem
                     ? `<span style="color:var(--text-muted); font-size:12px;">${systemText}</span>`
-                    : `<button onclick="deleteVendor(this.dataset.v)" data-v="${escapeHtml(name)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`)
+                    : `<button data-action="delete-vendor" data-v="${escapeHtml(name)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${deleteText}</button>`)
             }</td>
         </tr>`;
     });
 }
+
+document.getElementById('vendorTableBody')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="delete-vendor"]');
+    if (btn && btn.dataset.v) {
+        deleteVendor(btn.dataset.v);
+    }
+});
 
 // Carica le identita' del tenant selezionato nella select devProfile,
 // preservando default/custom. Chiamata al load della tab e al cambio tenant.

@@ -408,11 +408,13 @@ class TestDevicesTabRestyle(unittest.TestCase):
     def test_preserve_ids_and_bulk_actions(self):
         html = _html()
         for _id in ('deviceTableBody', 'deviceSearch', 'filterGroupSelect',
-                    'btnRunTriage', 'btnTriageSite', 'btnPingCheck'):
+                    'btnRunTriage', 'btnTriageSite', 'btnPingCheck',
+                    'btnSubnetScan', 'btnBulkCommand', 'btnExportDevices'):
             self.assertIn(f'id="{_id}"', html)
-        # bulk-action controls (no id, but onclick hooks must survive verbatim)
+        # bulk-action controls wired via addEventListener in static/js/devices.js
+        js = frontend_source()
         for hook in ('openSubnetScanModal()', 'openBulkCommandModal()', 'exportDeviceCsv()'):
-            self.assertIn(hook, html)
+            self.assertIn(hook, js)
 
     def test_endpoint_contract_present(self):
         # Most of these apiFetch(...) calls now live in static/js/devices.js --
@@ -449,13 +451,10 @@ class TestDevicesTabRestyle(unittest.TestCase):
 class TestGroupsTabRestyle(unittest.TestCase):
     def test_preserve_ids(self):
         html = _html()
-        for _id in ('groupsTableBody', 'vendorTableBody'):
+        for _id in ('groupsTableBody', 'vendorTableBody', 'btnAddVendor'):
             self.assertIn(f'id="{_id}"', html)
-        # add-vendor form static onclick + rename/delete hooks (the latter two
-        # are emitted inside JS template literals in renderGroupsTable, moved
-        # to static/js/devices.js -- frontend_source() concatenates both).
-        self.assertIn('addVendor()', html)
         js = frontend_source()
+        self.assertIn('addVendor()', js)
         for hook in ('renameGroup(', 'deleteGroup(', 'deleteVendor('):
             self.assertIn(hook, js)
 
@@ -504,11 +503,11 @@ class TestMapTabRestyle(unittest.TestCase):
         for _id in ('mapViewClassicBtn', 'mapViewMinimalBtn', 'networkGraphContainer',
                     'topologyGroupSelect', 'interactiveGroupSelect', 'portchannelReport'):
             self.assertIn(f'id="{_id}"', html)
-        # view-toggle + reset/export hooks preserved verbatim
-        for hook in ("setMapView('classic')", "setMapView('minimal')", 'resetTopology()',
-                     'loadInteractiveMap()', 'downloadTopology()', 'exportVisioMap()',
-                     'exportPdfMap()'):
-            self.assertIn(hook, html)
+        # view-toggle + reset/export hooks preserved in frontend
+        for hook in ('setMapView', 'resetTopology',
+                     'loadInteractiveMap', 'downloadTopology', 'exportVisioMap',
+                     'exportPdfMap'):
+            self.assertIn(hook, frontend_source())
 
     def test_endpoint_contract_present(self):
         # loadPortchannelReport/loadInteractiveMap/resetTopology moved to
@@ -603,10 +602,10 @@ class TestCategoriesTabRestyle(unittest.TestCase):
                     'categoriesDeviceList', 'btnSaveCatEdits', 'btnDiscardCatEdits',
                     'newCatKey', 'newCatLabel', 'newSubcat'):
             self.assertIn(f'id="{_id}"', html)
-        # onclick hooks preserved verbatim
-        for hook in ('renderCategoriesPanel()', 'saveCategoryEdits()', 'discardCategoryEdits()',
-                     'exportCategoriesCsv()', 'loadCategoriesData()', 'createCategory()'):
-            self.assertIn(hook, html)
+        # action hooks preserved in frontend
+        for hook in ('renderCategoriesPanel', 'saveCategoryEdits', 'discardCategoryEdits',
+                     'exportCategoriesCsv', 'loadCategoriesData', 'createCategory'):
+            self.assertIn(hook, frontend_source())
         # RBAC gating preserved on write-gated controls
         self.assertIn('id="btnSaveCatEdits"', html)
         save_start = html.index('id="btnSaveCatEdits"')
@@ -2403,7 +2402,7 @@ class TestSidebarRail(unittest.TestCase):
         m = re.search(r'<button[^>]*id="sidebarToggle"[^>]*>', self.html)
         self.assertIsNotNone(m, "#sidebarToggle button not found in markup")
         tag = m.group(0)
-        self.assertIn('onclick="toggleSidebar()"', tag)
+        self.assertIn("toggleSidebar", frontend_source())
         self.assertIn('aria-expanded="true"', tag)
         # aria-controls must point at an element that actually exists
         ac = re.search(r'aria-controls="([^"]+)"', tag)
