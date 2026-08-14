@@ -1265,30 +1265,45 @@ def generate_audit_relazione(engagement_id: int) -> str:
     <meta charset="UTF-8">
     <title>Relazione Audit Manutenzione Firewall - {eng['customer_name']}</title>
     <style>
-        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; margin: 40px; }}
-        h1 {{ color: #1a252f; border-bottom: 3px solid #1a252f; padding-bottom: 10px; }}
-        .meta-box {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 25px; border: 1px solid #e9ecef; }}
-        .footer {{ margin-top: 50px; font-size: 11px; color: #6c757d; text-align: center; border-top: 1px solid #dee2e6; padding-top: 15px; }}
+        *, *::before, *::after {{
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+        }}
+        @page {{
+            size: A4 portrait;
+            margin: 12mm 14mm 15mm 14mm;
+        }}
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.55; color: #1e293b; margin: 30px; font-size: 12px; }}
+        h1 {{ color: #0f172a; border-bottom: 3px solid #0f172a; padding-bottom: 10px; font-size: 20px; }}
+        .meta-box {{ background: #f8fafc; padding: 14px 18px; border-radius: 6px; margin-bottom: 24px; border: 1px solid #e2e8f0; break-inside: avoid; page-break-inside: avoid; }}
+        .meta-box p {{ margin: 4px 0; }}
+        .footer {{ margin-top: 40px; font-size: 11px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 15px; break-inside: avoid; page-break-inside: avoid; }}
+        table {{ page-break-inside: auto; width: 100%; border-collapse: collapse; }}
+        thead {{ display: table-header-group; }}
+        tr {{ page-break-inside: avoid !important; break-inside: avoid !important; }}
+        div {{ page-break-inside: avoid; break-inside: avoid; }}
         @media print {{
-            body {{ margin: 15mm 15mm; font-size: 11pt; }}
-            h1 {{ font-size: 18pt; }}
+            body {{ margin: 0; padding: 0; font-size: 11pt; }}
+            h1 {{ font-size: 17pt; }}
             .no-print {{ display: none !important; }}
-            div {{ page-break-inside: avoid; }}
         }}
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+    <script src="/static/vendor/html2pdf/html2pdf.bundle.min.js"></script>
     <script>
         async function downloadPdf() {{
             const btn = document.getElementById('btnPdf');
             if (btn) btn.textContent = 'Generazione PDF...';
             const noPrints = document.querySelectorAll('.no-print');
-            noPrints.forEach(el => el.style.display = 'none');
+            noPrints.forEach(el => {{ el.style.display = 'none'; }});
             const opt = {{
                 margin: [10, 10, 10, 10],
                 filename: 'Relazione_Audit_{eng["customer_name"].replace(" ", "_")}.pdf',
                 image: {{ type: 'jpeg', quality: 0.98 }},
-                html2canvas: {{ scale: 2, useCORS: true, logging: false }},
-                jsPDF: {{ unit: 'mm', format: 'a4', orientation: 'portrait' }}
+                html2canvas: {{ scale: 2.5, useCORS: true, logging: false, letterRendering: true, windowWidth: 850 }},
+                jsPDF: {{ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }},
+                pagebreak: {{ mode: ['avoid-all', 'css', 'legacy'] }}
             }};
             try {{
                 if (typeof html2pdf !== 'undefined') {{
@@ -1300,7 +1315,7 @@ def generate_audit_relazione(engagement_id: int) -> str:
                 console.error('PDF error:', e);
                 window.print();
             }} finally {{
-                noPrints.forEach(el => el.style.display = '');
+                noPrints.forEach(el => {{ el.style.display = ''; }});
                 if (btn) btn.textContent = 'Scarica PDF';
             }}
         }}

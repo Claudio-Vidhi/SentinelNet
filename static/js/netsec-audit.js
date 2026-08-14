@@ -522,53 +522,87 @@
     // usare le stringhe della UI legherebbe le due cose.
     const REPORT_TEXT = {
         it: {
-            docTitle: 'Report Audit', heading: 'Report di Compliance',
-            device: 'Apparato', platform: 'Piattaforma',
-            generatedOn: 'Generato il', score: 'Score',
-            passed: 'Conformi', failed: 'Non conformi', warned: 'Warning',
-            unknown: 'Non valutabili', notAssessable: 'NON VALUTABILE',
-            na: 'N/D', level: 'Livello', manual: 'verifica manuale',
-            verifyOn: 'Verifica sull\'apparato', line: 'riga',
-            thId: 'ID', thCheck: 'Controllo ed evidenze', thSeverity: 'Severità',
-            thStatus: 'Esito', thFix: 'Rimedio',
-            why: 'Perché conta', impact: 'Impatto del rimedio',
+            docTitle: 'Report di Compliance di Sicurezza',
+            heading: 'Report di Compliance di Sicurezza',
+            subheading: 'Audit di Sicurezza e Conformità Configurazione',
+            device: 'Apparato',
+            platform: 'Piattaforma',
+            benchmark: 'Benchmark',
+            generatedOn: 'Data Generazione',
+            score: 'Score di Conformità',
+            passed: 'Conformi (PASS)',
+            failed: 'Non Conformi (FAIL)',
+            warned: 'Avvisi (WARN)',
+            unknown: 'Non Valutabili',
+            notAssessable: 'NON VALUTABILE',
+            na: 'N/D',
+            level: 'Livello',
+            manual: 'Verifica manuale',
+            verifyOn: 'Verifica sull\'apparato',
+            line: 'riga',
+            thId: 'ID / Rif',
+            thCheck: 'Controllo, Guida ed Evidenze',
+            thSeverity: 'Severità',
+            thStatus: 'Esito',
+            thFix: 'Rimedio Consigliato (CLI)',
+            why: 'Perché conta',
+            impact: 'Impatto del rimedio',
             defaultValue: 'Valore di fabbrica',
+            evidenceTitle: 'Evidenze riscontrate nella configurazione',
             partialTitle: 'Valutazione parziale.',
             partial: (a, t, u) => `${a} controlli su ${t} sono stati valutati; ${u} non lo sono perché le relative sezioni di configurazione sono assenti nel file analizzato. Lo score si riferisce ai soli controlli valutabili.`,
-            note: 'I controlli marcati "non valutabile" corrispondono a sezioni di configurazione assenti nel file analizzato: sono esclusi dal calcolo dello score e non vanno letti come conformità.',
-            preview: 'Anteprima Report Compliance', pdf: 'Scarica PDF',
-            generating: 'Generazione PDF...', print: 'Stampa',
+            note: 'I controlli marcati "non valutabile" corrispondono a sezioni di configurazione assenti nel file analizzato: sono esclusi dal calcolo dello score e non vanno interpretati come conformità.',
+            footerNotice: 'Report di Audit di Sicurezza generato automaticamente da SentinelNet Engine. Documento confidenziale.',
+            preview: 'Anteprima Report Compliance',
+            pdf: 'Scarica PDF',
+            printVector: 'Stampa / Salva in PDF',
+            generating: 'Generazione PDF in corso...',
+            print: 'Stampa',
             html: 'Scarica HTML',
         },
         en: {
-            docTitle: 'Audit Report', heading: 'Compliance Report',
-            device: 'Device', platform: 'Platform',
-            generatedOn: 'Generated on', score: 'Score',
-            passed: 'Compliant', failed: 'Non-compliant', warned: 'Warning',
-            unknown: 'Not assessable', notAssessable: 'NOT ASSESSABLE',
-            na: 'N/A', level: 'Level', manual: 'manual check',
-            verifyOn: 'Verify on the device', line: 'line',
-            thId: 'ID', thCheck: 'Check and evidence', thSeverity: 'Severity',
-            thStatus: 'Result', thFix: 'Remediation',
-            why: 'Why it matters', impact: 'Impact of the fix',
+            docTitle: 'Security Compliance Audit Report',
+            heading: 'Security Compliance Report',
+            subheading: 'Security & Configuration Compliance Audit',
+            device: 'Target Device',
+            platform: 'Platform',
+            benchmark: 'Benchmark',
+            generatedOn: 'Generated on',
+            score: 'Compliance Score',
+            passed: 'Compliant (PASS)',
+            failed: 'Non-compliant (FAIL)',
+            warned: 'Warnings (WARN)',
+            unknown: 'Not Assessable',
+            notAssessable: 'NOT ASSESSABLE',
+            na: 'N/A',
+            level: 'Level',
+            manual: 'Manual check',
+            verifyOn: 'Verify command on device',
+            line: 'line',
+            thId: 'ID / Ref',
+            thCheck: 'Check, Guidance & Evidence',
+            thSeverity: 'Severity',
+            thStatus: 'Result',
+            thFix: 'Recommended Remediation (CLI)',
+            why: 'Why it matters',
+            impact: 'Impact of the fix',
             defaultValue: 'Factory default',
+            evidenceTitle: 'Evidence in analysed configuration',
             partialTitle: 'Partial assessment.',
             partial: (a, t, u) => `${a} of ${t} checks were assessed; ${u} were not, because the corresponding configuration sections are absent from the analysed file. The score covers the assessed checks only.`,
             note: 'Checks marked "not assessable" correspond to configuration sections absent from the analysed file: they are excluded from the score and must not be read as compliance.',
-            preview: 'Compliance Report Preview', pdf: 'Download PDF',
-            generating: 'Generating PDF...', print: 'Print',
+            footerNotice: 'Security Compliance Audit Report automatically generated by SentinelNet Engine. Confidential document.',
+            preview: 'Compliance Report Preview',
+            pdf: 'Download PDF',
+            printVector: 'Print / Save as PDF',
+            generating: 'Generating PDF...',
+            print: 'Print',
             html: 'Download HTML',
         },
     };
 
-    // Report HTML scaricabile. Nessuna dipendenza esterna: si costruisce il
-    // documento e lo si scarica via Blob, coerentemente col resto dell'app.
-    //
-    // La lingua del report e' indipendente da quella dell'interfaccia. I
-    // verdetti sono resi dal motore, quindi cambiarla significa rieseguire la
-    // valutazione: e' una funzione pura sul testo di configurazione, costa
-    // quanto la scansione appena fatta e garantisce che TUTTO il documento sia
-    // nella lingua scelta, non solo le intestazioni.
+    // Report HTML scaricabile e visualizzabile in anteprima.
+    // La lingua del report e' indipendente da quella dell'interfaccia.
     async function exportAuditReport() {
         if (!_auditRules.length) {
             showToast(currentLang === 'en'
@@ -591,7 +625,7 @@
         let score = _auditScore;
         if (lang !== currentLang) {
             const refreshed = await rescanForLanguage(benchmarkKey, lang);
-            if (!refreshed) return;          // errore già segnalato all'utente
+            if (!refreshed) return;
             rules = refreshed.rules || [];
             summary = refreshed.summary || summary;
             score = (refreshed.score === undefined) ? null : refreshed.score;
@@ -603,92 +637,511 @@
         const scoreTxt = hasScore ? (score + '%') : T.na;
         const generated = new Date().toLocaleString(lang === 'en' ? 'en-GB' : 'it-IT');
         const platform = _auditVendor === 'ios' ? 'Cisco IOS XE'
-            : _auditVendor === 'fortios' ? 'FortiOS' : '—';
+            : _auditVendor === 'fortios' ? 'FortiOS'
+            : _auditVendor === 'linux' ? 'Linux' : '—';
+
+        const filename = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}`;
 
         const rows = rules.map(r => {
             const ev = (r.evidence || []).map(e =>
-                `<div class="ev"><span>${e.line ? (T.line + ' ' + escapeHtml(String(e.line))) : '—'}</span>`
-                + `<span>${escapeHtml(e.context || '')}</span>`
-                + `<code>${escapeHtml(e.text || '')}</code></div>`).join('');
-            const label = r.status === 'UNKNOWN' ? T.notAssessable : escapeHtml(r.status);
-            // Il riferimento alla raccomandazione e il comando di verifica
-            // rendono il report controllabile contro il benchmark di origine:
-            // senza di essi resta un'affermazione da prendere per buona.
-            const ref = r.ref
-                ? `<div class="detail">${escapeHtml(String(r.ref))}${r.level ? ' · ' + T.level + ' ' + escapeHtml(String(r.level)) : ''}${r.automated === false ? ' · ' + T.manual : ''}</div>`
-                : '';
+                `<div class="evidence-item">`
+                + `<span class="evidence-line">${e.line ? (T.line + ' ' + escapeHtml(String(e.line))) : '—'}</span>`
+                + `<span class="evidence-ctx">${escapeHtml(e.context || '')}</span>`
+                + `<span class="evidence-txt">${escapeHtml(e.text || '')}</span>`
+                + `</div>`).join('');
+
+            const evBlock = ev ? `<div class="evidence-box"><div class="evidence-hdr">${T.evidenceTitle}</div>${ev}</div>` : '';
+
+            const statusClass = r.status === 'PASS' ? 'badge-pass'
+                : r.status === 'FAIL' ? 'badge-fail'
+                : r.status === 'WARN' ? 'badge-warn' : 'badge-unknown';
+
+            const statusIcon = r.status === 'PASS' ? '✔ '
+                : r.status === 'FAIL' ? '✖ '
+                : r.status === 'WARN' ? '⚠ ' : '? ';
+
+            const statusLabel = r.status === 'UNKNOWN' ? T.notAssessable : escapeHtml(r.status);
+
+            const sevClass = r.severity === 'CRITICAL' ? 'badge-critical'
+                : r.severity === 'HIGH' ? 'badge-high'
+                : r.severity === 'MEDIUM' ? 'badge-medium' : 'badge-low';
+
+            const refBadges = [];
+            if (r.ref) refBadges.push(`<span class="badge badge-ref">${escapeHtml(String(r.ref))}</span>`);
+            if (r.level) refBadges.push(`<span class="badge badge-ref">L${escapeHtml(String(r.level))}</span>`);
+            if (r.automated === false) refBadges.push(`<span class="badge badge-ref">${escapeHtml(T.manual)}</span>`);
+            const refHtml = refBadges.length ? `<div class="ref-badges">${refBadges.join(' ')}</div>` : '';
+
             const auditCmd = r.audit
-                ? `<div class="detail">${T.verifyOn}: <code style="white-space:pre-wrap;">${escapeHtml(r.audit)}</code></div>`
+                ? `<div class="verify-box"><span class="verify-lbl">${T.verifyOn}:</span> <code>${escapeHtml(r.audit)}</code></div>`
                 : '';
+
             const g = r.guidance || {};
-            const guide = (label2, text) => text
-                ? `<div class="guide"><b>${label2}:</b> ${escapeHtml(text)}</div>` : '';
-            const guidance = guide(T.why, g.why) + guide(T.impact, g.impact)
-                + guide(T.defaultValue, g.default);
-            return `<tr class="st-${escapeHtml(r.status)}">
-                <td><strong>${escapeHtml(r.id)}</strong>${ref}</td>
-                <td>${escapeHtml(r.title)}<div class="detail">${escapeHtml(r.detail)}</div>${guidance}${auditCmd}${ev}</td>
-                <td>${escapeHtml(r.severity)}</td>
-                <td>${label}</td>
-                <td><code>${escapeHtml(r.remediation)}</code></td>
+            const guideItems = [];
+            if (g.why) guideItems.push(`<div class="guide-item"><span class="guide-lbl">${T.why}:</span> ${escapeHtml(g.why)}</div>`);
+            if (g.impact) guideItems.push(`<div class="guide-item"><span class="guide-lbl">${T.impact}:</span> ${escapeHtml(g.impact)}</div>`);
+            if (g.default) guideItems.push(`<div class="guide-item"><span class="guide-lbl">${T.defaultValue}:</span> ${escapeHtml(g.default)}</div>`);
+            const guidanceHtml = guideItems.length ? `<div class="guidance-box">${guideItems.join('')}</div>` : '';
+
+            return `<tr class="finding-row st-${escapeHtml(r.status)}">
+                <td class="col-id">
+                    <strong class="rule-id">${escapeHtml(r.id)}</strong>
+                    ${refHtml}
+                </td>
+                <td class="col-check">
+                    <div class="rule-title">${escapeHtml(r.title)}</div>
+                    <div class="rule-desc">${escapeHtml(r.detail)}</div>
+                    ${guidanceHtml}
+                    ${auditCmd}
+                    ${evBlock}
+                </td>
+                <td class="col-sev"><span class="badge ${sevClass}">${escapeHtml(r.severity || 'MEDIUM')}</span></td>
+                <td class="col-status"><span class="badge ${statusClass}">${statusIcon}${statusLabel}</span></td>
+                <td class="col-fix"><code class="remediation-code">${escapeHtml(r.remediation || '—')}</code></td>
             </tr>`;
         }).join('');
 
-        // Se qualcosa non era valutabile va detto in testa al report, non solo
-        // in nota: un lettore che vede "100%" senza contesto conclude che tutto
-        // sia stato verificato.
         const partialBanner = unknown > 0
-            ? `<div class="warn"><strong>${T.partialTitle}</strong> ${T.partial(s.total - unknown, s.total, unknown)}</div>`
+            ? `<div class="warn-banner"><strong>${T.partialTitle}</strong> ${T.partial(s.total - unknown, s.total, unknown)}</div>`
             : '';
 
-        const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+        const scoreColor = (score !== null && score !== undefined)
+            ? (score >= 80 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444')
+            : '#64748b';
+
+        const html = `<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${T.docTitle} — ${escapeHtml(device)}</title>
 <style>
-body{font-family:system-ui,sans-serif;margin:32px;color:#111;}
-h1{font-size:20px;margin:0 0 4px;} .meta{color:#666;font-size:13px;margin-bottom:20px;}
-.warn{border:1px solid #a60;background:#fff8e6;color:#7a4d00;padding:10px 14px;border-radius:0;margin-bottom:18px;font-size:13px;line-height:1.5;}
-.kpis{display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap;}
-.kpi{border:1px solid #ddd;border-radius:0;padding:10px 16px;min-width:110px;font-size:12px;color:#666;}
-.kpi b{display:block;font-size:22px;color:#111;}
-table{width:100%;border-collapse:collapse;font-size:12px;}
-th,td{border-bottom:1px solid #e5e5e5;padding:8px;text-align:left;vertical-align:top;}
-th{background:#f6f6f6;}
-.detail{color:#666;margin-top:3px;}
-.ev{display:flex;gap:10px;margin-top:4px;font-family:ui-monospace,monospace;font-size:11px;flex-wrap:wrap;}
-.ev span:first-child{color:#999;min-width:60px;} .ev span:nth-child(2){color:#999;min-width:170px;}
-.ev code{color:#b00;}
-.st-FAIL td:nth-child(4){color:#b00;font-weight:700;}
-.st-WARN td:nth-child(4){color:#a60;font-weight:700;}
-.st-PASS td:nth-child(4){color:#070;font-weight:700;}
-.st-UNKNOWN td:nth-child(4){color:#888;font-weight:700;}
-.guide{color:#444;margin-top:4px;font-size:11px;line-height:1.5;}
-.guide b{color:#111;}
-.note{margin-top:20px;font-size:12px;color:#666;border-top:1px solid #ddd;padding-top:10px;line-height:1.5;}
+*, *::before, *::after {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+}
+@page {
+    size: A4 portrait;
+    margin: 10mm 12mm 14mm 12mm;
+}
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    margin: 0;
+    padding: 20px 24px;
+    font-size: 11px;
+    line-height: 1.45;
+}
+.report-container {
+    max-width: 860px;
+    margin: 0 auto;
+}
+/* Standalone action bar */
+.report-actions-bar {
+    margin-bottom: 20px;
+    padding: 10px 16px;
+    background: #0f172a;
+    color: #ffffff;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.act-btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 6px;
+    transition: opacity 0.15s ease;
+}
+.act-btn:hover { opacity: 0.9; }
+.act-btn-blue { background: #2563eb; color: #fff; }
+.act-btn-green { background: #10b981; color: #fff; }
+.act-btn-gray { background: #475569; color: #fff; }
+
+/* Report Header */
+.report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2px solid #0f172a;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.brand-title {
+    font-size: 19px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+.report-subtitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    margin-top: 3px;
+}
+.header-tag {
+    background: #e2e8f0;
+    color: #334155;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Metadata Grid */
+.meta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.meta-item { font-size: 10.5px; }
+.meta-label {
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    display: block;
+    margin-bottom: 2px;
+}
+.meta-value {
+    color: #0f172a;
+    font-weight: 700;
+    font-size: 11.5px;
+    word-break: break-all;
+}
+
+/* KPI Summary Cards */
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 18px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.kpi-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: center;
+    border-top: 3px solid #64748b;
+}
+.kpi-card.kpi-score { border-top-color: ${scoreColor}; background: #f8fafc; }
+.kpi-card.kpi-pass { border-top-color: #10b981; }
+.kpi-card.kpi-fail { border-top-color: #ef4444; }
+.kpi-card.kpi-warn { border-top-color: #f59e0b; }
+.kpi-card.kpi-unknown { border-top-color: #94a3b8; }
+.kpi-num {
+    font-size: 19px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: #0f172a;
+}
+.kpi-card.kpi-score .kpi-num { color: ${scoreColor}; }
+.kpi-card.kpi-pass .kpi-num { color: #059669; }
+.kpi-card.kpi-fail .kpi-num { color: #dc2626; }
+.kpi-card.kpi-warn .kpi-num { color: #d97706; }
+.kpi-card.kpi-unknown .kpi-num { color: #64748b; }
+.kpi-label {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-top: 2px;
+}
+
+/* Warning banner */
+.warn-banner {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59e0b;
+    color: #92400e;
+    padding: 9px 12px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    font-size: 11px;
+    line-height: 1.45;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+/* Findings Table */
+table.findings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    page-break-inside: auto;
+}
+thead { display: table-header-group; }
+th {
+    background: #0f172a;
+    color: #ffffff;
+    padding: 8px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 1px solid #0f172a;
+    text-align: left;
+}
+tr.finding-row {
+    border-bottom: 1px solid #e2e8f0;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+}
+tr.finding-row:nth-child(even) { background: #f8fafc; }
+td {
+    padding: 8px 8px;
+    vertical-align: top;
+    border: 1px solid #e2e8f0;
+}
+.col-id { width: 14%; white-space: normal; }
+.col-check { width: 44%; }
+.col-sev { width: 10%; text-align: center; }
+.col-status { width: 12%; text-align: center; }
+.col-fix { width: 20%; }
+
+/* Badges */
+.badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+.badge-pass { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.badge-fail { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.badge-warn { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.badge-unknown { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+
+.badge-critical { background: #991b1b; color: #ffffff; }
+.badge-high { background: #ea580c; color: #ffffff; }
+.badge-medium { background: #f59e0b; color: #000000; }
+.badge-low { background: #64748b; color: #ffffff; }
+.badge-ref { background: #e2e8f0; color: #334155; font-family: ui-monospace, monospace; font-size: 8.5px; margin-top: 3px; }
+.ref-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+
+/* Rule details */
+.rule-id { font-family: ui-monospace, monospace; font-size: 10px; color: #0f172a; word-break: break-all; }
+.rule-title { font-weight: 700; color: #0f172a; font-size: 11px; }
+.rule-desc { color: #475569; font-size: 10px; margin-top: 2px; line-height: 1.35; }
+.guidance-box {
+    margin-top: 5px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 3px;
+    padding: 5px 7px;
+    font-size: 9.5px;
+    line-height: 1.35;
+}
+.guide-item { margin-bottom: 2px; }
+.guide-item:last-child { margin-bottom: 0; }
+.guide-lbl { font-weight: 700; color: #334155; }
+.verify-box {
+    margin-top: 4px;
+    font-size: 9.5px;
+    color: #334155;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    padding: 3px 6px;
+    border-radius: 3px;
+}
+.verify-box code { font-family: ui-monospace, monospace; color: #0f172a; white-space: pre-wrap; word-break: break-all; }
+.verify-lbl { font-weight: 700; color: #475569; margin-right: 4px; }
+
+.evidence-box {
+    margin-top: 5px;
+    border: 1px solid #fecaca;
+    background: #fff5f5;
+    border-radius: 3px;
+    padding: 5px 6px;
+}
+.evidence-hdr { font-size: 9px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
+.evidence-item {
+    font-family: ui-monospace, monospace;
+    font-size: 9px;
+    display: flex;
+    gap: 6px;
+    padding: 1px 0;
+    flex-wrap: wrap;
+}
+.evidence-line { color: #94a3b8; font-weight: 600; min-width: 45px; }
+.evidence-ctx { color: #64748b; min-width: 110px; }
+.evidence-txt { color: #b91c1c; font-weight: 600; word-break: break-all; }
+
+.remediation-code {
+    font-family: ui-monospace, monospace;
+    font-size: 9.5px;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #0284c7;
+    padding: 3px 5px;
+    border-radius: 3px;
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* Footer & Note */
+.report-note {
+    font-size: 9.5px;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-top: 16px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.report-footer {
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid #cbd5e1;
+    font-size: 9.5px;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
 @media print {
-    body { margin: 15mm 15mm; font-size: 10pt; }
-    h1 { font-size: 16pt; }
-    tr { page-break-inside: avoid; }
+    body { padding: 0; margin: 0; }
     .no-print { display: none !important; }
+    .report-container { max-width: 100%; }
 }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-</head><body>
-<h1>${T.heading} — ${escapeHtml(benchmark)}</h1>
-<div class="meta">${T.device}: ${escapeHtml(device)} · ${T.platform}: ${escapeHtml(platform)} · ${T.generatedOn} ${escapeHtml(generated)}</div>
-${partialBanner}
-<div class="kpis">
-  <div class="kpi"><b>${escapeHtml(scoreTxt)}</b>${T.score}</div>
-  <div class="kpi"><b>${s.passed}</b>${T.passed}</div>
-  <div class="kpi"><b>${s.failed}</b>${T.failed}</div>
-  <div class="kpi"><b>${s.warned}</b>${T.warned}</div>
-  <div class="kpi"><b>${unknown}</b>${T.unknown}</div>
-</div>
-<table><thead><tr><th>${T.thId}</th><th>${T.thCheck}</th><th>${T.thSeverity}</th><th>${T.thStatus}</th><th>${T.thFix}</th></tr></thead>
-<tbody>${rows}</tbody></table>
-<div class="note">${T.note}</div>
-</body></html>`;
+<script src="/static/vendor/html2pdf/html2pdf.bundle.min.js"></script>
+<script>
+async function downloadPdf() {
+    const noPrints = document.querySelectorAll('.no-print');
+    noPrints.forEach(el => { el.style.display = 'none'; });
+    if (typeof html2pdf !== 'undefined') {
+        const opt = {
+            margin: [8, 8, 8, 8],
+            filename: '${filename}.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2.5, useCORS: true, logging: false, letterRendering: true, windowWidth: 850 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'], avoid: ['tr', '.kpi-card', '.warn-banner', '.kpis', '.report-header', '.meta-grid', '.evidence-box', '.guidance-box', '.report-note', '.report-footer'] }
+        };
+        try {
+            await html2pdf().set(opt).from(document.querySelector('.report-container') || document.body).save();
+        } catch(e) {
+            window.print();
+        }
+    } else {
+        window.print();
+    }
+    noPrints.forEach(el => { el.style.display = ''; });
+}
+function downloadHtml() {
+    const clone = document.documentElement.cloneNode(true);
+    const noPrints = clone.querySelectorAll('.no-print');
+    noPrints.forEach(el => el.remove());
+    const blob = new Blob(['<!doctype html>\\n' + clone.outerHTML], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '${filename}.html';
+    a.click();
+}
+</script>
+</head>
+<body>
+<div class="report-container">
+    <div class="no-print report-actions-bar">
+        <div>
+            <strong style="font-size:13px;">SentinelNet</strong>
+            <span style="color:#cbd5e1; font-size:12px;"> — ${T.subheading}</span>
+        </div>
+        <div>
+            <button onclick="window.print()" class="act-btn act-btn-blue">${T.printVector}</button>
+            <button onclick="downloadPdf()" class="act-btn act-btn-green">${T.pdf}</button>
+            <button onclick="downloadHtml()" class="act-btn act-btn-gray">${T.html}</button>
+        </div>
+    </div>
 
-        const filename = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}`;
+    <div class="report-header">
+        <div>
+            <h1 class="brand-title">SentinelNet <span style="font-weight:400; color:#64748b;">|</span> ${T.heading}</h1>
+            <div class="report-subtitle">${escapeHtml(benchmark)}</div>
+        </div>
+        <div class="header-tag">Security Audit</div>
+    </div>
+
+    <div class="meta-grid">
+        <div class="meta-item"><span class="meta-label">${T.device}</span><span class="meta-value">${escapeHtml(device)}</span></div>
+        <div class="meta-item"><span class="meta-label">${T.platform}</span><span class="meta-value">${escapeHtml(platform)}</span></div>
+        <div class="meta-item"><span class="meta-label">${T.benchmark}</span><span class="meta-value">${escapeHtml(benchmark)}</span></div>
+        <div class="meta-item"><span class="meta-label">${T.generatedOn}</span><span class="meta-value">${escapeHtml(generated)}</span></div>
+    </div>
+
+    ${partialBanner}
+
+    <div class="kpis">
+        <div class="kpi-card kpi-score"><div class="kpi-num">${escapeHtml(scoreTxt)}</div><div class="kpi-label">${T.score}</div></div>
+        <div class="kpi-card kpi-pass"><div class="kpi-num">${s.passed}</div><div class="kpi-label">${T.passed}</div></div>
+        <div class="kpi-card kpi-fail"><div class="kpi-num">${s.failed}</div><div class="kpi-label">${T.failed}</div></div>
+        <div class="kpi-card kpi-warn"><div class="kpi-num">${s.warned}</div><div class="kpi-label">${T.warned}</div></div>
+        <div class="kpi-card kpi-unknown"><div class="kpi-num">${unknown}</div><div class="kpi-label">${T.unknown}</div></div>
+    </div>
+
+    <table class="findings-table">
+        <thead>
+            <tr>
+                <th class="col-id">${T.thId}</th>
+                <th class="col-check">${T.thCheck}</th>
+                <th class="col-sev">${T.thSeverity}</th>
+                <th class="col-status">${T.thStatus}</th>
+                <th class="col-fix">${T.thFix}</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${rows}
+        </tbody>
+    </table>
+
+    <div class="report-note">${T.note}</div>
+
+    <div class="report-footer">
+        <span>${T.footerNotice}</span>
+        <span>${escapeHtml(generated)}</span>
+    </div>
+</div>
+</body>
+</html>`;
+
         openAuditReportModal(html, filename, `SentinelNet — ${T.preview}`);
     }
 
@@ -720,33 +1173,60 @@ ${partialBanner}
     async function downloadModalPdf() {
         const btn = document.getElementById('auditModalBtnPdf');
         const origHtml = btn ? btn.innerHTML : '';
-        if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (currentLang === 'en' ? 'PDF...' : 'PDF...');
-        const frame = document.getElementById('auditReportFrame');
-        const frameDoc = frame?.contentDocument || frame?.contentWindow?.document;
-        if (!frameDoc) return;
-        const opt = {
-            margin: [10, 10, 10, 10],
-            filename: (_currentReportFilename || 'audit-report') + '.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, logging: false },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (currentLang === 'en' ? 'Generating PDF...' : 'Generazione PDF...');
+            btn.disabled = true;
+        }
         try {
-            const h2p = window.html2pdf || (frame.contentWindow && frame.contentWindow.html2pdf);
-            if (typeof h2p !== 'undefined') {
-                await h2p().set(opt).from(frameDoc.body).save();
-            } else {
-                frame.contentWindow.focus();
-                frame.contentWindow.print();
+            if (typeof html2pdf === 'undefined' && typeof window.loadAssetOnce === 'function') {
+                await window.loadAssetOnce('/static/vendor/html2pdf/html2pdf.bundle.min.js');
             }
+            const frame = document.getElementById('auditReportFrame');
+            const frameDoc = frame?.contentDocument || frame?.contentWindow?.document;
+            const targetEl = frameDoc?.querySelector('.report-container') || frameDoc?.body;
+            if (!targetEl) {
+                showToast(currentLang === 'en' ? 'Report document not ready.' : 'Documento del report non pronto.', 'error');
+                return;
+            }
+            const h2p = window.html2pdf || (frame.contentWindow && frame.contentWindow.html2pdf);
+            if (typeof h2p === 'undefined') {
+                printModalReport();
+                return;
+            }
+
+            const noPrints = frameDoc.querySelectorAll('.no-print');
+            noPrints.forEach(el => { el.style.display = 'none'; });
+
+            const opt = {
+                margin: [8, 8, 8, 8],
+                filename: (_currentReportFilename || 'audit-report') + '.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: {
+                    scale: 2.5,
+                    useCORS: true,
+                    logging: false,
+                    letterRendering: true,
+                    scrollX: 0,
+                    scrollY: 0,
+                    windowWidth: 850
+                },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+                pagebreak: {
+                    mode: ['avoid-all', 'css', 'legacy'],
+                    avoid: ['tr', '.kpi-card', '.warn-banner', '.kpis', '.report-header', '.meta-grid', '.evidence-box', '.guidance-box', '.report-note', '.report-footer']
+                }
+            };
+            await h2p().set(opt).from(targetEl).save();
+            noPrints.forEach(el => { el.style.display = ''; });
+            showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
         } catch (e) {
             console.error('PDF export error:', e);
-            if (frame && frame.contentWindow) {
-                frame.contentWindow.focus();
-                frame.contentWindow.print();
-            }
+            printModalReport();
         } finally {
-            if (btn) btn.innerHTML = origHtml;
+            if (btn) {
+                btn.innerHTML = origHtml;
+                btn.disabled = false;
+            }
         }
     }
 
@@ -1007,7 +1487,7 @@ ${partialBanner}
         }
     });
 
-    document.getElementById('auditHistoryTableBody')?.addEventListener('click', (e) => {
+    document.getElementById('auditHistoryBody')?.addEventListener('click', (e) => {
         const openBtn = e.target.closest('[data-action="open-audit-run"]');
         if (openBtn && openBtn.dataset.runId) {
             openAuditRun(Number(openBtn.dataset.runId), false);
