@@ -737,16 +737,13 @@ body {
 }
 .report-container {
     max-width: 860px;
-    margin: 0 auto;
-}
-/* Standalone action bar */
 .report-actions-bar {
+    display: none;
     margin-bottom: 20px;
     padding: 10px 16px;
     background: #0f172a;
     color: #ffffff;
     border-radius: 6px;
-    display: flex;
     justify-content: space-between;
     align-items: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
@@ -850,6 +847,8 @@ body {
     padding: 8px 10px;
     text-align: center;
     border-top: 3px solid #64748b;
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 .kpi-card.kpi-score { border-top-color: ${scoreColor}; background: #f8fafc; }
 .kpi-card.kpi-pass { border-top-color: #10b981; }
@@ -896,7 +895,7 @@ table.findings-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 10.5px;
-    page-break-inside: auto;
+    background: #ffffff;
 }
 thead { display: table-header-group; }
 th {
@@ -912,8 +911,8 @@ th {
 }
 tr.finding-row {
     border-bottom: 1px solid #e2e8f0;
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 tr.finding-row:nth-child(even) { background: #f8fafc; }
 td {
@@ -962,6 +961,8 @@ td {
     padding: 5px 7px;
     font-size: 9.5px;
     line-height: 1.35;
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 .guide-item { margin-bottom: 2px; }
 .guide-item:last-child { margin-bottom: 0; }
@@ -974,6 +975,8 @@ td {
     border: 1px solid #cbd5e1;
     padding: 3px 6px;
     border-radius: 3px;
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 .verify-box code { font-family: ui-monospace, monospace; color: #0f172a; white-space: pre-wrap; word-break: break-all; }
 .verify-lbl { font-weight: 700; color: #475569; margin-right: 4px; }
@@ -984,6 +987,8 @@ td {
     background: #fff5f5;
     border-radius: 3px;
     padding: 5px 6px;
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 .evidence-hdr { font-size: 9px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
 .evidence-item {
@@ -1044,34 +1049,50 @@ td {
 </style>
 <script src="/static/vendor/html2pdf/html2pdf.bundle.min.js"></script>
 <script>
+window.addEventListener('DOMContentLoaded', function() {
+    if (window.self === window.top) {
+        var bar = document.querySelector('.report-actions-bar');
+        if (bar) bar.style.display = 'flex';
+    }
+});
+
 async function downloadPdf() {
-    const noPrints = document.querySelectorAll('.no-print');
-    noPrints.forEach(el => { el.style.display = 'none'; });
+    var noPrints = document.querySelectorAll('.no-print');
+    noPrints.forEach(function(el) { el.style.display = 'none'; });
     if (typeof html2pdf !== 'undefined') {
-        const opt = {
+        var opt = {
             margin: [8, 8, 8, 8],
             filename: '${filename}.pdf',
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2.5, useCORS: true, logging: false, letterRendering: true, windowWidth: 850 },
+            html2canvas: {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                scrollY: 0,
+                scrollX: 0
+            },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-            pagebreak: { mode: ['avoid-all', 'css', 'legacy'], avoid: ['tr', '.kpi-card', '.warn-banner', '.kpis', '.report-header', '.meta-grid', '.evidence-box', '.guidance-box', '.report-note', '.report-footer'] }
+            pagebreak: { mode: 'css' }
         };
         try {
-            await html2pdf().set(opt).from(document.querySelector('.report-container') || document.body).save();
+            await html2pdf().set(opt).from(document.body).save();
         } catch(e) {
+            console.error('PDF error:', e);
             window.print();
         }
     } else {
         window.print();
     }
-    noPrints.forEach(el => { el.style.display = ''; });
+    noPrints.forEach(function(el) { el.style.display = ''; });
 }
+
 function downloadHtml() {
-    const clone = document.documentElement.cloneNode(true);
-    const noPrints = clone.querySelectorAll('.no-print');
-    noPrints.forEach(el => el.remove());
-    const blob = new Blob(['<!doctype html>\\n' + clone.outerHTML], { type: 'text/html;charset=utf-8' });
-    const a = document.createElement('a');
+    var clone = document.documentElement.cloneNode(true);
+    var noPrints = clone.querySelectorAll('.no-print');
+    noPrints.forEach(function(el) { el.remove(); });
+    var blob = new Blob(['<!doctype html>\\n' + clone.outerHTML], { type: 'text/html;charset=utf-8' });
+    var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = '${filename}.html';
     a.click();
@@ -1178,47 +1199,13 @@ function downloadHtml() {
             btn.disabled = true;
         }
         try {
-            if (typeof html2pdf === 'undefined' && typeof window.loadAssetOnce === 'function') {
-                await window.loadAssetOnce('/static/vendor/html2pdf/html2pdf.bundle.min.js');
-            }
             const frame = document.getElementById('auditReportFrame');
-            const frameDoc = frame?.contentDocument || frame?.contentWindow?.document;
-            const targetEl = frameDoc?.querySelector('.report-container') || frameDoc?.body;
-            if (!targetEl) {
-                showToast(currentLang === 'en' ? 'Report document not ready.' : 'Documento del report non pronto.', 'error');
-                return;
-            }
-            const h2p = window.html2pdf || (frame.contentWindow && frame.contentWindow.html2pdf);
-            if (typeof h2p === 'undefined') {
+            if (frame && frame.contentWindow && typeof frame.contentWindow.downloadPdf === 'function') {
+                await frame.contentWindow.downloadPdf();
+                showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
+            } else {
                 printModalReport();
-                return;
             }
-
-            const noPrints = frameDoc.querySelectorAll('.no-print');
-            noPrints.forEach(el => { el.style.display = 'none'; });
-
-            const opt = {
-                margin: [8, 8, 8, 8],
-                filename: (_currentReportFilename || 'audit-report') + '.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: {
-                    scale: 2.5,
-                    useCORS: true,
-                    logging: false,
-                    letterRendering: true,
-                    scrollX: 0,
-                    scrollY: 0,
-                    windowWidth: 850
-                },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-                pagebreak: {
-                    mode: ['avoid-all', 'css', 'legacy'],
-                    avoid: ['tr', '.kpi-card', '.warn-banner', '.kpis', '.report-header', '.meta-grid', '.evidence-box', '.guidance-box', '.report-note', '.report-footer']
-                }
-            };
-            await h2p().set(opt).from(targetEl).save();
-            noPrints.forEach(el => { el.style.display = ''; });
-            showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
         } catch (e) {
             console.error('PDF export error:', e);
             printModalReport();
