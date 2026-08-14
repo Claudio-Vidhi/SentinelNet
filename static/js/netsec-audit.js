@@ -670,58 +670,7 @@ th{background:#f6f6f6;}
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-<script>
-    async function downloadPdf() {
-        const btn = document.getElementById('btnPdfNetsec');
-        if (btn) btn.textContent = '${T.generating}';
-        const noPrints = document.querySelectorAll('.no-print');
-        noPrints.forEach(el => el.style.display = 'none');
-        const opt = {
-            margin: [10, 10, 10, 10],
-            filename: 'audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, logging: false },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-        try {
-            if (typeof html2pdf !== 'undefined') {
-                await html2pdf().set(opt).from(document.body).save();
-            } else {
-                window.print();
-            }
-        } catch (e) {
-            console.error('PDF error:', e);
-            window.print();
-        } finally {
-            noPrints.forEach(el => el.style.display = '');
-            if (btn) btn.textContent = '${T.pdf}';
-        }
-    }
-    function downloadHtml() {
-        const clone = document.body.cloneNode(true);
-        const noPrints = clone.querySelectorAll('.no-print');
-        noPrints.forEach(el => el.remove());
-        const blob = new Blob(['<!DOCTYPE html><html>' + clone.outerHTML + '</html>'], { type: 'text/html;charset=utf-8' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.html';
-        a.click();
-    }
-    document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('btnPdfNetsec')?.addEventListener('click', downloadPdf);
-        document.getElementById('btnPrintNetsec')?.addEventListener('click', () => window.print());
-        document.getElementById('btnHtmlNetsec')?.addEventListener('click', downloadHtml);
-    });
-</script>
 </head><body>
-<div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 0; display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif;">
-    <span style="font-size: 14px; font-weight: bold;">SentinelNet — ${T.preview}</span>
-    <div style="display: flex; gap: 10px;">
-        <button id="btnPdfNetsec" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.pdf}</button>
-        <button id="btnPrintNetsec" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.print}</button>
-        <button id="btnHtmlNetsec" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.html}</button>
-    </div>
-</div>
 <h1>${T.heading} — ${escapeHtml(benchmark)}</h1>
 <div class="meta">${T.device}: ${escapeHtml(device)} · ${T.platform}: ${escapeHtml(platform)} · ${T.generatedOn} ${escapeHtml(generated)}</div>
 ${partialBanner}
@@ -737,21 +686,87 @@ ${partialBanner}
 <div class="note">${T.note}</div>
 </body></html>`;
 
-        const printWin = window.open('', '_blank');
-        if (printWin) {
-            printWin.document.write(html);
-            printWin.document.close();
-        } else {
-            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.html`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+        const filename = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}`;
+        openAuditReportModal(html, filename, `SentinelNet — ${T.preview}`);
+    }
+
+    let _currentReportHtml = '';
+    let _currentReportFilename = '';
+
+    function openAuditReportModal(html, filename, titleText) {
+        _currentReportHtml = html;
+        _currentReportFilename = filename || 'audit-report';
+        const modal = document.getElementById('auditReportModal');
+        const frame = document.getElementById('auditReportFrame');
+        const titleEl = document.getElementById('auditReportModalTitle');
+        if (titleEl && titleText) {
+            titleEl.innerHTML = `<i class="fa-solid fa-file-shield" style="color:var(--primary);"></i> <span>${escapeHtml(titleText)}</span>`;
         }
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+        if (frame) {
+            frame.srcdoc = html;
+        }
+    }
+
+    function closeAuditReportModal() {
+        const modal = document.getElementById('auditReportModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    async function downloadModalPdf() {
+        const btn = document.getElementById('auditModalBtnPdf');
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (currentLang === 'en' ? 'PDF...' : 'PDF...');
+        const frame = document.getElementById('auditReportFrame');
+        const frameDoc = frame?.contentDocument || frame?.contentWindow?.document;
+        if (!frameDoc) return;
+        const opt = {
+            margin: [10, 10, 10, 10],
+            filename: (_currentReportFilename || 'audit-report') + '.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        try {
+            const h2p = window.html2pdf || (frame.contentWindow && frame.contentWindow.html2pdf);
+            if (typeof h2p !== 'undefined') {
+                await h2p().set(opt).from(frameDoc.body).save();
+            } else {
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+            }
+        } catch (e) {
+            console.error('PDF export error:', e);
+            if (frame && frame.contentWindow) {
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+            }
+        } finally {
+            if (btn) btn.innerHTML = origHtml;
+        }
+    }
+
+    function printModalReport() {
+        const frame = document.getElementById('auditReportFrame');
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        }
+    }
+
+    function downloadModalHtml() {
+        if (!_currentReportHtml) return;
+        const blob = new Blob([_currentReportHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (_currentReportFilename || 'audit-report') + '.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     // Requisiti dichiarati dal motore, non una copia scritta a mano nella UI:
@@ -990,11 +1005,21 @@ ${partialBanner}
         }
     });
 
+    document.getElementById('auditModalBtnPdf')?.addEventListener('click', downloadModalPdf);
+    document.getElementById('auditModalBtnPrint')?.addEventListener('click', printModalReport);
+    document.getElementById('auditModalBtnHtml')?.addEventListener('click', downloadModalHtml);
+    document.getElementById('auditModalBtnClose')?.addEventListener('click', closeAuditReportModal);
+    document.getElementById('auditReportModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'auditReportModal') closeAuditReportModal();
+    });
+
     // Expose functions globally
     window.renderBenchmarkRequirements = renderBenchmarkRequirements;
     window.loadNetSecAuditTab = loadNetSecAuditTab;
     window.runAuditScan = runAuditScan;
     window.exportAuditReport = exportAuditReport;
+    window.openAuditReportModal = openAuditReportModal;
+    window.closeAuditReportModal = closeAuditReportModal;
     window.renderAuditRulesTable = renderAuditRulesTable;
     window.toggleAuditDetail = toggleAuditDetail;
     window.clearUploadedConfig = clearUploadedConfig;
