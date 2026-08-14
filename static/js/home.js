@@ -86,7 +86,7 @@ async function loadHome() {
                 return `<tr>
                     <td>${host}</td>
                     <td><code>${escapeHtml(d.IP || '')}</code></td>
-                    <td><span class="badge">${escapeHtml(d.Group || '')}</span></td>
+                    <td><span class="badge" style="cursor:pointer;" data-action="open-inventory-tenant" data-tenant="${escapeHtml(d.Group || '')}" title="${escapeHtml(d.Group || '')}">${escapeHtml(d.Group || '')}</span></td>
                     <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
                 </tr>`;
             }).join('');
@@ -244,7 +244,7 @@ document.getElementById('btnHomeRunTriage')?.addEventListener('click', () => {
     }
 });
 
-document.getElementById('homeTenantsBay')?.addEventListener('click', (e) => {
+document.getElementById('homeOnelineBays')?.addEventListener('click', (e) => {
     const bay = e.target.closest('[data-action]');
     if (!bay) return;
     const act = bay.dataset.action;
@@ -252,6 +252,13 @@ document.getElementById('homeTenantsBay')?.addEventListener('click', (e) => {
         openInventoryForTenant(bay.dataset.tenant);
     } else if (act === 'switch-tab' && bay.dataset.tab) {
         switchTab(bay.dataset.tab);
+    }
+});
+
+document.getElementById('homeAttentionBody')?.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-action="open-inventory-tenant"]');
+    if (el && el.dataset.tenant) {
+        openInventoryForTenant(el.dataset.tenant);
     }
 });
 

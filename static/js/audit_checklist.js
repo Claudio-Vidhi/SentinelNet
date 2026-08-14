@@ -297,8 +297,27 @@
         viewAuditReportForId(currentAuditEngagementId);
     }
 
-    function viewAuditReportForId(engId) {
-        window.open(`/api/audit-checklist/engagements/${engId}/report`, "_blank");
+    async function viewAuditReportForId(engId) {
+        try {
+            const res = await apiFetch(`/api/audit-checklist/engagements/${engId}/report`);
+            if (!res || !res.ok) {
+                alert("Errore durante il caricamento della relazione di audit.");
+                return;
+            }
+            const html = await res.text();
+            if (window.openAuditReportModal) {
+                window.openAuditReportModal(html, `Relazione_Audit_${engId}`, "SentinelNet — Anteprima Relazione Audit");
+            } else {
+                const printWin = window.open("", "_blank");
+                if (printWin) {
+                    printWin.document.write(html);
+                    printWin.document.close();
+                }
+            }
+        } catch (e) {
+            console.error("Errore apertura relazione:", e);
+            window.open(`/api/audit-checklist/engagements/${engId}/report`, "_blank");
+        }
     }
 
     function closeAuditWorkspace() {
