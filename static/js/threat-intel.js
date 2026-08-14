@@ -184,18 +184,31 @@
         }
     }
 
-    // Filtro testuale e per severità lato client sulle righe già caricate.
+    // Filtro testuale, severità, CVSS, EPSS, data ed exploitation lato client sulle righe già caricate.
     function vwApplyTextFilter() {
-        const q = (document.getElementById('vwText').value || '').trim().toLowerCase();
+        const q = (document.getElementById('vwText')?.value || '').trim().toLowerCase();
         const selectedSev = document.getElementById('vwSeverity')?.value;
         const sevRanks = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
         const targetRank = selectedSev ? (sevRanks[selectedSev] || 0) : 0;
+        const minCvss = parseFloat(document.getElementById('vwMinScore')?.value);
+        const minEpss = parseFloat(document.getElementById('vwMinEpss')?.value);
+        const onlyExploited = !!document.getElementById('vwExploited')?.checked;
+        const fromDateVal = document.getElementById('vwFromDate')?.value;
+        const fromTs = fromDateVal ? vwParseTimestamp(fromDateVal) : 0;
 
         vwState.filtered = vwState.data.filter(r => {
             if (targetRank > 0) {
                 const rRank = sevRanks[r.severity] || 0;
                 if (rRank < targetRank) return false;
             }
+            if (!isNaN(minCvss) && minCvss > 0) {
+                if (isNaN(r.score) || r.score < minCvss) return false;
+            }
+            if (!isNaN(minEpss) && minEpss > 0) {
+                if (isNaN(r.epss) || r.epss < minEpss) return false;
+            }
+            if (onlyExploited && !r.exploited) return false;
+            if (fromTs > 0 && vwParseTimestamp(r.date) < fromTs) return false;
             if (q) {
                 return [r.cve, r.euvd, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1;
             }
@@ -229,14 +242,20 @@
         bodyEl.innerHTML = vwState.filtered.map((item, idx) => {
             const ts = vwParseTimestamp(item.date);
             const displayDate = ts > 0 ? new Date(ts).toLocaleDateString() : (item.date || '—');
+            const subCve = (item.euvd && item.euvd !== item.cve && item.euvd !== '—')
+                ? `<div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(item.euvd)}</div>`
+                : '';
+            const productHtml = item.product && item.product !== '—'
+                ? `<div style="font-weight:600;">${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">${escapeHtml(item.vendor)}</div>`
+                : `<div style="font-weight:600; text-transform:uppercase;">${escapeHtml(item.vendor)}</div>`;
             return `
             <tr data-action="vw-open-drawer" data-idx="${idx}" style="cursor:pointer;">
-                <td><div>${escapeHtml(item.cve)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.euvd)}</div></td>
-                <td><div>${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.vendor)}</div></td>
+                <td><div style="font-family:var(--font-code); font-weight:700;">${escapeHtml(item.cve)}</div>${subCve}</td>
+                <td>${productHtml}</td>
                 <td><span class="severity-pill severity-${item.severity}">${item.severity}</span></td>
-                <td>${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
-                <td>${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</td>
-                <td>${item.exploited ? '<span class="badge exploited">Exploited</span>' : '<span class="badge">—</span>'}</td>
+                <td style="font-family:var(--font-code); font-weight:600;">${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
+                <td style="font-family:var(--font-code);">${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</td>
+                <td>${item.exploited ? '<span class="badge" style="color:var(--danger); border-color:var(--danger); font-weight:700;">Exploited</span>' : '<span class="badge" style="opacity:0.4;">—</span>'}</td>
                 <td data-sort-value="${ts}">${escapeHtml(displayDate)}</td>
             </tr>`;
         }).join('');
@@ -261,13 +280,17 @@
                 ? `<div><a href="${escapeHtml(r.trim())}" target="_blank" rel="noopener">${escapeHtml(r)}</a></div>`
                 : `<div>${escapeHtml(r)}</div>`).join('')
             : '<div style="color:var(--text-muted);">—</div>';
+        const subInfo = (item.euvd && item.euvd !== item.cve && item.euvd !== '—') ? ` · ${escapeHtml(item.euvd)}` : '';
         drawer.innerHTML = `
             <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" data-action="vw-close-drawer"><i class="fa-solid fa-xmark"></i></button>
-            <h3 style="margin:0 0 6px;">${escapeHtml(item.cve)} <span style="font-size:12px; color:var(--text-muted);">(${escapeHtml(item.euvd)})</span></h3>
-            <div style="margin-bottom:10px;"><span class="severity-pill severity-${item.severity}">${item.severity}</span>
-              <span style="margin-left:8px;">CVSS ${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</span>
-              <span style="margin-left:8px;">EPSS ${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</span></div>
-            <div style="margin-bottom:10px; color:var(--text-muted);">${escapeHtml(item.vendor)} · ${escapeHtml(item.product)}</div>
+            <h3 style="margin:0 0 6px; font-family:var(--font-code);">${escapeHtml(item.cve)}</h3>
+            <div style="margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span class="severity-pill severity-${item.severity}">${item.severity}</span>
+              <span style="font-weight:600;">CVSS ${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</span>
+              <span style="color:var(--text-muted);">EPSS ${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</span>
+              ${item.exploited ? '<span class="badge" style="color:var(--danger); border-color:var(--danger); font-weight:700;">Exploited</span>' : ''}
+            </div>
+            <div style="margin-bottom:10px; font-weight:600;">${escapeHtml(item.vendor)}${item.product && item.product !== '—' ? ' · ' + escapeHtml(item.product) : ''}${subInfo}</div>
             <div style="margin-bottom:14px; line-height:1.5;">${escapeHtml(item.summary)}</div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">${item.date ? new Date(item.date).toLocaleDateString() : '—'}</div>
             <div style="font-size:12px; word-break:break-all;">${refsHtml}</div>
@@ -282,7 +305,12 @@
         }
     });
 
-    document.getElementById('vwText') && document.getElementById('vwText').addEventListener('input', vwApplyTextFilter);
+    document.getElementById('vwText')?.addEventListener('input', vwApplyTextFilter);
+    document.getElementById('vwSeverity')?.addEventListener('change', vwApplyTextFilter);
+    document.getElementById('vwMinScore')?.addEventListener('change', vwApplyTextFilter);
+    document.getElementById('vwMinEpss')?.addEventListener('input', vwApplyTextFilter);
+    document.getElementById('vwExploited')?.addEventListener('change', vwApplyTextFilter);
+    document.getElementById('vwFromDate')?.addEventListener('change', vwApplyTextFilter);
 
     // Parallelizzazione delle query ENISA tramite Promise.all (Ottimizzazione Performance)
     // Aperta la tab: prepara i controlli (sedi consentite) e avvia automaticamente la scansione.

@@ -15,7 +15,13 @@ from routers.deps import get_current_user, require_operator, assert_device_allow
 
 router = APIRouter(tags=["Backup"])
 
-NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+BASE_URL = "https://euvdservices.enisa.europa.eu"
+
+ENISA_SEARCH_PARAMS = {
+    "fromScore", "toScore", "fromEpss", "toEpss",
+    "fromDate", "toDate", "fromUpdatedDate", "toUpdatedDate",
+    "product", "vendor", "assigner", "exploited", "text", "page", "size",
+}
 
 
 # --- ENDPOINTS ---
@@ -76,135 +82,36 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
 async def proxy_enisa_search(request: Request, current_user = Depends(get_current_user)):
     from urllib.parse import parse_qs, urlencode
     raw = parse_qs(request.url.query, keep_blank_values=True)
+    # Inoltra solo i parametri documentati dall'API EUVD.
+    params = {k: v for k, v in raw.items() if k in ENISA_SEARCH_PARAMS}
 
-    vendor_val = raw.get("vendor", [""])[0].strip()
-    text_val = raw.get("text", [""])[0].strip()
-    cve_id = raw.get("cveId", raw.get("cve", [""]))[0].strip()
+    if params.get("vendor"):
+        original = params["vendor"][0]
+        resolved = inventory_manager.resolve_euvd_term(original)
+        if resolved != original:
+            log_audit(f"EUVD vendor risolto: '{original}' → '{resolved}'")
+        params["vendor"] = [resolved]
 
-    resolved_vendor = inventory_manager.resolve_euvd_term(vendor_val) if vendor_val else ""
-
-    nvd_params = {}
-
-    # Map query to NVD API v2.0 parameters
-    if cve_id and cve_id.upper().startswith("CVE-"):
-        nvd_params["cveId"] = cve_id.upper()
-    else:
-        keywords = []
-        if resolved_vendor:
-            keywords.append(resolved_vendor)
-        if text_val:
-            keywords.append(text_val)
-        if keywords:
-            nvd_params["keywordSearch"] = " ".join(keywords)
-
-    results_per_page = 40
-    if "size" in raw:
+    # 'size' è limitato a 100 dalla specifica API: lo vincoliamo a [1, 100].
+    if params.get("size"):
         try:
-            results_per_page = max(1, min(2000, int(raw["size"][0])))
+            params["size"] = [str(max(1, min(100, int(params["size"][0]))))]
         except ValueError:
-            pass
-    nvd_params["resultsPerPage"] = str(results_per_page)
+            params.pop("size", None)
 
-    start_index = 0
-    if "page" in raw:
-        try:
-            page_num = max(1, int(raw["page"][0]))
-            start_index = (page_num - 1) * results_per_page
-        except ValueError:
-            pass
-    elif "startIndex" in raw:
-        try:
-            start_index = max(0, int(raw["startIndex"][0]))
-        except ValueError:
-            pass
-    nvd_params["startIndex"] = str(start_index)
-
-    severity_param = raw.get("severity", raw.get("cvssV3Severity", [""]))[0].strip().upper()
-    if severity_param in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
-        nvd_params["cvssV3Severity"] = severity_param
-    elif "fromScore" in raw:
-        try:
-            score_num = float(raw["fromScore"][0])
-            if score_num >= 9.0:
-                nvd_params["cvssV3Severity"] = "CRITICAL"
-            elif score_num >= 7.0:
-                nvd_params["cvssV3Severity"] = "HIGH"
-            elif score_num >= 4.0:
-                nvd_params["cvssV3Severity"] = "MEDIUM"
-        except ValueError:
-            pass
-
-    target_url = f"{NVD_BASE_URL}?{urlencode(nvd_params)}"
+    target = f"{BASE_URL}/api/search"
+    if params:
+        target += f"?{urlencode(params, doseq=True)}"
 
     try:
-        headers = {"User-Agent": "SentinelNet-NVD-Client/2.0"}
+        headers = {"User-Agent": "ThreatIntelDashboard/3.0"}
         from fastapi.concurrency import run_in_threadpool
-        resp = await run_in_threadpool(requests.get, target_url, headers=headers, timeout=15)
+        r = await run_in_threadpool(requests.get, target, headers=headers, timeout=15)
 
-        if resp.status_code != 200:
-            return JSONResponse(
-                status_code=resp.status_code,
-                content={"detail": f"NVD API HTTP {resp.status_code}", "items": [], "total": 0}
-            )
-
-        data = resp.json()
-        total = data.get("totalResults", 0)
-        vulnerabilities = data.get("vulnerabilities", [])
-
-        items = []
-        for elem in vulnerabilities:
-            cve = elem.get("cve", {})
-            cid = cve.get("id", "CVE-Unknown")
-
-            descriptions = cve.get("descriptions", [])
-            desc_text = "Nessuna descrizione disponibile."
-            for d in descriptions:
-                if d.get("lang") == "en":
-                    desc_text = d.get("value", "")
-                    break
-            if not desc_text and descriptions:
-                desc_text = descriptions[0].get("value", "")
-
-            metrics = cve.get("metrics", {})
-            base_score = None
-            severity = "MEDIUM"
-
-            cvss_v31 = metrics.get("cvssMetricV31", [])
-            cvss_v30 = metrics.get("cvssMetricV30", [])
-            cvss_v40 = metrics.get("cvssMetricV40", [])
-            cvss_v2 = metrics.get("cvssMetricV2", [])
-
-            active_metric = cvss_v31 or cvss_v30 or cvss_v40 or cvss_v2
-            if active_metric and isinstance(active_metric, list) and len(active_metric) > 0:
-                m_obj = active_metric[0]
-                cvss_data = m_obj.get("cvssData", {})
-                base_score = cvss_data.get("baseScore")
-                severity = cvss_data.get("baseSeverity") or m_obj.get("baseSeverity") or "MEDIUM"
-
-            published = cve.get("published", "")
-            cisa_k = bool(cve.get("cisaExploitAdd"))
-
-            refs = [r.get("url") for r in cve.get("references", []) if r.get("url")]
-
-            items.append({
-                "id": cid,
-                "cve": cid,
-                "cveId": cid,
-                "euvd": cid,
-                "vendor": resolved_vendor or vendor_val or "—",
-                "product": text_val or "—",
-                "description": desc_text,
-                "summary": desc_text,
-                "score": base_score,
-                "baseScore": base_score,
-                "severity": str(severity).upper(),
-                "published": published,
-                "date": published,
-                "exploited": cisa_k,
-                "references": refs
-            })
-
-        return {"items": items, "total": total}
-
+        return Response(
+            content=r.content,
+            status_code=r.status_code,
+            headers={"Content-Type": r.headers.get("Content-Type", "application/json")}
+        )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Errore connessione NVD NIST: {str(e)}")
+        raise HTTPException(status_code=502, detail=str(e))
