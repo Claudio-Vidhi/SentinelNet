@@ -24,21 +24,7 @@
   <link href="/static/vendor/fontawesome/css/all.min.css" rel="stylesheet">
 
   <link rel="stylesheet" href="/static/css/dashboard.css">
-  <script>
-    (function() {
-      try {
-        var v = localStorage.getItem('sentinelnet_ui_variant');
-        if (v && v !== 'default' && ['design-1', 'design-2', 'design-3'].indexOf(v) !== -1) {
-          document.documentElement.setAttribute('data-ui-variant', v);
-          var l = document.createElement('link');
-          l.id = 'theme-variant-stylesheet';
-          l.rel = 'stylesheet';
-          l.href = '/static/css/themes/' + v + '.css';
-          document.head.appendChild(l);
-        }
-      } catch (e) {}
-    })();
-  </script>
+  <script src="/static/js/boot-ui-variant.js"></script>
 </head>
 <body>
 <!--
@@ -59,42 +45,9 @@
   FINISH: unreviewed and undocumented is unfinished; this build ends with the
   finish review, the verdict, and DESIGN.md.
 -->
-  <script>
-    // Resa (chiara/scura) PRIMA del primo paint, come per la sidebar: applicarla
-    // dopo farebbe lampeggiare il quadro nella polarità sbagliata. Nessun valore
-    // salvato = si segue il sistema operativo (prefers-color-scheme).
-    try {
-      var t = localStorage.getItem('sentinelnet_theme');
-      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-    } catch (e) { /* localStorage non disponibile: si segue il sistema */ }
-  </script>
-  <script>
-    try {
-      var v = localStorage.getItem('sentinelnet_ui_variant');
-      if (v && v !== 'default') {
-        document.documentElement.setAttribute('data-ui-variant', v);
-        var link = document.createElement('link');
-        link.id = 'theme-variant-stylesheet';
-        link.rel = 'stylesheet';
-        link.href = '/static/css/themes/' + v + '.css';
-        document.head.appendChild(link);
-      }
-    } catch (e) { }
-  </script>
-  <script>
-
-    // Ripristina lo stato della sidebar PRIMA del primo paint: applicare la classe
-    // più tardi (a DOMContentLoaded) farebbe vedere la sidebar espansa che si
-    // richiude. Qui il valore iniziale è già 72px, quindi la transizione non parte.
-    // NB: questo script ha uno scope separato e non vede SIDEBAR_COLLAPSED_KEY,
-    // quindi la chiave è ripetuta come letterale: se la si rinomina va cambiata
-    // anche qui (TestSidebarRail fissa entrambe le occorrenze).
-    try {
-      if (localStorage.getItem('sidebarCollapsed') === '1') {
-        document.body.classList.add('sidebar-collapsed');
-      }
-    } catch (e) { /* localStorage non disponibile: si resta espansi */ }
-  </script>
+  <script src="/static/js/boot-theme.js"></script>
+  <script src="/static/js/boot-ui-variant-late.js"></script>
+  <script src="/static/js/boot-sidebar.js"></script>
 
   <!-- Overlay Login Glassmorphic / Setup Wizard -->
   <div id="authOverlay">
@@ -221,75 +174,75 @@
 
     <nav class="sidenav">
       <div class="nav-group"><h3 data-i18n="navInvestigate">Indaga</h3>
-        <button class="nav-item active" onclick="switchTab('tab-home', this)">
+        <button class="nav-item active" data-tab="tab-home">
           <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-table-cells-large"></i> Home</span>
         </button>
-        <button id="navIncidents" class="nav-item requires-admin" onclick="switchTab('tab-incidents', this)">
+        <button id="navIncidents" class="nav-item requires-admin" data-tab="tab-incidents">
           <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
           <span class="preview-badge">preview</span>
         </button>
-        <button class="nav-item" data-tabs="tab-flows" onclick="switchTab('tab-flows', this)">
+        <button class="nav-item" data-tabs="tab-flows" data-tab="tab-flows">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
         </button>
-        <button class="nav-item" data-tabs="tab-endpoint" onclick="switchTab('tab-endpoint', this)">
+        <button class="nav-item" data-tabs="tab-endpoint" data-tab="tab-endpoint">
           <span class="nav-left" data-i18n="tabEndpointLoc"><i class="fa-solid fa-map-pin"></i> Localizzazione Endpoint</span>
         </button>
-        <button class="nav-item" onclick="switchTab('tab-ai', this)">
+        <button class="nav-item" data-tab="tab-ai">
           <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navInventory">Inventario</h3>
-        <button class="nav-item" onclick="switchTab('tab-devices', this)">
+        <button class="nav-item" data-tab="tab-devices">
           <span class="nav-left" data-i18n="tabInventory"><i class="fa-solid fa-list-check"></i> Network Inventory</span>
         </button>
-        <button class="nav-item" data-tabs="tab-map tab-map-interactive" onclick="switchTab('tab-map', this)">
+        <button class="nav-item" data-tabs="tab-map tab-map-interactive" data-tab="tab-map">
           <span class="nav-left" data-i18n="tabTopologyGroup"><i class="fa-solid fa-circle-nodes"></i> Topologia</span>
         </button>
-        <button class="nav-item" onclick="switchTab('tab-categories', this)">
+        <button class="nav-item" data-tab="tab-categories">
           <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
         </button>
-        <button id="navFortigate" class="nav-item requires-admin" onclick="switchTab('tab-fortigate', this)">
+        <button id="navFortigate" class="nav-item requires-admin" data-tab="tab-fortigate">
           <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
         </button>
-        <button id="navWlc" class="nav-item" onclick="switchTab('tab-wlc', this)">
+        <button id="navWlc" class="nav-item" data-tab="tab-wlc">
           <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navAssess">Valuta</h3>
-        <button class="nav-item" onclick="switchTab('tab-security', this)">
+        <button class="nav-item" data-tab="tab-security">
           <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-virus"></i> Threat Intel (NVD NIST)</span>
         </button>
-        <button class="nav-item" onclick="switchTab('tab-config', this)">
+        <button class="nav-item" data-tab="tab-config">
           <span class="nav-left" data-i18n="tabConfigAnalyzer"><i class="fa-solid fa-file-code"></i> Config Analyzer</span>
         </button>
-        <button id="navNetSecAudit" class="nav-item" onclick="switchTab('tab-netsec-audit', this)">
+        <button id="navNetSecAudit" class="nav-item" data-tab="tab-netsec-audit">
           <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
           <span class="preview-badge">preview</span>
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navChange">Modifica</h3>
-        <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" onclick="switchTab('tab-provisioning', this)">
+        <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" data-tab="tab-provisioning">
           <span class="nav-left" data-i18n="tabProvGroup"><i class="fa-solid fa-circle-plus"></i> Provisioning</span>
         </button>
-        <button class="nav-item requires-write" onclick="switchTab('tab-import', this)">
+        <button class="nav-item requires-write" data-tab="tab-import">
           <span class="nav-left" data-i18n="tabImport"><i class="fa-solid fa-file-csv"></i> Importazione CSV</span>
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navAdminister">Amministra</h3>
-        <button class="nav-item requires-admin" onclick="switchTab('tab-users', this)">
+        <button class="nav-item requires-admin" data-tab="tab-users">
           <span class="nav-left" data-i18n="tabUsers"><i class="fa-solid fa-users-gear"></i> Utenti</span>
         </button>
-        <button class="nav-item requires-admin" onclick="switchTab('tab-groups', this)">
+        <button class="nav-item requires-admin" data-tab="tab-groups">
           <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Tenant</span>
         </button>
-        <button class="nav-item requires-admin" onclick="switchTab('tab-sites', this)">
+        <button class="nav-item requires-admin" data-tab="tab-sites">
           <span class="nav-left" data-i18n="tabSites"><i class="fa-solid fa-building"></i> Sedi</span>
           <span class="preview-badge">preview</span>
         </button>
-        <button class="nav-item requires-admin" data-tabs="tab-mcp tab-mcp-client" onclick="switchTab('tab-mcp', this)">
+        <button class="nav-item requires-admin" data-tabs="tab-mcp tab-mcp-client" data-tab="tab-mcp">
           <span class="nav-left" data-i18n="tabIntegrations"><i class="fa-solid fa-plug"></i> Integrazioni</span>
         </button>
-        <button class="nav-item requires-admin" onclick="switchTab('tab-settings', this)">
+        <button class="nav-item requires-admin" data-tab="tab-settings">
           <span class="nav-left" data-i18n="tabSettings"><i class="fa-solid fa-gear"></i> Impostazioni</span>
         </button>
       </div>
@@ -308,7 +261,7 @@
           <p data-i18n="homeSubtitle">Stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
         </div>
         <div class="split-footer" style="margin-top:0;">
-          <button class="btn btn-primary" style="width:auto;" onclick="switchTab('tab-devices')" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
+          <button class="btn btn-primary" style="width:auto;" data-switch-tab="tab-devices" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
           <button class="btn btn-secondary requires-write" style="width:auto;" onclick="startGroupTriage('all')" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
         </div>
       </div>
@@ -353,7 +306,7 @@
       <div class="panel">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
           <h3 style="margin:0; font-size:17px;" data-i18n="homeAttentionQueue"><i class="fa-solid fa-triangle-exclamation"></i> Coda attenzione flotta</h3>
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="switchTab('tab-devices')" data-i18n="homeViewAll">Vedi tutti</button>
+          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-switch-tab="tab-devices" data-i18n="homeViewAll">Vedi tutti</button>
         </div>
         <div class="table-container">
           <table>
@@ -468,8 +421,8 @@
     <!-- TAB 1b: Provisioning Apparato (estratto da Network Inventory) -->
     <div id="tab-provisioning" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-provisioning');" data-i18n="tabProvisioning"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-provisioner');" data-i18n="tabProvisioner"></button>
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-provisioning" data-i18n="tabProvisioning"></button>
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-provisioner" data-i18n="tabProvisioner"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -744,8 +697,8 @@
          la topologia si consulta nella mappa interattiva) -->
     <div id="tab-map" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-map');" data-i18n="tabMap"></button>
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-map-interactive');" data-i18n="tabInteractive"></button>
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-map" data-i18n="tabMap"></button>
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-map-interactive" data-i18n="tabInteractive"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -772,8 +725,8 @@
     <!-- TAB 4: Mappa Topologia 2D (Premium Vis.js) -->
     <div id="tab-map-interactive" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-map');" data-i18n="tabMap"></button>
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-map-interactive');" data-i18n="tabInteractive"></button>
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-map" data-i18n="tabMap"></button>
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-map-interactive" data-i18n="tabInteractive"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -1912,8 +1865,8 @@
     <!-- TAB: Switch da Zero (Provisioner) -->
     <div id="tab-provisioner" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-provisioning');" data-i18n="tabProvisioning"></button>
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-provisioner');" data-i18n="tabProvisioner"></button>
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-provisioning" data-i18n="tabProvisioning"></button>
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-provisioner" data-i18n="tabProvisioner"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -2339,8 +2292,8 @@
 
     <div id="tab-mcp" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" onclick="switchTab('tab-mcp');" data-i18n="tabMcp"></button>
-        <button class="btn btn-secondary ti-subtab preview-mcp-client" style="display:none;" onclick="switchTab('tab-mcp-client');" data-i18n="tabMcpClient"></button>
+        <button class="btn btn-secondary ti-subtab active" data-switch-tab="tab-mcp" data-i18n="tabMcp"></button>
+        <button class="btn btn-secondary ti-subtab preview-mcp-client" style="display:none;" data-switch-tab="tab-mcp-client" data-i18n="tabMcpClient"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -2400,8 +2353,8 @@
 
     <div id="tab-mcp-client" class="tab-content">
       <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab" onclick="switchTab('tab-mcp');" data-i18n="tabMcp"></button>
-        <button class="btn btn-secondary ti-subtab preview-mcp-client active" style="display:none;" onclick="switchTab('tab-mcp-client');" data-i18n="tabMcpClient"></button>
+        <button class="btn btn-secondary ti-subtab" data-switch-tab="tab-mcp" data-i18n="tabMcp"></button>
+        <button class="btn btn-secondary ti-subtab preview-mcp-client active" style="display:none;" data-switch-tab="tab-mcp-client" data-i18n="tabMcpClient"></button>
       </div>
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -3589,548 +3542,9 @@
   <script src="/static/js/endpoint-inventory.js"></script>
   <script src="/static/js/mcp-client.js"></script>
   <script src="/static/js/site-agent.js"></script>
-  <script>
-    // --- SIDEBAR RAIL (collasso a icone) --- [MOVED to static/js/core.js: syncNavTooltips,
-    // applySidebarCollapsed, toggleSidebar, escapeHtml, apiFetch, auth handlers, appInit,
-    // switchTab, showToast, cross-tab globals]
-
-    // MOVED to static/js/devices.js
-
-    // SWITCH PROVISIONER, FGT API Token Management, populateProvisioningFormSelects,
-    // loadProvisioningTab: MOVED to static/js/provisioning.js
-
-    // switchTab: MOVED to static/js/core.js
-
-    // --- OPERATIONS HOME (landing) ---
-    // Mirror renderDeviceTable's canonical status mapping: status is on
-    // globalVersions[device.IP].status, NOT on the device object itself.
-    function homeStatusInfo(status) {
-        if (status === 'online')      return { cls: 'ok',   led: 'led-success', key: 'homeStOnline' };
-        if (status === 'auth_failed') return { cls: 'warn', led: 'led-warning', key: 'homeStAuth' };
-        return { cls: 'bad', led: 'led-danger', key: 'homeStOffline' };
-    }
-
-    let _pingRefreshTimer = null;
-
-    async function loadHome() {
-        // Reset any previous auto-refresh timer; it will be re-armed below if
-        // the ping monitor is still active.
-        if (_pingRefreshTimer) { clearInterval(_pingRefreshTimer); _pingRefreshTimer = null; }
-        // Reuse the globals cached at login; fetch only if empty (same shape as appInit).
-        if (!globalDevices || globalDevices.length === 0) {
-            const res = await apiFetch('/api/local-devices');
-            if (res && res.ok) {
-                const data = await res.json();
-                globalDevices  = data.devices || [];
-                if (data.groups) globalGroups = data.groups;
-                globalVersions = data.detected_versions || {};
-            }
-        }
-        // When the continuous ping monitor is active, its results are the
-        // authoritative source for up/down state — fresher than the last scan.
-        try {
-            const pmRes = await apiFetch('/api/ping-monitor/status');
-            if (pmRes && pmRes.ok) {
-                const pm = await pmRes.json();
-                if (pm.enabled && pm.devices && pm.devices.length) {
-                    pm.devices.forEach(d => {
-                        if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
-                        globalVersions[d.ip].status = d.up ? 'online' : 'offline';
-                    });
-                    // Keep the home tab live: re-poll at the monitor cadence.
-                    // loadHome() is cheap here — globalDevices is cached, so
-                    // only the ping status and the render are repeated.
-                    const ms = Math.max(5, pm.interval_seconds || 60) * 1000;
-                    _pingRefreshTimer = setInterval(() => loadHome(), ms);
-                }
-            }
-        } catch (_) { /* monitor endpoint optional */ }
-        const devs = globalDevices || [];
-
-        let online = 0;
-        const attention = [];
-        devs.forEach(d => {
-            const scan = globalVersions[d.IP] || {};
-            if (scan.status === 'online') online++;
-            else attention.push(d); // auth_failed / offline / unknown / missing
-        });
-
-        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        setText('homeKpiTotal', devs.length);
-        setText('homeKpiOnline', online);
-        setText('homeKpiAttention', attention.length);
-
-        // Righe di contesto sotto ogni bay: un numero nudo non dice se sia molto.
-        const L = i18n[currentLang];
-        const pct = devs.length ? Math.round((online / devs.length) * 100) : 0;
-        setText('homeStatOnline', `${pct}% ${L.homeOfFleet}`);
-        setText('homeStatAttention', `${L.homeOutOf} ${devs.length}`);
-
-        // Cartiglio del disegno: revisione = istante dell'ultima lettura.
-        setText('homeOnelineRev', new Date().toLocaleString(currentLang === 'en' ? 'en-GB' : 'it-IT'));
-
-        renderFleetOneline(devs);
-
-        const body = document.getElementById('homeAttentionBody');
-        if (body) {
-            if (attention.length === 0) {
-                const okMsg = i18n[currentLang].homeNoAttention;
-                body.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted); text-align:center; padding:16px;">${okMsg}</td></tr>`;
-            } else {
-                body.innerHTML = attention.slice(0, 8).map(d => {
-                    const scan  = globalVersions[d.IP] || {};
-                    const info  = homeStatusInfo(scan.status);
-                    const label = i18n[currentLang][info.key] || scan.status || 'offline';
-                    const host  = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">&mdash;</span>';
-                    return `<tr>
-                        <td>${host}</td>
-                        <td><code>${escapeHtml(d.IP || '')}</code></td>
-                        <td><span class="badge">${escapeHtml(d.Group || '')}</span></td>
-                        <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
-                    </tr>`;
-                }).join('');
-            }
-        }
-
-        if (currentRole === 'admin') loadHomeAnomalies();
-        else renderEventStripDenied();
-    }
-
-    // Una bay per tenant: e' l'estate a essere indicizzata. Lo stato della bay e'
-    // il peggiore dei suoi apparati, perche' su un quadro una sbarra in allarme
-    // si vede prima del dettaglio che l'ha causata.
-    function renderFleetOneline(devs) {
-        const host = document.getElementById('homeOnelineBays');
-        if (!host) return;
-        const L = i18n[currentLang];
-
-        const bays = new Map();
-        devs.forEach(d => {
-            const tenant = (d.Group || '').trim() || L.homeBayUnassigned;
-            if (!bays.has(tenant)) bays.set(tenant, { total: 0, down: 0, warn: 0, idle: 0 });
-            const b = bays.get(tenant);
-            b.total++;
-            const st = (globalVersions[d.IP] || {}).status;
-            if (!st) b.idle++;                                   // mai interrogato
-            else if (st === 'offline' || st === 'unknown') b.down++;
-            else if (st !== 'online') b.warn++;
-        });
-
-        if (bays.size === 0) {
-            host.innerHTML = `<p class="oneline-empty">${escapeHtml(L.homeOnelineEmpty)}</p>`;
-            return;
-        }
-
-        // Molte bay non stanno sulla sbarra: si mostrano le piu' grandi e si
-        // raccoglie la coda in una bay di riepilogo, come un quadro di gruppo.
-        const sorted = [...bays.entries()].sort((a, b) => b[1].total - a[1].total);
-        const shown = sorted.slice(0, 6);
-        const rest  = sorted.slice(6);
-
-        // Peggiore stato della bay. 'idle' vince quando NIENTE e' stato ancora
-        // interrogato: una bay tutta da scansionare non e' una bay in avaria.
-        const state = b => b.down ? 'down'
-                         : b.warn ? 'warn'
-                         : (b.idle === b.total) ? 'idle'
-                         : b.total ? 'up' : 'idle';
-        let html = shown.map(([name, b]) => `
-            <button type="button" class="oneline-bay" data-state="${state(b)}"
-                    onclick="openInventoryForTenant('${escapeHtml(jsStr(name))}')"
-                    title="${escapeHtml(name)}">
-              <span class="oneline-drop"></span><span class="oneline-sw"></span>
-              <span class="oneline-node">
-                <span class="oneline-count">${b.total}</span>
-                <span class="oneline-name">${escapeHtml(name)}</span>
-                <span class="oneline-sub">${b.down ? escapeHtml(`${b.down} ${L.homeBayDown}`)
-                     : (b.idle === b.total) ? escapeHtml(L.homeBayUnscanned)
-                     : escapeHtml(L.homeBayAllUp)}</span>
-              </span>
-            </button>`).join('');
-
-        if (rest.length) {
-            const agg = rest.reduce((a, [, b]) => ({
-                total: a.total + b.total, down: a.down + b.down,
-                warn: a.warn + b.warn, idle: a.idle + b.idle
-            }), { total: 0, down: 0, warn: 0, idle: 0 });
-            html += `
-            <button type="button" class="oneline-bay" data-state="${state(agg)}"
-                    onclick="switchTab('tab-devices')">
-              <span class="oneline-drop"></span><span class="oneline-sw"></span>
-              <span class="oneline-node">
-                <span class="oneline-count">${agg.total}</span>
-                <span class="oneline-name">${escapeHtml(`+${rest.length} ${L.homeBayOther}`)}</span>
-                <span class="oneline-sub">${escapeHtml(L.homeBayOtherSub)}</span>
-              </span>
-            </button>`;
-        }
-        host.innerHTML = html;
-    }
-
-    // Apre l'inventario gia' filtrato sul tenant della bay cliccata.
-    function openInventoryForTenant(tenant) {
-        const sel = document.getElementById('filterGroupSelect');
-        if (sel) {
-            const hasOption = Array.from(sel.options).some(o => o.value === tenant);
-            sel.value = hasOption ? tenant : 'all';
-        }
-        renderDeviceTable();
-        switchTab('tab-devices');
-    }
-
-
-    async function loadHomeAnomalies() {
-        const box = document.getElementById('homeAnomSummary');
-        if (!box) return;
-        const L = i18n[currentLang];
-        // Una sola chiamata: la striscia eventi vuole le righe recenti, il
-        // riepilogo vuole quante ne restano da lavorare.
-        const res = await apiFetch('/api/observability/anomalies?status=all&limit=100');
-        if (!res || !res.ok) return;
-        const rows = (await res.json()).anomalies || [];
-        renderEventStrip(rows.slice(0, 5));
-        if (rows.length === 0) {
-            box.innerHTML = `<p style="color:var(--text-muted); margin:0; padding:8px 0;">${escapeHtml(L.homeNoAnomalies)}</p>`;
-            return;
-        }
-        const openCount = rows.filter(a => a.status === 'new').length;
-        box.innerHTML = `
-            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:4px 0;">
-                <span class="status ${openCount ? 'warn' : 'ok'}" style="font-size:15px;">${openCount}</span>
-                <span style="font-size:13px; color:var(--text-muted);">${escapeHtml(L.homeAnomOpenCount)}</span>
-                <button class="btn btn-small" style="width:auto; margin:0;" onclick="openTrafficoAnomalies()">
-                    <i class="fa-solid fa-arrow-right"></i> ${escapeHtml(L.homeAnomOpenLink)}
-                </button>
-            </div>`;
-    }
-
-    // Una sezione che non si puo' mostrare spiega perche', invece di sparire.
-    function renderEventStripDenied() {
-        const strip = document.getElementById('homeEventStrip');
-        if (strip) strip.innerHTML =
-            `<p class="eventstrip-empty">${escapeHtml(i18n[currentLang].homeEventStripDenied)}</p>`;
-    }
-
-    // Striscia eventi: una riga per evento, la piu' recente in alto, come la
-    // stampante di sala controllo da cui prende la forma.
-    function renderEventStrip(rows) {
-        const strip = document.getElementById('homeEventStrip');
-        if (!strip) return;
-        const L = i18n[currentLang];
-        if (!rows || rows.length === 0) {
-            strip.innerHTML = `<p class="eventstrip-empty">${escapeHtml(L.homeNoAnomalies)}</p>`;
-            return;
-        }
-        strip.innerHTML = rows.map(a => {
-            const sev = (a.severity || '').toString().toLowerCase();
-            const cls = (sev === 'high' || sev === 'critical') ? 'bad' : (sev === 'medium' ? 'warn' : 'ok');
-            const when = a.created_ts
-                ? new Date(a.created_ts * 1000).toLocaleTimeString(currentLang === 'en' ? 'en-GB' : 'it-IT')
-                : '--:--:--';
-            const src = escapeHtml((a.src_ip || '').toString());
-            const dst = escapeHtml((a.dst_ip || '').toString());
-            const kind = escapeHtml((a.kind || '').toString());
-            return `<div class="eventstrip-row">
-                <span class="eventstrip-time">${escapeHtml(when)}</span>
-                <span class="eventstrip-text">${kind}${src ? ` &middot; ${src} &rarr; ${dst}` : ''}</span>
-                <span class="status ${cls}"><span class="led led-${cls === 'bad' ? 'danger' : cls === 'warn' ? 'warning' : 'success'}"></span>${escapeHtml((a.severity || '—').toString())}</span>
-            </div>`;
-        }).join('');
-    }
-
-    // --- SEDI MULTI-SITO, TAB MCP SERVER: MOVED to static/js/settings.js
-
-    // MOVED to static/js/topology.js
-
-    // --- TERMINAL CLI INTERACTIVE (WebSockets + Xterm.js) ---
-
-    let termInstance = null;
-    let wsSocket = null;
-
-    async function openCliModal(ip) {
-        // xterm non sta piu' in <head>: si inietta al primo avvio della CLI
-        // (loader in static/js/core.js). ~280KB in meno al primo paint.
-        await Promise.all([
-            loadAssetOnce('/static/vendor/xterm/xterm.css'),
-            loadAssetOnce('/static/vendor/xterm/xterm.js'),
-        ]);
-        document.getElementById("cliTargetIp").innerText = ip;
-        document.getElementById("cliModalOverlay").style.display = "flex";
-
-        const container = document.getElementById("terminal-container");
-        container.innerHTML = "";
-
-        termInstance = new Terminal({
-            cursorBlink: true,
-            theme: {
-                background: cssVar('--surface-2', '#181e23'),
-                foreground: cssVar('--text', '#e8ebe6'),
-                cursor: cssVar('--lamp-up', '#56c07a'),
-                selection: cssVar('--surface-3', '#2a333a')
-            },
-            fontFamily: "'Azeret Mono', Menlo, monospace",
-            fontSize: 14,
-            rows: 24,
-            cols: 80
-        });
-        termInstance.registerLinkProvider({
-            provideLinks: (y, cb) => {
-                const line = termInstance.buffer.active.getLine(y - 1);
-                if (!line) { cb([]); return; }
-                const text = line.translateToString(true);
-                const rx = /(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}|(?:[0-9a-fA-F]{4}\.){2}[0-9a-fA-F]{4}/g;
-                const links = [];
-                let m;
-                while ((m = rx.exec(text)) !== null) {
-                    links.push({
-                        range: { start: { x: m.index + 1, y }, end: { x: m.index + m[0].length, y } },
-                        text: m[0],
-                        activate: (e, t) => macLocate(t)
-                    });
-                }
-                cb(links);
-            }
-        });
-        termInstance.open(container);
-        termInstance.write(currentLang === 'en' ? "Initializing terminal session...\r\n" : "Inizializzazione sessione terminale...\r\n");
-
-        // Fetch a single-use OTP before opening the WebSocket
-        const otpRes = await apiFetch("/api/ws-token", { method: "POST" });
-        if (!otpRes || !otpRes.ok) {
-            termInstance.write(currentLang === 'en' ? "[Error] Unable to obtain OTP token — JWT session expired or invalid.\r\n" : "[Errore] Impossibile ottenere il token OTP — sessione JWT scaduta o non valida.\r\n");
-            return;
-        }
-        const { ws_token } = await otpRes.json();
-
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl = `${protocol}//${window.location.host}/api/ws-terminal/${ip}?token=${encodeURIComponent(ws_token)}`;
-
-        wsSocket = new WebSocket(wsUrl);
-
-        wsSocket.onopen = () => {
-            termInstance.write(currentLang === 'en' ? "[WebSocket connection established]\r\n" : "[Connessione WebSocket stabilita]\r\n");
-        };
-        wsSocket.onmessage = (event) => {
-            termInstance.write(event.data);
-        };
-        wsSocket.onclose = (event) => {
-            const noReason = currentLang === 'en' ? "No reason provided" : "Nessun motivo fornito";
-            termInstance.write(`\r\n[${currentLang === 'en' ? 'Terminal connection closed' : 'Connessione terminale chiusa'}: ${event.reason || noReason}]\r\n`);
-        };
-        wsSocket.onerror = () => {
-            termInstance.write(currentLang === 'en' ? `\r\n[WebSocket Error] Connection interrupted.\r\n` : `\r\n[Errore WebSocket] Connessione interrotta.\r\n`);
-        };
-        termInstance.onData((data) => {
-            if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
-                wsSocket.send(data);
-            }
-        });
-    }
-
-    function closeCliModal() {
-        document.getElementById("cliModalOverlay").style.display = "none";
-
-        // Rilascio pulito delle risorse per evitare memory leak e connessioni orfane
-        if (wsSocket) {
-            try {
-                wsSocket.close();
-            } catch (e) {
-                console.error("Errore durante la chiusura del WebSocket:", e);
-            }
-            wsSocket = null;
-        }
-
-        if (termInstance) {
-            try {
-                termInstance.dispose();
-            } catch (e) {
-                console.error("Errore durante il dispose di Xterm.js:", e);
-            }
-            termInstance = null;
-        }
-    }
-
-    // --- GESTIONE UTENTI, IMPOSTAZIONI (network/app-adv/CLI blacklist): MOVED to static/js/settings.js
-
-    // MOVED to static/js/observability.js
-
-    // --- INVIO COMANDI MASSIVO (BULK) ---
-
-    let _bulkJobInterval = null;
-
-    function openBulkCommandModal() {
-        // Popola il filtro gruppo
-        const gf = document.getElementById('bulkGroupFilter');
-        gf.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
-            Object.keys(globalGroups).map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
-        gf.value = 'all';
-
-        document.getElementById('bulkSelectAll').checked = false;
-        document.getElementById('bulkMode').value = 'exec';
-        document.getElementById('bulkSave').checked = false;
-        document.getElementById('bulkCommands').value = '';
-        document.getElementById('bulkResults').style.display = 'none';
-        document.getElementById('bulkResultsList').innerHTML = '';
-        document.getElementById('bulkStatus').textContent = '';
-        const btn = document.getElementById('btnBulkRun');
-        btn.disabled = false;
-        btn.innerHTML = i18n[currentLang].btnBulkRun;
-
-        renderBulkTargets();
-        document.getElementById('bulkCommandModal').style.display = 'flex';
-    }
-
-    function closeBulkCommandModal() {
-        if (_bulkJobInterval) { clearInterval(_bulkJobInterval); _bulkJobInterval = null; }
-        document.getElementById('bulkCommandModal').style.display = 'none';
-    }
-
-    function renderBulkTargets() {
-        const group = document.getElementById('bulkGroupFilter').value;
-        // Preserva le selezioni correnti durante il re-render
-        const checked = new Set(getSelectedBulkIps());
-        const list = document.getElementById('bulkTargetList');
-        const rows = globalDevices
-            .filter(d => group === 'all' || d.Group === group)
-            .map(d => {
-                const isOn = checked.has(d.IP) ? 'checked' : '';
-                const hn = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>';
-                return `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-radius:0;">
-                    <input type="checkbox" class="bulk-target" value="${escapeHtml(d.IP)}" ${isOn} onchange="syncBulkSelectAll()">
-                    <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(d.IP)}</span>
-                    <span>${hn}</span>
-                    <span class="badge" style="margin-left:auto;">${escapeHtml(d.Group)}</span>
-                </label>`;
-            }).join('');
-        list.innerHTML = rows || `<div style="padding:12px; color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No devices in this tenant.' : 'Nessun dispositivo in questo tenant.'}</div>`;
-        syncBulkSelectAll();
-    }
-
-    function toggleAllBulkTargets(on) {
-        document.querySelectorAll('#bulkTargetList .bulk-target').forEach(cb => { cb.checked = on; });
-    }
-
-    function syncBulkSelectAll() {
-        const boxes = [...document.querySelectorAll('#bulkTargetList .bulk-target')];
-        const all = boxes.length > 0 && boxes.every(cb => cb.checked);
-        document.getElementById('bulkSelectAll').checked = all;
-    }
-
-    function getSelectedBulkIps() {
-        return [...document.querySelectorAll('#bulkTargetList .bulk-target:checked')].map(cb => cb.value);
-    }
-
-    async function startBulkCommand() {
-        if (_bulkJobInterval) { clearInterval(_bulkJobInterval); _bulkJobInterval = null; }
-
-        const ips = getSelectedBulkIps();
-        const commands = document.getElementById('bulkCommands').value;
-        const mode = document.getElementById('bulkMode').value;
-        const save = document.getElementById('bulkSave').checked;
-
-        if (ips.length === 0) { alert(currentLang === 'en' ? 'Select at least one device.' : 'Seleziona almeno un dispositivo.'); return; }
-        if (!commands.trim()) { alert(currentLang === 'en' ? 'Enter at least one command.' : 'Inserisci almeno un comando.'); return; }
-
-        const btn = document.getElementById('btnBulkRun');
-        btn.disabled = true;
-        btn.innerHTML = currentLang === 'en' ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Sending...' : '<i class="fa-solid fa-circle-notch fa-spin"></i> Invio in corso...';
-        document.getElementById('bulkResults').style.display = 'block';
-        document.getElementById('bulkResultsList').innerHTML = '';
-        document.getElementById('bulkProgressBar').style.transform = 'scaleX(0)';
-        document.getElementById('bulkStatus').textContent = currentLang === 'en' ? 'Starting...' : 'Avvio...';
-
-        const res = await apiFetch('/api/bulk-command', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ips, commands, mode, save }),
-        });
-        if (!res || !res.ok) {
-            const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
-            document.getElementById('bulkStatus').textContent =
-                (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || '');
-            btn.disabled = false;
-            btn.innerHTML = i18n[currentLang].btnBulkRun;
-            return;
-        }
-        const { job_id, total } = await res.json();
-        pollBulkJob(job_id, total);
-    }
-
-    function pollBulkJob(jobId, total) {
-        _bulkJobInterval = setInterval(async () => {
-            const res = await apiFetch(`/api/bulk-command/${jobId}`);
-            if (!res || !res.ok) {
-                clearInterval(_bulkJobInterval); _bulkJobInterval = null;
-                const b = document.getElementById('btnBulkRun');
-                b.disabled = false; b.innerHTML = i18n[currentLang].btnBulkRun;
-                return;
-            }
-            const data = await res.json();
-            const pct = total > 0 ? Math.round((data.progress / total) * 100) : 0;
-            document.getElementById('bulkProgressBar').style.transform = `scaleX(${pct / 100})`;
-            document.getElementById('bulkStatus').textContent =
-                currentLang === 'en' ? `Running — ${data.progress}/${total} devices...` : `In corso — ${data.progress}/${total} dispositivi...`;
-            renderBulkResults(data.results || []);
-
-            if (data.status !== 'running') {
-                clearInterval(_bulkJobInterval); _bulkJobInterval = null;
-                document.getElementById('bulkProgressBar').style.transform = 'scaleX(1)';
-                const ok  = (data.results || []).filter(r => r.result && r.result.status === 'success').length;
-                const err = (data.results || []).length - ok;
-                document.getElementById('bulkStatus').textContent =
-                    currentLang === 'en' ? `Completed — ${ok} ok, ${err} errors.` : `Completato — ${ok} ok, ${err} errori.`;
-                const b = document.getElementById('btnBulkRun');
-                b.disabled = false; b.innerHTML = i18n[currentLang].btnBulkRun;
-            }
-        }, 1500);
-    }
-
-    function renderBulkResults(results) {
-        const list = document.getElementById('bulkResultsList');
-        list.innerHTML = results.map(r => {
-            const ok = r.result && r.result.status === 'success';
-            const body = ok ? (r.result.output || '') : (r.result ? (r.result.message || '') : '');
-            return `<details style="border-bottom:1px solid var(--border);">
-                <summary style="padding:8px 12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:12px; list-style:none;">
-                    <span style="color:${ok ? 'var(--success)' : 'var(--danger)'}; font-weight:700;">${ok ? 'OK' : 'KO'}</span>
-                    <strong>${escapeHtml(r.hostname || r.ip)}</strong>
-                    <span style="font-family:var(--font-code); color:var(--text-muted);">${escapeHtml(r.ip)}</span>
-                </summary>
-                <pre style="margin:0; padding:10px 12px; background:var(--surface); color:var(--text); font-family:var(--font-code); font-size:11px; white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto;">${escapeHtml(body) || '<span style="color:var(--text-muted)">—</span>'}</pre>
-            </details>`;
-        }).join('');
-    }
-
-    // Chiusura del modale Bulk: backdrop e tasto Escape
-    document.getElementById('bulkCommandModal').addEventListener('click', e => {
-        if (e.target === e.currentTarget) closeBulkCommandModal();
-    });
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && document.getElementById('bulkCommandModal').style.display === 'flex') {
-            closeBulkCommandModal();
-        }
-    });
-
-    // MOVED to static/js/devices.js
-
-    // MOVED to static/js/client-map.js
-
-
-    // MOVED to static/js/config-analyzer.js
-
-    // --- VULNERABILITY ADVISORY (EUVD) ---
-
-    // MOVED to static/js/threat-intel.js
-
-
-    // MOVED to static/js/devices.js
-
-    // MOVED to static/js/ai.js
-
-    // MOVED to static/js/observability.js
-
-    window.onload = () => {
-        appInit();
-    };
-  </script>
+  <script src="/static/js/home.js"></script>
+  <script src="/static/js/cli-modal.js"></script>
+  <script src="/static/js/bulk-command.js"></script>
+  <script src="/static/js/boot-app.js"></script>
 </body>
 </html>

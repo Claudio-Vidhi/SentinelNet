@@ -50,7 +50,9 @@ class TestEndpointShell(unittest.TestCase):
 
     def test_the_nav_item_points_at_the_merged_tab(self):
         self.assertIn('data-tabs="tab-endpoint"', self.html)
-        self.assertIn("switchTab('tab-endpoint', this)", self.html)
+        # CSP senza 'unsafe-inline': la nav non porta piu' onclick, il click
+        # e' delegato in core.js sull'attributo data-tab.
+        self.assertIn('data-tab="tab-endpoint"', self.html)
 
 
 class TestPanesHoldTheContent(unittest.TestCase):

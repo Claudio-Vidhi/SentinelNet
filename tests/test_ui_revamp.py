@@ -316,11 +316,16 @@ class TestSidebarIA(unittest.TestCase):
         # every existing tab still reachable (tab-home is deferred to Task 3).
         # tab-mac and tab-clientmap merged into tab-endpoint (with tab-diagnosi
         # and tab-endpoints, which were never individually listed here).
+        # CSP senza 'unsafe-inline': i controlli non portano piu' onclick ma
+        # data-tab (nav) / data-switch-tab (altri pulsanti); il click e'
+        # delegato in core.js.
         for tab in ("tab-devices", "tab-endpoint", "tab-flows",
                     "tab-map", "tab-map-interactive", "tab-categories", "tab-security",
                     "tab-config", "tab-ai", "tab-provisioner", "tab-import", "tab-groups",
                     "tab-users", "tab-sites", "tab-mcp", "tab-settings"):
-            self.assertIn(f"switchTab('{tab}'", html)
+            self.assertTrue(
+                f'data-tab="{tab}"' in html or f'data-switch-tab="{tab}"' in html,
+                f"nessun controllo apre piu' {tab}")
         # RBAC preserved on gated nav
         self.assertIn('requires-admin', html)
         self.assertIn('requires-write', html)
@@ -361,18 +366,21 @@ class TestHomeTab(unittest.TestCase):
         # Home tab body + startup default
         self.assertIn('id="tab-home"', html)
         self.assertIn('<div id="tab-home" class="tab-content active">', html)
-        # loadHome function present
-        self.assertIn('function loadHome', html)
-        # Home nav-item present and active
-        self.assertIn("switchTab('tab-home'", html)
+        # loadHome function present -- moved to static/js/home.js (blocco
+        # inline estratto per la CSP senza 'unsafe-inline'): si asserts sul
+        # frontend concatenato, non sul solo HTML.
+        js = frontend_source()
+        self.assertIn('function loadHome', js)
+        # Home nav-item present and active (CSP: data-tab, click delegato)
+        self.assertIn('data-tab="tab-home"', html)
         self.assertIn('data-i18n="tabHome"', html)
         # runtime-populated ids
         for eid in ('homeKpiOnline', 'homeKpiAttention',
                     'homeAttentionBody', 'homeAnomSummary'):
             self.assertIn(f'id="{eid}"', html)
         # Home wires only to REAL endpoints
-        self.assertIn('/api/local-devices', html)
-        self.assertIn('/api/observability/anomalies', html)
+        self.assertIn('/api/local-devices', js)
+        self.assertIn('/api/observability/anomalies', js)
         # startGroupTriage('all') moved to static/js/devices.js -- frontend_source()
         # concatenates dashboard.html + all static js/css.
         js = frontend_source()
@@ -1260,10 +1268,11 @@ class TestImportTabRestyle(unittest.TestCase):
     def test_rbac_preserved(self):
         html = _html()
         # Precedent from Task 14 (provisioner): the tab is gated at the nav
-        # entry (`nav-item requires-write` on the switchTab('tab-import', ...)
-        # button), so the tab body itself carries no write-gate class.
+        # entry (`nav-item requires-write` on the button that opens
+        # tab-import), so the tab body itself carries no write-gate class.
+        # CSP: la nav porta data-tab invece di onclick.
         self.assertIn(
-            "class=\"nav-item requires-write\" onclick=\"switchTab('tab-import', this)\"",
+            "class=\"nav-item requires-write\" data-tab=\"tab-import\"",
             html)
 
     def test_tab_uses_component_classes(self):
@@ -1340,7 +1349,7 @@ class TestUsersTabRestyle(unittest.TestCase):
         # Precedent from Task 14/15 (provisioner/import): the tab is gated at
         # the nav entry, so the tab body itself carries no requires-admin gate.
         self.assertIn(
-            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-users', this)\"",
+            "class=\"nav-item requires-admin\" data-tab=\"tab-users\"",
             html)
         tab = self._tab(html)
         self.assertNotIn('requires-admin', tab)
@@ -1427,7 +1436,7 @@ class TestSitesTabRestyle(unittest.TestCase):
         # Precedent from Task 14-16: the tab is gated at the nav entry, so the
         # tab body itself carries no requires-admin gate.
         self.assertIn(
-            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-sites', this)\"",
+            "class=\"nav-item requires-admin\" data-tab=\"tab-sites\"",
             html)
         tab = self._tab(html)
         self.assertNotIn('requires-admin', tab)
@@ -1532,7 +1541,7 @@ class TestMcpTabRestyle(unittest.TestCase):
         self.assertRegex(
             html,
             r'<button class="nav-item requires-admin"[^>]*'
-            r'onclick="switchTab\(\'tab-mcp\', this\)"')
+            r'data-tab="tab-mcp"')
         tab = self._tab(html)
         self.assertNotIn('requires-admin', tab)
 
@@ -1657,7 +1666,7 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # loadAppSettings()/etc. moved to static/js/settings.js.
         html = frontend_source()
         self.assertIn(
-            "class=\"nav-item requires-admin\" onclick=\"switchTab('tab-settings', this)\"",
+            "class=\"nav-item requires-admin\" data-tab=\"tab-settings\"",
             html)
         # The ping-monitor, observability and application panels stay
         # admin-gated in-body (3 gates: one per admin-only concern).
@@ -1853,7 +1862,7 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertNotIn('<span class="status ok">${s}</span>', html)
         self.assertIn('`<span class="status ok">${escapeHtml(st)}</span>`', html)
         # Flussi Live non e' piu' in preview: la voce di menu non porta badge.
-        nav = html[html.index("switchTab('tab-flows'"):]
+        nav = html[html.index('data-tab="tab-flows"'):]
         self.assertNotIn('<span class="preview-badge">preview</span>', nav[:400])
 
     def test_i18n_keys_both_langs(self):
@@ -2556,13 +2565,14 @@ class TestSidebarRail(unittest.TestCase):
                           ('tab-mcp', 'requires-admin'),
                           ('tab-settings', 'requires-admin')):
             # Il gate RBAC vive sulla voce di nav che apre il tab: direttamente
-            # (onclick) oppure, per i tab accorpati, sulla voce del gruppo che
-            # lo dichiara in data-tabs. I sotto-tab non portano gate: stanno
-            # gia' dentro una regione gated (stessa regola di TestMcpTabRestyle,
-            # "il corpo del tab non porta requires-admin").
+            # (data-tab, click delegato in core.js dalla CSP in poi) oppure,
+            # per i tab accorpati, sulla voce del gruppo che lo dichiara in
+            # data-tabs. I sotto-tab non portano gate: stanno gia' dentro una
+            # regione gated (stessa regola di TestMcpTabRestyle, "il corpo del
+            # tab non porta requires-admin").
             direct = re.search(
-                r'<button class="nav-item([^"]*)"[^>]*onclick="switchTab\(\''
-                + tab + r'\'', self.html)
+                r'<button class="nav-item([^"]*)"[^>]*data-tab="'
+                + tab + r'"', self.html)
             grouped = re.search(
                 r'<button class="nav-item([^"]*)"[^>]*data-tabs="[^"]*\b'
                 + tab + r'\b', self.html)
@@ -2593,13 +2603,17 @@ class TestSidebarRail(unittest.TestCase):
     def test_state_restored_before_first_paint(self):
         # Restoring at DOMContentLoaded would paint the expanded sidebar and
         # then animate it shut. The restore must run in markup order BEFORE
-        # the <aside> is parsed.
-        restore = self.html.find("localStorage.getItem('sidebarCollapsed') === '1'")
-        self.assertNotEqual(restore, -1, "no pre-paint restore of the collapsed state")
-        self.assertIn("document.body.classList.add('sidebar-collapsed')",
-                      self.html[restore:restore + 250])
-        self.assertLess(restore, self.html.find('<aside'),
+        # the <aside> is parsed. Lo script ora vive in un file esterno
+        # (CSP senza 'unsafe-inline'): la posizione del tag non cambia.
+        tag = self.html.find('src="/static/js/boot-sidebar.js"')
+        self.assertNotEqual(tag, -1, "no pre-paint restore of the collapsed state")
+        self.assertLess(tag, self.html.find('<aside'),
                         "collapsed state must be restored before <aside> is parsed")
+        with open(os.path.join("static", "js", "boot-sidebar.js"),
+                  encoding="utf-8") as f:
+            boot = f.read()
+        self.assertIn("localStorage.getItem('sidebarCollapsed') === '1'", boot)
+        self.assertIn("document.body.classList.add('sidebar-collapsed')", boot)
 
     # --- tooltips -----------------------------------------------------------
 
