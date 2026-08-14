@@ -1892,8 +1892,15 @@
     function attrEsc(s) { return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
 
     async function loadCategoriesData() {
+        const devList = document.getElementById("categoriesDeviceList");
+        if (!categoriesData && devList && devList.innerHTML.trim() === '') {
+            devList.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top:10px; font-size:13px;">${currentLang === 'en' ? 'Scanning backups and classifying devices...' : 'Analisi backup e classificazione dispositivi in corso...'}</p></div>`;
+        }
         const res = await apiFetch("/api/device-classification");
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) {
+            if (devList && !categoriesData) devList.innerHTML = '';
+            return;
+        }
         categoriesData = await res.json();
         categoriesData.vendors = categoriesData.vendors || [];
         categoriesData.models = categoriesData.models || {};

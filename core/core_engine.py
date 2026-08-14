@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import logging
 import socket
 from typing import Optional, Any, Dict, List, Tuple
@@ -1612,9 +1613,12 @@ def get_portchannel_report(group_filter=None) -> list:
 # The cache is invalidated by an economical "signature" (count + max mtime of the
 # backups, mtime of the category-assignments file) computed with a single
 # os.walk/stat pass, much lighter than the full scan it replaces.
-_netmap_cache: dict = {"sig": None, "by_filter": {}}
+_netmap_cache: dict = {"sig": None, "by_filter": {}, "sig_ts": 0.0, "last_sig": None}
 
 def _netmap_signature():
+    now = time.time()
+    if _netmap_cache.get("last_sig") is not None and (now - _netmap_cache.get("sig_ts", 0)) < 4.0:
+        return _netmap_cache["last_sig"]
     count = 0
     max_mtime = 0.0
     if os.path.exists(BACKUP_FOLDER):
@@ -1633,7 +1637,10 @@ def _netmap_signature():
         cat_mtime = os.path.getmtime(CATEGORIES_FILE)
     except OSError:
         cat_mtime = 0.0
-    return (count, max_mtime, cat_mtime)
+    sig = (count, max_mtime, cat_mtime)
+    _netmap_cache["last_sig"] = sig
+    _netmap_cache["sig_ts"] = now
+    return sig
 
 
 def _enrich_map_with_redundancy(data: dict) -> dict:

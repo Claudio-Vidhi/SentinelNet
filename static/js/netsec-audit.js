@@ -18,6 +18,8 @@
     // Piattaforma riconosciuta nella configurazione analizzata: decide quali
     // regole il motore ha eseguito, quindi va detto nel report.
     let _auditVendor = null;
+    let _auditDeviceName = '';
+    let _auditBenchmarkName = '';
 
     // Un file caricato diventa una VOCE della tendina dei dispositivi, non uno
     // stato nascosto. Prima il testo restava in una variabile e vinceva sempre
@@ -580,9 +582,9 @@
 
         const benchSel = document.getElementById('auditBenchmarkSelect');
         const benchmarkKey = benchSel ? benchSel.value : 'cis';
-        const benchmark = benchSel ? benchSel.options[benchSel.selectedIndex].text : 'CIS';
+        const benchmark = _auditBenchmarkName || (benchSel ? benchSel.options[benchSel.selectedIndex].text : 'CIS');
         const devSel = document.getElementById('auditDeviceSelect');
-        const device = devSel ? devSel.options[devSel.selectedIndex].text : '—';
+        const device = _auditDeviceName || (devSel ? devSel.options[devSel.selectedIndex].text : '—');
 
         let rules = _auditRules;
         let summary = _auditSummary;
@@ -879,8 +881,9 @@ ${partialBanner}
                     <td style="font-size:11px; font-weight:700; color:${gradeColor};">${escapeHtml(gradeStr)}</td>
                     <td style="font-size:12px; color:var(--text-muted);">${actor}</td>
                     <td>
-                        <button class="btn btn-secondary" data-action="open-audit-run" data-run-id="${r.id}" style="padding:2px 8px; font-size:11px; margin:0 4px 0 0;" data-i18n="auditHistoryOpen">Apri</button>
-                        <button class="btn btn-secondary requires-admin" data-action="delete-audit-run" data-run-id="${r.id}" style="padding:2px 8px; font-size:11px; margin:0; color:var(--danger);" data-i18n="auditHistoryDelete">Elimina</button>
+                        <button class="btn btn-secondary btn-small" data-action="open-audit-run" data-run-id="${r.id}" style="padding:2px 8px; font-size:11px; margin:0 4px 0 0;" title="Apri Matrice Risultati"><i class="fa-solid fa-table-list"></i> Apri</button>
+                        <button class="btn btn-secondary btn-small" data-action="view-audit-report" data-run-id="${r.id}" style="padding:2px 8px; font-size:11px; margin:0 4px 0 0;" title="Anteprima Relazione Compliance"><i class="fa-solid fa-file-lines"></i> Report</button>
+                        <button class="btn btn-secondary btn-small requires-admin" data-action="delete-audit-run" data-run-id="${r.id}" style="padding:2px 8px; font-size:11px; margin:0; color:var(--danger);" title="Elimina dallo storico"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 </tr>`;
             }).join('');
@@ -921,7 +924,7 @@ ${partialBanner}
         }
     }
 
-    async function openAuditRun(id) {
+    async function openAuditRun(id, openReport = false) {
         try {
             const res = await apiFetch(`/api/netsec-audit/history/${id}`);
             if (!res || !res.ok) {
@@ -933,9 +936,20 @@ ${partialBanner}
             _auditSummary = data.summary || null;
             _auditScore = (data.score === undefined) ? null : data.score;
             _auditVendor = data.vendor || null;
+            _auditDeviceName = data.device_name || data.run_name || data.device_ip || 'Audit';
+            _auditBenchmarkName = data.benchmark_title || data.benchmark || 'CIS';
             renderAuditOverview();
             renderAuditRulesTable();
             showToast(currentLang === 'en' ? 'Audit run loaded from history.' : 'Run di audit caricata dallo storico.', 'info');
+
+            if (openReport) {
+                exportAuditReport();
+            } else {
+                const target = document.getElementById('auditRulesTableBody')?.closest('.panel') || document.getElementById('auditRulesTableBody');
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
         } catch (e) {
             console.error('openAuditRun error:', e);
             showToast(currentLang === 'en' ? 'Unable to load audit run.' : 'Impossibile caricare la run di audit.', 'error');
@@ -996,7 +1010,12 @@ ${partialBanner}
     document.getElementById('auditHistoryTableBody')?.addEventListener('click', (e) => {
         const openBtn = e.target.closest('[data-action="open-audit-run"]');
         if (openBtn && openBtn.dataset.runId) {
-            openAuditRun(Number(openBtn.dataset.runId));
+            openAuditRun(Number(openBtn.dataset.runId), false);
+            return;
+        }
+        const repBtn = e.target.closest('[data-action="view-audit-report"]');
+        if (repBtn && repBtn.dataset.runId) {
+            openAuditRun(Number(repBtn.dataset.runId), true);
             return;
         }
         const delBtn = e.target.closest('[data-action="delete-audit-run"]');
