@@ -18,7 +18,7 @@
             !tenant || (d.Group || 'Generale') === tenant);
         box.innerHTML = devices.length ? devices.map(d =>
             `<label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:4px 8px;">
-                <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''} onchange="updateAiDeviceBtnLabel()" style="accent-color:var(--primary);">
+                <input type="checkbox" class="ai-attach-device" value="${escapeHtml(d.IP)}"${cur.has(d.IP) ? ' checked' : ''} style="accent-color:var(--primary);">
                 <span>${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)})</span>
             </label>`
         ).join('') : `<span style="color:var(--text-muted); padding:4px 8px; display:block;">${i18n[currentLang].msgAiNoDevices || 'Nessun dispositivo'}</span>`;
@@ -101,11 +101,11 @@
         }
         const untitled = i18n[currentLang].lblAiUntitledChat || 'Nuova conversazione';
         box.innerHTML = aiConversations.map(c => `
-            <div class="ai-conv-item${c.id === aiConvId ? ' active' : ''}" onclick="openAiConversation(${Number(c.id)})">
+            <div class="ai-conv-item${c.id === aiConvId ? ' active' : ''}" data-action="open-conv" data-conv-id="${Number(c.id)}">
                 <i class="fa-regular fa-comment" style="font-size:11px;"></i>
                 <span class="ai-conv-title" title="${escapeHtml(c.title || untitled)}">${escapeHtml(c.title || untitled)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${escapeHtml(fmtAiConvTime(c.updated_ts))}</span>
-                <button class="ai-conv-del" onclick="event.stopPropagation(); deleteAiConversation(${Number(c.id)})"
+                <button class="ai-conv-del" data-action="delete-conv" data-conv-id="${Number(c.id)}"
                         title="${escapeHtml(i18n[currentLang].btnAiDeleteChat || 'Elimina conversazione')}">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -395,7 +395,7 @@
                 : (p.api_key_set
                     ? `<span style="color:var(--success);" title="${escapeHtml(L.lblAiKeySet || 'API key impostata')}"><i class="fa-solid fa-key"></i></span>`
                     : `<span style="color:var(--warning, var(--lamp-warn));" title="${escapeHtml(L.lblAiKeyMissing || 'API key mancante')}"><i class="fa-solid fa-triangle-exclamation"></i></span>`);
-            return `<div class="ai-profile-card${p.id === editing ? ' editing' : ''}" onclick="selectAiProfileCard('${escapeHtml(jsStr(p.id))}')">
+            return `<div class="ai-profile-card${p.id === editing ? ' editing' : ''}" data-action="select-profile" data-profile-id="${escapeHtml(p.id)}">
                 <div class="ai-prof-top">
                     <i class="${AI_PROVIDER_ICONS[p.provider] || 'fa-solid fa-robot'}" style="color:var(--primary); width:14px;"></i>
                     <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(p.name)}</span>
@@ -405,7 +405,7 @@
                     ${keyChip}
                     <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(p.model || L.optAiModelCustom || '—')}</span>
                 </div>
-                ${active ? '' : `<button type="button" class="ai-prof-activate" onclick="event.stopPropagation(); activateAiProfileCard('${escapeHtml(jsStr(p.id))}')">${escapeHtml(L.btnAiActivateProfile || 'Rendi attivo')}</button>`}
+                ${active ? '' : `<button type="button" class="ai-prof-activate" data-action="activate-profile" data-profile-id="${escapeHtml(p.id)}">${escapeHtml(L.btnAiActivateProfile || 'Rendi attivo')}</button>`}
             </div>`;
         }).join('');
     }
@@ -803,3 +803,79 @@
     window.populateGenCfgTemplates = populateGenCfgTemplates;
     window.generateSwitchConfig = generateSwitchConfig;
     window.copyGenCfgOutput = copyGenCfgOutput;
+
+    // Delegated event listeners for AI tab
+    document.getElementById('aiAttachDeviceList')?.addEventListener('change', (e) => {
+        if (e.target.classList.contains('ai-attach-device')) {
+            updateAiDeviceBtnLabel();
+        }
+    });
+
+    document.getElementById('aiConvList')?.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('[data-action="delete-conv"]');
+        if (delBtn && delBtn.dataset.convId) {
+            e.stopPropagation();
+            deleteAiConversation(Number(delBtn.dataset.convId));
+            return;
+        }
+        const openItem = e.target.closest('[data-action="open-conv"]');
+        if (openItem && openItem.dataset.convId) {
+            openAiConversation(Number(openItem.dataset.convId));
+            return;
+        }
+    });
+
+    document.getElementById('aiProfileCards')?.addEventListener('click', (e) => {
+        const actBtn = e.target.closest('[data-action="activate-profile"]');
+        if (actBtn && actBtn.dataset.profileId) {
+            e.stopPropagation();
+            activateAiProfileCard(actBtn.dataset.profileId);
+            return;
+        }
+        const selCard = e.target.closest('[data-action="select-profile"]');
+        if (selCard && selCard.dataset.profileId) {
+            selectAiProfileCard(selCard.dataset.profileId);
+            return;
+        }
+    });
+
+    document.getElementById('aiProfileSelect')?.addEventListener('change', onAiProfileSelectChange);
+    document.getElementById('aiProfileEditSelect')?.addEventListener('change', onAiProfileEditSelectChange);
+    document.getElementById('aiProvider')?.addEventListener('change', resetAiModelList);
+    document.getElementById('btnAiRefreshModels')?.addEventListener('click', refreshAiModels);
+    document.getElementById('btnAiSaveSettings')?.addEventListener('click', saveAiSettings);
+    document.getElementById('btnAiDeleteProfile')?.addEventListener('click', deleteAiProfile);
+    document.getElementById('btnAiNewChat')?.addEventListener('click', newAiConversation);
+    document.getElementById('btnAiRenameChat')?.addEventListener('click', renameAiConversation);
+    document.getElementById('btnAiDeleteChat')?.addEventListener('click', deleteCurrentAiConversation);
+    document.getElementById('aiAttachTenant')?.addEventListener('change', populateAiAttachDevices);
+    document.getElementById('aiAttachDeviceBtn')?.addEventListener('click', toggleAiDeviceDropdown);
+
+    document.getElementById('aiChatInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendAiChat();
+        }
+    });
+    document.getElementById('btnAiSend')?.addEventListener('click', sendAiChat);
+
+    document.getElementById('tab-ai')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="ai-select-all-devices"]')) {
+            setAllAiAttachDevices(true);
+            return;
+        }
+        if (e.target.closest('[data-action="ai-deselect-all-devices"]')) {
+            setAllAiAttachDevices(false);
+            return;
+        }
+        const newProf = e.target.closest('[data-action="select-profile"][data-profile-id="__new__"]');
+        if (newProf) {
+            selectAiProfileCard('__new__');
+            return;
+        }
+    });
+
+    document.getElementById('genCfgTenant')?.addEventListener('change', populateGenCfgTemplates);
+    document.getElementById('btnGenCfg')?.addEventListener('click', generateSwitchConfig);
+    document.getElementById('btnGenCfgCopy')?.addEventListener('click', copyGenCfgOutput);
+

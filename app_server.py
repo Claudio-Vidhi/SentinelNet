@@ -137,7 +137,7 @@ _CSP = (
     # tests/test_csp.py, which is the point: decide about the isolated site
     # first.
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
+    "script-src 'self'; "
     "style-src 'self' 'unsafe-inline'; "
     "font-src 'self'; "
     "img-src 'self' data:; "

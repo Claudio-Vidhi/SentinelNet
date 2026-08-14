@@ -660,9 +660,9 @@ class TestThreatIntelTabRestyle(unittest.TestCase):
         # startThreatScan()), plus the filter controls that feed it.
         for _id in ('threatGroupSelect', 'threatIncludeDiscovered', 'securityTriageContainer'):
             self.assertIn(f'id="{_id}"', html)
-        # onclick hooks preserved verbatim
-        for hook in ('startThreatScan()',):
-            self.assertIn(hook, html)
+        src = frontend_source()
+        for hook in ('startThreatScan',):
+            self.assertIn(hook, src)
 
     def test_endpoint_contract_present(self):
         # loadThreatIntel/startThreatScan/runEuvdQuery moved to
@@ -714,9 +714,10 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
                     'macResults',
                     'kpiMacSightings', 'kpiMacUniqueMacs', 'kpiMacSwitches', 'kpiMacRetention'):
             self.assertIn(f'id="{_id}"', html)
-        for hook in ('runMacScan()', 'macSearch()', 'macSearchReset()', 'saveMacOverride()',
-                     'saveMacRetention()'):
-            self.assertIn(hook, html)
+        src = frontend_source()
+        for hook in ('runMacScan', 'macSearch', 'macSearchReset', 'saveMacOverride',
+                     'saveMacRetention'):
+            self.assertIn(hook, src)
         # RBAC preserved: scan is requires-write, retention is requires-admin
         self.assertIn('id="btnMacScan"', html)
         scan_start = html.index('id="btnMacScan"')
@@ -743,8 +744,8 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
                     'arpFilterGateway', 'arpStats', 'arpScanSummary',
                     'arpResults', 'kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'):
             self.assertIn(f'id="{_id}"', html)
-        for hook in ('runArpScan()', 'arpClientSearch()', 'arpSearchReset()',
-                     'populateArpScanDevices()'):
+        for hook in ('runArpScan', 'arpClientSearch', 'arpSearchReset',
+                     'populateArpScanDevices'):
             self.assertIn(hook, html)
         # RBAC: the scan action stays write-gated
         self.assertIn('id="btnArpScan"', html)
@@ -757,7 +758,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         # (class + per-item onchange + JS helpers) survived the restyle.
         self.assertIn('class="arp-dev-cb"', html)
         self.assertIn('id="arpDevAll"', html)
-        self.assertIn('onchange="toggleAllArpDevices(this.checked)"', html)
+        self.assertIn('toggleAllArpDevices', html)
         self.assertIn('function selectedArpDevices()', html)
         self.assertIn("querySelectorAll('#arpDeviceList .arp-dev-cb:checked')", html)
 
@@ -840,18 +841,14 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
 
     def test_preserve_ids(self):
         html = _html()
-        # configGroupSelect (filter), caPills (view switcher container queried by
-        # caSwitchView), caResults (render target). caRawRouteModal/Content are
-        # the modal caShowRawRoute()/caCloseRawRouteModal() write into.
+        # IDs preserved
         for _id in ('configGroupSelect', 'caPills', 'caResults',
                     'caRawRouteModal', 'caRawRouteContent'):
             self.assertIn(f'id="{_id}"', html)
-        # onclick / onchange hooks preserved verbatim
-        for hook in ('loadConfigAnalyzer()', 'loadConfigAnalyzer(true)',
-                     "caSwitchView('vlan')", "caSwitchView('routing')",
-                     "caSwitchView('acl')", "caSwitchView('iface')",
-                     "caSwitchView('validation')", 'caCloseRawRouteModal()'):
-            self.assertIn(hook, html)
+        # JS handlers in frontend source
+        js = frontend_source()
+        for hook in ('loadConfigAnalyzer', 'caSwitchView', 'caCloseRawRouteModal'):
+            self.assertIn(hook, js)
         # the five view pills keep their data-view markers
         for view in ('vlan', 'routing', 'acl', 'iface', 'validation'):
             self.assertIn(f'data-view="{view}"', html)
@@ -927,12 +924,12 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
             self.assertIn(f'id="{_id}"', html)
 
     def test_onclick_hooks_preserved(self):
-        html = _html()
-        for hook in ('onAiProfileSelectChange()', 'onAiProfileEditSelectChange()',
-                     'resetAiModelList()', 'refreshAiModels()', 'saveAiSettings()',
-                     'deleteAiProfile()', 'populateAiAttachDevices()',
-                     'toggleAiDeviceDropdown()', 'setAllAiAttachDevices(true)',
-                     'setAllAiAttachDevices(false)', 'sendAiChat()'):
+        html = frontend_source()
+        for hook in ('onAiProfileSelectChange', 'onAiProfileEditSelectChange',
+                     'resetAiModelList', 'refreshAiModels', 'saveAiSettings',
+                     'deleteAiProfile', 'populateAiAttachDevices',
+                     'toggleAiDeviceDropdown', 'setAllAiAttachDevices',
+                     'sendAiChat'):
             self.assertIn(hook, html)
 
     def test_rbac_admin_gating_on_provider_config(self):
@@ -998,7 +995,7 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         self.assertIn('id="aiAttachDeviceList"', html)
         self.assertIn("querySelectorAll('#aiAttachDeviceList .ai-attach-device:checked')", html)
         self.assertIn("class=\"ai-attach-device\"", html)
-        self.assertIn('onchange="updateAiDeviceBtnLabel()"', html)
+        self.assertIn('updateAiDeviceBtnLabel', html)
 
     def test_ai_tab_uses_component_classes(self):
         html = _html()
@@ -1027,9 +1024,9 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         html = _html()
         self.assertIn('id="aiConvList"', html)
         self.assertIn('id="aiChatTitle"', html)
-        for hook in ('newAiConversation()', 'renameAiConversation()',
-                     'deleteCurrentAiConversation()'):
-            self.assertIn(hook, html)
+        self.assertIn('id="btnAiNewChat"', html)
+        self.assertIn('id="btnAiRenameChat"', html)
+        self.assertIn('id="btnAiDeleteChat"', html)
         # La sidebar della chat NON deve essere un <aside>: la regola globale
         # `aside { position:sticky; height:calc(100vh - 40px) }` la renderebbe
         # alta quanto il viewport, sfondando la griglia della chat e spingendo
@@ -1039,6 +1036,9 @@ class TestAiAssistantTabRestyle(unittest.TestCase):
         self.assertNotIn('<aside', tab)
         self.assertIn('<div class="ai-conv-sidebar">', tab)
         js = frontend_source()
+        for hook in ('newAiConversation', 'renameAiConversation',
+                     'deleteCurrentAiConversation'):
+            self.assertIn(hook, js)
         self.assertIn("apiFetch('/api/ai/conversations')", js)
         self.assertIn('`/api/ai/conversations/${Number(id)}`', js)
         self.assertIn('`/api/ai/conversations/${Number(aiConvId)}`', js)
@@ -1750,22 +1750,21 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
                     'flowsColsDropdown', 'anomStatus', 'anomIpFilterChip',
                     'flowDetailPanel', 'flowDetailPanelBody'):
             self.assertIn(f'id="{_id}"', html)
-        for hook in ('flowsTabShown()', 'loadTopTalkers()', 'loadAnomalies()',
-                     'toggleTrafTenantDropdown()', 'toggleTrafTenantAll()',
-                     'toggleFlowsColsDropdown()', 'analyzeFlowsWithAi()',
-                     'clearAnomIpFilter()', 'closeFlowDetailPanel()'):
+        for hook in ('flowsTabShown', 'loadTopTalkers', 'loadAnomalies',
+                     'toggleTrafTenantDropdown', 'toggleTrafTenantAll',
+                     'toggleFlowsColsDropdown', 'analyzeFlowsWithAi',
+                     'clearAnomIpFilter', 'closeFlowDetailPanel'):
             self.assertIn(hook, html)
         # Ids created only by JS (never literal in the static markup).
         for _id in ('flowsSelectAll',):
             self.assertIn(f"id=\\\"{_id}\\\"", html.replace('"', '\\"'))
         # RBAC: the two AI actions stay write-gated.
-        idx = html.index('analyzeFlowsWithAi()')
-        self.assertIn('requires-write', html[html.rindex('<button', 0, idx):idx])
-        self.assertIn('class="btn requires-write" style="text-align:left;" '
-                      'onclick="analyzeSingleFlowWithAi()"', html)
+        idx = html.index('id="btnAnalyzeFlowsAi"')
+        tag_end = html.index('>', idx)
+        self.assertIn('requires-write', html[html.rindex('<button', 0, idx):tag_end])
+        self.assertIn('data-action="detail-ai-flow"', html)
         # Anomaly transitions stay write-gated.
-        self.assertIn('<button class="btn requires-write" style="font-size:11px; '
-                      'padding:3px 8px;" onclick="anomTransition(', html)
+        self.assertIn('data-action="anom-transition"', html)
 
     def test_source_filter_chips_and_column_toggle_survive(self):
         # FLOWS_SOURCES/renderFlowsSourceChips/renderSyslogTable moved to
@@ -1775,14 +1774,14 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # what actually determines the chips, so assert the array itself.
         self.assertIn("const FLOWS_SOURCES = ['all', 'netflow', 'ipfix', 'sflow', 'syslog'];", html)
         self.assertIn("function renderFlowsSourceChips()", html)
-        self.assertIn('onclick="setFlowsSource(', html)
+        self.assertIn('data-action="set-flows-source"', html)
         # Syslog view swaps thead + tbody renderers.
         self.assertIn("if (_flowsSource === 'syslog')", html)
         # Dual-target: main table (syslog view) or the all-sources section below the flows.
         self.assertIn("function renderSyslogTable(tbodyId = 'flowsTableBody')", html)
         # Column-visibility toggle + its persistence.
         self.assertIn("const FLOW_TOGGLE_COLS = [", html)
-        self.assertIn("onchange=\"toggleFlowsCol('${c.id}', this.checked)\"", html)
+        self.assertIn('class="flows-col-cb"', html)
         self.assertIn("localStorage.setItem('sentinelnet_flows_hidden_cols'", html)
 
     def test_endpoint_contract_present(self):
@@ -2906,13 +2905,13 @@ class TestRedundancyUi(unittest.TestCase):
         # il pulsante è stato tolto e la rotta è di nuovo orfana.
         source = frontend_source()
         # FortiGate: pill nel pane Traffico + voce del registro FGT_DATASETS.
-        self.assertIn("fgtPickView('traffic','clientDiagnosis')", source)
+        self.assertIn('data-fgt-pill="clientDiagnosis"', source)
         self.assertIn("/diagnose-client`", source)
         self.assertIn("loadFgtDataset('clientDiagnosis')", source)
         # WLC: card nel referto della Client Map, lanciata a mano.
         self.assertIn("/api/wlc/${encodeURIComponent(ip)}/diagnose-client/", source)
         self.assertIn("function diagnoseWifi", source)
-        self.assertIn('onclick="diagnoseWifi()"', source)
+        self.assertIn('data-action="diagnose-wifi"', source)
 
     def test_query_views_do_not_fire_with_an_empty_form(self):
         # Aprire la pill carica la vista: senza il campo obbligatorio partiva

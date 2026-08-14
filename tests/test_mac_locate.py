@@ -213,8 +213,8 @@ class TestMacLocateFrontend(unittest.TestCase):
     def test_il_pulsante_passa_il_tenant_del_gruppo(self):
         """La tabella e' raggruppata per switch e il tenant e' gia' a schermo
         come badge: non passarlo era l'origine del difetto."""
-        self.assertIn("macLocate('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(g.tenant || ''))}')",
-                      self.src)
+        self.assertIn('data-action="mac-locate"', self.src)
+        self.assertIn('data-tenant="${escapeHtml(g.tenant || \'\')}"', self.src)
 
     def test_la_chiamata_porta_il_tenant_in_query(self):
         self.assertIn("'&tenant=' + encodeURIComponent(tenant)", self.src)

@@ -79,7 +79,7 @@ class TestWlcTargetPickerIsTenantScoped(unittest.TestCase):
 
     def test_tenant_select_exists_and_is_wired(self):
         self.assertIn('id="wlcTenantSelect"', self.html)
-        self.assertIn('onchange="onWlcTenantChanged()"', self.html)
+        self.assertIn("addEventListener('change', onWlcTenantChanged)", self.src)
         self.assertIn("function onWlcTenantChanged", self.src)
 
     def test_device_select_starts_disabled(self):
@@ -108,7 +108,7 @@ class TestWlcClientSearchAndQuality(unittest.TestCase):
 
     def test_search_box_exists_and_is_wired(self):
         self.assertIn('id="wlcClientSearch"', self.html)
-        self.assertIn('oninput="onWlcClientSearch()"', self.html)
+        self.assertIn("addEventListener('input', onWlcClientSearch)", self.src)
         self.assertIn("function onWlcClientSearch", self.src)
 
     def test_search_filters_the_whole_client_list_not_the_drawn_rows(self):

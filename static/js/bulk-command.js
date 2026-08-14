@@ -42,7 +42,7 @@ function renderBulkTargets() {
             const isOn = checked.has(d.IP) ? 'checked' : '';
             const hn = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>';
             return `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-radius:0;">
-                <input type="checkbox" class="bulk-target" value="${escapeHtml(d.IP)}" ${isOn} onchange="syncBulkSelectAll()">
+                <input type="checkbox" class="bulk-target" value="${escapeHtml(d.IP)}" ${isOn}>
                 <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(d.IP)}</span>
                 <span>${hn}</span>
                 <span class="badge" style="margin-left:auto;">${escapeHtml(d.Group)}</span>
@@ -147,12 +147,25 @@ function renderBulkResults(results) {
     }).join('');
 }
 
-// Chiusura del modale Bulk: backdrop e tasto Escape
-document.getElementById('bulkCommandModal').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeBulkCommandModal();
-});
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && document.getElementById('bulkCommandModal').style.display === 'flex') {
+document.getElementById('bulkCommandModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'bulkCommandModal' || e.target.closest('#btnCloseBulkCommand')) {
         closeBulkCommandModal();
     }
 });
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('bulkCommandModal')?.style.display === 'flex') {
+        closeBulkCommandModal();
+    }
+});
+
+document.getElementById('bulkTargetList')?.addEventListener('change', (e) => {
+    if (e.target.classList.contains('bulk-target')) {
+        syncBulkSelectAll();
+    }
+});
+
+document.getElementById('bulkGroupFilter')?.addEventListener('change', renderBulkTargets);
+document.getElementById('bulkSelectAll')?.addEventListener('change', (e) => toggleAllBulkTargets(e.target.checked));
+document.getElementById('btnBulkRun')?.addEventListener('click', startBulkCommand);
+
+

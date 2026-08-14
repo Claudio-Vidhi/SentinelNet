@@ -123,7 +123,7 @@
             <span style="color:var(--text-muted);">${active
                 ? (en ? 'Selected as the audit target.' : 'Selezionato come oggetto dell\'audit.')
                 : (en ? 'Loaded, but a device is selected instead.' : 'Caricato, ma è selezionato un dispositivo.')}</span>
-            <br><a href="#" onclick="clearUploadedConfig(); return false;" style="font-size:11px; color:var(--danger);">${en ? 'Remove file' : 'Rimuovi file'}</a>`;
+            <br><a href="#" data-action="clear-uploaded-config" style="font-size:11px; color:var(--danger);">${en ? 'Remove file' : 'Rimuovi file'}</a>`;
     }
 
     function clearUploadedConfig() {
@@ -317,7 +317,7 @@
                 </div>`).join('')}` : '';
 
             return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;"
-                        onclick="toggleAuditDetail('${escapeHtml(evId)}')"
+                        data-action="toggle-audit-detail" data-ev-id="${escapeHtml(evId)}"
                         title="${currentLang === 'en' ? 'Click to expand' : 'Clicca per espandere'}">
                 <td style="padding:8px; font-family:var(--font-code); font-weight:700; white-space:nowrap;">
                     <i class="fa-solid fa-chevron-${isOpen ? 'down' : 'right'}" style="color:var(--text-muted); font-size:9px; margin-right:6px;"></i>${escapeHtml(r.id)}
@@ -707,14 +707,19 @@ th{background:#f6f6f6;}
         a.download = 'audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}.html';
         a.click();
     }
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('btnPdfNetsec')?.addEventListener('click', downloadPdf);
+        document.getElementById('btnPrintNetsec')?.addEventListener('click', () => window.print());
+        document.getElementById('btnHtmlNetsec')?.addEventListener('click', downloadHtml);
+    });
 </script>
 </head><body>
 <div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #1e293b; color: white; border-radius: 0; display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif;">
     <span style="font-size: 14px; font-weight: bold;">SentinelNet — ${T.preview}</span>
     <div style="display: flex; gap: 10px;">
-        <button id="btnPdfNetsec" onclick="downloadPdf()" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.pdf}</button>
-        <button onclick="window.print()" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.print}</button>
-        <button onclick="downloadHtml()" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.html}</button>
+        <button id="btnPdfNetsec" style="padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.pdf}</button>
+        <button id="btnPrintNetsec" style="padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.print}</button>
+        <button id="btnHtmlNetsec" style="padding: 8px 16px; background: #64748b; color: white; border: none; border-radius: 0; font-size: 13px; font-weight: bold; cursor: pointer;">${T.html}</button>
     </div>
 </div>
 <h1>${T.heading} — ${escapeHtml(benchmark)}</h1>
@@ -859,8 +864,8 @@ ${partialBanner}
                     <td style="font-size:11px; font-weight:700; color:${gradeColor};">${escapeHtml(gradeStr)}</td>
                     <td style="font-size:12px; color:var(--text-muted);">${actor}</td>
                     <td>
-                        <button class="btn btn-secondary" onclick="openAuditRun(${r.id})" style="padding:2px 8px; font-size:11px; margin:0 4px 0 0;" data-i18n="auditHistoryOpen">Apri</button>
-                        <button class="btn btn-secondary requires-admin" onclick="deleteAuditRun(${r.id})" style="padding:2px 8px; font-size:11px; margin:0; color:var(--danger);" data-i18n="auditHistoryDelete">Elimina</button>
+                        <button class="btn btn-secondary" data-action="open-audit-run" data-run-id="${r.id}" style="padding:2px 8px; font-size:11px; margin:0 4px 0 0;" data-i18n="auditHistoryOpen">Apri</button>
+                        <button class="btn btn-secondary requires-admin" data-action="delete-audit-run" data-run-id="${r.id}" style="padding:2px 8px; font-size:11px; margin:0; color:var(--danger);" data-i18n="auditHistoryDelete">Elimina</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -940,6 +945,50 @@ ${partialBanner}
             showToast(currentLang === 'en' ? 'Failed to delete audit run.' : 'Eliminazione della run non riuscita.', 'error');
         }
     }
+
+    // Delegated and static event listeners
+    document.getElementById('netsecSubtabNav')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-subtab]');
+        if (btn && btn.dataset.subtab) switchNetSecSubtab(btn.dataset.subtab);
+    });
+
+    document.getElementById('auditBenchmarkSelect')?.addEventListener('change', renderBenchmarkRequirements);
+    document.getElementById('auditBenchmarkReqs')?.addEventListener('toggle', renderBenchmarkRequirements);
+    document.getElementById('auditRunName')?.addEventListener('input', toggleAuditSaveNameInput);
+    document.getElementById('btnRunAuditScan')?.addEventListener('click', runAuditScan);
+    document.getElementById('btnExportAuditReport')?.addEventListener('click', exportAuditReport);
+    document.getElementById('auditSevFilter')?.addEventListener('change', renderAuditRulesTable);
+    document.getElementById('auditCatFilter')?.addEventListener('change', renderAuditRulesTable);
+    document.getElementById('auditStatusFilter')?.addEventListener('change', renderAuditRulesTable);
+    document.getElementById('btnRefreshAuditHistory')?.addEventListener('click', loadAuditHistory);
+
+    document.getElementById('auditDropZone')?.addEventListener('click', (e) => {
+        const a = e.target.closest('[data-action="clear-uploaded-config"]');
+        if (a) {
+            e.preventDefault();
+            e.stopPropagation();
+            clearUploadedConfig();
+        }
+    });
+
+    document.getElementById('auditRulesTableBody')?.addEventListener('click', (e) => {
+        const row = e.target.closest('tr[data-action="toggle-audit-detail"]');
+        if (row && row.dataset.evId) {
+            toggleAuditDetail(row.dataset.evId);
+        }
+    });
+
+    document.getElementById('auditHistoryTableBody')?.addEventListener('click', (e) => {
+        const openBtn = e.target.closest('[data-action="open-audit-run"]');
+        if (openBtn && openBtn.dataset.runId) {
+            openAuditRun(Number(openBtn.dataset.runId));
+            return;
+        }
+        const delBtn = e.target.closest('[data-action="delete-audit-run"]');
+        if (delBtn && delBtn.dataset.runId) {
+            deleteAuditRun(Number(delBtn.dataset.runId));
+        }
+    });
 
     // Expose functions globally
     window.renderBenchmarkRequirements = renderBenchmarkRequirements;

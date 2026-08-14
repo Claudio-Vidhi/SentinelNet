@@ -34,11 +34,11 @@
             }
             let actions = '';
             if (s.mode === 'agent') {
-                actions += `<button data-s="${escapeHtml(s.id)}" onclick="openAgentControlModal(this.dataset.s)" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
-                actions += `<button data-s="${escapeHtml(s.id)}" onclick="regenSiteToken(this.dataset.s)" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
+                actions += `<button data-action="open-agent-control" data-site-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
+                actions += `<button data-action="regen-site-token" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
             }
             if (!isCentral) {
-                actions += `<button data-s="${escapeHtml(s.id)}" onclick="deleteSite(this.dataset.s)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
+                actions += `<button data-action="delete-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
             } else {
                 actions = `<span class="chip">${L.lblSiteDefault}</span>`;
             }
@@ -217,7 +217,7 @@
                 const checks = allGroups.map(g =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="scope-box" value="${escapeHtml(g)}" ${scope.includes(g) ? 'checked' : ''}
-                              onchange="saveUserGroups(this.closest('details').dataset.u)"
+                              data-action="save-user-groups" data-username="${escapeHtml(u.username)}"
                               style="accent-color:var(--primary); cursor:pointer;">
                        ${escapeHtml(g)}
                      </label>`).join('');
@@ -245,7 +245,7 @@
                 const tabChecks = ASSIGNABLE_TABS.map(t =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="tabs-box" value="${t.id}" ${allowed.includes(t.id) ? 'checked' : ''}
-                              onchange="markTabsDirty(this)"
+                              data-action="mark-tabs-dirty"
                               style="accent-color:var(--primary); cursor:pointer;">
                        ${i18n[currentLang][t.key] || t.id}
                      </label>`).join('');
@@ -257,7 +257,7 @@
                       <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tabs' : 'Nessuna spuntata = tutte le tab'}</div>
                       ${tabChecks}
                       <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
-                        <button type="button" class="btn btn-primary btn-small tabs-save-btn" style="display:none; width:auto; margin:0; padding:4px 10px; font-size:12px;" onclick="saveUserTabs(this)">
+                        <button type="button" class="btn btn-primary btn-small tabs-save-btn" data-action="save-user-tabs" style="display:none; width:auto; margin:0; padding:4px 10px; font-size:12px;">
                           <i class="fa-solid fa-floppy-disk"></i> ${currentLang === 'en' ? 'Save' : 'Salva'}
                         </button>
                         <span class="tabs-dirty-label" style="display:none; color:var(--warning); font-size:11px;">${currentLang === 'en' ? 'Unsaved changes' : 'Modifiche non salvate'}</span>
@@ -276,20 +276,19 @@
             const toggleIcon = disabled ? 'fa-circle-check' : 'fa-ban';
             const toggleColor = disabled ? 'var(--success)' : 'var(--warning)';
             const toggleBtn = isSelf ? '' :
-                `<button data-u="${escapeHtml(u.username)}" data-d="${disabled ? '1' : '0'}"
-                    onclick="toggleUserDisabled(this.dataset.u, this.dataset.d === '1')"
+                `<button data-action="toggle-user-disabled" data-username="${escapeHtml(u.username)}" data-disabled="${disabled ? '1' : '0'}"
                     style="color:${toggleColor}; background:none; border:none; cursor:pointer; margin-right:10px;">
                     <i class="fa-solid ${toggleIcon}"></i> ${toggleText}</button>`;
 
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
                 <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}${disabledBadge}</td>
-                <td><select data-u="${escapeHtml(u.username)}" onchange="changeUserRole(this.dataset.u, this.value)"
+                <td><select data-action="change-user-role" data-username="${escapeHtml(u.username)}"
                        style="font-size:12px; padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
                     ${roleOptions}
                   </select></td>
                 <td>${scopeCell}</td>
                 <td>${tabsCell}</td>
-                <td style="white-space:nowrap;">${toggleBtn}<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
+                <td style="white-space:nowrap;">${toggleBtn}<button data-action="delete-user" data-username="${escapeHtml(u.username)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
             </tr>`;
         }).join('');
     }
@@ -473,7 +472,7 @@
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
                 ${escapeHtml(L.lblAppDataDir || 'Cartella dati (solo env SENTINELNET_DATA_DIR)')}: <code>${escapeHtml(d.data_dir || '')}</code>
             </div>
-            <button class="btn btn-primary btn-small" onclick="saveAppAdvSettings()">
+            <button id="btnSaveAppAdv" class="btn btn-primary btn-small">
                 <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || 'Salva')}
             </button>
             <div id="appAdvError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>`;
@@ -556,7 +555,7 @@
             </div>
             ${envNote}
             <div style="margin-top:12px;">
-                <button class="btn btn-primary btn-small" onclick="saveAppSettings()" ${d.env_override ? 'disabled' : ''} data-i18n="btnSave">
+                <button id="btnSaveAppSettings" class="btn btn-primary btn-small" ${d.env_override ? 'disabled' : ''} data-i18n="btnSave">
                     <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
                 </button>
             </div>
@@ -571,12 +570,12 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ host: sel.value })
         });
+        const notice = document.getElementById('netSettingsNotice');
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || ''));
+            if (notice) notice.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || '');
             return;
         }
-        const notice = document.getElementById('netSettingsNotice');
         if (notice) notice.textContent = L.msgRestartRequired;
     }
 
@@ -639,3 +638,81 @@
             <span class="status ok"><span class="led led-success"></span>${escapeHtml(L.lblPingMonitorUp || 'Up')}: ${s.up}</span>
             <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>`;
     }
+
+    // Delegated and static event listeners
+    document.getElementById('uiVariantSelect')?.addEventListener('change', (e) => {
+        if (typeof applyUiVariant === 'function') applyUiVariant(e.target.value, true);
+    });
+
+    document.getElementById('uiVariantCardsGrid')?.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-action="apply-ui-variant"]');
+        if (card && card.dataset.variant && typeof applyUiVariant === 'function') {
+            applyUiVariant(card.dataset.variant, true);
+        }
+    });
+
+    document.getElementById('cliBlacklistToggle')?.addEventListener('change', saveCliBlacklistSetting);
+    document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);
+
+    document.getElementById('appAdvBody')?.addEventListener('click', (e) => {
+        if (e.target.closest('#btnSaveAppAdv')) saveAppAdvSettings();
+    });
+
+    document.getElementById('netSettingsBody')?.addEventListener('click', (e) => {
+        if (e.target.closest('#btnSaveAppSettings')) saveAppSettings();
+    });
+
+    document.getElementById('sitesTableBody')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn || !btn.dataset.siteId) return;
+        const act = btn.dataset.action;
+        const siteId = btn.dataset.siteId;
+        if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(siteId);
+        else if (act === 'regen-site-token') regenSiteToken(siteId);
+        else if (act === 'delete-site') deleteSite(siteId);
+    });
+
+    document.getElementById('usersTableBody')?.addEventListener('change', (e) => {
+        const grp = e.target.closest('[data-action="save-user-groups"]');
+        if (grp && grp.dataset.username) {
+            saveUserGroups(grp.dataset.username);
+            return;
+        }
+        const dirty = e.target.closest('[data-action="mark-tabs-dirty"]');
+        if (dirty) {
+            markTabsDirty(dirty);
+            return;
+        }
+        const role = e.target.closest('[data-action="change-user-role"]');
+        if (role && role.dataset.username) {
+            changeUserRole(role.dataset.username, role.value);
+            return;
+        }
+    });
+
+    document.getElementById('usersTableBody')?.addEventListener('click', (e) => {
+        const saveTabs = e.target.closest('[data-action="save-user-tabs"]');
+        if (saveTabs) {
+            saveUserTabs(saveTabs);
+            return;
+        }
+        const toggleDis = e.target.closest('[data-action="toggle-user-disabled"]');
+        if (toggleDis && toggleDis.dataset.username) {
+            toggleUserDisabled(toggleDis.dataset.username, toggleDis.dataset.disabled === '1');
+            return;
+        }
+        const delUser = e.target.closest('[data-action="delete-user"]');
+        if (delUser && delUser.dataset.username) {
+            deleteUser(delUser.dataset.username);
+            return;
+        }
+    });
+
+    document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
+    document.getElementById('btnCreateSite')?.addEventListener('click', createSite);
+    document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
+    document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
+    document.getElementById('mcpPreviewToggle')?.addEventListener('change', (e) => {
+        if (typeof setMcpPreview === 'function') setMcpPreview(e.target.checked);
+    });
+

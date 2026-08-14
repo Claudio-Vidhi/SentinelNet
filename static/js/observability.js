@@ -60,7 +60,7 @@
             <div style="margin-bottom:8px; font-size:12px; color:var(--text-muted);">${L.hintObsListeners || "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche ai listener vengono applicate subito, senza riavviare l'applicazione."}</div>
             ${listenerRows}
             <div style="margin-top:12px;">
-                <button class="btn btn-primary btn-small" onclick="saveObsSettings()" data-i18n="btnSave">
+                <button id="btnSaveObsSettings" class="btn btn-primary btn-small" data-action="save-obs-settings" data-i18n="btnSave">
                     <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
                 </button>
             </div>
@@ -109,7 +109,7 @@
                     <label for="obsPruneDays">${escapeHtml(L.obsPruneDays || (en ? 'Keep last (days)' : 'Conserva (giorni)'))}</label>
                     <input id="obsPruneDays" type="number" min="1" max="3650" value="30" style="padding-left:12px;">
                 </div>
-                <button class="btn btn-danger btn-small" style="width:auto; margin:0;" onclick="pruneObsLogs()">
+                <button id="btnPruneObsLogs" class="btn btn-danger btn-small" style="width:auto; margin:0;" data-action="prune-obs-logs">
                     <i class="fa-solid fa-broom"></i> ${escapeHtml(L.obsPruneRun || (en ? 'Purge older logs' : 'Elimina i log vecchi'))}
                 </button>
             </div>`;
@@ -269,7 +269,7 @@
         box.innerHTML = FLOWS_SOURCES.map(s => {
             const active = s === _flowsSource;
             const label = s === 'all' ? (L.chipAllSources || 'Tutte le origini') : FLOWS_SOURCE_LABELS[s];
-            return `<button class="btn btn-small" onclick="setFlowsSource('${s}')"
+            return `<button class="btn btn-small" data-action="set-flows-source" data-source="${s}"
                 style="padding:5px 14px; border-radius:0; font-size:12px;
                        ${active ? 'background:var(--cta); color:var(--cta-text); border-color:var(--cta);' : ''}">${label}</button>`;
         }).join('');
@@ -298,8 +298,8 @@
             const L = i18n[currentLang];
             dd.innerHTML = FLOW_TOGGLE_COLS.map(c => `
                 <label style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer; font-size:13px;">
-                    <input type="checkbox" ${flowsColHidden(c.id) ? '' : 'checked'}
-                           onchange="toggleFlowsCol('${c.id}', this.checked)" style="accent-color:var(--primary);">
+                    <input type="checkbox" class="flows-col-cb" data-col-id="${c.id}" ${flowsColHidden(c.id) ? '' : 'checked'}
+                           style="accent-color:var(--primary);">
                     <span>${escapeHtml(L[c.lbl] || c.id)}</span>
                 </label>`).join('');
             dd.style.display = 'block';
@@ -335,7 +335,7 @@
             return;
         }
         head.innerHTML = `<tr style="font-size:12px; text-align:left;">
-            <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" onclick="toggleFlowsSelectAll(this)" style="accent-color:var(--primary);" title="${escapeHtml(L.lnkSelectAll || 'Seleziona tutti')}"></th>
+            <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" style="accent-color:var(--primary);" title="${escapeHtml(L.lnkSelectAll || 'Seleziona tutti')}"></th>
             <th style="padding:8px;">#</th>
             ${flowsColHidden('tenant') ? '' : th(L.thFlTenant || 'Sede')}
             ${th(L.thFlSrc || 'Sorgente')}${th(L.thFlDst || 'Destinazione')}
@@ -369,7 +369,7 @@
         }
         const sevColor = s => s == null ? 'var(--text-muted)' : s <= 3 ? 'var(--danger)' : s <= 4 ? 'var(--warning)' : 'var(--text-muted)';
         tbody.innerHTML = rows.map((e, i) => `
-            <tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" onclick="showSyslogDetail(${i})" data-i18n-title="titleSyslogRowHint" title="${escapeHtml(L.titleSyslogRowHint || 'Clicca per il dettaglio')}">
+            <tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" data-action="show-syslog-detail" data-index="${i}" data-i18n-title="titleSyslogRowHint" title="${escapeHtml(L.titleSyslogRowHint || 'Clicca per il dettaglio')}">
                 <td style="padding:6px 8px; white-space:nowrap;">${new Date(e.ts * 1000).toLocaleString()}</td>
                 <td>${escapeHtml(e.tenant)}</td>
                 <td>${escapeHtml(e.device_ip || e.exporter_ip || '—')}</td>
@@ -558,7 +558,7 @@
         // Update checkbox list
         listDiv.innerHTML = tenants.map(t => `
             <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer;">
-                <input type="checkbox" value="${escapeHtml(t)}" onchange="updateFlowsTenantSelection()"
+                <input type="checkbox" class="flows-tenant-cb" value="${escapeHtml(t)}"
                        ${newSelected.has(t) ? 'checked' : ''} style="accent-color:var(--primary);">
                 <span>${escapeHtml(t)}</span>
             </label>
@@ -714,12 +714,12 @@
             const key = flowKey(f);
             const checked = _flowsSelectedKeys.has(key) ? 'checked' : '';
             const srcLabel = FLOWS_SOURCE_LABELS[f.source] || '—';
-            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" onclick="openFlowDetailPanelByKey('${escapeHtml(key)}', event)">
-                    <td style="padding:6px 8px;" onclick="event.stopPropagation();"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} onchange="toggleFlowRowSelect('${escapeHtml(key)}', this.checked)" style="accent-color:var(--primary);"></td>
+            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" data-action="open-flow-detail" data-key="${escapeHtml(key)}">
+                    <td style="padding:6px 8px;"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} style="accent-color:var(--primary);"></td>
                     <td style="padding:6px 8px;">${rowNum++}</td>
                     ${flowsColHidden('tenant') ? '' : `<td>${escapeHtml(f.tenant)}</td>`}
-                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.src_ip)}')" title="${hlTitle}">${escapeHtml(f.src_ip)}</a></td>
-                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.dst_ip)}')" title="${hlTitle}">${escapeHtml(f.dst_ip)}</a></td>
+                    <td><a href="javascript:void(0)" data-action="flow-hl-topo" data-ip="${escapeHtml(f.src_ip)}" title="${hlTitle}">${escapeHtml(f.src_ip)}</a></td>
+                    <td><a href="javascript:void(0)" data-action="flow-hl-topo" data-ip="${escapeHtml(f.dst_ip)}" title="${hlTitle}">${escapeHtml(f.dst_ip)}</a></td>
                     ${flowsColHidden('proto') ? '' : `<td>${proto}/${f.dst_port ?? '—'}</td>`}
                     ${flowsColHidden('source') ? '' : `<td><span style="font-size:11px; padding:2px 8px; border-radius:0; background:var(--surface-3);">${srcLabel}</span></td>`}
                     <td><div style="display:flex; align-items:center; gap:8px;">
@@ -750,24 +750,24 @@
         body.innerHTML = `
             <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:14px;">
                 ${row(L.thFlTenant || 'Sede', escapeHtml(f.tenant))}
-                ${row(L.thFlSrc || 'Sorgente', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.src_ip)}</a>`)}
-                ${row(L.thFlDst || 'Destinazione', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.dst_ip)}</a>`)}
+                ${row(L.thFlSrc || 'Sorgente', `<a href="javascript:void(0)" data-action="detail-hl-topo" data-ip="${escapeHtml(f.src_ip)}">${escapeHtml(f.src_ip)}</a>`)}
+                ${row(L.thFlDst || 'Destinazione', `<a href="javascript:void(0)" data-action="detail-hl-topo" data-ip="${escapeHtml(f.dst_ip)}">${escapeHtml(f.dst_ip)}</a>`)}
                 ${row(L.thFlProto || 'Proto/Porta', `${proto}/${f.dst_port ?? '—'}`)}
                 ${row(L.thFlTraffic || 'Traffico', fmtBytes(f.total_bytes))}
                 ${row(L.thFlPackets || 'Pacchetti', f.total_packets)}
                 ${row(en ? 'Aggregated flows' : 'Flussi aggregati', f.flow_count)}
             </table>
             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
-                <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">
+                <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.src_ip)}">
                     <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show source in topology' : 'Mostra sorgente in topologia'}
                 </button>
-                <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">
+                <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.dst_ip)}">
                     <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show destination in topology' : 'Mostra destinazione in topologia'}
                 </button>
-                <button class="btn" style="text-align:left;" onclick="jumpToAnomaliesForFlow()">
+                <button class="btn" style="text-align:left;" data-action="detail-anomalies">
                     <i class="fa-solid fa-triangle-exclamation"></i> ${en ? 'See anomalies for this flow' : 'Vedi anomalie di questo flusso'}
                 </button>
-                <button class="btn requires-write" style="text-align:left;" onclick="analyzeSingleFlowWithAi()" title="${en ? 'Send ONLY this flow to the AI assistant (identifiers; totals re-derived server-side)' : 'Invia SOLO questo flusso all\'assistente AI (identificatori; totali ri-derivati dal server)'}">
+                <button class="btn requires-write" style="text-align:left;" data-action="detail-ai-flow" title="${en ? 'Send ONLY this flow to the AI assistant (identifiers; totals re-derived server-side)' : 'Invia SOLO questo flusso all\'assistente AI (identificatori; totali ri-derivati dal server)'}">
                     <i class="fa-solid fa-robot"></i> ${L.btnAnalyzeAi || 'Analizza con AI'}
                 </button>
             </div>
@@ -976,16 +976,16 @@
             const lblAck = en ? 'Acknowledge' : 'Prendi in carico';
             const lblResolve = en ? 'Resolve' : 'Risolvi';
             if (a.status === 'new') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'ack')">${lblAck}</button>`);
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'resolved')">${lblResolve}</button>`);
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" data-action="anom-transition" data-id="${a.id}" data-from="new" data-to="ack">${lblAck}</button>`);
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" data-action="anom-transition" data-id="${a.id}" data-from="new" data-to="resolved">${lblResolve}</button>`);
             } else if (a.status === 'ack') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'ack', 'resolved')">${lblResolve}</button>`);
+                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" data-action="anom-transition" data-id="${a.id}" data-from="ack" data-to="resolved">${lblResolve}</button>`);
             }
             // The id this route returns IS the incident id: /api/observability/
             // anomalies reads FROM incidents. The two surfaces are one queue,
             // so the link costs nothing but the anchor.
             if (a.id != null) {
-                actions.push(`<button class="btn" style="font-size:11px; padding:3px 8px;" title="${en ? 'Open the incident' : 'Apri l\'incidente'}" onclick="anomOpenIncident(${Number(a.id)})"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>`);
+                actions.push(`<button class="btn" style="font-size:11px; padding:3px 8px;" title="${en ? 'Open the incident' : 'Apri l\'incidente'}" data-action="anom-open-incident" data-id="${Number(a.id)}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>`);
             }
             return `<tr style="font-size:12px; border-top:1px solid var(--border);">
                 <td style="padding:6px 8px;">${when}</td>
@@ -1650,6 +1650,129 @@
     window.loadObsProtocolDist = loadObsProtocolDist;
     window.openObsInspectModal = openObsInspectModal;
     window.closeObsInspectModal = closeObsInspectModal;
+
+    // Delegated click and change event listeners
+    document.getElementById('flowsSourceChips')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="set-flows-source"]');
+        if (btn && btn.dataset.source) setFlowsSource(btn.dataset.source);
+    });
+
+    document.getElementById('flowsColsDropdown')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('.flows-col-cb');
+        if (cb && cb.dataset.colId) toggleFlowsCol(cb.dataset.colId, cb.checked);
+    });
+
+    document.getElementById('flowsTableHead')?.addEventListener('change', (e) => {
+        const all = e.target.closest('#flowsSelectAll');
+        if (all) toggleFlowsSelectAll(all);
+    });
+
+    document.getElementById('flowsTableBody')?.addEventListener('click', (e) => {
+        const sysRow = e.target.closest('tr[data-action="show-syslog-detail"]');
+        if (sysRow && sysRow.dataset.index != null) {
+            showSyslogDetail(Number(sysRow.dataset.index));
+            return;
+        }
+        const hlLink = e.target.closest('[data-action="flow-hl-topo"]');
+        if (hlLink && hlLink.dataset.ip) {
+            e.stopPropagation();
+            highlightInTopology(hlLink.dataset.ip);
+            return;
+        }
+        const flowRow = e.target.closest('tr[data-action="open-flow-detail"]');
+        if (flowRow && flowRow.dataset.key) {
+            openFlowDetailPanelByKey(flowRow.dataset.key, e);
+        }
+    });
+
+    document.getElementById('flowsTableBody')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('.flow-row-check');
+        if (cb && cb.dataset.key) {
+            toggleFlowRowSelect(cb.dataset.key, cb.checked);
+        }
+    });
+
+    document.getElementById('flowsSyslogAllBody')?.addEventListener('click', (e) => {
+        const sysRow = e.target.closest('tr[data-action="show-syslog-detail"]');
+        if (sysRow && sysRow.dataset.index != null) {
+            showSyslogDetail(Number(sysRow.dataset.index));
+        }
+    });
+
+    document.getElementById('trafTenantList')?.addEventListener('change', (e) => {
+        if (e.target.closest('.flows-tenant-cb')) {
+            updateFlowsTenantSelection();
+        }
+    });
+
+    document.getElementById('flowDetailPanelBody')?.addEventListener('click', (e) => {
+        const hl = e.target.closest('[data-action="detail-hl-topo"]');
+        if (hl && hl.dataset.ip) {
+            highlightInTopology(hl.dataset.ip);
+            closeFlowDetailPanel();
+            return;
+        }
+        if (e.target.closest('[data-action="detail-anomalies"]')) {
+            jumpToAnomaliesForFlow();
+            return;
+        }
+        if (e.target.closest('[data-action="detail-ai-flow"]')) {
+            analyzeSingleFlowWithAi();
+            return;
+        }
+    });
+
+    document.getElementById('anomTableBody')?.addEventListener('click', (e) => {
+        const trBtn = e.target.closest('[data-action="anom-transition"]');
+        if (trBtn && trBtn.dataset.id) {
+            anomTransition(Number(trBtn.dataset.id), trBtn.dataset.from, trBtn.dataset.to);
+            return;
+        }
+        const incBtn = e.target.closest('[data-action="anom-open-incident"]');
+        if (incBtn && incBtn.dataset.id) {
+            anomOpenIncident(Number(incBtn.dataset.id));
+        }
+    });
+
+    document.getElementById('obsSettingsForm')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="save-obs-settings"]')) saveObsSettings();
+        if (e.target.closest('[data-action="prune-obs-logs"]')) pruneObsLogs();
+    });
+
+    // Static event listeners for Traffic / Flows / Observability tab
+    document.getElementById('trafWindow')?.addEventListener('change', (e) => trafSetWindow(e.target.value));
+    document.getElementById('trafMetric')?.addEventListener('change', (e) => trafSetMetric(e.target.value));
+    document.getElementById('trafTenantBtn')?.addEventListener('click', toggleTrafTenantDropdown);
+    document.getElementById('trafTenantAll')?.addEventListener('change', toggleTrafTenantAll);
+    document.getElementById('btnTrafRefresh')?.addEventListener('click', trafRefresh);
+    document.getElementById('trafHideTelemetry')?.addEventListener('change', (e) => setFlowsHideTelemetry(e.target.checked));
+    document.getElementById('btnAnalyzeFlowsAi')?.addEventListener('click', analyzeFlowsWithAi);
+    document.getElementById('trafPills')?.addEventListener('click', (e) => {
+        const pill = e.target.closest('[data-traf-view]');
+        if (pill && pill.dataset.trafView) trafSwitchView(pill.dataset.trafView);
+    });
+    document.getElementById('btnChartTypeDonut')?.addEventListener('click', () => setObsChartType('donut'));
+    document.getElementById('btnChartTypeBar')?.addEventListener('click', () => setObsChartType('bar'));
+    document.getElementById('btnChartTypeTrend')?.addEventListener('click', () => setObsChartType('trend'));
+    document.getElementById('btnObsInspectModal')?.addEventListener('click', () => openObsInspectModal('all'));
+    document.getElementById('flowsColsBtn')?.addEventListener('click', toggleFlowsColsDropdown);
+    document.getElementById('anomStatus')?.addEventListener('change', loadAnomalies);
+    document.getElementById('btnRefreshAnomalies')?.addEventListener('click', loadAnomalies);
+    document.getElementById('lnkClearAnomIpFilter')?.addEventListener('click', clearAnomIpFilter);
+    document.getElementById('btnCloseFlowDetail')?.addEventListener('click', closeFlowDetailPanel);
+
+    document.getElementById('syslogDetailModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'syslogDetailModal' || e.target.closest('#btnCloseSyslogDetail')) {
+            closeSyslogDetail();
+        }
+    });
+
+    document.getElementById('obsInspectModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'obsInspectModal' || e.target.closest('[data-action="close-obs-inspect-modal"]')) {
+            closeObsInspectModal();
+        }
+    });
+
 
     // Attach click listener on canvas. Il modulo ora si carica lazy alla
     // prima visita di tab-flows: di solito DOMContentLoaded e' gia' passato,

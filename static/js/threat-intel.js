@@ -82,7 +82,7 @@
             // prevenire una breakout di stringa JS dentro l'attributo.
             const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
             btnWrap.innerHTML = entries.map(([name, v], idx) =>
-                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" onclick="vwSelectVendor('${escapeHtml(jsStr(v.euvd_term))}', this)" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
+                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" data-action="vw-select-vendor" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
             ).join('');
             if (entries.length) {
                 // Nessuna query EUVD automatica all'apertura: il fetch parte solo
@@ -99,6 +99,13 @@
             if (statusEl) statusEl.textContent = i18n[currentLang].vwStatusError + err.message;
         }
     }
+
+    document.getElementById('vwVendorBtns')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="vw-select-vendor"]');
+        if (btn && btn.dataset.term) {
+            vwSelectVendor(btn.dataset.term, btn);
+        }
+    });
 
     function vwSelectVendor(term, btnEl) {
         window._vwVendor = term;
@@ -223,7 +230,7 @@
             const ts = vwParseTimestamp(item.date);
             const displayDate = ts > 0 ? new Date(ts).toLocaleDateString() : (item.date || '—');
             return `
-            <tr data-idx="${idx}" style="cursor:pointer;" onclick="vwOpenDrawer(${idx})">
+            <tr data-action="vw-open-drawer" data-idx="${idx}" style="cursor:pointer;">
                 <td><div>${escapeHtml(item.cve)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.euvd)}</div></td>
                 <td><div>${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.vendor)}</div></td>
                 <td><span class="severity-pill severity-${item.severity}">${item.severity}</span></td>
@@ -234,6 +241,13 @@
             </tr>`;
         }).join('');
     }
+
+    document.getElementById('vwBody')?.addEventListener('click', (e) => {
+        const row = e.target.closest('[data-action="vw-open-drawer"]');
+        if (row && row.dataset.idx != null) {
+            vwOpenDrawer(parseInt(row.dataset.idx, 10));
+        }
+    });
 
     // Apre il drawer laterale con i dettagli completi del record selezionato.
     function vwOpenDrawer(idx) {
@@ -248,7 +262,7 @@
                 : `<div>${escapeHtml(r)}</div>`).join('')
             : '<div style="color:var(--text-muted);">—</div>';
         drawer.innerHTML = `
-            <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" onclick="document.getElementById('vwDrawer').style.display='none';"><i class="fa-solid fa-xmark"></i></button>
+            <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" data-action="vw-close-drawer"><i class="fa-solid fa-xmark"></i></button>
             <h3 style="margin:0 0 6px;">${escapeHtml(item.cve)} <span style="font-size:12px; color:var(--text-muted);">(${escapeHtml(item.euvd)})</span></h3>
             <div style="margin-bottom:10px;"><span class="severity-pill severity-${item.severity}">${item.severity}</span>
               <span style="margin-left:8px;">CVSS ${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</span>
@@ -260,6 +274,13 @@
         `;
         drawer.style.display = 'block';
     }
+
+    document.getElementById('vwDrawer')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="vw-close-drawer"]')) {
+            const drawer = document.getElementById('vwDrawer');
+            if (drawer) drawer.style.display = 'none';
+        }
+    });
 
     document.getElementById('vwText') && document.getElementById('vwText').addEventListener('input', vwApplyTextFilter);
 
@@ -331,8 +352,8 @@
                         <div style="display:flex; align-items:center; gap:12px;">
                             <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
                             <button id="btn-mgd-${safeIpId}"
+                                data-action="run-managed-vuln-check"
                                 data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version || '')}" data-model="${escapeHtml(model)}"
-                                onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this, this.dataset.model)"
                                 style="padding:8px 14px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
                                 ${i18n[currentLang].btnAnalyzeVuln}
                             </button>
@@ -404,10 +425,10 @@
                 </div>
                 <button
                     id="btn-disc-${safeId}"
+                    data-action="run-discovered-vuln-check"
                     data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
                     data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
                     data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
-                    onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
                     style="width:100%; padding:8px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
                     ${i18n[currentLang].btnAnalyzeVuln}
                 </button>
@@ -543,7 +564,7 @@
                     const hideLabel = currentLang === 'en' ? 'Hide results' : 'Nascondi risultati';
                     resultsEl.innerHTML = `
                         <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:6px;">
-                            <button onclick="toggleVulnResults('${effectiveResultsId}', this)"
+                            <button data-action="toggle-vuln-results" data-target="${effectiveResultsId}"
                                 style="padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
                                 <i class="fa-solid fa-chevron-up"></i> ${hideLabel}
                             </button>
@@ -574,7 +595,7 @@
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
                                     <div style="display:flex; align-items:center; gap:8px;">
                                         <strong style="color:var(--primary);">${escapeHtml(cveId)}</strong>
-                                        <button onclick="toggleVulnDesc('${descId}', this)"
+                                        <button data-action="toggle-vuln-desc" data-target="${descId}"
                                             style="padding:2px 7px; border-radius:0; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
                                             <i class="fa-solid fa-chevron-up"></i>
                                         </button>
@@ -597,3 +618,33 @@
             statusEl.innerHTML = `<span style="color: var(--danger);">${i18n[currentLang].errorScan}</span>`;
         }
     }
+
+    document.getElementById('securityTriageContainer')?.addEventListener('click', (e) => {
+        const mgdBtn = e.target.closest('[data-action="run-managed-vuln-check"]');
+        if (mgdBtn) {
+            runManagedVulnCheck(mgdBtn.dataset.ip, mgdBtn.dataset.vendor, mgdBtn.dataset.version, mgdBtn, mgdBtn.dataset.model);
+            return;
+        }
+        const discBtn = e.target.closest('[data-action="run-discovered-vuln-check"]');
+        if (discBtn) {
+            runDiscoveredVulnCheck(discBtn.dataset.id, discBtn.dataset.label, discBtn.dataset.version, discBtn.dataset.vshort, discBtn.dataset.vendor, discBtn);
+            return;
+        }
+        const resBtn = e.target.closest('[data-action="toggle-vuln-results"]');
+        if (resBtn && resBtn.dataset.target) {
+            toggleVulnResults(resBtn.dataset.target, resBtn);
+            return;
+        }
+        const descBtn = e.target.closest('[data-action="toggle-vuln-desc"]');
+        if (descBtn && descBtn.dataset.target) {
+            toggleVulnDesc(descBtn.dataset.target, descBtn);
+        }
+    });
+
+    // Static event listeners for Threat Intel tab
+    document.getElementById('tiTabMatcher')?.addEventListener('click', () => tiSwitchView('matcher'));
+    document.getElementById('tiTabWatch')?.addEventListener('click', () => tiSwitchView('watch'));
+    document.getElementById('threatGroupSelect')?.addEventListener('change', startThreatScan);
+    document.getElementById('threatSeveritySelect')?.addEventListener('change', applyThreatSeverityFilter);
+    document.getElementById('threatIncludeDiscovered')?.addEventListener('change', startThreatScan);
+    document.getElementById('vwRefresh')?.addEventListener('click', vwFetch);

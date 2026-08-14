@@ -969,9 +969,9 @@ function renderIdentitiesPanel() {
         <td style="padding:8px 6px; text-align:center; font-family:var(--font-code); font-size:12px;">${i.devices_using}</td>
         <td style="padding:8px 6px; text-align:right;">
           <div style="display:flex; gap:4px; justify-content:flex-end;">
-            <button class="btn-icon" onclick="assignIdentityToDevices('${i.id}')" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="${escapeHtml(i18n[currentLang].btnAssignIdentityTitle || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle" style="font-size:11px;"></i></button>
-            <button class="btn-icon" onclick="editIdentity('${i.id}')" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Edit"><i class="fa-solid fa-pen" style="font-size:11px;"></i></button>
-            <button class="btn-icon danger" onclick="deleteIdentity('${i.id}')" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Delete"><i class="fa-solid fa-trash-can" style="font-size:11px;"></i></button>
+            <button class="btn-icon" data-action="assign-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="${escapeHtml(i18n[currentLang].btnAssignIdentityTitle || 'Assign to devices')}"><i class="fa-solid fa-users-rectangle" style="font-size:11px;"></i></button>
+            <button class="btn-icon" data-action="edit-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Edit"><i class="fa-solid fa-pen" style="font-size:11px;"></i></button>
+            <button class="btn-icon danger" data-action="delete-identity" data-id="${i.id}" style="width:26px; height:26px; padding:0; display:inline-flex; align-items:center; justify-content:center;" title="Delete"><i class="fa-solid fa-trash-can" style="font-size:11px;"></i></button>
           </div>
         </td></tr>`;
     }).join('')
@@ -1029,16 +1029,22 @@ async function showPortConfig(switchIp, port, switchName) {
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                     <h3 style="font-size:17px;"><i class="fa-solid fa-ethernet" style="color:var(--primary);"></i> ${escapeHtml(L.portConfigTitle)}</h3>
-                    <i class="fa-solid fa-xmark" onclick="closePortConfigModal()" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
+                    <i class="fa-solid fa-xmark" data-action="close-port-config" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
                 </div>
                 <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(switchName || switchIp)} — ${escapeHtml(port)}</div>
                 ${body}
                 <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
-                    <button onclick="openPortInAnalyzer('${escapeHtml(switchIp)}','${escapeHtml(port)}')" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-up-right-from-square"></i> ${escapeHtml(L.openInAnalyzer)}</button>
-                    <button onclick="closePortConfigModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang === 'en' ? 'Close' : 'Chiudi'}</button>
+                    <button data-action="open-port-in-analyzer" data-ip="${escapeHtml(switchIp)}" data-port="${escapeHtml(port)}" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-up-right-from-square"></i> ${escapeHtml(L.openInAnalyzer)}</button>
+                    <button data-action="close-port-config" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang === 'en' ? 'Close' : 'Chiudi'}</button>
                 </div>
             </div>`;
-    ov.addEventListener('click', e => { if (e.target === ov) closePortConfigModal(); });
+    ov.addEventListener('click', e => {
+        if (e.target === ov || e.target.closest('[data-action="close-port-config"]')) closePortConfigModal();
+        const openBtn = e.target.closest('[data-action="open-port-in-analyzer"]');
+        if (openBtn && openBtn.dataset.ip) {
+            openPortInAnalyzer(openBtn.dataset.ip, openBtn.dataset.port);
+        }
+    });
     document.body.appendChild(ov);
 }
 
@@ -1110,3 +1116,13 @@ document.addEventListener('toggle', function(e) {
         }
     }
 }, true);
+
+document.getElementById('identitiesList')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn || !btn.dataset.id) return;
+    const act = btn.dataset.action;
+    if (act === 'assign-identity') assignIdentityToDevices(btn.dataset.id);
+    else if (act === 'edit-identity') editIdentity(btn.dataset.id);
+    else if (act === 'delete-identity') deleteIdentity(btn.dataset.id);
+});
+

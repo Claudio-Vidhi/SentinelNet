@@ -87,15 +87,14 @@ function endpointsRender(d) {
         : '';
 
     // Le tre azioni esistono gia' altrove: qui si rendono solo raggiungibili
-    // dalla riga. stopPropagation perche' la riga stessa e' cliccabile e
-    // senza di esso ogni pulsante farebbe partire anche la diagnosi.
-    const act = (icon, title, call, enabled) => enabled
-        ? `<button onclick="event.stopPropagation(); ${call}" title="${escapeHtml(title)}"
+    // dalla riga. stopPropagation non serve piu' grazie alla delegazione.
+    const act = (icon, title, action, dataAttrs, enabled) => enabled
+        ? `<button data-action="${action}" ${dataAttrs} title="${escapeHtml(title)}"
              style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px; margin-right:8px;">
              <i class="fa-solid ${icon}"></i></button>`
         : `<span style="color:var(--text-muted); font-size:12px; margin-right:8px; opacity:0.35;"><i class="fa-solid ${icon}"></i></span>`;
 
-    const body = _epRows.map(r => `<tr style="cursor:pointer;" onclick="endpointsDiagnose('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(r.tenant || ''))}')">
+    const body = _epRows.map(r => `<tr data-action="ep-row-diagnose" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}" style="cursor:pointer;">
         <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(r.mac)}</td>
         <td style="font-size:12px;">${escapeHtml(r.oui_vendor || '—')}</td>
         <td style="font-size:12px;">${escapeHtml(r.tenant || '—')} <span style="color:var(--text-muted);">/ ${escapeHtml(r.site || '—')}</span></td>
@@ -106,12 +105,12 @@ function endpointsRender(d) {
         <td style="font-size:11px; color:var(--text-muted);">${escapeHtml(_epTime(r.last_seen))}</td>
         <td>${(r.flags || []).map(_epFlag).join(' ')}</td>
         <td style="white-space:nowrap;">${
-            act('fa-stethoscope', L.epActDiagnose,
-                `endpointsDiagnose('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(r.tenant || ''))}')`, true) +
-            act('fa-magnifying-glass-location', L.epActLocate,
-                `macLocate('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(r.tenant || ''))}')`, true) +
-            act('fa-file-lines', L.epActPortCfg,
-                `showPortConfig('${escapeHtml(jsStr(r.switch_ip))}','${escapeHtml(jsStr(r.interface))}','${escapeHtml(jsStr(r.switch_name || ''))}')`,
+            act('fa-stethoscope', L.epActDiagnose, 'ep-diagnose',
+                `data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}"`, true) +
+            act('fa-magnifying-glass-location', L.epActLocate, 'ep-locate',
+                `data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(r.tenant || '')}"`, true) +
+            act('fa-file-lines', L.epActPortCfg, 'ep-portcfg',
+                `data-switch-ip="${escapeHtml(r.switch_ip || '')}" data-switch-port="${escapeHtml(r.interface || '')}" data-switch-name="${escapeHtml(r.switch_name || '')}"`,
                 !!(r.switch_ip && r.interface))
         }</td>
     </tr>`).join('');
@@ -306,3 +305,41 @@ function endpointsPortsRender(d) {
             <tbody>${rows}</tbody>
         </table></div></div>`;
 }
+
+// Delegated click listener on #epResults
+document.getElementById('epResults')?.addEventListener('click', (e) => {
+    const diagBtn = e.target.closest('[data-action="ep-diagnose"]');
+    if (diagBtn) {
+        endpointsDiagnose(diagBtn.dataset.mac, diagBtn.dataset.tenant || '');
+        return;
+    }
+    const locBtn = e.target.closest('[data-action="ep-locate"]');
+    if (locBtn) {
+        macLocate(locBtn.dataset.mac, locBtn.dataset.tenant || '');
+        return;
+    }
+    const portBtn = e.target.closest('[data-action="ep-portcfg"]');
+    if (portBtn) {
+        showPortConfig(portBtn.dataset.switchIp, portBtn.dataset.switchPort, portBtn.dataset.switchName);
+        return;
+    }
+    const row = e.target.closest('tr[data-action="ep-row-diagnose"]');
+    if (row && row.dataset.mac) {
+        endpointsDiagnose(row.dataset.mac, row.dataset.tenant || '');
+    }
+});
+
+// Static event listeners for Endpoint Inventory
+document.getElementById('epModeListBtn')?.addEventListener('click', () => endpointsMode('list'));
+document.getElementById('epModePortsBtn')?.addEventListener('click', () => endpointsMode('ports'));
+document.getElementById('epPortsSwitch')?.addEventListener('change', endpointsPorts);
+document.getElementById('epFilterQ')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') endpointsApplyFilters();
+});
+document.getElementById('epFilterStale')?.addEventListener('change', endpointsApplyFilters);
+document.getElementById('epFilterStale')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') endpointsApplyFilters();
+});
+document.getElementById('btnEpFilter')?.addEventListener('click', endpointsApplyFilters);
+document.getElementById('btnEpExportCsv')?.addEventListener('click', () => endpointsExport('csv'));
+document.getElementById('btnEpExportJson')?.addEventListener('click', () => endpointsExport('json'));

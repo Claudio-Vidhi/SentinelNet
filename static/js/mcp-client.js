@@ -59,8 +59,8 @@ function renderMcpClientServers(servers) {
               <span><strong>${escapeHtml(s.name)}</strong> <code style="font-size:11px; color:var(--text-muted);">${escapeHtml(s.url)}</code>
                 ${s.has_auth ? '<span class="chip"><i class="fa-solid fa-key"></i> auth</span>' : ''}</span>
               <span style="display:flex; gap:8px;">
-                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="mcpClientListTools('${nm}')"><i class="fa-solid fa-list"></i> ${escapeHtml(L.btnMcpListTools)}</button>
-                <button class="btn btn-secondary btn-small" style="width:auto; margin:0; color:var(--danger);" onclick="deleteMcpClientServer('${nm}')"><i class="fa-solid fa-trash-can"></i></button>
+                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="mcp-list-tools" data-server="${nm}"><i class="fa-solid fa-list"></i> ${escapeHtml(L.btnMcpListTools)}</button>
+                <button class="btn btn-secondary btn-small" style="width:auto; margin:0; color:var(--danger);" data-action="mcp-delete-server" data-server="${nm}"><i class="fa-solid fa-trash-can"></i></button>
               </span>
             </div>
             <div id="mcpcTools-${nm}" style="margin-top:10px;"></div>
@@ -120,7 +120,7 @@ async function mcpClientListTools(name) {
           <div style="color:var(--text-muted); font-size:11px; margin:4px 0;">${escapeHtml(t.description || '')}</div>
           ${schema ? `<pre style="background:var(--bg); border:1px solid var(--border); border-radius:0; padding:8px; font-size:11px; overflow-x:auto; white-space:pre;">${schema}</pre>` : ''}
           <textarea id="mcpcArgs-${nm}-${i}" class="input" rows="3" style="font-family:var(--font-code); font-size:12px;" placeholder='{ }'>{}</textarea>
-          <div style="margin-top:6px;"><button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="mcpClientCall('${nm}','${tn}','mcpcArgs-${nm}-${i}','mcpcResult-${nm}-${i}')"><i class="fa-solid fa-play"></i> ${escapeHtml(L.btnMcpInvoke)}</button></div>
+          <div style="margin-top:6px;"><button class="btn btn-primary btn-small" style="width:auto; margin:0;" data-action="mcp-invoke-tool" data-server="${nm}" data-tool="${tn}" data-args-id="mcpcArgs-${nm}-${i}" data-res-id="mcpcResult-${nm}-${i}"><i class="fa-solid fa-play"></i> ${escapeHtml(L.btnMcpInvoke)}</button></div>
           <pre id="mcpcResult-${nm}-${i}" style="margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:0; padding:8px; font-size:11px; overflow-x:auto; white-space:pre-wrap; display:none;"></pre>
         </div>`;
     }).join('');
@@ -157,3 +157,32 @@ function mcpClientPreset(kind) {
     document.getElementById('mcpcUrl').value = p.url;
     document.getElementById('mcpcHint').textContent = p.hint;
 }
+
+// Delegated event listener for MCP client servers & tools
+document.getElementById('mcpClientServerList')?.addEventListener('click', (e) => {
+    const listBtn = e.target.closest('[data-action="mcp-list-tools"]');
+    if (listBtn && listBtn.dataset.server) {
+        mcpClientListTools(listBtn.dataset.server);
+        return;
+    }
+    const delBtn = e.target.closest('[data-action="mcp-delete-server"]');
+    if (delBtn && delBtn.dataset.server) {
+        deleteMcpClientServer(delBtn.dataset.server);
+        return;
+    }
+    const invokeBtn = e.target.closest('[data-action="mcp-invoke-tool"]');
+    if (invokeBtn && invokeBtn.dataset.server && invokeBtn.dataset.tool) {
+        mcpClientCall(invokeBtn.dataset.server, invokeBtn.dataset.tool, invokeBtn.dataset.argsId, invokeBtn.dataset.resId);
+        return;
+    }
+});
+
+document.getElementById('btnSaveMcpClientServer')?.addEventListener('click', saveMcpClientServer);
+
+document.getElementById('tab-mcp-client')?.addEventListener('click', (e) => {
+    const presetBtn = e.target.closest('[data-action="mcp-preset"]');
+    if (presetBtn && presetBtn.dataset.preset) {
+        mcpClientPreset(presetBtn.dataset.preset);
+    }
+});
+

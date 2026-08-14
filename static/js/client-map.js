@@ -108,7 +108,7 @@ function locTenantChanged() {
             <span style="font-family:var(--font-code); color:var(--primary); min-width:120px;">${escapeHtml(o.switch_ip)}</span>
             <span style="font-family:var(--font-code); flex:1;">${escapeHtml(o.command)}</span>
             <span class="badge" style="font-size:10px;">${escapeHtml(o.fmt)}</span>
-            <button onclick="removeMacOverride('${escapeHtml(o.switch_ip)}')" title="${currentLang==='en'?'Remove':'Rimuovi'}" style="border:none; background:none; color:var(--danger); cursor:pointer;"><i class="fa-solid fa-trash-can"></i></button>
+            <button data-action="remove-mac-override" data-switch-ip="${escapeHtml(o.switch_ip)}" title="${currentLang==='en'?'Remove':'Rimuovi'}" style="border:none; background:none; color:var(--danger); cursor:pointer;"><i class="fa-solid fa-trash-can"></i></button>
         </div>`).join('');
     }
 
@@ -191,12 +191,12 @@ function locTenantChanged() {
         if (box) {
             const devs = macFilteredDevices();
             const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
-                <input type="checkbox" id="macDevAll" onchange="toggleAllMacDevices(this.checked)" style="accent-color:var(--primary);">
+                <input type="checkbox" id="macDevAll" data-action="toggle-all-mac-devices" style="accent-color:var(--primary);">
                 <strong>${currentLang==='en'?'All devices':'Tutti i dispositivi'}</strong></label>`;
             const items = devs.map(d => {
                 const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
                 return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" class="mac-dev-cb" value="${escapeHtml(d.IP)}" onchange="updateMacDeviceSummary()" style="accent-color:var(--primary);">
+                    <input type="checkbox" class="mac-dev-cb" value="${escapeHtml(d.IP)}" data-action="update-mac-device-summary" style="accent-color:var(--primary);">
                     <span style="font-family:var(--font-code);">${escapeHtml(d.IP)}</span>
                     <span style="color:var(--text-muted);">${name}</span></label>`;
             }).join('');
@@ -331,12 +331,12 @@ function locTenantChanged() {
             const L = i18n[currentLang];
             const devs = arpFilteredDevices();
             const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
-                <input type="checkbox" id="arpDevAll" onchange="toggleAllArpDevices(this.checked)" style="accent-color:var(--primary);">
+                <input type="checkbox" id="arpDevAll" data-action="toggle-all-arp-devices" style="accent-color:var(--primary);">
                 <strong>${L.optMacAllDevices || 'Tutti i dispositivi'}</strong></label>`;
             const items = devs.map(d => {
                 const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
                 return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
-                    <input type="checkbox" class="arp-dev-cb" value="${escapeHtml(d.IP)}" onchange="updateArpDeviceSummary()" style="accent-color:var(--primary);">
+                    <input type="checkbox" class="arp-dev-cb" value="${escapeHtml(d.IP)}" data-action="update-arp-device-summary" style="accent-color:var(--primary);">
                     <span style="font-family:var(--font-code);">${escapeHtml(d.IP)}</span>
                     <span style="color:var(--text-muted);">${name}</span></label>`;
             }).join('');
@@ -508,13 +508,13 @@ function locTenantChanged() {
             td(escapeHtml(r.client_type || 'client')),
             td(r.switch_ip ? `${escapeHtml(r.switch_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.switch_ip)}</span>` : '—'),
             td(escapeHtml(r.switch_port || '—') + (r.switch_ip && r.switch_port
-                ? `<button onclick="showPortConfig('${escapeHtml(r.switch_ip)}','${escapeHtml(r.switch_port)}','${escapeHtml(r.switch_name || '')}')" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
+                ? `<button data-action="show-port-config" data-switch-ip="${escapeHtml(r.switch_ip)}" data-switch-port="${escapeHtml(r.switch_port)}" data-switch-name="${escapeHtml(r.switch_name || '')}" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
                 : '')),
             td(fmtMacTime(r.last_seen)),
             // Diagnosi: la riga ha già IP e MAC, cioè tutto l'ingresso
             // dell'endpoint. Si passa l'IP quando c'è (più preciso del MAC,
             // che il servizio dovrebbe comunque risolvere).
-            td(`<button onclick="diagnoseClientInTab('${escapeHtml(jsStr(r.ip || r.mac))}','')" title="${escapeHtml(i18n[currentLang].btnDiagnose)}" style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:13px;"><i class="fa-solid fa-stethoscope"></i></button>`),
+            td(`<button data-action="diagnose-client" data-target="${escapeHtml(r.ip || r.mac)}" title="${escapeHtml(i18n[currentLang].btnDiagnose)}" style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:13px;"><i class="fa-solid fa-stethoscope"></i></button>`),
         ].join('') + '</tr>';
         const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">` +
             `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
@@ -576,13 +576,13 @@ function locTenantChanged() {
                     ? `<span title="${currentLang==='en'?'In transit on an uplink':'In transito su un uplink'}" style="font-size:10px; color:var(--warning); border:1px solid var(--warning); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-right-arrow-left"></i> ${currentLang==='en'?'transit':'transito'}${r.uplink_to?` → ${escapeHtml(r.uplink_to)}`:''}</span>`
                     : `<span title="${currentLang==='en'?'Access port – device attached here':'Porta di accesso – dispositivo collegato qui'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 5px;"><i class="fa-solid fa-location-crosshairs"></i> ${currentLang==='en'?'access':'accesso'}</span>`;
                 const portCfgBtn = (g.ip && r.interface)
-                    ? `<button onclick="showPortConfig('${escapeHtml(g.ip)}','${escapeHtml(r.interface)}','${escapeHtml(g.name || '')}')" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
+                    ? `<button data-action="show-port-config" data-switch-ip="${escapeHtml(g.ip)}" data-switch-port="${escapeHtml(r.interface)}" data-switch-name="${escapeHtml(g.name || '')}" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
                     : '';
                 // Il tenant del gruppo viaggia col MAC: si sta guardando UNO
                 // switch di UNA sede, e la risposta deve essere di quella sede.
                 // Senza, il modale univa gli avvistamenti di tutti i tenant
                 // visibili e dichiarava ambigue porte che ambigue non erano.
-                const locateBtn = `<button onclick="macLocate('${escapeHtml(jsStr(r.mac))}','${escapeHtml(jsStr(g.tenant || ''))}')" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
+                const locateBtn = `<button data-action="mac-locate" data-mac="${escapeHtml(r.mac)}" data-tenant="${escapeHtml(g.tenant || '')}" title="${currentLang==='en'?'Locate origin across switches':'Localizza origine tra gli switch'}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-magnifying-glass-location"></i></button>`;
                 // MAC di un'interfaccia propria dello switch: infrastruttura, non endpoint.
                 const isSwitchIf = (r.origin_type || r.device_type) === 'switch-interface';
                 const swName = r.origin_switch || r.switch_name || r.switch_ip;
@@ -727,17 +727,19 @@ function locTenantChanged() {
             <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(560px,94vw); max-height:86vh; overflow:auto; box-shadow:var(--shadow-float);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                     <h3 style="font-size:17px;"><i class="fa-solid fa-magnifying-glass-location" style="color:var(--primary);"></i> ${en?'MAC origin':'Origine MAC'}</h3>
-                    <i class="fa-solid fa-xmark" onclick="closeMacLocateModal()" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
+                    <i class="fa-solid fa-xmark" data-action="close-mac-locate-modal" style="cursor:pointer; color:var(--text-muted); font-size:17px;"></i>
                 </div>
                 <div style="font-family:var(--font-code); font-size:13px; color:var(--primary); margin-bottom:16px;">${escapeHtml(macStr)}</div>
 
                 ${sectionsHtml}
 
                 <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:16px;">
-                    <button onclick="closeMacLocateModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
+                    <button data-action="close-mac-locate-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${en?'Close':'Chiudi'}</button>
                 </div>
             </div>`;
-        ov.addEventListener('click', e => { if (e.target === ov) closeMacLocateModal(); });
+        ov.addEventListener('click', e => {
+            if (e.target === ov || e.target.closest('[data-action="close-mac-locate-modal"]')) closeMacLocateModal();
+        });
         document.body.appendChild(ov);
     }
 
@@ -772,3 +774,88 @@ function locTenantChanged() {
             alert((currentLang==='en'?'Error: ':'Errore: ') + (e.detail || ''));
         }
     }
+
+    // Delegated event listeners for dynamic containers in client-map.js
+    document.getElementById('macOverridesList')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="remove-mac-override"]');
+        if (btn && btn.dataset.switchIp) {
+            removeMacOverride(btn.dataset.switchIp);
+        }
+    });
+
+    document.getElementById('macDeviceList')?.addEventListener('change', (e) => {
+        const allCb = e.target.closest('input[data-action="toggle-all-mac-devices"]');
+        if (allCb) {
+            toggleAllMacDevices(allCb.checked);
+            return;
+        }
+        const devCb = e.target.closest('input[data-action="update-mac-device-summary"]');
+        if (devCb) {
+            updateMacDeviceSummary();
+        }
+    });
+
+    document.getElementById('arpDeviceList')?.addEventListener('change', (e) => {
+        const allCb = e.target.closest('input[data-action="toggle-all-arp-devices"]');
+        if (allCb) {
+            toggleAllArpDevices(allCb.checked);
+            return;
+        }
+        const devCb = e.target.closest('input[data-action="update-arp-device-summary"]');
+        if (devCb) {
+            updateArpDeviceSummary();
+        }
+    });
+
+    document.getElementById('arpResults')?.addEventListener('click', (e) => {
+        const portBtn = e.target.closest('[data-action="show-port-config"]');
+        if (portBtn) {
+            showPortConfig(portBtn.dataset.switchIp, portBtn.dataset.switchPort, portBtn.dataset.switchName);
+            return;
+        }
+        const diagBtn = e.target.closest('[data-action="diagnose-client"]');
+        if (diagBtn) {
+            diagnoseClientInTab(diagBtn.dataset.target, '');
+        }
+    });
+
+    document.getElementById('macResults')?.addEventListener('click', (e) => {
+        const portBtn = e.target.closest('[data-action="show-port-config"]');
+        if (portBtn) {
+            showPortConfig(portBtn.dataset.switchIp, portBtn.dataset.switchPort, portBtn.dataset.switchName);
+            return;
+        }
+        const locBtn = e.target.closest('[data-action="mac-locate"]');
+        if (locBtn) {
+            macLocate(locBtn.dataset.mac, locBtn.dataset.tenant);
+        }
+    });
+
+    // Static event listeners for MAC Tracker & Client Map tabs
+    document.getElementById('locTenant')?.addEventListener('change', locTenantChanged);
+    document.getElementById('locPills')?.addEventListener('click', (e) => {
+        const pill = e.target.closest('[data-loc-view]');
+        if (pill && pill.dataset.locView) {
+            locSwitchView(pill.dataset.locView);
+        }
+    });
+    const kpiMacWrap = document.getElementById('kpiMacUniqueWrap');
+    if (kpiMacWrap) {
+        kpiMacWrap.addEventListener('click', focusMacResults);
+        kpiMacWrap.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                focusMacResults();
+            }
+        });
+    }
+    document.getElementById('btnMacScan')?.addEventListener('click', runMacScan);
+    document.getElementById('btnSaveMacRetention')?.addEventListener('click', saveMacRetention);
+    document.getElementById('btnSaveMacOverride')?.addEventListener('click', saveMacOverride);
+    document.getElementById('macSearchSwitch')?.addEventListener('change', macSearch);
+    document.getElementById('btnMacSearch')?.addEventListener('click', macSearch);
+    document.getElementById('btnMacSearchReset')?.addEventListener('click', macSearchReset);
+    document.getElementById('btnArpScan')?.addEventListener('click', runArpScan);
+    document.getElementById('arpFilterGateway')?.addEventListener('change', arpClientSearch);
+    document.getElementById('btnArpSearch')?.addEventListener('click', arpClientSearch);
+    document.getElementById('btnArpSearchReset')?.addEventListener('click', arpSearchReset);

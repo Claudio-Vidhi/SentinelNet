@@ -921,8 +921,8 @@
 
       <!-- Sub-tab: Vulnerability Matcher (dispositivi interni) vs Vendor Watch (EUVD globale) -->
       <div style="display:flex; gap:8px; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" id="tiTabMatcher" onclick="tiSwitchView('matcher')" data-i18n="tiTabMatcher"><i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher</button>
-        <button class="btn btn-secondary ti-subtab" id="tiTabWatch" onclick="tiSwitchView('watch')" data-i18n="tiTabWatch"><i class="fa-solid fa-satellite-dish"></i> Vendor Watch</button>
+        <button class="btn btn-secondary ti-subtab active" id="tiTabMatcher" data-i18n="tiTabMatcher"><i class="fa-solid fa-crosshairs"></i> Vulnerability Matcher</button>
+        <button class="btn btn-secondary ti-subtab" id="tiTabWatch" data-i18n="tiTabWatch"><i class="fa-solid fa-satellite-dish"></i> Vendor Watch</button>
       </div>
 
       <div id="tiViewMatcher">
@@ -930,11 +930,11 @@
         <div class="panel" style="margin-bottom:18px;">
           <div class="filterbar" style="margin-top:0; align-items:center; gap:12px; flex-wrap:wrap;">
             <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatGroup">Sede da analizzare:</label>
-            <select id="threatGroupSelect" onchange="startThreatScan()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <select id="threatGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
             <label style="font-size:13px; font-weight:700; color:var(--text-muted);" data-i18n="lblThreatSeverity">Severità:</label>
-            <select id="threatSeveritySelect" onchange="applyThreatSeverityFilter()" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <select id="threatSeveritySelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optSevAll">Tutte le severità</option>
               <option value="CRITICAL" data-i18n="optSevCritical">Solo Critica (CRITICAL)</option>
               <option value="HIGH" data-i18n="optSevHigh">Alta e superiore (HIGH+)</option>
@@ -942,7 +942,7 @@
               <option value="LOW" data-i18n="optSevLow">Tutte (inclusa LOW)</option>
             </select>
             <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer;">
-              <input type="checkbox" id="threatIncludeDiscovered" onchange="startThreatScan()" style="accent-color:var(--primary);">
+              <input type="checkbox" id="threatIncludeDiscovered" style="accent-color:var(--primary);">
               <span data-i18n="lblThreatDiscovered">Includi vicini scoperti</span>
             </label>
           </div>
@@ -975,7 +975,7 @@
               <input type="checkbox" id="vwExploited" style="accent-color:var(--primary);"> <span data-i18n="vwLblExploited">Solo sfruttate</span></label>
             <div class="form-group" style="margin:0;"><label data-i18n="vwLblFrom">Da</label><input id="vwFromDate" type="date"></div>
             <div class="form-group" style="margin:0;"><label data-i18n="vwLblSearch">Cerca</label><input id="vwText" type="text" placeholder="CVE, prodotto..." style="padding-left:10px;"></div>
-            <button class="btn btn-primary" id="vwRefresh" onclick="vwFetch()"><i class="fa-solid fa-rotate"></i></button>
+            <button class="btn btn-primary" id="vwRefresh"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
         <div class="panel">
@@ -999,20 +999,20 @@
 
       <div class="filterbar" style="align-items:center; gap:10px; margin-bottom:14px;">
         <span style="font-size:12px; color:var(--text-muted);" data-i18n="locTenantLabel">Tenant</span>
-        <select id="locTenant" onchange="locTenantChanged()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;"></select>
+        <select id="locTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;"></select>
       </div>
 
       <div id="locPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button type="button" class="ca-pill active" id="locPill-mac" onclick="locSwitchView('mac')" data-i18n="tabMacTracker">Tracker MAC</button>
-        <button type="button" class="ca-pill" id="locPill-clientmap" onclick="locSwitchView('clientmap')" data-i18n="tabClientMap">Client Map</button>
-        <button type="button" class="ca-pill" id="locPill-diagnosi" onclick="locSwitchView('diagnosi')" data-i18n="tabDiagnosi">Diagnosi Client</button>
-        <button type="button" class="ca-pill" id="locPill-inventory" onclick="locSwitchView('inventory')" data-i18n="tabEndpoints">Endpoint Inventory</button>
+        <button type="button" class="ca-pill active" id="locPill-mac" data-loc-view="mac" data-i18n="tabMacTracker">Tracker MAC</button>
+        <button type="button" class="ca-pill" id="locPill-clientmap" data-loc-view="clientmap" data-i18n="tabClientMap">Client Map</button>
+        <button type="button" class="ca-pill" id="locPill-diagnosi" data-loc-view="diagnosi" data-i18n="tabDiagnosi">Diagnosi Client</button>
+        <button type="button" class="ca-pill" id="locPill-inventory" data-loc-view="inventory" data-i18n="tabEndpoints">Endpoint Inventory</button>
       </div>
 
       <div id="locPane-mac" class="loc-pane">
       <div class="oneline-foot" style="margin-bottom:18px;">
         <span><span data-i18n="macKpiSightingsLabel">Avvistamenti</span> <b id="kpiMacSightings">&mdash;</b></span>
-        <span class="kpi-clickable" onclick="focusMacResults()" title="" data-i18n-title="macKpiUniqueHint" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();focusMacResults();}"><span data-i18n="macKpiUniqueLabel">MAC Univoci</span> <i class="fa-solid fa-arrow-down-long" style="font-size:11px; color:var(--primary); margin-left:4px;"></i> <b id="kpiMacUniqueMacs">&mdash;</b></span>
+        <span class="kpi-clickable" id="kpiMacUniqueWrap" data-action="focus-mac-results" title="" data-i18n-title="macKpiUniqueHint" role="button" tabindex="0"><span data-i18n="macKpiUniqueLabel">MAC Univoci</span> <i class="fa-solid fa-arrow-down-long" style="font-size:11px; color:var(--primary); margin-left:4px;"></i> <b id="kpiMacUniqueMacs">&mdash;</b></span>
         <span><span data-i18n="macKpiSwitchesLabel">Switch</span> <b id="kpiMacSwitches">&mdash;</b></span>
         <span><span data-i18n="macKpiRetentionLabel">Retention (giorni)</span> <b id="kpiMacRetention">&mdash;</b></span>
       </div>
@@ -1037,13 +1037,13 @@
             </select>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <button class="btn btn-primary btn-small requires-write" id="btnMacScan" onclick="runMacScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnMacScan">
+            <button class="btn btn-primary btn-small requires-write" id="btnMacScan" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnMacScan">
               <i class="fa-solid fa-satellite-dish"></i> Avvia MAC Scan
             </button>
             <div class="requires-admin" style="display:flex; align-items:center; gap:6px;">
               <label style="font-size:12px; color:var(--text-muted);" data-i18n="lblMacRetention">Retention (giorni):</label>
               <input id="macRetentionDays" type="number" min="1" max="3650" style="width:70px; padding:5px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
-              <button class="btn btn-secondary btn-small" onclick="saveMacRetention()" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
+              <button class="btn btn-secondary btn-small" id="btnSaveMacRetention" style="width:auto; margin:0;" data-i18n="btnSave">Salva</button>
             </div>
           </div>
         </div>
@@ -1076,7 +1076,7 @@
                 <option value="generic" data-i18n="optMacFmtGeneric">generico</option>
               </select>
             </div>
-            <button class="btn btn-primary btn-small" onclick="saveMacOverride()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnSave">Salva</button>
+            <button class="btn btn-primary btn-small" id="btnSaveMacOverride" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnSave">Salva</button>
           </div>
           <div id="macOverridesList" style="margin-top:12px;"></div>
         </div>
@@ -1099,12 +1099,12 @@
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSwitch">Switch (IP)</label>
-            <select id="macSearchSwitch" class="ui-input" onchange="macSearch()" style="width:200px;"></select>
+            <select id="macSearchSwitch" class="ui-input" style="width:200px;"></select>
           </div>
-          <button class="btn btn-primary btn-small" onclick="macSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
+          <button class="btn btn-primary btn-small" id="btnMacSearch" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
             <i class="fa-solid fa-magnifying-glass"></i> Cerca
           </button>
-          <button class="btn btn-secondary btn-small" onclick="macSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
+          <button class="btn btn-secondary btn-small" id="btnMacSearchReset" style="width:auto; margin:0;" data-i18n="btnMacReset">
             <i class="fa-solid fa-rotate-left"></i> Reset
           </button>
         </div>
@@ -1138,7 +1138,7 @@
               <div id="arpDeviceList" style="position:absolute; top:110%; right:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:var(--shadow-float);"></div>
             </details>
           </div>
-          <button class="btn btn-primary btn-small requires-write" id="btnArpScan" onclick="runArpScan()" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
+          <button class="btn btn-primary btn-small requires-write" id="btnArpScan" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
             <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
           </button>
         </div>
@@ -1158,14 +1158,14 @@
           </div>
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
-            <select id="arpFilterGateway" onchange="arpClientSearch()" class="ui-input" style="width:200px; cursor:pointer;">
+            <select id="arpFilterGateway" class="ui-input" style="width:200px; cursor:pointer;">
               <option value="" data-i18n="optArpAllGateways">Tutti i gateway</option>
             </select>
           </div>
-          <button class="btn btn-primary btn-small" onclick="arpClientSearch()" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
+          <button class="btn btn-primary btn-small" id="btnArpSearch" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
             <i class="fa-solid fa-magnifying-glass"></i> Cerca
           </button>
-          <button class="btn btn-secondary btn-small" onclick="arpSearchReset()" style="width:auto; margin:0;" data-i18n="btnMacReset">
+          <button class="btn btn-secondary btn-small" id="btnArpSearchReset" style="width:auto; margin:0;" data-i18n="btnMacReset">
             <i class="fa-solid fa-rotate-left"></i> Reset
           </button>
           <span id="arpStats" class="chip" style="margin-left:auto;"></span>
@@ -1186,26 +1186,24 @@
           <div class="form-group" style="margin-bottom:0;">
             <label for="diagClientInput" data-i18n="lblDiagClient"></label>
             <input id="diagClientInput" type="text" placeholder="192.0.2.10 / aa:bb:cc:dd:ee:ff"
-                   style="padding-left:12px; font-size:13px;"
-                   onkeydown="if(event.key==='Enter')runDiagnosi();">
+                   style="padding-left:12px; font-size:13px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="diagDestInput" data-i18n="lblDiagDest"></label>
-            <input id="diagDestInput" type="text" style="padding-left:12px; font-size:13px;"
-                   onkeydown="if(event.key==='Enter')runDiagnosi();">
+            <input id="diagDestInput" type="text" style="padding-left:12px; font-size:13px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
               <label for="diagGatewayInput" style="margin-bottom:0; font-size:12px; font-weight:600;">Gateway L3</label>
-              <button class="btn btn-sm btn-secondary" type="button" onclick="detectGatewayTracerouteUI()" style="padding:2px 6px; font-size:10px; width:auto; border-radius:0;" title="Rileva il primo hop tramite traceroute">
+              <button class="btn btn-sm btn-secondary" id="btnDiagTraceroute" type="button" style="padding:2px 6px; font-size:10px; width:auto; border-radius:0;" title="Rileva il primo hop tramite traceroute">
                 <i class="fa-solid fa-route" style="color:var(--primary);"></i> Traceroute
               </button>
             </div>
             <div style="display:flex; gap:6px;">
-              <select id="diagGatewaySelect" onchange="onDiagGatewaySelectChange()" style="flex:1; padding:6px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+              <select id="diagGatewaySelect" style="flex:1; padding:6px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                 <option value="">Auto (ARP / Subnet)</option>
               </select>
-              <input id="diagGatewayInput" type="text" placeholder="Es. 192.168.1.1" style="flex:1; padding-left:8px; font-size:12px;" onkeydown="if(event.key==='Enter')runDiagnosi();">
+              <input id="diagGatewayInput" type="text" placeholder="Es. 192.168.1.1" style="flex:1; padding-left:8px; font-size:12px;">
             </div>
           </div>
           <div class="form-group" style="margin-bottom:0;">
@@ -1221,7 +1219,7 @@
             <input id="diagPortInput" type="number" min="1" max="65535" value="443"
                    style="padding-left:12px; font-size:13px;">
           </div>
-          <button class="btn btn-secondary" style="width:auto;" onclick="runDiagnosi()"
+          <button class="btn btn-secondary" id="btnRunDiagnosi" style="width:auto;"
                   data-i18n="btnDiagRun"></button>
         </div>
       </div>
@@ -1230,11 +1228,10 @@
       <div id="locPane-inventory" class="loc-pane" style="display:none;">
       <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
         <button id="epModeListBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0; border-color:var(--primary); color:var(--primary);"
-                onclick="endpointsMode('list')" data-i18n="epModeList"></button>
+                data-ep-mode="list" data-i18n="epModeList"></button>
         <button id="epModePortsBtn" class="btn btn-secondary btn-small" style="width:auto; margin:0;"
-                onclick="endpointsMode('ports')" data-i18n="epModePorts"></button>
-        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"
-                onchange="endpointsPorts()"></select>
+                data-ep-mode="ports" data-i18n="epModePorts"></button>
+        <select id="epPortsSwitch" style="display:none; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;"></select>
       </div>
       <div id="epKpis" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:16px;"></div>
       <div class="panel" style="margin-bottom:16px;">
@@ -1245,21 +1242,18 @@
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
             <label for="epFilterQ" data-i18n="epFilterQ"></label>
-            <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;"
-                   onkeydown="if(event.key==='Enter')endpointsApplyFilters();">
+            <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label for="epFilterStale" data-i18n="epFilterStale"></label>
             <input id="epFilterStale" type="number" min="1" max="3650" value="7"
-                   style="padding-left:12px; font-size:13px;"
-                   onchange="endpointsApplyFilters()"
-                   onkeydown="if(event.key==='Enter')endpointsApplyFilters();">
+                   style="padding-left:12px; font-size:13px;">
           </div>
-          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsApplyFilters()">
+          <button class="btn btn-secondary" id="btnEpFilter" style="width:auto;">
             <i class="fa-solid fa-magnifying-glass"></i>
           </button>
-          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('csv')" data-i18n="epExportCsv"></button>
-          <button class="btn btn-secondary" style="width:auto;" onclick="endpointsExport('json')" data-i18n="epExportJson"></button>
+          <button class="btn btn-secondary" id="btnEpExportCsv" style="width:auto;" data-i18n="epExportCsv"></button>
+          <button class="btn btn-secondary" id="btnEpExportJson" style="width:auto;" data-i18n="epExportJson"></button>
         </div>
       </div>
       <div id="epResults"></div>
@@ -1276,13 +1270,13 @@
         <div style="display:flex; align-items:center; gap:10px;">
           <!-- Tenant first, controller second: the second select lists only the
                WLCs of the chosen tenant (vendor cisco_wlc / cisco_9800). -->
-          <select id="wlcTenantSelect" onchange="onWlcTenantChanged()" style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
+          <select id="wlcTenantSelect" style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
             <option value="">-- Seleziona tenant --</option>
           </select>
-          <select id="wlcTargetSelect" onchange="onWlcTargetChanged()" disabled style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
+          <select id="wlcTargetSelect" disabled style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
             <option value="">-- Scegli prima un tenant --</option>
           </select>
-          <button class="btn btn-primary" onclick="refreshWlcData()" style="width:auto;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+          <button id="btnRefreshWlcData" class="btn btn-primary" style="width:auto;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
         </div>
       </div>
 
@@ -1312,7 +1306,7 @@
           <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
             <h3 style="font-size:15px; margin:0; flex:1 1 auto;"><i class="fa-solid fa-users-viewfinder" style="color:var(--success); margin-right:8px;"></i>Client Wireless Associati</h3>
             <span id="wlcClientCount" style="font-size:12px; color:var(--text-muted); font-family:var(--font-code);"></span>
-            <input id="wlcClientSearch" type="search" oninput="onWlcClientSearch()" placeholder="Cerca MAC, IP, AP, SSID..."
+            <input id="wlcClientSearch" type="search" placeholder="Cerca MAC, IP, AP, SSID..."
                    style="flex:0 1 260px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           </div>
           <div class="table-wrap" style="max-height:300px; overflow-y:auto;">
@@ -1368,13 +1362,13 @@
           <h3 style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
             <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i> Diagnostica Client Wireless WLC
           </h3>
-          <button onclick="document.getElementById('wlcDiagModal').style.display='none'" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+          <button id="btnCloseWlcDiagModal" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div id="wlcDiagModalBody" style="padding:18px; overflow-y:auto;">
           <!-- Telemetria diagnostica dinamica -->
         </div>
         <div style="padding:12px 18px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
-          <button class="btn btn-secondary" onclick="document.getElementById('wlcDiagModal').style.display='none'">Chiudi</button>
+          <button id="btnFooterCloseWlcDiagModal" class="btn btn-secondary">Chiudi</button>
         </div>
       </div>
     </div>
@@ -1394,51 +1388,51 @@
            per tutte e quattro le viste. Prima la stessa finestra esisteva tre
            volte e nessuna parlava con le altre. -->
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
-        <select id="trafWindow" onchange="trafSetWindow(this.value)" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <select id="trafWindow" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="15m" data-i18n="optWin15m">Ultimi 15 minuti</option>
           <option value="1h" selected data-i18n="optWin1h">Ultima ora</option>
           <option value="24h" data-i18n="optWin24h">Ultime 24 ore</option>
           <option value="7d" data-i18n="optWin7d">Ultimi 7 giorni</option>
         </select>
-        <select id="trafMetric" onchange="trafSetMetric(this.value)" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <select id="trafMetric" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="bytes" data-i18n="optByBytes">Per byte</option>
           <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
         </select>
         <div style="position:relative; display:inline-block;">
-          <button id="trafTenantBtn" class="btn" onclick="toggleTrafTenantDropdown()" style="padding:6px 12px;">
+          <button id="trafTenantBtn" class="btn" style="padding:6px 12px;">
             <i class="fa-solid fa-filter"></i> Tenants
           </button>
           <div id="trafTenantDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:220px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
             <div style="padding:8px;">
               <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; font-weight:500;">
-                <input type="checkbox" id="trafTenantAll" onchange="toggleTrafTenantAll()" style="accent-color:var(--primary);">
+                <input type="checkbox" id="trafTenantAll" style="accent-color:var(--primary);">
                 <span data-i18n="optArpAllTenants">Tutti i tenant</span>
               </label>
               <div id="trafTenantList" style="margin-top:6px;"></div>
             </div>
           </div>
         </div>
-        <button class="btn" style="width:auto; margin:0;" onclick="trafRefresh()"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
+        <button id="btnTrafRefresh" class="btn" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
           <input type="checkbox" id="trafAutoRefresh" checked style="accent-color:var(--primary);">
           <span data-i18n="lblFlowsAutoRefresh">Auto-aggiornamento (30s, in pausa se la scheda non è visibile)</span>
         </label>
         <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
-          <input type="checkbox" id="trafHideTelemetry" onchange="setFlowsHideTelemetry(this.checked)" style="accent-color:var(--primary);">
+          <input type="checkbox" id="trafHideTelemetry" style="accent-color:var(--primary);">
           <span data-i18n="lblFlowsHideTelemetry">Escludi traffico di telemetria (NetFlow/IPFIX/sFlow/Syslog/SNMP)</span>
         </label>
         <span id="trafLastUpdate" style="font-size:12px; color:var(--text-muted);"></span>
-        <button class="btn requires-write" style="width:auto; margin:0;" onclick="analyzeFlowsWithAi()" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
+        <button id="btnAnalyzeFlowsAi" class="btn requires-write" style="width:auto; margin:0;" data-i18n-title="titleAnalyzeFlowsAi" title="Invia un riassunto aggregato dei flussi all'assistente AI">
           <i class="fa-solid fa-robot"></i> <span data-i18n="btnAnalyzeAi">Analizza con AI</span>
         </button>
       </div>
 
       <div id="flowsAiNote" style="display:none; font-size:12px; color:var(--warning, var(--lamp-warn)); margin-bottom:12px;"></div>
       <div id="trafPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button type="button" class="ca-pill active" id="trafPill-overview" onclick="trafSwitchView('overview')" data-i18n="trafPillOverview">Panoramica</button>
-        <button type="button" class="ca-pill" id="trafPill-flows" onclick="trafSwitchView('flows')" data-i18n="trafPillFlows">Flussi</button>
-        <button type="button" class="ca-pill" id="trafPill-search" onclick="trafSwitchView('search')" data-i18n="trafPillSearch">Ricerca</button>
-        <button type="button" class="ca-pill" id="trafPill-anomalies" onclick="trafSwitchView('anomalies')" data-i18n="trafPillAnomalies">Anomalie</button>
+        <button type="button" class="ca-pill active" id="trafPill-overview" data-traf-view="overview" data-i18n="trafPillOverview">Panoramica</button>
+        <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
+        <button type="button" class="ca-pill" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
+        <button type="button" class="ca-pill" id="trafPill-anomalies" data-traf-view="anomalies" data-i18n="trafPillAnomalies">Anomalie</button>
       </div>
 
       <div id="trafPane-overview" class="traf-pane">
@@ -1482,16 +1476,16 @@
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
             <!-- 3-Way Graph Type Selector Buttons -->
             <div class="btn-group" style="display:inline-flex; border:1px solid var(--border); border-radius:0; overflow:hidden; background:var(--surface-3);">
-              <button id="btnChartTypeDonut" class="btn btn-sm" onclick="setObsChartType('donut')" style="padding:5px 10px; border:none; background:var(--cta); color:var(--cta-text); font-size:12px;" title="Grafico a Ciambella (Donut)"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="lblChartDonut">Ciambella</span></button>
-              <button id="btnChartTypeBar" class="btn btn-sm" onclick="setObsChartType('bar')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
-              <button id="btnChartTypeTrend" class="btn btn-sm" onclick="setObsChartType('trend')" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
+              <button id="btnChartTypeDonut" class="btn btn-sm" data-chart-type="donut" style="padding:5px 10px; border:none; background:var(--cta); color:var(--cta-text); font-size:12px;" title="Grafico a Ciambella (Donut)"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="lblChartDonut">Ciambella</span></button>
+              <button id="btnChartTypeBar" class="btn btn-sm" data-chart-type="bar" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
+              <button id="btnChartTypeTrend" class="btn btn-sm" data-chart-type="trend" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
             </div>
             <!-- La finestra e' quella del tab: la card non ne ha piu' una sua. -->
-            <button class="btn btn-sm btn-secondary" onclick="openObsInspectModal('all')" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
+            <button id="btnObsInspectModal" class="btn btn-sm btn-secondary" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
           </div>
         </div>
         <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; overflow:hidden;">
-          <canvas id="obsProtocolCanvas" onclick="openObsInspectModal('all')" style="width:100%; height:100%; display:block; cursor:pointer;" title="Clicca per aprire l'ispezione dettagliata telemetria"></canvas>
+          <canvas id="obsProtocolCanvas" style="width:100%; height:100%; display:block; cursor:pointer;" title="Clicca per aprire l'ispezione dettagliata telemetria"></canvas>
           <div id="obsProtocolStats" style="display:none; width:100%; height:100%; flex-direction:column; justify-content:center; gap:10px; padding:10px 20px;"></div>
         </div>
       </div>
@@ -1516,7 +1510,7 @@
         <div class="filterbar" style="gap:6px; align-items:center;">
           <div id="flowsSourceChips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
           <div style="position:relative; display:inline-block; margin-left:auto;">
-            <button id="flowsColsBtn" class="btn btn-small" onclick="toggleFlowsColsDropdown()" style="padding:6px 12px;">
+            <button id="flowsColsBtn" class="btn btn-small" style="padding:6px 12px;">
               <i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span>
             </button>
             <div id="flowsColsDropdown" style="display:none; position:absolute; top:100%; right:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:180px; z-index:1000; box-shadow:var(--shadow-lift); padding:8px;"></div>
@@ -1549,7 +1543,7 @@
       <div id="trafPane-search" class="traf-pane" style="display:none;">
       <div class="filterbar" style="align-items:center; margin:0 0 12px;">
         <span id="flowSiemStreamBadge" class="status ok"><span class="led led-success"></span>LIVE TAIL</span>
-        <button id="btnFlowSiemStream" class="btn btn-sm btn-secondary" onclick="toggleSiemStream()"><i class="fa-solid fa-pause"></i> Pausa Streaming</button>
+        <button id="btnFlowSiemStream" class="btn btn-sm btn-secondary"><i class="fa-solid fa-pause"></i> Pausa Streaming</button>
         <span id="flowSiemScopeNote" style="display:none; font-size:12px; color:var(--text-muted);"></span>
       </div>
       <div class="panel" style="margin-bottom:18px;">
@@ -1563,9 +1557,9 @@
         <div style="display:flex; gap:10px; align-items:center;">
           <div class="input-wrapper" style="flex:1;">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input id="flowSiemQueryInput" type="text" placeholder="Ricerca libera (es. 10.0.1.45, DENY, TCP) oppure campo:valore (es. src_ip:10.0.1.45, action:DENY)" onkeyup="filterSiemEvents()" style="width:100%; padding-left:36px;">
+            <input id="flowSiemQueryInput" type="text" placeholder="Ricerca libera (es. 10.0.1.45, DENY, TCP) oppure campo:valore (es. src_ip:10.0.1.45, action:DENY)" style="width:100%; padding-left:36px;">
           </div>
-          <button class="btn btn-primary btn-small" onclick="filterSiemEvents()"><i class="fa-solid fa-filter"></i> Filtra</button>
+          <button id="btnFilterSiem" class="btn btn-primary btn-small"><i class="fa-solid fa-filter"></i> Filtra</button>
         </div>
       </div>
 
@@ -1603,16 +1597,16 @@
       <div class="panel">
       <h3 id="anomSectionTitle" style="margin:0 0 10px; font-size:17px;" data-i18n="titleCorrelatedAnomalies">Correlated anomalies</h3>
       <div class="filterbar" style="gap:10px; align-items:center; margin-top:0;">
-        <select id="anomStatus" onchange="loadAnomalies()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+        <select id="anomStatus" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
           <option value="new" data-i18n="optAnomNew">Nuove</option>
           <option value="ack" data-i18n="optAnomAck">Prese in carico</option>
           <option value="resolved" data-i18n="optAnomResolved">Risolte</option>
           <option value="all" data-i18n="optAnomAll">Tutte</option>
         </select>
-        <button class="btn" onclick="loadAnomalies()"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
+        <button id="btnRefreshAnomalies" class="btn"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         <span id="anomIpFilterChip" class="chip" style="display:none; text-transform:none; letter-spacing:normal;">
           <span></span>
-          <a href="javascript:void(0)" onclick="clearAnomIpFilter()" data-i18n-title="titleRemoveFilter" title="Rimuovi filtro"><i class="fa-solid fa-xmark"></i></a>
+          <a href="javascript:void(0)" id="lnkClearAnomIpFilter" data-i18n-title="titleRemoveFilter" title="Rimuovi filtro"><i class="fa-solid fa-xmark"></i></a>
         </span>
       </div>
       <div class="table-wrap" style="max-height:320px;">
@@ -1635,7 +1629,7 @@
     <div id="flowDetailPanel" style="display:none; position:fixed; top:0; right:0; height:100vh; width:380px; max-width:92vw; background:var(--surface-2); border-left:1px solid var(--border); box-shadow:var(--shadow-float); z-index:10010; overflow-y:auto; padding:18px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h4 style="margin:0;" data-i18n="titleFlowDetail">Flow detail</h4>
-        <button class="btn" onclick="closeFlowDetailPanel()" data-i18n-title="titleClose" title="Close"><i class="fa-solid fa-xmark"></i></button>
+        <button id="btnCloseFlowDetail" class="btn" data-i18n-title="titleClose" title="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div id="flowDetailPanelBody"></div>
     </div>
@@ -1654,24 +1648,24 @@
       <div class="panel" style="margin-bottom:18px;">
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div id="caPills" style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="ca-pill active" data-view="home" onclick="caSwitchView('home')" data-i18n="pillCaHome">Home</button>
-            <button class="ca-pill" data-view="vlan" onclick="caSwitchView('vlan')" data-i18n="pillVlans">VLAN</button>
-            <button class="ca-pill" data-view="routing" onclick="caSwitchView('routing')" data-i18n="pillRouting">Routing</button>
-            <button class="ca-pill" data-view="acl" onclick="caSwitchView('acl')" data-i18n="pillAcls">ACL</button>
-            <button class="ca-pill" data-view="iface" onclick="caSwitchView('iface')" data-i18n="pillIfaces">Interfacce</button>
-            <button class="ca-pill" data-view="validation" onclick="caSwitchView('validation')" data-i18n="pillValidation">Validazione</button>
-            <button class="ca-pill" data-view="firewall" onclick="caSwitchView('firewall')" data-i18n="pillCaFirewall">Firewall</button>
-            <button class="ca-pill" data-view="server" onclick="caSwitchView('server')" data-i18n="pillCaServer">Server</button>
-            <button class="ca-pill" data-view="convert" onclick="caSwitchView('convert')" data-i18n="pillCaConvert">Converti</button>
+            <button class="ca-pill active" data-view="home" data-i18n="pillCaHome">Home</button>
+            <button class="ca-pill" data-view="vlan" data-i18n="pillVlans">VLAN</button>
+            <button class="ca-pill" data-view="routing" data-i18n="pillRouting">Routing</button>
+            <button class="ca-pill" data-view="acl" data-i18n="pillAcls">ACL</button>
+            <button class="ca-pill" data-view="iface" data-i18n="pillIfaces">Interfacce</button>
+            <button class="ca-pill" data-view="validation" data-i18n="pillValidation">Validazione</button>
+            <button class="ca-pill" data-view="firewall" data-i18n="pillCaFirewall">Firewall</button>
+            <button class="ca-pill" data-view="server" data-i18n="pillCaServer">Server</button>
+            <button class="ca-pill" data-view="convert" data-i18n="pillCaConvert">Converti</button>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <input id="caSearch" type="text" oninput="caApplySearch()"
+            <input id="caSearch" type="text"
                    data-i18n-placeholder="phCaSearch" placeholder="Cerca..."
                    style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; outline:none; width:180px;">
-            <select id="configGroupSelect" onchange="loadConfigAnalyzer()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
+            <select id="configGroupSelect" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; cursor:pointer; outline:none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
-            <button class="btn btn-secondary btn-small" onclick="loadConfigAnalyzer(true)" style="width:auto; margin:0;" data-i18n="btnCaRefresh">
+            <button id="btnCaRefresh" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-i18n="btnCaRefresh">
               <i class="fa-solid fa-rotate"></i> Aggiorna
             </button>
           </div>
@@ -1707,10 +1701,10 @@
         </summary>
         <div style="padding:0 16px 16px 16px;">
           <div style="display:none;">
-            <select id="aiProfileSelect" onchange="onAiProfileSelectChange()">
+            <select id="aiProfileSelect">
               <option value="" data-i18n="optAiNoProfile">Nessun profilo</option>
             </select>
-            <select id="aiProfileEditSelect" onchange="onAiProfileEditSelectChange()">
+            <select id="aiProfileEditSelect">
               <option value="__new__" data-i18n="optAiNewProfile">-- nuovo profilo --</option>
             </select>
           </div>
@@ -1718,7 +1712,7 @@
             <div>
               <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:8px;" data-i18n="lblAiProfileList">Profili</div>
               <div id="aiProfileCards" style="display:flex; flex-direction:column; gap:8px;"></div>
-              <button type="button" class="btn btn-secondary btn-small ai-profile-new" style="width:100%; margin-top:8px;" onclick="selectAiProfileCard('__new__')">
+              <button type="button" class="btn btn-secondary btn-small ai-profile-new" style="width:100%; margin-top:8px;" data-action="select-profile" data-profile-id="__new__">
                 <i class="fa-solid fa-plus"></i> <span data-i18n="optAiNewProfile">-- nuovo profilo --</span>
               </button>
             </div>
@@ -1732,7 +1726,7 @@
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
             <div class="form-group" style="min-width:150px;">
               <label data-i18n="lblAiProvider">Provider</label>
-              <select id="aiProvider" onchange="resetAiModelList()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+              <select id="aiProvider" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
                 <option value="" data-i18n="optAiNoProvider">-- seleziona provider --</option>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI (ChatGPT)</option>
@@ -1746,7 +1740,7 @@
                 <select id="aiModelSelect" style="flex:1; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
                   <option value="" data-i18n="optAiModelCustom">-- modello personalizzato --</option>
                 </select>
-                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="refreshAiModels()" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
+                <button type="button" class="btn btn-secondary btn-small" id="btnAiRefreshModels" style="width:auto; margin:0;" title="Aggiorna elenco modelli" data-i18n-title="btnAiRefreshModelsTitle">
                   <i class="fa-solid fa-rotate"></i>
                 </button>
               </div>
@@ -1776,10 +1770,10 @@
             </div>
           </div>
           <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-            <button class="btn btn-primary" style="width:auto;" onclick="saveAiSettings()" data-i18n="btnAiSaveSettings">
+            <button class="btn btn-primary" id="btnAiSaveSettings" style="width:auto;" data-i18n="btnAiSaveSettings">
               <i class="fa-solid fa-floppy-disk"></i> Salva profilo
             </button>
-            <button class="btn btn-secondary" style="width:auto;" onclick="deleteAiProfile()" id="btnAiDeleteProfile" data-i18n="btnAiDeleteProfile">
+            <button class="btn btn-secondary" style="width:auto;" id="btnAiDeleteProfile" data-i18n="btnAiDeleteProfile">
               <i class="fa-solid fa-trash"></i> Elimina profilo
             </button>
           </div>
@@ -1801,7 +1795,7 @@
              - 40px)), diventerebbe alto quanto il viewport e sfonderebbe la
              griglia della chat, spingendo il composer fuori dal riquadro. -->
         <div class="ai-conv-sidebar">
-          <button class="btn btn-primary btn-small" style="width:100%;" onclick="newAiConversation()" data-i18n="btnAiNewChat">
+          <button class="btn btn-primary btn-small" id="btnAiNewChat" style="width:100%;" data-i18n="btnAiNewChat">
             <i class="fa-solid fa-plus"></i> Nuova conversazione
           </button>
           <div id="aiConvList" class="ai-conv-list"></div>
@@ -1810,10 +1804,10 @@
         <section class="ai-chat-main">
           <header class="ai-chat-header">
             <h3 id="aiChatTitle" style="margin:0; font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" data-i18n="titleAiChat">Conversazione</h3>
-            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="renameAiConversation()" id="btnAiRenameChat" data-i18n-title="btnAiRenameChat" title="Rinomina conversazione">
+            <button class="btn btn-secondary btn-small" style="width:auto;" id="btnAiRenameChat" data-i18n-title="btnAiRenameChat" title="Rinomina conversazione">
               <i class="fa-solid fa-pen"></i>
             </button>
-            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="deleteCurrentAiConversation()" id="btnAiDeleteChat" data-i18n-title="btnAiDeleteChat" title="Elimina conversazione">
+            <button class="btn btn-secondary btn-small" style="width:auto;" id="btnAiDeleteChat" data-i18n-title="btnAiDeleteChat" title="Elimina conversazione">
               <i class="fa-solid fa-trash"></i>
             </button>
           </header>
@@ -1824,18 +1818,18 @@
             <label style="font-size:13px; display:flex; align-items:center; gap:6px;">
               <input type="checkbox" id="aiAttachInventory"> <span data-i18n="lblAiAttachInventory">Allega riepilogo inventario</span>
             </label>
-            <select id="aiAttachTenant" onchange="populateAiAttachDevices()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+            <select id="aiAttachTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
               <option value="" data-i18n="optAiNoTenant">Nessun tenant allegato</option>
             </select>
             <div style="position:relative; display:inline-block;">
-              <button id="aiAttachDeviceBtn" class="btn" onclick="toggleAiDeviceDropdown()" style="padding:6px 12px;">
+              <button id="aiAttachDeviceBtn" class="btn" style="padding:6px 12px;">
                 <i class="fa-solid fa-server"></i> <span id="aiAttachDeviceBtnLabel">Dispositivi</span>
               </button>
               <div id="aiAttachDeviceDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:260px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
                 <div style="padding:8px;">
                   <div style="display:flex; gap:12px; padding:2px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:6px;">
-                    <a href="javascript:void(0)" onclick="setAllAiAttachDevices(true)" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
-                    <a href="javascript:void(0)" onclick="setAllAiAttachDevices(false)" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
+                    <a href="javascript:void(0)" data-action="ai-select-all-devices" style="font-size:11px;" data-i18n="lnkSelectAll">Seleziona tutti</a>
+                    <a href="javascript:void(0)" data-action="ai-deselect-all-devices" style="font-size:11px;" data-i18n="lnkDeselectAll">Deseleziona tutti</a>
                   </div>
                   <div id="aiAttachDeviceList" style="font-size:13px;"></div>
                 </div>
@@ -1846,8 +1840,8 @@
           <div id="aiChatMessages" style="flex:1 1 0; min-height:0; overflow-y:auto; padding:16px; background:var(--surface);"></div>
 
           <div class="ai-chat-composer">
-            <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAiChat();}"></textarea>
-            <button class="btn btn-primary" id="btnAiSend" style="width:auto;" onclick="sendAiChat()" data-i18n="btnAiSend">
+            <textarea id="aiChatInput" rows="2" placeholder="Scrivi un messaggio..." data-i18n-placeholder="phAiChatInput" style="flex:1; padding:10px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); resize:vertical;"></textarea>
+            <button class="btn btn-primary" id="btnAiSend" style="width:auto;" data-i18n="btnAiSend">
               <i class="fa-solid fa-paper-plane"></i> Invia
             </button>
           </div>
@@ -1890,7 +1884,7 @@
           </div>
           <div class="form-group" style="min-width:170px; margin:0;">
             <label data-i18n="lblGenCfgTenant">Tenant</label>
-            <select id="genCfgTenant" onchange="populateGenCfgTemplates()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
+            <select id="genCfgTenant" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;"></select>
           </div>
           <div class="form-group" style="min-width:220px; margin:0;">
             <label data-i18n="lblGenCfgTemplate">Switch template (opzionale)</label>
@@ -1910,14 +1904,14 @@
             <label data-i18n="lblGenCfgNotes">Note (opzionale)</label>
             <input id="genCfgNotes" type="text" placeholder="" style="padding-left:12px;">
           </div>
-          <button class="btn btn-primary" id="btnGenCfg" style="width:auto; margin:0;" onclick="generateSwitchConfig()" data-i18n="btnGenCfgGenerate">
+          <button class="btn btn-primary" id="btnGenCfg" style="width:auto; margin:0;" data-i18n="btnGenCfgGenerate">
             <i class="fa-solid fa-wand-magic-sparkles"></i> Genera
           </button>
         </div>
         <div id="genCfgStatus" style="font-size:12px; color:var(--text-muted); margin-top:8px;"></div>
         <div id="genCfgResult" style="display:none; margin-top:10px;">
           <div style="display:flex; justify-content:flex-end; margin-bottom:6px;">
-            <button class="btn btn-secondary btn-small" style="width:auto;" onclick="copyGenCfgOutput()" data-i18n="btnGenCfgCopy">
+            <button class="btn btn-secondary btn-small" id="btnGenCfgCopy" style="width:auto;" data-i18n="btnGenCfgCopy">
               <i class="fa-solid fa-copy"></i> Copia
             </button>
           </div>
@@ -2228,7 +2222,7 @@
               <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
             </select>
           </div>
-          <button class="btn btn-primary btn-small" onclick="createUser()" style="margin:0; white-space:nowrap;" data-i18n="btnAddUser">
+          <button class="btn btn-primary btn-small" id="btnCreateUser" style="margin:0; white-space:nowrap;" data-i18n="btnAddUser">
             <i class="fa-solid fa-plus"></i> Crea Utente
           </button>
         </div>
@@ -2276,7 +2270,7 @@
             <label data-i18n="lblSiteSubnets">Subnet (separate da virgola)</label>
             <input id="newSiteSubnets" type="text" placeholder="es. 10.0.0.0/24, 10.0.1.0/24" style="padding-left:12px;">
           </div>
-          <button class="btn btn-primary btn-small" onclick="createSite()" style="margin:0; white-space:nowrap;">
+          <button class="btn btn-primary btn-small" id="btnCreateSite" style="margin:0; white-space:nowrap;">
             <i class="fa-solid fa-plus"></i> <span data-i18n="btnCreateSite">Crea sede</span>
           </button>
         </div>
@@ -2304,7 +2298,7 @@
       <div class="panel" style="margin-bottom:18px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
           <h3 style="font-size:15px; margin:0;"><i class="fa-solid fa-file-code" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientConfig">Configurazione client</span></h3>
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="copyMcpConfig()">
+          <button class="btn btn-secondary btn-small" id="btnCopyMcpConfig" style="width:auto; margin:0;">
             <i class="fa-solid fa-copy"></i> <span data-i18n="btnCopyJson">Copia JSON</span>
           </button>
         </div>
@@ -2323,7 +2317,7 @@
         </p>
         <div id="mcpToolList" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:8px;"></div>
         <div style="display:flex; gap:10px; align-items:center; margin-top:14px;">
-          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="saveMcpSettings()">
+          <button class="btn btn-primary btn-small" id="btnSaveMcpSettings" style="width:auto; margin:0;">
             <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
           </button>
           <span id="mcpSettingsStatus" style="font-size:12px; color:var(--text-muted);"></span>
@@ -2336,7 +2330,7 @@
           Abilita la tab sperimentale "MCP Client": SentinelNet come client verso server MCP esterni (Jira, ServiceNow…) via Streamable HTTP. Funzionalita' in anteprima.
         </p>
         <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
-          <input type="checkbox" id="mcpPreviewToggle" onchange="setMcpPreview(this.checked)">
+          <input type="checkbox" id="mcpPreviewToggle">
           <span data-i18n="lblMcpClientPreviewToggle">Abilita la tab MCP Client (preview)</span>
         </label>
         <span id="mcpPreviewStatus" style="font-size:12px; color:var(--text-muted);"></span>
@@ -2361,8 +2355,8 @@
       <div class="panel" style="margin-bottom:18px;">
         <h3 style="font-size:15px; margin-bottom:10px;"><i class="fa-solid fa-plus" style="color:var(--primary);"></i> <span data-i18n="titleMcpClientAdd">Aggiungi server</span></h3>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="mcpClientPreset('jira')"><i class="fa-brands fa-jira"></i> Jira (MCP)</button>
-          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="mcpClientPreset('servicenow')"><i class="fa-solid fa-headset"></i> ServiceNow (MCP)</button>
+          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="mcp-preset" data-preset="jira"><i class="fa-brands fa-jira"></i> Jira (MCP)</button>
+          <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="mcp-preset" data-preset="servicenow"><i class="fa-solid fa-headset"></i> ServiceNow (MCP)</button>
         </div>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:10px;">
           <input id="mcpcName" class="input" placeholder="Nome" data-i18n-placeholder="phMcpClientName">
@@ -2371,7 +2365,7 @@
         </div>
         <p id="mcpcHint" style="color:var(--text-muted); font-size:11px; margin:8px 0 0;"></p>
         <div style="display:flex; gap:10px; align-items:center; margin-top:12px;">
-          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="saveMcpClientServer()"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span></button>
+          <button class="btn btn-primary btn-small" id="btnSaveMcpClientServer" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span></button>
           <span id="mcpcSaveStatus" style="font-size:12px; color:var(--text-muted);"></span>
         </div>
       </div>
@@ -2397,25 +2391,25 @@
         <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
           <div class="form-group" style="margin-bottom:0; min-width:260px;">
             <label for="fgtTargetSelect" data-i18n="lblFgtTargetSelect">Target FortiGate attivo</label>
-            <select id="fgtTargetSelect" onchange="onFgtTargetSelectChange()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            <select id="fgtTargetSelect" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               <option value="" data-i18n="optFgtNoTargets">-- nessun target configurato --</option>
             </select>
           </div>
-          <button type="button" class="btn btn-secondary" style="width:auto;" onclick="openFgtManageModal()" data-i18n="btnFgtManageTargets">
+          <button type="button" id="btnFgtManageTargets" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtManageTargets">
             <i class="fa-solid fa-gears"></i> Gestisci FortiGate
           </button>
         </div>
       </div>
 
       <!-- Sotto-tab Fortigate Management -->
-      <div class="subtab-bar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
-        <button class="btn btn-secondary ti-subtab active" id="fgtSub-overview" onclick="fgtSwitchView('overview')" data-i18n="fgtSubOverview">Panoramica</button>
-        <button class="btn btn-secondary ti-subtab" id="fgtSub-network" onclick="fgtSwitchView('network')" data-i18n="fgtSubNetwork">Rete</button>
-        <button class="btn btn-secondary ti-subtab" id="fgtSub-firewall" onclick="fgtSwitchView('firewall')" data-i18n="fgtSubFirewall">Firewall</button>
-        <button class="btn btn-secondary ti-subtab" id="fgtSub-traffic" onclick="fgtSwitchView('traffic')" data-i18n="fgtSubTraffic">Traffico</button>
-        <button class="btn btn-secondary ti-subtab" id="fgtSub-security" onclick="fgtSwitchView('security')" data-i18n="fgtSubSecurity">Sicurezza</button>
-        <button class="btn btn-secondary ti-subtab" id="fgtSub-wifi" onclick="fgtSwitchView('wifi')" data-i18n="fgtSubWifi">WiFi</button>
-        <button class="btn btn-secondary ti-subtab requires-admin" id="fgtSub-settings" onclick="fgtSwitchView('settings')" data-i18n="fgtSubSettings">Impostazioni</button>
+      <div class="subtab-bar" id="fgtSubtabBar" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <button class="btn btn-secondary ti-subtab active" id="fgtSub-overview" data-fgt-view="overview" data-i18n="fgtSubOverview">Panoramica</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-network" data-fgt-view="network" data-i18n="fgtSubNetwork">Rete</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-firewall" data-fgt-view="firewall" data-i18n="fgtSubFirewall">Firewall</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-traffic" data-fgt-view="traffic" data-i18n="fgtSubTraffic">Traffico</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-security" data-fgt-view="security" data-i18n="fgtSubSecurity">Sicurezza</button>
+        <button class="btn btn-secondary ti-subtab" id="fgtSub-wifi" data-fgt-view="wifi" data-i18n="fgtSubWifi">WiFi</button>
+        <button class="btn btn-secondary ti-subtab requires-admin" id="fgtSub-settings" data-fgt-view="settings" data-i18n="fgtSubSettings">Impostazioni</button>
       </div>
 
       <!-- Panoramica: tile di stato + risorse + HA. Nessuna pill, guidato da renderFgtOverview() (Task 10). -->
@@ -2434,21 +2428,21 @@
       <!-- Rete: interfacce, ARP, DHCP, routing, VPN, SD-WAN -->
       <div id="fgtPane-network" class="fgt-pane" style="display:none;">
         <div class="panel">
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <button type="button" class="ca-pill active" id="fgtPill-interfaces" onclick="fgtPickView('network','interfaces')" data-i18n="fgtPillInterfaces">Interfacce</button>
-            <button type="button" class="ca-pill" id="fgtPill-arp" onclick="fgtPickView('network','arp')" data-i18n="fgtPillArp">ARP</button>
-            <button type="button" class="ca-pill" id="fgtPill-dhcp" onclick="fgtPickView('network','dhcp')" data-i18n="fgtPillDhcp">DHCP</button>
-            <button type="button" class="ca-pill" id="fgtPill-routes" onclick="fgtPickView('network','routes')" data-i18n="fgtPillRoutes">Routing</button>
-            <button type="button" class="ca-pill" id="fgtPill-vpn" onclick="fgtPickView('network','vpn')" data-i18n="fgtPillVpn">VPN</button>
-            <button type="button" class="ca-pill" id="fgtPill-sdwan" onclick="fgtPickView('network','sdwan')" data-i18n="fgtPillSdwan">SD-WAN</button>
+          <div class="fgt-pills-container" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-interfaces" data-fgt-section="network" data-fgt-pill="interfaces" data-i18n="fgtPillInterfaces">Interfacce</button>
+            <button type="button" class="ca-pill" id="fgtPill-arp" data-fgt-section="network" data-fgt-pill="arp" data-i18n="fgtPillArp">ARP</button>
+            <button type="button" class="ca-pill" id="fgtPill-dhcp" data-fgt-section="network" data-fgt-pill="dhcp" data-i18n="fgtPillDhcp">DHCP</button>
+            <button type="button" class="ca-pill" id="fgtPill-routes" data-fgt-section="network" data-fgt-pill="routes" data-i18n="fgtPillRoutes">Routing</button>
+            <button type="button" class="ca-pill" id="fgtPill-vpn" data-fgt-section="network" data-fgt-pill="vpn" data-i18n="fgtPillVpn">VPN</button>
+            <button type="button" class="ca-pill" id="fgtPill-sdwan" data-fgt-section="network" data-fgt-pill="sdwan" data-i18n="fgtPillSdwan">SD-WAN</button>
           </div>
-          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-interfaces" type="text" oninput="renderFgtDataset('interfaces')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-arp" type="text" oninput="renderFgtDataset('arp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-dhcp" type="text" oninput="renderFgtDataset('dhcp')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-routes" type="text" oninput="renderFgtDataset('routes')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-vpn" type="text" oninput="renderFgtDataset('vpn')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-sdwan" type="text" oninput="renderFgtDataset('sdwan')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <button type="button" class="btn btn-secondary btn-small" data-action="fgt-refresh" style="width:auto; margin-bottom:10px;" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-interfaces" type="text" class="fgt-filter-input" data-fgt-dataset="interfaces" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-arp" type="text" class="fgt-filter-input" data-fgt-dataset="arp" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-dhcp" type="text" class="fgt-filter-input" data-fgt-dataset="dhcp" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-routes" type="text" class="fgt-filter-input" data-fgt-dataset="routes" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-vpn" type="text" class="fgt-filter-input" data-fgt-dataset="vpn" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-sdwan" type="text" class="fgt-filter-input" data-fgt-dataset="sdwan" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-interfaces"></div>
           <div id="fgtView-arp" style="display:none;"></div>
           <div id="fgtView-dhcp" style="display:none;"></div>
@@ -2461,24 +2455,24 @@
       <!-- Firewall: indirizzi, gruppi, servizi, VIP, IP pool, policy, verifica policy -->
       <div id="fgtPane-firewall" class="fgt-pane" style="display:none;">
         <div class="panel">
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <button type="button" class="ca-pill active" id="fgtPill-addresses" onclick="fgtPickView('firewall','addresses')" data-i18n="fgtPillAddresses">Indirizzi</button>
-            <button type="button" class="ca-pill" id="fgtPill-addressGroups" onclick="fgtPickView('firewall','addressGroups')" data-i18n="fgtPillAddressGroups">Gruppi Indirizzi</button>
-            <button type="button" class="ca-pill" id="fgtPill-services" onclick="fgtPickView('firewall','services')" data-i18n="fgtPillServices">Servizi</button>
-            <button type="button" class="ca-pill" id="fgtPill-serviceGroups" onclick="fgtPickView('firewall','serviceGroups')" data-i18n="fgtPillServiceGroups">Gruppi Servizi</button>
-            <button type="button" class="ca-pill" id="fgtPill-vips" onclick="fgtPickView('firewall','vips')" data-i18n="fgtPillVips">VIP</button>
-            <button type="button" class="ca-pill" id="fgtPill-ipPools" onclick="fgtPickView('firewall','ipPools')" data-i18n="fgtPillIpPools">IP Pool</button>
-            <button type="button" class="ca-pill" id="fgtPill-policies" onclick="fgtPickView('firewall','policies')" data-i18n="fgtPillPolicies">Policy</button>
-            <button type="button" class="ca-pill" id="fgtPill-policyLookup" onclick="fgtPickView('firewall','policyLookup')" data-i18n="fgtPillPolicyLookup">Verifica Policy</button>
+          <div class="fgt-pills-container" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-addresses" data-fgt-section="firewall" data-fgt-pill="addresses" data-i18n="fgtPillAddresses">Indirizzi</button>
+            <button type="button" class="ca-pill" id="fgtPill-addressGroups" data-fgt-section="firewall" data-fgt-pill="addressGroups" data-i18n="fgtPillAddressGroups">Gruppi Indirizzi</button>
+            <button type="button" class="ca-pill" id="fgtPill-services" data-fgt-section="firewall" data-fgt-pill="services" data-i18n="fgtPillServices">Servizi</button>
+            <button type="button" class="ca-pill" id="fgtPill-serviceGroups" data-fgt-section="firewall" data-fgt-pill="serviceGroups" data-i18n="fgtPillServiceGroups">Gruppi Servizi</button>
+            <button type="button" class="ca-pill" id="fgtPill-vips" data-fgt-section="firewall" data-fgt-pill="vips" data-i18n="fgtPillVips">VIP</button>
+            <button type="button" class="ca-pill" id="fgtPill-ipPools" data-fgt-section="firewall" data-fgt-pill="ipPools" data-i18n="fgtPillIpPools">IP Pool</button>
+            <button type="button" class="ca-pill" id="fgtPill-policies" data-fgt-section="firewall" data-fgt-pill="policies" data-i18n="fgtPillPolicies">Policy</button>
+            <button type="button" class="ca-pill" id="fgtPill-policyLookup" data-fgt-section="firewall" data-fgt-pill="policyLookup" data-i18n="fgtPillPolicyLookup">Verifica Policy</button>
           </div>
-          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-addresses" type="text" oninput="renderFgtDataset('addresses')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-addressGroups" type="text" oninput="renderFgtDataset('addressGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-services" type="text" oninput="renderFgtDataset('services')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-serviceGroups" type="text" oninput="renderFgtDataset('serviceGroups')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-vips" type="text" oninput="renderFgtDataset('vips')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-ipPools" type="text" oninput="renderFgtDataset('ipPools')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-policies" type="text" oninput="renderFgtDataset('policies')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <button type="button" class="btn btn-secondary btn-small" data-action="fgt-refresh" style="width:auto; margin-bottom:10px;" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-addresses" type="text" class="fgt-filter-input" data-fgt-dataset="addresses" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-addressGroups" type="text" class="fgt-filter-input" data-fgt-dataset="addressGroups" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-services" type="text" class="fgt-filter-input" data-fgt-dataset="services" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-serviceGroups" type="text" class="fgt-filter-input" data-fgt-dataset="serviceGroups" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-vips" type="text" class="fgt-filter-input" data-fgt-dataset="vips" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-ipPools" type="text" class="fgt-filter-input" data-fgt-dataset="ipPools" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-policies" type="text" class="fgt-filter-input" data-fgt-dataset="policies" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtForm-policyLookup" style="display:none; margin-bottom:12px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
               <div class="form-group" style="margin-bottom:0;">
@@ -2506,7 +2500,7 @@
                 <input id="fgtLookupIntf" type="text" style="padding-left:12px; font-size:13px;">
               </div>
             </div>
-            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('policyLookup')" data-i18n="btnFgtLookupRun">
+            <button type="button" id="btnFgtLookupRun" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtLookupRun">
               <i class="fa-solid fa-magnifying-glass"></i> Verifica policy
             </button>
           </div>
@@ -2524,13 +2518,13 @@
       <!-- Traffico: sessioni attive, log, inventario dispositivi -->
       <div id="fgtPane-traffic" class="fgt-pane" style="display:none;">
         <div class="panel">
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <button type="button" class="ca-pill active" id="fgtPill-sessions" onclick="fgtPickView('traffic','sessions')" data-i18n="fgtPillSessions">Sessioni</button>
-            <button type="button" class="ca-pill" id="fgtPill-logs" onclick="fgtPickView('traffic','logs')" data-i18n="fgtPillLogs">Log</button>
-            <button type="button" class="ca-pill" id="fgtPill-deviceInventory" onclick="fgtPickView('traffic','deviceInventory')" data-i18n="fgtPillDeviceInventory">Inventario Dispositivi</button>
-            <button type="button" class="ca-pill" id="fgtPill-clientDiagnosis" onclick="fgtPickView('traffic','clientDiagnosis')" data-i18n="fgtPillClientDiagnosis">Diagnosi Client</button>
+          <div class="fgt-pills-container" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-sessions" data-fgt-section="traffic" data-fgt-pill="sessions" data-i18n="fgtPillSessions">Sessioni</button>
+            <button type="button" class="ca-pill" id="fgtPill-logs" data-fgt-section="traffic" data-fgt-pill="logs" data-i18n="fgtPillLogs">Log</button>
+            <button type="button" class="ca-pill" id="fgtPill-deviceInventory" data-fgt-section="traffic" data-fgt-pill="deviceInventory" data-i18n="fgtPillDeviceInventory">Inventario Dispositivi</button>
+            <button type="button" class="ca-pill" id="fgtPill-clientDiagnosis" data-fgt-section="traffic" data-fgt-pill="clientDiagnosis" data-i18n="fgtPillClientDiagnosis">Diagnosi Client</button>
           </div>
-          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <button type="button" class="btn btn-secondary btn-small" data-action="fgt-refresh" style="width:auto; margin-bottom:10px;" data-i18n="btnFgtRefreshView">Aggiorna</button>
           <div id="fgtForm-sessions" style="margin-bottom:12px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
               <div class="form-group" style="margin-bottom:0;">
@@ -2547,13 +2541,12 @@
               </div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('sessions')" data-i18n="btnFgtSessLoad">
+              <button type="button" id="btnFgtSessLoad" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtSessLoad">
                 <i class="fa-solid fa-rotate"></i> Carica sessioni
               </button>
               <!-- Termina le sessioni che corrispondono ai filtri qui sopra.
                    Senza filtri non parte: azzererebbe la tabella sessioni. -->
-              <button type="button" id="btnFgtSessionKill" class="btn btn-danger requires-write" style="width:auto;"
-                      onclick="fgtKillSessions()" data-i18n="btnFgtSessKill">
+              <button type="button" id="btnFgtSessionKill" class="btn btn-danger requires-write" style="width:auto;" data-i18n="btnFgtSessKill">
                 <i class="fa-solid fa-ban"></i> Termina sessioni
               </button>
             </div>
@@ -2610,13 +2603,13 @@
                 <input id="fgtLogCount" type="number" value="100" min="1" max="1000" style="padding-left:12px; font-size:13px;">
               </div>
             </div>
-            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('logs')" data-i18n="btnFgtLogLoad">
+            <button type="button" id="btnFgtLogLoad" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtLogLoad">
               <i class="fa-solid fa-rotate"></i> Carica log
             </button>
           </div>
-          <input id="fgtFilter-sessions" type="text" oninput="renderFgtDataset('sessions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-logs" type="text" oninput="renderFgtDataset('logs')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-deviceInventory" type="text" oninput="renderFgtDataset('deviceInventory')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-sessions" type="text" class="fgt-filter-input" data-fgt-dataset="sessions" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-logs" type="text" class="fgt-filter-input" data-fgt-dataset="logs" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-deviceInventory" type="text" class="fgt-filter-input" data-fgt-dataset="deviceInventory" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtForm-clientDiagnosis" style="display:none; margin-bottom:12px;">
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:10px;">
               <div class="form-group" style="margin-bottom:0;">
@@ -2640,7 +2633,7 @@
                 <input id="fgtDiagPort" type="number" min="1" max="65535" value="443" style="padding-left:12px; font-size:13px;">
               </div>
             </div>
-            <button type="button" class="btn btn-secondary" style="width:auto;" onclick="loadFgtDataset('clientDiagnosis')" data-i18n="btnFgtDiagRun">
+            <button type="button" id="btnFgtDiagRun" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtDiagRun">
               <i class="fa-solid fa-stethoscope"></i> Diagnostica
             </button>
           </div>
@@ -2654,18 +2647,18 @@
       <!-- Sicurezza: amministratori, utenti bannati, certificati, revisioni config, profili -->
       <div id="fgtPane-security" class="fgt-pane" style="display:none;">
         <div class="panel">
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <button type="button" class="ca-pill active" id="fgtPill-admins" onclick="fgtPickView('security','admins')" data-i18n="fgtPillAdmins">Amministratori</button>
-            <button type="button" class="ca-pill" id="fgtPill-bannedUsers" onclick="fgtPickView('security','bannedUsers')" data-i18n="fgtPillBannedUsers">Utenti Bannati</button>
-            <button type="button" class="ca-pill" id="fgtPill-certificates" onclick="fgtPickView('security','certificates')" data-i18n="fgtPillCertificates">Certificati</button>
-            <button type="button" class="ca-pill" id="fgtPill-configRevisions" onclick="fgtPickView('security','configRevisions')" data-i18n="fgtPillConfigRevisions">Revisioni Config</button>
-            <button type="button" class="ca-pill" id="fgtPill-securityProfiles" onclick="fgtPickView('security','securityProfiles')" data-i18n="fgtPillSecurityProfiles">Profili Sicurezza</button>
+          <div class="fgt-pills-container" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-admins" data-fgt-section="security" data-fgt-pill="admins" data-i18n="fgtPillAdmins">Amministratori</button>
+            <button type="button" class="ca-pill" id="fgtPill-bannedUsers" data-fgt-section="security" data-fgt-pill="bannedUsers" data-i18n="fgtPillBannedUsers">Utenti Bannati</button>
+            <button type="button" class="ca-pill" id="fgtPill-certificates" data-fgt-section="security" data-fgt-pill="certificates" data-i18n="fgtPillCertificates">Certificati</button>
+            <button type="button" class="ca-pill" id="fgtPill-configRevisions" data-fgt-section="security" data-fgt-pill="configRevisions" data-i18n="fgtPillConfigRevisions">Revisioni Config</button>
+            <button type="button" class="ca-pill" id="fgtPill-securityProfiles" data-fgt-section="security" data-fgt-pill="securityProfiles" data-i18n="fgtPillSecurityProfiles">Profili Sicurezza</button>
           </div>
-          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-admins" type="text" oninput="renderFgtDataset('admins')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-bannedUsers" type="text" oninput="renderFgtDataset('bannedUsers')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-certificates" type="text" oninput="renderFgtDataset('certificates')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
-          <input id="fgtFilter-configRevisions" type="text" oninput="renderFgtDataset('configRevisions')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <button type="button" class="btn btn-secondary btn-small" data-action="fgt-refresh" style="width:auto; margin-bottom:10px;" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-admins" type="text" class="fgt-filter-input" data-fgt-dataset="admins" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-bannedUsers" type="text" class="fgt-filter-input" data-fgt-dataset="bannedUsers" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-certificates" type="text" class="fgt-filter-input" data-fgt-dataset="certificates" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <input id="fgtFilter-configRevisions" type="text" class="fgt-filter-input" data-fgt-dataset="configRevisions" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-admins"></div>
           <div id="fgtView-bannedUsers" style="display:none;"></div>
           <div id="fgtView-certificates" style="display:none;"></div>
@@ -2677,13 +2670,13 @@
       <!-- WiFi: access point e client associati -->
       <div id="fgtPane-wifi" class="fgt-pane" style="display:none;">
         <div class="panel">
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-            <button type="button" class="ca-pill active" id="fgtPill-wifiAps" onclick="fgtPickView('wifi','wifiAps')" data-i18n="fgtPillWifiAps">Access Point</button>
-            <button type="button" class="ca-pill" id="fgtPill-wifiClients" onclick="fgtPickView('wifi','wifiClients')" data-i18n="fgtPillWifiClients">Client WiFi</button>
+          <div class="fgt-pills-container" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button type="button" class="ca-pill active" id="fgtPill-wifiAps" data-fgt-section="wifi" data-fgt-pill="wifiAps" data-i18n="fgtPillWifiAps">Access Point</button>
+            <button type="button" class="ca-pill" id="fgtPill-wifiClients" data-fgt-section="wifi" data-fgt-pill="wifiClients" data-i18n="fgtPillWifiClients">Client WiFi</button>
           </div>
-          <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin-bottom:10px;" onclick="refreshFgtView()" data-i18n="btnFgtRefreshView">Aggiorna</button>
-          <input id="fgtFilter-wifiAps" type="text" oninput="renderFgtDataset('wifiAps')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
-          <input id="fgtFilter-wifiClients" type="text" oninput="renderFgtDataset('wifiClients')" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
+          <button type="button" class="btn btn-secondary btn-small" data-action="fgt-refresh" style="width:auto; margin-bottom:10px;" data-i18n="btnFgtRefreshView">Aggiorna</button>
+          <input id="fgtFilter-wifiAps" type="text" class="fgt-filter-input" data-fgt-dataset="wifiAps" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+          <input id="fgtFilter-wifiClients" type="text" class="fgt-filter-input" data-fgt-dataset="wifiClients" data-i18n-placeholder="phFgtObjFilter" placeholder="Filtra..." style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-wifiAps"></div>
           <div id="fgtView-wifiClients" style="display:none;"></div>
         </div>
@@ -2735,13 +2728,13 @@
               <label for="fgtPrevTokenVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-primary" style="width:auto;" onclick="saveFgtPrevToken()" data-i18n="btnFgtTokenSave">
+              <button id="btnFgtTokenSave" class="btn btn-primary" style="width:auto;" data-i18n="btnFgtTokenSave">
                 <i class="fa-solid fa-floppy-disk"></i> Salva token cifrato
               </button>
-              <button class="btn btn-secondary" style="width:auto;" onclick="removeFgtPrevToken()" data-i18n="btnFgtTokenRemove">
+              <button id="btnFgtTokenRemove" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtTokenRemove">
                 <i class="fa-solid fa-trash"></i> Rimuovi
               </button>
-              <button class="btn btn-secondary" style="width:auto;" onclick="testFgtPrevToken()" data-i18n="btnFgtTokenTest">
+              <button id="btnFgtTokenTest" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtTokenTest">
                 <i class="fa-solid fa-plug"></i> Test
               </button>
             </div>
@@ -2755,10 +2748,10 @@
           <p style="margin:0 0 12px; color:var(--text-muted); font-size:12px;" data-i18n="descFgtFullConfig">
             Contiene segreti: non viene mai caricata automaticamente.
           </p>
-          <button type="button" class="btn btn-secondary" style="width:auto; margin-bottom:12px;" onclick="loadFgtDataset('fullConfig')" data-i18n="btnFgtFullConfigLoad">
+          <button type="button" id="btnFgtFullConfigLoad" class="btn btn-secondary" style="width:auto; margin-bottom:12px;" data-i18n="btnFgtFullConfigLoad">
             <i class="fa-solid fa-rotate"></i> Carica configurazione completa
           </button>
-          <input id="fgtFilter-fullConfig" type="text" oninput="renderFgtDataset('fullConfig')"
+          <input id="fgtFilter-fullConfig" type="text" class="fgt-filter-input" data-fgt-dataset="fullConfig"
                  data-i18n-placeholder="phFgtConfigSearch" placeholder="Cerca nella configurazione..."
                  style="width:100%; margin-bottom:10px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; display:none;">
           <div id="fgtView-fullConfig"></div>
@@ -2790,7 +2783,7 @@
         <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
           <div class="form-group" style="margin:0; max-width:340px;">
             <label style="font-size:12px;" data-i18n="lblUiVariantSelect">Seleziona Layout / Design</label>
-            <select id="uiVariantSelect" onchange="applyUiVariant(this.value, true)" style="padding-left:12px;">
+            <select id="uiVariantSelect" style="padding-left:12px;">
               <option value="default" data-i18n="optUiVariantDefault">Standard (SentinelNet SCADA Mimic)</option>
               <option value="design-1" data-i18n="optUiVariantDesign1">Design 1 (Impeccable Modern Blue)</option>
               <option value="design-2" data-i18n="optUiVariantDesign2">Design 2 (Impeccable Cyber Violet)</option>
@@ -2803,20 +2796,20 @@
              i campioni delle palette delle varianti: ogni card PUBBLICIZZA la
              palette che applica, come per themes/*.css (waiver in
              .impeccable/config.json). -->
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
-          <div onclick="applyUiVariant('default', true)" style="cursor:pointer; padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-radius -- preview card rounded on purpose, it is not panel chrome -->
+        <div id="uiVariantCardsGrid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+          <div data-action="apply-ui-variant" data-variant="default" style="cursor:pointer; padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-radius -- preview card rounded on purpose, it is not panel chrome -->
             <div style="font-weight:600; font-size:13px; margin-bottom:4px;"><i class="fa-solid fa-layer-group" style="color:var(--primary); margin-right:6px;"></i>Standard</div>
             <div style="font-size:11px; color:var(--text-muted);">SCADA Mimic board</div>
           </div>
-          <div onclick="applyUiVariant('design-1', true)" style="cursor:pointer; padding:14px; border:1px solid rgba(56,189,248,0.3); border-radius:8px; background:rgba(19,31,55,0.7); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-color, design-system-radius -- swatch of the design-1 palette it advertises -->
+          <div data-action="apply-ui-variant" data-variant="design-1" style="cursor:pointer; padding:14px; border:1px solid rgba(56,189,248,0.3); border-radius:8px; background:rgba(19,31,55,0.7); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-color, design-system-radius -- swatch of the design-1 palette it advertises -->
             <div style="font-weight:600; font-size:13px; color:#38bdf8; margin-bottom:4px;"><i class="fa-solid fa-gem" style="margin-right:6px;"></i>Design 1</div> <!-- impeccable-disable-line design-system-color -- swatch of the design-1 palette it advertises -->
             <div style="font-size:11px; color:#94a3b8;">Modern Blue Glass</div> <!-- impeccable-disable-line design-system-color -- swatch of the design-1 palette it advertises -->
           </div>
-          <div onclick="applyUiVariant('design-2', true)" style="cursor:pointer; padding:14px; border:1px solid rgba(139,92,246,0.3); border-radius:8px; background:rgba(18,25,41,0.7); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-color, design-system-radius -- swatch of the design-2 palette it advertises -->
+          <div data-action="apply-ui-variant" data-variant="design-2" style="cursor:pointer; padding:14px; border:1px solid rgba(139,92,246,0.3); border-radius:8px; background:rgba(18,25,41,0.7); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-color, design-system-radius -- swatch of the design-2 palette it advertises -->
             <div style="font-weight:600; font-size:13px; color:#c084fc; margin-bottom:4px;"><i class="fa-solid fa-bolt" style="margin-right:6px;"></i>Design 2</div> <!-- impeccable-disable-line design-system-color -- swatch of the design-2 palette it advertises -->
             <div style="font-size:11px; color:#a78bfa;">Cyber Violet Synthwave</div> <!-- impeccable-disable-line design-system-color -- swatch of the design-2 palette it advertises -->
           </div>
-          <div onclick="applyUiVariant('design-3', true)" style="cursor:pointer; padding:14px; border:1px solid rgba(148,163,184,0.3); border-radius:8px; background:rgba(31,41,55,0.7); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-color, design-system-radius -- swatch of the design-3 palette it advertises -->
+          <div data-action="apply-ui-variant" data-variant="design-3" style="cursor:pointer; padding:14px; border:1px solid rgba(148,163,184,0.3); border-radius:8px; background:rgba(31,41,55,0.7); transition:all 0.2s ease;"> <!-- impeccable-disable-line design-system-color, design-system-radius -- swatch of the design-3 palette it advertises -->
             <div style="font-weight:600; font-size:13px; color:#38bdf8; margin-bottom:4px;"><i class="fa-solid fa-snowflake" style="margin-right:6px;"></i>Design 3</div> <!-- impeccable-disable-line design-system-color -- swatch of the design-3 palette it advertises -->
             <div style="font-size:11px; color:#cbd5e1;">Titanium Frost Slate</div> <!-- impeccable-disable-line design-system-color -- swatch of the design-3 palette it advertises -->
           </div>
@@ -2841,7 +2834,7 @@
           Gli amministratori bypassano sempre la blacklist dei comandi distruttivi (i comandi restano tracciati nell'audit log). Qui decidi se applicarla agli operatori.
         </p>
         <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-          <input type="checkbox" id="cliBlacklistToggle" onchange="saveCliBlacklistSetting()">
+          <input type="checkbox" id="cliBlacklistToggle">
           <span style="font-size:13px;" data-i18n="lblCliBlacklistOperators">Applica blacklist comandi CLI agli operatori</span>
         </label>
         <div id="cliBlacklistStatus" style="margin-top:10px; font-size:12px; color:var(--text-muted);"></div>
@@ -2862,7 +2855,7 @@
             <label style="font-size:12px;" data-i18n="lblPingMonitorInterval">Intervallo (secondi)</label>
             <input type="number" id="pingMonitorInterval" min="5" max="86400" value="60" style="padding-left:12px;">
           </div>
-          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="savePingMonitorSettings()">
+          <button id="btnSavePingMonitor" class="btn btn-primary btn-small" style="width:auto; margin:0;">
             <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="btnSave">Salva</span>
           </button>
         </div>
@@ -2912,7 +2905,7 @@
       <div class="panel" style="padding:12px 16px; margin-bottom:18px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
         <div>
           <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterStatus">Stato</label>
-          <select id="incStatusFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+          <select id="incStatusFilter" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
             <option value="new" data-i18n="incOptNew">Nuovi</option>
             <option value="ack" data-i18n="incOptAck">Presi in carico</option>
             <option value="resolved" data-i18n="incOptResolved">Risolti</option>
@@ -2921,13 +2914,13 @@
         </div>
         <div>
           <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="incFilterWindow">Finestra</label>
-          <select id="incWindowFilter" onchange="loadIncidentsList()" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+          <select id="incWindowFilter" style="padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
             <option value="24h" data-i18n="optWin24h">24 ore</option>
             <option value="6h" data-i18n="optWin6h">6 ore</option>
             <option value="7d" data-i18n="optWin7d">7 giorni</option>
           </select>
         </div>
-        <button class="btn btn-secondary btn-small" style="width:auto;" onclick="loadIncidentsList()" data-i18n="incBtnRefresh"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+        <button id="btnRefreshIncidents" class="btn btn-secondary btn-small" style="width:auto;" data-i18n="incBtnRefresh"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
       </div>
 
       <div style="display:grid; grid-template-columns: 380px 1fr; gap:18px; align-items:start;">
@@ -2968,11 +2961,11 @@
     <!-- TAB: NetSec Audit -->
     <div id="tab-netsec-audit" class="tab-content">
       <!-- Sub-tab switcher per NetSec Audit -->
-      <div style="display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:10px;">
-        <button id="subtabBtnAuditScan" class="btn btn-secondary active" onclick="switchNetSecSubtab('scan')" style="width:auto; margin:0; padding:6px 14px; font-size:13px; font-weight:600;">
+      <div id="netsecSubtabNav" style="display:flex; gap:8px; margin-bottom:18px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+        <button id="subtabBtnAuditScan" class="btn btn-secondary active" data-subtab="scan" style="width:auto; margin:0; padding:6px 14px; font-size:13px; font-weight:600;">
           <i class="fa-solid fa-shield-cat"></i> <span data-i18n="nsaSubtabScan">Scansione &amp; Compliance Automatica</span>
         </button>
-        <button id="subtabBtnChecklist" class="btn btn-secondary" onclick="switchNetSecSubtab('checklist')" style="width:auto; margin:0; padding:6px 14px; font-size:13px; font-weight:600;">
+        <button id="subtabBtnChecklist" class="btn btn-secondary" data-subtab="checklist" style="width:auto; margin:0; padding:6px 14px; font-size:13px; font-weight:600;">
           <i class="fa-solid fa-clipboard-check"></i> <span data-i18n="nsaSubtabChecklist">Checklist Audit Firewall</span>
         </button>
       </div>
@@ -3016,7 +3009,7 @@
             </div>
             <div>
               <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="nsaBenchmarkLabel">Benchmark / Standard di Security</label>
-              <select id="auditBenchmarkSelect" onchange="renderBenchmarkRequirements()" style="width:100%; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <select id="auditBenchmarkSelect" style="width:100%; padding:8px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
                 <option value="cis" data-i18n="nsaBenchCis">CIS Benchmark (FortiGate 7.4.x / Cisco IOS XE 17.x / Ubuntu 24.04 LTS)</option>
                 <option value="nist" data-i18n="nsaBenchNist">NIST SP 800-53 Rev. 5</option>
                 <option value="pci" data-i18n="nsaBenchPci">PCI-DSS v4.0 Network Requirement</option>
@@ -3027,20 +3020,20 @@
                   <span data-i18n="auditSaveRunLabel">Conserva questa esecuzione nello storico</span>
                 </label>
                 <div id="auditSaveNameContainer" style="margin-top:4px;">
-                  <input type="text" id="auditRunName" oninput="toggleAuditSaveNameInput()" placeholder="Nome / Etichetta Audit (opzionale, es. Audit Q3)" data-i18n-placeholder="auditRunNamePh" style="width:100%; padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+                  <input type="text" id="auditRunName" placeholder="Nome / Etichetta Audit (opzionale, es. Audit Q3)" data-i18n-placeholder="auditRunNamePh" style="width:100%; padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
                 </div>
               </div>
             </div>
           </div>
 
-          <details id="auditBenchmarkReqs" style="margin-bottom:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-2);" ontoggle="renderBenchmarkRequirements()">
+          <details id="auditBenchmarkReqs" style="margin-bottom:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-2);">
             <summary style="padding:8px 12px; cursor:pointer; font-size:12px; font-weight:600; color:var(--primary);" data-i18n="nsaReqsSummary">
               <i class="fa-solid fa-circle-info"></i> Requisiti verificati da questo benchmark
             </summary>
             <div id="auditBenchmarkReqsBody" style="padding:0 12px 12px;"></div>
           </details>
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-            <button id="btnRunAuditScan" class="btn btn-primary" onclick="runAuditScan()" style="width:auto; margin:0;" data-i18n="nsaBtnRun"><i class="fa-solid fa-play"></i> Esegui Audit Scan</button>
+            <button id="btnRunAuditScan" class="btn btn-primary" style="width:auto; margin:0;" data-i18n="nsaBtnRun"><i class="fa-solid fa-play"></i> Esegui Audit Scan</button>
             <div style="display:flex; align-items:center; gap:8px;">
               <!-- Lingua del REPORT, non dell'interfaccia: un audit si consegna,
                    e il destinatario puo' non leggere la lingua di chi lo esegue.
@@ -3050,7 +3043,7 @@
                 <option value="it">Italiano</option>
                 <option value="en">English</option>
               </select>
-              <button class="btn btn-secondary" onclick="exportAuditReport()" style="width:auto; margin:0;" data-i18n="nsaBtnExport"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
+              <button id="btnExportAuditReport" class="btn btn-secondary" style="width:auto; margin:0;" data-i18n="nsaBtnExport"><i class="fa-solid fa-file-pdf"></i> Esporta Report Compliance</button>
             </div>
           </div>
         </div>
@@ -3075,7 +3068,7 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
           <h4 style="margin:0; font-size:15px;" data-i18n="nsaResultsTitle"><i class="fa-solid fa-list-check"></i> Matrice Risultati Audit Policy</h4>
           <div style="display:flex; gap:8px;">
-            <select id="auditSevFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <select id="auditSevFilter" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
               <option value="all" data-i18n="nsaFilterSevAll">Filtra Severità: Tutte</option>
               <option value="critical">Critical</option>
               <option value="high">High</option>
@@ -3085,7 +3078,7 @@
             <!-- Le categorie corrispondono al campo 'category' delle regole in
                  services/netsec_audit/benchmarks.py: aggiungerne una li' senza
                  aggiungerla qui la rende non filtrabile. -->
-            <select id="auditCatFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <select id="auditCatFilter" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
               <option value="all" data-i18n="nsaFilterCatAll">Filtra Categoria: Tutte</option>
               <option value="hardening">Hardening</option>
               <option value="access rules">Access Rules</option>
@@ -3098,7 +3091,7 @@
             </select>
             <!-- Gli stati sono le costanti di services/netsec_audit/model.py;
                  UNKNOWN qui si legge "N/D", come nel badge della tabella. -->
-            <select id="auditStatusFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+            <select id="auditStatusFilter" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
               <option value="all" data-i18n="nsaFilterStatusAll">Filtra Stato: Tutti</option>
               <option value="PASS">Pass</option>
               <option value="FAIL">Fail</option>
@@ -3128,7 +3121,7 @@
       <div id="auditHistoryPanel" class="panel" style="margin-top:16px; padding:16px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <h4 style="margin:0; font-size:15px; color:var(--primary);" data-i18n="auditHistoryTitle"><i class="fa-solid fa-clock-rotate-left"></i> Storico Esecuzioni Audit</h4>
-          <button class="btn btn-secondary" onclick="loadAuditHistory()" style="width:auto; margin:0; padding:4px 10px; font-size:12px;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+          <button id="btnRefreshAuditHistory" class="btn btn-secondary" style="width:auto; margin:0; padding:4px 10px; font-size:12px;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
         </div>
         <div class="table-container">
           <table>
@@ -3165,7 +3158,7 @@
       <div class="panel" style="margin-bottom:18px;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
           <h3 style="font-size:17px; margin:0;"><i class="fa-solid fa-folder-open" style="color:var(--primary);"></i> Audit Clienti (Engagement)</h3>
-          <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="openNewAuditModal()"><i class="fa-solid fa-plus"></i> Nuovo Audit Cliente</button>
+          <button id="btnOpenNewAuditModal" class="btn btn-primary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-plus"></i> Nuovo Audit Cliente</button>
         </div>
         <div id="auditEngagementList"></div>
       </div>
@@ -3175,8 +3168,8 @@
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:6px;">
           <h3 style="font-size:17px; margin:0;"><i class="fa-solid fa-list-check" style="color:var(--primary);"></i> Domande della Checklist <span id="auditTplName" style="font-size:12px; font-weight:normal; color:var(--text-muted);"></span></h3>
           <div style="display:flex; gap:8px;">
-            <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="openTemplateItemModal()"><i class="fa-solid fa-plus"></i> Nuova Domanda</button>
-            <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="toggleTemplateEditor()"><i class="fa-solid fa-eye"></i> <span id="auditTplToggleLabel">Mostra</span></button>
+            <button id="btnOpenTemplateItemModal" class="btn btn-primary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-plus"></i> Nuova Domanda</button>
+            <button id="btnToggleTemplateEditor" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-eye"></i> <span id="auditTplToggleLabel">Mostra</span></button>
           </div>
         </div>
         <p style="margin:0 0 12px; color:var(--text-muted); font-size:12px;">
@@ -3205,7 +3198,7 @@
     <div class="modal" style="width: 720px; max-width: 96%;">
       <div class="modal-header">
         <h3 data-i18n="titleSubnetScan"><i class="fa-solid fa-magnifying-glass-location" style="color: var(--primary);"></i> Scansione Subnet</h3>
-        <i class="fa-solid fa-xmark modal-close" onclick="closeSubnetScanModal()"></i>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseSubnetScan"></i>
       </div>
 
       <div class="form-group">
@@ -3217,9 +3210,7 @@
                       padding: 10px 12px; border-radius: 0;
                       background: var(--surface-2); border: 1px solid var(--border);
                       color: var(--text); width: 100%; box-sizing: border-box;
-                      outline: none; transition: var(--transition);"
-               onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
-               onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
+                      outline: none; transition: var(--transition);">
       </div>
 
       <div class="form-group">
@@ -3229,17 +3220,15 @@
                       padding: 10px 12px; border-radius: 0;
                       background: var(--surface-2); border: 1px solid var(--border);
                       color: var(--text); width: 100%; box-sizing: border-box;
-                      outline: none; transition: var(--transition);"
-               onfocus="this.style.borderColor='var(--primary)'; this.style.boxShadow='0 0 0 3px var(--primary-glow)';"
-               onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
+                      outline: none; transition: var(--transition);">
         <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
-          <button type="button" class="btn btn-small" onclick="addScanPort(22)"
+          <button type="button" class="btn btn-small" data-action="add-scan-port" data-port="22"
                   style="margin:0; width:auto; padding:3px 8px;">SSH 22</button>
-          <button type="button" class="btn btn-small" onclick="addScanPort(23)"
+          <button type="button" class="btn btn-small" data-action="add-scan-port" data-port="23"
                   style="margin:0; width:auto; padding:3px 8px;">Telnet 23</button>
-          <button type="button" class="btn btn-small" onclick="addScanPort(443)"
+          <button type="button" class="btn btn-small" data-action="add-scan-port" data-port="443"
                   style="margin:0; width:auto; padding:3px 8px;">HTTPS 443</button>
-          <button type="button" class="btn btn-small" onclick="addScanPort(8443)"
+          <button type="button" class="btn btn-small" data-action="add-scan-port" data-port="8443"
                   style="margin:0; width:auto; padding:3px 8px;">8443</button>
         </div>
         <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;"
@@ -3258,7 +3247,6 @@
       </div>
 
       <button class="btn btn-primary" id="btnAvviaScan"
-              onclick="startSubnetScan()"
               style="width: 100%; margin: 0;"
               data-i18n="btnStartScan">
         <i class="fa-solid fa-satellite-dish"></i> Avvia Scansione
@@ -3290,10 +3278,9 @@
                   style="padding: 6px 8px; border-radius: 0; background: var(--surface-2);
                          border: 1px solid var(--border); color: var(--text);
                          font-size: 12px; cursor: pointer; outline: none;"></select>
-          <button class="btn btn-small" id="btnScanVerify" onclick="verifySelectedScanRows()"
+          <button class="btn btn-small" id="btnScanVerify"
                   style="margin:0; width:auto; padding:5px 10px;" disabled></button>
           <button class="btn btn-primary btn-small" id="btnScanAddSelected"
-                  onclick="addSelectedScanRows()"
                   style="margin:0; width:auto; padding:5px 10px;" disabled></button>
         </div>
       </div>
@@ -3301,11 +3288,11 @@
   </div>
 
   <!-- Gestione multi-target FortiGate: elenco, test connessione, add/edit -->
-  <div class="modal-overlay" id="fgtManageModal" onclick="if(event.target===this)closeFgtManageModal()">
+  <div class="modal-overlay" id="fgtManageModal">
     <div class="modal" style="width: 760px; max-width: 96%;">
       <div class="modal-header">
         <h3 data-i18n="titleFgtManageTargets"><i class="fa-solid fa-gears" style="color: var(--primary);"></i> Gestione FortiGate</h3>
-        <i class="fa-solid fa-xmark modal-close" onclick="closeFgtManageModal()"></i>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseFgtManage"></i>
       </div>
 
       <div class="table-wrap" style="margin-top:0; max-height:280px; overflow-y:auto;">
@@ -3355,10 +3342,10 @@
           <label for="fgtMgrVerifyTls" style="font-size:12px; cursor:pointer;" data-i18n="lblFgtTokenVerifyTls">Verifica certificato TLS (disabilitare solo per self-signed)</label>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button class="btn btn-primary" style="width:auto;" onclick="saveFgtMgrTarget()" data-i18n="btnFgtMgrSave">
+          <button class="btn btn-primary" id="btnSaveFgtMgrTarget" style="width:auto;" data-i18n="btnFgtMgrSave">
             <i class="fa-solid fa-floppy-disk"></i> Salva
           </button>
-          <button class="btn btn-secondary" style="width:auto;" onclick="resetFgtMgrForm()" data-i18n="btnFgtMgrReset">
+          <button class="btn btn-secondary" id="btnResetFgtMgrForm" style="width:auto;" data-i18n="btnFgtMgrReset">
             <i class="fa-solid fa-eraser"></i> Nuovo target
           </button>
         </div>
@@ -3369,11 +3356,11 @@
 
   <!-- Selettore sede per il Triage -->
   <!-- Dettaglio evento syslog: campi FortiOS key=value in tabella + messaggio raw -->
-  <div class="modal-overlay" id="syslogDetailModal" onclick="if(event.target===this)closeSyslogDetail()">
+  <div class="modal-overlay" id="syslogDetailModal">
     <div class="modal" style="width: 760px; max-width: 96%;">
       <div class="modal-header">
         <h3 style="margin:0; font-size:17px;"><i class="fa-solid fa-file-lines" style="color:var(--primary);"></i> <span data-i18n="titleSyslogDetail">Dettaglio evento syslog</span></h3>
-        <span class="modal-close" onclick="closeSyslogDetail()"><i class="fa-solid fa-xmark"></i></span>
+        <span class="modal-close" id="btnCloseSyslogDetail"><i class="fa-solid fa-xmark"></i></span>
       </div>
       <div id="syslogDetailBody" style="max-height:60vh; overflow:auto; font-size:13px;"></div>
     </div>
@@ -3383,12 +3370,12 @@
     <div class="modal" style="width: 460px; max-width: 95%;">
       <div class="modal-header">
         <h3 data-i18n="titleTriageScope"><i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Scegli la sede per il Triage</h3>
-        <i class="fa-solid fa-xmark modal-close" onclick="closeTriageScopeModal()"></i>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseTriageScope"></i>
       </div>
       <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descTriageScope">
         Seleziona una singola sede da analizzare oppure esegui il triage su tutte le sedi.
       </p>
-      <button class="btn btn-primary" onclick="startGroupTriage('all')"
+      <button class="btn btn-primary" id="btnStartGroupTriageAll"
               style="margin-bottom: 12px; background: var(--cta); color: var(--cta-text);" data-i18n="btnTriageAllSites">
         <i class="fa-solid fa-globe"></i> Scansiona tutte le sedi
       </button>
@@ -3401,7 +3388,7 @@
     <div class="modal" style="width: 720px; max-width: 96%;">
       <div class="modal-header">
         <h3 data-i18n="titleBulkCommand"><i class="fa-solid fa-terminal" style="color: var(--warning);"></i> Invio Comandi Massivo</h3>
-        <i class="fa-solid fa-xmark modal-close" onclick="closeBulkCommandModal()"></i>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseBulkCommand"></i>
       </div>
 
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
@@ -3409,10 +3396,10 @@
         <div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
             <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblBulkTargets">Dispositivi target</label>
-            <select id="bulkGroupFilter" onchange="renderBulkTargets()" style="font-size:11px; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; outline:none;"></select>
+            <select id="bulkGroupFilter" style="font-size:11px; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; outline:none;"></select>
           </div>
           <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; padding:6px 0;">
-            <input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulkTargets(this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
+            <input type="checkbox" id="bulkSelectAll" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer;">
             <span data-i18n="bulkSelectAll">Seleziona tutti</span>
           </label>
           <div id="bulkTargetList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:6px;"></div>
@@ -3442,7 +3429,7 @@
         </div>
       </div>
 
-      <button class="btn btn-primary" id="btnBulkRun" onclick="startBulkCommand()"
+      <button class="btn btn-primary" id="btnBulkRun"
               style="margin-top:16px; background:var(--cta); color:var(--cta-text);" data-i18n="btnBulkRun">
         <i class="fa-solid fa-paper-plane"></i> Esegui sui dispositivi
       </button>
@@ -3462,7 +3449,7 @@
     <div class="modal" style="width: 640px; max-width: 95%;">
       <div class="modal-header">
         <h3><i class="fa-solid fa-code" style="color: var(--primary);"></i> <span data-i18n="titleCaRawRoute">Riga di configurazione</span></h3>
-        <i class="fa-solid fa-xmark modal-close" onclick="caCloseRawRouteModal()"></i>
+        <i class="fa-solid fa-xmark modal-close" id="btnCaCloseRawRouteModal"></i>
       </div>
       <pre id="caRawRouteContent" style="font-family:var(--font-code); font-size:13px; background:var(--surface); border:1px solid var(--border); border-radius:0; padding:12px; white-space:pre-wrap; word-break:break-all; margin:0;"></pre>
     </div>
@@ -3472,7 +3459,7 @@
     <div class="modal" style="width: 800px; max-width: 95%;">
       <div class="modal-header">
         <h3 data-i18n="titleInteractiveTerminal"><i class="fa-solid fa-terminal" style="color: var(--primary);"></i> Terminale SSH Interattivo</h3>
-        <i class="fa-solid fa-xmark modal-close" onclick="closeCliModal()"></i>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseCliModal"></i>
       </div>
       <div style="margin-bottom: 12px; font-size: 14px;">
         <span data-i18n="lblTargetDevice">Dispositivo target:</span> <strong id="cliTargetIp">10.0.0.1</strong>
@@ -3490,13 +3477,13 @@
           <i class="fa-solid fa-gears" style="color:var(--primary);"></i>
           <span>Gestione Remota Agente di Sede</span>
         </h3>
-        <button onclick="closeAgentControlModal()" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+        <button data-action="close-agent-control-modal" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div id="agentControlBody" style="padding:20px; overflow-y:auto; font-size:13px; line-height:1.6;">
         <!-- Dynamic Agent Telemetry & Remote Control Buttons -->
       </div>
       <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
-        <button class="btn btn-sm" onclick="closeAgentControlModal()" style="padding:6px 16px;">Chiudi</button>
+        <button class="btn btn-sm" data-action="close-agent-control-modal" style="padding:6px 16px;">Chiudi</button>
       </div>
     </div>
   </div>
@@ -3509,13 +3496,13 @@
           <i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i>
           <span>Dettaglio Telemetria Protocollo</span>
         </h3>
-        <button onclick="closeObsInspectModal()" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+        <button data-action="close-obs-inspect-modal" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div id="obsInspectBody" style="padding:20px; overflow-y:auto; font-size:13px; line-height:1.6;">
         <!-- Filled dynamically -->
       </div>
       <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
-        <button class="btn btn-sm" onclick="closeObsInspectModal()" style="padding:6px 16px;">Chiudi</button>
+        <button class="btn btn-sm" data-action="close-obs-inspect-modal" style="padding:6px 16px;">Chiudi</button>
       </div>
     </div>
   </div>
