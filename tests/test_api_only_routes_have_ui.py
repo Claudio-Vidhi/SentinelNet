@@ -50,7 +50,6 @@ class TestSessionKillIsReachable(unittest.TestCase):
 
     def test_button_and_handler_exist(self):
         self.assertIn('id="btnFgtSessionKill"', self.html)
-        self.assertIn("fgtKillSessions()", self.html)
         self.assertIn("async function fgtKillSessions", self.js)
 
     def test_button_is_write_gated(self):

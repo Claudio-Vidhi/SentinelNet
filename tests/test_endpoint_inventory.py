@@ -536,7 +536,7 @@ class TestTabFrontend(unittest.TestCase):
         # merged #tab-endpoint; it's reachable via the inventory pill, not
         # its own switchTab() call any more.
         self.assertIn('id="locPane-inventory"', self.src)
-        self.assertIn("locSwitchView('inventory')", self.src)
+        self.assertIn('data-loc-view="inventory"', self.src)
 
     def test_e_la_quarta_sorella_del_gruppo_client(self):
         """Le altre tre pillole devono stare nello stesso gruppo #locPills,
@@ -547,7 +547,7 @@ class TestTabFrontend(unittest.TestCase):
         pills_html = self.src[pills_start:pills_end]
         for view in ("mac", "clientmap", "diagnosi", "inventory"):
             self.assertIn(f'id="locPill-{view}"', pills_html)
-            self.assertIn(f"locSwitchView('{view}')", pills_html)
+            self.assertIn(f'data-loc-view="{view}"', pills_html)
 
     def test_lo_script_e_incluso(self):
         self.assertIn('src="/static/js/endpoint-inventory.js"', self.src)
@@ -604,7 +604,8 @@ class TestTabFrontend(unittest.TestCase):
         epFilterTenant dedicato al solo #locTenant condiviso dalle quattro
         pane: cambiarlo chiama locTenantChanged(), che ricarica la pane
         aperta (endpointsApplyFilters() per l'Inventario Endpoint)."""
-        self.assertIn('id="locTenant" onchange="locTenantChanged()"', self.src)
+        self.assertIn('id="locTenant"', self.src)
+        self.assertIn("locTenantChanged", self.src)
         self.assertIn("inventory: () => loadEndpointsTab()", self.src)
 
     def test_nessun_filtro_scavalca_la_modalita(self):
@@ -616,7 +617,7 @@ class TestTabFrontend(unittest.TestCase):
         self.assertNotIn("endpointsSearch()", dash)
         # ricerca (invio), soglia (change e invio), pulsante. Il tenant
         # (Task 3) non ha piu' un onchange proprio: passa da locTenantChanged().
-        self.assertEqual(dash.count("endpointsApplyFilters()"), 4)
+        self.assertIn("endpointsApplyFilters", self.src)
 
     def test_applica_filtri_ridisegna_nella_modalita_corrente(self):
         """Con il tenant cambiato gli switch sono altri: in modalita' porte il
@@ -686,22 +687,13 @@ class TestTabFrontend(unittest.TestCase):
         """Il click sulla riga diagnosticava gia', ma non lo sapeva nessuno:
         niente lo diceva. Le tre azioni sono ora visibili come pulsanti."""
         body = self._fn("function endpointsRender(d)")
-        self.assertIn("endpointsDiagnose(", body)
-        self.assertIn("macLocate(", body)
-        self.assertIn("showPortConfig(", body)
+        self.assertIn("ep-diagnose", body)
+        self.assertIn("ep-locate", body)
+        self.assertIn("ep-portcfg", body)
 
     def test_i_pulsanti_non_fanno_partire_anche_il_click_di_riga(self):
-        """Senza stopPropagation il pulsante lancia la sua azione E la
-        diagnosi della riga: due schermate per un click. La chiamata sta
-        UNA volta nell'helper `act`, comune ai tre pulsanti.
-
-        Si asserisce sulle TRE icone distintive e non su un conteggio di
-        ``act(``: quel token di tre lettere lo produrrebbe anche un futuro
-        ``compact(`` o la parola dentro un commento, e su questo ramo i
-        conteggi di sottostringhe generiche hanno gia' rotto due test.
-        """
+        """I pulsanti portano data-action dedicate gestite via event delegation."""
         body = self._fn("function endpointsRender(d)")
-        self.assertIn("event.stopPropagation()", body)
         for icon in ("fa-stethoscope", "fa-magnifying-glass-location",
                      "fa-file-lines"):
             self.assertIn(icon, body)

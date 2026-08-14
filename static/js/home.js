@@ -136,7 +136,7 @@ function renderFleetOneline(devs) {
                      : b.total ? 'up' : 'idle';
     let html = shown.map(([name, b]) => `
         <button type="button" class="oneline-bay" data-state="${state(b)}"
-                onclick="openInventoryForTenant('${escapeHtml(jsStr(name))}')"
+                data-action="open-inventory-tenant" data-tenant="${escapeHtml(name)}"
                 title="${escapeHtml(name)}">
           <span class="oneline-drop"></span><span class="oneline-sw"></span>
           <span class="oneline-node">
@@ -155,7 +155,7 @@ function renderFleetOneline(devs) {
         }), { total: 0, down: 0, warn: 0, idle: 0 });
         html += `
         <button type="button" class="oneline-bay" data-state="${state(agg)}"
-                onclick="switchTab('tab-devices')">
+                data-action="switch-tab" data-tab="tab-devices">
           <span class="oneline-drop"></span><span class="oneline-sw"></span>
           <span class="oneline-node">
             <span class="oneline-count">${agg.total}</span>
@@ -198,7 +198,7 @@ async function loadHomeAnomalies() {
         <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:4px 0;">
             <span class="status ${openCount ? 'warn' : 'ok'}" style="font-size:15px;">${openCount}</span>
             <span style="font-size:13px; color:var(--text-muted);">${escapeHtml(L.homeAnomOpenCount)}</span>
-            <button class="btn btn-small" style="width:auto; margin:0;" onclick="openTrafficoAnomalies()">
+            <button class="btn btn-small" style="width:auto; margin:0;" data-action="open-traffico-anomalies">
                 <i class="fa-solid fa-arrow-right"></i> ${escapeHtml(L.homeAnomOpenLink)}
             </button>
         </div>`;
@@ -241,5 +241,22 @@ function renderEventStrip(rows) {
 document.getElementById('btnHomeRunTriage')?.addEventListener('click', () => {
     if (typeof startGroupTriage === 'function') {
         startGroupTriage('all');
+    }
+});
+
+document.getElementById('homeTenantsBay')?.addEventListener('click', (e) => {
+    const bay = e.target.closest('[data-action]');
+    if (!bay) return;
+    const act = bay.dataset.action;
+    if (act === 'open-inventory-tenant' && bay.dataset.tenant) {
+        openInventoryForTenant(bay.dataset.tenant);
+    } else if (act === 'switch-tab' && bay.dataset.tab) {
+        switchTab(bay.dataset.tab);
+    }
+});
+
+document.getElementById('homeAnomSummary')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="open-traffico-anomalies"]')) {
+        openTrafficoAnomalies();
     }
 });

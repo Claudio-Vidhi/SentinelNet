@@ -251,7 +251,7 @@ function renderWlcClientRows() {
             <td>${escapeHtml(c.rssi || '-')} dBm / ${escapeHtml(c.snr || '-')} dB</td>
             <td>${badge}</td>
             <td>
-                <button class="btn btn-sm btn-secondary" onclick="wlcDiagnoseClient('${escapeHtml(c.mac || c.mac_address)}')">
+                <button class="btn btn-sm btn-secondary" data-action="wlc-diagnose" data-mac="${escapeHtml(c.mac || c.mac_address)}">
                     <i class="fa-solid fa-stethoscope"></i> Diagnostica
                 </button>
             </td>
@@ -337,3 +337,23 @@ async function wlcDiagnoseClient(mac) {
         showToast('Errore diagnostica: ' + e.message, 'error');
     }
 }
+
+// Delegated and static event listeners for WLC tab
+document.getElementById('wlcTenantSelect')?.addEventListener('change', onWlcTenantChanged);
+document.getElementById('wlcTargetSelect')?.addEventListener('change', onWlcTargetChanged);
+document.getElementById('btnRefreshWlcData')?.addEventListener('click', refreshWlcData);
+document.getElementById('wlcClientSearch')?.addEventListener('input', onWlcClientSearch);
+document.getElementById('btnCloseWlcDiagModal')?.addEventListener('click', () => {
+    const m = document.getElementById('wlcDiagModal');
+    if (m) m.style.display = 'none';
+});
+document.getElementById('btnFooterCloseWlcDiagModal')?.addEventListener('click', () => {
+    const m = document.getElementById('wlcDiagModal');
+    if (m) m.style.display = 'none';
+});
+document.getElementById('wlcClientTableBody')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="wlc-diagnose"]');
+    if (btn && btn.dataset.mac) {
+        wlcDiagnoseClient(btn.dataset.mac);
+    }
+});

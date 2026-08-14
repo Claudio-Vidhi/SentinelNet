@@ -44,10 +44,14 @@ class TestContentSecurityPolicy(unittest.TestCase):
         self.assertNotIn("https://", self.csp)
 
     def test_the_directives_that_matter_are_self(self):
-        for directive in ("default-src 'self'", "font-src 'self'",
+        for directive in ("default-src 'self'", "script-src 'self'", "font-src 'self'",
                           "img-src 'self'", "connect-src 'self'"):
             with self.subTest(directive=directive):
                 self.assertIn(directive, self.csp)
+
+    def test_script_src_does_not_contain_unsafe_inline(self):
+        self.assertNotIn("script-src 'self' 'unsafe-inline'", self.csp)
+        self.assertNotIn("'unsafe-inline'", [part.strip() for part in self.csp.split(";") if "script-src" in part][0])
 
     def test_the_clamps_are_still_there(self):
         # Non erano il soggetto della modifica, ma restringere una direttiva
@@ -64,6 +68,8 @@ class TestContentSecurityPolicy(unittest.TestCase):
         self.assertIn("content-security-policy", {k.lower() for k in res.headers})
         sent = res.headers["content-security-policy"]
         self.assertNotIn("https://", sent)
+        self.assertIn("script-src 'self'", sent)
+        self.assertNotIn("script-src 'self' 'unsafe-inline'", sent)
 
 
 if __name__ == "__main__":

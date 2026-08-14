@@ -107,3 +107,11 @@ function closeCliModal() {
         termInstance = null;
     }
 }
+
+document.getElementById('btnCloseCliModal')?.addEventListener('click', closeCliModal);
+document.getElementById('cliModalOverlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'cliModalOverlay') {
+        closeCliModal();
+    }
+});
+

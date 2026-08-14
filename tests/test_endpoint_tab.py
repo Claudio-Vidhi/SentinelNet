@@ -42,7 +42,7 @@ class TestEndpointShell(unittest.TestCase):
 
     def test_pills_are_wired_to_the_switcher(self):
         for v in VIEWS:
-            self.assertIn(f"locSwitchView('{v}')", self.html)
+            self.assertIn(f'data-loc-view="{v}"', self.html)
         self.assertIn("function locSwitchView", self.js)
 
     def test_one_tenant_select_in_the_header(self):

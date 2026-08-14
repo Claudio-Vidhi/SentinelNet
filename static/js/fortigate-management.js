@@ -506,7 +506,7 @@ function renderFgtResources(host, usage, badge) {
     const bar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">` +
         FGT_RES_WINDOWS.map(w =>
             `<button type="button" class="ca-pill${w === fgtResWindow ? ' active' : ''}"
-                 onclick="fgtSetResWindow('${escapeHtml(w)}')">${escapeHtml(w)}</button>`).join('') +
+                 data-fgt-res-win="${escapeHtml(w)}">${escapeHtml(w)}</button>`).join('') +
         `</div>`;
 
     const cards = FGT_RES_METRICS.map(([k, label, kind]) => {
@@ -600,7 +600,7 @@ function _fgtColTable(cols, rows, filter, L, key) {
         // dettaglio apre la riga GREZZA, come il pannello Details della GUI
         // del FortiGate, invece di allargare la tabella a 40 colonne.
         return `<tr class="fgt-row" style="border-bottom:1px solid var(--border); cursor:pointer;"
-                    onclick="fgtToggleRow('${escapeHtml(key)}',${i},this)"
+                    data-fgt-key="${escapeHtml(key)}" data-fgt-idx="${i}"
                     title="${escapeHtml(L.lblFgtRowDetails || 'Dettagli')}">
               <td style="padding:8px 6px; color:var(--text-muted);"><i class="fa-solid fa-chevron-right" style="font-size:10px;"></i></td>
               ${tds}</tr>
@@ -903,15 +903,15 @@ function renderFgtMgrTable() {
             <td style="padding:8px 12px;">${t.port}</td>
             <td style="padding:8px 12px;">${tlsBadge}</td>
             <td style="padding:8px 12px; text-align:center;">
-                <input type="radio" name="fgtMgrActiveRadio" ${t.active ? 'checked' : ''} onclick="activateFgtMgrTarget('${ip}')">
+                <input type="radio" name="fgtMgrActiveRadio" ${t.active ? 'checked' : ''} data-fgt-action="activate-target" data-ip="${ip}">
             </td>
             <td style="padding:8px 12px; text-align:center;">
-                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="testFgtMgrTarget('${ip}', this)">${L.btnFgtMgrTest || '<i class="fa-solid fa-plug"></i>'}</button>
+                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-fgt-action="test-target" data-ip="${ip}">${L.btnFgtMgrTest || '<i class="fa-solid fa-plug"></i>'}</button>
                 <span class="fgt-mgr-test-result" style="margin-left:6px; font-size:11px;"></span>
             </td>
             <td style="padding:8px 12px; text-align:right; white-space:nowrap;">
-                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="editFgtMgrTarget('${ip}')" title="${currentLang === 'en' ? 'Edit' : 'Modifica'}"><i class="fa-solid fa-pen"></i></button>
-                <button type="button" class="btn btn-danger btn-small" style="width:auto; margin:0;" onclick="deleteFgtMgrTarget('${ip}')">${L.btnFgtMgrDelete || '<i class="fa-solid fa-trash"></i>'}</button>
+                <button type="button" class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-fgt-action="edit-target" data-ip="${ip}" title="${currentLang === 'en' ? 'Edit' : 'Modifica'}"><i class="fa-solid fa-pen"></i></button>
+                <button type="button" class="btn btn-danger btn-small" style="width:auto; margin:0;" data-fgt-action="delete-target" data-ip="${ip}">${L.btnFgtMgrDelete || '<i class="fa-solid fa-trash"></i>'}</button>
             </td>
         </tr>`;
     }).join('');
@@ -1154,3 +1154,71 @@ async function renderFgtOverview() {
     loadFgtDataset('resources');
     loadFgtDataset('ha');
 }
+
+// Delegated and static event listeners
+document.getElementById('fgtTargetSelect')?.addEventListener('change', onFgtTargetSelectChange);
+document.getElementById('btnFgtManageTargets')?.addEventListener('click', openFgtManageModal);
+
+document.getElementById('fgtSubtabBar')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-fgt-view]');
+    if (btn && btn.dataset.fgtView) fgtSwitchView(btn.dataset.fgtView);
+});
+
+document.getElementById('tab-fortigate')?.addEventListener('click', (e) => {
+    const pill = e.target.closest('.ca-pill[data-fgt-section]');
+    if (pill && pill.dataset.fgtSection && pill.dataset.fgtPill) {
+        fgtPickView(pill.dataset.fgtSection, pill.dataset.fgtPill);
+        return;
+    }
+    if (e.target.closest('[data-action="fgt-refresh"]')) {
+        refreshFgtView();
+        return;
+    }
+    const winBtn = e.target.closest('[data-fgt-res-win]');
+    if (winBtn && winBtn.dataset.fgtResWin) {
+        fgtSetResWindow(winBtn.dataset.fgtResWin);
+        return;
+    }
+    const row = e.target.closest('.fgt-row[data-fgt-key]');
+    if (row && row.dataset.fgtKey && row.dataset.fgtIdx != null) {
+        fgtToggleRow(row.dataset.fgtKey, Number(row.dataset.fgtIdx), row);
+        return;
+    }
+});
+
+document.getElementById('tab-fortigate')?.addEventListener('input', (e) => {
+    const input = e.target.closest('.fgt-filter-input[data-fgt-dataset]');
+    if (input && input.dataset.fgtDataset) {
+        renderFgtDataset(input.dataset.fgtDataset);
+    }
+});
+
+document.getElementById('fgtMgrTargetsTableBody')?.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-fgt-action]');
+    if (!el || !el.dataset.ip) return;
+    const action = el.dataset.fgtAction;
+    const ip = el.dataset.ip;
+    if (action === 'activate-target') activateFgtMgrTarget(ip);
+    else if (action === 'test-target') testFgtMgrTarget(ip, el);
+    else if (action === 'edit-target') editFgtMgrTarget(ip);
+    else if (action === 'delete-target') deleteFgtMgrTarget(ip);
+});
+
+document.getElementById('btnFgtLookupRun')?.addEventListener('click', () => loadFgtDataset('policyLookup'));
+document.getElementById('btnFgtSessLoad')?.addEventListener('click', () => loadFgtDataset('sessions'));
+document.getElementById('btnFgtSessionKill')?.addEventListener('click', fgtKillSessions);
+document.getElementById('btnFgtLogLoad')?.addEventListener('click', () => loadFgtDataset('logs'));
+document.getElementById('btnFgtDiagRun')?.addEventListener('click', () => loadFgtDataset('clientDiagnosis'));
+document.getElementById('btnFgtTokenSave')?.addEventListener('click', saveFgtPrevToken);
+document.getElementById('btnFgtTokenRemove')?.addEventListener('click', removeFgtPrevToken);
+document.getElementById('btnFgtTokenTest')?.addEventListener('click', testFgtPrevToken);
+document.getElementById('btnFgtFullConfigLoad')?.addEventListener('click', () => loadFgtDataset('fullConfig'));
+
+document.getElementById('fgtManageModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'fgtManageModal' || e.target.closest('#btnCloseFgtManage')) {
+        closeFgtManageModal();
+    }
+});
+document.getElementById('btnSaveFgtMgrTarget')?.addEventListener('click', saveFgtMgrTarget);
+document.getElementById('btnResetFgtMgrForm')?.addEventListener('click', resetFgtMgrForm);
+

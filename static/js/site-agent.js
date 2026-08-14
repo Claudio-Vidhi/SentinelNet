@@ -115,7 +115,7 @@
                         <span class="led ${isFlowActive ? 'led-success' : 'led-warning'}"></span>
                         ${isFlowActive ? 'FLUSSO ATTIVO' : 'FLUSSO PAUSATO'}
                     </span>
-                    <button class="btn btn-sm ${isFlowActive ? 'btn-secondary' : 'btn-primary'}" onclick="toggleAgentDataFlow('${escapeHtml(siteId)}', ${!isFlowActive})" style="padding:4px 10px; font-size:11px;">
+                    <button class="btn btn-sm ${isFlowActive ? 'btn-secondary' : 'btn-primary'}" data-action="toggle-flow" data-site-id="${escapeHtml(siteId)}" data-active="${!isFlowActive}" style="padding:4px 10px; font-size:11px;">
                         <i class="fa-solid ${isFlowActive ? 'fa-pause' : 'fa-play'}"></i> ${isFlowActive ? 'Interrompi Flusso Dati' : 'Riavvia Flusso Dati'}
                     </button>
                 </div>
@@ -139,7 +139,7 @@
                     <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Intervallo Polling Inventario (sec)</label>
                     <input id="agentCfgInterval" type="number" value="${curInterval}" style="width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text);">
                 </div>
-                <button class="btn btn-sm" onclick="triggerAgentConfigSave('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--cta); color:var(--cta-text);">
+                <button class="btn btn-sm" data-action="save-config" data-site-id="${escapeHtml(siteId)}" style="padding:6px 14px; background:var(--cta); color:var(--cta-text);">
                     <i class="fa-solid fa-floppy-disk"></i> Salva Config
                 </button>
             </div>
@@ -149,7 +149,7 @@
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
                 <h4 style="margin:0; font-size:13px; color:var(--warning);"><i class="fa-solid fa-file-csv"></i> Editor Inventario Locale Sede (network_hosts.csv)</h4>
-                <button class="btn btn-sm btn-secondary" onclick="fetchAgentInventory('${escapeHtml(siteId)}')" style="padding:4px 10px; font-size:11px;">
+                <button class="btn btn-sm btn-secondary" data-action="fetch-inv" data-site-id="${escapeHtml(siteId)}" style="padding:4px 10px; font-size:11px;">
                     <i class="fa-solid fa-download"></i> Leggi da Agente
                 </button>
             </div>
@@ -164,7 +164,7 @@
                 delle credenziali di default. Per impostare credenziali reali usa l'inventario locale sull'agente.
             </div>
             <div style="margin-top:8px; display:flex; justify-content:flex-end;">
-                <button class="btn btn-sm" onclick="saveAgentInventory('${escapeHtml(siteId)}')" style="padding:6px 14px; background:var(--warning); color:var(--on-lamp); font-weight:700;">
+                <button class="btn btn-sm" data-action="save-inv" data-site-id="${escapeHtml(siteId)}" style="padding:6px 14px; background:var(--warning); color:var(--on-lamp); font-weight:700;">
                     <i class="fa-solid fa-upload"></i> Salva Inventario Remoto
                 </button>
             </div>
@@ -173,10 +173,10 @@
         <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:16px;">
             <h4 style="margin:0 0 10px; font-size:13px; color:var(--primary);"><i class="fa-solid fa-screwdriver-wrench"></i> Azioni di Gestione Remota (Checkmk Style)</h4>
             <div style="display:flex; flex-wrap:wrap; gap:10px;">
-                <button class="btn btn-sm" onclick="triggerAgentSelfUpdate('${escapeHtml(siteId)}')" style="background:var(--primary); color:#fff; padding:8px 14px;">
+                <button class="btn btn-sm" data-action="self-update" data-site-id="${escapeHtml(siteId)}" style="background:var(--primary); color:#fff; padding:8px 14px;">
                     <i class="fa-solid fa-rotate"></i> Aggiorna Agente da Git (git pull)
                 </button>
-                <button class="btn btn-sm btn-secondary" onclick="triggerAgentRestart('${escapeHtml(siteId)}')" style="padding:8px 14px;">
+                <button class="btn btn-sm btn-secondary" data-action="restart-agent" data-site-id="${escapeHtml(siteId)}" style="padding:8px 14px;">
                     <i class="fa-solid fa-power-off" style="color:var(--warning);"></i> Riavvia Agente
                 </button>
             </div>
@@ -290,6 +290,26 @@
             alert(`Errore gestione flusso: ${err ? err.detail : 'Errore sconosciuto'}`);
         }
     }
+
+    // Delegated click listener for agent control modal
+    document.getElementById('agentControlModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'agentControlModal' || e.target.closest('[data-action="close-agent-control-modal"]')) {
+            closeAgentControlModal();
+        }
+    });
+
+    document.getElementById('agentControlModalBody')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn || !btn.dataset.siteId) return;
+        const action = btn.dataset.action;
+        const siteId = btn.dataset.siteId;
+        if (action === 'toggle-flow') toggleAgentDataFlow(siteId, btn.dataset.active === 'true');
+        else if (action === 'save-config') triggerAgentConfigSave(siteId);
+        else if (action === 'fetch-inv') fetchAgentInventory(siteId);
+        else if (action === 'save-inv') saveAgentInventory(siteId);
+        else if (action === 'self-update') triggerAgentSelfUpdate(siteId);
+        else if (action === 'restart-agent') triggerAgentRestart(siteId);
+    });
 
     // Expose functions globally for UI buttons
     window.openAgentControlModal = openAgentControlModal;

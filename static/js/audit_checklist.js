@@ -36,7 +36,7 @@
                 <div style="text-align:center; padding:30px 10px; color:var(--text-muted);">
                     <i class="fa-solid fa-folder-open" style="font-size:30px; margin-bottom:10px; opacity:0.5;"></i>
                     <p style="margin:0 0 10px; font-size:14px;">Nessun audit di manutenzione registrato.</p>
-                    <button class="btn btn-primary btn-small" style="width:auto;" onclick="openNewAuditModal()"><i class="fa-solid fa-plus"></i> Avvia Primo Audit</button>
+                    <button class="btn btn-primary btn-small" style="width:auto;" data-action="open-new-audit"><i class="fa-solid fa-plus"></i> Avvia Primo Audit</button>
                 </div>
             `;
             return;
@@ -86,8 +86,8 @@
                         ${(e.da_verificare_count || 0) > 0 ? ` / <span style="color:var(--cta); font-weight:bold;">${e.da_verificare_count} da verif.</span>` : ''}
                     </td>
                     <td style="padding:10px; text-align:right;">
-                        <button class="btn btn-secondary btn-small" style="width:auto; margin:0 3px;" onclick="openAuditWorkspace(${e.id})"><i class="fa-solid fa-pen-to-square"></i> Apri</button>
-                        <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="viewAuditReportForId(${e.id})"><i class="fa-solid fa-file-lines"></i> Relazione</button>
+                        <button class="btn btn-secondary btn-small" style="width:auto; margin:0 3px;" data-action="open-workspace" data-id="${e.id}"><i class="fa-solid fa-pen-to-square"></i> Apri</button>
+                        <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="view-report" data-id="${e.id}"><i class="fa-solid fa-file-lines"></i> Relazione</button>
                     </td>
                 </tr>
             `;
@@ -251,7 +251,7 @@
                             </div>
                         </div>
                         <div style="display:flex; justify-content:flex-end;">
-                            <button class="btn btn-primary btn-small" style="width:auto;" onclick="saveAuditItem('${item.item_ref}')"><i class="fa-solid fa-floppy-disk"></i> Salva Rigo</button>
+                            <button class="btn btn-primary btn-small" style="width:auto;" data-action="save-item" data-ref="${item.item_ref}"><i class="fa-solid fa-floppy-disk"></i> Salva Rigo</button>
                         </div>
                     </div>
                 `;
@@ -370,8 +370,8 @@
                                 <div style="color:var(--text-muted); font-size:11px; margin-top:2px;">${escapeHtml(i.guidance_why || '')}</div>
                             </td>
                             <td style="padding:8px 14px; text-align:right; white-space:nowrap;">
-                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0 3px;" onclick="openTemplateItemModal('${escapeHtml(jsStr(i.ref))}')"><i class="fa-solid fa-pen"></i></button>
-                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="deleteTemplateItem('${escapeHtml(jsStr(i.ref))}')"><i class="fa-solid fa-trash"></i></button>
+                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0 3px;" data-action="edit-tpl-item" data-ref="${escapeHtml(i.ref)}"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="delete-tpl-item" data-ref="${escapeHtml(i.ref)}"><i class="fa-solid fa-trash"></i></button>
                             </td>
                         </tr>
                     `).join("")}
@@ -479,6 +479,34 @@
             alert("Errore di rete durante l'eliminazione della domanda.");
         }
     }
+
+    // Delegated and static event listeners
+    document.getElementById('btnOpenNewAuditModal')?.addEventListener('click', openNewAuditModal);
+    document.getElementById('btnOpenTemplateItemModal')?.addEventListener('click', () => openTemplateItemModal());
+    document.getElementById('btnToggleTemplateEditor')?.addEventListener('click', toggleTemplateEditor);
+
+    document.getElementById('auditEngagementList')?.addEventListener('click', (e) => {
+        const btnNew = e.target.closest('[data-action="open-new-audit"]');
+        if (btnNew) { openNewAuditModal(); return; }
+        const btnOpen = e.target.closest('[data-action="open-workspace"]');
+        if (btnOpen && btnOpen.dataset.id) { openAuditWorkspace(Number(btnOpen.dataset.id)); return; }
+        const btnRep = e.target.closest('[data-action="view-report"]');
+        if (btnRep && btnRep.dataset.id) { viewAuditReportForId(Number(btnRep.dataset.id)); return; }
+    });
+
+    document.getElementById('auditSectionAccordion')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="save-item"]');
+        if (btn && btn.dataset.ref) {
+            saveAuditItem(btn.dataset.ref);
+        }
+    });
+
+    document.getElementById('auditTemplateEditor')?.addEventListener('click', (e) => {
+        const btnEdit = e.target.closest('[data-action="edit-tpl-item"]');
+        if (btnEdit && btnEdit.dataset.ref) { openTemplateItemModal(btnEdit.dataset.ref); return; }
+        const btnDel = e.target.closest('[data-action="delete-tpl-item"]');
+        if (btnDel && btnDel.dataset.ref) { deleteTemplateItem(btnDel.dataset.ref); return; }
+    });
 
     // Esporta funzioni globali
     window.loadAuditChecklistTab = loadAuditChecklistTab;

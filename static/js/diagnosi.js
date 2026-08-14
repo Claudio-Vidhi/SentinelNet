@@ -337,7 +337,7 @@ function renderDiagnosi(d, dest) {
             <span style="font-family:var(--font-code); font-size:14px; color:var(--primary);">${escapeHtml(d.client)}</span>
             ${badge}
             <div style="flex:1; min-width:20px;"></div>
-            <button onclick="runDiagnosi()" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> ${escapeHtml(en ? 'Re-run' : 'Rilancia')}</button>
+            <button data-action="rerun-diagnosi" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> ${escapeHtml(en ? 'Re-run' : 'Rilancia')}</button>
         </div>
         ${_diagFreshness(d.freshness)}
         <div class="diag-cards">${position}${l2}${history}${path}${fw}${across}${denies}${_diagWifiCard()}</div>`;
@@ -356,7 +356,7 @@ function _diagTenantChoice(d) {
     // preselezionato: la scelta e' di chi legge.
     const chips = list.map(t => {
         const where = [t.switch_name, t.switch_port].filter(Boolean).join(' ');
-        return `<button onclick="diagnosiPickTenant('${escapeHtml(jsStr(t.tenant))}')"
+        return `<button data-action="diagnosi-pick-tenant" data-tenant="${escapeHtml(t.tenant)}"
             class="btn btn-secondary btn-small" style="width:auto; margin:0; text-align:left;"
             title="${escapeHtml(`${t.ip || ''} ${where}`.trim())}">
             <i class="fa-solid fa-sitemap" style="margin-right:6px;"></i>${escapeHtml(t.tenant)}
@@ -459,7 +459,7 @@ function _diagWifiCard() {
             <div style="flex:1; min-width:20px;"></div>
             <input id="diagWlcIp" placeholder="${escapeHtml(en ? 'WLC address' : 'indirizzo WLC')}"
                    style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:4px 10px; font-size:12px; color:var(--text); width:170px;">
-            <button onclick="diagnoseWifi()" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-stethoscope"></i> ${escapeHtml(en ? 'Run' : 'Lancia')}</button>
+            <button data-action="diagnose-wifi" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-stethoscope"></i> ${escapeHtml(en ? 'Run' : 'Lancia')}</button>
         </div>
         <div id="diagWifiBody"><div style="color:var(--text-muted); font-size:12px;">${escapeHtml(
             _diagMac ? (en ? 'Client detail, AP, WLAN and nearby rogue APs — on demand.'
@@ -521,11 +521,11 @@ function _diagBounceControl() {
                 <b style="font-family:var(--font-code);">${escapeHtml(_diagSwitch.port)}</b></span>
             <input id="diagBounceConfirm" placeholder="${escapeHtml(en ? 'type the port name' : 'digita il nome della porta')}"
                    style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:4px 10px; font-size:12px; color:var(--text); width:190px;">
-            <button onclick="diagBouncePort()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
+            <button data-action="diag-bounce-port" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
                 <i class="fa-solid fa-power-off"></i> ${escapeHtml(en ? 'Bounce' : 'Riavvia porta')}</button>
-            <button onclick="diagIsolatePort()" class="btn btn-danger btn-small" style="width:auto; margin:0;">
+            <button data-action="diag-isolate-port" class="btn btn-danger btn-small" style="width:auto; margin:0;">
                 <i class="fa-solid fa-plug-circle-xmark"></i> ${escapeHtml(en ? 'Isolate' : 'Isola porta')}</button>
-            <button onclick="diagRestorePort()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
+            <button data-action="diag-restore-port" class="btn btn-secondary btn-small" style="width:auto; margin:0;">
                 <i class="fa-solid fa-plug-circle-check"></i> ${escapeHtml(en ? 'Re-enable' : 'Riattiva porta')}</button>
         </div>
         <div id="diagBounceOut" style="font-size:12px; margin-top:6px;"></div>
@@ -600,3 +600,42 @@ async function diagBouncePort() {
         ? `<span style="color:var(--success);">${escapeHtml(en ? 'Port bounced.' : 'Porta riavviata.')}</span>`
         : `<span style="color:var(--danger);">${escapeHtml(r.error || (en ? 'PORT LEFT DOWN.' : 'PORTA RIMASTA GIU.'))}</span>`;
 }
+
+// Delegated click listener on #diagResult
+document.getElementById('diagResult')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="rerun-diagnosi"]')) {
+        runDiagnosi();
+        return;
+    }
+    const pickBtn = e.target.closest('[data-action="diagnosi-pick-tenant"]');
+    if (pickBtn && pickBtn.dataset.tenant) {
+        diagnosiPickTenant(pickBtn.dataset.tenant);
+        return;
+    }
+    if (e.target.closest('[data-action="diagnose-wifi"]')) {
+        diagnoseWifi();
+        return;
+    }
+    if (e.target.closest('[data-action="diag-bounce-port"]')) {
+        diagBouncePort();
+        return;
+    }
+    if (e.target.closest('[data-action="diag-isolate-port"]')) {
+        diagIsolatePort();
+        return;
+    }
+    if (e.target.closest('[data-action="diag-restore-port"]')) {
+        diagRestorePort();
+    }
+});
+
+// Static event listeners for Diagnosi tab
+const diagInputs = ['diagClientInput', 'diagDestInput', 'diagGatewayInput'];
+diagInputs.forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') runDiagnosi();
+    });
+});
+document.getElementById('btnDiagTraceroute')?.addEventListener('click', detectGatewayTracerouteUI);
+document.getElementById('diagGatewaySelect')?.addEventListener('change', onDiagGatewaySelectChange);
+document.getElementById('btnRunDiagnosi')?.addEventListener('click', runDiagnosi);

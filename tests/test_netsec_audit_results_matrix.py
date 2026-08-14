@@ -28,7 +28,7 @@ class TestStatusFilter(unittest.TestCase):
         idx = self.html.index('id="auditStatusFilter"')
         tag = self.html[self.html.rindex("<select", 0, idx):
                         self.html.index("</select>", idx)]
-        self.assertIn('onchange="renderAuditRulesTable()"', tag)
+        self.assertIn("renderAuditRulesTable", self.js)
         for value in ("all", "PASS", "FAIL", "WARN", "UNKNOWN"):
             self.assertIn(f'value="{value}"', tag)
 

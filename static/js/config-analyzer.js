@@ -65,7 +65,7 @@
             <button type="button" class="btn btn-secondary btn-small requires-write"
                 style="margin:0; padding:4px 8px; color:var(--warning);"
                 title="${escapeHtml(L.titleCaTriage)}"
-                onclick="caTriageDevice('${escapeHtml(jsStr(dev.ip))}', this, event)"><i class="fa-solid fa-bolt-lightning"></i></button>
+                data-action="ca-triage" data-ip="${escapeHtml(dev.ip)}"><i class="fa-solid fa-bolt-lightning"></i></button>
         </span>`;
     }
 
@@ -247,8 +247,7 @@
 
     function caRenderHome(L) {
         const card = (view, icon, title, desc) => `
-            <div class="hero-card" onclick="caSwitchView('${view}')" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:22px 18px; transition:var(--transition);"
-                 onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div class="hero-card" data-action="ca-switch-view" data-view="${view}" style="cursor:pointer; flex:1; min-width:220px; border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:22px 18px; transition:var(--transition);">
                 <div style="font-size:var(--font-size-3xl); color:var(--primary); margin-bottom:10px;"><i class="fa-solid ${icon}"></i></div>
                 <div style="font-weight:600; font-size:15px; margin-bottom:6px;">${escapeHtml(title)}</div>
                 <div style="font-size:12px; color:var(--text-muted); line-height:1.5;">${escapeHtml(desc)}</div>
@@ -267,14 +266,14 @@
         return `<div style="border:1px solid var(--border); border-radius:0; background:var(--surface-2); padding:16px;">
             <div style="font-weight:600; margin-bottom:12px;"><i class="fa-solid fa-right-left" style="color:var(--primary); margin-right:8px;"></i>${escapeHtml(L.caConvertTitle)}</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
-                <select id="caConvDevice" onchange="caConvPickDevice()" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
+                <select id="caConvDevice" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px; min-width:240px;">
                     ${caDeviceOptions(L, 'caConvDevicePick')}
                 </select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvSource)}</label>
                 <select id="caConvSource" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('fortios')}</select>
                 <label style="font-size:12px; color:var(--text-muted);">${escapeHtml(L.caConvTarget)}</label>
                 <select id="caConvTarget" style="padding:6px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); font-size:13px;">${vendorOpts('panos')}</select>
-                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" onclick="caConvertPreview()"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
+                <button class="btn btn-primary btn-small" style="width:auto; margin:0;" data-action="ca-convert-preview"><i class="fa-solid fa-eye"></i> ${escapeHtml(L.caConvPreviewBtn)}</button>
             </div>
             <textarea id="caConvText" rows="8" placeholder="${escapeHtml(L.caConvTextPh)}" style="width:100%; font-family:var(--font-code); font-size:12px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); padding:10px; resize:vertical;"></textarea>
             <div id="caConvResult" style="margin-top:12px;"></div>
@@ -337,7 +336,7 @@
                 </details>
                 <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
                     <div style="font-weight:600; font-size:13px;">Preview</div>
-                    <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" onclick="caConvDownload()"><i class="fa-solid fa-download"></i> ${escapeHtml(L.caConvDownload)}</button>
+                    <button class="btn btn-secondary btn-small" style="width:auto; margin:0;" data-action="ca-conv-download"><i class="fa-solid fa-download"></i> ${escapeHtml(L.caConvDownload)}</button>
                 </div>
                 <pre style="white-space:pre-wrap; font-size:11px; background:var(--surface-3); border:1px solid var(--border); border-radius:0; padding:10px; margin-top:8px; max-height:320px; overflow:auto;">${escapeHtml(caConvLastPreview)}</pre>`;
         } catch (e) {
@@ -424,7 +423,7 @@
         if (!lines.length) return '';
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(lines))));
         return `<button type="button" class="ca-pill" title="${escapeHtml(L.lblCaShowRawRoute)}" data-i18n-title="lblCaShowRawRoute"
-            data-raw="${encoded}" onclick="caShowRawRoute(this)" style="padding:2px 8px;">
+            data-raw="${encoded}" data-action="ca-show-raw-route" style="padding:2px 8px;">
             <i class="fa-solid fa-code"></i>
         </button>`;
     }
@@ -486,8 +485,8 @@
             </details>`;
         }).join('') : `<div style="font-size:12px; color:var(--text-muted); padding:8px 0;">—</div>`;
         const routeToggle = `<div style="display:flex; gap:6px; margin-bottom:8px;">
-            <button type="button" class="ca-pill ${caRouteGroupMode === 'flat' ? 'active' : ''}" onclick="caSwitchRouteGroupMode('flat', ${idx})">${escapeHtml(L.lblCaRouteFlat)}</button>
-            <button type="button" class="ca-pill ${caRouteGroupMode === 'byhop' ? 'active' : ''}" onclick="caSwitchRouteGroupMode('byhop', ${idx})">${escapeHtml(L.lblCaRouteByHop)}</button>
+            <button type="button" class="ca-pill ${caRouteGroupMode === 'flat' ? 'active' : ''}" data-action="ca-switch-route-group" data-mode="flat" data-idx="${idx}">${escapeHtml(L.lblCaRouteFlat)}</button>
+            <button type="button" class="ca-pill ${caRouteGroupMode === 'byhop' ? 'active' : ''}" data-action="ca-switch-route-group" data-mode="byhop" data-idx="${idx}">${escapeHtml(L.lblCaRouteByHop)}</button>
         </div>`;
         const staticSection = `${routeToggle}${caRouteGroupMode === 'byhop' ? groupedHtml : staticTable}`;
         const protoCards = protocols.length ? protocols.map(p => `
@@ -617,7 +616,7 @@
                 ? `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">shutdown</span>`
                 : `<span class="ca-chip" style="color:var(--success); border-color:var(--success);">${escapeHtml(L.lblCaActive)}</span>`;
             const rowId = `caIfaceRaw_${dev.ip || ''}_${ii}`.replace(/[^a-zA-Z0-9_]/g, '_');
-            return `<tr style="cursor:pointer;" data-ca-iface="${escapeHtml(expandIface(i.name).toLowerCase())}" onclick="caToggleIfaceRaw('${rowId}')">
+            return `<tr style="cursor:pointer;" data-ca-iface="${escapeHtml(expandIface(i.name).toLowerCase())}" data-action="ca-toggle-iface-raw" data-target="${rowId}">
                     <td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.description || '—')}</td><td><span class="badge" style="font-size:10px;">${escapeHtml(mode)}</span></td>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(String(vlanCol))}</td>
                     <td style="font-family:var(--font-code); font-size:12px;">${escapeHtml(i.ip || '—')}</td>
@@ -872,8 +871,8 @@
         // Nascondere un solo valore non fa guadagnare spazio: costa un clic e basta.
         if (all.length <= CA_CELL_PREVIEW + 1) return all.join(', ');
         const head = all.slice(0, CA_CELL_PREVIEW).join(', ');
-        return `<span class="ca-cell-short">${head}<button type="button" class="ca-more" onclick="caToggleCell(this)">+${all.length - CA_CELL_PREVIEW}</button></span>`
-             + `<span class="ca-cell-full" style="display:none;">${all.join(', ')}<button type="button" class="ca-more" onclick="caToggleCell(this)">&minus;</button></span>`;
+        return `<span class="ca-cell-short">${head}<button type="button" class="ca-more" data-action="ca-toggle-cell">+${all.length - CA_CELL_PREVIEW}</button></span>`
+             + `<span class="ca-cell-full" style="display:none;">${all.join(', ')}<button type="button" class="ca-more" data-action="ca-toggle-cell">&minus;</button></span>`;
     }
 
     function caToggleCell(btn) {
@@ -941,7 +940,7 @@
         if (!sectionIds.includes(activeId)) activeId = sectionIds[0];
         const subPills = sectionIds.map(id => {
             const lbl = L[sectionMap[id]] || sectionMap[id];
-            return `<button class="ca-pill${activeId === id ? ' active' : ''}" onclick="${switchFn}('${escapeHtml(jsStr(id))}')">${escapeHtml(lbl)}</button>`;
+            return `<button class="ca-pill${activeId === id ? ' active' : ''}" data-action="ca-switch-envelope-section" data-fn="${escapeHtml(switchFn)}" data-id="${escapeHtml(id)}">${escapeHtml(lbl)}</button>`;
         }).join('');
         const subBar = `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">${subPills}</div>`;
         // Riga di aiuto della sezione attiva. La chiave si ricava da quella
@@ -1060,3 +1059,87 @@
             ${iosHtml}
             ${caMvSectionTitle(L.titleCaValidation)}${val.body}`;
     }
+
+    // Delegated event listeners for Config Analyzer
+    document.getElementById('caPills')?.addEventListener('click', (e) => {
+        const pill = e.target.closest('.ca-pill[data-view]');
+        if (pill && pill.dataset.view) {
+            caSwitchView(pill.dataset.view);
+        }
+    });
+
+    document.getElementById('caResults')?.addEventListener('change', (e) => {
+        if (e.target.id === 'caConvDevice') {
+            caConvPickDevice();
+        }
+    });
+
+    document.getElementById('caResults')?.addEventListener('click', (e) => {
+        const triageBtn = e.target.closest('[data-action="ca-triage"]');
+        if (triageBtn && triageBtn.dataset.ip) {
+            caTriageDevice(triageBtn.dataset.ip, triageBtn, e);
+            return;
+        }
+        const switchViewCard = e.target.closest('[data-action="ca-switch-view"]');
+        if (switchViewCard && switchViewCard.dataset.view) {
+            caSwitchView(switchViewCard.dataset.view);
+            return;
+        }
+        const convPrevBtn = e.target.closest('[data-action="ca-convert-preview"]');
+        if (convPrevBtn) {
+            caConvertPreview();
+            return;
+        }
+        const convDlBtn = e.target.closest('[data-action="ca-conv-download"]');
+        if (convDlBtn) {
+            caConvDownload();
+            return;
+        }
+        const rawRouteBtn = e.target.closest('[data-action="ca-show-raw-route"]');
+        if (rawRouteBtn) {
+            caShowRawRoute(rawRouteBtn);
+            return;
+        }
+        const switchRouteGrpBtn = e.target.closest('[data-action="ca-switch-route-group"]');
+        if (switchRouteGrpBtn && switchRouteGrpBtn.dataset.mode) {
+            caSwitchRouteGroupMode(switchRouteGrpBtn.dataset.mode, Number(switchRouteGrpBtn.dataset.idx));
+            return;
+        }
+        const toggleIfaceRow = e.target.closest('[data-action="ca-toggle-iface-raw"]');
+        if (toggleIfaceRow && toggleIfaceRow.dataset.target) {
+            caToggleIfaceRaw(toggleIfaceRow.dataset.target);
+            return;
+        }
+        const toggleCellBtn = e.target.closest('[data-action="ca-toggle-cell"]');
+        if (toggleCellBtn) {
+            caToggleCell(toggleCellBtn);
+            return;
+        }
+        const switchEnvPill = e.target.closest('[data-action="ca-switch-envelope-section"]');
+        if (switchEnvPill && switchEnvPill.dataset.fn && switchEnvPill.dataset.id) {
+            const fn = switchEnvPill.dataset.fn;
+            if (fn === 'caSwitchFwView') caSwitchFwView(switchEnvPill.dataset.id);
+            else if (fn === 'caSwitchSrvView') caSwitchSrvView(switchEnvPill.dataset.id);
+            return;
+        }
+    });
+
+    document.getElementById('caRawRouteModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'caRawRouteModal' || e.target.closest('#btnCaCloseRawRouteModal')) {
+            caCloseRawRouteModal();
+        }
+    });
+
+    document.getElementById('caSearch')?.addEventListener('input', () => {
+        if (typeof caApplySearch === 'function') caApplySearch();
+    });
+
+    document.getElementById('configGroupSelect')?.addEventListener('change', () => {
+        if (typeof loadConfigAnalyzer === 'function') loadConfigAnalyzer();
+    });
+
+    document.getElementById('btnCaRefresh')?.addEventListener('click', () => {
+        if (typeof loadConfigAnalyzer === 'function') loadConfigAnalyzer(true);
+    });
+
+

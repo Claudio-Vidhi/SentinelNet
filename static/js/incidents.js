@@ -158,12 +158,12 @@
         return `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 0 10px; font-size:11px; color:var(--text-muted);">
             <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
                 <input type="checkbox" id="dvx-${escapeHtml(ip)}" ${rule ? 'checked' : ''}
-                       onchange="saveDeviceSuppression('${escapeHtml(jsStr(tenant))}','${escapeHtml(jsStr(ip))}')"
+                       data-action="save-dev-suppression" data-tenant="${escapeHtml(tenant)}" data-ip="${escapeHtml(ip)}"
                        style="accent-color:var(--warning);">
                 <span>${L('incDevExpectedDown')}</span>
             </label>
             <input type="datetime-local" id="dvu-${escapeHtml(ip)}" value="${escapeHtml(until)}"
-                   onchange="saveDeviceSuppression('${escapeHtml(jsStr(tenant))}','${escapeHtml(jsStr(ip))}')"
+                   data-action="save-dev-suppression" data-tenant="${escapeHtml(tenant)}" data-ip="${escapeHtml(ip)}"
                    title="${L('incUntilHint')}"
                    style="padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">
             <input type="text" id="dvn-${escapeHtml(ip)}" value="${escapeHtml((rule || {}).note || '')}" placeholder="${L('incReasonPl')}"
@@ -205,10 +205,10 @@
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
                     <input type="checkbox" id="ifx-${r._i}" ${r.suppressed ? 'checked' : ''}
                            ${r.scope === 'device' ? `disabled title="${L('incCoveredByDevice')}"` : ''}
-                           onchange="saveInterfaceExpectation(${r._i})" style="accent-color:var(--primary);"></td>
+                           data-action="save-if-expectation" data-index="${r._i}" style="accent-color:var(--primary);"></td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
                     <input type="datetime-local" id="ifu-${r._i}" value="${escapeHtml(local(r.to_ts))}"
-                           onchange="saveInterfaceExpectation(${r._i})"
+                           data-action="save-if-expectation" data-index="${r._i}"
                            style="padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;"></td>
                 <td style="padding:5px 8px; border-bottom:1px solid var(--border);">
                     <input type="text" id="ifn-${r._i}" value="${escapeHtml(r.note || '')}" placeholder="${L('incReasonPl')}"
@@ -319,7 +319,7 @@
                                           background:var(--surface-2); color:var(--text); font-size:12px;">
                         </div>`).join('')}
                         <button class="btn btn-secondary btn-small" style="width:auto;"
-                                onclick="saveRuleParameters('${escapeHtml(jsStr(r.id))}')">${L('incSaveThresholds')}</button>
+                                data-action="save-rule-params" data-rule-id="${escapeHtml(r.id)}">${L('incSaveThresholds')}</button>
                         <span id="rp-status-${escapeHtml(r.id)}" style="font-size:11px; color:var(--text-muted);"></span>
                     </div>` : `<div style="font-size:11px; color:var(--text-muted);">${L('incNoThresholds')}</div>`}
                 </div>`).join('');
@@ -384,7 +384,7 @@
         }
         box.innerHTML = _incidents.map(inc => {
             const active = inc.id === _selectedId;
-            return `<div onclick="openIncident(${Number(inc.id)})" style="cursor:pointer; padding:10px; border-radius:0; margin-bottom:8px;
+            return `<div class="incident-list-item" data-id="${Number(inc.id)}" style="cursor:pointer; padding:10px; border-radius:0; margin-bottom:8px;
                         border:1px solid ${active ? 'var(--primary)' : 'var(--border)'}; background:var(--surface-2);">
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
                     <span style="width:8px; height:8px; border-radius:50%; background:${sevColor(inc.severity)};"></span>
@@ -528,7 +528,7 @@
                 <span style="font-size:11px; text-transform:uppercase; font-weight:700; color:var(--primary);">
                     <i class="fa-solid fa-robot"></i> ${L('incAiRestated')}
                 </span>
-                <button class="btn btn-secondary btn-small" style="width:auto;" onclick="explainIncident(${Number(inc.id)})">
+                <button class="btn btn-secondary btn-small" style="width:auto;" data-action="explain-incident" data-id="${Number(inc.id)}">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> ${inc.ai_narrative ? L('incRegenerate') : L('incExplainAi')}
                 </button>
             </div>
@@ -584,10 +584,10 @@
         const box = document.getElementById('incidentDetail');
         if (!box) return;
         const next = inc.status === 'new'
-            ? `<button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'new', 'ack')">${L('incBtnAck')}</button>
-               <button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'new', 'resolved')">${L('incBtnResolve')}</button>`
+            ? `<button class="btn btn-secondary btn-small" style="width:auto;" data-action="set-incident-status" data-id="${Number(inc.id)}" data-from="new" data-to="ack">${L('incBtnAck')}</button>
+               <button class="btn btn-secondary btn-small" style="width:auto;" data-action="set-incident-status" data-id="${Number(inc.id)}" data-from="new" data-to="resolved">${L('incBtnResolve')}</button>`
             : (inc.status === 'ack'
-                ? `<button class="btn btn-secondary btn-small" style="width:auto;" onclick="setIncidentStatus(${Number(inc.id)}, 'ack', 'resolved')">${L('incBtnResolve')}</button>`
+                ? `<button class="btn btn-secondary btn-small" style="width:auto;" data-action="set-incident-status" data-id="${Number(inc.id)}" data-from="ack" data-to="resolved">${L('incBtnResolve')}</button>`
                 : '');
         box.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px;">
@@ -648,6 +648,50 @@
             if (body) body.innerHTML = `<div style="color:var(--danger); font-size:12px;">${L('incErrGeneration')}</div>`;
         }
     }
+
+    // Delegated and static event listeners
+    document.getElementById('incStatusFilter')?.addEventListener('change', loadIncidentsList);
+    document.getElementById('incWindowFilter')?.addEventListener('change', loadIncidentsList);
+
+    document.getElementById('incidentsList')?.addEventListener('click', (e) => {
+        const item = e.target.closest('.incident-list-item[data-id]');
+        if (item && item.dataset.id) {
+            openIncident(Number(item.dataset.id));
+        }
+    });
+
+    document.getElementById('incidentDetail')?.addEventListener('click', (e) => {
+        const expBtn = e.target.closest('[data-action="explain-incident"]');
+        if (expBtn && expBtn.dataset.id) {
+            explainIncident(Number(expBtn.dataset.id));
+            return;
+        }
+        const stBtn = e.target.closest('[data-action="set-incident-status"]');
+        if (stBtn && stBtn.dataset.id && stBtn.dataset.from && stBtn.dataset.to) {
+            setIncidentStatus(Number(stBtn.dataset.id), stBtn.dataset.from, stBtn.dataset.to);
+            return;
+        }
+    });
+
+    document.getElementById('incidentRules')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="save-rule-params"]');
+        if (btn && btn.dataset.ruleId) {
+            saveRuleParameters(btn.dataset.ruleId);
+        }
+    });
+
+    document.getElementById('incidentInterfaces')?.addEventListener('change', (e) => {
+        const devEl = e.target.closest('[data-action="save-dev-suppression"]');
+        if (devEl && devEl.dataset.tenant && devEl.dataset.ip) {
+            saveDeviceSuppression(devEl.dataset.tenant, devEl.dataset.ip);
+            return;
+        }
+        const ifEl = e.target.closest('[data-action="save-if-expectation"]');
+        if (ifEl && ifEl.dataset.index != null) {
+            saveInterfaceExpectation(Number(ifEl.dataset.index));
+            return;
+        }
+    });
 
     window.loadIncidentsTab = loadIncidentsTab;
     window.loadIncidentsList = loadIncidentsList;

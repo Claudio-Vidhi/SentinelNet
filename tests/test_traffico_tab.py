@@ -71,8 +71,8 @@ class TestTrafficoStructure(unittest.TestCase):
 
     def test_pills_are_wired_to_the_switcher(self):
         for view in self.PILLS:
-            self.assertIn(f"trafSwitchView('{view}')", self.html,
-                          f"la pill '{view}' non chiama trafSwitchView")
+            self.assertIn(f'data-traf-view="{view}"', self.html,
+                          f"la pill '{view}' non ha data-traf-view")
         self.assertIn("function trafSwitchView", self.js)
         self.assertIn("window.trafSwitchView = trafSwitchView", self.js)
 

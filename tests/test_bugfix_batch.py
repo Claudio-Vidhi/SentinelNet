@@ -138,9 +138,10 @@ class TestOnelineBayOpensFilteredInventory(unittest.TestCase):
     def test_bay_button_passes_its_tenant(self):
         # La bay per tenant non deve piu' aprire l'inventario senza filtro.
         bay = re.search(r'class="oneline-bay" data-state="\$\{state\(b\)\}"\s*'
-                        r'onclick="([^"]+)"', self.src)
+                        r'data-action="open-inventory-tenant"\s*'
+                        r'data-tenant="\$\{escapeHtml\(name\)\}"', self.src)
         self.assertIsNotNone(bay, "bottone bay per tenant non trovato")
-        self.assertIn("openInventoryForTenant(", bay.group(1))
+        self.assertIn("openInventoryForTenant", self.src)
 
 
 class TestSortKeepsDetailRowsWithTheirParent(unittest.TestCase):

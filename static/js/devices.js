@@ -922,7 +922,7 @@
                     align-items:center; gap:8px; padding:8px 12px; position:sticky; top:0;
                     background:var(--surface-3); border-bottom:1px solid var(--border);
                     font-size:11px; text-transform:uppercase; color:var(--text-muted);">
-            <input type="checkbox" id="scanSelectAll" onchange="toggleAllScanRows(this)"
+            <input type="checkbox" id="scanSelectAll" data-action="toggle-all-scan-rows"
                    style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
             <span>IP</span>
             <span>${escapeHtml(L.scanColPing || 'Ping')}</span>
@@ -947,7 +947,7 @@
                         align-items:center; gap:8px; padding:8px 12px;
                         border-bottom:1px solid var(--border); font-size:12px;">
                 <input type="checkbox" class="scan-row-cb" data-ip="${escapeHtml(r.ip)}"
-                       onchange="refreshScanActionButtons()"
+                       data-action="refresh-scan-action-buttons"
                        style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
                 <span style="font-family:var(--font-code); color:var(--primary);">${escapeHtml(r.ip)}</span>
                 <span style="color:${r.alive ? 'var(--primary)' : 'var(--text-muted)'};">${r.alive ? '✓' : '✗'}</span>
@@ -964,6 +964,17 @@
         vendorSel.onchange = refreshScanActionButtons;
         refreshScanActionButtons();
     }
+
+    document.getElementById('subnetScanResultsTable')?.addEventListener('change', (e) => {
+        const master = e.target.closest('#scanSelectAll');
+        if (master) {
+            toggleAllScanRows(master);
+            return;
+        }
+        if (e.target.closest('.scan-row-cb')) {
+            refreshScanActionButtons();
+        }
+    });
 
     function toggleAllScanRows(master) {
         document.querySelectorAll('.scan-row-cb').forEach(cb => { cb.checked = master.checked; });
@@ -1500,3 +1511,20 @@
     document.getElementById('btnExportDevices')?.addEventListener('click', exportDeviceCsv);
     document.getElementById('btnCancelEditDevice')?.addEventListener('click', resetDeviceForm);
     document.getElementById('btnAddVendor')?.addEventListener('click', addVendor);
+
+    // Subnet Scan modal listeners
+    document.getElementById('btnCloseSubnetScan')?.addEventListener('click', closeSubnetScanModal);
+    document.getElementById('subnetScanModal')?.addEventListener('click', (e) => {
+        const portBtn = e.target.closest('[data-action="add-scan-port"]');
+        if (portBtn && portBtn.dataset.port) {
+            addScanPort(Number(portBtn.dataset.port));
+        }
+    });
+    document.getElementById('btnAvviaScan')?.addEventListener('click', startSubnetScan);
+    document.getElementById('btnScanVerify')?.addEventListener('click', verifySelectedScanRows);
+    document.getElementById('btnScanAddSelected')?.addEventListener('click', addSelectedScanRows);
+
+    // Triage Scope modal listeners
+    document.getElementById('btnCloseTriageScope')?.addEventListener('click', closeTriageScopeModal);
+    document.getElementById('btnStartGroupTriageAll')?.addEventListener('click', () => startGroupTriage('all'));
+

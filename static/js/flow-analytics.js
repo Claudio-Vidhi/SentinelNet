@@ -188,7 +188,7 @@
                     <i class="fa-solid ${icon}"></i> ${title}
                 </h5>
                 ${(items || []).map(item => `
-                    <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:0; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" onclick="applySiemFilter('${escapeHtml(jsStr(item.value))}', '${field}')" title="${escapeHtml(field)}:${escapeHtml(item.value)}">
+                    <div class="siem-facet-item" data-term="${escapeHtml(item.value)}" data-field="${escapeHtml(field)}" style="display:flex; align-items:center; justify-content:space-between; font-size:11px; padding:3px 6px; border-radius:0; cursor:pointer; background:var(--surface-3); margin-bottom:4px;" title="${escapeHtml(field)}:${escapeHtml(item.value)}">
                         <span style="font-family:var(--font-code); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:130px;">${escapeHtml(item.value)}</span>
                         <span class="badge" style="font-size:10px;">${item.count}</span>
                     </div>
@@ -243,7 +243,7 @@
                 ? dash
                 : `${(e.bytes / 1024).toFixed(1)} KB`;
 
-            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer; ${isSelected ? 'background:var(--surface-3);' : ''}" onclick="toggleEventDrawer(${JSON.stringify(e.id)})">
+            return `<tr class="siem-event-row" data-id="${escapeHtml(String(e.id))}" style="font-size:12px; border-top:1px solid var(--border); cursor:pointer; ${isSelected ? 'background:var(--surface-3);' : ''}">
                 <td style="padding:6px 8px; font-family:var(--font-code); color:var(--text-muted);">${timeStr}</td>
                 <td style="padding:6px 8px; font-family:var(--font-code); color:var(--primary);">${endpoint(e.src_ip, e.src_port)}</td>
                 <td style="padding:6px 8px; font-family:var(--font-code);">${endpoint(e.dst_ip, e.dst_port)}</td>
@@ -262,7 +262,7 @@
                     </div>` : ''}
                 </div>
                 <div style="display:flex; justify-content:flex-end;">
-                    <button class="btn btn-sm btn-secondary" onclick="suppressSiemAlert(${JSON.stringify(e.id)}, event)"><i class="fa-solid fa-bell-slash"></i> Sopprimi Allerta Threat</button>
+                    <button class="btn btn-sm btn-secondary" data-action="suppress-alert" data-id="${escapeHtml(String(e.id))}"><i class="fa-solid fa-bell-slash"></i> Sopprimi Allerta Threat</button>
                 </div>
             </td></tr>` : ''}`;
         }).join('');
@@ -305,6 +305,34 @@
                 : 'Errore durante la soppressione dell\'allerta.', 'error');
         }
     }
+
+    // Delegated click listeners
+    document.getElementById('flowSiemFacets')?.addEventListener('click', (e) => {
+        const item = e.target.closest('.siem-facet-item');
+        if (item && item.dataset.term) {
+            applySiemFilter(item.dataset.term, item.dataset.field || '');
+        }
+    });
+
+    document.getElementById('flowSiemTableBody')?.addEventListener('click', (e) => {
+        const suppressBtn = e.target.closest('[data-action="suppress-alert"]');
+        if (suppressBtn) {
+            e.stopPropagation();
+            suppressSiemAlert(suppressBtn.dataset.id, e);
+            return;
+        }
+        const row = e.target.closest('.siem-event-row');
+        if (row && row.dataset.id) {
+            toggleEventDrawer(row.dataset.id);
+        }
+    });
+
+    // Static event listeners
+    document.getElementById('btnFlowSiemStream')?.addEventListener('click', toggleSiemStream);
+    document.getElementById('btnFilterSiem')?.addEventListener('click', filterSiemEvents);
+    document.getElementById('flowSiemQueryInput')?.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter' || e.target.value.length === 0) filterSiemEvents();
+    });
 
     // Expose functions globally
     window.loadFlowSiemTab = loadFlowSiemTab;
