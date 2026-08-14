@@ -487,14 +487,14 @@ def get_all_vendors() -> dict:
     defaults = {
         "cisco":   {"euvd_term": "cisco",                    "driver": "cisco_ios"},
         "cisco_cbs":{"euvd_term": "cisco",                   "driver": "cisco_s300"},
-        "hpe":     {"euvd_term": "hewlett packard enterprise","driver": "hp_procurve"},
-        "juniper": {"euvd_term": "juniper networks",          "driver": "juniper_junos"},
-        "aruba":   {"euvd_term": "aruba networks",            "driver": "aruba_os"},
-        "fortinet":{"euvd_term": "fortinet",                  "driver": "fortinet"},
-        "paloalto":{"euvd_term": "palo alto networks",        "driver": "paloalto_panos"},
-        "cisco_wlc":{"euvd_term": "cisco",                    "driver": "cisco_wlc"},
-        "cisco_9800":{"euvd_term": "cisco",                   "driver": "cisco_9800"},
-        "linux":   {"euvd_term": "linux kernel",              "driver": "linux"},
+        "hpe":     {"euvd_term": "hpe",                      "driver": "hp_procurve"},
+        "juniper": {"euvd_term": "juniper",                  "driver": "juniper_junos"},
+        "aruba":   {"euvd_term": "aruba",                    "driver": "aruba_os"},
+        "fortinet":{"euvd_term": "fortinet",                 "driver": "fortinet"},
+        "paloalto":{"euvd_term": "palo alto",                "driver": "paloalto_panos"},
+        "cisco_wlc":{"euvd_term": "cisco",                   "driver": "cisco_wlc"},
+        "cisco_9800":{"euvd_term": "cisco",                  "driver": "cisco_9800"},
+        "linux":   {"euvd_term": "linux",                    "driver": "linux"},
     }
     vendors_file = get_vendors_file()
     if not os.path.exists(vendors_file):
@@ -503,9 +503,12 @@ def get_all_vendors() -> dict:
     try:
         with open(vendors_file, "r") as f:
             stored = json.load(f)
-        # I vendor di sistema sono sempre disponibili (lo stored ha la precedenza),
-        # così driver come 'cisco_s300' (CBS) restano selezionabili.
-        return {**defaults, **stored}
+        merged = {**defaults, **stored}
+        # Canonicalize legacy multi-word EUVD terms into clean NVD keywords
+        for vname, vmeta in merged.items():
+            if isinstance(vmeta, dict) and "euvd_term" in vmeta:
+                vmeta["euvd_term"] = resolve_euvd_term(vmeta["euvd_term"])
+        return merged
     except Exception:
         return defaults
 
@@ -759,15 +762,37 @@ def delete_model(vendor: str, model: str) -> bool:
             return True
     return False
 
+VENDOR_NVD_MAP = {
+    "hewlett packard enterprise": "hpe",
+    "hewlett-packard": "hpe",
+    "hewlett packard": "hpe",
+    "hp": "hpe",
+    "hpe": "hpe",
+    "aruba networks": "aruba",
+    "aruba": "aruba",
+    "juniper networks": "juniper",
+    "juniper": "juniper",
+    "palo alto networks": "palo alto",
+    "paloalto": "palo alto",
+    "palo alto": "palo alto",
+    "linux kernel": "linux",
+    "linux": "linux",
+    "cisco systems": "cisco",
+    "cisco": "cisco",
+    "cisco_cbs": "cisco",
+    "cisco_wlc": "cisco",
+    "cisco_9800": "cisco",
+    "fortinet": "fortinet",
+}
+
 def resolve_euvd_term(vendor_display: str) -> str:
-    """Maps a vendor display name to the correct EUVD search term."""
-    vendors = get_all_vendors()
-    key = vendor_display.strip().lower()
-    if key in vendors:
-        return vendors[key].get("euvd_term", key)
-    for k, v in vendors.items():
-        if k in key or key in k:
-            return v.get("euvd_term", key)
+    """Maps a vendor display name to the correct NVD search term."""
+    key = (vendor_display or "").strip().lower()
+    if key in VENDOR_NVD_MAP:
+        return VENDOR_NVD_MAP[key]
+    for k, v in VENDOR_NVD_MAP.items():
+        if k in key:
+            return v
     return key
 
 # --- UTILITIES PER RILEVAMENTO VERSIONI (Richieste dal Core Engine e Server) ---
