@@ -1654,6 +1654,10 @@
     // Attach click listener on canvas
     document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
+            // Pre-login l'overlay copre l'app: nessuna sessione esiste ancora,
+            // e il fetch protetto produrrebbe solo uno 401 inutile.
+            const overlay = document.getElementById('authOverlay');
+            if (overlay && overlay.style.display !== 'none') return;
             loadObsProtocolDist();
             const canvas = document.getElementById('obsProtocolCanvas');
             if (canvas) {
