@@ -1071,7 +1071,9 @@ document.addEventListener('keydown', e => {
         if (target === 'h') switchTab('tab-home');
         else if (target === 's') switchTab('tab-settings');
         else if (target === 'd') switchTab('tab-devices');
-        else if (target === 'a') switchTab('tab-ai-chat');
+        // 'tab-ai-chat' era l'id del prototype: la tab reale e' tab-ai, e il
+        // vecchio id faceva morire switchTab su getElementById(null).
+        else if (target === 'a') switchTab('tab-ai');
     }
 });
 
