@@ -235,10 +235,16 @@
 
         const sevFilter = document.getElementById('auditSevFilter') ? document.getElementById('auditSevFilter').value : 'all';
         const catFilter = document.getElementById('auditCatFilter') ? document.getElementById('auditCatFilter').value : 'all';
+        const statusFilter = document.getElementById('auditStatusFilter') ? document.getElementById('auditStatusFilter').value : 'all';
 
         let filtered = _auditRules;
         if (sevFilter !== 'all') filtered = filtered.filter(r => r.severity.toLowerCase() === sevFilter.toLowerCase());
         if (catFilter !== 'all') filtered = filtered.filter(r => r.category.toLowerCase() === catFilter.toLowerCase());
+        if (statusFilter !== 'all') filtered = filtered.filter(r => {
+            // Come il badge: tutto cio' che non e' PASS/FAIL/WARN e' N/D.
+            const st = (r.status === 'PASS' || r.status === 'FAIL' || r.status === 'WARN') ? r.status : 'UNKNOWN';
+            return st === statusFilter;
+        });
 
         if (!filtered.length) {
             tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${currentLang==='en'?'No audit rules match filter.':'Nessuna regola di audit corrisponde ai filtri.'}</td></tr>`;

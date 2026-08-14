@@ -13,14 +13,6 @@ from typing import Optional
 from core import db
 
 
-def _ensure_run_name_column(conn):
-    try:
-        conn.execute("ALTER TABLE netsec_audit_runs ADD COLUMN run_name TEXT")
-        conn.commit()
-    except Exception:
-        pass
-
-
 def save(result: dict, *, tenant: Optional[str], device_name: Optional[str],
          device_ip: Optional[str], actor: str, run_name: Optional[str] = None) -> int:
     summary = result.get("summary") or {}
@@ -30,7 +22,6 @@ def save(result: dict, *, tenant: Optional[str], device_name: Optional[str],
     score = int(raw) if isinstance(raw, (int, float)) else None
     conn = db.get_observability_connection()
     try:
-        _ensure_run_name_column(conn)
         cur = conn.execute(
             "INSERT INTO netsec_audit_runs (ts, tenant, device_name, device_ip, "
             "benchmark, benchmark_title, vendor, lang, score, "

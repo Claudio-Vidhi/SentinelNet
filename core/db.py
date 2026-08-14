@@ -167,6 +167,11 @@ def migrate() -> None:
                 ("retracted_reason", "TEXT")):
             if ev_cols and column not in ev_cols:
                 conn.execute(f"ALTER TABLE evidence ADD COLUMN {column} {ddl}")
+        # run_name arrived after netsec_audit_runs shipped (same reason as above).
+        ar_cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(netsec_audit_runs)").fetchall()}
+        if ar_cols and "run_name" not in ar_cols:
+            conn.execute("ALTER TABLE netsec_audit_runs ADD COLUMN run_name TEXT")
         if current < SCHEMA_VERSION:
             conn.execute("DELETE FROM schema_version")
             conn.execute("INSERT INTO schema_version(version) VALUES (?)", (SCHEMA_VERSION,))

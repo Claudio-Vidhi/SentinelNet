@@ -3151,6 +3151,15 @@
               <option value="threat prevention">Threat Prevention</option>
               <option value="availability">Availability</option>
             </select>
+            <!-- Gli stati sono le costanti di services/netsec_audit/model.py;
+                 UNKNOWN qui si legge "N/D", come nel badge della tabella. -->
+            <select id="auditStatusFilter" onchange="renderAuditRulesTable()" style="padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px;">
+              <option value="all" data-i18n="nsaFilterStatusAll">Filtra Stato: Tutti</option>
+              <option value="PASS">Pass</option>
+              <option value="FAIL">Fail</option>
+              <option value="WARN">Warn</option>
+              <option value="UNKNOWN">N/D</option>
+            </select>
           </div>
         </div>
         <div class="table-container">
