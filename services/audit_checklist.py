@@ -1290,6 +1290,7 @@ def generate_audit_relazione(engagement_id: int) -> str:
             .no-print {{ display: none !important; }}
         }}
     </style>
+    <base href="/">
     <script src="/static/vendor/html2pdf/html2pdf.bundle.min.js"></script>
     <script>
         async function downloadPdf() {{
@@ -1303,17 +1304,23 @@ def generate_audit_relazione(engagement_id: int) -> str:
                 image: {{ type: 'jpeg', quality: 0.98 }},
                 html2canvas: {{ scale: 2.5, useCORS: true, logging: false, letterRendering: true, windowWidth: 850 }},
                 jsPDF: {{ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }},
-                pagebreak: {{ mode: ['avoid-all', 'css', 'legacy'] }}
+                pagebreak: {{ mode: 'css' }}
             }};
             try {{
-                if (typeof html2pdf !== 'undefined') {{
-                    await html2pdf().set(opt).from(document.body).save();
+                let h2p = (typeof html2pdf !== 'undefined') ? html2pdf : (window.parent && window.parent.html2pdf);
+                if (!h2p && window.parent && typeof window.parent.ensureHtml2Pdf === 'function') {{
+                    try {{
+                        h2p = await window.parent.ensureHtml2Pdf();
+                    }} catch(err) {{}}
+                }}
+                if (h2p) {{
+                    await h2p().set(opt).from(document.body).save();
                 }} else {{
-                    window.print();
+                    alert('Libreria PDF non disponibile. Riprova tra qualche istante.');
                 }}
             }} catch (e) {{
                 console.error('PDF error:', e);
-                window.print();
+                alert('Errore durante la generazione del PDF: ' + (e.message || e));
             }} finally {{
                 noPrints.forEach(el => {{ el.style.display = ''; }});
                 if (btn) btn.textContent = 'Scarica PDF';
