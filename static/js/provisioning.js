@@ -111,8 +111,10 @@ document.getElementById('btnNewIdentity').addEventListener('click', async () => 
     await populateIdentTenantOptions(document.getElementById('devGroupSelect').value || 'all');
     document.getElementById('identityForm').style.display = 'block';
 });
-document.getElementById('btnCancelIdentity').addEventListener('click', () =>
-    document.getElementById('identityForm').style.display = 'none');
+document.getElementById('btnCancelIdentity').addEventListener('click', () => {
+    ['identPass', 'identSecret'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+    document.getElementById('identityForm').style.display = 'none';
+});
 document.getElementById('btnSaveIdentity').addEventListener('click', async () => {
     const id = document.getElementById('identEditId').value;
     const chkSpecific = document.getElementById('chkIdentSpecificTenant');
@@ -129,12 +131,14 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
         tenantPayload = 'all';
     }
 
+    const passEl = document.getElementById('identPass');
+    const secretEl = document.getElementById('identSecret');
     const payload = {
         name: document.getElementById('identName').value.trim(),
         tenant: tenantPayload,
         username: document.getElementById('identUser').value.trim(),
-        password: document.getElementById('identPass').value,
-        enable_secret: document.getElementById('identSecret').value,
+        password: passEl ? passEl.value : '',
+        enable_secret: secretEl ? secretEl.value : '',
     };
     if (!payload.name || !payload.username || (!id && !payload.password)) {
         alert(i18n[currentLang].alertIdentityFields); return;
@@ -145,6 +149,8 @@ document.getElementById('btnSaveIdentity').addEventListener('click', async () =>
         body: JSON.stringify(payload)
     });
     if (res && res.ok) {
+        if (passEl) passEl.value = '';
+        if (secretEl) secretEl.value = '';
         document.getElementById('identityForm').style.display = 'none';
         await refreshIdentityOptions(); renderIdentitiesPanel();
     } else if (res) {
