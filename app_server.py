@@ -8,6 +8,7 @@ import webbrowser
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -153,6 +154,23 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Content-Security-Policy"] = _CSP
     return response
+
+# Vendor e font sono pinnati in static/ e cambiano solo di versione: un anno
+# di cache e' sicuro. Il codice dell'app cambia a ogni release: TTL corto
+# finche' non esiste il fingerprinting dei nomi file.
+@app.middleware("http")
+async def cache_control_middleware(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/vendor/") or path.startswith("/static/fonts/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=300"
+    return response
+
+# Ultimo middleware aggiunto = piu' esterno: comprime il corpo finale.
+# I JS pesano (topology.js ~175KB) e la LAN di gestione spesso e' lenta.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):

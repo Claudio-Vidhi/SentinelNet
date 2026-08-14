@@ -308,6 +308,12 @@ function getAuthHeaders() {
     return { "X-Requested-With": "SentinelNet" };
 }
 
+// Sessione confermata dal server (auth/me ok). Distingue "non ancora
+// loggato" — 401 pre-login, da ignorare in silenzio — da "sessione scaduta"
+// durante il lavoro, che invece forza il logout. Senza questo flag ogni
+// fetch pre-login innescava logout() -> POST logout 401 -> re-check auth.
+let _sessionConfirmed = false;
+
 // Funzione centralizzata per iniettare e controllare gli header di autenticazione ed evitare disallineamenti della UI
 async function apiFetch(url, options = {}) {
     options.headers = options.headers || {};
@@ -319,8 +325,10 @@ async function apiFetch(url, options = {}) {
     try {
         const res = await fetch(url, options);
         if (res.status === 401) {
-            console.warn("[AUTH] Sessione scaduta o non valida (401). Forzatura Logout.");
-            logout();
+            if (_sessionConfirmed) {
+                console.warn("[AUTH] Sessione scaduta o non valida (401). Forzatura Logout.");
+                logout();
+            }
             return null;
         }
         return res;
@@ -360,6 +368,7 @@ async function checkAuthRequirements() {
                 if (overlay) overlay.style.display = 'flex';
                 return false;
             }
+            _sessionConfirmed = true;
             if (overlay) overlay.style.display = 'none';
             return true;
         }
@@ -483,6 +492,7 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
 });
 
 async function logout() {
+    _sessionConfirmed = false;
     // Cancella il cookie di sessione lato server (best-effort).
     try {
         await fetch('/api/auth/logout', {
