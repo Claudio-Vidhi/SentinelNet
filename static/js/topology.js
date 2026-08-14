@@ -184,11 +184,18 @@
         });
         box.innerHTML = cats.map(k => `
             <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:pointer; color:var(--text);">
-                <input type="checkbox" ${isMapCatVisible(k)?'checked':''} onchange="toggleMapCat('${k}', this.checked)" style="accent-color:var(--primary);">
+                <input type="checkbox" ${isMapCatVisible(k)?'checked':''} data-action="toggle-map-cat" data-k="${escapeHtml(k)}" style="accent-color:var(--primary);">
                 <span style="display:inline-block; width:10px; height:10px; border-radius:0; background:${mapCatMeta(k).color};"></span>
                 ${mapCatLabel(k)}
             </label>`).join('');
     }
+
+    document.getElementById('mapCatList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-action="toggle-map-cat"]');
+        if (cb && cb.dataset.k) {
+            toggleMapCat(cb.dataset.k, cb.checked);
+        }
+    });
 
     // Costruisce la legenda dei colori per tipo di apparato sotto la mappa.
     function renderDeviceTypeLegend() {
@@ -483,10 +490,17 @@
         }
         box.innerHTML = nodesData.map(n => `
             <label style="display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12px; cursor:pointer; color:var(--text);">
-                <input type="checkbox" ${isDeviceHidden(group, n.id) ? '' : 'checked'} onchange="toggleDeviceFilter('${attrEsc(group)}', '${attrEsc(n.id)}', !this.checked)" style="accent-color:var(--primary);">
+                <input type="checkbox" ${isDeviceHidden(group, n.id) ? '' : 'checked'} data-action="toggle-device-filter" data-group="${attrEsc(group)}" data-node-id="${attrEsc(n.id)}" style="accent-color:var(--primary);">
                 <span>${escapeHtml(n.label || n.id)}</span>
             </label>`).join('');
     }
+
+    document.getElementById('deviceFilterList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-action="toggle-device-filter"]');
+        if (cb && cb.dataset.group && cb.dataset.nodeId) {
+            toggleDeviceFilter(cb.dataset.group, cb.dataset.nodeId, !cb.checked);
+        }
+    });
 
     async function loadInteractiveMap() {
         const groupSelect = document.getElementById('interactiveGroupSelect');
@@ -916,7 +930,7 @@
         if (!box) return;
         box.innerHTML = MINIMAL_LINK_TYPES.map(t => `
             <label style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted); cursor:pointer; user-select:none;" title="${currentLang==='en'?t.en:t.it}">
-                <input type="color" value="${linkColor(t.key)}" onchange="setMinimalLinkColor('${t.key}', this.value)" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:0; background:none; cursor:pointer;">
+                <input type="color" value="${linkColor(t.key)}" data-action="set-minimal-link-color" data-key="${attrEsc(t.key)}" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:0; background:none; cursor:pointer;">
                 <span>${currentLang==='en'?t.en:t.it}</span>
             </label>`).join('')
             // Categorie personalizzate (sola visualizzazione: gestione nel pannello
@@ -930,6 +944,14 @@
                 </span>`;
             }).join('');
     }
+
+    document.getElementById('minimalLegendWrap')?.addEventListener('change', (e) => {
+        const inp = e.target.closest('input[data-action="set-minimal-link-color"]');
+        if (inp && inp.dataset.key) {
+            setMinimalLinkColor(inp.dataset.key, inp.value);
+        }
+    });
+
     function setMinimalLinkColor(key, val) {
         minimalLinkColors[key] = val;
         localStorage.setItem('minimalLinkColors', JSON.stringify(minimalLinkColors));
@@ -995,7 +1017,7 @@
                 <span style="width:14px; height:14px; border-radius:0; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
                 <span style="flex:1; font-size:12px; color:var(--text);">${escapeHtml(nm)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${dashLabel(c.dash)}</span>
-                <button onclick="deleteMinimalCustomCat('${attrEsc(nm)}')" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:var(--lamp-fault-ink); cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
+                <button data-action="delete-minimal-custom-cat" data-name="${attrEsc(nm)}" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:var(--lamp-fault-ink); cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
             </div>`;
         }).join('') || `<div style="font-size:12px; color:var(--text-muted); padding:4px 0;">${currentLang==='en'?'No categories yet':'Nessuna categoria'}</div>`;
         box.innerHTML = rows + `
@@ -1007,9 +1029,21 @@
                     <option value="dashed">${currentLang==='en'?'Dashed':'Tratteggiata'}</option>
                     <option value="dotted">${currentLang==='en'?'Dotted':'Punteggiata'}</option>
                 </select>
-                <button onclick="addMinimalCustomCat()" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--cta); color:var(--cta-text); border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
+                <button data-action="add-minimal-custom-cat" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--cta); color:var(--cta-text); border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
             </div>`;
     }
+
+    document.getElementById('minimalCustomCatList')?.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('[data-action="delete-minimal-custom-cat"]');
+        if (delBtn && delBtn.dataset.name) {
+            deleteMinimalCustomCat(delBtn.dataset.name);
+            return;
+        }
+        const addBtn = e.target.closest('[data-action="add-minimal-custom-cat"]');
+        if (addBtn) {
+            addMinimalCustomCat();
+        }
+    });
     // Menu contestuale (click destro su un cavo nella mappa minimalista) per
     // assegnare/rimuovere la categoria personalizzata di un singolo collegamento.
     function closeEdgeCatMenu() {
@@ -1895,10 +1929,18 @@
         if (!box) return;
         box.innerHTML = CAT_COLUMNS.map(c => `
             <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:${c.fixed?'default':'pointer'}; color:${c.fixed?'var(--text-muted)':'var(--text)'};">
-                <input type="checkbox" ${isColVisible(c.key)?'checked':''} ${c.fixed?'disabled':''} onchange="toggleCatColumn('${c.key}', this.checked)" style="accent-color:var(--primary);">
+                <input type="checkbox" ${isColVisible(c.key)?'checked':''} ${c.fixed?'disabled':''} data-action="toggle-cat-column" data-key="${attrEsc(c.key)}" style="accent-color:var(--primary);">
                 ${colLabel(c)}
             </label>`).join("");
     }
+
+    document.getElementById('categoryColumnsList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-action="toggle-cat-column"]');
+        if (cb && cb.dataset.key) {
+            toggleCatColumn(cb.dataset.key, cb.checked);
+        }
+    });
+
     function toggleCatColumn(key, on) {
         catColVis[key] = on;
         localStorage.setItem('catColVis', JSON.stringify(catColVis));
@@ -1988,9 +2030,9 @@
                 const color = deviceTypeMeta(k).color;
                 const n = counts[k] || 0;
                 const delBtn = (!c.builtin && canWrite)
-                    ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="deleteCategory('${escapeHtml(k)}')"></i>` : '';
+                    ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" data-action="delete-category" data-k="${escapeHtml(k)}"></i>` : '';
                 const subChips = c.subcategories.length
-                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" onclick="deleteSubcategory('${escapeHtml(k)}','${escapeHtml(s)}')" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
+                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
                 return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px;">
                     ${delBtn}
                     <div style="font-size:25px; font-weight:900; color:${color};">${n}</div>
@@ -1999,6 +2041,18 @@
                 </div>`;
             }).join("");
         }
+
+        document.getElementById('categoryCountCards')?.addEventListener('click', (e) => {
+            const delCat = e.target.closest('[data-action="delete-category"]');
+            if (delCat && delCat.dataset.k) {
+                deleteCategory(delCat.dataset.k);
+                return;
+            }
+            const delSub = e.target.closest('[data-action="delete-subcategory"]');
+            if (delSub && delSub.dataset.k && delSub.dataset.s) {
+                deleteSubcategory(delSub.dataset.k, delSub.dataset.s);
+            }
+        });
 
         const nodes = getFilteredCategoryNodes();
         const byGroup = {};
@@ -2020,17 +2074,17 @@
             switch (col.key) {
                 case 'hostname': {
                     const conflictIcon = (canWrite && n.name_options && n.name_options.length > 1)
-                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" onclick="openConflictModal('${escapeHtml(n.id)}')" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
+                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" data-action="open-conflict-modal" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
                     // Chevron di espansione: mostra le unità fisiche dello stack.
                     const chevron = n.stack
-                        ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${currentLang==='en'?'Show stack units':'Mostra unità dello stack'}" onclick="toggleStackRow('${escapeHtml(n.id)}')" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
+                        ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${currentLang==='en'?'Show stack units':'Mostra unità dello stack'}" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
                         : '';
                     const dot = `${chevron}<span style="display:inline-block; width:9px; height:9px; border-radius:0; background:${meta.color}; margin-right:6px;"></span>`;
                     // Rinomina inline: modifica il nome mostrato (stage 'name', salvato col pulsante).
                     if (canWrite) {
                         const p = pendingEdits[n.id];
                         const curName = (p && Object.prototype.hasOwnProperty.call(p, 'name')) ? p.name : (n.label || '');
-                        return td(`${dot}<input value="${attrEsc(curName)}" onchange="stageEdit('${escapeHtml(n.id)}','name',this.value.trim())" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
+                        return td(`${dot}<input value="${attrEsc(curName)}" data-action="stage-edit-name" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
                     }
                     return td(`${dot}${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
                 }
@@ -2042,19 +2096,19 @@
                         : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:0; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
                     // Promozione di un dispositivo scoperto a gestito (operator/admin).
                     const promote = (n.discovered && canWrite && n.display_ip)
-                        ? ` <button onclick="promoteDevice('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
+                        ? ` <button data-action="promote-device" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
                     return td(badge + promote);
                 }
                 case 'vendor': {
                     const v = (function(){ const e = effVal(n,'vendor'); return (e && e !== 'discovered') ? e : ''; })();
                     return td(canWrite
-                        ? `<input list="catVendorDL" value="${attrEsc(v)}" onchange="stageEdit('${escapeHtml(n.id)}','vendor',this.value.trim())" placeholder="—" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `<input list="catVendorDL" value="${attrEsc(v)}" data-action="stage-edit-vendor" data-node-id="${escapeHtml(n.id)}" placeholder="—" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(v||'—')}</span>`);
                 }
                 case 'model': {
                     const vk = String(effVal(n,'vendor')||'').toLowerCase();
                     return td(canWrite
-                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" onchange="stageModel('${escapeHtml(n.id)}', this.value.trim())" placeholder="—" style="width:140px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" data-action="stage-model" data-node-id="${escapeHtml(n.id)}" placeholder="—" style="width:140px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(effVal(n,'model')||'—')}</span>`);
                 }
                 case 'version':
@@ -2067,19 +2121,19 @@
                     const hg = effVal(n,'ha_group') || '';
                     const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:var(--cond-d); border:1px solid var(--cond-d); border-radius:0; padding:1px 4px; margin-right:4px;">HA</span>` : '';
                     return td(canWrite
-                        ? `${badge}<input value="${attrEsc(hg)}" onchange="stageEdit('${escapeHtml(n.id)}','ha_group',this.value.trim())" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `${badge}<input value="${attrEsc(hg)}" data-action="stage-edit-ha-group" data-node-id="${escapeHtml(n.id)}" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : (hg ? `${badge}<span style="font-size:12px; color:var(--cond-d);">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
                 }
                 case 'stack': {
                     if (n.stack) {
                         const warn = n.stack.health === 'degraded'
                             ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'Degraded stack':'Stack degradato'}" style="color:var(--danger); font-size:10px;"></i>` : '';
-                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:0; padding:2px 6px; cursor:pointer;" onclick="toggleStackRow('${escapeHtml(n.id)}')"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
+                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:0; padding:2px 6px; cursor:pointer;" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
                     }
                     // Solo switch/router gestiti possono essere marcati a mano.
                     const canMark = canAdmin && !n.discovered && ['switch','router'].includes(effVal(n,'category'));
                     return td(canMark
-                        ? `<button onclick="markAsStack('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:0; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
+                        ? `<button data-action="mark-as-stack" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:0; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
                         : '<span style="color:var(--text-muted);">—</span>', 'white-space:nowrap;');
                 }
                 case 'category': {
@@ -2089,12 +2143,12 @@
                     // Il menù sottocategoria viene reso SOLO se la categoria ne ha:
                     // così, rimuovendo l'ultima sottocategoria, non resta spazio vuoto.
                     const subSel = (canWrite && subs.length)
-                        ? `<select class="subcat-sel" onchange="stageEdit('${escapeHtml(n.id)}','subcategory',this.value)" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                        ? `<select class="subcat-sel" data-action="stage-edit-subcategory" data-node-id="${escapeHtml(n.id)}" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                             <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
                             ${subs.map(s => `<option value="${escapeHtml(s)}"${s===curSub?' selected':''}>${escapeHtml(s)}</option>`).join('')}
                         </select>` : '';
                     const ctrl = canWrite
-                        ? `<select onchange="stageCategory('${escapeHtml(n.id)}', this.value)" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                        ? `<select data-action="stage-category" data-node-id="${escapeHtml(n.id)}" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                             ${categoryOptions(curCat)}
                         </select>${subSel}`
                         : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(curCat))}</span>${curSub?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(curSub)}</span>`:''}`;
@@ -2124,8 +2178,8 @@
             </tr>`).join('');
             // Azioni accanto al titolo: sfruttano lo spazio orizzontale libero.
             const actions = canAdmin ? `<div style="display:flex; gap:8px;">
-                <button onclick="saveStackMembers('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
-                <button onclick="removeStack('${escapeHtml(n.id)}')" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
+                <button data-action="save-stack-members" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
+                <button data-action="remove-stack" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
             </div>` : '';
             // Larghezze: #, Ruolo, Modello, Serial, Stato.
             const widths = ['36px', '18%', '32%', '30%', '90px'];
@@ -2156,6 +2210,32 @@
             </div>`;
         }).join("");
     }
+
+    document.getElementById('categoriesDeviceList')?.addEventListener('click', (e) => {
+        const actEl = e.target.closest('[data-action]');
+        if (!actEl) return;
+        const act = actEl.dataset.action;
+        const nodeId = actEl.dataset.nodeId;
+        if (act === 'open-conflict-modal') openConflictModal(nodeId);
+        else if (act === 'toggle-stack-row') toggleStackRow(nodeId);
+        else if (act === 'promote-device') promoteDevice(nodeId);
+        else if (act === 'mark-as-stack') markAsStack(nodeId);
+        else if (act === 'save-stack-members') saveStackMembers(nodeId);
+        else if (act === 'remove-stack') removeStack(nodeId);
+    });
+
+    document.getElementById('categoriesDeviceList')?.addEventListener('change', (e) => {
+        const actEl = e.target.closest('[data-action]');
+        if (!actEl) return;
+        const act = actEl.dataset.action;
+        const nodeId = actEl.dataset.nodeId;
+        if (act === 'stage-edit-name') stageEdit(nodeId, 'name', actEl.value.trim());
+        else if (act === 'stage-edit-vendor') stageEdit(nodeId, 'vendor', actEl.value.trim());
+        else if (act === 'stage-model') stageModel(nodeId, actEl.value.trim());
+        else if (act === 'stage-edit-ha-group') stageEdit(nodeId, 'ha_group', actEl.value.trim());
+        else if (act === 'stage-edit-subcategory') stageEdit(nodeId, 'subcategory', actEl.value);
+        else if (act === 'stage-category') stageCategory(nodeId, actEl.value);
+    });
 
     function exportCategoriesCsv() {
         const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
@@ -2350,11 +2430,20 @@
                 <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${currentLang==='en'?'The same device was discovered with different names. Choose the name and version to keep.':'Lo stesso dispositivo è stato rilevato con nomi diversi. Scegli nome e versione da mantenere.'}</p>
                 ${rows}
                 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
-                    <button onclick="closeConflictModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Cancel':'Annulla'}</button>
-                    <button onclick="confirmConflict('${escapeHtml(nodeId)}')" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);">${currentLang==='en'?'Apply':'Applica'}</button>
+                    <button data-action="close-conflict-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Cancel':'Annulla'}</button>
+                    <button data-action="confirm-conflict" data-node-id="${escapeHtml(nodeId)}" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);">${currentLang==='en'?'Apply':'Applica'}</button>
                 </div>
             </div>`;
-        ov.addEventListener('click', e => { if (e.target === ov) closeConflictModal(); });
+        ov.addEventListener('click', e => {
+            if (e.target === ov || e.target.closest('[data-action="close-conflict-modal"]')) {
+                closeConflictModal();
+                return;
+            }
+            const confBtn = e.target.closest('[data-action="confirm-conflict"]');
+            if (confBtn && confBtn.dataset.nodeId) {
+                confirmConflict(confBtn.dataset.nodeId);
+            }
+        });
         document.body.appendChild(ov);
     }
     async function confirmConflict(nodeId) {
@@ -2737,3 +2826,30 @@
         const data = await res.json();
         console.info(`[Reset] Eliminati ${data.deleted} file cache.`);
     }
+
+    // Static event listeners for Topology and Categories tabs
+    document.getElementById('topologyGroupSelect')?.addEventListener('change', loadTopology);
+    document.getElementById('btnResetPortchannels')?.addEventListener('click', resetTopology);
+    document.getElementById('interactiveGroupSelect')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('toggleDiscovered')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('togglePortChannel')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('toggleVtpDomain')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('mapViewClassicBtn')?.addEventListener('click', () => setMapView('classic'));
+    document.getElementById('mapViewMinimalBtn')?.addEventListener('click', () => setMapView('minimal'));
+    document.getElementById('toggleMinimalHover')?.addEventListener('change', (e) => {
+        localStorage.setItem('minimalHoverInfo', e.target.checked ? '1' : '0');
+        loadInteractiveMap();
+    });
+    document.getElementById('btnResetInteractiveTopology')?.addEventListener('click', resetTopology);
+    document.getElementById('btnRefreshInteractiveMap')?.addEventListener('click', loadInteractiveMap);
+    document.getElementById('btnDownloadTopology')?.addEventListener('click', downloadTopology);
+    document.getElementById('btnExportVisioMap')?.addEventListener('click', exportVisioMap);
+    document.getElementById('btnExportPdfMap')?.addEventListener('click', exportPdfMap);
+    document.getElementById('legendToggleBtn')?.addEventListener('click', toggleLegend);
+    document.getElementById('categoriesGroupSelect')?.addEventListener('change', renderCategoriesPanel);
+    document.getElementById('categoriesCatFilter')?.addEventListener('change', renderCategoriesPanel);
+    document.getElementById('btnSaveCatEdits')?.addEventListener('click', saveCategoryEdits);
+    document.getElementById('btnDiscardCatEdits')?.addEventListener('click', discardCategoryEdits);
+    document.getElementById('btnExportCategoriesCsv')?.addEventListener('click', exportCategoriesCsv);
+    document.getElementById('btnRefreshCategories')?.addEventListener('click', loadCategoriesData);
+    document.getElementById('btnCreateCategory')?.addEventListener('click', createCategory);

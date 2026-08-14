@@ -1294,6 +1294,7 @@ div.vis-tooltip {
 .search-wrap { position: relative; min-width: 240px; flex: 1; }
 .search-wrap > i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-soft); font-size: 12px; }
 .search-wrap > input { padding-left: 30px !important; }
+.search-wrap > input:focus { border-color: var(--primary) !important; box-shadow: 0 0 0 3px var(--primary-glow) !important; }
 
 .subtab-bar {
   display: flex; gap: 0; flex-wrap: wrap;

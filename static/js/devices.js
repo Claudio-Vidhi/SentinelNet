@@ -56,7 +56,7 @@
             const renameText = currentLang === 'en' ? '<i class="fa-solid fa-pen"></i> Rename' : '<i class="fa-solid fa-pen"></i> Rinomina';
             const reservedText = currentLang === 'en' ? 'System Reserved' : 'System Reserved';
             const renameBtn = (g !== 'Generale')
-                ? `<button onclick="renameGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${renameText}</button>` : '';
+                ? `<button data-action="rename-group" data-g="${escapeHtml(g)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:12px;">${renameText}</button>` : '';
 
             const hasSnmp = snmpDefaultTenants.includes(g);
             const snmpCell = `<td>
@@ -64,7 +64,7 @@
                     ${hasSnmp ? (currentLang === 'en' ? 'configured' : 'configurata')
                               : (currentLang === 'en' ? 'not set' : 'non impostata')}</span>
                 ${currentRole === 'admin'
-                    ? `<button onclick="setTenantSnmp(this.dataset.g)" data-g="${escapeHtml(g)}" style="margin-left:8px; color:var(--primary); background:none; border:none; cursor:pointer;">${i18n[currentLang].btnSetTenantSnmp}</button>`
+                    ? `<button data-action="set-tenant-snmp" data-g="${escapeHtml(g)}" style="margin-left:8px; color:var(--primary); background:none; border:none; cursor:pointer;">${i18n[currentLang].btnSetTenantSnmp}</button>`
                     : ''}</td>`;
 
             groupBody.innerHTML += `<tr>
@@ -73,10 +73,20 @@
                 ${snmpCell}
                 <td>${currentRole === 'viewer'
                     ? '<span style="color:var(--text-muted)">—</span>'
-                    : (g !== 'Generale' ? `${renameBtn}<button onclick="deleteGroup(this.dataset.g)" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText)}</td>
+                    : (g !== 'Generale' ? `${renameBtn}<button data-action="delete-group" data-g="${escapeHtml(g)}" style="color:var(--danger); background:none; border:none; cursor:pointer;">${btnText}</button>` : reservedText)}</td>
             </tr>`;
         });
     }
+
+    document.getElementById('groupsTableBody')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const g = btn.dataset.g;
+        if (action === 'rename-group') renameGroup(g);
+        else if (action === 'set-tenant-snmp') setTenantSnmp(g);
+        else if (action === 'delete-group') deleteGroup(g);
+    });
 
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
     // da ricerca/tenant), stessa mappatura stato->led usata per le righe della tabella.
@@ -150,7 +160,8 @@
                     ${isViewer ? `<span class="badge" id="badge_${safeIp}">${escapeHtml(d.Group)}</span>` : ''}
                     ${isViewer ? '' : `<select
                       id="grpsel_${safeIp}"
-                      onchange="reassignDevice('${d.IP}', this.value, this)"
+                      data-action="reassign-device"
+                      data-ip="${escapeHtml(d.IP)}"
                       title="${currentLang==='en'?'Move to another tenant without deleting':'Sposta in un altro tenant senza eliminare'}"
                       style="font-size:11px; padding:3px 6px; border-radius:0;
                              border:1px solid var(--border); background:var(--surface-3);
@@ -163,7 +174,7 @@
                 <td><span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span></td>
                 <td style="font-family:monospace; font-size:12px; white-space:nowrap;">
                   ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
-                  ${isViewer ? '' : `<button onclick="renameDevice('${d.IP}')"
+                  ${isViewer ? '' : `<button data-action="rename-device" data-ip="${escapeHtml(d.IP)}"
                       title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}"
                       style="margin-left:6px; font-size:11px; cursor:pointer; border:none; background:none;
                              color:var(--text-muted); padding:0;">
@@ -182,34 +193,40 @@
                     ${isViewer ? '<span style="color:var(--text-muted)">—</span>' : `
                     <button class="btn btn-secondary btn-small"
                         style="margin:0; padding:4px 8px;"
-                        onclick="pingSingleDevice('${d.IP}', this)"
+                        data-action="ping-device"
+                        data-ip="${escapeHtml(d.IP)}"
                         title="${currentLang==='en'?'Ping device':'Ping dispositivo'}">
                       <i class="fa-solid fa-wifi"></i>
                     </button>
                     <button class="btn btn-secondary btn-small"
                         style="margin:0; padding:4px 8px; color:var(--warning);"
-                        onclick="triageSingleDevice('${d.IP}', this)"
+                        data-action="triage-device"
+                        data-ip="${escapeHtml(d.IP)}"
                         title="${currentLang==='en'?'Triage device':'Triage dispositivo'}">
                       <i class="fa-solid fa-bolt-lightning"></i>
                     </button>
                     <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
-                        onclick="openCliModal('${d.IP}')">
+                        data-action="open-cli"
+                        data-ip="${escapeHtml(d.IP)}">
                         <i class="fa-solid fa-terminal"></i> CLI
                     </button>
                     <button class="btn btn-secondary btn-small" style="margin:0; padding:4px 8px;"
-                        onclick="editDevice('${d.IP}')"
+                        data-action="edit-device"
+                        data-ip="${escapeHtml(d.IP)}"
                         title="${currentLang==='en'?'Edit device':'Modifica dispositivo'}">
                         <i class="fa-solid fa-pen"></i> ${currentLang==='en'?'Edit':'Modifica'}
                     </button>
                     <button class="btn btn-primary btn-small"
                         style="margin:0; width:auto; background:var(--cta); color:var(--cta-text); padding:4px 8px;"
-                        onclick="downloadBackup('${d.IP}')">
+                        data-action="download-backup"
+                        data-ip="${escapeHtml(d.IP)}">
                         <i class="fa-solid fa-download"></i>
                     </button>
                     <button class="btn btn-danger btn-small"
                         style="margin:0; padding:4px 8px; background:none; border:none;
                                color:var(--danger); cursor:pointer;"
-                        onclick="deleteDevice('${d.IP}')">
+                        data-action="delete-device"
+                        data-ip="${escapeHtml(d.IP)}">
                         <i class="fa-solid fa-trash-can"></i> ${deleteText}
                     </button>`}
                 </td>
@@ -226,6 +243,27 @@
             </td></tr>`;
         }
     }
+
+    document.getElementById('deviceTableBody')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const ip = btn.dataset.ip;
+        if (action === 'open-cli') openCliModal(ip);
+        else if (action === 'edit-device') editDevice(ip);
+        else if (action === 'delete-device') deleteDevice(ip);
+        else if (action === 'ping-device') pingSingleDevice(ip, btn);
+        else if (action === 'triage-device') triageSingleDevice(ip, btn);
+        else if (action === 'rename-device') renameDevice(ip);
+        else if (action === 'download-backup') downloadBackup(ip);
+    });
+
+    document.getElementById('deviceTableBody')?.addEventListener('change', (e) => {
+        const sel = e.target.closest('select[data-action="reassign-device"]');
+        if (sel && sel.dataset.ip) {
+            reassignDevice(sel.dataset.ip, sel.value, sel);
+        }
+    });
 
     // --- DEVICE CRUD ---
 
@@ -253,8 +291,16 @@
         const existing = (globalDevices || []).find(d => d.IP === v);
         if (existing && !editingDeviceIp) {
             hint.style.display = 'block'; hint.style.color = 'var(--warning)';
-            hint.innerHTML = `${i18n[currentLang].hintIpExists} <a href="#" onclick="editDevice('${v}'); return false;">${i18n[currentLang].hintIpEditLink}</a>`;
+            hint.innerHTML = `${i18n[currentLang].hintIpExists} <a href="#" data-action="edit-device-hint" data-ip="${escapeHtml(v)}">${i18n[currentLang].hintIpEditLink}</a>`;
         } else { hint.style.display = 'none'; }
+    });
+
+    document.getElementById('devIpHint')?.addEventListener('click', (e) => {
+        const a = e.target.closest('[data-action="edit-device-hint"]');
+        if (a && a.dataset.ip) {
+            e.preventDefault();
+            editDevice(a.dataset.ip);
+        }
     });
 
     // devGroupSelect change listener + IDENTITIES CRUD (renderIdentitiesPanel/
@@ -638,12 +684,19 @@
     function openTriageScopeModal() {
         const list = document.getElementById('triageScopeList');
         list.innerHTML = Object.keys(globalGroups).map(g =>
-            `<button class="btn btn-secondary" data-g="${escapeHtml(g)}" onclick="startGroupTriage(this.dataset.g)"
+            `<button class="btn btn-secondary" data-action="triage-scope-group" data-g="${escapeHtml(g)}"
                  style="justify-content:flex-start; gap:10px;">
                <i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)}
              </button>`).join('');
         document.getElementById('triageScopeModal').style.display = 'flex';
     }
+
+    document.getElementById('triageScopeList')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="triage-scope-group"]');
+        if (btn && btn.dataset.g) {
+            startGroupTriage(btn.dataset.g);
+        }
+    });
 
     function closeTriageScopeModal() {
         document.getElementById('triageScopeModal').style.display = 'none';
@@ -1435,3 +1488,15 @@
         }
     }
     window.loadRedundancyGroups = loadRedundancyGroups;
+
+    document.getElementById('filterGroupSelect')?.addEventListener('change', renderDeviceTable);
+    document.getElementById('deviceSearch')?.addEventListener('input', renderDeviceTable);
+    document.getElementById('btnTriageSite')?.addEventListener('click', triageCurrentSite);
+    document.getElementById('btnPingCheck')?.addEventListener('click', runPingCheck);
+    document.getElementById('btnSubnetScan')?.addEventListener('click', openSubnetScanModal);
+    document.getElementById('btnBulkCommand')?.addEventListener('click', () => {
+        if (typeof openBulkCommandModal === 'function') openBulkCommandModal();
+    });
+    document.getElementById('btnExportDevices')?.addEventListener('click', exportDeviceCsv);
+    document.getElementById('btnCancelEditDevice')?.addEventListener('click', resetDeviceForm);
+    document.getElementById('btnAddVendor')?.addEventListener('click', addVendor);

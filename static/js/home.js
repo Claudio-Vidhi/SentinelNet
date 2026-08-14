@@ -237,3 +237,9 @@ function renderEventStrip(rows) {
         </div>`;
     }).join('');
 }
+
+document.getElementById('btnHomeRunTriage')?.addEventListener('click', () => {
+    if (typeof startGroupTriage === 'function') {
+        startGroupTriage('all');
+    }
+});
