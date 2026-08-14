@@ -19,6 +19,16 @@
 - Only validate at system boundaries (user input, external APIs).
 - Don't use feature flags or backwards-compatibility shims when you can just change code.
 - Code comments only in english
+
+## Software Versioning (SemVer)
+- Single source of truth is `core/version.py` (`__version__ = "X.Y.Z"`).
+- `pyproject.toml` version must always match `core/version.py`.
+- Bump version based on modification scope:
+  - **PATCH** (`0.2.0` -> `0.2.1`): bug fixes, security patches, minor UI refinements.
+  - **MINOR** (`0.2.0` -> `0.3.0`): new features, new modules/tabs, vendor engines, significant architectural updates.
+  - **MAJOR** (`0.2.0` -> `1.0.0`): breaking API/schema changes, incompatible DB changes.
+- When updating version, update both `core/version.py` and `pyproject.toml`.
+
 ## FastAPI Refactoring & Destructuring
 - **OpenAPI Parity is Insufficient**: When extracting or refactoring FastAPI routers, do not rely solely on OpenAPI schema parity (`app.openapi()`). Introspection does not execute handler bodies and will mask `NameError` or `ImportError` bugs.
 - **Mandatory Smoke Tests**: Always add a smoke test suite using `TestClient` that actually hits at least one route per router. The goal is to verify the handler executes without a 500 server error (missing imports). 401/403/422 responses are acceptable as they prove the code ran.

@@ -17,6 +17,15 @@
 - Only validate at system boundaries (user input, external APIs).
 - Don't use feature flags or backwards-compatibility shims when you can just change code.
 
+## Software Versioning (SemVer)
+- Single source of truth is `core/version.py` (`__version__ = "X.Y.Z"`).
+- `pyproject.toml` version must always match `core/version.py`.
+- Bump version based on modification scope:
+  - **PATCH** (`0.2.0` -> `0.2.1`): bug fixes, security patches, minor UI refinements.
+  - **MINOR** (`0.2.0` -> `0.3.0`): new features, new modules/tabs, vendor engines, significant architectural updates.
+  - **MAJOR** (`0.2.0` -> `1.0.0`): breaking API/schema changes, incompatible DB changes.
+- When updating version, update both `core/version.py` and `pyproject.toml`.
+
 ## Protect real data (repo is PUBLIC on GitHub)
 
 - `data/` is gitignored because it holds real customer network state. **Facts
