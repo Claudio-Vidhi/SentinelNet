@@ -911,13 +911,13 @@
       </div>
     </div>
 
-    <!-- TAB 5: Threat Intel (NIST NVD) -->
+    <!-- TAB 5: Threat Intel (EUVD ENISA) -->
     <div id="tab-security" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleThreatIntel">Vulnerability Matcher (NIST NVD)</h2>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleThreatIntel">Vulnerability Matcher (EUVD ENISA)</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descThreatIntel">
-            Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con il National Vulnerability Database (NVD NIST).
+            Controlla in tempo reale le vulnerabilità del firmware rilevate sugli apparati attivi confrontandole con l'European Vulnerability Database (EUVD).
           </p>
         </div>
       </div>
@@ -978,7 +978,7 @@
               <input type="checkbox" id="vwExploited" style="accent-color:var(--primary);"> <span data-i18n="vwLblExploited">Solo sfruttate</span></label>
             <div class="form-group" style="margin:0;"><label data-i18n="vwLblFrom">Da</label><input id="vwFromDate" type="date"></div>
             <div class="form-group" style="margin:0;"><label data-i18n="vwLblSearch">Cerca</label><input id="vwText" type="text" placeholder="CVE, prodotto..." style="padding-left:10px;"></div>
-            <button class="btn btn-primary" id="vwRefresh"><i class="fa-solid fa-rotate"></i></button>
+            <button class="btn btn-primary" id="vwRefresh" style="width:auto; margin:0;" title="Aggiorna"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
         <div class="panel">
@@ -1174,9 +1174,7 @@
           <span id="arpStats" class="chip" style="margin-left:auto;"></span>
         </div>
 
-        <div class="table-wrap">
-          <div id="arpResults" style="overflow-x:auto;"></div>
-        </div>
+        <div id="arpResults" style="margin-top:14px;"></div>
       </div>
       </div>
       <div id="locPane-diagnosi" class="loc-pane" style="display:none;">

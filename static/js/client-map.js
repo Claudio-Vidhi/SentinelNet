@@ -479,13 +479,14 @@ function locTenantChanged() {
         const box = document.getElementById('arpResults');
         const totalRows = tenants.reduce((n, t) => n + (byTenant[t] || []).length, 0);
         if (!totalRows) {
-            box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${en
+            box.innerHTML = `<div style="padding:28px 16px; text-align:center; color:var(--text-muted); font-size:13px; border:1px solid var(--border); background:var(--surface-2);">
+                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${en
                 ? 'No MAC ↔ IP bindings. Run an ARP collection (and a MAC scan for port matching).'
-                : 'Nessun binding MAC ↔ IP. Esegui una raccolta ARP (e una MAC scan per il match della porta).'}</p>`;
+                : 'Nessun binding MAC ↔ IP. Esegui una raccolta ARP (e una MAC scan per il match della porta).'}</div>`;
             return;
         }
-        const th = (t) => `<th style="text-align:left; padding:8px 10px; font-size:11px; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border); white-space:nowrap;">${t}</th>`;
-        const td = (t) => `<td style="padding:8px 10px; font-size:13px; border-bottom:1px solid var(--border); white-space:nowrap;">${t}</td>`;
+        const th = (t) => `<th style="text-align:left; padding:9px 12px; font-size:10px; font-weight:600; font-family:var(--font-legend); letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); background:var(--surface-3); border-bottom:1px solid var(--border-strong); white-space:nowrap;">${t}</th>`;
+        const td = (t) => `<td style="padding:9px 12px; font-size:12.5px; border-bottom:1px solid var(--border); font-family:var(--font-data); white-space:nowrap;">${t}</td>`;
         const header = en
             ? [th('MAC'), th('IP'), th('VLAN'), th('Gateway (routes VLAN)'), th('Type'), th('Access switch'), th('Port'), th('Last seen'), th('')]
             : [th('MAC'), th('IP'), th('VLAN'), th('Gateway (ruota la VLAN)'), th('Tipo'), th('Switch di accesso'), th('Porta'), th('Ultimo avvistamento'), th('')];
@@ -516,22 +517,32 @@ function locTenantChanged() {
             // che il servizio dovrebbe comunque risolvere).
             td(`<button data-action="diagnose-client" data-target="${escapeHtml(r.ip || r.mac)}" title="${escapeHtml(i18n[currentLang].btnDiagnose)}" style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:13px;"><i class="fa-solid fa-stethoscope"></i></button>`),
         ].join('') + '</tr>';
-        const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2); border:1px solid var(--border); border-radius:0; overflow:hidden;">` +
+        const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2);">` +
             `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
         box.innerHTML = tenants.map(t => {
             const rows = byTenant[t] || [];
             const body = rows.length
-                ? table(rows.map(rowHtml).join(''))
-                : `<p style="color:var(--text-muted); font-size:12px;">${en ? 'No bindings for this tenant.' : 'Nessun binding per questo tenant.'}</p>`;
+                ? `<div class="table-container" style="border:none; margin:0; background:transparent;">${table(rows.map(rowHtml).join(''))}</div>`
+                : `<div style="padding:16px 14px; color:var(--text-muted); font-size:12px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${en ? 'No bindings for this tenant.' : 'Nessun binding per questo tenant.'}</div>`;
             // 'all' is the sentinel locTenant() returns for "no tenant chosen" (the pane's
             // default), not a real tenant name: label it via i18n instead of printing it raw.
             const tenantLabel = t === 'all' ? i18n[currentLang].optFilterAll : escapeHtml(t);
+            const countLabel = en ? (rows.length === 1 ? 'binding' : 'bindings') : 'binding';
             return `
-            <div style="margin-bottom:18px;">
-                <h4 style="margin:0 0 8px 0; font-size:13px; display:flex; align-items:center; gap:8px;">
-                    <i class="fa-solid fa-building" style="color:var(--primary);"></i> ${tenantLabel}
-                    <span style="color:var(--text-muted); font-weight:400; font-size:12px;">(${rows.length})</span>
-                </h4>
+            <div style="margin-bottom:18px; border:1px solid var(--border-strong); background:var(--surface-2); overflow:hidden;">
+                <div style="padding:9px 14px; background:var(--surface-3); border-bottom:1px solid var(--border-strong); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:9px;">
+                        <span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--edge); color:var(--text);">
+                            <i class="fa-solid fa-building" style="font-size:11px;"></i>
+                        </span>
+                        <span style="font-family:var(--font-legend); font-weight:700; font-size:14px; letter-spacing:0.08em; text-transform:uppercase; color:var(--text);">
+                            ${tenantLabel}
+                        </span>
+                    </div>
+                    <span class="count-badge" style="font-family:var(--font-legend); font-size:11px; font-weight:600; letter-spacing:0.06em; padding:2px 8px; border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text);">
+                        ${rows.length} ${countLabel}
+                    </span>
+                </div>
                 ${body}
             </div>`;
         }).join('');
