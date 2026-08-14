@@ -314,6 +314,10 @@ function getAuthHeaders() {
 // fetch pre-login innescava logout() -> POST logout 401 -> re-check auth.
 let _sessionConfirmed = false;
 
+// Dati di /api/auth/me letti in checkAuthRequirements: appInit li riusa
+// invece di rifare la stessa chiamata per ruolo/username/tab.
+let _meCache = null;
+
 // Funzione centralizzata per iniettare e controllare gli header di autenticazione ed evitare disallineamenti della UI
 async function apiFetch(url, options = {}) {
     options.headers = options.headers || {};
@@ -369,6 +373,7 @@ async function checkAuthRequirements() {
                 return false;
             }
             _sessionConfirmed = true;
+            _meCache = await me.json().catch(() => null);
             if (overlay) overlay.style.display = 'none';
             return true;
         }
@@ -493,6 +498,7 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
 
 async function logout() {
     _sessionConfirmed = false;
+    _meCache = null;
     // Cancella il cookie di sessione lato server (best-effort).
     try {
         await fetch('/api/auth/logout', {
@@ -614,11 +620,16 @@ async function appInit() {
         return;
     }
 
-    // Determina ruolo/privilegi dell'utente corrente e adatta la UI
+    // Determina ruolo/privilegi dell'utente corrente e adatta la UI.
+    // I dati arrivano dalla cache di checkAuthRequirements; il fetch resta
+    // solo come fallback se la cache non si e' riempita.
     try {
-        const meRes = await apiFetch('/api/auth/me');
-        if (meRes && meRes.ok) {
-            const me = await meRes.json();
+        let me = _meCache;
+        if (!me) {
+            const meRes = await apiFetch('/api/auth/me');
+            if (meRes && meRes.ok) me = await meRes.json();
+        }
+        if (me) {
             currentRole = me.role || 'viewer';
             applyRoleUI(me.username, currentRole, me.allowed_tabs || []);
         }
@@ -634,7 +645,11 @@ async function appInit() {
     // nav come ogni altra voce.
 
     try {
-        const res = await apiFetch('/api/local-devices');
+        // Indipendenti: partono insieme invece che in sequenza.
+        const [res, vRes] = await Promise.all([
+            apiFetch('/api/local-devices'),
+            apiFetch('/api/vendors'),
+        ]);
         if (!res) {
             appLoading = false;
             return;
@@ -645,7 +660,6 @@ async function appInit() {
         globalGroups = data.groups;
         globalVersions = data.detected_versions; // Cache globale delle versioni rilevate
 
-        const vRes = await apiFetch('/api/vendors');
         if (vRes && vRes.ok) globalVendors = await vRes.json();
 
         // Popola tendine Vendor + tendina Gruppi del form di provisioning
@@ -718,7 +732,64 @@ async function appInit() {
     }
 }
 
-function switchTab(tabId, clickedBtn) {
+// --- CARICAMENTO LAZY DEI MODULI PER TAB ---
+// I moduli pesanti e legati a una singola tab non bloccano piu' il primo
+// paint: vengono iniettati alla prima visita della tab che li usa.
+// I vendor restano in bundle con il modulo che li consuma (vis-network
+// prima di topology.js: async=false conserva l'ordine di esecuzione).
+const LAZY_TAB_SCRIPTS = {
+    'tab-map': ['/static/vendor/vis/vis-network.min.js', '/static/js/topology.js'],
+    'tab-map-interactive': ['/static/vendor/vis/vis-network.min.js', '/static/js/topology.js'],
+    'tab-flows': ['/static/js/flow-analytics.js', '/static/js/observability.js'],
+    'tab-config': ['/static/js/config-analyzer.js'],
+    'tab-ai': ['/static/js/ai.js'],
+    'tab-fortigate': ['/static/js/fortigate-management.js'],
+    'tab-wlc': ['/static/js/wlc.js'],
+    'tab-audit-checklist': ['/static/js/audit_checklist.js'],
+    'tab-settings': ['/static/js/settings.js'],
+    'tab-incidents': ['/static/js/incidents.js'],
+    'tab-netsec-audit': ['/static/js/netsec-audit.js'],
+};
+
+const _lazyLoaded = new Set();
+const _lazyLoading = new Map();
+
+function loadAssetOnce(src) {
+    if (_lazyLoaded.has(src)) return Promise.resolve();
+    if (_lazyLoading.has(src)) return _lazyLoading.get(src);
+    const isCss = src.endsWith('.css');
+    const p = new Promise((resolve, reject) => {
+        let el;
+        if (isCss) {
+            el = document.createElement('link');
+            el.rel = 'stylesheet';
+            el.href = src;
+        } else {
+            el = document.createElement('script');
+            el.src = src;
+            el.async = false;
+        }
+        el.onload = () => { _lazyLoaded.add(src); _lazyLoading.delete(src); resolve(); };
+        el.onerror = () => { _lazyLoading.delete(src); reject(new Error('Load failed: ' + src)); };
+        document.head.appendChild(el);
+    });
+    _lazyLoading.set(src, p);
+    return p;
+}
+
+async function ensureTabScripts(tabId) {
+    const scripts = LAZY_TAB_SCRIPTS[tabId];
+    if (!scripts) return;
+    try {
+        await Promise.all(scripts.map(loadAssetOnce));
+    } catch (e) {
+        console.error('[lazy]', e);
+        showToast('Errore di caricamento modulo', 'error');
+    }
+}
+
+async function switchTab(tabId, clickedBtn) {
+    await ensureTabScripts(tabId);
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
@@ -762,6 +833,12 @@ function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-wlc' && typeof loadWlcTab === 'function') loadWlcTab();
     else if (tabId === 'tab-audit-checklist') loadAuditChecklistTab();
     else if (tabId === 'tab-settings') loadAppSettings();
+    // Queste tre tab prima si inizializzavano con una seconda chiamata
+    // nell'onclick del pulsante nav; ora il dispatch e' unico e arriva
+    // dopo il caricamento lazy del modulo.
+    else if (tabId === 'tab-flows') flowsTabShown();
+    else if (tabId === 'tab-incidents') loadIncidentsTab();
+    else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
 }
 
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------

@@ -15,14 +15,13 @@
   <link rel="preload" href="/static/fonts/saira-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/azeret-mono-var.woff2" as="font" type="font/woff2" crossorigin>
   
-  <!-- Icone, topologia e terminale serviti dall'applicazione, non da un CDN:
-       una LAN di management isolata non risolve cdnjs/unpkg/jsdelivr, e la
-       console resterebbe senza una sola icona e con due tab morte. Stesso
-       criterio dei font in static/fonts/. -->
+  <!-- Icone servite dall'applicazione, non da un CDN: una LAN di management
+       isolata non risolve cdnjs/unpkg/jsdelivr, e la console resterebbe senza
+       una sola icona. Stesso criterio dei font in static/fonts/.
+       Topologia (vis-network) e terminale (xterm) non sono piu' in head:
+       li inietta lazy core.js al primo uso (vedi LAZY_TAB_SCRIPTS e
+       openCliModal), cosi' non bloccano il primo paint. -->
   <link href="/static/vendor/fontawesome/css/all.min.css" rel="stylesheet">
-  <script src="/static/vendor/vis/vis-network.min.js"></script>
-  <link rel="stylesheet" href="/static/vendor/xterm/xterm.css" />
-  <script src="/static/vendor/xterm/xterm.js"></script>
 
   <link rel="stylesheet" href="/static/css/dashboard.css">
   <script>
@@ -225,11 +224,11 @@
         <button class="nav-item active" onclick="switchTab('tab-home', this)">
           <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-table-cells-large"></i> Home</span>
         </button>
-        <button id="navIncidents" class="nav-item requires-admin" onclick="switchTab('tab-incidents', this); loadIncidentsTab();">
+        <button id="navIncidents" class="nav-item requires-admin" onclick="switchTab('tab-incidents', this)">
           <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
           <span class="preview-badge">preview</span>
         </button>
-        <button class="nav-item" data-tabs="tab-flows" onclick="switchTab('tab-flows', this); flowsTabShown();">
+        <button class="nav-item" data-tabs="tab-flows" onclick="switchTab('tab-flows', this)">
           <span class="nav-left" data-i18n="tabTrafficGroup"><i class="fa-solid fa-wave-square"></i> Traffico</span>
         </button>
         <button class="nav-item" data-tabs="tab-endpoint" onclick="switchTab('tab-endpoint', this)">
@@ -252,7 +251,7 @@
         <button id="navFortigate" class="nav-item requires-admin" onclick="switchTab('tab-fortigate', this)">
           <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
         </button>
-        <button id="navWlc" class="nav-item" onclick="switchTab('tab-wlc', this); loadWlcTab();">
+        <button id="navWlc" class="nav-item" onclick="switchTab('tab-wlc', this)">
           <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
         </button>
       </div>
@@ -263,7 +262,7 @@
         <button class="nav-item" onclick="switchTab('tab-config', this)">
           <span class="nav-left" data-i18n="tabConfigAnalyzer"><i class="fa-solid fa-file-code"></i> Config Analyzer</span>
         </button>
-        <button id="navNetSecAudit" class="nav-item" onclick="switchTab('tab-netsec-audit', this); loadNetSecAuditTab();">
+        <button id="navNetSecAudit" class="nav-item" onclick="switchTab('tab-netsec-audit', this)">
           <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
           <span class="preview-badge">preview</span>
         </button>
@@ -3575,27 +3574,21 @@
     </div>
   </div>
 
+  <!-- Solo i moduli necessari prima del login e al boot della dashboard.
+       Gli altri (topology, observability, ai, settings, fortigate, wlc,
+       config-analyzer, flow-analytics, netsec-audit, audit_checklist,
+       incidents) vengono iniettati da core.js alla prima visita della tab
+       che li usa: vedi LAZY_TAB_SCRIPTS. -->
   <script src="/static/js/i18n.js"></script>
   <script src="/static/js/core.js"></script>
-  <script src="/static/js/config-analyzer.js"></script>
-  <script src="/static/js/observability.js"></script>
   <script src="/static/js/threat-intel.js"></script>
   <script src="/static/js/provisioning.js"></script>
   <script src="/static/js/devices.js"></script>
-  <script src="/static/js/topology.js"></script>
   <script src="/static/js/client-map.js"></script>
   <script src="/static/js/diagnosi.js"></script>
   <script src="/static/js/endpoint-inventory.js"></script>
-  <script src="/static/js/ai.js"></script>
-  <script src="/static/js/settings.js"></script>
   <script src="/static/js/mcp-client.js"></script>
-  <script src="/static/js/fortigate-management.js"></script>
-  <script src="/static/js/wlc.js"></script>
   <script src="/static/js/site-agent.js"></script>
-  <script src="/static/js/flow-analytics.js"></script>
-  <script src="/static/js/netsec-audit.js"></script>
-  <script src="/static/js/audit_checklist.js"></script>
-  <script src="/static/js/incidents.js"></script>
   <script>
     // --- SIDEBAR RAIL (collasso a icone) --- [MOVED to static/js/core.js: syncNavTooltips,
     // applySidebarCollapsed, toggleSidebar, escapeHtml, apiFetch, auth handlers, appInit,
@@ -3854,6 +3847,12 @@
     let wsSocket = null;
 
     async function openCliModal(ip) {
+        // xterm non sta piu' in <head>: si inietta al primo avvio della CLI
+        // (loader in static/js/core.js). ~280KB in meno al primo paint.
+        await Promise.all([
+            loadAssetOnce('/static/vendor/xterm/xterm.css'),
+            loadAssetOnce('/static/vendor/xterm/xterm.js'),
+        ]);
         document.getElementById("cliTargetIp").innerText = ip;
         document.getElementById("cliModalOverlay").style.display = "flex";
 

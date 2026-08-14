@@ -1651,8 +1651,10 @@
     window.openObsInspectModal = openObsInspectModal;
     window.closeObsInspectModal = closeObsInspectModal;
 
-    // Attach click listener on canvas
-    document.addEventListener('DOMContentLoaded', () => {
+    // Attach click listener on canvas. Il modulo ora si carica lazy alla
+    // prima visita di tab-flows: di solito DOMContentLoaded e' gia' passato,
+    // quindi il boot va eseguito subito (stesso pattern di provisioning.js).
+    function obsWidgetBoot() {
         setTimeout(() => {
             // Pre-login l'overlay copre l'app: nessuna sessione esiste ancora,
             // e il fetch protetto produrrebbe solo uno 401 inutile.
@@ -1667,5 +1669,10 @@
                 });
             }
         }, 800);
-    });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', obsWidgetBoot);
+    } else {
+        obsWidgetBoot();
+    }
 

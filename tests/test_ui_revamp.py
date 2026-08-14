@@ -324,17 +324,14 @@ class TestSidebarIA(unittest.TestCase):
         # RBAC preserved on gated nav
         self.assertIn('requires-admin', html)
         self.assertIn('requires-write', html)
-        # Hook di caricamento: OGNI controllo che porta al tab deve portarselo
-        # dietro, non solo uno. tab-flows still has several sub-tab entry
-        # points that each carry their own inline hook.
-        for tab, hook in (("tab-flows", "flowsTabShown"),):
-            entries = re.findall(
-                r"onclick=\"switchTab\('" + tab + r"'(?:, this)?\);([^\"]*)\"", html)
-            self.assertTrue(entries, f"{tab}: nessun controllo lo apre")
-            for i, rest in enumerate(entries):
-                self.assertIn(
-                    f"{hook}()", rest,
-                    f"{tab}: il punto d'ingresso #{i} non chiama {hook}()")
+        # Hook di caricamento: tab-flows ha centralizzato l'hook dentro
+        # switchTab() (stesso pattern gia' documentato sotto per tab-endpoint):
+        # il dispatch in core.js garantisce che OGNI punto d'ingresso inizi
+        # la tab, incluso il richiamo interno di observability.js. Prima
+        # l'hook viveva nell'onclick del nav e bastava un secondo punto
+        # d'ingresso per perderlo.
+        self.assertIn("tab-flows') flowsTabShown()", frontend_source(),
+                      "switchTab non dispatcha flowsTabShown() per tab-flows")
         # tab-endpoint centralised its load hook inside switchTab() itself
         # (dispatch on tabId, not one onclick-embedded hook per caller), so
         # every plain switchTab('tab-endpoint') always redraws the open pane.
