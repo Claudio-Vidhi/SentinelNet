@@ -767,6 +767,7 @@ async function appInit() {
 const LAZY_TAB_SCRIPTS = {
     'tab-map': ['/static/vendor/vis/vis-network.min.js', '/static/js/topology.js'],
     'tab-map-interactive': ['/static/vendor/vis/vis-network.min.js', '/static/js/topology.js'],
+    'tab-categories': ['/static/js/topology.js'],
     'tab-flows': ['/static/js/flow-analytics.js', '/static/js/observability.js'],
     'tab-config': ['/static/js/config-analyzer.js'],
     'tab-ai': ['/static/js/ai.js'],
