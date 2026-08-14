@@ -773,10 +773,10 @@ const LAZY_TAB_SCRIPTS = {
     'tab-ai': ['/static/js/ai.js'],
     'tab-fortigate': ['/static/js/fortigate-management.js'],
     'tab-wlc': ['/static/js/wlc.js'],
-    'tab-audit-checklist': ['/static/js/audit_checklist.js'],
+    'tab-audit-checklist': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/audit_checklist.js'],
     'tab-settings': ['/static/js/settings.js'],
     'tab-incidents': ['/static/js/incidents.js'],
-    'tab-netsec-audit': ['/static/js/netsec-audit.js'],
+    'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js'],
 };
 
 const _lazyLoaded = new Set();
@@ -1147,4 +1147,6 @@ document.getElementById('identitiesList')?.addEventListener('click', (e) => {
     else if (act === 'edit-identity') editIdentity(btn.dataset.id);
     else if (act === 'delete-identity') deleteIdentity(btn.dataset.id);
 });
+
+window.loadAssetOnce = loadAssetOnce;
 
