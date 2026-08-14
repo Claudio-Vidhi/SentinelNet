@@ -410,6 +410,7 @@ document.getElementById('btnRegisterAdmin').addEventListener('click', async () =
         });
         if (loginRes.ok) {
             // La sessione è nel cookie HttpOnly impostato dal server.
+            const wp = document.getElementById('wizPass'); if (wp) wp.value = '';
             document.getElementById('authOverlay').style.display = 'none';
             appInit();
         } else {
@@ -426,7 +427,8 @@ document.getElementById('btnRegisterAdmin').addEventListener('click', async () =
 // Evento per il Login Standard
 document.getElementById('btnLogin').addEventListener('click', async () => {
     const user = document.getElementById('loginUser').value.trim();
-    const pass = document.getElementById('loginPass').value.trim();
+    const passInput = document.getElementById('loginPass');
+    const pass = passInput ? passInput.value.trim() : '';
     const errDiv = document.getElementById('loginError');
 
     if (!user || !pass) { errDiv.innerText = i18n[currentLang].alertLoginFill; errDiv.style.display = 'block'; return; }
@@ -439,6 +441,7 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
     });
 
     if (res.ok) {
+        if (passInput) passInput.value = '';
         const data = await res.json();
         // La sessione è nel cookie HttpOnly impostato dal server: nessun
         // token conservato lato JavaScript (finding L-1).
@@ -467,8 +470,10 @@ let pendingOldPass = '';
 
 // Cambio password obbligatorio al primo accesso
 document.getElementById('btnChangePass').addEventListener('click', async () => {
-    const np = document.getElementById('cpwNewPass').value.trim();
-    const cp = document.getElementById('cpwConfirmPass').value.trim();
+    const npEl = document.getElementById('cpwNewPass');
+    const cpEl = document.getElementById('cpwConfirmPass');
+    const np = npEl ? npEl.value.trim() : '';
+    const cp = cpEl ? cpEl.value.trim() : '';
     const errDiv = document.getElementById('loginError');
     errDiv.style.display = 'none';
 
@@ -486,6 +491,8 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
 
     if (res.ok) {
         pendingOldPass = '';
+        if (npEl) npEl.value = '';
+        if (cpEl) cpEl.value = '';
         document.getElementById('changePwSection').style.display = 'none';
         document.getElementById('loginSection').style.display = 'block';
         document.getElementById('authOverlay').style.display = 'none';
@@ -499,6 +506,8 @@ document.getElementById('btnChangePass').addEventListener('click', async () => {
 async function logout() {
     _sessionConfirmed = false;
     _meCache = null;
+    // Pulisce campi sensibili in memoria nel DOM
+    document.querySelectorAll('input[type="password"]').forEach(el => { el.value = ''; });
     // Cancella il cookie di sessione lato server (best-effort).
     try {
         await fetch('/api/auth/logout', {
