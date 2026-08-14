@@ -650,6 +650,18 @@ async function appInit() {
         }
     } catch (e) { /* non bloccante */ }
 
+    // Sincronizza badge di versione dell'applicazione
+    try {
+        const verRes = await apiFetch('/api/version');
+        if (verRes && verRes.ok) {
+            const vData = await verRes.json();
+            const badge = document.getElementById('appVersionBadge');
+            if (badge && vData.version) {
+                badge.textContent = 'v' + vData.version;
+            }
+        }
+    } catch (e) { /* non bloccante */ }
+
     // Gating tab MCP Client (preview): visibile solo ad admin col flag attivo.
     if (currentRole === 'admin' && typeof applyMcpClientGating === 'function') {
         try { await applyMcpClientGating(); } catch (e) { /* non bloccante */ }

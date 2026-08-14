@@ -52,7 +52,13 @@ async def lifespan(app: "FastAPI"):
     await listener_manager.shutdown()
     db.stop_writer()
 
-app = FastAPI(title="SentinelNet API", version="0.2.0-beta.1", lifespan=lifespan)
+from core.version import __version__
+
+app = FastAPI(title="SentinelNet API", version=__version__, lifespan=lifespan)
+
+@app.get("/api/version")
+def get_app_version():
+    return {"app": "SentinelNet", "version": __version__}
 
 from routers import deps as _deps_router  # not a router, but compat
 from routers import fortigate as _fortigate_router
