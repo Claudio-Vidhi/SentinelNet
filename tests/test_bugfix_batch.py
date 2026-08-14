@@ -124,7 +124,10 @@ class TestOnelineBayOpensFilteredInventory(unittest.TestCase):
         self.src = frontend_source()
 
     def test_helper_selects_tenant_then_renders_inventory(self):
-        m = re.search(r'function openInventoryForTenant\s*\([^)]*\)\s*\{(.*?)\n    \}',
+        # La funzione vive ora in static/js/home.js (blocco inline estratto
+        # per la CSP senza 'unsafe-inline'): chiusura a colonna 0, non piu'
+        # indentata di 4 spazi come nel vecchio blocco inline.
+        m = re.search(r'function openInventoryForTenant\s*\([^)]*\)\s*\{(.*?)\n\}',
                       self.src, re.DOTALL)
         self.assertIsNotNone(m, "manca openInventoryForTenant()")
         body = m.group(1)

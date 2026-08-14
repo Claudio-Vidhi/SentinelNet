@@ -566,8 +566,7 @@ function applyRoleUI(username, role, allowedTabs) {
     const allowed = normalizeAllowedTabs(allowedTabs);
     if (allowed.length > 0) {
         document.querySelectorAll('.nav-item').forEach(btn => {
-            const m = btn.getAttribute('onclick').match(/switchTab\('([^']+)'/);
-            const tabId = m && m[1];
+            const tabId = btn.getAttribute('data-tab');
             if (tabId && !allowed.includes(tabId)) btn.style.display = 'none';
         });
     }
@@ -788,6 +787,17 @@ async function ensureTabScripts(tabId) {
     }
 }
 
+// Delega per l'apertura delle tab: niente piu' onclick inline (CSP senza
+// 'unsafe-inline'). data-tab marca le voci della nav, data-switch-tab gli
+// altri pulsanti (home, sotto-tab). I secondi non passano il pulsante:
+// switchTab risale alla voce di nav da sola, come prima.
+document.addEventListener('click', e => {
+    const el = e.target.closest('[data-tab], [data-switch-tab]');
+    if (!el) return;
+    const tabId = el.getAttribute('data-tab') || el.getAttribute('data-switch-tab');
+    switchTab(tabId, el.classList.contains('nav-item') ? el : undefined);
+});
+
 async function switchTab(tabId, clickedBtn) {
     await ensureTabScripts(tabId);
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -797,7 +807,7 @@ async function switchTab(tabId, clickedBtn) {
     // I sotto-tab passano solo il tabId: la voce di nav che li raggruppa si
     // dichiara con data-tabs, così una sola voce resta attiva per piu' tab.
     const btn = clickedBtn
-        || document.querySelector(`.nav-item[onclick*="'${tabId}'"]`)
+        || document.querySelector(`.nav-item[data-tab="${tabId}"]`)
         || document.querySelector(`.nav-item[data-tabs~="${tabId}"]`);
     if (btn) {
         btn.classList.add('active');
