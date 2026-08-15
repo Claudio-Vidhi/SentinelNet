@@ -506,6 +506,20 @@
         const groupSelect = document.getElementById('interactiveGroupSelect');
         const selectedGroup = groupSelect ? groupSelect.value : 'all';
         
+        // Sync fresh live reachability from ping monitor when available
+        try {
+            const pmRes = await apiFetch('/api/ping-monitor/status');
+            if (pmRes && pmRes.ok) {
+                const pm = await pmRes.json();
+                if (pm.devices && pm.devices.length) {
+                    pm.devices.forEach(d => {
+                        if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
+                        globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                    });
+                }
+            }
+        } catch (_) {}
+
         const res = await apiFetch("/api/network-map?group=" + encodeURIComponent(selectedGroup));
         if (!res || !res.ok) return;
         const data = await res.json();
@@ -554,6 +568,8 @@
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
             const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            const effectiveStatus = (scan && scan.status && scan.status !== 'unknown') ? scan.status : (n.status || 'offline');
+            n.status = effectiveStatus;
             
             // Risolve robustamente il vendor sul client confrontando l'IP con l'anagrafica di globalDevices
             const matchedDev = globalDevices.find(d => d.IP === n.id);
@@ -568,7 +584,7 @@
             return {
                 id: n.id,
                 shape: "image",
-                image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor, vtp, stack),
+                image: createNodeSvg(n.label, n.id, n.device_type, effectiveStatus, n.is_boundary, resolvedVendor, vtp, stack),
                 title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
                 // Fix B: la card SVG cresce di 22px per ogni fascia (STACK, VTP); il
                 // nodo vis.js deve crescere di conseguenza, altrimenti l'immagine più
@@ -1111,6 +1127,8 @@
 
         const nodes = nodeData.map((n, idx) => {
             const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            const effectiveStatus = (scan && scan.status && scan.status !== 'unknown') ? scan.status : (n.status || 'offline');
+            n.status = effectiveStatus;
             const matchedDev = globalDevices.find(d => d.IP === n.id);
             const resolvedVendor = (n.vendor && n.vendor !== 'discovered')
                 ? n.vendor : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
@@ -1163,7 +1181,7 @@
                     highlight: { background: fill, border: '#1a2430' },
                     hover: { background: fill, border: '#1a2430' }
                 },
-                opacity: (n.status === 'offline') ? S.node.offlineOpacity : 1,
+                opacity: (effectiveStatus === 'offline') ? S.node.offlineOpacity : 1,
                 font: S.node.font,
                 x: c.x + ((idx * 137) % (2 * jitter)) - jitter,
                 y: c.y + ((idx * 89)  % (2 * jitter)) - jitter,
@@ -2511,21 +2529,34 @@
     }
 
     function updateTopologyMapNodeStatus(ip, newStatus) {
+        if (!globalVersions[ip]) globalVersions[ip] = {};
+        globalVersions[ip].status = newStatus;
+
         if (networkInstance && networkInstance.body && networkInstance.body.data && networkInstance.body.data.nodes) {
             const nodesDataSet = networkInstance.body.data.nodes;
             const node = nodesDataSet.get(ip);
             if (node) {
-                node.nodeDataVal.status = newStatus;
+                if (node.nodeDataVal) node.nodeDataVal.status = newStatus;
+                else node.nodeDataVal = { id: ip, label: node.labelVal || ip, status: newStatus };
 
                 const scan = globalVersions[ip] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: newStatus };
+                const vtp = node.vtpVal || {};
+                const stack = nodeStack(node.nodeDataVal);
 
-                node.image = createNodeSvg(node.labelVal, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal, node.vtpVal);
+                if (node.shape === 'image') {
+                    node.image = createNodeSvg(node.labelVal || ip, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal, vtp, stack);
+                }
                 node.title = createNodeTooltip(node.nodeDataVal, scan, node.vendorVal);
+                if (node.opacity !== undefined) {
+                    node.opacity = (newStatus === 'offline') ? 0.45 : 1;
+                }
 
                 nodesDataSet.update(node);
             }
         }
     }
+    window.updateTopologyMapNodeStatus = updateTopologyMapNodeStatus;
+    window.loadInteractiveMap = loadInteractiveMap;
 
     // Cattura la mappa corrente su un canvas ad alta risoluzione (fit su tutta
     // la topologia, sfondo opaco) e lo passa a cb; poi ripristina la vista.

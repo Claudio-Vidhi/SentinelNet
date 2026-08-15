@@ -1645,11 +1645,37 @@ def _netmap_signature():
 
 def _enrich_map_with_redundancy(data: dict) -> dict:
     from redundancy import service as redundancy_service
+    from services.inventory_manager import get_detected_versions
+    try:
+        from services import ping_monitor
+        pm_status = ping_monitor.get_status()
+        pm_devices = {d["ip"]: d for d in pm_status.get("devices", [])}
+    except Exception:
+        pm_devices = {}
+    versions = get_detected_versions()
+
     nodes = data.get("nodes", [])
     links = list(data.get("links", []))
     nodes_decorated = []
     for n in nodes:
         node_copy = dict(n)
+        nid = n.get("id")
+        # Live status: continuous ping monitor is authoritative when available,
+        # otherwise detected_versions, otherwise preserve discovered/parsed status.
+        if nid in pm_devices:
+            node_copy["status"] = "online" if pm_devices[nid].get("up") else "offline"
+        elif nid in versions and versions[nid].get("status"):
+            node_copy["status"] = versions[nid].get("status")
+        elif n.get("status") != "discovered":
+            node_copy["status"] = versions.get(nid, {}).get("status", n.get("status", "offline"))
+
+        if nid in versions:
+            v_info = versions[nid]
+            if v_info.get("version"):
+                node_copy["version"] = v_info.get("version")
+            if v_info.get("vendor"):
+                node_copy["vendor"] = v_info.get("vendor")
+
         node_copy["redundancy"] = redundancy_service.device_redundancy_badge(n["id"])
         nodes_decorated.append(node_copy)
 
