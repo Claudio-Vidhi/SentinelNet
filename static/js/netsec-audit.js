@@ -96,10 +96,14 @@
             opt.textContent = '📄 ' + (_droppedConfigName || 'config');
             sel.insertBefore(opt, sel.firstChild);
         }
-        if (previous && [...sel.options].some(o => o.value === previous)) {
+        if (previous === UPLOADED_VALUE && _droppedConfigText) {
+            sel.value = UPLOADED_VALUE;
+        } else if (previous && previous !== 'all' && previous !== UPLOADED_VALUE && [...sel.options].some(o => o.value === previous)) {
             sel.value = previous;
         } else if (_droppedConfigText) {
             sel.value = UPLOADED_VALUE;
+        } else if ([...sel.options].some(o => o.value === 'all')) {
+            sel.value = 'all';
         }
         syncDropzoneHint();
     }
@@ -131,6 +135,11 @@
     function clearUploadedConfig() {
         _droppedConfigText = null;
         _droppedConfigName = '';
+        _auditRules = [];
+        _auditSummary = null;
+        _auditScore = null;
+        _auditVendor = null;
+        _auditDeviceName = '';
         const sel = document.getElementById('auditDeviceSelect');
         if (sel) {
             [...sel.options].forEach(o => {
@@ -141,6 +150,8 @@
         const fileInput = document.getElementById('auditFileInput');
         if (fileInput) fileInput.value = '';
         syncDropzoneHint();
+        renderAuditOverview();
+        renderAuditRulesTable();
     }
 
     // Riepilogo e punteggio arrivano dal motore. NON ricalcolati qui: la regola
@@ -365,10 +376,16 @@
     async function runAuditScan() {
         const btn = document.getElementById('btnRunAuditScan');
         const benchmark = document.getElementById('auditBenchmarkSelect') ? document.getElementById('auditBenchmarkSelect').value : 'cis';
-        const deviceIp = document.getElementById('auditDeviceSelect') ? document.getElementById('auditDeviceSelect').value : 'all';
+        const devSel = document.getElementById('auditDeviceSelect');
+        const deviceIp = devSel ? devSel.value : 'all';
         // Il testo caricato si invia SOLO se e' lui l'oggetto selezionato:
         // altrimenti sovrascriverebbe in silenzio il dispositivo scelto.
         const uploaded = (deviceIp === UPLOADED_VALUE);
+
+        if (uploaded && !_droppedConfigText) {
+            showToast(currentLang === 'en' ? 'Please upload a configuration file first.' : 'Carica prima un file di configurazione.', 'error');
+            return;
+        }
 
         if (btn) {
             btn.disabled = true;
@@ -388,6 +405,7 @@
                     // il report esportato ha un proprio selettore.
                     lang: currentLang,
                     device_ip: uploaded ? null : deviceIp,
+                    device_name: uploaded ? _droppedConfigName : (devSel && devSel.selectedIndex >= 0 ? devSel.options[devSel.selectedIndex]?.text : null),
                     config_text: uploaded ? _droppedConfigText : null,
                     save: saveRun,
                     run_name: runName
@@ -403,6 +421,8 @@
                 _auditSummary = data.summary || null;
                 _auditScore = (data.score === undefined) ? null : data.score;
                 _auditVendor = data.vendor || null;
+                _auditDeviceName = data.device_name || (uploaded ? _droppedConfigName : (devSel ? devSel.options[devSel.selectedIndex]?.text : '')) || 'Device';
+                _auditBenchmarkName = data.benchmark_title || data.benchmark || benchmark;
                 renderAuditOverview();
                 renderAuditRulesTable();
                 if (data.saved_id) {
@@ -432,10 +452,53 @@
     function setupConfigDropzone() {
         const zone = document.getElementById('auditDropZone');
         const fileInput = document.getElementById('auditFileInput');
-        const dropText = document.getElementById('auditDropText');
-        const benchSel = document.getElementById('auditBenchmarkSelect');
         if (!zone || !fileInput) return;
 
+        if (!zone.dataset.bound) {
+            zone.dataset.bound = 'true';
+
+            fileInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            zone.addEventListener('click', (e) => {
+                if (e.target === fileInput) return;
+                const clearBtn = e.target.closest('[data-action="clear-uploaded-config"]');
+                if (clearBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    clearUploadedConfig();
+                    return;
+                }
+                fileInput.value = '';
+                fileInput.click();
+            });
+
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.style.borderColor = 'var(--primary)';
+            });
+
+            zone.addEventListener('dragleave', () => {
+                zone.style.borderColor = 'var(--border)';
+            });
+
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.style.borderColor = 'var(--border)';
+                if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+                    handleFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files && fileInput.files.length) {
+                    handleFile(fileInput.files[0]);
+                }
+            });
+        }
+
+        const benchSel = document.getElementById('auditBenchmarkSelect');
         if (benchSel && !benchSel.dataset.bound) {
             benchSel.dataset.bound = 'true';
             benchSel.addEventListener('change', () => runAuditScan());
@@ -447,34 +510,27 @@
             devSel.addEventListener('change', syncDropzoneHint);
         }
 
-        zone.onclick = () => fileInput.click();
-
-        zone.ondragover = e => { e.preventDefault(); zone.style.borderColor = 'var(--primary)'; };
-        zone.ondragleave = () => { zone.style.borderColor = 'var(--border)'; };
-        zone.ondrop = e => {
-            e.preventDefault();
-            zone.style.borderColor = 'var(--border)';
-            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-        };
-
-        fileInput.onchange = () => {
-            if (fileInput.files.length) handleFile(fileInput.files[0]);
-        };
-
         function handleFile(file) {
+            if (!file) return;
             const reader = new FileReader();
             reader.onload = e => {
                 _droppedConfigText = e.target.result;
                 _droppedConfigName = file.name;
+                _auditDeviceName = file.name;
                 const sel = document.getElementById('auditDeviceSelect');
                 if (sel) {
                     [...sel.options].forEach(o => {
                         if (o.value === UPLOADED_VALUE) o.remove();
                     });
                     restoreUploadedOption(sel, UPLOADED_VALUE);
+                    sel.value = UPLOADED_VALUE;
                 }
                 syncDropzoneHint();
                 runAuditScan();
+            };
+            reader.onerror = err => {
+                console.error('File read error:', err);
+                showToast(currentLang === 'en' ? 'Failed to read file.' : 'Impossibile leggere il file.', 'error');
             };
             reader.readAsText(file);
         }
@@ -496,6 +552,7 @@
                 body: JSON.stringify({
                     benchmark: benchmarkKey,
                     device_ip: uploaded ? null : deviceIp,
+                    device_name: uploaded ? _droppedConfigName : (devSel && devSel.selectedIndex >= 0 ? devSel.options[devSel.selectedIndex]?.text : null),
                     lang: lang,
                     config_text: uploaded ? _droppedConfigText : null,
                     save: saveRun,
@@ -624,11 +681,16 @@
         let summary = _auditSummary;
         let score = _auditScore;
         if (lang !== currentLang) {
-            const refreshed = await rescanForLanguage(benchmarkKey, lang);
-            if (!refreshed) return;
-            rules = refreshed.rules || [];
-            summary = refreshed.summary || summary;
-            score = (refreshed.score === undefined) ? null : refreshed.score;
+            const hasUpload = (_droppedConfigText && _droppedConfigText.trim().length > 0);
+            const hasDev = (devSel && devSel.value && devSel.value !== 'all' && devSel.value !== UPLOADED_VALUE);
+            if (hasUpload || hasDev) {
+                const refreshed = await rescanForLanguage(benchmarkKey, lang);
+                if (refreshed) {
+                    rules = refreshed.rules || rules;
+                    summary = refreshed.summary || summary;
+                    score = (refreshed.score === undefined) ? score : refreshed.score;
+                }
+            }
         }
 
         const s = summary || { total: 0, passed: 0, failed: 0, warned: 0, unknown: 0 };
@@ -643,12 +705,16 @@
         const filename = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}`;
 
         const rows = rules.map(r => {
-            const ev = (r.evidence || []).map(e =>
-                `<div class="evidence-item">`
-                + `<span class="evidence-line">${e.line ? (T.line + ' ' + escapeHtml(String(e.line))) : '—'}</span>`
-                + `<span class="evidence-ctx">${escapeHtml(e.context || '')}</span>`
-                + `<span class="evidence-txt">${escapeHtml(e.text || '')}</span>`
-                + `</div>`).join('');
+            const ev = (r.evidence || []).map(e => {
+                const rawCtx = e.context || '';
+                const ctxClean = rawCtx.replace(/^firewall policy\s*\/\s*(\d+)$/i, 'Policy ID #$1')
+                                       .replace(/^policy\s*\/\s*(\d+)$/i, 'Policy ID #$1');
+                return `<div class="evidence-item">`
+                    + `<span class="evidence-line">${e.line ? (T.line + ' ' + escapeHtml(String(e.line))) : '—'}</span>`
+                    + `<span class="evidence-ctx">${escapeHtml(ctxClean)}</span>`
+                    + `<span class="evidence-txt">${escapeHtml(e.text || '')}</span>`
+                    + `</div>`;
+            }).join('');
 
             const evBlock = ev ? `<div class="evidence-box"><div class="evidence-hdr">${T.evidenceTitle}</div>${ev}</div>` : '';
 
@@ -678,9 +744,9 @@
 
             const g = r.guidance || {};
             const guideItems = [];
-            if (g.why) guideItems.push(`<div class="guide-item"><span class="guide-lbl">${T.why}:</span> ${escapeHtml(g.why)}</div>`);
-            if (g.impact) guideItems.push(`<div class="guide-item"><span class="guide-lbl">${T.impact}:</span> ${escapeHtml(g.impact)}</div>`);
-            if (g.default) guideItems.push(`<div class="guide-item"><span class="guide-lbl">${T.defaultValue}:</span> ${escapeHtml(g.default)}</div>`);
+            if (g.why) guideItems.push(`<div class="guide-item"><strong class="guide-lbl">${T.why}:</strong> <span class="guide-val">${escapeHtml(g.why)}</span></div>`);
+            if (g.impact) guideItems.push(`<div class="guide-item"><strong class="guide-lbl">${T.impact}:</strong> <span class="guide-val">${escapeHtml(g.impact)}</span></div>`);
+            if (g.default) guideItems.push(`<div class="guide-item"><strong class="guide-lbl">${T.defaultValue}:</strong> <span class="guide-val">${escapeHtml(g.default)}</span></div>`);
             const guidanceHtml = guideItems.length ? `<div class="guidance-box">${guideItems.join('')}</div>` : '';
 
             return `<tr class="finding-row st-${escapeHtml(r.status)}">
@@ -727,21 +793,23 @@
     margin: 10mm 12mm 14mm 12mm;
 }
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #0f172a;
     background: #ffffff;
     margin: 0;
-    padding: 20px 24px;
-    font-size: 11px;
+    padding: 14px 18px;
+    font-size: 10px;
     line-height: 1.45;
 }
 .report-container {
-    max-width: 860px;
+    width: 100%;
+    max-width: 100%;
     margin: 0 auto;
+    box-sizing: border-box;
 }
 .report-actions-bar {
     display: none;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     padding: 10px 16px;
     background: #0f172a;
     color: #ffffff;
@@ -763,6 +831,7 @@ body {
 .act-btn:hover { opacity: 0.9; }
 .act-btn-blue { background: #2563eb; color: #fff; }
 .act-btn-green { background: #10b981; color: #fff; }
+.act-btn-cyan { background: #0284c7; color: #fff; }
 .act-btn-gray { background: #475569; color: #fff; }
 
 /* Report Header */
@@ -771,13 +840,13 @@ body {
     justify-content: space-between;
     align-items: flex-start;
     border-bottom: 2px solid #0f172a;
-    padding-bottom: 12px;
-    margin-bottom: 16px;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
 .brand-title {
-    font-size: 19px;
+    font-size: 18px;
     font-weight: 800;
     color: #0f172a;
     letter-spacing: -0.02em;
@@ -787,17 +856,17 @@ body {
     margin: 0;
 }
 .report-subtitle {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    color: #475569;
+    color: #334155;
     margin-top: 3px;
 }
 .header-tag {
     background: #e2e8f0;
-    color: #334155;
+    color: #1e293b;
     padding: 3px 8px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -807,21 +876,21 @@ body {
 .meta-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    gap: 6px;
     background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 6px;
-    padding: 10px 14px;
-    margin-bottom: 16px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
-.meta-item { font-size: 10.5px; }
+.meta-item { font-size: 10px; }
 .meta-label {
-    color: #64748b;
-    font-weight: 600;
+    color: #475569;
+    font-weight: 700;
     text-transform: uppercase;
-    font-size: 9px;
+    font-size: 8.5px;
     letter-spacing: 0.04em;
     display: block;
     margin-bottom: 2px;
@@ -829,24 +898,24 @@ body {
 .meta-value {
     color: #0f172a;
     font-weight: 700;
-    font-size: 11.5px;
-    word-break: break-all;
+    font-size: 11px;
+    word-break: break-word;
 }
 
 /* KPI Summary Cards */
 .kpis {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    margin-bottom: 18px;
+    gap: 6px;
+    margin-bottom: 14px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
 .kpi-card {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 6px;
-    padding: 8px 10px;
+    padding: 6px 8px;
     text-align: center;
     border-top: 3px solid #64748b;
     break-inside: avoid;
@@ -858,7 +927,7 @@ body {
 .kpi-card.kpi-warn { border-top-color: #f59e0b; }
 .kpi-card.kpi-unknown { border-top-color: #94a3b8; }
 .kpi-num {
-    font-size: 19px;
+    font-size: 17px;
     font-weight: 800;
     line-height: 1.1;
     color: #0f172a;
@@ -867,13 +936,13 @@ body {
 .kpi-card.kpi-pass .kpi-num { color: #059669; }
 .kpi-card.kpi-fail .kpi-num { color: #dc2626; }
 .kpi-card.kpi-warn .kpi-num { color: #d97706; }
-.kpi-card.kpi-unknown .kpi-num { color: #64748b; }
+.kpi-card.kpi-unknown .kpi-num { color: #475569; }
 .kpi-label {
-    font-size: 9.5px;
-    font-weight: 600;
-    color: #64748b;
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #475569;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
     margin-top: 2px;
 }
 
@@ -883,11 +952,11 @@ body {
     border: 1px solid #fde68a;
     border-left: 4px solid #f59e0b;
     color: #92400e;
-    padding: 9px 12px;
+    padding: 8px 12px;
     border-radius: 4px;
-    margin-bottom: 16px;
-    font-size: 11px;
-    line-height: 1.45;
+    margin-bottom: 14px;
+    font-size: 10.5px;
+    line-height: 1.4;
     break-inside: avoid;
     page-break-inside: avoid;
 }
@@ -895,44 +964,47 @@ body {
 /* Findings Table */
 table.findings-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
-    font-size: 10.5px;
+    font-size: 10px;
     background: #ffffff;
 }
 thead { display: table-header-group; }
 th {
     background: #0f172a;
     color: #ffffff;
-    padding: 8px 8px;
-    font-size: 10px;
+    padding: 6px 8px;
+    font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     border: 1px solid #0f172a;
     text-align: left;
 }
 tr.finding-row {
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
     break-inside: avoid;
     page-break-inside: avoid;
 }
 tr.finding-row:nth-child(even) { background: #f8fafc; }
 td {
-    padding: 8px 8px;
+    padding: 6px 8px;
     vertical-align: top;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
-.col-id { width: 14%; white-space: normal; }
-.col-check { width: 44%; }
-.col-sev { width: 10%; text-align: center; }
-.col-status { width: 12%; text-align: center; }
-.col-fix { width: 20%; }
+.col-id { width: 12%; word-break: break-all; }
+.col-check { width: 52%; word-break: break-word; }
+.col-sev { width: 8%; text-align: center; }
+.col-status { width: 8%; text-align: center; }
+.col-fix { width: 20%; word-break: break-word; }
 
 /* Badges */
 .badge {
     display: inline-block;
-    padding: 2px 6px;
-    font-size: 9px;
+    padding: 2px 5px;
+    font-size: 8.5px;
     font-weight: 700;
     border-radius: 3px;
     text-transform: uppercase;
@@ -948,94 +1020,99 @@ td {
 .badge-high { background: #ea580c; color: #ffffff; }
 .badge-medium { background: #f59e0b; color: #000000; }
 .badge-low { background: #64748b; color: #ffffff; }
-.badge-ref { background: #e2e8f0; color: #334155; font-family: ui-monospace, monospace; font-size: 8.5px; margin-top: 3px; }
+.badge-ref { background: #e2e8f0; color: #1e293b; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 8.5px; font-weight: 600; margin-top: 3px; }
 .ref-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
 
 /* Rule details */
-.rule-id { font-family: ui-monospace, monospace; font-size: 10px; color: #0f172a; word-break: break-all; }
-.rule-title { font-weight: 700; color: #0f172a; font-size: 11px; }
-.rule-desc { color: #475569; font-size: 10px; margin-top: 2px; line-height: 1.35; }
+.rule-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; color: #0f172a; font-weight: 700; word-break: break-all; }
+.rule-title { font-weight: 700; color: #0f172a; font-size: 11px; margin-bottom: 2px; line-height: 1.35; }
+.rule-desc { color: #0f172a; font-size: 10px; margin-top: 2px; line-height: 1.4; }
 .guidance-box {
     margin-top: 5px;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 3px;
-    padding: 5px 7px;
-    font-size: 9.5px;
-    line-height: 1.35;
-    break-inside: avoid;
-    page-break-inside: avoid;
-}
-.guide-item { margin-bottom: 2px; }
-.guide-item:last-child { margin-bottom: 0; }
-.guide-lbl { font-weight: 700; color: #334155; }
-.verify-box {
-    margin-top: 4px;
-    font-size: 9.5px;
-    color: #334155;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    padding: 3px 6px;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 9.5px;
+    line-height: 1.45;
+    color: #0f172a !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.guide-item { margin-bottom: 3px; color: #0f172a !important; }
+.guide-item:last-child { margin-bottom: 0; }
+.guide-lbl { font-weight: 800; color: #0f172a !important; margin-right: 3px; }
+.guide-val { color: #0f172a !important; font-weight: 500; }
+
+.verify-box {
+    margin-top: 5px;
+    font-size: 9.5px;
+    color: #0f172a;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    padding: 4px 6px;
     border-radius: 3px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
-.verify-box code { font-family: ui-monospace, monospace; color: #0f172a; white-space: pre-wrap; word-break: break-all; }
-.verify-lbl { font-weight: 700; color: #475569; margin-right: 4px; }
+.verify-box code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #0f172a; font-weight: 600; white-space: pre-wrap; word-break: break-all; font-size: 9px; }
+.verify-lbl { font-weight: 700; color: #334155; margin-right: 4px; }
 
 .evidence-box {
     margin-top: 5px;
-    border: 1px solid #fecaca;
+    border: 1px solid #fca5a5;
     background: #fff5f5;
-    border-radius: 3px;
-    padding: 5px 6px;
+    border-radius: 4px;
+    padding: 5px 8px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
 .evidence-hdr { font-size: 9px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
 .evidence-item {
-    font-family: ui-monospace, monospace;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
     font-size: 9px;
     display: flex;
     gap: 6px;
     padding: 1px 0;
     flex-wrap: wrap;
+    color: #0f172a;
 }
-.evidence-line { color: #94a3b8; font-weight: 600; min-width: 45px; }
-.evidence-ctx { color: #64748b; min-width: 110px; }
-.evidence-txt { color: #b91c1c; font-weight: 600; word-break: break-all; }
+.evidence-line { color: #475569; font-weight: 700; min-width: 45px; }
+.evidence-ctx { color: #0f172a; font-weight: 700; min-width: 100px; }
+.evidence-txt { color: #b91c1c; font-weight: 700; word-break: break-all; }
 
 .remediation-code {
-    font-family: ui-monospace, monospace;
-    font-size: 9.5px;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    color: #0284c7;
-    padding: 3px 5px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 9px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    color: #0369a1;
+    padding: 4px 6px;
     border-radius: 3px;
     display: block;
+    font-weight: 600;
     white-space: pre-wrap;
-    word-break: break-all;
+    word-break: break-word;
 }
 
 /* Footer & Note */
 .report-note {
-    font-size: 9.5px;
-    color: #64748b;
+    font-size: 9px;
+    color: #475569;
     background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 4px;
-    padding: 8px 12px;
-    margin-top: 16px;
+    padding: 7px 10px;
+    margin-top: 14px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
 .report-footer {
-    margin-top: 20px;
-    padding-top: 10px;
+    margin-top: 16px;
+    padding-top: 8px;
     border-top: 1px solid #cbd5e1;
-    font-size: 9.5px;
-    color: #64748b;
+    font-size: 9px;
+    color: #475569;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1046,7 +1123,7 @@ td {
 @media print {
     body { padding: 0; margin: 0; }
     .no-print { display: none !important; }
-    .report-container { max-width: 100%; }
+    .report-container { max-width: 100%; width: 100%; }
 }
 </style>
 <base href="/">
@@ -1073,7 +1150,7 @@ async function downloadPdf() {
 
     if (h2p) {
         var opt = {
-            margin: [8, 8, 8, 8],
+            margin: 10,
             filename: '${filename}.pdf',
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: {
@@ -1090,7 +1167,9 @@ async function downloadPdf() {
         var styleEl = document.querySelector('style');
         var reportEl = document.querySelector('.report-container');
         var wrapper = document.createElement('div');
-        wrapper.style.width = '860px';
+        wrapper.style.width = '100%';
+        wrapper.style.boxSizing = 'border-box';
+        wrapper.style.padding = '0 6px';
         wrapper.style.background = '#ffffff';
         if (styleEl) wrapper.appendChild(styleEl.cloneNode(true));
         if (reportEl) {
@@ -1109,6 +1188,14 @@ async function downloadPdf() {
     } else {
         if (btn) btn.textContent = origText;
         alert('Libreria PDF non caricata. Riprova.');
+    }
+}
+
+function downloadDocx() {
+    if (window.parent && typeof window.parent.downloadModalDocx === 'function') {
+        window.parent.downloadModalDocx();
+    } else {
+        alert('Esportazione DOCX disponibile dal pannello principale.');
     }
 }
 
@@ -1132,9 +1219,10 @@ function downloadHtml() {
             <span style="color:#cbd5e1; font-size:12px;"> — ${T.subheading}</span>
         </div>
         <div>
-            <button onclick="window.print()" class="act-btn act-btn-blue">${T.printVector}</button>
             <button onclick="downloadPdf()" class="act-btn act-btn-green">${T.pdf}</button>
+            <button onclick="downloadDocx()" class="act-btn act-btn-cyan"><i class="fa-solid fa-file-word"></i> DOCX</button>
             <button onclick="downloadHtml()" class="act-btn act-btn-gray">${T.html}</button>
+            <button onclick="window.print()" class="act-btn act-btn-blue">${T.printVector}</button>
         </div>
     </div>
 
@@ -1188,11 +1276,22 @@ function downloadHtml() {
 </body>
 </html>`;
 
-        openAuditReportModal(html, filename, `SentinelNet — ${T.preview}`);
+        openAuditReportModal(html, filename, `SentinelNet — ${T.preview}`, {
+            rules,
+            summary: s,
+            score,
+            device_name: device,
+            benchmark: benchmarkKey,
+            benchmark_title: benchmark,
+            vendor: _auditVendor,
+            lang,
+            generated
+        });
     }
 
     let _currentReportHtml = '';
     let _currentReportFilename = '';
+    let _currentAuditPayload = null;
 
     async function ensureHtml2Pdf() {
         if (typeof window.html2pdf === 'function') return window.html2pdf;
@@ -1206,9 +1305,10 @@ function downloadHtml() {
     }
     window.ensureHtml2Pdf = ensureHtml2Pdf;
 
-    function openAuditReportModal(html, filename, titleText) {
+    function openAuditReportModal(html, filename, titleText, payload) {
         _currentReportHtml = html;
         _currentReportFilename = filename || 'audit-report';
+        _currentAuditPayload = payload || null;
         const modal = document.getElementById('auditReportModal');
         const frame = document.getElementById('auditReportFrame');
         const titleEl = document.getElementById('auditReportModalTitle');
@@ -1246,7 +1346,7 @@ function downloadHtml() {
 
             const filename = (_currentReportFilename || 'compliance-report') + '.pdf';
             const opt = {
-                margin: [8, 8, 8, 8],
+                margin: 10,
                 filename: filename,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: {
@@ -1266,7 +1366,9 @@ function downloadHtml() {
 
             if (reportEl) {
                 const wrapper = document.createElement('div');
-                wrapper.style.width = '860px';
+                wrapper.style.width = '100%';
+                wrapper.style.boxSizing = 'border-box';
+                wrapper.style.padding = '0 6px';
                 wrapper.style.background = '#ffffff';
                 if (styleEl) wrapper.appendChild(styleEl.cloneNode(true));
                 const clone = reportEl.cloneNode(true);
@@ -1288,6 +1390,54 @@ function downloadHtml() {
             }
         }
     }
+
+    async function downloadModalDocx() {
+        const payload = _currentAuditPayload || {
+            rules: _auditRules,
+            summary: _auditSummary,
+            score: _auditScore,
+            device_name: _auditDeviceName,
+            benchmark_title: _auditBenchmarkName,
+            vendor: _auditVendor,
+            lang: currentLang
+        };
+
+        const btn = document.getElementById('auditModalBtnDoc');
+        const origHtml = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (currentLang === 'en' ? 'Generating DOCX...' : 'Generazione DOCX...');
+            btn.disabled = true;
+        }
+
+        try {
+            const res = await apiFetch('/api/netsec-audit/export/docx', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            if (!res || !res.ok) {
+                throw new Error(currentLang === 'en' ? 'Failed to generate DOCX on server' : 'Errore server durante la generazione del DOCX');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = (_currentReportFilename || 'compliance-report') + '.docx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(currentLang === 'en' ? 'DOCX file downloaded successfully.' : 'File DOCX scaricato con successo.', 'info');
+        } catch (e) {
+            console.error('DOCX export error:', e);
+            showToast((currentLang === 'en' ? 'Failed to export DOCX: ' : 'Errore esportazione DOCX: ') + (e.message || e), 'error');
+        } finally {
+            if (btn) {
+                btn.innerHTML = origHtml;
+                btn.disabled = false;
+            }
+        }
+    }
+    window.downloadModalDocx = downloadModalDocx;
 
     function printModalReport() {
         const frame = document.getElementById('auditReportFrame');
@@ -1530,15 +1680,6 @@ function downloadHtml() {
     document.getElementById('auditStatusFilter')?.addEventListener('change', renderAuditRulesTable);
     document.getElementById('btnRefreshAuditHistory')?.addEventListener('click', loadAuditHistory);
 
-    document.getElementById('auditDropZone')?.addEventListener('click', (e) => {
-        const a = e.target.closest('[data-action="clear-uploaded-config"]');
-        if (a) {
-            e.preventDefault();
-            e.stopPropagation();
-            clearUploadedConfig();
-        }
-    });
-
     document.getElementById('auditRulesTableBody')?.addEventListener('click', (e) => {
         const row = e.target.closest('tr[data-action="toggle-audit-detail"]');
         if (row && row.dataset.evId) {
@@ -1564,6 +1705,7 @@ function downloadHtml() {
     });
 
     document.getElementById('auditModalBtnPdf')?.addEventListener('click', downloadModalPdf);
+    document.getElementById('auditModalBtnDoc')?.addEventListener('click', downloadModalDocx);
     document.getElementById('auditModalBtnPrint')?.addEventListener('click', printModalReport);
     document.getElementById('auditModalBtnHtml')?.addEventListener('click', downloadModalHtml);
     document.getElementById('auditModalBtnClose')?.addEventListener('click', closeAuditReportModal);
@@ -1586,5 +1728,8 @@ function downloadHtml() {
     window.deleteAuditRun = deleteAuditRun;
     window.toggleAuditSaveNameInput = toggleAuditSaveNameInput;
     window.switchNetSecSubtab = switchNetSecSubtab;
+
+    // Auto-init if tab is active or rendered
+    loadNetSecAuditTab();
 })();
 
