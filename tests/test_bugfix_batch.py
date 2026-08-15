@@ -143,6 +143,12 @@ class TestOnelineBayOpensFilteredInventory(unittest.TestCase):
         self.assertIsNotNone(bay, "bottone bay per tenant non trovato")
         self.assertIn("openInventoryForTenant", self.src)
 
+    def test_bay_state_partial_down_is_warn(self):
+        # Se solo alcuni apparati sono down, lo stato della bay deve essere 'warn' (attenzione),
+        # e 'down' solo se tutti gli apparati della bay sono giù.
+        self.assertIn("(b.down === b.total) ? 'down'", self.src)
+        self.assertIn("(b.down > 0 || b.warn > 0) ? 'warn'", self.src)
+
 
 class TestSortKeepsDetailRowsWithTheirParent(unittest.TestCase):
     """Le tabelle con riga di dettaglio espandibile (matrice audit) la

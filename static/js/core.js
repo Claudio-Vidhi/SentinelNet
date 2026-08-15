@@ -774,7 +774,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-fortigate': ['/static/js/fortigate-management.js'],
     'tab-wlc': ['/static/js/wlc.js'],
     'tab-audit-checklist': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/audit_checklist.js'],
-    'tab-settings': ['/static/js/settings.js'],
+    'tab-settings': ['/static/js/settings.js', '/static/js/observability.js'],
     'tab-incidents': ['/static/js/incidents.js'],
     'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js'],
 };

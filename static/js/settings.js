@@ -413,7 +413,9 @@
         renderAppSettings(d);
         loadCliBlacklistSetting();
         loadPingMonitorSettings();
-        loadObsSettings();
+        if (typeof loadObsSettings === 'function') {
+            loadObsSettings();
+        }
         loadAppAdvSettings();
     }
 

@@ -1734,7 +1734,7 @@
         }
     });
 
-    document.getElementById('obsSettingsForm')?.addEventListener('click', (e) => {
+    document.getElementById('obsSettingsBody')?.addEventListener('click', (e) => {
         if (e.target.closest('[data-action="save-obs-settings"]')) saveObsSettings();
         if (e.target.closest('[data-action="prune-obs-logs"]')) pruneObsLogs();
     });
