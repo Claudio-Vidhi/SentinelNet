@@ -813,7 +813,7 @@ body {
     padding: 10px 16px;
     background: #0f172a;
     color: #ffffff;
-    border-radius: 6px;
+    border-radius: 2px;
     justify-content: space-between;
     align-items: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
@@ -821,7 +821,7 @@ body {
 .act-btn {
     padding: 6px 14px;
     border: none;
-    border-radius: 4px;
+    border-radius: 2px;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
@@ -865,7 +865,7 @@ body {
     background: #e2e8f0;
     color: #1e293b;
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: 2px;
     font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
@@ -879,7 +879,7 @@ body {
     gap: 6px;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 6px;
+    border-radius: 2px;
     padding: 8px 12px;
     margin-bottom: 14px;
     break-inside: avoid;
@@ -914,7 +914,7 @@ body {
 .kpi-card {
     background: #ffffff;
     border: 1px solid #cbd5e1;
-    border-radius: 6px;
+    border-radius: 2px;
     padding: 6px 8px;
     text-align: center;
     border-top: 3px solid #64748b;
@@ -950,10 +950,9 @@ body {
 .warn-banner {
     background: #fffbeb;
     border: 1px solid #fde68a;
-    border-left: 4px solid #f59e0b;
     color: #92400e;
     padding: 8px 12px;
-    border-radius: 4px;
+    border-radius: 2px;
     margin-bottom: 14px;
     font-size: 10.5px;
     line-height: 1.4;
@@ -1006,7 +1005,7 @@ td {
     padding: 2px 5px;
     font-size: 8.5px;
     font-weight: 700;
-    border-radius: 3px;
+    border-radius: 2px;
     text-transform: uppercase;
     letter-spacing: 0.02em;
     white-space: nowrap;
@@ -1020,18 +1019,18 @@ td {
 .badge-high { background: #ea580c; color: #ffffff; }
 .badge-medium { background: #f59e0b; color: #000000; }
 .badge-low { background: #64748b; color: #ffffff; }
-.badge-ref { background: #e2e8f0; color: #1e293b; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 8.5px; font-weight: 600; margin-top: 3px; }
+.badge-ref { background: #e2e8f0; color: #1e293b; font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 8.5px; font-weight: 600; margin-top: 3px; }
 .ref-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
 
 /* Rule details */
-.rule-id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9.5px; color: #0f172a; font-weight: 700; word-break: break-all; }
+.rule-id { font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9.5px; color: #0f172a; font-weight: 700; word-break: break-all; }
 .rule-title { font-weight: 700; color: #0f172a; font-size: 11px; margin-bottom: 2px; line-height: 1.35; }
 .rule-desc { color: #0f172a; font-size: 10px; margin-top: 2px; line-height: 1.4; }
 .guidance-box {
     margin-top: 5px;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 4px;
+    border-radius: 2px;
     padding: 6px 8px;
     font-size: 9.5px;
     line-height: 1.45;
@@ -1051,25 +1050,25 @@ td {
     background: #f8fafc;
     border: 1px solid #cbd5e1;
     padding: 4px 6px;
-    border-radius: 3px;
+    border-radius: 2px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
-.verify-box code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #0f172a; font-weight: 600; white-space: pre-wrap; word-break: break-all; font-size: 9px; }
+.verify-box code { font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; color: #0f172a; font-weight: 600; white-space: pre-wrap; word-break: break-all; font-size: 9px; }
 .verify-lbl { font-weight: 700; color: #334155; margin-right: 4px; }
 
 .evidence-box {
     margin-top: 5px;
     border: 1px solid #fca5a5;
     background: #fff5f5;
-    border-radius: 4px;
+    border-radius: 2px;
     padding: 5px 8px;
     break-inside: avoid;
     page-break-inside: avoid;
 }
 .evidence-hdr { font-size: 9px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
 .evidence-item {
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
     font-size: 9px;
     display: flex;
     gap: 6px;
@@ -1082,13 +1081,13 @@ td {
 .evidence-txt { color: #b91c1c; font-weight: 700; word-break: break-all; }
 
 .remediation-code {
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
     font-size: 9px;
     background: #f0f9ff;
     border: 1px solid #bae6fd;
     color: #0369a1;
     padding: 4px 6px;
-    border-radius: 3px;
+    border-radius: 2px;
     display: block;
     font-weight: 600;
     white-space: pre-wrap;
@@ -1101,7 +1100,7 @@ td {
     color: #475569;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 4px;
+    border-radius: 2px;
     padding: 7px 10px;
     margin-top: 14px;
     break-inside: avoid;
