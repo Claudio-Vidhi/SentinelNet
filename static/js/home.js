@@ -128,12 +128,15 @@ function renderFleetOneline(devs) {
     const shown = sorted.slice(0, 6);
     const rest  = sorted.slice(6);
 
-    // Peggiore stato della bay. 'idle' vince quando NIENTE e' stato ancora
-    // interrogato: una bay tutta da scansionare non e' una bay in avaria.
-    const state = b => b.down ? 'down'
-                     : b.warn ? 'warn'
-                     : (b.idle === b.total) ? 'idle'
-                     : b.total ? 'up' : 'idle';
+    // Peggiore stato della bay:
+    // - 'idle': nessun apparato della bay è mai stato scansionato
+    // - 'down': TUTTI gli apparati della bay sono giù (interruttore aperto / irraggiungibile)
+    // - 'warn': solo ALCUNI apparati sono giù o in attenzione (degradato / attenzione)
+    // - 'up': tutti gli apparati operativi (eccitato)
+    const state = b => (!b || !b.total || b.idle === b.total) ? 'idle'
+                     : (b.down === b.total) ? 'down'
+                     : (b.down > 0 || b.warn > 0) ? 'warn'
+                     : 'up';
     let html = shown.map(([name, b]) => `
         <button type="button" class="oneline-bay" data-state="${state(b)}"
                 data-action="open-inventory-tenant" data-tenant="${escapeHtml(name)}"
