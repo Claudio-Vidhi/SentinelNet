@@ -1299,7 +1299,7 @@ def generate_audit_relazione(engagement_id: int) -> str:
             const noPrints = document.querySelectorAll('.no-print');
             noPrints.forEach(el => {{ el.style.display = 'none'; }});
             const opt = {{
-                margin: [10, 10, 10, 10],
+                margin: 10,
                 filename: 'Relazione_Audit_{eng["customer_name"].replace(" ", "_")}.pdf',
                 image: {{ type: 'jpeg', quality: 0.98 }},
                 html2canvas: {{ scale: 2.5, useCORS: true, logging: false, letterRendering: true, windowWidth: 850 }},

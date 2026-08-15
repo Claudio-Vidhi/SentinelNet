@@ -2,9 +2,9 @@
 """Router Analyzer. Estratto da app_server.py (fase 6.6)."""
 
 import json
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
 from core import db
@@ -154,6 +154,8 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
         # (risultato privo di significato) senza avvisare l'utente.
         text = _load_backup_text(payload.device_ip, current_user)
         dev_name = payload.device_ip
+    elif text and not dev_name:
+        dev_name = payload.device_ip or "Uploaded Config"
     if not text or not text.strip():
         # Senza configurazione non c'e' nulla da valutare. Il motore, ricevendo
         # una stringa vuota, non trova alcuna violazione e restituisce un
@@ -189,6 +191,23 @@ def netsec_audit_scan(payload: NetSecAuditSchema, current_user = Depends(get_cur
                   f"da '{current_user.get('sub')}'.")
         result["saved_id"] = run_id
     return result
+
+
+@router.post("/api/netsec-audit/export/docx")
+def netsec_audit_export_docx(payload: Dict[str, Any], current_user = Depends(get_current_user)):
+    """Esporta un report di compliance NetSec Audit in formato Microsoft Word (.docx)."""
+    from services.netsec_audit.docx_export import generate_audit_docx
+    try:
+        docx_bytes = generate_audit_docx(payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore durante la generazione del file Word: {e}")
+    device = (payload.get("device_name") or payload.get("device_ip") or "device").replace(" ", "_")
+    filename = f"audit-{device}.docx"
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @router.get("/api/netsec-audit/history")
