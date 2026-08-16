@@ -1,0 +1,44 @@
+[tools]
+python = "3.14"
+uv = "latest"
+
+[env]
+PYTHONUNBUFFERED = "1"
+
+[tasks.install]
+description = "Install project dependencies via uv"
+run = "uv pip install -r requirements.txt && uv pip install httpx pyrefly"
+
+[tasks.dev]
+alias = "server"
+description = "Start SentinelNet development server"
+run = "uv run app_server.py"
+
+[tasks.test]
+description = "Run full unit test suite"
+run = "uv run python -m unittest discover -s tests -v"
+
+[tasks."test:one"]
+description = "Run a single test module (e.g. mise run test:one -- tests.test_version)"
+run = "uv run python -m unittest -v"
+
+[tasks.typecheck]
+alias = "check"
+description = "Run Pyrefly type checking"
+run = "uv run pyrefly check"
+
+[tasks.snapshot]
+description = "Regenerate OpenAPI schema snapshot"
+run = "uv run python scripts/snapshot_openapi.py"
+
+[tasks.build]
+description = "Build PyInstaller Windows standalone executable"
+run = "pwsh scripts/build.ps1"
+
+[tasks."build:docker"]
+description = "Build Docker image"
+run = "docker compose build"
+
+[tasks.pre-commit]
+description = "Run pre-commit checks: typecheck and test suite"
+depends = ["typecheck", "test"]
