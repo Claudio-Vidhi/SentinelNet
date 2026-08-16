@@ -8,6 +8,15 @@ does not repeat them; it covers layout, tests and build.
 
 ## 1. Setup
 
+### With `mise` (recommended)
+
+```sh
+mise install
+mise run dev
+```
+
+### With `uv`
+
 ```sh
 uv venv
 uv pip install -r requirements.txt
@@ -17,6 +26,17 @@ uv run app_server.py
 `pyproject.toml` declares `requires-python = ">=3.14"`; the root README still
 says 3.11+. The compiled artifacts in the tree are CPython 3.14 — treat
 `pyproject.toml` as authoritative and don't assume 3.11 works.
+
+### Common `mise` tasks
+
+- `mise run dev` (or `mise run server`) — start development server
+- `mise run test` — run full test suite
+- `mise run test:one -- tests.test_db` — run single test module
+- `mise run typecheck` (or `mise run check`) — run Pyrefly type checker
+- `mise run pre-commit` — run type checking and test suite
+- `mise run build` — build PyInstaller Windows executable
+- `mise run build:docker` — build Docker container
+
 
 ---
 
