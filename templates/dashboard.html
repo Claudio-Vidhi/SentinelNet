@@ -201,6 +201,9 @@
         <button class="nav-item" data-tabs="tab-map tab-map-interactive" data-tab="tab-map">
           <span class="nav-left" data-i18n="tabTopologyGroup"><i class="fa-solid fa-circle-nodes"></i> Topologia</span>
         </button>
+        <button id="navRedundancy" class="nav-item" data-tab="tab-redundancy">
+          <span class="nav-left" data-i18n="tabRedundancy"><i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)</span>
+        </button>
         <button class="nav-item" data-tab="tab-categories">
           <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
         </button>
@@ -908,6 +911,52 @@
       <!-- Lista dispositivi raggruppati per sede -->
       <div class="panel">
         <div id="categoriesDeviceList"></div>
+      </div>
+    </div>
+
+    <!-- TAB: Alta Affidabilità & Gruppi di Ridondanza -->
+    <div id="tab-redundancy" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;">Alta Affidabilità (HA) &amp; Gruppi di Ridondanza</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:74ch;">
+            Monitoraggio in tempo reale della salute dei cluster e protocolli di failover: HSRP, VRRP, FortiGate HA (FGCP), Cisco StackWise e coppie VPC/MLAG per prevenire scenari di split-brain.
+          </p>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase;">Cluster Totali</h4>
+          <strong id="haKpiTotal" style="font-size:22px;">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--success);">In Salute (Healthy)</h4>
+          <strong id="haKpiHealthy" style="font-size:22px; color:var(--success);">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--warning);">Degradati</h4>
+          <strong id="haKpiDegraded" style="font-size:22px; color:var(--warning);">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--danger);">Critici / Split-Brain</h4>
+          <strong id="haKpiCritical" style="font-size:22px; color:var(--danger);">0</strong>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-server"></i> Gruppi di Ridondanza Attivi</h3>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-primary btn-small requires-admin" data-action="open-create-redundancy" style="width:auto;">
+              <i class="fa-solid fa-plus"></i> Nuovo Gruppo HA
+            </button>
+            <button class="btn btn-secondary btn-small" data-action="refresh-redundancy" style="width:auto;">
+              <i class="fa-solid fa-rotate"></i> Aggiorna
+            </button>
+          </div>
+        </div>
+        <div id="redundancyGroupsContainer"></div>
       </div>
     </div>
 
@@ -3504,6 +3553,49 @@
       </div>
       <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
         <button class="btn btn-sm" data-action="close-obs-inspect-modal" style="padding:6px 16px;">Chiudi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Create Redundancy Group Modal -->
+  <div id="createRedundancyModal" class="modal-backdrop" style="display:none; position:fixed; inset:0; background:color-mix(in srgb, var(--bg) 82%, transparent); z-index:10050; align-items:center; justify-content:center;">
+    <div style="background:var(--surface-1); border:1px solid var(--border); border-radius:0; width:92%; max-width:520px; display:flex; flex-direction:column; overflow:hidden; box-shadow:var(--shadow-float);">
+      <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+        <h3 style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
+          <i class="fa-solid fa-layer-group" style="color:var(--primary);"></i>
+          <span>Crea Gruppo di Ridondanza / HA</span>
+        </h3>
+        <button data-action="close-create-redundancy" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="padding:20px; display:flex; flex-direction:column; gap:12px;">
+        <div class="form-group" style="margin:0;">
+          <label>Nome Gruppo</label>
+          <input type="text" id="haGroupName" placeholder="es. Core-HSRP-VLAN10" style="padding-left:12px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Protocollo / Tipo HA</label>
+          <select id="haProtocol" style="padding-left:12px;">
+            <option value="HSRP">Cisco HSRP</option>
+            <option value="VRRP">VRRP v2/v3</option>
+            <option value="FortiGate-FGCP">FortiGate HA (FGCP)</option>
+            <option value="StackWise">Cisco StackWise</option>
+            <option value="VPC">Cisco vPC / MLAG</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Virtual IP (VIP / Gateway Condiviso)</label>
+          <input type="text" id="haVirtualIp" placeholder="es. 192.0.2.1" style="padding-left:12px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Tenant</label>
+          <input type="text" id="haTenant" value="default" style="padding-left:12px;">
+        </div>
+      </div>
+      <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-secondary btn-small" data-action="close-create-redundancy" style="width:auto;">Annulla</button>
+        <button class="btn btn-primary btn-small" id="btnSubmitCreateRedundancy" style="width:auto; background:var(--cta); color:var(--cta-text);">
+          <i class="fa-solid fa-plus"></i> Crea Gruppo
+        </button>
       </div>
     </div>
   </div>

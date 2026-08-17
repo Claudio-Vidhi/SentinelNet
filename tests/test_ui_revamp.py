@@ -2854,6 +2854,13 @@ class TestRedundancyUi(unittest.TestCase):
         self.assertIn("redundancy_heartbeat", source)
         self.assertIn("dashes: true", source)
 
+    def test_redundancy_tab_renders_member_serials_and_switch_stack_details(self):
+        source = frontend_source()
+        self.assertIn("function renderRedundancyCard", source)
+        self.assertIn("m.serial", source)
+        self.assertIn("Switch #", source)
+        self.assertIn("fa-barcode", source)
+
     def test_the_diagnosis_report_is_rendered_in_exactly_one_place(self):
         # Viveva in una modale della Client Map. Due copie dello stesso referto
         # sarebbero due copie da tenere allineate: il pulsante di riga porta
