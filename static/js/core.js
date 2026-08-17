@@ -776,6 +776,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-audit-checklist': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/audit_checklist.js'],
     'tab-settings': ['/static/js/settings.js', '/static/js/observability.js'],
     'tab-incidents': ['/static/js/incidents.js'],
+    'tab-redundancy': ['/static/js/redundancy.js'],
     'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js'],
 };
 
@@ -877,6 +878,7 @@ async function switchTab(tabId, clickedBtn) {
     // dopo il caricamento lazy del modulo.
     else if (tabId === 'tab-flows') flowsTabShown();
     else if (tabId === 'tab-incidents') loadIncidentsTab();
+    else if (tabId === 'tab-redundancy') loadRedundancyTab();
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
 }
 
