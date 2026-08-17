@@ -692,7 +692,6 @@
                 }
             }
         }
-
         const s = summary || { total: 0, passed: 0, failed: 0, warned: 0, unknown: 0 };
         const unknown = s.unknown || 0;
         const hasScore = (score !== null && score !== undefined);
@@ -704,7 +703,7 @@
 
         const filename = `audit-${(device || 'device').replace(/[^\w.-]+/g, '_')}-${new Date().toISOString().slice(0, 10)}`;
 
-        const rows = rules.map(r => {
+        function renderRuleCard(r) {
             const ev = (r.evidence || []).map(e => {
                 const rawCtx = e.context || '';
                 const ctxClean = rawCtx.replace(/^firewall policy\s*\/\s*(\d+)$/i, 'Policy ID #$1')
@@ -749,23 +748,29 @@
             if (g.default) guideItems.push(`<div class="guide-item"><strong class="guide-lbl">${T.defaultValue}:</strong> <span class="guide-val">${escapeHtml(g.default)}</span></div>`);
             const guidanceHtml = guideItems.length ? `<div class="guidance-box">${guideItems.join('')}</div>` : '';
 
-            return `<tr class="finding-row st-${escapeHtml(r.status)}">
-                <td class="col-id">
+            // Guida, comando di verifica ed evidenze occupano la larghezza
+            // piena sotto la riga: incolonnati sotto il titolo leggevano su
+            // 286px mentre severita', esito e rimedio restavano vuoti per
+            // tutta l'altezza della scheda.
+            const detailHtml = (guidanceHtml || auditCmd || evBlock)
+                ? `<div class="col-detail">${guidanceHtml}${auditCmd}${evBlock}</div>`
+                : '';
+
+            return `<div class="finding-card st-${escapeHtml(r.status)}">
+                <div class="col-id">
                     <strong class="rule-id">${escapeHtml(r.id)}</strong>
                     ${refHtml}
-                </td>
-                <td class="col-check">
+                </div>
+                <div class="col-check">
                     <div class="rule-title">${escapeHtml(r.title)}</div>
                     <div class="rule-desc">${escapeHtml(r.detail)}</div>
-                    ${guidanceHtml}
-                    ${auditCmd}
-                    ${evBlock}
-                </td>
-                <td class="col-sev"><span class="badge ${sevClass}">${escapeHtml(r.severity || 'MEDIUM')}</span></td>
-                <td class="col-status"><span class="badge ${statusClass}">${statusIcon}${statusLabel}</span></td>
-                <td class="col-fix"><code class="remediation-code">${escapeHtml(r.remediation || '—')}</code></td>
-            </tr>`;
-        }).join('');
+                </div>
+                <div class="col-sev"><span class="badge ${sevClass}">${escapeHtml(r.severity || 'MEDIUM')}</span></div>
+                <div class="col-status"><span class="badge ${statusClass}">${statusIcon}${statusLabel}</span></div>
+                <div class="col-fix"><code class="remediation-code">${escapeHtml(r.remediation || '—')}</code></div>
+                ${detailHtml}
+            </div>`;
+        }
 
         const partialBanner = unknown > 0
             ? `<div class="warn-banner"><strong>${T.partialTitle}</strong> ${T.partial(s.total - unknown, s.total, unknown)}</div>`
@@ -774,6 +779,77 @@
         const scoreColor = (score !== null && score !== undefined)
             ? (score >= 80 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444')
             : '#64748b';
+
+        const findingsHeaderHtml = `<div class="findings-header">
+            <div class="col-id">${T.thId}</div>
+            <div class="col-check">${T.thCheck}</div>
+            <div class="col-sev">${T.thSeverity}</div>
+            <div class="col-status">${T.thStatus}</div>
+            <div class="col-fix">${T.thFix}</div>
+        </div>`;
+
+        // Le pagine non si stimano piu' a occhio: si emette una pagina 1 con
+        // tutte le schede dentro, e lo script del documento le ridistribuisce
+        // misurando l'ingombro reale. Un'altezza stimata sbagliata o gonfiava
+        // il report di pagine mezze vuote o, peggio, tagliava una scheda
+        // contro «overflow: hidden» senza dirlo.
+        const allCardsHtml = rules.map(r => renderRuleCard(r)).join('');
+        const pageLabel = lang === 'en' ? 'Page' : 'Pagina';
+
+        const pagesHtml = `<div class="pdf-page" id="pdf-page-1">
+                    <div class="report-header">
+                        <div>
+                            <h1 class="brand-title">SentinelNet <span style="font-weight:400; color:#64748b;">|</span> ${T.heading}</h1>
+                            <div class="report-subtitle">${escapeHtml(benchmark)}</div>
+                        </div>
+                        <div class="header-tag">Security Audit</div>
+                    </div>
+
+                    <div class="meta-grid">
+                        <div class="meta-item"><span class="meta-label">${T.device}</span><span class="meta-value">${escapeHtml(device)}</span></div>
+                        <div class="meta-item"><span class="meta-label">${T.platform}</span><span class="meta-value">${escapeHtml(platform)}</span></div>
+                        <div class="meta-item"><span class="meta-label">${T.benchmark}</span><span class="meta-value">${escapeHtml(benchmark)}</span></div>
+                        <div class="meta-item"><span class="meta-label">${T.generatedOn}</span><span class="meta-value">${escapeHtml(generated)}</span></div>
+                    </div>
+
+                    ${partialBanner}
+
+                    <div class="kpis">
+                        <div class="kpi-card kpi-score"><div class="kpi-num">${escapeHtml(scoreTxt)}</div><div class="kpi-label">${T.score}</div></div>
+                        <div class="kpi-card kpi-pass"><div class="kpi-num">${s.passed}</div><div class="kpi-label">${T.passed}</div></div>
+                        <div class="kpi-card kpi-fail"><div class="kpi-num">${s.failed}</div><div class="kpi-label">${T.failed}</div></div>
+                        <div class="kpi-card kpi-warn"><div class="kpi-num">${s.warned}</div><div class="kpi-label">${T.warned}</div></div>
+                        <div class="kpi-card kpi-unknown"><div class="kpi-num">${unknown}</div><div class="kpi-label">${T.unknown}</div></div>
+                    </div>
+
+                    <div class="findings-list">
+                        ${findingsHeaderHtml}
+                        ${allCardsHtml}
+                    </div>
+
+                    <div class="pdf-page-footer">
+                        <span>${T.footerNotice}</span>
+                        <span class="page-num"></span>
+                    </div>
+                </div>
+
+                <div class="pdf-page pdf-tpl" data-tpl="page">
+                    <div class="page-top-bar">
+                        <span class="page-top-brand"><strong>SentinelNet</strong> | ${T.heading}</span>
+                        <span class="page-top-meta">${escapeHtml(device)} &bull; ${escapeHtml(benchmark)}</span>
+                    </div>
+
+                    <div class="findings-list">
+                        ${findingsHeaderHtml}
+                    </div>
+
+                    <div class="pdf-page-footer">
+                        <span>${T.footerNotice}</span>
+                        <span class="page-num"></span>
+                    </div>
+                </div>
+
+                <div class="report-note pdf-tpl" data-tpl="note">${T.note}</div>`;
 
         const html = `<!doctype html>
 <html lang="${lang}">
@@ -790,33 +866,50 @@
 }
 @page {
     size: A4 portrait;
-    margin: 10mm 12mm 14mm 12mm;
+    margin: 0;
 }
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     color: #0f172a;
-    background: #ffffff;
+    background: #f1f5f9;
     margin: 0;
-    padding: 14px 18px;
+    padding: 16px 0;
     font-size: 10px;
     line-height: 1.45;
 }
-.report-container {
-    width: 100%;
-    max-width: 100%;
-    margin: 0 auto;
-    box-sizing: border-box;
-}
 .report-actions-bar {
-    display: none;
-    margin-bottom: 16px;
+    width: 210mm;
+    margin: 0 auto 16px auto;
     padding: 10px 16px;
     background: #0f172a;
     color: #ffffff;
-    border-radius: 2px;
+    border-radius: 4px;
+    display: none;
     justify-content: space-between;
     align-items: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.report-pages-container {
+    width: 210mm;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.pdf-page {
+    width: 210mm;
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+    box-sizing: border-box;
+    padding: 10mm 12mm 10mm 12mm;
+    margin: 0 auto;
+    background: #ffffff;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.12);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 .act-btn {
     padding: 6px 14px;
@@ -834,19 +927,39 @@ body {
 .act-btn-cyan { background: #0284c7; color: #fff; }
 .act-btn-gray { background: #475569; color: #fff; }
 
-/* Report Header */
+.page-top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1.5px solid #0f172a;
+    padding-bottom: 5px;
+    margin-bottom: 8px;
+    font-size: 9.5px;
+    color: #334155;
+    flex-shrink: 0;
+}
+.page-top-brand {
+    font-size: 10.5px;
+    color: #0f172a;
+    font-weight: 700;
+}
+.page-top-meta {
+    color: #64748b;
+    font-size: 9px;
+    font-weight: 600;
+}
+
 .report-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     border-bottom: 2px solid #0f172a;
-    padding-bottom: 10px;
-    margin-bottom: 14px;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
 }
 .brand-title {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 800;
     color: #0f172a;
     letter-spacing: -0.02em;
@@ -856,23 +969,22 @@ body {
     margin: 0;
 }
 .report-subtitle {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: #334155;
-    margin-top: 3px;
+    margin-top: 2px;
 }
 .header-tag {
     background: #e2e8f0;
     color: #1e293b;
     padding: 3px 8px;
     border-radius: 2px;
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
-/* Metadata Grid */
 .meta-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -880,130 +992,107 @@ body {
     background: #f8fafc;
     border: 1px solid #cbd5e1;
     border-radius: 2px;
-    padding: 8px 12px;
-    margin-bottom: 14px;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
 }
-.meta-item { font-size: 10px; }
+.meta-item { font-size: 9.5px; }
 .meta-label {
     color: #475569;
     font-weight: 700;
     text-transform: uppercase;
-    font-size: 8.5px;
+    font-size: 8px;
     letter-spacing: 0.04em;
     display: block;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
 }
 .meta-value {
     color: #0f172a;
     font-weight: 700;
-    font-size: 11px;
+    font-size: 10.5px;
     word-break: break-word;
 }
 
-/* KPI Summary Cards */
 .kpis {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 6px;
-    margin-bottom: 14px;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    margin-bottom: 10px;
+    flex-shrink: 0;
 }
 .kpi-card {
     background: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 2px;
-    padding: 6px 8px;
+    padding: 5px 6px;
     text-align: center;
     border-top: 3px solid #64748b;
-    break-inside: avoid;
-    page-break-inside: avoid;
 }
-.kpi-card.kpi-score { border-top-color: ${scoreColor}; background: #f8fafc; }
-.kpi-card.kpi-pass { border-top-color: #10b981; }
-.kpi-card.kpi-fail { border-top-color: #ef4444; }
-.kpi-card.kpi-warn { border-top-color: #f59e0b; }
-.kpi-card.kpi-unknown { border-top-color: #94a3b8; }
-.kpi-num {
-    font-size: 17px;
-    font-weight: 800;
-    line-height: 1.1;
-    color: #0f172a;
-}
-.kpi-card.kpi-score .kpi-num { color: ${scoreColor}; }
-.kpi-card.kpi-pass .kpi-num { color: #059669; }
-.kpi-card.kpi-fail .kpi-num { color: #dc2626; }
-.kpi-card.kpi-warn .kpi-num { color: #d97706; }
-.kpi-card.kpi-unknown .kpi-num { color: #475569; }
-.kpi-label {
-    font-size: 8.5px;
-    font-weight: 700;
-    color: #475569;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    margin-top: 2px;
-}
+.kpi-score { border-top-color: ${scoreColor}; background: #f8fafc; }
+.kpi-pass { border-top-color: #10b981; }
+.kpi-fail { border-top-color: #ef4444; }
+.kpi-warn { border-top-color: #f59e0b; }
+.kpi-unknown { border-top-color: #94a3b8; }
+.kpi-num { font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+.kpi-score .kpi-num { color: ${scoreColor}; }
+.kpi-pass .kpi-num { color: #059669; }
+.kpi-fail .kpi-num { color: #dc2626; }
+.kpi-warn .kpi-num { color: #d97706; }
+.kpi-unknown .kpi-num { color: #475569; }
+.kpi-label { font-size: 8px; font-weight: 700; text-transform: uppercase; color: #475569; margin-top: 2px; }
 
-/* Warning banner */
 .warn-banner {
     background: #fffbeb;
     border: 1px solid #fde68a;
     color: #92400e;
-    padding: 8px 12px;
+    padding: 5px 8px;
+    font-size: 9px;
     border-radius: 2px;
-    margin-bottom: 14px;
-    font-size: 10.5px;
-    line-height: 1.4;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    margin-bottom: 10px;
+    flex-shrink: 0;
 }
 
-/* Findings Table */
-table.findings-table {
+.findings-list {
     width: 100%;
-    table-layout: fixed;
-    border-collapse: collapse;
-    font-size: 10px;
-    background: #ffffff;
+    margin-bottom: 8px;
 }
-thead { display: table-header-group; }
-th {
+.findings-header {
+    display: grid;
+    grid-template-columns: 80px 1fr 65px 75px 165px;
+    gap: 8px;
     background: #0f172a;
     color: #ffffff;
-    padding: 6px 8px;
-    font-size: 9.5px;
+    padding: 5px 8px;
+    font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     border: 1px solid #0f172a;
-    text-align: left;
+    align-items: center;
 }
-tr.finding-row {
-    border-bottom: 1px solid #cbd5e1;
-    break-inside: avoid;
-    page-break-inside: avoid;
-}
-tr.finding-row:nth-child(even) { background: #f8fafc; }
-td {
+.finding-card {
+    display: grid;
+    grid-template-columns: 80px 1fr 65px 75px 165px;
+    gap: 8px;
     padding: 6px 8px;
-    vertical-align: top;
+    background: #ffffff;
     border: 1px solid #cbd5e1;
-    word-break: break-word;
-    overflow-wrap: break-word;
+    border-top: none;
+    font-size: 9.5px;
+    align-items: start;
 }
-.col-id { width: 12%; word-break: break-all; }
-.col-check { width: 52%; word-break: break-word; }
-.col-sev { width: 8%; text-align: center; }
-.col-status { width: 8%; text-align: center; }
-.col-fix { width: 20%; word-break: break-word; }
+.finding-card:nth-child(even) { background: #f8fafc; }
+.col-id { word-break: break-all; }
+.col-check { min-width: 0; word-break: break-word; }
+.col-sev { text-align: center; }
+.col-status { text-align: center; }
+.col-fix { min-width: 0; word-break: break-word; }
+.col-detail { grid-column: 2 / -1; min-width: 0; }
 
-/* Badges */
 .badge {
     display: inline-block;
     padding: 2px 5px;
-    font-size: 8.5px;
+    font-size: 8px;
     font-weight: 700;
     border-radius: 2px;
     text-transform: uppercase;
@@ -1019,175 +1108,236 @@ td {
 .badge-high { background: #ea580c; color: #ffffff; }
 .badge-medium { background: #f59e0b; color: #000000; }
 .badge-low { background: #64748b; color: #ffffff; }
-.badge-ref { background: #e2e8f0; color: #1e293b; font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 8.5px; font-weight: 600; margin-top: 3px; }
-.ref-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.col-status .badge { white-space: normal; }
+.badge-ref { background: #e2e8f0; color: #1e293b; font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 8px; font-weight: 600; margin-top: 2px; }
 
-/* Rule details */
-.rule-id { font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9.5px; color: #0f172a; font-weight: 700; word-break: break-all; }
-.rule-title { font-weight: 700; color: #0f172a; font-size: 11px; margin-bottom: 2px; line-height: 1.35; }
-.rule-desc { color: #0f172a; font-size: 10px; margin-top: 2px; line-height: 1.4; }
-.guidance-box {
-    margin-top: 5px;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    border-radius: 2px;
-    padding: 6px 8px;
-    font-size: 9.5px;
-    line-height: 1.45;
-    color: #0f172a !important;
-    break-inside: avoid;
-    page-break-inside: avoid;
+/* Il report riporta comandi CLI: nessuna legatura, altrimenti «/ set» o «!=»
+   vengono disegnati come un glifo solo e il comando non e' piu' copiabile
+   a occhio da chi lo esegue sull'apparato. */
+.rule-id, .badge-ref, .verify-box code, .evidence-box, .remediation-code {
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0;
 }
-.guide-item { margin-bottom: 3px; color: #0f172a !important; }
+.pdf-tpl { display: none !important; }
+.pdf-page.pdf-page-tall { height: auto; max-height: none; }
+.ref-badges { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 3px; }
+
+.rule-id { font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9px; color: #0f172a; font-weight: 700; word-break: break-all; }
+.rule-title { font-weight: 700; color: #0f172a; font-size: 10.5px; margin-bottom: 2px; line-height: 1.3; }
+.rule-desc { color: #334155; font-size: 9.5px; margin-top: 2px; line-height: 1.35; }
+
+.guidance-box {
+    margin-top: 4px;
+    background: #f8fafc;
+    border-left: 3px solid #64748b;
+    padding: 4px 6px;
+    font-size: 9px;
+    line-height: 1.35;
+}
+.guide-item { margin-bottom: 2px; }
 .guide-item:last-child { margin-bottom: 0; }
-.guide-lbl { font-weight: 800; color: #0f172a !important; margin-right: 3px; }
-.guide-val { color: #0f172a !important; font-weight: 500; }
+.guide-lbl { color: #0f172a; font-weight: 700; }
+.guide-val { color: #334155; }
 
 .verify-box {
-    margin-top: 5px;
-    font-size: 9.5px;
-    color: #0f172a;
-    background: #f8fafc;
+    margin-top: 4px;
+    background: #f1f5f9;
     border: 1px solid #cbd5e1;
-    padding: 4px 6px;
     border-radius: 2px;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    padding: 3px 6px;
+    font-size: 8.5px;
 }
-.verify-box code { font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; color: #0f172a; font-weight: 600; white-space: pre-wrap; word-break: break-all; font-size: 9px; }
-.verify-lbl { font-weight: 700; color: #334155; margin-right: 4px; }
+.verify-lbl { font-weight: 600; color: #475569; margin-right: 4px; }
+.verify-box code { font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; color: #0f172a; }
 
 .evidence-box {
-    margin-top: 5px;
-    border: 1px solid #fca5a5;
-    background: #fff5f5;
+    margin-top: 4px;
+    background: #fff;
+    border: 1px solid #fecaca;
     border-radius: 2px;
-    padding: 5px 8px;
-    break-inside: avoid;
-    page-break-inside: avoid;
-}
-.evidence-hdr { font-size: 9px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; }
-.evidence-item {
+    padding: 4px 6px;
     font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
-    font-size: 9px;
-    display: flex;
-    gap: 6px;
-    padding: 1px 0;
-    flex-wrap: wrap;
-    color: #0f172a;
+    font-size: 8px;
+    line-height: 1.35;
 }
+.evidence-hdr {
+    color: #991b1b;
+    font-weight: 700;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+}
+.evidence-item { display: flex; gap: 8px; margin-bottom: 1px; }
 .evidence-line { color: #475569; font-weight: 700; min-width: 45px; }
-.evidence-ctx { color: #0f172a; font-weight: 700; min-width: 100px; }
-.evidence-txt { color: #b91c1c; font-weight: 700; word-break: break-all; }
+.evidence-ctx { color: #0f172a; font-weight: 700; min-width: 95px; }
+.evidence-txt { color: #b91c1c; font-weight: 700; overflow-wrap: anywhere; }
 
 .remediation-code {
     font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
-    font-size: 9px;
+    font-size: 8.5px;
     background: #f0f9ff;
     border: 1px solid #bae6fd;
     color: #0369a1;
-    padding: 4px 6px;
+    padding: 3px 5px;
     border-radius: 2px;
     display: block;
     font-weight: 600;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
 }
 
-/* Footer & Note */
 .report-note {
-    font-size: 9px;
+    font-size: 8.5px;
     color: #475569;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
     border-radius: 2px;
-    padding: 7px 10px;
-    margin-top: 14px;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    padding: 5px 8px;
+    margin-top: auto;
+    margin-bottom: 6px;
 }
-.report-footer {
-    margin-top: 16px;
-    padding-top: 8px;
+.pdf-page-footer {
+    margin-top: auto;
+    padding-top: 5px;
     border-top: 1px solid #cbd5e1;
-    font-size: 9px;
-    color: #475569;
+    font-size: 8px;
+    color: #64748b;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    flex-shrink: 0;
 }
 
 @media print {
-    body { padding: 0; margin: 0; }
+    body { padding: 0; margin: 0; background: #ffffff; }
     .no-print { display: none !important; }
-    .report-container { max-width: 100%; width: 100%; }
+    /* Lo stacco fra i fogli dell'anteprima, in stampa, spinge ogni pagina
+       piu' in basso della precedente: il taglio non cade piu' dove lo ha
+       messo l'impaginatore. */
+    .report-pages-container { width: 100%; margin: 0; display: block; gap: 0; }
+    .pdf-page {
+        margin: 0;
+        box-shadow: none;
+        width: 100%;
+        height: 297mm;
+        max-height: 297mm;
+        min-height: 297mm;
+        page-break-after: always;
+        break-after: page;
+    }
+    /* L'ultima pagina non chiede un foglio dopo di se': sarebbe bianco. */
+    .pdf-page:last-child { page-break-after: auto; break-after: auto; }
 }
 </style>
 <base href="/">
-<script src="/static/vendor/html2pdf/html2pdf.bundle.min.js"></script>
 <script>
+// Impagina misurando: una scheda entra nella pagina finche' il piede resta
+// dentro il box di padding. Nessuna stima di altezza, quindi ne' pagine mezze
+// vuote ne' schede tagliate dall'overflow.
+function paginateReport() {
+    var container = document.querySelector('.report-pages-container');
+    if (!container) return;
+    var pageTpl = container.querySelector('[data-tpl="page"]');
+    var noteTpl = container.querySelector('[data-tpl="note"]');
+    if (!pageTpl) return;
+    container.removeChild(pageTpl);
+    if (noteTpl) container.removeChild(noteTpl);
+    pageTpl.classList.remove('pdf-tpl');
+    pageTpl.removeAttribute('data-tpl');
+    if (noteTpl) {
+        noteTpl.classList.remove('pdf-tpl');
+        noteTpl.removeAttribute('data-tpl');
+    }
+
+    function overflows(page) {
+        var foot = page.querySelector('.pdf-page-footer');
+        var pad = parseFloat(getComputedStyle(page).paddingBottom) || 0;
+        return foot.getBoundingClientRect().bottom
+             > page.getBoundingClientRect().bottom - pad + 0.5;
+    }
+
+    function addPage() {
+        var p = pageTpl.cloneNode(true);
+        container.appendChild(p);
+        return p;
+    }
+
+    var page = container.querySelector('.pdf-page');
+    var list = page.querySelector('.findings-list');
+    var cards = Array.prototype.slice.call(list.querySelectorAll('.finding-card'));
+    cards.forEach(function(c) { list.removeChild(c); });
+
+    // Una pagina cresciuta non va piu' in overflow: senza questo, tutte le
+    // schede successive le finirebbero dentro.
+    var startNewPage = false;
+
+    for (var i = 0; i < cards.length; i++) {
+        if (startNewPage) {
+            page = addPage();
+            list = page.querySelector('.findings-list');
+            startNewPage = false;
+        }
+        list.appendChild(cards[i]);
+        if (!overflows(page)) continue;
+        if (list.querySelectorAll('.finding-card').length > 1) {
+            list.removeChild(cards[i]);
+            page = addPage();
+            list = page.querySelector('.findings-list');
+            list.appendChild(cards[i]);
+        }
+        // Le evidenze sono una riga per policy: non hanno un tetto, quindi una
+        // scheda puo' superare l'altezza di una pagina. Su una pagina di
+        // altezza fissa «overflow: hidden» la taglierebbe in silenzio, e un
+        // report di conformita' che perde evidenze senza dirlo e' peggio di un
+        // report con una pagina piu' lunga delle altre.
+        if (overflows(page)) {
+            page.classList.add('pdf-page-tall');
+            startNewPage = true;
+        }
+    }
+
+    if (noteTpl) {
+        page.insertBefore(noteTpl, page.querySelector('.pdf-page-footer'));
+        if (overflows(page)) {
+            page.removeChild(noteTpl);
+            page = addPage();
+            page.insertBefore(noteTpl, page.querySelector('.pdf-page-footer'));
+        }
+    }
+
+    var pages = container.querySelectorAll('.pdf-page');
+    for (var j = 0; j < pages.length; j++) {
+        pages[j].id = 'pdf-page-' + (j + 1);
+        var num = pages[j].querySelector('.page-num');
+        if (num) num.textContent = '${pageLabel} ' + (j + 1) + ' / ' + pages.length;
+    }
+}
+
 window.addEventListener('DOMContentLoaded', function() {
     if (window.self === window.top) {
         var bar = document.querySelector('.report-actions-bar');
         if (bar) bar.style.display = 'flex';
     }
+    // I font monospace cambiano l'ingombro delle evidenze: misurare prima che
+    // siano pronti sposterebbe i tagli di pagina.
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(paginateReport);
+    } else {
+        paginateReport();
+    }
 });
 
-async function downloadPdf() {
-    var btn = document.querySelector('.act-btn-green');
-    var origText = btn ? btn.textContent : '';
-    if (btn) btn.textContent = '...';
-
-    var h2p = (typeof html2pdf !== 'undefined') ? html2pdf : (window.parent && window.parent.html2pdf);
-    if (!h2p && window.parent && typeof window.parent.ensureHtml2Pdf === 'function') {
-        try {
-            h2p = await window.parent.ensureHtml2Pdf();
-        } catch(err) {}
+// Il PDF lo stampa il server con lo stesso motore che disegna questa pagina.
+// html2canvas ridisegnava il documento in una tela sola e la affettava a passo
+// fisso: bastava una scheda piu' alta di una pagina perche' ogni foglio
+// successivo cadesse a un terzo di pagina dal taglio giusto.
+function downloadPdf() {
+    if (window.parent && typeof window.parent.downloadModalPdf === 'function') {
+        return window.parent.downloadModalPdf();
     }
-
-    if (h2p) {
-        var opt = {
-            margin: 10,
-            filename: '${filename}.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                logging: false,
-                scrollY: 0,
-                scrollX: 0
-            },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-            pagebreak: { mode: 'css' }
-        };
-        var styleEl = document.querySelector('style');
-        var reportEl = document.querySelector('.report-container');
-        var wrapper = document.createElement('div');
-        wrapper.style.width = '100%';
-        wrapper.style.boxSizing = 'border-box';
-        wrapper.style.padding = '0 6px';
-        wrapper.style.background = '#ffffff';
-        if (styleEl) wrapper.appendChild(styleEl.cloneNode(true));
-        if (reportEl) {
-            var clone = reportEl.cloneNode(true);
-            clone.querySelectorAll('.no-print').forEach(function(el) { el.remove(); });
-            wrapper.appendChild(clone);
-        }
-        try {
-            await h2p().set(opt).from(wrapper).save();
-        } catch(e) {
-            console.error('PDF error:', e);
-            alert('Errore durante la generazione del PDF: ' + (e.message || e));
-        } finally {
-            if (btn) btn.textContent = origText;
-        }
-    } else {
-        if (btn) btn.textContent = origText;
-        alert('Libreria PDF non caricata. Riprova.');
-    }
+    window.print();
 }
 
 function downloadDocx() {
@@ -1211,66 +1361,21 @@ function downloadHtml() {
 </script>
 </head>
 <body>
-<div class="report-container">
-    <div class="no-print report-actions-bar">
-        <div>
-            <strong style="font-size:13px;">SentinelNet</strong>
-            <span style="color:#cbd5e1; font-size:12px;"> — ${T.subheading}</span>
-        </div>
-        <div>
-            <button onclick="downloadPdf()" class="act-btn act-btn-green">${T.pdf}</button>
-            <button onclick="downloadDocx()" class="act-btn act-btn-cyan"><i class="fa-solid fa-file-word"></i> DOCX</button>
-            <button onclick="downloadHtml()" class="act-btn act-btn-gray">${T.html}</button>
-            <button onclick="window.print()" class="act-btn act-btn-blue">${T.printVector}</button>
-        </div>
+<div class="no-print report-actions-bar">
+    <div>
+        <strong style="font-size:13px;">SentinelNet</strong>
+        <span style="color:#cbd5e1; font-size:12px;"> — ${T.subheading}</span>
     </div>
-
-    <div class="report-header">
-        <div>
-            <h1 class="brand-title">SentinelNet <span style="font-weight:400; color:#64748b;">|</span> ${T.heading}</h1>
-            <div class="report-subtitle">${escapeHtml(benchmark)}</div>
-        </div>
-        <div class="header-tag">Security Audit</div>
+    <div>
+        <button onclick="downloadPdf()" class="act-btn act-btn-green">${T.pdf}</button>
+        <button onclick="downloadDocx()" class="act-btn act-btn-cyan"><i class="fa-solid fa-file-word"></i> DOCX</button>
+        <button onclick="downloadHtml()" class="act-btn act-btn-gray">${T.html}</button>
+        <button onclick="window.print()" class="act-btn act-btn-blue">${T.printVector}</button>
     </div>
+</div>
 
-    <div class="meta-grid">
-        <div class="meta-item"><span class="meta-label">${T.device}</span><span class="meta-value">${escapeHtml(device)}</span></div>
-        <div class="meta-item"><span class="meta-label">${T.platform}</span><span class="meta-value">${escapeHtml(platform)}</span></div>
-        <div class="meta-item"><span class="meta-label">${T.benchmark}</span><span class="meta-value">${escapeHtml(benchmark)}</span></div>
-        <div class="meta-item"><span class="meta-label">${T.generatedOn}</span><span class="meta-value">${escapeHtml(generated)}</span></div>
-    </div>
-
-    ${partialBanner}
-
-    <div class="kpis">
-        <div class="kpi-card kpi-score"><div class="kpi-num">${escapeHtml(scoreTxt)}</div><div class="kpi-label">${T.score}</div></div>
-        <div class="kpi-card kpi-pass"><div class="kpi-num">${s.passed}</div><div class="kpi-label">${T.passed}</div></div>
-        <div class="kpi-card kpi-fail"><div class="kpi-num">${s.failed}</div><div class="kpi-label">${T.failed}</div></div>
-        <div class="kpi-card kpi-warn"><div class="kpi-num">${s.warned}</div><div class="kpi-label">${T.warned}</div></div>
-        <div class="kpi-card kpi-unknown"><div class="kpi-num">${unknown}</div><div class="kpi-label">${T.unknown}</div></div>
-    </div>
-
-    <table class="findings-table">
-        <thead>
-            <tr>
-                <th class="col-id">${T.thId}</th>
-                <th class="col-check">${T.thCheck}</th>
-                <th class="col-sev">${T.thSeverity}</th>
-                <th class="col-status">${T.thStatus}</th>
-                <th class="col-fix">${T.thFix}</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${rows}
-        </tbody>
-    </table>
-
-    <div class="report-note">${T.note}</div>
-
-    <div class="report-footer">
-        <span>${T.footerNotice}</span>
-        <span>${escapeHtml(generated)}</span>
-    </div>
+<div class="report-pages-container">
+${pagesHtml}
 </div>
 </body>
 </html>`;
@@ -1335,50 +1440,36 @@ function downloadHtml() {
             btn.disabled = true;
         }
         try {
-            const h2p = await ensureHtml2Pdf();
-            if (!h2p) {
-                throw new Error(currentLang === 'en' ? 'PDF library not loaded' : 'Libreria PDF non disponibile');
-            }
-
+            // Si manda al server l'HTML dell'anteprima gia' impaginato, e il
+            // server lo stampa con il browser di sistema: il PDF consegnato e'
+            // lo stesso documento che l'operatore ha appena guardato.
             const frame = document.getElementById('auditReportFrame');
             const doc = frame && frame.contentDocument ? frame.contentDocument : null;
-
-            const filename = (_currentReportFilename || 'compliance-report') + '.pdf';
-            const opt = {
-                margin: 10,
-                filename: filename,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: {
-                    scale: 2,
-                    useCORS: true,
-                    backgroundColor: '#ffffff',
-                    logging: false,
-                    scrollY: 0,
-                    scrollX: 0
-                },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-                pagebreak: { mode: 'css' }
-            };
-
-            const styleEl = doc ? doc.querySelector('style') : null;
-            const reportEl = doc ? doc.querySelector('.report-container') : null;
-
-            if (reportEl) {
-                const wrapper = document.createElement('div');
-                wrapper.style.width = '100%';
-                wrapper.style.boxSizing = 'border-box';
-                wrapper.style.padding = '0 6px';
-                wrapper.style.background = '#ffffff';
-                if (styleEl) wrapper.appendChild(styleEl.cloneNode(true));
-                const clone = reportEl.cloneNode(true);
-                clone.querySelectorAll('.no-print').forEach(el => el.remove());
-                wrapper.appendChild(clone);
-
-                await h2p().set(opt).from(wrapper).save();
-                showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
-            } else {
+            if (!doc) {
                 throw new Error(currentLang === 'en' ? 'Report content not found' : 'Contenuto del report non trovato');
             }
+
+            const res = await apiFetch('/api/netsec-audit/report/pdf', {
+                method: 'POST',
+                body: JSON.stringify({
+                    html: '<!doctype html>\n' + doc.documentElement.outerHTML,
+                    filename: _currentReportFilename || 'compliance-report'
+                })
+            });
+            if (!res || !res.ok) {
+                const detail = res ? ((await res.json().catch(() => ({}))).detail || res.status) : 'network';
+                throw new Error(String(detail));
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = (_currentReportFilename || 'compliance-report') + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
         } catch (e) {
             console.error('PDF export error:', e);
             showToast((currentLang === 'en' ? 'Failed to generate PDF: ' : 'Errore generazione PDF: ') + (e.message || e), 'error');

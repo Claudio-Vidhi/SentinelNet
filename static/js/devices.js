@@ -759,6 +759,145 @@
     // the optional verify step (see verifySelectedScanRows).
     let _scanRows = [];
 
+    // --- SUB-SCAN BACKGROUND JOB & ALERTING STATE ---
+    window._activeSubnetScanJob = window._activeSubnetScanJob || {
+        jobId: null,
+        type: 'scan',
+        network: '',
+        ports: '22',
+        total: 0,
+        progress: 0,
+        status: 'idle',
+        results: [],
+        isVerify: false,
+    };
+
+    function playNotificationChime() {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const now = ctx.currentTime;
+
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            osc1.type = 'sine';
+            osc1.frequency.setValueAtTime(587.33, now); // D5
+            gain1.gain.setValueAtTime(0.12, now);
+            gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc1.connect(gain1);
+            gain1.connect(ctx.destination);
+            osc1.start(now);
+            osc1.stop(now + 0.3);
+
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(880, now + 0.12); // A5
+            gain2.gain.setValueAtTime(0.12, now + 0.12);
+            gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.start(now + 0.12);
+            osc2.stop(now + 0.55);
+        } catch (e) {
+            // AudioContext blocked
+        }
+    }
+
+    function sendDesktopNotification(title, body) {
+        if (!('Notification' in window)) return;
+        if (Notification.permission === 'granted') {
+            try {
+                const n = new Notification(title, { body });
+                n.onclick = () => {
+                    window.focus();
+                    switchToDevicesAndOpenScan();
+                };
+            } catch (e) {}
+        } else if (Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }
+
+    function switchToDevicesAndOpenScan() {
+        if (typeof switchTab === 'function') {
+            switchTab('tab-devices');
+        }
+        openSubnetScanModal();
+    }
+
+    function updateFloatingScanWidget() {
+        const widget = document.getElementById('floatingScanWidget');
+        if (!widget) return;
+        const job = window._activeSubnetScanJob;
+        const modal = document.getElementById('subnetScanModal');
+        const isModalOpen = modal && modal.style.display !== 'none' && modal.style.display !== '';
+
+        if (!job || job.status !== 'running' || isModalOpen) {
+            widget.style.display = 'none';
+            return;
+        }
+
+        const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+        const titleEl = document.getElementById('floatingScanTitle');
+        const subEl = document.getElementById('floatingScanSubtitle');
+        if (titleEl) {
+            titleEl.textContent = job.isVerify
+                ? (L.lblScanVerifyRunningShort || (currentLang === 'en' ? 'Verifying credentials...' : 'Verifica credenziali...'))
+                : (L.lblScanRunningShort ? L.lblScanRunningShort.replace('{net}', job.network) : (currentLang === 'en' ? `Scanning: ${job.network}` : `Scansione: ${job.network}`));
+        }
+        if (subEl) {
+            const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
+            subEl.textContent = `${job.progress}/${job.total} host (${pct}%)`;
+        }
+        widget.style.display = 'flex';
+    }
+
+    function showScanCompletionAlert(msg, onAction) {
+        const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+        const old = document.querySelector('.scan-complete-toast');
+        if (old) old.remove();
+
+        const el = document.createElement('div');
+        el.className = 'scan-complete-toast';
+        el.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:10070;'
+            + 'padding:12px 18px; border-radius:0; font-size:13px;'
+            + 'font-family:var(--font-prose); color:var(--text);'
+            + 'background:var(--surface-3); box-shadow:var(--shadow-float);'
+            + 'border:1px solid var(--success, #10b981);'
+            + 'display:flex; align-items:center; gap:12px; max-width:520px;';
+
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-circle-check';
+        icon.style.cssText = 'color:var(--success, #10b981); font-size:16px; flex-shrink:0;';
+        el.appendChild(icon);
+
+        const text = document.createElement('span');
+        text.style.flex = '1';
+        text.textContent = msg;
+        el.appendChild(text);
+
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary btn-small';
+        btn.style.cssText = 'width:auto; margin:0; padding:4px 10px; font-size:12px; flex-shrink:0; cursor:pointer;';
+        btn.textContent = L.btnViewResults || (currentLang === 'en' ? 'View Results' : 'Mostra Risultati');
+        btn.onclick = () => {
+            el.remove();
+            if (onAction) onAction();
+        };
+        el.appendChild(btn);
+
+        const closeBtn = document.createElement('i');
+        closeBtn.className = 'fa-solid fa-xmark';
+        closeBtn.style.cssText = 'color:var(--text-muted); cursor:pointer; font-size:14px; margin-left:4px;';
+        closeBtn.onclick = () => el.remove();
+        el.appendChild(closeBtn);
+
+        document.body.appendChild(el);
+        setTimeout(() => { if (el.parentNode) el.remove(); }, 14000);
+    }
+
     function addScanPort(port) {
         const input = document.getElementById('scanPortsInput');
         const ports = input.value.split(',').map(s => s.trim()).filter(Boolean);
@@ -769,39 +908,73 @@
     function openSubnetScanModal() {
         // Populate group select from current globalGroups cache
         const sel = document.getElementById('scanGroupSelect');
-        sel.innerHTML = '';
-        Object.keys(globalGroups).forEach(g => {
-            const opt = document.createElement('option');
-            opt.value = g;
-            opt.textContent = g;
-            if (g === 'Generale') opt.selected = true;
-            sel.appendChild(opt);
-        });
+        if (sel) {
+            sel.innerHTML = '';
+            Object.keys(globalGroups).forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                if (g === 'Generale') opt.selected = true;
+                sel.appendChild(opt);
+            });
+        }
 
-        _scanRows = [];
-        document.getElementById('subnetScanResults').style.display = 'none';
-        document.getElementById('scanActionsBar').style.display = 'none';
-        document.getElementById('subnetScanResultsTable').innerHTML = '';
-        document.getElementById('subnetScanStatus').textContent = '';
-        document.getElementById('scanNetworkInput').value = '';
-        document.getElementById('scanPortsInput').value = '22';
-        // Il vendor torna "non impostato" a ogni apertura, come rete e porte.
-        // renderScanResults invece conserva la scelta (le serve per sopravvivere
-        // al ridisegno dopo la verifica): senza questo azzeramento il vendor
-        // dell'ultima scansione si applicherebbe da solo alla successiva, che e'
-        // di nuovo un vendor che l'utente non ha scelto.
-        document.getElementById('scanVerifyVendorSelect').innerHTML = buildScanVendorOptions('');
-        document.getElementById('btnAvviaScan').disabled = false;
+        const job = window._activeSubnetScanJob;
+        const bgBtn = document.getElementById('btnScanRunBackground');
+
+        if (job && job.status === 'running') {
+            // Restore active running scan state
+            if (job.network) document.getElementById('scanNetworkInput').value = job.network;
+            if (job.ports) document.getElementById('scanPortsInput').value = job.ports;
+            document.getElementById('subnetScanResults').style.display = 'block';
+            const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
+            document.getElementById('subnetScanProgressBar').style.transform = `scaleX(${pct / 100})`;
+            document.getElementById('subnetScanStatus').textContent = currentLang === 'en'
+                ? `Scanning — ${job.progress}/${job.total} hosts processed...`
+                : `Scansione in corso — ${job.progress}/${job.total} host elaborati...`;
+
+            const btn = document.getElementById('btnAvviaScan');
+            btn.disabled = true;
+            btn.innerHTML = currentLang === 'en'
+                ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...'
+                : '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
+            if (bgBtn) bgBtn.style.display = 'inline-flex';
+        } else if (job && job.status === 'done' && _scanRows.length > 0) {
+            // Restore finished results
+            if (job.network) document.getElementById('scanNetworkInput').value = job.network;
+            if (job.ports) document.getElementById('scanPortsInput').value = job.ports;
+            document.getElementById('subnetScanResults').style.display = 'block';
+            document.getElementById('subnetScanProgressBar').style.transform = 'scaleX(1)';
+            scanStartButtonIdle();
+            if (bgBtn) bgBtn.style.display = 'none';
+            renderScanResults(_scanRows);
+        } else {
+            _scanRows = [];
+            document.getElementById('subnetScanResults').style.display = 'none';
+            document.getElementById('scanActionsBar').style.display = 'none';
+            document.getElementById('subnetScanResultsTable').innerHTML = '';
+            document.getElementById('subnetScanStatus').textContent = '';
+            document.getElementById('scanNetworkInput').value = '';
+            document.getElementById('scanPortsInput').value = '22';
+            document.getElementById('scanVerifyVendorSelect').innerHTML = buildScanVendorOptions('');
+            scanStartButtonIdle();
+            if (bgBtn) bgBtn.style.display = 'none';
+        }
+
         document.getElementById('subnetScanModal').style.display = 'flex';
+        updateFloatingScanWidget();
     }
 
     function closeSubnetScanModal() {
-        if (_scanJobInterval) { clearInterval(_scanJobInterval); _scanJobInterval = null; }
-        document.getElementById('subnetScanModal').style.display = 'none';
+        // Leaving scan running in background: do not cancel interval if running!
+        const modal = document.getElementById('subnetScanModal');
+        if (modal) modal.style.display = 'none';
+        updateFloatingScanWidget();
     }
 
     function scanStartButtonIdle() {
         const b = document.getElementById('btnAvviaScan');
+        if (!b) return;
         b.disabled = false;
         b.innerHTML = currentLang === 'en'
             ? '<i class="fa-solid fa-satellite-dish"></i> Start Scan'
@@ -829,6 +1002,14 @@
         document.getElementById('subnetScanStatus').textContent =
             currentLang === 'en' ? 'Starting scan...' : 'Avvio scansione...';
 
+        const bgBtn = document.getElementById('btnScanRunBackground');
+        if (bgBtn) bgBtn.style.display = 'inline-flex';
+
+        // Request browser notification permission if not yet decided
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
         const res = await apiFetch('/api/scan-subnet', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -839,6 +1020,7 @@
             document.getElementById('subnetScanStatus').textContent =
                 (currentLang === 'en' ? 'Error: ' : 'Errore: ') +
                 (err.detail || (currentLang === 'en' ? 'unable to start scan.' : 'impossibile avviare la scansione.'));
+            if (bgBtn) bgBtn.style.display = 'none';
             scanStartButtonIdle();
             return;
         }
@@ -849,38 +1031,90 @@
         btn.innerHTML = currentLang === 'en'
             ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Scanning...'
             : '<i class="fa-solid fa-circle-notch fa-spin"></i> Scansione in corso...';
-        pollScanJob(job_id, total_hosts);
+        pollScanJob(job_id, total_hosts, network, ports.join(','));
     }
 
-    function pollScanJob(jobId, totalHosts) {
+    function pollScanJob(jobId, totalHosts, network, portsStr) {
+        window._activeSubnetScanJob = {
+            jobId,
+            type: 'scan',
+            network: network || '',
+            ports: portsStr || '22',
+            total: totalHosts,
+            progress: 0,
+            status: 'running',
+            results: [],
+            isVerify: false,
+            startTime: Date.now()
+        };
+        updateFloatingScanWidget();
+
         _scanJobInterval = setInterval(async () => {
             const res = await apiFetch(`/api/scan-subnet/${jobId}`);
             if (!res || !res.ok) {
                 clearInterval(_scanJobInterval); _scanJobInterval = null;
-                document.getElementById('subnetScanStatus').textContent =
-                    currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
+                window._activeSubnetScanJob.status = 'error';
+                updateFloatingScanWidget();
+                const bgBtn = document.getElementById('btnScanRunBackground');
+                if (bgBtn) bgBtn.style.display = 'none';
+                const st = document.getElementById('subnetScanStatus');
+                if (st) st.textContent = currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
                 scanStartButtonIdle();
                 return;
             }
             const data = await res.json();
             const total = data.total || totalHosts;
             const pct = total > 0 ? Math.round((data.progress / total) * 100) : 0;
-            document.getElementById('subnetScanProgressBar').style.transform = `scaleX(${pct / 100})`;
-            document.getElementById('subnetScanStatus').textContent = currentLang === 'en'
-                ? `Scanning — ${data.progress}/${total} hosts processed...`
-                : `Scansione in corso — ${data.progress}/${total} host elaborati...`;
+
+            window._activeSubnetScanJob.progress = data.progress;
+            window._activeSubnetScanJob.total = total;
+            updateFloatingScanWidget();
+
+            const pBar = document.getElementById('subnetScanProgressBar');
+            if (pBar) pBar.style.transform = `scaleX(${pct / 100})`;
+            const st = document.getElementById('subnetScanStatus');
+            if (st) {
+                st.textContent = currentLang === 'en'
+                    ? `Scanning — ${data.progress}/${total} hosts processed...`
+                    : `Scansione in corso — ${data.progress}/${total} host elaborati...`;
+            }
 
             if (data.status !== 'running') {
                 clearInterval(_scanJobInterval); _scanJobInterval = null;
+                window._activeSubnetScanJob.status = data.status;
+                window._activeSubnetScanJob.results = data.results || [];
+                updateFloatingScanWidget();
                 scanStartButtonIdle();
-                document.getElementById('subnetScanProgressBar').style.transform = 'scaleX(1)';
+                const bgBtn = document.getElementById('btnScanRunBackground');
+                if (bgBtn) bgBtn.style.display = 'none';
+                if (pBar) pBar.style.transform = 'scaleX(1)';
+
                 if (data.status === 'error') {
-                    document.getElementById('subnetScanStatus').textContent =
-                        currentLang === 'en' ? 'Scan finished with error.' : 'Scansione terminata con errore.';
+                    if (st) st.textContent = currentLang === 'en' ? 'Scan finished with error.' : 'Scansione terminata con errore.';
                     return;
                 }
                 _scanRows = (data.results || []).map(r => ({ ...r, verify: null }));
                 renderScanResults(_scanRows);
+
+                // Multi-channel completion alert
+                const count = _scanRows.length;
+                const netStr = window._activeSubnetScanJob.network || network || 'subnet';
+                const alertMsg = currentLang === 'en'
+                    ? `Subnet scan completed! Found ${count} active host(s) on ${netStr}.`
+                    : `Scansione Subnet completata! Trovati ${count} host attivi su ${netStr}.`;
+
+                playNotificationChime();
+                sendDesktopNotification('SentinelNet', alertMsg);
+
+                const modal = document.getElementById('subnetScanModal');
+                const isModalOpen = modal && modal.style.display !== 'none' && modal.style.display !== '';
+                if (!isModalOpen || document.hidden) {
+                    showScanCompletionAlert(alertMsg, () => {
+                        switchToDevicesAndOpenScan();
+                    });
+                } else {
+                    showToast(alertMsg, 'success');
+                }
             }
         }, 2000);
     }
@@ -892,29 +1126,36 @@
 
     function refreshScanActionButtons() {
         const n = selectedScanIps().length;
-        const L = i18n[currentLang];
-        const identity = document.getElementById('scanIdentitySelect').value;
-        const vendor = document.getElementById('scanVerifyVendorSelect').value;
+        const L = i18n[currentLang] || {};
+        const identity = document.getElementById('scanIdentitySelect')?.value;
+        const vendor = document.getElementById('scanVerifyVendorSelect')?.value;
         const verifyBtn = document.getElementById('btnScanVerify');
         const addBtn = document.getElementById('btnScanAddSelected');
-        verifyBtn.textContent = (L.btnScanVerify || 'Verifica selezionati ({n})').replace('{n}', n);
-        addBtn.textContent = (L.btnScanAddSelected || 'Aggiungi selezionati ({n})').replace('{n}', n);
-        // Verify authenticates: it needs a selection, an identity AND a vendor
-        // (probe_device resolves the driver from it — there is no sane default).
-        verifyBtn.disabled = n === 0 || !identity || !vendor;
-        addBtn.disabled = n === 0;
+        if (verifyBtn) {
+            verifyBtn.textContent = (L.btnScanVerify || 'Verifica selezionati ({n})').replace('{n}', n);
+            verifyBtn.disabled = n === 0 || !identity || !vendor;
+        }
+        if (addBtn) {
+            addBtn.textContent = (L.btnScanAddSelected || 'Aggiungi selezionati ({n})').replace('{n}', n);
+            addBtn.disabled = n === 0;
+        }
     }
 
     function renderScanResults(rows) {
-        const L = i18n[currentLang];
-        document.getElementById('subnetScanStatus').textContent =
-            (L.scanFoundCount || 'Trovati {n} host').replace('{n}', rows.length);
+        const L = i18n[currentLang] || {};
+        const st = document.getElementById('subnetScanStatus');
+        if (st) {
+            st.textContent = (L.scanFoundCount || 'Trovati {n} host').replace('{n}', rows.length);
+        }
+
+        const tableEl = document.getElementById('subnetScanResultsTable');
+        const actionsBar = document.getElementById('scanActionsBar');
+        if (!tableEl) return;
 
         if (rows.length === 0) {
-            document.getElementById('subnetScanResultsTable').innerHTML =
-                `<div style="padding:14px; color:var(--text-muted); font-size:13px;">${
-                    escapeHtml(L.scanNoHosts || 'Nessun host ha risposto.')}</div>`;
-            document.getElementById('scanActionsBar').style.display = 'none';
+            tableEl.innerHTML = `<div style="padding:14px; color:var(--text-muted); font-size:13px;">${
+                escapeHtml(L.scanNoHosts || 'Nessun host ha risposto.')}</div>`;
+            if (actionsBar) actionsBar.style.display = 'none';
             return;
         }
 
@@ -931,7 +1172,7 @@
           </div>`;
 
         const body = rows.map(r => {
-            const ports = r.open_ports.length
+            const ports = (r.open_ports && r.open_ports.length)
                 ? escapeHtml(r.open_ports.join(', '))
                 : '<span style="color:var(--text-muted)">—</span>';
             let verifyCell = '<span style="color:var(--text-muted)">—</span>';
@@ -956,12 +1197,14 @@
               </div>`;
         }).join('');
 
-        document.getElementById('subnetScanResultsTable').innerHTML = header + body;
-        document.getElementById('scanActionsBar').style.display = 'flex';
+        tableEl.innerHTML = header + body;
+        if (actionsBar) actionsBar.style.display = 'flex';
         populateScanIdentitySelect();
         const vendorSel = document.getElementById('scanVerifyVendorSelect');
-        vendorSel.innerHTML = buildScanVendorOptions(vendorSel.value);
-        vendorSel.onchange = refreshScanActionButtons;
+        if (vendorSel) {
+            vendorSel.innerHTML = buildScanVendorOptions(vendorSel.value);
+            vendorSel.onchange = refreshScanActionButtons;
+        }
         refreshScanActionButtons();
     }
 
@@ -983,10 +1226,10 @@
 
     async function populateScanIdentitySelect() {
         const sel = document.getElementById('scanIdentitySelect');
-        const L = i18n[currentLang];
+        if (!sel) return;
+        const L = i18n[currentLang] || {};
         const res = await apiFetch('/api/identities');
         const identities = (res && res.ok) ? (await res.json()).identities || [] : [];
-        // Empty value = no identity chosen: verify stays disabled, add still works.
         sel.innerHTML = `<option value="">${
             escapeHtml(L.optScanNoIdentity || '— nessuna (solo scoperta) —')}</option>` +
             identities.map(i => `<option value="${escapeHtml(i.id)}">${
@@ -996,12 +1239,16 @@
 
     async function verifySelectedScanRows() {
         const ips = selectedScanIps();
-        const identityId = document.getElementById('scanIdentitySelect').value;
-        const vendor = document.getElementById('scanVerifyVendorSelect').value;
+        const identityId = document.getElementById('scanIdentitySelect')?.value;
+        const vendor = document.getElementById('scanVerifyVendorSelect')?.value;
         if (!ips.length || !identityId) return;
 
-        const L = i18n[currentLang];
-        document.getElementById('btnScanVerify').disabled = true;
+        const L = i18n[currentLang] || {};
+        const verifyBtn = document.getElementById('btnScanVerify');
+        if (verifyBtn) verifyBtn.disabled = true;
+
+        const bgBtn = document.getElementById('btnScanRunBackground');
+        if (bgBtn) bgBtn.style.display = 'inline-flex';
 
         const res = await apiFetch('/api/scan-verify', {
             method: 'POST',
@@ -1010,49 +1257,90 @@
         });
         if (!res || !res.ok) {
             const err = res ? await res.json() : { detail: currentLang === 'en' ? 'Network error' : 'Errore di rete' };
-            document.getElementById('subnetScanStatus').textContent =
-                (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || '');
+            const st = document.getElementById('subnetScanStatus');
+            if (st) st.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + (err.detail || '');
+            if (bgBtn) bgBtn.style.display = 'none';
             refreshScanActionButtons();
             return;
         }
         const { job_id } = await res.json();
 
-        // Same job machinery and same polling endpoint as the scan, but a job
-        // of its own: the discovery job may already have been collected.
+        window._activeSubnetScanJob = {
+            jobId: job_id,
+            type: 'verify',
+            network: '',
+            ports: '',
+            total: ips.length,
+            progress: 0,
+            status: 'running',
+            results: [],
+            isVerify: true,
+            startTime: Date.now()
+        };
+        updateFloatingScanWidget();
+
         const interval = setInterval(async () => {
             const poll = await apiFetch(`/api/scan-subnet/${job_id}`);
             if (!poll || !poll.ok) {
                 clearInterval(interval);
-                document.getElementById('subnetScanStatus').textContent =
-                    currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
+                window._activeSubnetScanJob.status = 'error';
+                updateFloatingScanWidget();
+                if (bgBtn) bgBtn.style.display = 'none';
+                const st = document.getElementById('subnetScanStatus');
+                if (st) st.textContent = currentLang === 'en' ? 'Error during polling.' : 'Errore durante il polling.';
                 refreshScanActionButtons();
                 return;
             }
             const data = await poll.json();
-            document.getElementById('subnetScanStatus').textContent =
-                (L.scanVerifyRunning || 'Verifica in corso — {done}/{total}...')
+            window._activeSubnetScanJob.progress = data.progress;
+            window._activeSubnetScanJob.total = data.total;
+            updateFloatingScanWidget();
+
+            const st = document.getElementById('subnetScanStatus');
+            if (st) {
+                st.textContent = (L.scanVerifyRunning || 'Verifica in corso — {done}/{total}...')
                     .replace('{done}', data.progress).replace('{total}', data.total);
+            }
 
             if (data.status !== 'running') {
                 clearInterval(interval);
+                window._activeSubnetScanJob.status = data.status;
+                updateFloatingScanWidget();
+                if (bgBtn) bgBtn.style.display = 'none';
+
                 if (data.status === 'error') {
-                    document.getElementById('subnetScanStatus').textContent =
-                        currentLang === 'en' ? 'Verify finished with error.' : 'Verifica terminata con errore.';
+                    if (st) st.textContent = currentLang === 'en' ? 'Verify finished with error.' : 'Verifica terminata con errore.';
                     refreshScanActionButtons();
                     return;
                 }
-                // Merge by IP into the rows already on screen.
                 const selected = new Set(ips);
                 (data.results || []).forEach(v => {
                     const row = _scanRows.find(r => r.ip === v.ip);
                     if (row) row.verify = v;
                 });
                 renderScanResults(_scanRows);
-                // renderScanResults rebuilds the table, so restore the selection.
                 document.querySelectorAll('.scan-row-cb').forEach(cb => {
                     cb.checked = selected.has(cb.dataset.ip);
                 });
                 refreshScanActionButtons();
+
+                const okCount = (data.results || []).filter(r => r.ok).length;
+                const alertMsg = currentLang === 'en'
+                    ? `Credential verification completed: ${okCount}/${ips.length} succeeded.`
+                    : `Verifica credenziali completata: ${okCount}/${ips.length} con successo.`;
+
+                playNotificationChime();
+                sendDesktopNotification('SentinelNet', alertMsg);
+
+                const modal = document.getElementById('subnetScanModal');
+                const isModalOpen = modal && modal.style.display !== 'none' && modal.style.display !== '';
+                if (!isModalOpen || document.hidden) {
+                    showScanCompletionAlert(alertMsg, () => {
+                        switchToDevicesAndOpenScan();
+                    });
+                } else {
+                    showToast(alertMsg, 'success');
+                }
             }
         }, 2000);
     }
@@ -1514,6 +1802,14 @@
 
     // Subnet Scan modal listeners
     document.getElementById('btnCloseSubnetScan')?.addEventListener('click', closeSubnetScanModal);
+    document.getElementById('btnScanRunBackground')?.addEventListener('click', () => {
+        closeSubnetScanModal();
+        const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+        showToast(L.msgScanRunningBackground || (currentLang === 'en' ? 'Scan is continuing in the background.' : 'La scansione continua in background.'), 'info');
+    });
+    document.getElementById('floatingScanWidget')?.addEventListener('click', () => {
+        switchToDevicesAndOpenScan();
+    });
     document.getElementById('subnetScanModal')?.addEventListener('click', (e) => {
         const portBtn = e.target.closest('[data-action="add-scan-port"]');
         if (portBtn && portBtn.dataset.port) {

@@ -2,6 +2,11 @@
 """Router Analyzer. Estratto da app_server.py (fase 6.6)."""
 
 import json
+import os
+import re
+import subprocess
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -85,6 +90,80 @@ def config_analyzer_convert(payload: ConvertSchema, current_user = Depends(get_c
     if from_ip:
         result["source_text"] = text
     return result
+
+
+class ReportPdfSchema(BaseModel):
+    """HTML gia' impaginato dall'anteprima, da stampare cosi' com'e'."""
+    html: str
+    filename: str = "compliance-report"
+
+
+def _browser_executable() -> Optional[str]:
+    """Chrome o Edge gia' installati sulla macchina.
+
+    Il PDF va stampato dallo stesso motore che disegna l'anteprima: qualsiasi
+    altro renderer ridisegna il documento con la sua interpretazione di grid e
+    flex, e il report consegnato non e' piu' quello che l'operatore ha visto.
+    """
+    override = os.environ.get("SENTINELNET_BROWSER")
+    if override and os.path.isfile(override):
+        return override
+    candidates = []
+    for var in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        base = os.environ.get(var)
+        if not base:
+            continue
+        candidates.append(os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"))
+        candidates.append(os.path.join(base, "Microsoft", "Edge", "Application", "msedge.exe"))
+    candidates += ["/usr/bin/google-chrome", "/usr/bin/chromium",
+                   "/usr/bin/chromium-browser", "/usr/bin/microsoft-edge"]
+    return next((c for c in candidates if os.path.isfile(c)), None)
+
+
+@router.post("/api/netsec-audit/report/pdf")
+def netsec_audit_report_pdf(payload: ReportPdfSchema,
+                            current_user = Depends(get_current_user)):
+    """Stampa in PDF l'HTML dell'anteprima, con il browser di sistema."""
+    if len(payload.html) > 40_000_000:
+        raise HTTPException(status_code=413, detail="Report troppo grande per la stampa.")
+    exe = _browser_executable()
+    if exe is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Nessun browser Chrome o Edge trovato per la stampa del report. "
+                   "Impostare SENTINELNET_BROWSER con il percorso dell'eseguibile.")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "report.html")
+        out = os.path.join(tmp, "report.pdf")
+        with open(src, "w", encoding="utf-8") as fh:
+            fh.write(payload.html)
+        cmd = [
+            exe, "--headless=new", "--disable-gpu", "--disable-extensions",
+            "--no-first-run", f"--user-data-dir={os.path.join(tmp, 'profile')}",
+            # Le due varianti del flag: Chrome ignora quella che non conosce.
+            "--no-pdf-header-footer", "--print-to-pdf-no-header-footer",
+            # Senza budget la stampa parte prima che i font siano pronti e
+            # l'impaginazione misurata dallo script slitta.
+            "--virtual-time-budget=5000",
+            f"--print-to-pdf={out}", Path(src).as_uri(),
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="Stampa del report scaduta.")
+        if not os.path.isfile(out):
+            err = (proc.stderr or b"").decode("utf-8", "ignore")[-500:]
+            raise HTTPException(status_code=500,
+                                detail=f"Stampa del report fallita. {err}")
+        with open(out, "rb") as fh:
+            data = fh.read()
+
+    name = re.sub(r"[^\w.-]+", "_", payload.filename) or "compliance-report"
+    log_audit(f"Report di audit '{name}' stampato in PDF "
+              f"dall'utente '{current_user.get('sub')}'.")
+    return Response(content=data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
 
 
 class NetSecAuditSchema(BaseModel):
