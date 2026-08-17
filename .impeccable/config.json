@@ -66,7 +66,7 @@
       },
       {
         "rule": "overused-font",
-        "value": "Inter",
+        "value": "inter",
         "files": [
           "static/css/themes/design-1.css",
           "static/css/themes/design-3.css"
@@ -82,6 +82,15 @@
         ],
         "createdAt": "2026-08-09T14:40:00.000Z",
         "reason": "Extends the existing colour waiver on this file to the type ramp, for the same reason: the sizes flagged live in the exported standalone audit report, a self-contained print document with its own stylesheet that cannot reference app tokens"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "static/js/netsec-audit.js"
+        ],
+        "createdAt": "2026-08-17T16:55:58.354Z",
+        "reason": "Left rule on the guidance callout in the printed A4 audit report; present in the reference PDF the output must match"
       }
     ]
   }

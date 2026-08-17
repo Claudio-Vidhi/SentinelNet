@@ -446,10 +446,10 @@
               <label data-i18n="lblGroup">Assegna a Tenant</label>
               <div style="display:flex; gap:8px; align-items:center;">
                 <select id="devGroupSelect" style="flex:1;"></select>
-                <button class="btn btn-secondary" id="btnInlineNewTenant" type="button" title="Nuovo tenant" style="white-space:nowrap; width:auto; flex:0 0 auto;"><i class="fa-solid fa-plus"></i></button>
+                <button class="btn btn-secondary" id="btnInlineNewTenant" type="button" title="Nuovo tenant" data-i18n-title="titleBtnNewTenant" style="white-space:nowrap; width:auto; flex:0 0 auto;"><i class="fa-solid fa-plus"></i></button>
               </div>
               <div id="inlineNewTenantRow" style="display:none; margin-top:8px; gap:8px;">
-                <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" style="flex:1; padding-left:12px;">
+                <input id="newGroupName" type="text" placeholder="Es. Tenant_Torino" data-i18n-placeholder="phNewTenant" style="flex:1; padding-left:12px;">
                 <button class="btn btn-primary" id="btnCreateGroup" style="background:var(--cta); color:var(--cta-text); width:auto; flex:0 0 auto;" data-i18n="btnCreateGroup"><i class="fa-solid fa-folder-plus"></i> Crea Tenant</button>
               </div>
             </div>
@@ -824,7 +824,7 @@
         <div class="network-legend" id="networkLegend">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
             <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="legendTitle">Legenda</span>
-            <button id="legendToggleBtn" title="Legenda" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:13px;"><i class="fa-solid fa-chevron-down"></i></button>
+            <button id="legendToggleBtn" title="Legenda" data-i18n-title="titleLegend" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:13px;"><i class="fa-solid fa-chevron-down"></i></button>
           </div>
           <div id="legendBody" style="display:flex; flex-direction:column; gap:8px;">
             <div class="legend-item"><span class="led led-online"></span><span data-i18n="legendOnline">Dispositivo Online</span></div>
@@ -918,8 +918,8 @@
     <div id="tab-redundancy" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;">Alta Affidabilità (HA) &amp; Gruppi di Ridondanza</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:74ch;">
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleRedundancyHeader">Alta Affidabilità (HA) &amp; Gruppi di Ridondanza</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:74ch;" data-i18n="descRedundancy">
             Monitoraggio in tempo reale della salute dei cluster e protocolli di failover: HSRP, VRRP, FortiGate HA (FGCP), Cisco StackWise e coppie VPC/MLAG per prevenire scenari di split-brain.
           </p>
         </div>
@@ -927,31 +927,31 @@
 
       <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
         <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase;">Cluster Totali</h4>
+          <h4 style="font-size:11px; text-transform:uppercase;" data-i18n="lblClusterTotal">Cluster Totali</h4>
           <strong id="haKpiTotal" style="font-size:22px;">0</strong>
         </div>
         <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase; color:var(--success);">In Salute (Healthy)</h4>
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--success);" data-i18n="lblClusterHealthy">In Salute (Healthy)</h4>
           <strong id="haKpiHealthy" style="font-size:22px; color:var(--success);">0</strong>
         </div>
         <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase; color:var(--warning);">Degradati</h4>
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--warning);" data-i18n="lblClusterDegraded">Degradati</h4>
           <strong id="haKpiDegraded" style="font-size:22px; color:var(--warning);">0</strong>
         </div>
         <div class="kpi">
-          <h4 style="font-size:11px; text-transform:uppercase; color:var(--danger);">Critici / Split-Brain</h4>
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--danger);" data-i18n="lblClusterCritical">Critici / Split-Brain</h4>
           <strong id="haKpiCritical" style="font-size:22px; color:var(--danger);">0</strong>
         </div>
       </div>
 
       <div class="panel">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-          <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-server"></i> Gruppi di Ridondanza Attivi</h3>
+          <h3 style="margin:0; font-size:16px;" data-i18n="titleActiveRedundancyGroups"><i class="fa-solid fa-server"></i> Gruppi di Ridondanza Attivi</h3>
           <div style="display:flex; gap:8px;">
-            <button class="btn btn-primary btn-small requires-admin" data-action="open-create-redundancy" style="width:auto;">
+            <button class="btn btn-primary btn-small requires-admin" data-action="open-create-redundancy" style="width:auto;" data-i18n="btnNewHaGroup">
               <i class="fa-solid fa-plus"></i> Nuovo Gruppo HA
             </button>
-            <button class="btn btn-secondary btn-small" data-action="refresh-redundancy" style="width:auto;">
+            <button class="btn btn-secondary btn-small" data-action="refresh-redundancy" style="width:auto;" data-i18n="btnRefreshHa">
               <i class="fa-solid fa-rotate"></i> Aggiorna
             </button>
           </div>
@@ -1027,7 +1027,7 @@
               <input type="checkbox" id="vwExploited" style="accent-color:var(--primary);"> <span data-i18n="vwLblExploited">Solo sfruttate</span></label>
             <div class="form-group" style="margin:0;"><label data-i18n="vwLblFrom">Da</label><input id="vwFromDate" type="date"></div>
             <div class="form-group" style="margin:0;"><label data-i18n="vwLblSearch">Cerca</label><input id="vwText" type="text" placeholder="CVE, prodotto..." style="padding-left:10px;"></div>
-            <button class="btn btn-primary" id="vwRefresh" style="width:auto; margin:0;" title="Aggiorna"><i class="fa-solid fa-rotate"></i></button>
+            <button class="btn btn-primary" id="vwRefresh" style="width:auto; margin:0;" title="Aggiorna" data-i18n-title="titleBtnRefresh"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
         <div class="panel">
@@ -1245,7 +1245,7 @@
           <div class="form-group" style="margin-bottom:0;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
               <label for="diagGatewayInput" style="margin-bottom:0; font-size:12px; font-weight:600;">Gateway L3</label>
-              <button class="btn btn-sm btn-secondary" id="btnDiagTraceroute" type="button" style="padding:2px 6px; font-size:10px; width:auto; border-radius:0;" title="Rileva il primo hop tramite traceroute">
+              <button class="btn btn-sm btn-secondary" id="btnDiagTraceroute" type="button" style="padding:2px 6px; font-size:10px; width:auto; border-radius:0;" title="Rileva il primo hop tramite traceroute" data-i18n-title="titleDiagTraceroute">
                 <i class="fa-solid fa-route" style="color:var(--primary);"></i> Traceroute
               </button>
             </div>
@@ -1356,7 +1356,7 @@
           <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
             <h3 style="font-size:15px; margin:0; flex:1 1 auto;"><i class="fa-solid fa-users-viewfinder" style="color:var(--success); margin-right:8px;"></i>Client Wireless Associati</h3>
             <span id="wlcClientCount" style="font-size:12px; color:var(--text-muted); font-family:var(--font-code);"></span>
-            <input id="wlcClientSearch" type="search" placeholder="Cerca MAC, IP, AP, SSID..."
+            <input id="wlcClientSearch" type="search" placeholder="Cerca MAC, IP, AP, SSID..." data-i18n-placeholder="phWlcSearch"
                    style="flex:0 1 260px; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
           </div>
           <div class="table-wrap" style="max-height:300px; overflow-y:auto;">
@@ -1527,11 +1527,11 @@
             <!-- 3-Way Graph Type Selector Buttons -->
             <div class="btn-group" style="display:inline-flex; border:1px solid var(--border); border-radius:0; overflow:hidden; background:var(--surface-3);">
               <button id="btnChartTypeDonut" class="btn btn-sm" data-chart-type="donut" style="padding:5px 10px; border:none; background:var(--cta); color:var(--cta-text); font-size:12px;" title="Grafico a Ciambella (Donut)"><i class="fa-solid fa-chart-pie"></i> <span data-i18n="lblChartDonut">Ciambella</span></button>
-              <button id="btnChartTypeBar" class="btn btn-sm" data-chart-type="bar" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
-              <button id="btnChartTypeTrend" class="btn btn-sm" data-chart-type="trend" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
+              <button id="btnChartTypeBar" class="btn btn-sm" data-chart-type="bar" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico a Barre (Bar)" data-i18n-title="titleChartBar"><i class="fa-solid fa-chart-bar"></i> <span data-i18n="lblChartBar">Barre</span></button>
+              <button id="btnChartTypeTrend" class="btn btn-sm" data-chart-type="trend" style="padding:5px 10px; border:none; background:transparent; color:var(--text); font-size:12px;" title="Grafico Trend Temporale (Trend)" data-i18n-title="titleChartTrend"><i class="fa-solid fa-chart-line"></i> <span data-i18n="lblChartTrend">Trend</span></button>
             </div>
             <!-- La finestra e' quella del tab: la card non ne ha piu' una sua. -->
-            <button id="btnObsInspectModal" class="btn btn-sm btn-secondary" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
+            <button id="btnObsInspectModal" class="btn btn-sm btn-secondary" style="padding:5px 10px; font-size:12px; white-space:nowrap;" title="Ispeziona Dettagli Telemetria" data-i18n-title="titleObsInspect"><i class="fa-solid fa-magnifying-glass-chart"></i> Dettagli</button>
           </div>
         </div>
         <div style="position:relative; width:100%; height:280px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px; overflow:hidden;">
@@ -1607,7 +1607,7 @@
         <div style="display:flex; gap:10px; align-items:center;">
           <div class="input-wrapper" style="flex:1;">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input id="flowSiemQueryInput" type="text" placeholder="Ricerca libera (es. 10.0.1.45, DENY, TCP) oppure campo:valore (es. src_ip:10.0.1.45, action:DENY)" style="width:100%; padding-left:36px;">
+            <input id="flowSiemQueryInput" type="text" placeholder="Ricerca libera (es. 10.0.1.45, DENY, TCP) oppure campo:valore (es. src_ip:10.0.1.45, action:DENY)" data-i18n-placeholder="phSiemQuery" style="width:100%; padding-left:36px;">
           </div>
           <button id="btnFilterSiem" class="btn btn-primary btn-small"><i class="fa-solid fa-filter"></i> Filtra</button>
         </div>
@@ -1770,7 +1770,7 @@
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
             <div class="form-group" style="min-width:160px; flex:1;">
               <label data-i18n="lblAiProfileName">Nome profilo</label>
-              <input id="aiProfileName" type="text" placeholder="es. Claude prod" style="padding-left:12px;">
+              <input id="aiProfileName" type="text" placeholder="es. Claude prod" data-i18n-placeholder="phAiProfileName" style="padding-left:12px;">
             </div>
           </div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
@@ -1794,11 +1794,11 @@
                   <i class="fa-solid fa-rotate"></i>
                 </button>
               </div>
-              <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" style="padding-left:12px; margin-top:4px;">
+              <input id="aiModel" type="text" placeholder="es. claude-3-5-sonnet-latest" data-i18n-placeholder="phAiModel" style="padding-left:12px; margin-top:4px;">
             </div>
             <div class="form-group" style="min-width:220px;">
               <label id="aiApiKeyLabel" data-i18n="lblAiApiKey">API Key</label>
-              <input id="aiApiKey" type="password" placeholder="•••••• (lascia vuoto per non modificare)" style="padding-left:12px;">
+              <input id="aiApiKey" type="password" placeholder="•••••• (lascia vuoto per non modificare)" data-i18n-placeholder="phAiApiKey" style="padding-left:12px;">
             </div>
             <div class="form-group" style="min-width:220px;">
               <label data-i18n="lblAiBaseUrl">Endpoint locale (Ollama)</label>
@@ -1806,11 +1806,11 @@
             </div>
             <div class="form-group" style="min-width:150px;">
               <label data-i18n="lblAiRateLimit">Limite richieste/min</label>
-              <input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" style="padding-left:12px;">
+              <input id="aiRateLimitRpm" type="number" min="0" step="1" placeholder="0 = illimitato" data-i18n-placeholder="phAiRateLimit" style="padding-left:12px;">
             </div>
             <div class="form-group" style="min-width:170px;">
               <label data-i18n="lblAiContextBudget">Budget contesto (caratteri)</label>
-              <input id="aiContextBudget" type="number" min="0" step="1000" placeholder="0 = auto per modello" style="padding-left:12px;">
+              <input id="aiContextBudget" type="number" min="0" step="1000" placeholder="0 = auto per modello" data-i18n-placeholder="phAiContextBudget" style="padding-left:12px;">
             </div>
             <div class="form-group" style="min-width:260px;">
               <label style="font-size:13px; display:flex; align-items:center; gap:6px; margin-top:22px;">
@@ -1944,7 +1944,7 @@
           </div>
           <div class="form-group" style="min-width:150px; margin:0;">
             <label data-i18n="lblGenCfgHostname">Hostname</label>
-            <input id="genCfgHostname" type="text" placeholder="es. SW-ACC-05" style="padding-left:12px;">
+            <input id="genCfgHostname" type="text" placeholder="es. SW-ACC-05" data-i18n-placeholder="phGenCfgHostname" style="padding-left:12px;">
           </div>
           <div class="form-group" style="min-width:150px; margin:0;">
             <label data-i18n="lblGenCfgMgmtIp">IP di management</label>
@@ -2033,7 +2033,7 @@
           <div class="form-group"><label>SNMPv3 user</label><input id="fgtSnmpUser" type="text" style="padding-left:12px;"></div>
           <div class="form-group"><label>SNMPv3 auth pass</label><input id="fgtSnmpAuth" type="password" style="padding-left:12px;"></div>
           <div class="form-group"><label>SNMPv3 priv pass</label><input id="fgtSnmpPriv" type="password" style="padding-left:12px;"></div>
-          <div class="form-group"><label>Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" style="padding-left:12px;"></div>
+          <div class="form-group"><label>Banner post-login</label><input id="fgtBanner" type="text" placeholder="Accesso riservato - uso autorizzato" data-i18n-placeholder="phProvBanner" style="padding-left:12px;"></div>
           <div class="form-group"><label data-i18n="lblAaaProtocol">Protocollo AAA</label>
             <select id="fgtAaaProtocol" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
               <option value="none" data-i18n="optAaaNone">Nessuno</option>
@@ -2071,7 +2071,7 @@
         <div class="form-group"><label>Admin locale (user)</label><input id="provAdminUser" type="text" placeholder="netadmin" style="padding-left:12px;"></div>
         <div class="form-group"><label>Admin locale (password)</label><input id="provAdminPass" type="password" style="padding-left:12px;"></div>
         <div class="form-group"><label>Enable secret</label><input id="provEnableSecret" type="password" style="padding-left:12px;"></div>
-        <div class="form-group"><label>Banner MOTD</label><input id="provBanner" type="text" placeholder="Accesso riservato - uso autorizzato" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Banner MOTD</label><input id="provBanner" type="text" placeholder="Accesso riservato - uso autorizzato" data-i18n-placeholder="phProvBanner" style="padding-left:12px;"></div>
         <div class="form-group"><label>NTP servers (comma)</label><input id="provNtp" type="text" placeholder="10.0.0.1, 10.0.0.2" style="padding-left:12px;"></div>
         <div class="form-group"><label>Syslog server</label><input id="provSyslog" type="text" placeholder="10.0.0.50" style="padding-left:12px;"></div>
         <div class="form-group"><label>SNMPv3 user</label><input id="provSnmpUser" type="text" style="padding-left:12px;"></div>
@@ -2082,7 +2082,7 @@
         <div class="form-group"><label>VLAN dati porte access</label><input id="provAccessVlan" type="number" placeholder="10" style="padding-left:12px;"></div>
         <div class="form-group"><label>Porte trunk (range)</label><input id="provTrunkPorts" type="text" placeholder="GigabitEthernet1/0/25-28" style="padding-left:12px;"></div>
         <div class="form-group"><label>VLAN consentite su trunk</label><input id="provTrunkVlans" type="text" placeholder="10,20,99" style="padding-left:12px;"></div>
-        <div class="form-group"><label>Uplink Port-Channel ID (LACP)</label><input id="provUplinkPc" type="number" placeholder="1 (vuoto = nessun EtherChannel)" style="padding-left:12px;"></div>
+        <div class="form-group"><label>Uplink Port-Channel ID (LACP)</label><input id="provUplinkPc" type="number" placeholder="1 (vuoto = nessun EtherChannel)" data-i18n-placeholder="phProvUplinkPc" style="padding-left:12px;"></div>
         <div class="form-group" id="provSvisGroup" style="display:none;"><label>SVI distribution (vlan:ip:mask, comma)</label><input id="provSvis" type="text" placeholder="10:10.1.10.1:255.255.255.0" style="padding-left:12px;"></div>
         <div class="form-group" id="provDefRouteGroup" style="display:none;"><label>Default route gateway</label><input id="provDefRouteGw" type="text" placeholder="10.1.0.1" style="padding-left:12px;"></div>
         <div class="form-group"><label data-i18n="lblAaaProtocol">Protocollo AAA</label>
@@ -2137,7 +2137,7 @@
         <div class="form-group"><label>Porta COM</label>
           <div style="display:flex; gap:8px;">
             <input id="provComPort" type="text" placeholder="COM3 / /dev/ttyUSB0" style="padding-left:12px; flex:1;">
-            <button class="btn" id="btnProvRefreshPorts" title="Aggiorna elenco porte"><i class="fa-solid fa-rotate"></i></button>
+            <button class="btn" id="btnProvRefreshPorts" title="Aggiorna elenco porte" data-i18n-title="titleBtnRefreshPorts"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
         <div class="form-group"><label>Baud rate</label>
@@ -2150,7 +2150,7 @@
           </select>
         </div>
         <div class="form-group" id="fgtConsoleUserGroup" style="display:none;"><label>Login console (user)</label><input id="fgtConsoleUser" type="text" value="admin" style="padding-left:12px;"></div>
-        <div class="form-group" id="fgtConsolePassGroup" style="display:none;"><label>Login console (password)</label><input id="fgtConsolePass" type="password" placeholder="(vuota su unità vergine)" style="padding-left:12px;"></div>
+        <div class="form-group" id="fgtConsolePassGroup" style="display:none;"><label>Login console (password)</label><input id="fgtConsolePass" type="password" placeholder="(vuota su unità vergine)" data-i18n-placeholder="phFgtConsolePass" style="padding-left:12px;"></div>
         <div style="align-self:end;"><button class="btn btn-primary" id="btnProvPushSerial"><i class="fa-solid fa-paper-plane"></i> Applica via Console</button></div>
       </div>
 
@@ -2258,7 +2258,7 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblNewUserName">Username</label>
-            <input id="newUserName" type="text" placeholder="es. mario.rossi" style="padding-left:12px;">
+            <input id="newUserName" type="text" placeholder="es. mario.rossi" data-i18n-placeholder="phNewUserName" style="padding-left:12px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblNewUserPass">Password</label>
@@ -2307,7 +2307,7 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr 2fr auto; gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblSiteName">Nome</label>
-            <input id="newSiteName" type="text" placeholder="es. Milano" style="padding-left:12px;">
+            <input id="newSiteName" type="text" placeholder="es. Milano" data-i18n-placeholder="phNewSiteName" style="padding-left:12px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblSiteMode">Modalità</label>
@@ -3197,8 +3197,8 @@
     <div id="netsecSubtabChecklist" style="display:none;">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;">Checklist Audit Manutenzione Firewall</h2>
-          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:75ch;">
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleChecklistAuditHeader">Checklist Audit Manutenzione Firewall</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:75ch;" data-i18n="descChecklistAudit">
             Guida passo-passo per l'audit di manutenzione dei firewall dei clienti. Compila i rilievi sulle 9 sezioni di sicurezza, registra le evidenze e genera la relazione di audit finale.
           </p>
         </div>
@@ -3219,7 +3219,7 @@
           <h3 style="font-size:17px; margin:0;"><i class="fa-solid fa-list-check" style="color:var(--primary);"></i> Domande della Checklist <span id="auditTplName" style="font-size:12px; font-weight:normal; color:var(--text-muted);"></span></h3>
           <div style="display:flex; gap:8px;">
             <button id="btnOpenTemplateItemModal" class="btn btn-primary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-plus"></i> Nuova Domanda</button>
-            <button id="btnToggleTemplateEditor" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-eye"></i> <span id="auditTplToggleLabel">Mostra</span></button>
+            <button id="btnToggleTemplateEditor" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-eye"></i> <span id="auditTplToggleLabel" data-i18n="lblChecklistShow">Mostra</span></button>
           </div>
         </div>
         <p style="margin:0 0 12px; color:var(--text-muted); font-size:12px;">
@@ -3248,7 +3248,10 @@
     <div class="modal" style="width: 720px; max-width: 96%;">
       <div class="modal-header">
         <h3 data-i18n="titleSubnetScan"><i class="fa-solid fa-magnifying-glass-location" style="color: var(--primary);"></i> Scansione Subnet</h3>
-        <i class="fa-solid fa-xmark modal-close" id="btnCloseSubnetScan"></i>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn btn-secondary btn-small" id="btnScanRunBackground" style="display:none; width:auto; font-size:11px; padding:3px 8px; margin:0;" data-i18n="btnRunInBackground"><i class="fa-solid fa-window-minimize"></i> Esegui in background</button>
+          <i class="fa-solid fa-xmark modal-close" id="btnCloseSubnetScan"></i>
+        </div>
       </div>
 
       <div class="form-group">
@@ -3525,7 +3528,7 @@
       <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
         <h3 id="agentControlTitle" style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
           <i class="fa-solid fa-gears" style="color:var(--primary);"></i>
-          <span>Gestione Remota Agente di Sede</span>
+          <span data-i18n="titleAgentControlModal">Gestione Remota Agente di Sede</span>
         </h3>
         <button data-action="close-agent-control-modal" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
       </div>
@@ -3533,7 +3536,7 @@
         <!-- Dynamic Agent Telemetry & Remote Control Buttons -->
       </div>
       <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
-        <button class="btn btn-sm" data-action="close-agent-control-modal" style="padding:6px 16px;">Chiudi</button>
+        <button class="btn btn-sm" data-action="close-agent-control-modal" style="padding:6px 16px;" data-i18n="btnClose">Chiudi</button>
       </div>
     </div>
   </div>
@@ -3544,7 +3547,7 @@
       <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
         <h3 id="obsInspectTitle" style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
           <i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i>
-          <span>Dettaglio Telemetria Protocollo</span>
+          <span data-i18n="titleObsDetailModal">Dettaglio Telemetria Protocollo</span>
         </h3>
         <button data-action="close-obs-inspect-modal" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
       </div>
@@ -3552,9 +3555,20 @@
         <!-- Filled dynamically -->
       </div>
       <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end;">
-        <button class="btn btn-sm" data-action="close-obs-inspect-modal" style="padding:6px 16px;">Chiudi</button>
+        <button class="btn btn-sm" data-action="close-obs-inspect-modal" style="padding:6px 16px;" data-i18n="btnClose">Chiudi</button>
       </div>
     </div>
+  </div>
+
+
+  <!-- Floating background subnet scan progress indicator -->
+  <div id="floatingScanWidget" class="floating-scan-widget" style="display:none; position:fixed; bottom:24px; right:24px; z-index:9990; background:var(--surface-3); border:1px solid var(--primary); padding:10px 14px; box-shadow:var(--shadow-float); font-size:12px; color:var(--text); align-items:center; gap:10px; cursor:pointer; user-select:none;">
+    <i class="fa-solid fa-satellite-dish fa-spin" style="color:var(--primary); font-size:14px;"></i>
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      <strong id="floatingScanTitle" style="font-size:12px;">Scansione in corso...</strong>
+      <span id="floatingScanSubtitle" style="font-size:11px; color:var(--text-muted);">0%</span>
+    </div>
+    <button type="button" class="btn btn-primary btn-small" style="width:auto; margin:0 0 0 8px; padding:3px 8px; font-size:11px;" data-i18n="btnViewResults">Apri</button>
   </div>
 
   <!-- Modal: Create Redundancy Group Modal -->
@@ -3563,17 +3577,17 @@
       <div style="padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
         <h3 style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
           <i class="fa-solid fa-layer-group" style="color:var(--primary);"></i>
-          <span>Crea Gruppo di Ridondanza / HA</span>
+          <span data-i18n="titleModalCreateHa">Crea Gruppo di Ridondanza / HA</span>
         </h3>
         <button data-action="close-create-redundancy" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div style="padding:20px; display:flex; flex-direction:column; gap:12px;">
         <div class="form-group" style="margin:0;">
-          <label>Nome Gruppo</label>
-          <input type="text" id="haGroupName" placeholder="es. Core-HSRP-VLAN10" style="padding-left:12px;">
+          <label data-i18n="lblHaGroupName">Nome Gruppo</label>
+          <input type="text" id="haGroupName" placeholder="es. Core-HSRP-VLAN10" data-i18n-placeholder="phHaGroupName" style="padding-left:12px;">
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Protocollo / Tipo HA</label>
+          <label data-i18n="lblHaProtocolType">Protocollo / Tipo HA</label>
           <select id="haProtocol" style="padding-left:12px;">
             <option value="HSRP">Cisco HSRP</option>
             <option value="VRRP">VRRP v2/v3</option>
@@ -3583,7 +3597,7 @@
           </select>
         </div>
         <div class="form-group" style="margin:0;">
-          <label>Virtual IP (VIP / Gateway Condiviso)</label>
+          <label data-i18n="lblHaVip">Virtual IP (VIP / Gateway Condiviso)</label>
           <input type="text" id="haVirtualIp" placeholder="es. 192.0.2.1" style="padding-left:12px;">
         </div>
         <div class="form-group" style="margin:0;">
@@ -3592,8 +3606,8 @@
         </div>
       </div>
       <div style="padding:12px 20px; border-top:1px solid var(--border); background:var(--surface-2); display:flex; justify-content:flex-end; gap:8px;">
-        <button class="btn btn-secondary btn-small" data-action="close-create-redundancy" style="width:auto;">Annulla</button>
-        <button class="btn btn-primary btn-small" id="btnSubmitCreateRedundancy" style="width:auto; background:var(--cta); color:var(--cta-text);">
+        <button class="btn btn-secondary btn-small" data-action="close-create-redundancy" style="width:auto;" data-i18n="btnCancel">Annulla</button>
+        <button class="btn btn-primary btn-small" id="btnSubmitCreateRedundancy" style="width:auto; background:var(--cta); color:var(--cta-text);" data-i18n="btnSubmitCreateHa">
           <i class="fa-solid fa-plus"></i> Crea Gruppo
         </button>
       </div>
@@ -3606,13 +3620,13 @@
       <div style="padding:12px 18px; border-bottom:1px solid var(--border); background:var(--surface-2); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
         <h3 id="auditReportModalTitle" style="margin:0; font-size:17px; display:flex; align-items:center; gap:8px;">
           <i class="fa-solid fa-file-shield" style="color:var(--primary);"></i>
-          <span>SentinelNet — Anteprima Report Compliance</span>
+          <span data-i18n="titleAuditModalPreview">SentinelNet — Anteprima Report Compliance</span>
         </h3>
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <button id="auditModalBtnPdf" class="btn btn-small btn-primary" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Scarica PDF"><i class="fa-solid fa-file-pdf"></i> <span>Scarica PDF</span></button>
-          <button id="auditModalBtnDoc" class="btn btn-small" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Scarica Documento Microsoft Word (.docx)"><i class="fa-solid fa-file-word"></i> <span>Scarica DOCX</span></button>
-          <button id="auditModalBtnPrint" class="btn btn-small" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Stampa o Salva in PDF Vettoriale"><i class="fa-solid fa-print"></i> <span>Stampa / PDF Vettoriale</span></button>
-          <button id="auditModalBtnHtml" class="btn btn-small" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Scarica HTML"><i class="fa-solid fa-code"></i> <span>Scarica HTML</span></button>
+          <button id="auditModalBtnPdf" class="btn btn-small btn-primary" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Scarica PDF" data-i18n-title="titleBtnDownloadPdf"><i class="fa-solid fa-file-pdf"></i> <span data-i18n="btnPdf">Scarica PDF</span></button>
+          <button id="auditModalBtnDoc" class="btn btn-small" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Scarica Documento Microsoft Word (.docx)" data-i18n-title="titleDownloadDocx"><i class="fa-solid fa-file-word"></i> <span data-i18n="btnDocx">Scarica DOCX</span></button>
+          <button id="auditModalBtnPrint" class="btn btn-small" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Stampa o Salva in PDF Vettoriale" data-i18n-title="titlePrintVector"><i class="fa-solid fa-print"></i> <span data-i18n="btnPrintVector">Stampa / PDF Vettoriale</span></button>
+          <button id="auditModalBtnHtml" class="btn btn-small" style="width:auto; margin:0; font-weight:bold; font-size:12px; cursor:pointer;" title="Scarica HTML" data-i18n-title="titleDownloadHtml"><i class="fa-solid fa-code"></i> <span data-i18n="btnHtml">Scarica HTML</span></button>
           <button id="auditModalBtnClose" style="border:none; background:transparent; color:var(--text-muted); font-size:17px; cursor:pointer; padding:4px 8px; margin-left:6px;"><i class="fa-solid fa-xmark"></i></button>
         </div>
       </div>
