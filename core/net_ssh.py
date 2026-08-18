@@ -60,9 +60,23 @@ def _transport(site: dict) -> paramiko.Transport:
         sock = socket.create_connection(
             (site["jump_host"], int(site.get("jump_port") or 22)),
             timeout=CONNECT_TIMEOUT)
-        tr = paramiko.Transport(sock)
-        tr.banner_timeout = BANNER_TIMEOUT
-        tr.connect(username=username, password=password)
+        tr = None
+        try:
+            tr = paramiko.Transport(sock)
+            tr.banner_timeout = BANNER_TIMEOUT
+            tr.connect(username=username, password=password)
+        except Exception:
+            # paramiko only owns/closes the socket when handed a (host, port)
+            # tuple; handing it an already-open socket (needed for
+            # CONNECT_TIMEOUT above) makes that socket ours to close on
+            # failure. Without this, a site polled on a schedule with bad or
+            # rotated bastion credentials leaks one fd (plus a half-started
+            # Transport) per attempt until the process runs out of them.
+            if tr is not None:
+                tr.close()
+            sock.close()
+            _transports.pop(site_id, None)
+            raise
         _transports[site_id] = tr
         return tr
 
