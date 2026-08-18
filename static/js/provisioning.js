@@ -22,11 +22,11 @@ async function populateIdentTenantOptions(selected) {
         const res = await apiFetch('/api/groups');
         if (res && res.ok) {
             const data = await res.json();
-            window.globalGroups = (data && data.groups) ? data.groups : (data || {});
+            globalGroups = (data && data.groups) ? data.groups : (data || {});
         }
     } catch (e) { /* fallback */ }
-    const fromGlobal = Object.keys(window.globalGroups || {});
-    const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
+    const fromGlobal = Object.keys(globalGroups || {});
+    const fromDevs = (globalDevices || []).map(d => d.Group).filter(Boolean);
     const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
     if (typeof window.populateGenCfgTenants === 'function') window.populateGenCfgTenants();
 
@@ -510,7 +510,7 @@ async function loadProvisioningTab() {
         const res = await apiFetch('/api/groups');
         if (res && res.ok) {
             const data = await res.json();
-            window.globalGroups = (data && data.groups) ? data.groups : (data || {});
+            globalGroups = (data && data.groups) ? data.groups : (data || {});
         }
     } catch (e) {}
     populateProvisioningFormSelects();
@@ -537,7 +537,10 @@ function assignIdentityToDevices(identityId) {
         if (allowedTenants.includes('all')) allowedTenants = null;
     }
 
-    const devices = (window.globalDevices || []).filter(d => {
+    // globalDevices e' un 'let' di core.js: sta nello scope lessicale globale,
+    // non su window. Leggerlo come window.globalDevices dava sempre undefined
+    // e la lista dei dispositivi restava vuota per ogni tenant.
+    const devices = (globalDevices || []).filter(d => {
         if (allowedTenants && allowedTenants.length) return allowedTenants.includes(d.Group);
         return currentTenant === 'all' || d.Group === currentTenant;
     });

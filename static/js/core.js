@@ -286,6 +286,7 @@ if (document.readyState === 'loading') {
 function expandIface(name) {
     if (!name) return '';
     name = String(name).trim();
+    /** @type {[RegExp, string][]} */
     const abbr = [
         [/^(?:GigabitEthernet|Gi)(?=\d)/i, 'GigabitEthernet'],
         [/^(?:TenGigabitEthernet|TenGigE|Te|XGi|10Ge)(?=\d)/i, 'TenGigabitEthernet'],
@@ -1009,6 +1010,7 @@ function renderIdentitiesPanel() {
 function expandIface(name) {
     if (!name) return '';
     name = String(name).trim();
+    /** @type {[RegExp, string][]} */
     const abbr = [
         [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
         [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],

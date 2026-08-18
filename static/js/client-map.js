@@ -436,9 +436,9 @@ function locTenantChanged() {
             if (r.mac) macs.add(String(r.mac).toLowerCase());
             if (r.source_ip) gws.add(r.source_ip);
         }));
-        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = bindings;
-        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = macs.size;
-        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = gws.size;
+        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = String(bindings);
+        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = String(macs.size);
+        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = String(gws.size);
         const el = document.getElementById('arpStats');
         if (el) el.innerText = (currentLang === 'en'
             ? `${bindings} bindings · ${macs.size} MACs · ${gws.size} gateways`
