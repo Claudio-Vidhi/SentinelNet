@@ -20,7 +20,7 @@ import socket
 import threading
 
 import paramiko
-from netmiko import ConnectHandler as _netmiko_connect
+import netmiko
 
 # Bounds on connecting to a bastion. Without them, paramiko.Transport handed a
 # bare (host, port) tuple uses a blocking socket with no timeout, and a dead
@@ -79,6 +79,17 @@ def _transport(site: dict) -> paramiko.Transport:
             raise
         _transports[site_id] = tr
         return tr
+
+
+def _netmiko_connect(**params):
+    """Call netmiko.ConnectHandler at runtime to support test patching.
+
+    netmiko.ConnectHandler must be looked up at call time, not at import time,
+    so that tests patching netmiko.ConnectHandler globally can intercept the
+    call. If this were an import-time alias (from netmiko import ConnectHandler
+    as _netmiko_connect), the patch would not affect this module's already-bound
+    reference, and SSH connection tests would attempt real connections."""
+    return netmiko.ConnectHandler(**params)
 
 
 def jump_channel(site: dict, host: str, port: int) -> paramiko.Channel:
