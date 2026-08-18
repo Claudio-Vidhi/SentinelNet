@@ -532,7 +532,7 @@
             background: cssVar('--surface-2', '#181e23'), border: cssVar('--border-strong', '#46535c'),
             highlight: { background: cssVar('--surface-2', '#181e23'), border: nodeInk }
         };
-        /** @type {any[]} */ // nodi vis.js: forma variabile fra centro e hop
+        /** @type {any[]} */ // vis.js nodes: shape differs between center and hop
         const nodes = [{
             id: 'center', label: hostname, shape: 'box',
             color: centerColor,

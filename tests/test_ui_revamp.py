@@ -2932,10 +2932,10 @@ class TestRedundancyUi(unittest.TestCase):
 
 class TestIdentitiesActionsWired(unittest.TestCase):
     def test_identity_action_listener_binds_an_id_that_exists(self):
-        # Modifica/Elimina/Assegna della tabella "Identita' del Tenant" passano
-        # tutte da un solo listener delegato. Era agganciato a '#identitiesList',
-        # id mai presente nel template: l'optional chaining ingoiava il null e i
-        # pulsanti restavano muti.
+        # Edit/Delete/Assign in the "Identita' del Tenant" table all go through a
+        # single delegated listener. It was bound to '#identitiesList', an id
+        # never present in the template: optional chaining swallowed the null and
+        # the buttons stayed mute.
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(base, "static", "js", "core.js"), encoding="utf-8") as f:
             js = f.read()
@@ -2943,17 +2943,17 @@ class TestIdentitiesActionsWired(unittest.TestCase):
             r"getElementById\('([A-Za-z0-9_-]+)'\)\??\.addEventListener\("
             r"(?:(?!getElementById).)*?edit-identity",
             js, re.S)
-        self.assertIsNotNone(m, "listener delegato delle identita' non trovato")
+        self.assertIsNotNone(m, "identities delegated listener not found")
         self.assertIn('id="%s"' % m.group(1), _html())
 
 
 class TestGlobalsAreNotReadOffWindow(unittest.TestCase):
-    """core.js dichiara i suoi globali con 'let': in uno script classico
-    finiscono nello scope lessicale globale, NON come proprieta' di window.
-    Leggerli come window.globalDevices restituisce sempre undefined e il
-    fallback '|| []' nasconde il guasto — era la lista dispositivi vuota nel
-    modale 'Assegna identita''. Scriverli su window crea invece una seconda
-    variabile che i lettori normali non vedono mai."""
+    """core.js declares its globals with 'let': in a classic script those land
+    in the global lexical scope, NOT as window properties. Reading them as
+    window.globalDevices always returns undefined and the '|| []' fallback hides
+    the failure — that was the empty device list in the 'Assegna identita''
+    modal. Writing them onto window instead creates a second variable the normal
+    readers never see."""
 
     def test_no_module_reads_or_writes_core_globals_through_window(self):
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2967,20 +2967,20 @@ class TestGlobalsAreNotReadOffWindow(unittest.TestCase):
                 continue
             with open(os.path.join(js_dir, name), encoding="utf-8") as f:
                 src = f.read()
-            # I commenti citano gli identificatori a scopo esplicativo.
+            # Comments mention the identifiers for explanatory purposes.
             src = re.sub(r"//[^\n]*", "", src)
             for var in re.findall(r"window\.(\w+)", src):
                 if var in lexical:
                     offenders.append("%s: window.%s" % (name, var))
-        self.assertEqual(offenders, [], "globali di core.js usati via window: %s" % offenders)
+        self.assertEqual(offenders, [], "core.js globals used via window: %s" % offenders)
 
 
 class TestDelegatedListenersBindRealIds(unittest.TestCase):
-    """Un listener delegato agganciato con getElementById('x')?. su un id che
-    non esiste non solleva nulla: l'optional chaining ingoia il null e i
-    pulsanti restano muti. Quattro moduli erano in questo stato dopo la
-    modularizzazione del frontend. Qui si controllano i contenitori delegati:
-    se l'id sparisce dal template, il test cade invece che la UI."""
+    """A delegated listener bound with getElementById('x')?. to an id that does
+    not exist raises nothing: optional chaining swallows the null and the buttons
+    stay mute. Four modules were in that state after the frontend was split into
+    modules. This checks the delegated containers: if the id disappears from the
+    template, the test fails instead of the UI."""
 
     CONTAINERS = {
         "core.js": "identitiesTableBody",
@@ -3000,19 +3000,19 @@ class TestDelegatedListenersBindRealIds(unittest.TestCase):
                 self.assertIn('id="%s"' % container, html)
 
     def test_audit_checklist_module_is_loaded_with_its_tab(self):
-        # La Checklist Audit Firewall e' un sotto-tab di NetSec Audit: senza
-        # questa voce il modulo non veniva mai iniettato e il sotto-tab era
-        # inerte (loadAuditChecklistTab non definita).
+        # The Firewall Audit Checklist is a sub-tab of NetSec Audit: without this
+        # entry the module was never injected and the sub-tab was inert
+        # (loadAuditChecklistTab undefined).
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(base, "static", "js", "core.js"), encoding="utf-8") as f:
             core = f.read()
         m = re.search(r"'tab-netsec-audit':\s*\[([^\]]*)\]", core)
-        self.assertIsNotNone(m, "voce LAZY_TAB_SCRIPTS di tab-netsec-audit non trovata")
+        self.assertIsNotNone(m, "LAZY_TAB_SCRIPTS entry for tab-netsec-audit not found")
         self.assertIn("/static/js/audit_checklist.js", m.group(1))
 
     def test_audit_checklist_form_controls_are_wired(self):
-        # I due form e i pulsanti dell'area di lavoro erano markup mancante:
-        # il template li ha persi, il modulo continuava a cercarli.
+        # The two forms and the workspace buttons were missing markup: the
+        # template lost them while the module kept looking for them.
         html = _html()
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         with open(os.path.join(base, "static", "js", "audit_checklist.js"), encoding="utf-8") as f:

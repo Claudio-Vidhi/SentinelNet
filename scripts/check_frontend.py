@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Type check di static/js con tsc, filtrando il rumore strutturale.
+"""Type check static/js with tsc, filtering out the structural noise.
 
-TypeScript in modalita' checkJs applica al DOM tipi piu' stretti di quelli che
-il JS non annotato puo' soddisfare: getElementById() restituisce HTMLElement e
-non HTMLInputElement, quindi ogni `.value` diventa un errore; e.target e'
-EventTarget, quindi ogni `.closest()` lo diventa. Sono ~900 segnalazioni che
-non corrispondono ad alcun difetto e che, lasciate passare, renderebbero il
-controllo illeggibile e quindi inutile.
+In checkJs mode TypeScript holds the DOM to types unannotated JS cannot
+satisfy: getElementById() returns HTMLElement rather than HTMLInputElement, so
+every `.value` is an error; e.target is EventTarget, so every `.closest()` is
+one too. That is ~900 reports matching no actual defect, and letting them
+through would make the check unreadable and therefore useless.
 
-Tutto il resto passa: nomi non dichiarati, proprieta' inesistenti su window
-(la classe di bug che teneva window.globalDevices sempre undefined), chiavi
-duplicate negli object literal, tipi di argomento incompatibili.
+Everything else gets through: undeclared names, properties that do not exist on
+window (the bug class that kept window.globalDevices undefined), duplicate keys
+in object literals, incompatible argument types.
 
-Uso:  uv run python scripts/check_frontend.py
+Usage:  uv run python scripts/check_frontend.py
 """
 import re
 import subprocess
@@ -21,9 +20,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Righe attese e prive di valore diagnostico: sottotipi del DOM che il JS non
-# annotato non puo' esprimere. NON aggiungere qui pattern che nascondono
-# 'Window & typeof globalThis': e' il caso che vogliamo continuare a vedere.
+# Expected lines with no diagnostic value: DOM subtypes unannotated JS cannot
+# express. Do NOT add patterns here that would hide
+# 'Window & typeof globalThis': that is the case worth keeping visible.
 BENIGN = (
     re.compile(r"does not exist on type '(HTMLElement|Element|EventTarget|HTMLElement \| \{\})'"),
     re.compile(r"'EventTarget' is not assignable to parameter of type 'Node'"),
@@ -33,7 +32,7 @@ BENIGN = (
 def main() -> int:
     tsc = ROOT / "node_modules" / "typescript" / "bin" / "tsc"
     if not tsc.exists():
-        print("typescript non installato: esegui `npm install` nella radice del progetto.")
+        print("typescript not installed: run `npm install` in the project root.")
         return 1
 
     proc = subprocess.run(
@@ -47,10 +46,10 @@ def main() -> int:
 
     if real:
         print("\n".join(real))
-        print("\n%d problemi reali (%d segnalazioni DOM filtrate)." % (len(real), suppressed))
+        print("\n%d real problems (%d DOM reports filtered)." % (len(real), suppressed))
         return 1
 
-    print("Frontend type check: nessun problema (%d segnalazioni DOM filtrate)." % suppressed)
+    print("Frontend type check: clean (%d DOM reports filtered)." % suppressed)
     return 0
 
 
