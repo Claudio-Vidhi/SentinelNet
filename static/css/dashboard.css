@@ -797,6 +797,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--text); }
 .status.ok   { background: var(--lamp-up-wash);    color: var(--lamp-up-ink);    border-color: var(--lamp-up); }
 .status.warn { background: var(--lamp-warn-wash);  color: var(--lamp-warn-ink);  border-color: var(--lamp-warn); }
 .status.bad  { background: var(--lamp-fault-wash); color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
+/* Not measurable (e.g. a jump-site device: no ICMP through the bastion) — distinct from "bad", not a confirmed down. */
+.status.idle { background: var(--lamp-idle-wash);  color: var(--lamp-idle-ink);  border-color: var(--lamp-idle); }
 .status .led { margin-right: 2px; }
 
 /* ---------------------------------------------------------------
