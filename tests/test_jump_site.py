@@ -11,6 +11,7 @@ afterwards would have no effect.
 import os
 import tempfile
 import unittest
+import unittest.mock as mock
 
 _TMP = tempfile.mkdtemp(prefix="sentinelnet_jump_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
@@ -54,6 +55,42 @@ class JumpSiteModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             site_manager.create_site("Customer F", "jump",
                 jump_host="198.51.100.10", jump_port="abc", jump_identity="id-1")
+
+
+class JumpChannel(unittest.TestCase):
+    def test_connect_handler_injects_sock_for_a_jump_device(self):
+        from core import net_ssh
+        chan = object()
+        device = {"IP": "192.0.2.5", "Site": "customer-a"}
+        site = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
+                "jump_port": 22, "jump_identity": "id-1"}
+        with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
+             mock.patch.object(net_ssh, "jump_channel", return_value=chan) as jc, \
+             mock.patch("services.inventory_manager.get_device_by_ip", return_value=device), \
+             mock.patch("services.site_manager.get_site", return_value=site):
+            net_ssh.ConnectHandler(device_type="cisco_ios", host="192.0.2.5",
+                                   username="u", password="p")
+        jc.assert_called_once_with(site, "192.0.2.5", 22)
+        self.assertIs(nm.call_args.kwargs["sock"], chan)
+
+    def test_connect_handler_is_untouched_for_a_central_device(self):
+        from core import net_ssh
+        device = {"IP": "192.0.2.6", "Site": "central"}
+        site = {"id": "central", "mode": "central"}
+        with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
+             mock.patch("services.inventory_manager.get_device_by_ip", return_value=device), \
+             mock.patch("services.site_manager.get_site", return_value=site):
+            net_ssh.ConnectHandler(device_type="cisco_ios", host="192.0.2.6",
+                                   username="u", password="p")
+        self.assertNotIn("sock", nm.call_args.kwargs)
+
+    def test_unknown_device_is_untouched(self):
+        from core import net_ssh
+        with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
+             mock.patch("services.inventory_manager.get_device_by_ip", return_value=None):
+            net_ssh.ConnectHandler(device_type="cisco_ios", host="203.0.113.9",
+                                   username="u", password="p")
+        self.assertNotIn("sock", nm.call_args.kwargs)
 
 
 if __name__ == "__main__":
