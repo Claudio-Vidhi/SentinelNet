@@ -2809,7 +2809,6 @@
       </div>
     </div>
 
-    <div id="tab-audit-checklist" class="tab-content" style="display:none;"></div>
 
 
     <div id="tab-settings" class="tab-content">
@@ -3226,6 +3225,125 @@
           Le modifiche valgono per tutti gli audit che usano questo template. Una nuova domanda viene aggiunta anche agli audit gia' aperti; una domanda gia' valutata in un audit non puo' essere eliminata.
         </p>
         <div id="auditTemplateEditor" style="display:none;"></div>
+      </div>
+
+      <!-- Area di lavoro checklist dell'audit attivo -->
+      <div id="auditWorkspace" class="panel" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:15px;">
+          <div>
+            <h3 id="auditWorkHeader" style="margin:0; font-size:17px;">--</h3>
+            <span id="auditWorkSub" style="font-size:12px; color:var(--text-muted);">--</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button id="btnViewAuditReport" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-file-lines"></i> Genera Relazione HTML</button>
+            <button id="btnCloseAuditWorkspace" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-xmark"></i> Chiudi</button>
+          </div>
+        </div>
+        <div id="auditSectionAccordion"></div>
+      </div>
+
+      <!-- Modale Creazione Nuovo Audit Cliente -->
+      <div id="newAuditModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--scrim); z-index:9999; justify-content:center; align-items:center;">
+        <div class="panel" style="width:100%; max-width:480px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:20px; box-shadow:var(--shadow-float);">
+          <h3 style="margin-top:0; margin-bottom:15px; font-size:17px;"><i class="fa-solid fa-clipboard-check" style="color:var(--primary);"></i> Nuovo Audit Cliente</h3>
+          <form id="formNewAudit">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Nome Cliente / Azienda *</label>
+              <input id="auditCustomerName" type="text" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. ACME Corp S.p.A.">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Modalita' Audit</label>
+              <select id="auditModality" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                <option value="onsite">On-Site (Presenza presso sede cliente)</option>
+                <option value="remote">Remoto (Interview / Config Review)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:18px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Referente Intervistato (Opzionale)</label>
+              <input id="auditInterviewee" type="text" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. Mario Rossi (IT Manager)">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+              <button type="button" id="btnCancelNewAudit" class="btn btn-secondary" style="width:auto; margin:0;">Annulla</button>
+              <button type="submit" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-check"></i> Crea Audit</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Modale Domanda del Template -->
+      <div id="templateItemModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--scrim); z-index:9999; justify-content:center; align-items:center;">
+        <div class="panel" style="width:100%; max-width:620px; max-height:90vh; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:20px; box-shadow:var(--shadow-float);">
+          <h3 id="tplItemModalTitle" style="margin-top:0; margin-bottom:15px; font-size:17px;"><i class="fa-solid fa-list-check" style="color:var(--primary);"></i> Nuova Domanda</h3>
+          <form id="formTemplateItem">
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+              <div>
+                <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Riferimento *</label>
+                <input id="tplItemRef" type="text" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;" placeholder="Es. 4.7">
+              </div>
+              <div>
+                <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Sezione n. *</label>
+                <input id="tplItemSectionNo" type="number" min="1" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              </div>
+              <div>
+                <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Ordine</label>
+                <input id="tplItemSortOrder" type="number" min="0" step="10" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Titolo Sezione *</label>
+              <input id="tplItemSectionTitle" type="text" required list="tplSectionTitles" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+              <datalist id="tplSectionTitles"></datalist>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Domanda / Controllo *</label>
+              <input id="tplItemTitle" type="text" required style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Perche' e' importante</label>
+              <textarea id="tplItemWhy" rows="2" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Cosa cercare</label>
+              <textarea id="tplItemGood" rows="2" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Come verificarlo</label>
+              <textarea id="tplItemHow" rows="2" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; font-family:var(--font-main);"></textarea>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+              <div>
+                <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Gravita' di default</label>
+                <select id="tplItemSeverity" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="critica">Critica</option>
+                  <option value="alta">Alta</option>
+                  <option value="media" selected>Media</option>
+                  <option value="bassa">Bassa</option>
+                  <option value="osservazione">Osservazione</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px;">Tipo di verifica</label>
+                <select id="tplItemCheckKind" style="width:100%; padding:8px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="manual">Manuale</option>
+                  <option value="semi">Semi-automatica</option>
+                  <option value="auto">Automatica</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex; gap:20px; margin-bottom:18px;">
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+                <input id="tplItemPrereq" type="checkbox"> Prerequisito
+              </label>
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+                <input id="tplItemEvidence" type="checkbox"> Evidenza richiesta
+              </label>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+              <button type="button" id="btnCancelTemplateItem" class="btn btn-secondary" style="width:auto; margin:0;">Annulla</button>
+              <button type="submit" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-check"></i> Salva</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div> <!-- End #netsecSubtabChecklist -->
   </div> <!-- End #tab-netsec-audit -->

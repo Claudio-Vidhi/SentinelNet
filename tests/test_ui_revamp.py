@@ -2930,5 +2930,77 @@ class TestRedundancyUi(unittest.TestCase):
         self.assertIn("requires: 'fgtLookupSrc'", source)
 
 
+class TestIdentitiesActionsWired(unittest.TestCase):
+    def test_identity_action_listener_binds_an_id_that_exists(self):
+        # Modifica/Elimina/Assegna della tabella "Identita' del Tenant" passano
+        # tutte da un solo listener delegato. Era agganciato a '#identitiesList',
+        # id mai presente nel template: l'optional chaining ingoiava il null e i
+        # pulsanti restavano muti.
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "static", "js", "core.js"), encoding="utf-8") as f:
+            js = f.read()
+        m = re.search(
+            r"getElementById\('([A-Za-z0-9_-]+)'\)\??\.addEventListener\("
+            r"(?:(?!getElementById).)*?edit-identity",
+            js, re.S)
+        self.assertIsNotNone(m, "listener delegato delle identita' non trovato")
+        self.assertIn('id="%s"' % m.group(1), _html())
+
+
+class TestDelegatedListenersBindRealIds(unittest.TestCase):
+    """Un listener delegato agganciato con getElementById('x')?. su un id che
+    non esiste non solleva nulla: l'optional chaining ingoia il null e i
+    pulsanti restano muti. Quattro moduli erano in questo stato dopo la
+    modularizzazione del frontend. Qui si controllano i contenitori delegati:
+    se l'id sparisce dal template, il test cade invece che la UI."""
+
+    CONTAINERS = {
+        "core.js": "identitiesTableBody",
+        "site-agent.js": "agentControlBody",
+        "fortigate-management.js": "fgtMgrTableBody",
+        "audit_checklist.js": "auditSectionAccordion",
+    }
+
+    def test_containers_exist_in_template(self):
+        html = _html()
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for mod, container in self.CONTAINERS.items():
+            with self.subTest(module=mod):
+                with open(os.path.join(base, "static", "js", mod), encoding="utf-8") as f:
+                    js = f.read()
+                self.assertIn("getElementById('%s')" % container, js)
+                self.assertIn('id="%s"' % container, html)
+
+    def test_audit_checklist_module_is_loaded_with_its_tab(self):
+        # La Checklist Audit Firewall e' un sotto-tab di NetSec Audit: senza
+        # questa voce il modulo non veniva mai iniettato e il sotto-tab era
+        # inerte (loadAuditChecklistTab non definita).
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "static", "js", "core.js"), encoding="utf-8") as f:
+            core = f.read()
+        m = re.search(r"'tab-netsec-audit':\s*\[([^\]]*)\]", core)
+        self.assertIsNotNone(m, "voce LAZY_TAB_SCRIPTS di tab-netsec-audit non trovata")
+        self.assertIn("/static/js/audit_checklist.js", m.group(1))
+
+    def test_audit_checklist_form_controls_are_wired(self):
+        # I due form e i pulsanti dell'area di lavoro erano markup mancante:
+        # il template li ha persi, il modulo continuava a cercarli.
+        html = _html()
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "static", "js", "audit_checklist.js"), encoding="utf-8") as f:
+            js = f.read()
+        for el in ("formNewAudit", "btnCancelNewAudit", "formTemplateItem",
+                   "btnCancelTemplateItem", "btnViewAuditReport",
+                   "btnCloseAuditWorkspace", "auditWorkspace", "newAuditModal",
+                   "templateItemModal"):
+            with self.subTest(element=el):
+                self.assertIn('id="%s"' % el, html)
+        for el in ("formNewAudit", "btnCancelNewAudit", "formTemplateItem",
+                   "btnCancelTemplateItem", "btnViewAuditReport",
+                   "btnCloseAuditWorkspace"):
+            with self.subTest(listener=el):
+                self.assertIn("getElementById('%s')" % el, js)
+
+
 if __name__ == "__main__":
     unittest.main()

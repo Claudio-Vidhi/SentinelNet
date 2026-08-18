@@ -520,6 +520,13 @@
         }
     });
 
+    document.getElementById('formNewAudit')?.addEventListener('submit', submitNewAuditForm);
+    document.getElementById('btnCancelNewAudit')?.addEventListener('click', closeNewAuditModal);
+    document.getElementById('formTemplateItem')?.addEventListener('submit', submitTemplateItemForm);
+    document.getElementById('btnCancelTemplateItem')?.addEventListener('click', closeTemplateItemModal);
+    document.getElementById('btnViewAuditReport')?.addEventListener('click', () => viewAuditReport());
+    document.getElementById('btnCloseAuditWorkspace')?.addEventListener('click', closeAuditWorkspace);
+
     document.getElementById('auditTemplateEditor')?.addEventListener('click', (e) => {
         const btnEdit = e.target.closest('[data-action="edit-tpl-item"]');
         if (btnEdit && btnEdit.dataset.ref) { openTemplateItemModal(btnEdit.dataset.ref); return; }

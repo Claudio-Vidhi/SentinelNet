@@ -1193,7 +1193,9 @@ document.getElementById('tab-fortigate')?.addEventListener('input', (e) => {
     }
 });
 
-document.getElementById('fgtMgrTargetsTableBody')?.addEventListener('click', (e) => {
+// Il <tbody> riempito da renderFgtMgrTargets(): agganciare qui il listener
+// delegato, non a un id inesistente.
+document.getElementById('fgtMgrTableBody')?.addEventListener('click', (e) => {
     const el = e.target.closest('[data-fgt-action]');
     if (!el || !el.dataset.ip) return;
     const action = el.dataset.fgtAction;

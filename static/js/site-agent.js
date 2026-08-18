@@ -298,7 +298,9 @@
         }
     });
 
-    document.getElementById('agentControlModalBody')?.addEventListener('click', (e) => {
+    // Stesso id riempito da openAgentControlModal(): il listener delegato deve
+    // stare sul contenitore reale, non su un wrapper inesistente.
+    document.getElementById('agentControlBody')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
         if (!btn || !btn.dataset.siteId) return;
         const action = btn.dataset.action;

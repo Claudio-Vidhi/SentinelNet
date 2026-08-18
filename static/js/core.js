@@ -773,11 +773,12 @@ const LAZY_TAB_SCRIPTS = {
     'tab-ai': ['/static/js/ai.js'],
     'tab-fortigate': ['/static/js/fortigate-management.js'],
     'tab-wlc': ['/static/js/wlc.js'],
-    'tab-audit-checklist': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/audit_checklist.js'],
     'tab-settings': ['/static/js/settings.js', '/static/js/observability.js'],
     'tab-incidents': ['/static/js/incidents.js'],
     'tab-redundancy': ['/static/js/redundancy.js'],
-    'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js'],
+    // La Checklist Audit Firewall e' un sotto-tab di NetSec Audit: il suo
+    // modulo va caricato con la tab che lo contiene.
+    'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js'],
 };
 
 const _lazyLoaded = new Set();
@@ -871,7 +872,6 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-mcp-client') loadMcpClientTab();
     else if (tabId === 'tab-fortigate') loadFgtTab();
     else if (tabId === 'tab-wlc' && typeof loadWlcTab === 'function') loadWlcTab();
-    else if (tabId === 'tab-audit-checklist') loadAuditChecklistTab();
     else if (tabId === 'tab-settings') loadAppSettings();
     // Queste tre tab prima si inizializzavano con una seconda chiamata
     // nell'onclick del pulsante nav; ora il dispatch e' unico e arriva
@@ -1141,7 +1141,9 @@ document.addEventListener('toggle', function(e) {
     }
 }, true);
 
-document.getElementById('identitiesList')?.addEventListener('click', (e) => {
+// Il <tbody> e' il contenitore che renderIdentitiesPanel() riempie: agganciare
+// qui il listener delegato, non a un wrapper inesistente.
+document.getElementById('identitiesTableBody')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn || !btn.dataset.id) return;
     const act = btn.dataset.action;
