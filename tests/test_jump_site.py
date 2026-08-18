@@ -9,7 +9,9 @@ core.data_config.get_path at module import time, so setting the env var
 afterwards would have no effect.
 """
 import os
+import shutil
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -428,6 +430,64 @@ class FrontendJumpStatusIsNotCollapsedToOffline(unittest.TestCase):
 
     def test_status_idle_css_class_exists(self):
         self.assertIn(".status.idle", self._read("static", "css", "dashboard.css"))
+
+
+class FleetOnelineBayIsNotPaintedDownForUnmeasurable(unittest.TestCase):
+    """A fourth consumer in home.js, found on re-review: renderFleetOneline's
+    per-tenant bay computed its worst status with
+    `st === 'offline' || st === 'unknown' -> down`. That line predates this
+    task and was harmless while 'unknown' never reached globalVersions[...]
+    .status; home.js:47 (fixed earlier this round) now writes exactly that
+    value for a jump-site device, so a tenant reached only through a bastion
+    painted its whole bay red, contradicting the correctly-fixed KPI row and
+    attention table on the same page."""
+
+    def setUp(self):
+        import os
+        self.base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _read(self, *parts):
+        import os
+        with open(os.path.join(self.base, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_bucket_counting_has_its_own_unknown_bucket(self):
+        # Source-text check for the bucket split; the worst-of-bay `state`
+        # function itself is covered behaviourally below (real execution, not
+        # text matching -- a wrong operator here reads fine as text).
+        home_src = self._read("static", "js", "home.js")
+        self.assertIn("else if (st === 'unknown') b.unknown++;", home_src)
+        self.assertNotIn("st === 'offline' || st === 'unknown'", home_src)
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_bay_state_treats_unknown_as_its_own_state(self):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        harness = os.path.join(base, "tests", "js", "test_home_fleet_state.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=base)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+    def test_bay_sub_label_does_not_claim_all_up_when_unmeasurable(self):
+        # The line right below the down/unknown split: without its own
+        # branch, an unknown-only bay would fall through to "all up" -- the
+        # opposite lie the coordinator warned about.
+        home_src = self._read("static", "js", "home.js")
+        self.assertIn("b.unknown ? escapeHtml(`${b.unknown} ${L.homeBayUnknown}`)", home_src)
+
+    def test_unknown_bay_i18n_keys_exist_in_both_languages(self):
+        from tests.test_helpers_frontend import frontend_source
+        src = frontend_source()
+        self.assertEqual(src.count("homeBayUnknown:"), 2)
+        self.assertEqual(src.count("homeLegUnknown:"), 2)
+
+    def test_legend_and_css_declare_the_fourth_state(self):
+        # "the legend is the contract of symbols" (home.js/dashboard.html's
+        # own comment): a bar state with no legend entry breaks that contract.
+        html = self._read("templates", "dashboard.html")
+        self.assertIn('data-state="unknown"', html)
+        self.assertIn('data-i18n="homeLegUnknown"', html)
+        css = self._read("static", "css", "dashboard.css")
+        self.assertIn('.oneline-bay[data-state="unknown"] .oneline-sw', css)
 
 
 class NoDirectNetmikoImports(unittest.TestCase):
