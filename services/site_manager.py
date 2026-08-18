@@ -6,6 +6,9 @@ Ogni sito ha una modalità:
   - "agent":   un processo agente leggero gira nella sede remota, si connette
     IN USCITA verso il centrale (HTTPS) e vi spinge inventario, MAC e stato;
     il centrale gli inoltra comandi CLI tramite una coda di job.
+  # - "jump": the central reaches remote devices through an SSH bastion
+  #   (jump_host/jump_port/jump_identity below); no token, no agent process.
+  #   The tunnel itself is built on top of this data model in a later task.
 
 I siti sono persistiti in sites.json (come user_manager/inventory_manager).
 Il token per-sede è generato una sola volta e memorizzato SOLO come hash
@@ -31,7 +34,7 @@ SITES_JSON = data_config.get_path("sites.json")
 JOBS_DB = data_config.get_path("agent_jobs.db")
 
 DEFAULT_SITE_ID = "central"
-VALID_MODES = ("central", "agent")
+VALID_MODES = ("central", "agent", "jump")
 
 _lock = threading.RLock()
 _jobs_lock = threading.Lock()
@@ -107,6 +110,20 @@ def _public(site: dict) -> dict:
     return d
 
 
+def _validate_jump(values: dict) -> dict:
+    """Normalize and check the bastion fields of a 'jump' site."""
+    host = (values.get("jump_host") or "").strip()
+    if not host:
+        raise ValueError("Un sito 'jump' richiede jump_host.")
+    identity = (values.get("jump_identity") or "").strip()
+    if not identity:
+        raise ValueError("Un sito 'jump' richiede jump_identity.")
+    port = int(values.get("jump_port") or 22)
+    if not (1 <= port <= 65535):
+        raise ValueError("jump_port non valida.")
+    return {"jump_host": host, "jump_port": port, "jump_identity": identity}
+
+
 # --- CRUD siti ---
 
 def list_sites() -> list:
@@ -120,15 +137,18 @@ def get_site(site_id: str):
         return _public(s) if s else None
 
 
-def create_site(name: str, mode: str, subnets=None):
+def create_site(name: str, mode: str, subnets=None, **kwargs):
     """Crea un sito. Ritorna (site_pubblico, token_in_chiaro|None).
-    Per i siti in modalità 'agent' viene generato un token (mostrato una volta)."""
+    Per i siti in modalità 'agent' viene generato un token (mostrato una volta).
+    # For 'jump' sites, kwargs carries jump_host/jump_port/jump_identity
+    # (validated by _validate_jump) and no token is generated."""
     name = (name or "").strip()
     if not name:
         raise ValueError("Il nome del sito è obbligatorio.")
     if mode not in VALID_MODES:
         raise ValueError(f"Modalità non valida: {mode}")
     subnets = [s.strip() for s in (subnets or []) if s and s.strip()]
+    jump_fields = _validate_jump(kwargs) if mode == "jump" else {}
     with _lock:
         data = _load()
         base = _slugify(name)
@@ -148,6 +168,7 @@ def create_site(name: str, mode: str, subnets=None):
             "token_hash": token_hash,
             "created": time.time(),
             "last_seen": None,
+            **jump_fields,
         }
         _save(data)
         return _public(data[site_id]), token_plain
@@ -186,6 +207,13 @@ def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> b
                 site["token_hash"] = None
         if subnets is not None:
             site["subnets"] = [s.strip() for s in subnets if isinstance(s, str) and s.strip()]
+        # If the resulting mode is 'jump', validate the bastion fields (existing
+        # values merged with any incoming kwargs) before the generic passthrough
+        # below can write an invalid jump site.
+        if site["mode"] == "jump":
+            site.update(_validate_jump({**site, **kwargs}))
+            kwargs = {k: v for k, v in kwargs.items()
+                      if k not in ("jump_host", "jump_port", "jump_identity")}
         for k, v in kwargs.items():
             site[k] = v
         _save(data)
