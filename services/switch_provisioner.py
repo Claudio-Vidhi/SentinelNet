@@ -327,7 +327,7 @@ def push_via_ssh(host: str, username: str, password: str, secret: str,
                   device_type: str = "cisco_ios") -> dict:
     """Applica la config generata via SSH (Netmiko) su un apparato
     raggiungibile e opzionalmente esegue 'write memory'."""
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
 
     commands = [ln for ln in config_text.splitlines()
                 if ln.strip() and not ln.strip().startswith("!")]

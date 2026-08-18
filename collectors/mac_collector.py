@@ -401,7 +401,7 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
     cases an ad-hoc command can be passed (e.g. 'show bridge-domain') with the
     related parsing format (fmt in CLI_FORMATS)."""
     try:
-        from netmiko import ConnectHandler
+        from core.net_ssh import ConnectHandler
     except ImportError:
         return None
     cmd = command or "show mac address-table"
@@ -569,7 +569,7 @@ def collect_if_macs_via_cli(host, username, password, secret="", device_type="ci
                             timeout=20):
     """Own-interface MACs via Netmiko CLI ('show interfaces')."""
     try:
-        from netmiko import ConnectHandler
+        from core.net_ssh import ConnectHandler
     except ImportError:
         return None
     params = {'device_type': device_type, 'host': host, 'username': username,

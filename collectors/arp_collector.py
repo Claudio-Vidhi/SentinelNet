@@ -112,7 +112,7 @@ def collect_from_device(device: dict) -> dict:
     command = ARP_COMMANDS.get(driver_name or "", "show arp")
     source_type = "firewall" if driver_name == "paloalto_panos" else "switch"
 
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
     from core.core_engine import get_device_credentials
     username, password, secret = get_device_credentials(device)
     params = {"device_type": netmiko_type, "host": device["IP"],

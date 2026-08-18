@@ -79,7 +79,7 @@ def set_admin_state(device: dict, interface: str, up: bool) -> dict:
     bounce — un 'shutdown' mandato a un ProCurve non spegne niente e fa
     credere all'operatore che il client sia isolato.
     """
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
 
     netmiko_type, params = _params(device)
     down, up_cmds = _build(netmiko_type, interface)
@@ -106,7 +106,7 @@ def bounce(device: dict, interface: str, wait_s: float = 2.0) -> dict:
     l'ha trovata.
     """
     import time
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
 
     netmiko_type, params = _params(device)
     down, up = _build(netmiko_type, interface)

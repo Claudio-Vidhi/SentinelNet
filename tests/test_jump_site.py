@@ -224,5 +224,29 @@ class JumpTransportLocking(unittest.TestCase):
         self.assertNotIn("lock-test-fail", net_ssh._transports)
 
 
+class NoDirectNetmikoImports(unittest.TestCase):
+    """Every SSH call site must go through core.net_ssh, otherwise a jump site
+    silently bypasses the tunnel and tries to reach the device directly."""
+
+    # site_agent.py runs inside the remote network: it must NOT tunnel.
+    ALLOWED = {"core/net_ssh.py", "services/site_agent.py"}
+
+    def test_no_module_imports_connecthandler_from_netmiko(self):
+        import pathlib
+        import re
+        root = pathlib.Path(__file__).resolve().parents[1]
+        offenders = []
+        for path in root.rglob("*.py"):
+            if ".venv" in path.parts or "tests" in path.parts:
+                continue
+            rel = path.relative_to(root).as_posix()
+            if rel in self.ALLOWED:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if re.search(r"from netmiko import [^\n]*ConnectHandler", text):
+                offenders.append(rel)
+        self.assertEqual(offenders, [])
+
+
 if __name__ == "__main__":
     unittest.main()

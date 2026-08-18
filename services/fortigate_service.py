@@ -263,7 +263,7 @@ def api_get_cmdb(ip: str, path: str, fmt: Optional[str] = None, flt: Optional[st
 
 def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
     """Esegue un comando CLI FortiOS via Netmiko e ritorna l'output testuale."""
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
     from core.core_engine import get_device_credentials, get_device_port
     username, password, _secret = get_device_credentials(device)
     params = {"device_type": "fortinet", "host": device["IP"],
