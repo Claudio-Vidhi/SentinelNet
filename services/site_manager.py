@@ -144,6 +144,12 @@ def get_site(site_id: str):
         return _public(s) if s else None
 
 
+def is_reachable_by_icmp(site_id: str) -> bool:
+    """False for bastion-only sites: ICMP cannot cross an SSH tunnel."""
+    site = get_site(site_id or "")
+    return not (site and site.get("mode") == "jump")
+
+
 def create_site(name: str, mode: str, subnets=None, **kwargs):
     """Crea un sito. Ritorna (site_pubblico, token_in_chiaro|None).
     Per i siti in modalità 'agent' viene generato un token (mostrato una volta).

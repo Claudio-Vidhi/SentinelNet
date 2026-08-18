@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Router Scan. Estratto da app_server.py (fase 6.6)."""
 
+import ipaddress
 import threading
 import uuid
 import time
@@ -15,6 +16,7 @@ from routers.deps import get_current_user, require_operator, user_group_scope
 from collectors.network_scanner import parse_network, scan_subnet
 from core import core_engine
 from security import crypto_vault, identity_manager
+from services import site_manager
 
 router = APIRouter(tags=["Scan"])
 
@@ -29,6 +31,23 @@ class SubnetScanRequest(BaseModel):
 _scan_jobs: dict[str, dict] = {}
 
 _scan_jobs_lock = threading.Lock()
+
+
+def _site_for_network(hosts: list[str]):
+    """Return the site whose declared subnet contains this scan's targets, or
+    None. Uses the first host as a proxy for the whole requested range."""
+    if not hosts:
+        return None
+    addr = ipaddress.ip_address(hosts[0])
+    for site in site_manager.list_sites():
+        for raw in site.get("subnets") or []:
+            try:
+                net = ipaddress.ip_network(str(raw).strip(), strict=False)
+            except ValueError:
+                continue
+            if addr in net:
+                return site
+    return None
 
 def _run_scan_job(job_id: str, req: SubnetScanRequest):
     def _progress(done: int, total: int):
@@ -60,6 +79,11 @@ def start_subnet_scan(
         hosts = parse_network(payload.network)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    site = _site_for_network(hosts)
+    if site and not site_manager.is_reachable_by_icmp(site["id"]):
+        raise HTTPException(status_code=409,
+                            detail="Sito jump: la scansione ICMP non e' possibile.")
 
     job_id = str(uuid.uuid4())
     with _scan_jobs_lock:
