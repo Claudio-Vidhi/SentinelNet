@@ -16,6 +16,8 @@ import time
 import unittest
 import unittest.mock as mock
 
+import paramiko
+
 _TMP = tempfile.mkdtemp(prefix="sentinelnet_jump_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
 
@@ -148,10 +150,9 @@ class JumpTransportLocking(unittest.TestCase):
 
     def tearDown(self):
         from core import net_ssh
-        net_ssh._transports.pop("lock-test-a", None)
-        net_ssh._transports.pop("lock-test-b", None)
-        net_ssh._site_locks.pop("lock-test-a", None)
-        net_ssh._site_locks.pop("lock-test-b", None)
+        for site_id in ("lock-test-a", "lock-test-b", "lock-test-fail"):
+            net_ssh._transports.pop(site_id, None)
+            net_ssh._site_locks.pop(site_id, None)
 
     def test_two_sites_connect_concurrently_not_serialized(self):
         from core import net_ssh
@@ -203,6 +204,24 @@ class JumpTransportLocking(unittest.TestCase):
         cc.assert_called_once_with(("198.51.100.42", 22), timeout=net_ssh.CONNECT_TIMEOUT)
         net_ssh._transports.pop("lock-test-timeout", None)
         net_ssh._site_locks.pop("lock-test-timeout", None)
+
+    def test_failed_connect_closes_the_socket_and_clears_cache(self):
+        from core import net_ssh
+        site = {"id": "lock-test-fail", "jump_host": "198.51.100.43",
+                "jump_port": 22, "jump_identity": "id-f"}
+        fake_sock = mock.Mock()
+        fake_transport = mock.Mock()
+        fake_transport.connect.side_effect = paramiko.AuthenticationException("bad creds")
+        with mock.patch.object(net_ssh.socket, "create_connection", return_value=fake_sock), \
+             mock.patch.object(net_ssh.paramiko, "Transport", return_value=fake_transport), \
+             mock.patch("security.identity_manager.get_identity_credentials",
+                        return_value=("u", "wrong-password", "s")):
+            with self.assertRaises(paramiko.AuthenticationException):
+                net_ssh._transport(site)
+        # The socket the module opened is ours to close on a failed connect —
+        # paramiko doesn't do it for us once we hand it an already-open sock.
+        fake_sock.close.assert_called_once()
+        self.assertNotIn("lock-test-fail", net_ssh._transports)
 
 
 if __name__ == "__main__":
