@@ -330,10 +330,11 @@ def invalidate_device_ip_cache():
 
 
 def get_device_by_ip(ip: str):
-    """Risolve un IP in (hostname, gruppo/tenant) per l'attribuzione dei
-    flussi all'ingest. Ritorna dict {'ip','hostname','tenant'} oppure None se
-    sconosciuto. Se PIÙ device condividono lo stesso IP ritorna il sentinella
-    {'collision': True} (attribuzione rifiutata, anomalia da auditare)."""
+    """Resolve an IP to {'ip', 'hostname', 'tenant', 'site'}, or None if
+    unknown. 'tenant' is the device's Group column, 'site' its Site column
+    (defaulting to 'central'). If MULTIPLE devices share the same IP, returns
+    the sentinel {'collision': True} instead (attribution refused, an anomaly
+    to audit) — callers that need a per-key field must check for it first."""
     global _device_ip_cache
     with _device_ip_cache_lock:
         if _device_ip_cache is None:
