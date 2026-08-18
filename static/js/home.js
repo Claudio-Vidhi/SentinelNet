@@ -116,12 +116,16 @@ function renderFleetOneline(devs) {
     const bays = new Map();
     devs.forEach(d => {
         const tenant = (d.Group || '').trim() || L.homeBayUnassigned;
-        if (!bays.has(tenant)) bays.set(tenant, { total: 0, down: 0, warn: 0, idle: 0 });
+        if (!bays.has(tenant)) bays.set(tenant, { total: 0, down: 0, warn: 0, idle: 0, unknown: 0 });
         const b = bays.get(tenant);
         b.total++;
         const st = (globalVersions[d.IP] || {}).status;
         if (!st) b.idle++;                                   // mai interrogato
-        else if (st === 'offline' || st === 'unknown') b.down++;
+        // 'unknown': jump-site device, no ICMP through the bastion — not
+        // measurable, NOT a confirmed down. Its own bucket, not merged into
+        // 'down' (that painted a bastion-only tenant's bay red as an outage).
+        else if (st === 'unknown') b.unknown++;
+        else if (st === 'offline') b.down++;
         else if (st !== 'online') b.warn++;
     });
 
@@ -139,11 +143,15 @@ function renderFleetOneline(devs) {
     // Peggiore stato della bay:
     // - 'idle': nessun apparato della bay è mai stato scansionato
     // - 'down': TUTTI gli apparati della bay sono giù (interruttore aperto / irraggiungibile)
-    // - 'warn': solo ALCUNI apparati sono giù o in attenzione (degradato / attenzione)
+    // - 'unknown': TUTTI gli apparati non-idle della bay sono su un sito jump
+    //   (nessun ICMP attraverso il bastione) — non misurabile, MAI un'interruzione:
+    //   una sede raggiunta solo via bastione non deve sembrare un'interruzione.
+    // - 'warn': un mix di giù/attenzione/non misurabile (degradato / attenzione)
     // - 'up': tutti gli apparati operativi (eccitato)
     const state = b => (!b || !b.total || b.idle === b.total) ? 'idle'
                      : (b.down === b.total) ? 'down'
-                     : (b.down > 0 || b.warn > 0) ? 'warn'
+                     : (b.unknown === b.total) ? 'unknown'
+                     : (b.down > 0 || b.warn > 0 || b.unknown > 0) ? 'warn'
                      : 'up';
     let html = shown.map(([name, b]) => `
         <button type="button" class="oneline-bay" data-state="${state(b)}"
@@ -154,6 +162,7 @@ function renderFleetOneline(devs) {
             <span class="oneline-count">${b.total}</span>
             <span class="oneline-name">${escapeHtml(name)}</span>
             <span class="oneline-sub">${b.down ? escapeHtml(`${b.down} ${L.homeBayDown}`)
+                 : b.unknown ? escapeHtml(`${b.unknown} ${L.homeBayUnknown}`)
                  : (b.idle === b.total) ? escapeHtml(L.homeBayUnscanned)
                  : escapeHtml(L.homeBayAllUp)}</span>
           </span>
@@ -162,8 +171,9 @@ function renderFleetOneline(devs) {
     if (rest.length) {
         const agg = rest.reduce((a, [, b]) => ({
             total: a.total + b.total, down: a.down + b.down,
-            warn: a.warn + b.warn, idle: a.idle + b.idle
-        }), { total: 0, down: 0, warn: 0, idle: 0 });
+            warn: a.warn + b.warn, idle: a.idle + b.idle,
+            unknown: a.unknown + b.unknown
+        }), { total: 0, down: 0, warn: 0, idle: 0, unknown: 0 });
         html += `
         <button type="button" class="oneline-bay" data-state="${state(agg)}"
                 data-action="switch-tab" data-tab="tab-devices">

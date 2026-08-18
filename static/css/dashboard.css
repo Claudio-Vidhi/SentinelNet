@@ -1496,6 +1496,12 @@ details.mac-switch > summary:hover,
 .oneline-bay[data-state="idle"] .oneline-sw {
   background: transparent; border: 2px dashed var(--lamp-idle);
 }
+/* non misurabile: tratteggiato come 'idle' ma con lavaggio pieno — un dato
+   che manca per costruzione (bastione, niente ICMP), non un guasto ('down',
+   contorno rosso) e non un apparato mai interrogato ('idle', vuoto). */
+.oneline-bay[data-state="unknown"] .oneline-sw {
+  background: var(--lamp-idle-wash); border: 2px dashed var(--lamp-idle);
+}
 
 .oneline-node {
   margin-top: 8px;
@@ -1557,7 +1563,8 @@ details.mac-switch > summary:hover,
 .oneline-legend .oneline-bay[data-state="up"] .oneline-sw,
 .oneline-legend .oneline-bay[data-state="warn"] .oneline-sw,
 .oneline-legend .oneline-bay[data-state="down"] .oneline-sw,
-.oneline-legend .oneline-bay[data-state="idle"] .oneline-sw { border-width: 1.5px; }
+.oneline-legend .oneline-bay[data-state="idle"] .oneline-sw,
+.oneline-legend .oneline-bay[data-state="unknown"] .oneline-sw { border-width: 1.5px; }
 
 /* Striscia eventi: la stampante di sala controllo */
 .eventstrip { display: flex; flex-direction: column; }
