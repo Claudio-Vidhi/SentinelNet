@@ -182,7 +182,7 @@ def _linux_devices() -> list:
 
 def _poll_device(device: dict) -> list:
     """[(kind, summary_json)] per un host. Lista vuota se non risponde."""
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
     from core import core_engine
     from drivers.linux import sanitize_session
 

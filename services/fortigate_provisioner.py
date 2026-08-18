@@ -373,7 +373,7 @@ def push_via_ssh(host: str, username: str, password: str, config_text: str,
                  port: int = 22) -> dict:
     """Applica la config FortiOS via SSH (Netmiko, device_type 'fortinet').
     FortiOS salva automaticamente a ogni 'end': nessun write memory."""
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
 
     commands = [ln for ln in config_text.splitlines()
                 if ln.strip() and not ln.strip().startswith("#")]

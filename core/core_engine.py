@@ -4,7 +4,7 @@ import time
 import logging
 import socket
 from typing import Optional, Any, Dict, List, Tuple
-from netmiko import ConnectHandler
+from core.net_ssh import ConnectHandler
 from services.inventory_manager import (
     update_version_inventory, get_all_devices, get_detected_versions,
     update_device_hostname, get_all_vendors, get_category_assignments,

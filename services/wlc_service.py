@@ -96,7 +96,7 @@ def _session(device: dict, timeout: int = 30):
     """Apre una sola sessione SSH e ne cede (conn, platform, sysinfo).
     AireOS accetta al massimo 5 sessioni SSH concorrenti: un comando per
     connessione esauriva il controller a ogni refresh del tab."""
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
     vendor = (device.get("Vendor") or "").lower()
     try:
         _, netmiko_type = resolve_driver(vendor)
