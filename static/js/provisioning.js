@@ -537,9 +537,9 @@ function assignIdentityToDevices(identityId) {
         if (allowedTenants.includes('all')) allowedTenants = null;
     }
 
-    // globalDevices e' un 'let' di core.js: sta nello scope lessicale globale,
-    // non su window. Leggerlo come window.globalDevices dava sempre undefined
-    // e la lista dei dispositivi restava vuota per ogni tenant.
+    // globalDevices is a 'let' in core.js: it lives in the global lexical
+    // scope, not on window. Reading it as window.globalDevices always returned
+    // undefined and left the device list empty for every tenant.
     const devices = (globalDevices || []).filter(d => {
         if (allowedTenants && allowedTenants.length) return allowedTenants.includes(d.Group);
         return currentTenant === 'all' || d.Group === currentTenant;

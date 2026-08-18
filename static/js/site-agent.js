@@ -298,8 +298,8 @@
         }
     });
 
-    // Stesso id riempito da openAgentControlModal(): il listener delegato deve
-    // stare sul contenitore reale, non su un wrapper inesistente.
+    // Same id openAgentControlModal() fills: the delegated listener belongs on
+    // the real container, not on a wrapper that does not exist.
     document.getElementById('agentControlBody')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
         if (!btn || !btn.dataset.siteId) return;

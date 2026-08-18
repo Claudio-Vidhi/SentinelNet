@@ -1,26 +1,25 @@
-// Contratto fra i moduli del frontend.
+// Cross-module contract for the frontend.
 //
-// I file di static/js sono script classici che condividono un unico scope
-// globale: quello che un modulo espone con `window.X = ...` viene poi chiamato
-// da un altro come `X()`. Senza queste dichiarazioni il type check segnala sia
-// l'assegnazione sia la chiamata; con queste, segnala SOLO i nomi non previsti
-// — ed e' esattamente il caso che ha lasciato `window.globalDevices` sempre
-// undefined (globalDevices e' un `let` di core.js, non una proprieta' di
-// window, e non va aggiunto qui).
+// The files in static/js are classic scripts sharing one global scope: what a
+// module exposes with `window.X = ...` is later called by another as `X()`.
+// Without these declarations the type check flags both the assignment and the
+// call; with them it flags ONLY unexpected names — which is exactly the case
+// that left `window.globalDevices` permanently undefined (globalDevices is a
+// `let` in core.js, not a window property, so it must NOT be added here).
 //
-// Aggiungere una voce SOLO insieme al corrispondente `window.X = ...`.
-// Rigenerabile: vedi docs/development.md.
+// Add an entry ONLY together with its `window.X = ...` assignment.
+// Regenerating: see docs/development.md.
 
-// --- Librerie vendorizzate (static/vendor), caricate via <script src>. ---
-// `var` e non `const`: sono UMD e si registrano su window, quindi il codice le
-// raggiunge sia come `html2pdf` sia come `window.html2pdf`.
+// --- Vendored libraries (static/vendor), loaded via <script src>. ---
+// `var` and not `const`: they are UMD and register themselves on window, so
+// code reaches them both as `html2pdf` and as `window.html2pdf`.
 declare var vis: any;
 declare var Chart: any;
 declare var html2pdf: any;
 declare var Terminal: any;
 declare var FitAddon: any;
 
-// --- Esposizioni cross-modulo (window.X = ...) ---
+// --- Cross-module exposures (window.X = ...) ---
 
 // audit_checklist.js
 declare var closeAuditWorkspace: any;
@@ -105,12 +104,12 @@ declare var triggerAgentSelfUpdate: any;
 declare var _threatScanBusy: any;
 declare var _vwVendor: any;
 
-// Nomi che esistono gia' come dichiarazione top-level in un modulo e che
-// vengono ANCHE riesposti su window: qui va dichiarata solo la meta' 'window',
-// altrimenti si duplica l'identificatore.
+// Names that already exist as a top-level declaration in some module AND are
+// also re-exposed on window: only the 'window' half belongs here, otherwise the
+// identifier is declared twice.
 interface Window {
     loadAssetOnce: any;      // core.js
-    trafState: any;          // observability.js, letto da flow-analytics.js
-    _vwLoaded: any;          // threat-intel.js, flag di primo caricamento
-    webkitAudioContext: any; // fallback Safari legacy in devices.js
+    trafState: any;          // observability.js, read by flow-analytics.js
+    _vwLoaded: any;          // threat-intel.js, first-load flag
+    webkitAudioContext: any; // legacy Safari fallback in devices.js
 }

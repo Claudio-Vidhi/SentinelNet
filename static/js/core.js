@@ -777,8 +777,8 @@ const LAZY_TAB_SCRIPTS = {
     'tab-settings': ['/static/js/settings.js', '/static/js/observability.js'],
     'tab-incidents': ['/static/js/incidents.js'],
     'tab-redundancy': ['/static/js/redundancy.js'],
-    // La Checklist Audit Firewall e' un sotto-tab di NetSec Audit: il suo
-    // modulo va caricato con la tab che lo contiene.
+    // The Firewall Audit Checklist is a sub-tab of NetSec Audit: its module
+    // has to load together with the tab that contains it.
     'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js'],
 };
 
@@ -1143,8 +1143,8 @@ document.addEventListener('toggle', function(e) {
     }
 }, true);
 
-// Il <tbody> e' il contenitore che renderIdentitiesPanel() riempie: agganciare
-// qui il listener delegato, non a un wrapper inesistente.
+// The <tbody> is the container renderIdentitiesPanel() fills: bind the
+// delegated listener here, not to a wrapper that does not exist.
 document.getElementById('identitiesTableBody')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn || !btn.dataset.id) return;
