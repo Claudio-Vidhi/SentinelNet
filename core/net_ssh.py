@@ -44,12 +44,19 @@ def jump_channel(site: dict, host: str, port: int) -> paramiko.Channel:
 
 
 def _jump_site_for(host: str):
-    """Return the jump site owning this device IP, or None."""
+    """Return the jump site owning this device IP, or None.
+
+    get_device_by_ip's cache entry carries "site" (lowercase — see
+    services/inventory_manager.py:get_device_by_ip), not the raw CSV row's
+    "Site" column. The collision sentinel {"collision": True} has no "site"
+    key, so a duplicated IP falls through here to a direct connection rather
+    than risking a tunnel to the wrong customer.
+    """
     from services import inventory_manager, site_manager
     device = inventory_manager.get_device_by_ip(host)
     if not device:
         return None
-    site = site_manager.get_site(device.get("Site") or "")
+    site = site_manager.get_site(device.get("site") or "")
     return site if site and site.get("mode") == "jump" else None
 
 

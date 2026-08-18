@@ -349,6 +349,7 @@ def get_device_by_ip(ip: str):
                     "ip": key,
                     "hostname": d.get('Hostname') or "",
                     "tenant": d.get('Group') or 'Generale',
+                    "site": d.get('Site') or 'central',
                 }
             _device_ip_cache = cache
         return _device_ip_cache.get(ip)

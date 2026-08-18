@@ -17,6 +17,7 @@ _TMP = tempfile.mkdtemp(prefix="sentinelnet_jump_")
 os.environ["SENTINELNET_DATA_DIR"] = _TMP
 
 from services import site_manager  # noqa: E402
+from services import inventory_manager  # noqa: E402
 
 
 class JumpSiteModel(unittest.TestCase):
@@ -61,7 +62,12 @@ class JumpChannel(unittest.TestCase):
     def test_connect_handler_injects_sock_for_a_jump_device(self):
         from core import net_ssh
         chan = object()
-        device = {"IP": "192.0.2.5", "Site": "customer-a"}
+        # Shape of services.inventory_manager.get_device_by_ip's real cache
+        # entry (see get_device_by_ip): lowercase keys, not the raw hosts.csv
+        # row. JumpChannelRealDeviceLookup below exercises the real function
+        # instead of a hand-picked shape.
+        device = {"ip": "192.0.2.5", "hostname": "", "tenant": "Generale",
+                  "site": "customer-a"}
         site = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
                 "jump_port": 22, "jump_identity": "id-1"}
         with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
@@ -75,7 +81,8 @@ class JumpChannel(unittest.TestCase):
 
     def test_connect_handler_is_untouched_for_a_central_device(self):
         from core import net_ssh
-        device = {"IP": "192.0.2.6", "Site": "central"}
+        device = {"ip": "192.0.2.6", "hostname": "", "tenant": "Generale",
+                  "site": "central"}
         site = {"id": "central", "mode": "central"}
         with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
              mock.patch("services.inventory_manager.get_device_by_ip", return_value=device), \
@@ -91,6 +98,45 @@ class JumpChannel(unittest.TestCase):
             net_ssh.ConnectHandler(device_type="cisco_ios", host="203.0.113.9",
                                    username="u", password="p")
         self.assertNotIn("sock", nm.call_args.kwargs)
+
+
+class JumpChannelRealDeviceLookup(unittest.TestCase):
+    """Exercises the real services.inventory_manager.get_device_by_ip instead
+    of mocking it: the mocked tests above assume a shape, this test proves
+    _jump_site_for actually works against the live cache. Isolates hosts.csv
+    the way tests/test_bulk_assign_identity.py does (HOSTS_CSV attribute
+    override, not the env var, since inventory_manager may already be
+    imported with a resolved path by the time this test runs)."""
+
+    def setUp(self):
+        fd, self.csv_path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        os.remove(self.csv_path)
+        self._orig_csv = inventory_manager.HOSTS_CSV
+        inventory_manager.HOSTS_CSV = self.csv_path
+        inventory_manager.invalidate_device_ip_cache()
+
+    def tearDown(self):
+        inventory_manager.HOSTS_CSV = self._orig_csv
+        inventory_manager.invalidate_device_ip_cache()
+        if os.path.exists(self.csv_path):
+            os.remove(self.csv_path)
+
+    def test_connect_handler_finds_jump_site_via_real_device_lookup(self):
+        from core import net_ssh
+        inventory_manager.add_or_update_device(
+            "192.0.2.5", "cisco", "default", "u", "p", "s", "Generale",
+            site="customer-a")
+        chan = object()
+        site = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
+                "jump_port": 22, "jump_identity": "id-1"}
+        with mock.patch.object(net_ssh, "_netmiko_connect") as nm, \
+             mock.patch.object(net_ssh, "jump_channel", return_value=chan) as jc, \
+             mock.patch("services.site_manager.get_site", return_value=site):
+            net_ssh.ConnectHandler(device_type="cisco_ios", host="192.0.2.5",
+                                   username="u", password="p")
+        jc.assert_called_once_with(site, "192.0.2.5", 22)
+        self.assertIs(nm.call_args.kwargs["sock"], chan)
 
 
 if __name__ == "__main__":
