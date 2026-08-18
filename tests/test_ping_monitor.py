@@ -79,7 +79,7 @@ class PingMonitorCycleTest(unittest.TestCase):
                        {"192.0.2.1": True, "192.0.2.2": False})
         with patch.object(ping_monitor, "get_app_settings", return_value={}):
             status = ping_monitor.get_status()
-        self.assertEqual(status["summary"], {"total": 2, "up": 1, "down": 1})
+        self.assertEqual(status["summary"], {"total": 2, "up": 1, "down": 1, "unknown": 0})
         self.assertIsNotNone(status["last_run"])
         self.assertFalse(status["enabled"])
 

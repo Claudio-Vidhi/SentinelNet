@@ -27,8 +27,15 @@ from services import inventory_manager  # noqa: E402
 
 class JumpSiteModel(unittest.TestCase):
     def test_create_jump_site_keeps_fields_and_issues_no_token(self):
+        # subnets uses 203.0.113.0/24 (RFC 5737 TEST-NET-3), not 192.0.2.0/24:
+        # site_manager binds its storage path at first import across the whole
+        # suite (see module docstring), so a site declared here is visible to
+        # every test file that runs afterwards in the same process. 192.0.2.x
+        # is this codebase's default example device range, so declaring it as
+        # an owned site subnet would make any later, unrelated test that scans
+        # or probes a 192.0.2.x address collide with this jump site.
         site, token = site_manager.create_site(
-            "Customer A", "jump", subnets=["192.0.2.0/24"],
+            "Customer A", "jump", subnets=["203.0.113.0/24"],
             jump_host="198.51.100.10", jump_port=22, jump_identity="id-1")
         self.assertIsNone(token)
         self.assertEqual(site["mode"], "jump")
@@ -222,6 +229,100 @@ class JumpTransportLocking(unittest.TestCase):
         # paramiko doesn't do it for us once we hand it an already-open sock.
         fake_sock.close.assert_called_once()
         self.assertNotIn("lock-test-fail", net_ssh._transports)
+
+
+class IcmpSkippedForJumpSites(unittest.TestCase):
+    """Task 4: a bastion carries TCP only, never ICMP. A jump-site device must
+    come back 'unknown', never a false 'down'.
+
+    The plan's brief guessed a `ping_monitor.check_device(device) -> "unknown"`
+    entry point that does not exist. The real entry point is `_run_cycle()`
+    (services/ping_monitor.py:66), which pings every inventory device and
+    keeps per-IP state in `_state`; the per-device pinger `_ping_one` (line 59)
+    only ever sees a bare IP, so the jump-site guard has to happen in
+    `_run_cycle` where the device's Site is still known. This test drives that
+    real path instead."""
+
+    def setUp(self):
+        from services import ping_monitor
+        with ping_monitor._lock:
+            ping_monitor._state.clear()
+            ping_monitor._last_run = None
+
+    def test_jump_site_device_is_unknown_not_offline(self):
+        from services import ping_monitor
+        device = {"IP": "192.0.2.5", "Site": "customer-a"}
+        site = {"id": "customer-a", "mode": "jump"}
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("collectors.network_scanner._ping") as p:
+            ping_monitor._run_cycle()
+        p.assert_not_called()
+        with ping_monitor._lock:
+            state = dict(ping_monitor._state["192.0.2.5"])
+        self.assertEqual(state["status"], "unknown")
+        self.assertIsNone(state["up"])
+
+    def test_central_site_device_is_still_pinged(self):
+        from services import ping_monitor
+        device = {"IP": "192.0.2.6", "Site": "central"}
+        site = {"id": "central", "mode": "central"}
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("collectors.network_scanner._ping", return_value=True) as p:
+            ping_monitor._run_cycle()
+        p.assert_called_once_with("192.0.2.6")
+        with ping_monitor._lock:
+            state = dict(ping_monitor._state["192.0.2.6"])
+        self.assertEqual(state["status"], "up")
+        self.assertTrue(state["up"])
+
+    def test_summary_reports_unknown_separately_from_down(self):
+        from services import ping_monitor
+        devices = [{"IP": "192.0.2.5", "Site": "customer-a"},
+                  {"IP": "192.0.2.6", "Site": "central"}]
+
+        def fake_get_site(site_id):
+            return {"id": "customer-a", "mode": "jump"} if site_id == "customer-a" \
+                else {"id": "central", "mode": "central"}
+
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=devices), \
+             mock.patch("services.site_manager.get_site", side_effect=fake_get_site), \
+             mock.patch("collectors.network_scanner._ping", return_value=False):
+            ping_monitor._run_cycle()
+        with mock.patch.object(ping_monitor, "get_app_settings", return_value={}):
+            status = ping_monitor.get_status()
+        self.assertEqual(status["summary"], {"total": 2, "up": 0, "down": 1, "unknown": 1})
+
+
+class ScanRejectsJumpSites(unittest.TestCase):
+    """routers/scan.py: a subnet scan is an ICMP sweep, which cannot cross a
+    bastion tunnel either. Calling the endpoint function directly (it is a
+    plain callable under the FastAPI decorator) rather than standing up a full
+    authenticated TestClient, since the check under test runs before any
+    auth-scoped logic."""
+
+    def test_scan_targeting_a_jump_site_subnet_is_rejected(self):
+        from routers import scan as scan_router
+        site = {"id": "customer-a", "mode": "jump", "subnets": ["192.0.2.0/24"]}
+        with mock.patch("services.site_manager.list_sites", return_value=[site]), \
+             mock.patch("services.site_manager.get_site", return_value=site):
+            req = scan_router.SubnetScanRequest(network="192.0.2.0/24")
+            with self.assertRaises(scan_router.HTTPException) as ctx:
+                scan_router.start_subnet_scan(req, current_user={"sub": "tester"})
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail,
+                         "Sito jump: la scansione ICMP non e' possibile.")
+
+    def test_scan_targeting_a_central_site_subnet_is_unaffected(self):
+        from routers import scan as scan_router
+        site = {"id": "central", "mode": "central", "subnets": ["192.0.2.0/24"]}
+        with mock.patch("services.site_manager.list_sites", return_value=[site]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("routers.scan._run_scan_job"):
+            req = scan_router.SubnetScanRequest(network="192.0.2.0/24")
+            result = scan_router.start_subnet_scan(req, current_user={"sub": "tester"})
+        self.assertEqual(result["status"], "started")
 
 
 class NoDirectNetmikoImports(unittest.TestCase):

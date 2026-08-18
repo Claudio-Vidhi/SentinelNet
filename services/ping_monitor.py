@@ -66,21 +66,35 @@ def _ping_one(ip: str) -> tuple:
 def _run_cycle() -> None:
     """One ping round over the full inventory."""
     global _last_run
-    from services import inventory_manager
+    from services import inventory_manager, site_manager
     devices = inventory_manager.get_all_devices()
-    ips = sorted({(d.get("IP") or "").strip() for d in devices if (d.get("IP") or "").strip()})
-    if not ips:
+    # Map IP -> Site so a jump-site device can be excluded from ICMP without
+    # losing its identity (a plain set of IPs would drop the Site column).
+    ip_site = {}
+    for d in devices:
+        ip = (d.get("IP") or "").strip()
+        if ip:
+            ip_site[ip] = d.get("Site") or "central"
+    if not ip_site:
         with _lock:
             _state.clear()
             _last_run = time.time()
         return
 
+    # A jump site is reachable over SSH only: ICMP cannot cross the bastion
+    # tunnel, so these devices are never pinged and are reported "unknown"
+    # rather than a false "down".
+    pingable_ips = sorted(ip for ip, site in ip_site.items()
+                          if site_manager.is_reachable_by_icmp(site))
+    unknown_ips = sorted(ip for ip in ip_site if ip not in pingable_ips)
+
     results = {}
-    # Same parallelism level as subnet scan: enough to avoid serializing
-    # hundreds of pings, low enough not to saturate the network.
-    with ThreadPoolExecutor(max_workers=min(50, max(4, len(ips)))) as pool:
-        for ip, up in pool.map(_ping_one, ips):
-            results[ip] = up
+    if pingable_ips:
+        # Same parallelism level as subnet scan: enough to avoid serializing
+        # hundreds of pings, low enough not to saturate the network.
+        with ThreadPoolExecutor(max_workers=min(50, max(4, len(pingable_ips)))) as pool:
+            for ip, up in pool.map(_ping_one, pingable_ips):
+                results[ip] = up
 
     now = time.time()
     with _lock:
@@ -88,20 +102,30 @@ def _run_cycle() -> None:
             prev = _state.get(ip)
             if prev is None:
                 _state[ip] = {
-                    "up": up, "last_check": now, "last_change": now,
+                    "up": up, "status": "up" if up else "down",
+                    "last_check": now, "last_change": now,
                     "checks": 1, "fails": 0 if up else 1,
                 }
             else:
                 if prev["up"] != up:
                     prev["last_change"] = now
                 prev["up"] = up
+                prev["status"] = "up" if up else "down"
                 prev["last_check"] = now
                 prev["checks"] += 1
                 if not up:
                     prev["fails"] += 1
+        for ip in unknown_ips:
+            # No history to carry forward: a jump-site device has nothing to
+            # transition from/to, it is simply not measurable.
+            _state[ip] = {
+                "up": None, "status": "unknown",
+                "last_check": now, "last_change": now,
+                "checks": 0, "fails": 0,
+            }
         # Devices removed from inventory drop out of the state.
         for ip in list(_state.keys()):
-            if ip not in results:
+            if ip not in ip_site:
                 del _state[ip]
         _last_run = now
 
@@ -158,11 +182,14 @@ def get_status() -> dict:
             for ip, st in sorted(_state.items())
         ]
         last_run = _last_run
-    up_count = sum(1 for d in devices if d["up"])
+    up_count = sum(1 for d in devices if d["up"] is True)
+    down_count = sum(1 for d in devices if d["up"] is False)
+    unknown_count = len(devices) - up_count - down_count
     return {
         "enabled": cfg["enabled"],
         "interval_seconds": cfg["interval_seconds"],
         "last_run": last_run,
         "devices": devices,
-        "summary": {"total": len(devices), "up": up_count, "down": len(devices) - up_count},
+        "summary": {"total": len(devices), "up": up_count, "down": down_count,
+                    "unknown": unknown_count},
     }

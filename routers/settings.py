@@ -190,11 +190,15 @@ def ping_monitor_status(current_user = Depends(get_current_user)):
             if (d.get("Group") or "Generale") in scope
         }
         status["devices"] = [d for d in status["devices"] if d["ip"] in ips_in_scope]
-        up_count = sum(1 for d in status["devices"] if d["up"])
+        # Tri-state: "up" is None for a jump-site device (not measurable, see
+        # services/ping_monitor.py), which must not be counted as "down".
+        up_count = sum(1 for d in status["devices"] if d["up"] is True)
+        down_count = sum(1 for d in status["devices"] if d["up"] is False)
         status["summary"] = {
             "total": len(status["devices"]),
             "up": up_count,
-            "down": len(status["devices"]) - up_count,
+            "down": down_count,
+            "unknown": len(status["devices"]) - up_count - down_count,
         }
     return status
 
