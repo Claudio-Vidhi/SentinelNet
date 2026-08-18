@@ -8,6 +8,10 @@
 function homeStatusInfo(status) {
     if (status === 'online')      return { cls: 'ok',   led: 'led-success', key: 'homeStOnline' };
     if (status === 'auth_failed') return { cls: 'warn', led: 'led-warning', key: 'homeStAuth' };
+    // A jump-site device: the SSH bastion tunnel carries no ICMP, so this is
+    // not measurable, never a confirmed down. Reusing led-discovered (the
+    // existing "not confirmed" grey/dashed lamp) rather than the red fault lamp.
+    if (status === 'unknown')     return { cls: 'idle', led: 'led-discovered', key: 'homeStUnknown' };
     return { cls: 'bad', led: 'led-danger', key: 'homeStOffline' };
 }
 
@@ -36,7 +40,11 @@ async function loadHome() {
             if (pm.enabled && pm.devices && pm.devices.length) {
                 pm.devices.forEach(d => {
                     if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
-                    globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                    // d.status is the tri-state the ping monitor already computed
+                    // server-side: for a jump-site device (bastion tunnel, no ICMP)
+                    // d.up is null and d.status is 'unknown' — never collapse that
+                    // to 'offline', it would report a false down.
+                    globalVersions[d.ip].status = d.status === 'unknown' ? 'unknown' : (d.up ? 'online' : 'offline');
                 });
                 // Keep the home tab live: re-poll at the monitor cadence.
                 // loadHome() is cheap here — globalDevices is cached, so

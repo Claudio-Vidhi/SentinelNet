@@ -1663,7 +1663,10 @@ def _enrich_map_with_redundancy(data: dict) -> dict:
         # Live status: continuous ping monitor is authoritative when available,
         # otherwise detected_versions, otherwise preserve discovered/parsed status.
         if nid in pm_devices:
-            node_copy["status"] = "online" if pm_devices[nid].get("up") else "offline"
+            # Tri-state: "up" is None for a jump-site device (bastion tunnel,
+            # no ICMP) — not measurable, must not render as a false "offline".
+            pm_up = pm_devices[nid].get("up")
+            node_copy["status"] = "online" if pm_up is True else "offline" if pm_up is False else "unknown"
         elif nid in versions and versions[nid].get("status"):
             node_copy["status"] = versions[nid].get("status")
         elif n.get("status") != "discovered":

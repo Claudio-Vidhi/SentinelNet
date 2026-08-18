@@ -325,6 +325,111 @@ class ScanRejectsJumpSites(unittest.TestCase):
         self.assertEqual(result["status"], "started")
 
 
+class NetworkMapReportsUnknownForJumpDevices(unittest.TestCase):
+    """core/core_engine.py's _enrich_map_with_redundancy used to fold the ping
+    monitor's tri-state 'up' into a bare truthy check, turning a jump-site
+    device's None (not measurable) into the same 'offline' string as a real
+    down. This is the JSON /api/network-map serves to the topology map, so
+    the lie would have painted the map with a false down."""
+
+    def test_jump_device_status_is_unknown_not_offline(self):
+        from core import core_engine
+        data = {"nodes": [{"id": "192.0.2.5", "status": "offline"},
+                          {"id": "192.0.2.6", "status": "offline"},
+                          {"id": "192.0.2.7", "status": "offline"}],
+                "links": []}
+        pm_status = {"devices": [
+            {"ip": "192.0.2.5", "up": None},   # jump site: not measurable
+            {"ip": "192.0.2.6", "up": True},
+            {"ip": "192.0.2.7", "up": False},
+        ]}
+        with mock.patch("services.ping_monitor.get_status", return_value=pm_status), \
+             mock.patch("services.inventory_manager.get_detected_versions", return_value={}), \
+             mock.patch("redundancy.service.list_groups", return_value=[]), \
+             mock.patch("redundancy.service.device_redundancy_badge", return_value=None):
+            result = core_engine._enrich_map_with_redundancy(data)
+        by_id = {n["id"]: n["status"] for n in result["nodes"]}
+        self.assertEqual(by_id["192.0.2.5"], "unknown")
+        self.assertEqual(by_id["192.0.2.6"], "online")
+        self.assertEqual(by_id["192.0.2.7"], "offline")
+
+
+class ScopedPingStatusReportsUnknown(unittest.TestCase):
+    """routers/settings.py's ping_monitor_status recomputes its own summary
+    for a group-scoped (non-superadmin) caller instead of reusing
+    ping_monitor.get_status()'s already-correct one. It must not fold a
+    jump-site device's tri-state 'unknown' (up=None) into 'down' via a naive
+    truthy check — that would reintroduce the false-down this task removes,
+    just for non-admin callers."""
+
+    def setUp(self):
+        from services import ping_monitor
+        with ping_monitor._lock:
+            ping_monitor._state.clear()
+            ping_monitor._last_run = None
+
+    def test_scoped_user_sees_jump_device_as_unknown_not_down(self):
+        from services import ping_monitor
+        from routers import settings as settings_router
+        device = {"IP": "192.0.2.5", "Site": "customer-a", "Group": "sede-a"}
+        site = {"id": "customer-a", "mode": "jump"}
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("collectors.network_scanner._ping") as p:
+            ping_monitor._run_cycle()
+        p.assert_not_called()
+
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("routers.deps.user_group_scope", return_value=["sede-a"]):
+            result = settings_router.ping_monitor_status(current_user={"sub": "scoped"})
+
+        self.assertEqual(result["summary"], {"total": 1, "up": 0, "down": 0, "unknown": 1})
+        self.assertIsNone(result["devices"][0]["up"])
+        self.assertEqual(result["devices"][0]["status"], "unknown")
+
+
+class FrontendJumpStatusIsNotCollapsedToOffline(unittest.TestCase):
+    """static/js/home.js and static/js/topology.js both re-derive an
+    online/offline string from the ping-monitor JSON on the client. `d.up`
+    is JSON null for a jump-site device, and null is falsy in JS, so the old
+    `d.up ? 'online' : 'offline'` silently painted it as offline in the
+    Operations Home KPI and the topology map. No JS test runner exists in
+    this repo (see tests/test_bugfix_batch.py for the same grep-on-source
+    pattern), so this asserts on the fixed source text directly, plus the
+    i18n keys and CSS the fix depends on existing in both languages."""
+
+    def setUp(self):
+        import os
+        from tests.test_helpers_frontend import frontend_source
+        self.src = frontend_source()
+        self.base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _read(self, *parts):
+        import os
+        with open(os.path.join(self.base, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_home_js_no_longer_collapses_null_to_offline(self):
+        self.assertIn(
+            "d.status === 'unknown' ? 'unknown' : (d.up ? 'online' : 'offline')",
+            self._read("static", "js", "home.js"))
+
+    def test_topology_js_no_longer_collapses_null_to_offline(self):
+        self.assertIn(
+            "d.status === 'unknown' ? 'unknown' : (d.up ? 'online' : 'offline')",
+            self._read("static", "js", "topology.js"))
+
+    def test_unknown_status_keys_exist_in_both_languages(self):
+        # i18n.js repeats each language's block verbatim (it/en): both copies
+        # of every new key must be present, or changeLanguage() would render
+        # 'undefined' for whichever language is not currently active.
+        self.assertEqual(self.src.count("homeStUnknown:"), 2)
+        self.assertEqual(self.src.count("mapStatusUnknown:"), 2)
+
+    def test_status_idle_css_class_exists(self):
+        self.assertIn(".status.idle", self._read("static", "css", "dashboard.css"))
+
+
 class NoDirectNetmikoImports(unittest.TestCase):
     """Every SSH call site must go through core.net_ssh, otherwise a jump site
     silently bypasses the tunnel and tries to reach the device directly."""

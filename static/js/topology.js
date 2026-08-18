@@ -255,6 +255,14 @@
             statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
             statusGlow = cssVar('--lamp-idle', '#6c7a83');
             statusText = currentLang === 'en' ? "DISCOVERED" : "RILEVATO";
+        } else if (status === "unknown") {
+            // Jump-site device: the SSH bastion tunnel carries no ICMP, so
+            // reachability is not measurable — never paint it as the red
+            // "offline" fault lamp, that would be a false down.
+            statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
+            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
+            statusGlow = cssVar('--lamp-idle', '#6c7a83');
+            statusText = i18n[currentLang].mapStatusUnknown;
         }
 
         if (isBoundary) {
@@ -407,6 +415,7 @@
         else if (n.status === "offline") statusLed = `<span style="color: var(--lamp-fault-ink); font-weight: bold;">● OFFLINE</span>`;
         else if (n.status === "auth_failed") statusLed = `<span style="color: var(--lamp-warn-ink); font-weight: bold;">● AUTH FAILED</span>`;
         else if (n.status === "discovered") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● DISCOVERED</span>`;
+        else if (n.status === "unknown") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● ${escapeHtml(i18n[currentLang].mapStatusUnknown)}</span>`;
         
         const firmware = (n.version) ? n.version : ((scan && scan.version) ? scan.version : (currentLang === 'en' ? "Not detected / Offline" : "Non rilevato / Offline"));
         const vendorName = (resolvedVendor && resolvedVendor !== 'discovered') ? resolvedVendor : (currentLang === 'en' ? "LLDP/CDP Neighbor" : "Vicino LLDP/CDP");
@@ -514,7 +523,11 @@
                 if (pm.devices && pm.devices.length) {
                     pm.devices.forEach(d => {
                         if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
-                        globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                        // d.status is the tri-state the ping monitor already computed
+                        // server-side: for a jump-site device (bastion tunnel, no ICMP)
+                        // d.up is null and d.status is 'unknown' — never collapse that
+                        // to 'offline', it would paint the map with a false down.
+                        globalVersions[d.ip].status = d.status === 'unknown' ? 'unknown' : (d.up ? 'online' : 'offline');
                     });
                 }
             }
