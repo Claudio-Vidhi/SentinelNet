@@ -9,7 +9,10 @@ core.data_config.get_path at module import time, so setting the env var
 afterwards would have no effect.
 """
 import os
+import socket
 import tempfile
+import threading
+import time
 import unittest
 import unittest.mock as mock
 
@@ -137,6 +140,69 @@ class JumpChannelRealDeviceLookup(unittest.TestCase):
                                    username="u", password="p")
         jc.assert_called_once_with(site, "192.0.2.5", 22)
         self.assertIs(nm.call_args.kwargs["sock"], chan)
+
+
+class JumpTransportLocking(unittest.TestCase):
+    """Covers the per-site locking fix: a slow/dead bastion for one site must
+    not block a connect to a different, healthy site's bastion."""
+
+    def tearDown(self):
+        from core import net_ssh
+        net_ssh._transports.pop("lock-test-a", None)
+        net_ssh._transports.pop("lock-test-b", None)
+        net_ssh._site_locks.pop("lock-test-a", None)
+        net_ssh._site_locks.pop("lock-test-b", None)
+
+    def test_two_sites_connect_concurrently_not_serialized(self):
+        from core import net_ssh
+        site_a = {"id": "lock-test-a", "jump_host": "198.51.100.40",
+                  "jump_port": 22, "jump_identity": "id-a"}
+        site_b = {"id": "lock-test-b", "jump_host": "198.51.100.41",
+                  "jump_port": 22, "jump_identity": "id-b"}
+        started_a = threading.Event()
+        release_a = threading.Event()
+
+        def fake_create_connection(addr, timeout=None):
+            if addr[0] == site_a["jump_host"]:
+                started_a.set()
+                # Stands in for a black-holed bastion: site A's connect
+                # hangs here until the test releases it.
+                release_a.wait(timeout=5)
+            return mock.Mock()
+
+        with mock.patch.object(net_ssh.socket, "create_connection",
+                                side_effect=fake_create_connection), \
+             mock.patch.object(net_ssh.paramiko, "Transport", return_value=mock.Mock()), \
+             mock.patch("security.identity_manager.get_identity_credentials",
+                        return_value=("u", "p", "s")):
+            t = threading.Thread(target=net_ssh._transport, args=(site_a,))
+            t.start()
+            try:
+                self.assertTrue(started_a.wait(timeout=5),
+                                "site A's connect never started")
+
+                start = time.monotonic()
+                net_ssh._transport(site_b)
+                elapsed = time.monotonic() - start
+                self.assertLess(elapsed, 1.0,
+                                "site B waited on site A's lock: locking is not per-site")
+            finally:
+                release_a.set()
+                t.join(timeout=5)
+
+    def test_connect_timeout_raises_instead_of_hanging(self):
+        from core import net_ssh
+        site = {"id": "lock-test-timeout", "jump_host": "198.51.100.42",
+                "jump_port": 22, "jump_identity": "id-t"}
+        with mock.patch.object(net_ssh.socket, "create_connection",
+                                side_effect=socket.timeout("timed out")) as cc, \
+             mock.patch("security.identity_manager.get_identity_credentials",
+                        return_value=("u", "p", "s")):
+            with self.assertRaises(socket.timeout):
+                net_ssh._transport(site)
+        cc.assert_called_once_with(("198.51.100.42", 22), timeout=net_ssh.CONNECT_TIMEOUT)
+        net_ssh._transports.pop("lock-test-timeout", None)
+        net_ssh._site_locks.pop("lock-test-timeout", None)
 
 
 if __name__ == "__main__":

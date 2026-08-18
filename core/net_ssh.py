@@ -9,21 +9,47 @@ every other device this is netmiko unchanged.
 
 One transport is kept per site and reused by all its devices; a dead transport
 is rebuilt on the next call.
+
+Locking is per-site, not global: a black-holed bastion (firewall silently
+dropping SYN, or accepting the TCP connection but never speaking SSH) must
+only stall the threads dialling THAT site, not every jump-mode connection in
+the process. The registry lock below only ever guards a dict lookup, never
+network I/O, so it is held for microseconds.
 """
+import socket
 import threading
 
 import paramiko
 from netmiko import ConnectHandler as _netmiko_connect
 
+# Bounds on connecting to a bastion. Without them, paramiko.Transport handed a
+# bare (host, port) tuple uses a blocking socket with no timeout, and a dead
+# bastion (SYN black-holed, or TCP up but nothing ever speaks SSH) hangs the
+# calling thread for the OS TCP retransmit ceiling — minutes.
+CONNECT_TIMEOUT = 10  # seconds: raw TCP connect to the bastion
+BANNER_TIMEOUT = 15   # seconds: SSH banner exchange once the socket is up
+
 _transports: "dict[str, paramiko.Transport]" = {}
-_lock = threading.Lock()
+_site_locks: "dict[str, threading.Lock]" = {}
+_registry_lock = threading.Lock()  # guards _site_locks/_transports lookups only, never I/O
+
+
+def _lock_for(site_id: str) -> threading.Lock:
+    """Return the per-site lock, creating it if needed. Two different sites
+    never wait on each other here; two threads for the same site do."""
+    with _registry_lock:
+        lock = _site_locks.get(site_id)
+        if lock is None:
+            lock = threading.Lock()
+            _site_locks[site_id] = lock
+        return lock
 
 
 def _transport(site: dict) -> paramiko.Transport:
     """Return a live SSH transport to the site's bastion, opening it if needed."""
     from security import identity_manager
     site_id = site["id"]
-    with _lock:
+    with _lock_for(site_id):
         tr = _transports.get(site_id)
         if tr is not None and tr.is_active():
             return tr
@@ -31,7 +57,11 @@ def _transport(site: dict) -> paramiko.Transport:
         if not creds:
             raise ValueError(f"Identita' {site['jump_identity']} non trovata.")
         username, password = creds[0], creds[1]
-        tr = paramiko.Transport((site["jump_host"], int(site.get("jump_port") or 22)))
+        sock = socket.create_connection(
+            (site["jump_host"], int(site.get("jump_port") or 22)),
+            timeout=CONNECT_TIMEOUT)
+        tr = paramiko.Transport(sock)
+        tr.banner_timeout = BANNER_TIMEOUT
         tr.connect(username=username, password=password)
         _transports[site_id] = tr
         return tr
@@ -71,7 +101,8 @@ def ConnectHandler(**params):
 
 def close_all() -> None:
     """Close every cached bastion transport (application shutdown)."""
-    with _lock:
-        for tr in _transports.values():
-            tr.close()
+    with _registry_lock:
+        transports = list(_transports.values())
         _transports.clear()
+    for tr in transports:
+        tr.close()
