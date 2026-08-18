@@ -118,7 +118,14 @@ def _validate_jump(values: dict) -> dict:
     identity = (values.get("jump_identity") or "").strip()
     if not identity:
         raise ValueError("Un sito 'jump' richiede jump_identity.")
-    port = int(values.get("jump_port") or 22)
+    raw_port = values.get("jump_port")
+    if raw_port is None or raw_port == "":
+        port = 22
+    else:
+        try:
+            port = int(raw_port)
+        except (TypeError, ValueError):
+            raise ValueError("jump_port non valida.")
     if not (1 <= port <= 65535):
         raise ValueError("jump_port non valida.")
     return {"jump_host": host, "jump_port": port, "jump_identity": identity}
