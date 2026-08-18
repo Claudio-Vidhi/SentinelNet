@@ -2947,6 +2947,34 @@ class TestIdentitiesActionsWired(unittest.TestCase):
         self.assertIn('id="%s"' % m.group(1), _html())
 
 
+class TestGlobalsAreNotReadOffWindow(unittest.TestCase):
+    """core.js dichiara i suoi globali con 'let': in uno script classico
+    finiscono nello scope lessicale globale, NON come proprieta' di window.
+    Leggerli come window.globalDevices restituisce sempre undefined e il
+    fallback '|| []' nasconde il guasto — era la lista dispositivi vuota nel
+    modale 'Assegna identita''. Scriverli su window crea invece una seconda
+    variabile che i lettori normali non vedono mai."""
+
+    def test_no_module_reads_or_writes_core_globals_through_window(self):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        js_dir = os.path.join(base, "static", "js")
+        with open(os.path.join(js_dir, "core.js"), encoding="utf-8") as f:
+            core = f.read()
+        lexical = set(re.findall(r"^(?:let|const)\s+(\w+)", core, re.M))
+        offenders = []
+        for name in sorted(os.listdir(js_dir)):
+            if not name.endswith(".js"):
+                continue
+            with open(os.path.join(js_dir, name), encoding="utf-8") as f:
+                src = f.read()
+            # I commenti citano gli identificatori a scopo esplicativo.
+            src = re.sub(r"//[^\n]*", "", src)
+            for var in re.findall(r"window\.(\w+)", src):
+                if var in lexical:
+                    offenders.append("%s: window.%s" % (name, var))
+        self.assertEqual(offenders, [], "globali di core.js usati via window: %s" % offenders)
+
+
 class TestDelegatedListenersBindRealIds(unittest.TestCase):
     """Un listener delegato agganciato con getElementById('x')?. su un id che
     non esiste non solleva nulla: l'optional chaining ingoia il null e i

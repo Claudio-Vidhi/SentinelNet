@@ -238,8 +238,8 @@
         const sel = document.getElementById('genCfgTenant');
         if (!sel) return;
         const cur = sel.value;
-        const fromGlobal = Object.keys(window.globalGroups || {});
-        const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
+        const fromGlobal = Object.keys(globalGroups || {});
+        const fromDevs = (globalDevices || []).map(d => d.Group).filter(Boolean);
         const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
 
         sel.innerHTML = allTenants.map(g =>

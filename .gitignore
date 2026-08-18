@@ -114,3 +114,6 @@ cont.txt
 # di lavorazione. Scratch rigenerabile, la storia git e il record vero.
 .superpowers/
 .claude/settings.local.json
+
+# Frontend type-check tooling (nessun bundle: solo tsc)
+node_modules/

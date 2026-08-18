@@ -85,11 +85,35 @@ The permanent security gates (`test_provisioning_secrets.py`,
 ## 4. Type checking
 
 ```sh
-pyrefly check
+pyrefly check                              # Python
+uv run python scripts/check_frontend.py    # static/js
 ```
 
-Configured in `pyproject.toml`, which excludes `.venv/`, `build/`, `dist/` and
-`tests/`.
+`pyrefly` is configured in `pyproject.toml`, which excludes `.venv/`, `build/`,
+`dist/` and `tests/`.
+
+The frontend check runs TypeScript in `checkJs` mode over `static/js` — types
+only, no bundler, no build artifact, no change to how the files are served. One
+`npm install` in the project root is needed first; `node_modules/` is
+gitignored.
+
+It exists because 23k lines of JS previously had no static analysis at all, and
+the resulting bugs were all the same shape: a name that must match something in
+another file, checked by nobody. `window.globalDevices` read a property that
+never existed (`globalDevices` is a `let` in `core.js`, so it lives in the
+global lexical scope, not on `window`), and the `|| []` fallback turned that
+into an empty device list instead of a crash.
+
+`scripts/check_frontend.py` filters roughly 900 structural DOM complaints that
+unannotated JS cannot avoid — `getElementById()` returns `HTMLElement`, so every
+`.value` is flagged; `e.target` is `EventTarget`, so every `.closest()` is.
+Everything else fails the check. Never widen that filter to cover
+`Window & typeof globalThis`: that is precisely the case worth seeing.
+
+`types/globals.d.ts` records the cross-module contract — every `window.X = ...`
+a module exposes for another to call. Add an entry only together with the
+assignment it describes; an undeclared `window` property is meant to be an
+error.
 
 ---
 
@@ -112,12 +136,14 @@ local.
 ## 6. Pre-commit checklist
 
 1. `pyrefly check` clean on the modified files.
-2. Full test suite green.
-3. New data files added to `SentinelNet.spec`, verified in source / exe / Docker.
-4. Documentation touched by the change updated (see the maintenance rule in
+2. `uv run python scripts/check_frontend.py` clean, if the change touched
+   `static/js` or `templates/`.
+3. Full test suite green.
+4. New data files added to `SentinelNet.spec`, verified in source / exe / Docker.
+5. Documentation touched by the change updated (see the maintenance rule in
    [README.md](README.md)); a decision that changes an invariant gets an
    [ADR](adr/).
-5. `graphify update .` to keep the knowledge graph current.
+6. `graphify update .` to keep the knowledge graph current.
 
 ---
 
