@@ -90,6 +90,18 @@
 
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
     // da ricerca/tenant), stessa mappatura stato->led usata per le righe della tabella.
+    // A jump-site device has no ICMP, but the SSH triage does reach it through
+    // the bastion and its outcome is persisted (detected_versions, written by
+    // update_version_inventory). So "not measurable" applies only until that
+    // outcome exists: showing the em dash regardless threw the triage result
+    // away on every re-render, and the ONLINE the triage had just painted
+    // vanished as soon as the user left the tab and came back.
+    function jumpStatusIsUnmeasurable(d) {
+        if (d.icmp_reachable !== false) return false;
+        const st = (globalVersions[d.IP] || {}).status;
+        return !st || st === 'unknown';
+    }
+
     function updateInventoryKpis() {
         let online = 0, offline = 0, authFailed = 0, unknown = 0;
         (globalDevices || []).forEach(d => {
@@ -98,7 +110,7 @@
             // has_direct_path). Without this branch a jump-site device
             // that has never been triaged falls into `else offline++` and the
             // "Offline: N" tile contradicts the row directly below it.
-            if (d.icmp_reachable === false) { unknown++; return; }
+            if (jumpStatusIsUnmeasurable(d)) { unknown++; return; }
             const scan = globalVersions[d.IP] || {};
             if (scan.status === 'online') online++;
             else if (scan.status === 'auth_failed') authFailed++;
@@ -113,6 +125,12 @@
 
     function renderDeviceTable() {
         updateInventoryKpis();
+
+        // The Sede column needs the site list, and every caller of this
+        // function is synchronous. Fetch it once in the background and repaint
+        // when it lands; until then each row offers only its own site, so the
+        // table is never blocked on the request.
+        if (_sitesCache === null) loadDeviceSites().then(renderDeviceTable);
 
         const filterSelect  = document.getElementById('filterGroupSelect');
         const selectedGroup = filterSelect ? filterSelect.value : 'all';
@@ -145,7 +163,13 @@
             // has_direct_path, surfaced per-device as icmp_reachable by
             // /api/local-devices). Show the same "not measurable" em dash used
             // elsewhere instead of a misleading led.
-            const isJumpUnmeasurable = d.icmp_reachable === false;
+            const isJumpUnmeasurable = jumpStatusIsUnmeasurable(d);
+
+            const siteOptions = (current) => (_sitesCache || []).map(st => {
+                const mode = st.mode === 'jump' ? ' [bastion]' : (st.mode === 'agent' ? ' [agent]' : '');
+                return `<option value="${escapeHtml(st.id)}" ${st.id === current ? 'selected' : ''}>${
+                    escapeHtml(st.name || st.id)}${escapeHtml(mode)}</option>`;
+            }).join('') || `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`;
 
             const groupOptions = Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}" ${g === d.Group ? "selected" : ""}>${escapeHtml(g)}</option>`
@@ -187,7 +211,18 @@
                     </select>`}
                   </div>
                 </td>
-                <td><span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span></td>
+                <td>${isViewer
+                  ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span>`
+                  : `<select
+                      data-action="reassign-device-site"
+                      data-ip="${escapeHtml(d.IP)}"
+                      title="${currentLang==='en'?'Move to another site (changes how the device is reached)':"Sposta in un'altra sede (cambia come si raggiunge l'apparato)"}"
+                      style="font-size:11px; padding:3px 6px; border-radius:0;
+                             border:1px solid var(--border); background:var(--surface-3);
+                             color:var(--text-muted); cursor:pointer; outline:none;
+                             max-width:130px; transition:var(--transition);">
+                      ${siteOptions(d.Site || 'central')}
+                    </select>`}</td>
                 <td style="font-family:monospace; font-size:12px; white-space:nowrap;">
                   ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
                   ${isViewer ? '' : `<button data-action="rename-device" data-ip="${escapeHtml(d.IP)}"
@@ -275,6 +310,11 @@
     });
 
     document.getElementById('deviceTableBody')?.addEventListener('change', (e) => {
+        const siteSel = e.target.closest('select[data-action="reassign-device-site"]');
+        if (siteSel && siteSel.dataset.ip) {
+            reassignDeviceSite(siteSel.dataset.ip, siteSel.value, siteSel);
+            return;
+        }
         const sel = e.target.closest('select[data-action="reassign-device"]');
         if (sel && sel.dataset.ip) {
             reassignDevice(sel.dataset.ip, sel.value, sel);
@@ -1592,6 +1632,44 @@
         };
         reader.readAsText(file);
     });
+
+    // Sites for the inventory's Sede column. Cached: the list changes only when
+    // an admin edits it in the Sedi tab, and renderDevices runs on every poll.
+    let _sitesCache = null;
+
+    async function loadDeviceSites() {
+        if (_sitesCache) return _sitesCache;
+        const res = await apiFetch('/api/sites');
+        _sitesCache = (res && res.ok) ? (await res.json()).sites || [] : [];
+        return _sitesCache;
+    }
+
+    async function reassignDeviceSite(ip, newSite, selectEl) {
+        const dev = globalDevices.find(d => d.IP === ip);
+        if (!dev || newSite === (dev.Site || 'central')) return;
+        const previous = dev.Site || 'central';
+        selectEl.disabled = true;
+        try {
+            const res = await apiFetch('/api/reassign-device-site', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, new_site: newSite })
+            });
+            if (res && res.ok) {
+                dev.Site = newSite;
+                // The site decides HOW the device is reached, so the row's
+                // reachability semantics change with it: a jump site has no
+                // ICMP. Re-fetch rather than guess the new state here.
+                appInit();
+            } else {
+                selectEl.value = previous;
+                const e = res ? await res.json() : {};
+                alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            }
+        } finally {
+            selectEl.disabled = false;
+        }
+    }
 
     async function reassignDevice(ip, newGroup, selectEl) {
         const dev = globalDevices.find(d => d.IP === ip);

@@ -54,6 +54,10 @@ class DeviceReassignSchema(BaseModel):
     ip: str
     new_group: str
 
+class DeviceSiteSchema(BaseModel):
+    ip: str
+    new_site: str
+
 class PromoteDeviceSchema(BaseModel):
     node_id: str
     ip: str = Field(..., pattern=r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
@@ -363,3 +367,34 @@ def reassign_device(payload: DeviceReassignSchema, current_user = Depends(requir
         f"al gruppo '{payload.new_group}' dall'utente '{current_user.get('sub')}'."
     )
     return {"status": "success", "message": f"Dispositivo spostato in '{payload.new_group}'"}
+
+@router.post("/api/reassign-device-site")
+def reassign_device_site(payload: DeviceSiteSchema, current_user = Depends(require_operator)):
+    """Sposta un dispositivo in un'altra sede aggiornando solo il campo Site.
+
+    Separata da /api/reassign-device perche' cambia una cosa diversa: il
+    tenant e' il confine di autorizzazione, la sede decide COME si raggiunge
+    l'apparato (diretto, agente, tunnel sul bastione). Spostarlo su una sede
+    jump lo toglie dal ping ICMP e lo mette dietro il bastione al giro dopo.
+    """
+    from services import site_manager
+    if not site_manager.get_site(payload.new_site):
+        raise HTTPException(status_code=400,
+                            detail=f"Sede '{payload.new_site}' non esiste.")
+    devices = inventory_manager.get_all_devices()
+    target = next((d for d in devices if d['IP'] == payload.ip), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Dispositivo non trovato in inventario.")
+    # Il tenant resta il confine di scoping: chi non puo' gestire il tenant del
+    # dispositivo non ne cambia nemmeno la sede.
+    assert_group_allowed(current_user, target.get('Group', 'Generale'))
+
+    old_site = target.get('Site', 'central')
+    target['Site'] = payload.new_site
+    inventory_manager.safe_write_hosts_csv(devices)
+
+    log_audit(
+        f"Dispositivo '{payload.ip}' spostato dalla sede '{old_site}' "
+        f"alla sede '{payload.new_site}' dall'utente '{current_user.get('sub')}'."
+    )
+    return {"status": "success", "message": f"Dispositivo spostato nella sede '{payload.new_site}'"}
