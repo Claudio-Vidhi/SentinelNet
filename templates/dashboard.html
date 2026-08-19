@@ -2315,6 +2315,7 @@
             <select id="newSiteMode" style="padding-left:12px;">
               <option value="central">Central poll</option>
               <option value="agent">Site agent</option>
+              <option value="jump" data-i18n="optSiteJump">Jump (bastion SSH)</option>
             </select>
           </div>
           <div class="form-group" style="margin-bottom:0;">
@@ -2324,6 +2325,32 @@
           <button class="btn btn-primary btn-small" id="btnCreateSite" style="margin:0; white-space:nowrap;">
             <i class="fa-solid fa-plus"></i> <span data-i18n="btnCreateSite">Crea sede</span>
           </button>
+        </div>
+
+        <div id="jumpFields" style="display:none; grid-template-columns: 1fr 1fr 2fr; gap:10px; align-items:end; margin-top:10px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblJumpHost">Host bastione (IP/hostname)</label>
+            <input id="newSiteJumpHost" type="text" placeholder="es. 198.51.100.10" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblJumpPort">Porta SSH bastione</label>
+            <input id="newSiteJumpPort" type="number" value="22" min="1" max="65535" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label>
+            <select id="newSiteJumpIdentity" style="padding-left:12px;"></select>
+          </div>
+        </div>
+
+        <div class="panel" id="jumpLimits" style="display:none; border-left:2px solid var(--warning); padding-left:10px;">
+          <h4 data-i18n="jumpLimitsTitle">Cosa non funziona su un sito jump</h4>
+          <ul>
+            <li data-i18n="jumpLimitsPing">Nessun ping ICMP: lo stato online/offline resta "non misurabile".</li>
+            <li data-i18n="jumpLimitsScan">Nessuna scansione di subnet ne' discovery dal centrale.</li>
+            <li data-i18n="jumpLimitsUdp">Nessun syslog, flow o SNMP in ingresso.</li>
+            <li data-i18n="jumpLimitsRest">Nessuna API REST vendor (FortiGate, WLC): solo CLI.</li>
+            <li data-i18n="jumpLimitsWorks">Funzionano: inventario, backup config, MAC/ARP, comandi CLI, audit.</li>
+          </ul>
         </div>
       </div>
     </div>

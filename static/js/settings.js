@@ -17,6 +17,8 @@
             const isCentral = s.id === 'central';
             const modeBadge = s.mode === 'agent'
                 ? '<span class="chip">SITE AGENT</span>'
+                : s.mode === 'jump'
+                ? '<span class="chip">JUMP (BASTION)</span>'
                 : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
             const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
             const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
@@ -54,20 +56,52 @@
         }).join('');
     }
 
+    // Toggles the bastion fields + limitation notice for the 'jump' mode, and
+    // (re)populates the identity select the first time it becomes visible.
+    async function onNewSiteModeChange() {
+        const mode = document.getElementById('newSiteMode').value;
+        const isJump = mode === 'jump';
+        const fields = document.getElementById('jumpFields');
+        const limits = document.getElementById('jumpLimits');
+        if (fields) fields.style.display = isJump ? 'grid' : 'none';
+        if (limits) limits.style.display = isJump ? 'block' : 'none';
+        if (isJump) await populateJumpIdentitySelect();
+    }
+
+    async function populateJumpIdentitySelect() {
+        const sel = document.getElementById('newSiteJumpIdentity');
+        if (!sel || sel.dataset.loaded) return;
+        const res = await apiFetch('/api/identities');
+        const identities = (res && res.ok) ? (await res.json()).identities || [] : [];
+        sel.innerHTML = identities.map(i => `<option value="${escapeHtml(i.id)}">${
+            escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('');
+        sel.dataset.loaded = '1';
+    }
+
     async function createSite() {
         const name = document.getElementById('newSiteName').value.trim();
         const mode = document.getElementById('newSiteMode').value;
         const subnets = document.getElementById('newSiteSubnets').value
             .split(',').map(x => x.trim()).filter(Boolean);
         if (!name) { alert(currentLang==='en' ? 'Site name required.' : 'Nome sede obbligatorio.'); return; }
+        const payload = { name, mode, subnets };
+        if (mode === 'jump') {
+            payload.jump_host = document.getElementById('newSiteJumpHost').value.trim();
+            payload.jump_port = parseInt(document.getElementById('newSiteJumpPort').value, 10) || 22;
+            payload.jump_identity = document.getElementById('newSiteJumpIdentity').value;
+        }
         const res = await apiFetch('/api/sites', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, mode, subnets })
+            body: JSON.stringify(payload)
         });
         if (res && res.ok) {
             const data = await res.json();
             document.getElementById('newSiteName').value = '';
             document.getElementById('newSiteSubnets').value = '';
+            if (mode === 'jump') {
+                document.getElementById('newSiteJumpHost').value = '';
+                document.getElementById('newSiteJumpPort').value = '22';
+            }
             if (data.token) {
                 prompt(currentLang==='en' ? 'Site token (shown ONLY ONCE — copy it now and configure it in the agent):' : 'Token della sede (mostrato UNA SOLA VOLTA — copialo ora e configuralo nell\'agente):', data.token);
             }
@@ -712,6 +746,7 @@
 
     document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
     document.getElementById('btnCreateSite')?.addEventListener('click', createSite);
+    document.getElementById('newSiteMode')?.addEventListener('change', onNewSiteModeChange);
     document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
     document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
     document.getElementById('mcpPreviewToggle')?.addEventListener('change', (e) => {

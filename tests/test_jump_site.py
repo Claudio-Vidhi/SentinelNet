@@ -514,5 +514,49 @@ class NoDirectNetmikoImports(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
+class JumpSiteApi(unittest.TestCase):
+    """Task 5: POST /api/sites accepts mode='jump' and the three bastion
+    fields, and GET /api/sites never leaks a secret for it (a jump site has
+    no token, unlike an agent site)."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Same authenticated-client mechanism as RemoteSiteE2E.setUpClass
+        # (tests/test_remote_site.py:41): same app import, same login. Copied
+        # rather than inventing a second way to authenticate.
+        from fastapi.testclient import TestClient
+        import app_server
+        from security import user_manager
+        import bcrypt
+        cls.client = TestClient(app_server.app)
+        admin = "e2e_jump_admin"
+        admin_pw = "adminpw12345"
+        users = user_manager.get_users()
+        pw_hash = bcrypt.hashpw(admin_pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        users[admin] = {"hashed_password": pw_hash, "role": "admin", "disabled": False}
+        user_manager._save_users(users)
+        r = cls.client.post("/api/auth/login",
+                            json={"username": admin, "password": admin_pw})
+        assert r.status_code == 200, r.text
+        cls.admin_h = {"Authorization": "Bearer " + r.json()["access_token"]}
+
+    def test_post_sites_accepts_jump_mode(self):
+        # 203.0.113.0/24 (RFC 5737 TEST-NET-3), not 192.0.2.0/24: site_manager
+        # binds its storage path at first import across the whole suite (see
+        # JumpSiteModel's docstring above), so this site is visible to every
+        # test file that runs afterwards in the same process. 192.0.2.x is
+        # this codebase's default example device range, so an owned jump-site
+        # subnet there would make later unrelated scan/ping tests probing
+        # 192.0.2.x collide with it (409 "scansione ICMP non e' possibile").
+        r = self.client.post("/api/sites", headers=self.admin_h, json={
+            "name": "Jump API Test Site", "mode": "jump", "jump_host": "198.51.100.11",
+            "jump_port": 22, "jump_identity": "id-1", "subnets": ["203.0.113.0/24"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        body = r.json()["site"]
+        self.assertEqual(body["mode"], "jump")
+        self.assertNotIn("token_hash", body)
+        self.assertIsNone(r.json()["token"])
+
+
 if __name__ == "__main__":
     unittest.main()

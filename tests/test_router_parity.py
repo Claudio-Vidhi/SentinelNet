@@ -221,8 +221,12 @@ class TestFullParity(unittest.TestCase):
     # SubnetScanRequest: la scansione e' diventata solo scoperta (ping + porte
     # TCP configurabili): vendor, group, auto_add e use_default_creds sono
     # rimossi, il login vive in /api/scan-verify con un'identita' esplicita.
+    # SiteSchema/SiteUpdateSchema: jump-host-sites Task 5 adds jump_host,
+    # jump_port, jump_identity (all optional) so /api/sites can create and
+    # update bastion-mode sites; no existing field removed or retyped.
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema",
-                               "SubnetScanRequest", "AiGenerateConfigSchema")
+                               "SubnetScanRequest", "AiGenerateConfigSchema",
+                               "SiteSchema", "SiteUpdateSchema")
 
     @classmethod
     def setUpClass(cls):
