@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
-from services import inventory_manager
+from services import inventory_manager, site_manager
 from core import core_engine
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope, assert_device_allowed, assert_group_allowed
@@ -145,9 +145,14 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     elif scope is not None:
         devices = [d for d in devices if d.get('Group') in scope]
 
-    results: dict[str, bool] = {}
+    # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
+    # same tri-state vocabulary as services.ping_monitor / is_reachable_by_icmp.
+    results: Dict[str, Optional[bool]] = {}
 
     def _ping(d):
+        if not site_manager.is_reachable_by_icmp(d.get('Site')):
+            results[d['IP']] = None
+            return
         from collectors.network_scanner import _ping as icmp_ping
         results[d['IP']] = icmp_ping(d['IP'])
 
@@ -166,7 +171,8 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
             if ip in data:
                 vendor = data[ip].get('vendor', vendor)
                 version = data[ip].get('version', version)
-            inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
+            status = "unknown" if alive is None else ("online" if alive else "offline")
+            inventory_manager.update_version_inventory(ip, vendor, version, status)
     except Exception as e:
         logging.warning(f"Stato ping non persistito in detected_versions.json: {e}")
 
@@ -185,8 +191,14 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     _dev = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
     if _dev is not None:
         assert_group_allowed(current_user, _dev.get('Group', 'Generale'))
-    from collectors.network_scanner import _ping as icmp_ping
-    alive = icmp_ping(ip)
+    # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
+    # same tri-state as ping_check above / services.ping_monitor.
+    alive: Optional[bool]
+    if _dev is not None and not site_manager.is_reachable_by_icmp(_dev.get('Site')):
+        alive = None
+    else:
+        from collectors.network_scanner import _ping as icmp_ping
+        alive = icmp_ping(ip)
 
     # Aggiorna lo stato nel file detected_versions.json
     try:
@@ -201,10 +213,12 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
             dev = next((d for d in devices if d["IP"] == ip), None)
             if dev:
                 vendor = dev.get("Vendor", vendor)
-        inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
+        status = "unknown" if alive is None else ("online" if alive else "offline")
+        inventory_manager.update_version_inventory(ip, vendor, version, status)
     except Exception as e:
         logging.warning(f"Stato ping non persistito per '{ip}': {e}")
 
-    log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {'raggiungibile' if alive else 'non raggiungibile'}.")
+    alive_txt = "non misurabile (sito jump)" if alive is None else ("raggiungibile" if alive else "non raggiungibile")
+    log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {alive_txt}.")
     return {"ip": ip, "reachable": alive}
 

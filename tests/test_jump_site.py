@@ -327,6 +327,80 @@ class ScanRejectsJumpSites(unittest.TestCase):
         self.assertEqual(result["status"], "started")
 
 
+class ManualPingSkipsJumpSites(unittest.TestCase):
+    """routers/triage.py's /api/ping-check and /api/ping/{ip}: unlike the
+    background ping_monitor loop (Task 4), these two are fired on-demand by
+    the operator clicking a button in the Inventory tab. Left unguarded, a
+    click on a jump-site device would run a real ICMP probe, get a real
+    (meaningless) failure, persist "offline" to detected_versions.json, and
+    overwrite the em-dash the row just showed on load with a false down —
+    the exact bug the em dash exists to prevent, reintroduced via a button.
+    Calling the endpoint functions directly (plain callables under the
+    FastAPI decorator), same technique as ScanRejectsJumpSites above, with
+    role: 'admin' so user_group_scope short-circuits before touching
+    user_manager."""
+
+    ADMIN = {"sub": "tester", "role": "admin"}
+
+    def test_ping_check_reports_unmeasurable_for_a_jump_device(self):
+        from routers import triage as triage_router
+        device = {"IP": "192.0.2.5", "Site": "customer-a", "Group": "Generale"}
+        site = {"id": "customer-a", "mode": "jump"}
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("services.inventory_manager.get_detected_versions", return_value={}), \
+             mock.patch("services.inventory_manager.update_version_inventory") as uvi, \
+             mock.patch("collectors.network_scanner._ping") as p:
+            result = triage_router.ping_check(
+                triage_router.PingCheckRequest(group="all"), current_user=self.ADMIN)
+        p.assert_not_called()
+        self.assertIsNone(result["results"]["192.0.2.5"])
+        uvi.assert_called_once_with("192.0.2.5", "cisco", "Non Rilevata", "unknown")
+
+    def test_ping_check_still_pings_a_central_device(self):
+        from routers import triage as triage_router
+        device = {"IP": "192.0.2.6", "Site": "central", "Group": "Generale"}
+        site = {"id": "central", "mode": "central"}
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("services.inventory_manager.get_detected_versions", return_value={}), \
+             mock.patch("services.inventory_manager.update_version_inventory") as uvi, \
+             mock.patch("collectors.network_scanner._ping", return_value=True) as p:
+            result = triage_router.ping_check(
+                triage_router.PingCheckRequest(group="all"), current_user=self.ADMIN)
+        p.assert_called_once_with("192.0.2.6")
+        self.assertTrue(result["results"]["192.0.2.6"])
+        uvi.assert_called_once_with("192.0.2.6", "cisco", "Non Rilevata", "online")
+
+    def test_ping_single_reports_unmeasurable_for_a_jump_device(self):
+        from routers import triage as triage_router
+        device = {"IP": "192.0.2.5", "Site": "customer-a", "Group": "Generale"}
+        site = {"id": "customer-a", "mode": "jump"}
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("services.inventory_manager.get_detected_versions", return_value={}), \
+             mock.patch("services.inventory_manager.update_version_inventory") as uvi, \
+             mock.patch("collectors.network_scanner._ping") as p:
+            result = triage_router.ping_single("192.0.2.5", current_user=self.ADMIN)
+        p.assert_not_called()
+        self.assertIsNone(result["reachable"])
+        uvi.assert_called_once_with("192.0.2.5", "cisco", "Non Rilevata", "unknown")
+
+    def test_ping_single_still_pings_a_central_device(self):
+        from routers import triage as triage_router
+        device = {"IP": "192.0.2.6", "Site": "central", "Group": "Generale"}
+        site = {"id": "central", "mode": "central"}
+        with mock.patch("services.inventory_manager.get_all_devices", return_value=[device]), \
+             mock.patch("services.site_manager.get_site", return_value=site), \
+             mock.patch("services.inventory_manager.get_detected_versions", return_value={}), \
+             mock.patch("services.inventory_manager.update_version_inventory") as uvi, \
+             mock.patch("collectors.network_scanner._ping", return_value=False) as p:
+            result = triage_router.ping_single("192.0.2.6", current_user=self.ADMIN)
+        p.assert_called_once_with("192.0.2.6")
+        self.assertFalse(result["reachable"])
+        uvi.assert_called_once_with("192.0.2.6", "cisco", "Non Rilevata", "offline")
+
+
 class NetworkMapReportsUnknownForJumpDevices(unittest.TestCase):
     """core/core_engine.py's _enrich_map_with_redundancy used to fold the ping
     monitor's tri-state 'up' into a bare truthy check, turning a jump-site
@@ -556,6 +630,33 @@ class JumpSiteApi(unittest.TestCase):
         self.assertEqual(body["mode"], "jump")
         self.assertNotIn("token_hash", body)
         self.assertIsNone(r.json()["token"])
+
+    def test_get_sites_round_trips_jump_fields_without_a_secret(self):
+        # Same 203.0.113.0/24 reasoning as above; a distinct name/subnet from
+        # the other test in this class so the two don't collide in the shared
+        # storage (see the comment on test_post_sites_accepts_jump_mode).
+        r = self.client.post("/api/sites", headers=self.admin_h, json={
+            "name": "Jump GET Roundtrip Site", "mode": "jump",
+            "jump_host": "198.51.100.12", "jump_port": 2222,
+            "jump_identity": "id-roundtrip", "subnets": ["203.0.113.0/25"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        site_id = r.json()["site"]["id"]
+
+        r = self.client.get("/api/sites", headers=self.admin_h)
+        self.assertEqual(r.status_code, 200, r.text)
+        site = next(s for s in r.json()["sites"] if s["id"] == site_id)
+
+        # The bastion fields round-trip exactly as sent.
+        self.assertEqual(site["jump_host"], "198.51.100.12")
+        self.assertEqual(site["jump_port"], 2222)
+        self.assertEqual(site["jump_identity"], "id-roundtrip")
+
+        # jump_identity is a reference (an id string resolved server-side at
+        # connect time, see core/net_ssh.py) — never a credential itself, and
+        # no key on the site object may carry one either.
+        forbidden_keys = {"token_hash", "password", "enable_secret",
+                          "enable secret", "username"}
+        self.assertEqual(forbidden_keys & set(site.keys()), set())
 
 
 if __name__ == "__main__":
