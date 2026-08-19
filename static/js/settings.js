@@ -6,13 +6,17 @@
         const res = await apiFetch('/api/sites');
         if (!res || !res.ok) return;
         const data = await res.json();
-        renderSitesTable(data.sites || []);
+        await renderSitesTable(data.sites || []);
     }
 
-    function renderSitesTable(sites) {
+    async function renderSitesTable(sites) {
         const body = document.getElementById('sitesTableBody');
         if (!body) return;
         const L = i18n[currentLang];
+        // A jump row carries its device-default identity inline: the bastion
+        // login and the login used on the devices behind it are two different
+        // credentials, and there is no other screen to change the second one.
+        const identities = sites.some(s => s.mode === 'jump') ? await getIdentities() : [];
         body.innerHTML = sites.map(s => {
             const isCentral = s.id === 'central';
             const modeBadge = s.mode === 'agent'
@@ -38,6 +42,10 @@
             if (s.mode === 'agent') {
                 actions += `<button data-action="open-agent-control" data-site-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
                 actions += `<button data-action="regen-site-token" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
+            }
+            if (s.mode === 'jump') {
+                actions += `<select data-action="set-site-device-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblDeviceIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;"><option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>${identityOptions(identities, s.device_identity || '')}</select>`;
+                actions += `<button data-action="test-bastion" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-plug-circle-check"></i> ${L.btnTestBastion}</button>`;
             }
             if (!isCentral) {
                 actions += `<button data-action="delete-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
@@ -68,13 +76,34 @@
         if (isJump) await populateJumpIdentitySelect();
     }
 
+    let identitiesCache = null;
+
+    async function getIdentities() {
+        if (identitiesCache) return identitiesCache;
+        const res = await apiFetch('/api/identities');
+        identitiesCache = (res && res.ok) ? (await res.json()).identities || [] : [];
+        return identitiesCache;
+    }
+
+    function identityOptions(identities, selected) {
+        return identities.map(i => `<option value="${escapeHtml(i.id)}"${
+            i.id === selected ? ' selected' : ''}>${escapeHtml(i.name)} (${
+            escapeHtml(i.username)})</option>`).join('');
+    }
+
     async function populateJumpIdentitySelect() {
         const sel = document.getElementById('newSiteJumpIdentity');
+        const dev = document.getElementById('newSiteDeviceIdentity');
         if (!sel || sel.dataset.loaded) return;
-        const res = await apiFetch('/api/identities');
-        const identities = (res && res.ok) ? (await res.json()).identities || [] : [];
-        sel.innerHTML = identities.map(i => `<option value="${escapeHtml(i.id)}">${
-            escapeHtml(i.name)} (${escapeHtml(i.username)})</option>`).join('');
+        const identities = await getIdentities();
+        sel.innerHTML = identityOptions(identities, null);
+        // The device default is optional: without it the devices behind the
+        // bastion fall back to the global admin credentials.
+        if (dev) {
+            const L = i18n[currentLang];
+            dev.innerHTML = `<option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>`
+                + identityOptions(identities, null);
+        }
         sel.dataset.loaded = '1';
     }
 
@@ -89,6 +118,7 @@
             payload.jump_host = document.getElementById('newSiteJumpHost').value.trim();
             payload.jump_port = parseInt(document.getElementById('newSiteJumpPort').value, 10) || 22;
             payload.jump_identity = document.getElementById('newSiteJumpIdentity').value;
+            payload.device_identity = document.getElementById('newSiteDeviceIdentity').value;
         }
         const res = await apiFetch('/api/sites', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -122,6 +152,32 @@
             prompt(currentLang==='en' ? 'New token (shown ONLY ONCE):' : 'Nuovo token (mostrato UNA SOLA VOLTA):', data.token);
             loadSites();
         } else if (res) { const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+    }
+
+    async function testBastion(id) {
+        const L = i18n[currentLang];
+        const res = await apiFetch('/api/sites/test-bastion', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) { alert((L.lblError || 'Errore') + ': ' + (data.detail || '')); return; }
+        if (data.status === 'success') alert(L.msgBastionOk);
+        else if (data.status === 'auth_failed') alert(L.msgBastionAuthFailed + '\n\n' + (data.message || ''));
+        else alert(L.msgBastionUnreachable + '\n\n' + (data.message || ''));
+    }
+
+    async function setSiteDeviceIdentity(id, identityId) {
+        const res = await apiFetch('/api/sites/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, device_identity: identityId })
+        });
+        if (res && !res.ok) {
+            const e = await res.json();
+            alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            loadSites();
+        }
     }
 
     async function deleteSite(id) {
@@ -712,6 +768,12 @@
         if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(siteId);
         else if (act === 'regen-site-token') regenSiteToken(siteId);
         else if (act === 'delete-site') deleteSite(siteId);
+        else if (act === 'test-bastion') testBastion(siteId);
+    });
+
+    document.getElementById('sitesTableBody')?.addEventListener('change', (e) => {
+        const sel = e.target.closest('[data-action="set-site-device-identity"]');
+        if (sel && sel.dataset.siteId) setSiteDeviceIdentity(sel.dataset.siteId, sel.value);
     });
 
     document.getElementById('usersTableBody')?.addEventListener('change', (e) => {

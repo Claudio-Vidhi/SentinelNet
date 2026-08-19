@@ -128,7 +128,13 @@ def _validate_jump(values: dict) -> dict:
             raise ValueError("jump_port non valida.")
     if not (1 <= port <= 65535):
         raise ValueError("jump_port non valida.")
-    return {"jump_host": host, "jump_port": port, "jump_identity": identity}
+    # Default identity for the DEVICES behind the bastion, distinct from the
+    # bastion's own login. Optional: a device row may still name its own
+    # identity, which wins. Empty means "no site default", and the caller
+    # falls back to the global admin credentials.
+    device_identity = (values.get("device_identity") or "").strip()
+    return {"jump_host": host, "jump_port": port, "jump_identity": identity,
+            "device_identity": device_identity}
 
 
 # --- CRUD siti ---
@@ -233,7 +239,8 @@ def update_site(site_id: str, name=None, mode=None, subnets=None, **kwargs) -> b
         if site["mode"] == "jump":
             site.update(_validate_jump({**site, **kwargs}))
             kwargs = {k: v for k, v in kwargs.items()
-                      if k not in ("jump_host", "jump_port", "jump_identity")}
+                      if k not in ("jump_host", "jump_port", "jump_identity",
+                                   "device_identity")}
         for k, v in kwargs.items():
             site[k] = v
         _save(data)

@@ -456,6 +456,14 @@
               </div>
             </div>
 
+            <div class="form-group">
+              <label data-i18n="lblDeviceSite">Sede fisica</label>
+              <div class="input-wrapper">
+                <i class="fa-solid fa-location-dot"></i>
+                <select id="devSiteSelect" style="padding-left:36px;"></select>
+              </div>
+            </div>
+
             <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); margin:14px 0 8px; display:flex; align-items:center; gap:6px;">
               <i class="fa-solid fa-server"></i> <span data-i18n="secDevice">2 · Dispositivo</span>
             </h4>
@@ -2198,11 +2206,24 @@
             e filtra ogni scheda, ed è il valore che accompagna ogni riga di osservabilità.
             Alias riconosciuti: <code>group</code>, <code>gruppo</code>, <code>tenant</code>.<br>
             <b>Site</b> è la <b>sede fisica</b>: da dove l'apparato viene raggiunto —
-            <code>central</code> (il server lo interroga direttamente) oppure l'id di una sede
-            con agente. Alias: <code>site</code>, <code>sede</code>. Se la ometti vale
-            <code>central</code>.<br>
+            <code>central</code> (il server lo interroga direttamente), oppure l'id di una sede
+            con agente o di una sede <b>jump</b> (raggiunta via bastion SSH). Alias:
+            <code>site</code>, <code>sede</code>. Se la ometti vale <code>central</code>.<br>
             Un tenant può contenere più sedi, e una sede può ospitare apparati di tenant diversi:
             per questo sono due colonne e non una.
+          </div>
+          <!-- The device form has a Site selector; in the CSV the same value is
+               free text, so the id has to be copied exactly. -->
+          <div style="font-size:12px; color:var(--text-muted); line-height:1.6; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);" data-i18n="importSiteIdsNote">
+            La sede si assegna dal modulo di provisioning con la tendina <b>Sede fisica</b>,
+            oppure qui con la colonna <code>Site</code>. Nel CSV il valore deve corrispondere
+            <b>esattamente</b> all'id della sede (non al nome), altrimenti la riga viene
+            scartata con «Sede inesistente». Le credenziali del CSV sono quelle degli
+            apparati, non quelle del bastion di una sede jump.
+          </div>
+          <div id="importSiteIds" style="display:none; margin-top:10px; font-size:12px;">
+            <span style="color:var(--text-muted);" data-i18n="importSiteIdsAvailable">Id sede disponibili:</span>
+            <span id="importSiteIdsList"></span>
           </div>
         </div>
         <div style="margin-top:14px;">
@@ -2333,7 +2354,7 @@
           </button>
         </div>
 
-        <div id="jumpFields" style="display:none; grid-template-columns: 1fr 1fr 2fr; gap:10px; align-items:end; margin-top:10px;">
+        <div id="jumpFields" style="display:none; grid-template-columns: 1fr 1fr 2fr 2fr; gap:10px; align-items:end; margin-top:10px;">
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblJumpHost">Host bastione (IP/hostname)</label>
             <input id="newSiteJumpHost" type="text" placeholder="es. 198.51.100.10" data-i18n-placeholder="phNewSiteJumpHost" style="padding-left:12px;">
@@ -2346,6 +2367,10 @@
             <label data-i18n="lblJumpIdentity">Identità (credenziali) bastione</label>
             <select id="newSiteJumpIdentity" style="padding-left:12px;"></select>
           </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblDeviceIdentity">Identità di default dei dispositivi</label>
+            <select id="newSiteDeviceIdentity" style="padding-left:12px;"></select>
+          </div>
         </div>
 
         <div class="panel" id="jumpLimits" style="display:none; border-left:2px solid var(--warning); padding-left:10px;">
@@ -2356,6 +2381,7 @@
             <li data-i18n="jumpLimitsUdp">Nessun syslog, flow o SNMP in ingresso.</li>
             <li data-i18n="jumpLimitsRest">Nessuna API REST vendor (FortiGate): solo CLI.</li>
             <li data-i18n="jumpLimitsWorks">Funzionano: inventario, backup config, MAC/ARP, comandi CLI, audit.</li>
+            <li data-i18n="jumpLimitsIdentity">L'identità del bastione e quella dei dispositivi sono distinte: la seconda vale per i dispositivi il cui profilo è "default".</li>
           </ul>
         </div>
       </div>

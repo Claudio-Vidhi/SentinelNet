@@ -91,22 +91,62 @@ def remove_stale_backups(ip: str):
                 except OSError as e:
                     logging.warning(f"Backup obsoleto non rimosso ({f}): {e}")
 
+def _failure_status(exc) -> str:
+    """Inventory status for a failed triage: 'auth_failed' or 'offline'.
+
+    BastionAuthError is an authentication failure too, but of the SITE's
+    bastion login; the message returned alongside says which hop refused, so
+    the operator does not rotate the device credential for nothing.
+    """
+    from core.net_ssh import BastionAuthError
+    if isinstance(exc, BastionAuthError):
+        return "auth_failed"
+    msg = str(exc).lower()
+    return "auth_failed" if ("auth" in msg or "credentials" in msg
+                             or "credenziali" in msg) else "offline"
+
+
+def _fallback_credentials(device):
+    """Credentials to use when the device row names none of its own.
+
+    A site may declare a default identity for the devices behind it
+    (site_manager: 'device_identity'). Without it the only fallback is the
+    global admin account, which for a customer site behind a bastion means
+    dialling that customer's devices with this installation's default
+    login — the wrong credential, sent to the right device.
+    """
+    # hosts.csv rows carry 'Site'; the get_device_by_ip cache carries 'site'
+    # (see services/inventory_manager.py). Both shapes reach this function.
+    site_id = device.get('Site') or device.get('site') or ''
+    if site_id:
+        from services import site_manager
+        from security import identity_manager
+        site = site_manager.get_site(site_id)
+        identity = (site or {}).get('device_identity')
+        if identity:
+            creds = identity_manager.get_identity_credentials(identity)
+            if creds:
+                return creds
+    return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
+
+
 def get_device_credentials(device):
     profile = device.get('Profile', 'custom').lower()
     if profile == 'default':
-        return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
+        return _fallback_credentials(device)
     if profile.startswith('identity:'):
-        # Tenant identity (identity_manager): fallback to defaults if
+        # Tenant identity (identity_manager): fallback to the site default if
         # the identity no longer exists (it should not: delete is blocked if in use).
         from security import identity_manager
         creds = identity_manager.get_identity_credentials(
             device.get('Profile', '')[len('identity:'):])
         if creds:
             return creds
-        return DEFAULT_USERNAME, DEFAULT_PASSWORD, DEFAULT_SECRET
-    username = device.get('Username') or DEFAULT_USERNAME
-    password = decrypt_password(device.get('Password')) or DEFAULT_PASSWORD
-    secret   = decrypt_password(device.get('Enable Secret')) or DEFAULT_SECRET
+        return _fallback_credentials(device)
+    fb_user, fb_pass, fb_secret = _fallback_credentials(device)
+    username = device.get('Username') or fb_user
+    password = decrypt_password(device.get('Password')) or fb_pass
+    secret   = decrypt_password(device.get('Enable Secret')) or fb_secret
     return username, password, secret
 
 # --- REGISTRY DRIVER ↔ NETMIKO ---
@@ -232,7 +272,7 @@ def _fortigate_backup_and_triage(device):
         cfg = fortigate_service.get_full_config(device)
     except Exception as e:
         logging.error(f"Errore su {ip}: {str(e)}")
-        st = "auth_failed" if "auth" in str(e).lower() or "credentials" in str(e).lower() else "offline"
+        st = _failure_status(e)
         update_version_inventory(ip, vendor, "Non Rilevata", st)
         log_audit(f"Triage fallito per FortiGate '{ip}': {str(e)}.")
         return {"status": "error", "message": str(e)}
@@ -474,7 +514,7 @@ def run_backup_and_triage(device):
 
     except Exception as e:
         logging.error(f"Errore su {ip}: {str(e)}")
-        st = "auth_failed" if "auth" in str(e).lower() or "credentials" in str(e).lower() else "offline"
+        st = _failure_status(e)
         update_version_inventory(ip, vendor, "Non Rilevata", st)
         log_audit(f"Triage fallito per dispositivo '{ip}': errore di connessione/autenticazione ({str(e)}).")
         return {"status": "error", "message": str(e)}
