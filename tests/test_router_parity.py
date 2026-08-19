@@ -224,9 +224,14 @@ class TestFullParity(unittest.TestCase):
     # SiteSchema/SiteUpdateSchema: jump-host-sites Task 5 adds jump_host,
     # jump_port, jump_identity (all optional) so /api/sites can create and
     # update bastion-mode sites; no existing field removed or retyped.
+    # SwitchProvisionSSHSchema/FortiGateProvisionSSHSchema: jump-host-sites adds
+    # ssh_site (optional, defaults to ""), the site id of a day-0 target that is
+    # not in the inventory yet, so the push can be tunnelled through a bastion;
+    # no existing field removed or retyped.
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema",
                                "SubnetScanRequest", "AiGenerateConfigSchema",
-                               "SiteSchema", "SiteUpdateSchema")
+                               "SiteSchema", "SiteUpdateSchema",
+                               "SwitchProvisionSSHSchema", "FortiGateProvisionSSHSchema")
 
     @classmethod
     def setUpClass(cls):

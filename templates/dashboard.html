@@ -2132,6 +2132,11 @@
         <div class="form-group"><label>Username</label><input id="provSshUser" type="text" placeholder="admin" style="padding-left:12px;"></div>
         <div class="form-group"><label>Password</label><input id="provSshPass" type="password" style="padding-left:12px;"></div>
         <div class="form-group"><label>Enable secret</label><input id="provSshSecret" type="password" style="padding-left:12px;"></div>
+        <div class="form-group"><label data-i18n="lblProvSshSite">Sede del target</label>
+          <select id="provSshSite" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
+            <option value="" data-i18n="optProvSshSiteAuto">Automatica (da inventario)</option>
+          </select>
+        </div>
         <div style="align-self:end;"><button class="btn btn-primary" id="btnProvPushSsh"><i class="fa-solid fa-paper-plane"></i> Applica via SSH</button></div>
       </div>
 

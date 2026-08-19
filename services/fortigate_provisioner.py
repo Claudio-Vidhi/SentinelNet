@@ -370,9 +370,14 @@ def push_via_api(ip: str, config_text: str, filename: str = "sentinelnet-day0") 
         return {"status": "error", "message": str(e)}
 
 def push_via_ssh(host: str, username: str, password: str, config_text: str,
-                 port: int = 22) -> dict:
+                 port: int = 22, site: str = "") -> dict:
     """Applica la config FortiOS via SSH (Netmiko, device_type 'fortinet').
-    FortiOS salva automaticamente a ogni 'end': nessun write memory."""
+    FortiOS salva automaticamente a ogni 'end': nessun write memory.
+
+    # `site` names the site explicitly for a day-0 device that is not in the
+    # inventory yet; without it core.net_ssh would dial a jump-site FortiGate
+    # directly instead of through the bastion.
+    """
     from core.net_ssh import ConnectHandler
 
     commands = [ln for ln in config_text.splitlines()
@@ -389,7 +394,7 @@ def push_via_ssh(host: str, username: str, password: str, config_text: str,
         "banner_timeout": 15,
     }
     try:
-        with ConnectHandler(**device_params) as conn:
+        with ConnectHandler(site_id=site or None, **device_params) as conn:
             output = conn.send_config_set(commands, exit_config_mode=False,
                                           cmd_verify=False)
             return {"status": "success", "output": output}
