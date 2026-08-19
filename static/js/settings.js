@@ -668,11 +668,17 @@
                 ? `${L.lblPingMonitorLastRun || 'Ultimo ciclo'}: ${lastRun}`
                 : (L.msgPingMonitorDisabled || 'Monitor ping disattivato.');
         }
-        const s = st.summary || { total: 0, up: 0, down: 0 };
+        // Three buckets, not two: a jump-site device is never pinged (the
+        // bastion tunnel carries no ICMP), so the backend reports it under
+        // summary.unknown. Rendering only up/down made those devices vanish
+        // from the panel with no explanation. Same vocabulary and lamp as the
+        // inventory KPI row for the state (invKpiUnknownLabel / led-discovered).
+        const s = st.summary || { total: 0, up: 0, down: 0, unknown: 0 };
         summaryEl.innerHTML = `
             <span class="chip">${escapeHtml(L.lblPingMonitorTotal || 'Dispositivi')}: ${s.total}</span>
             <span class="status ok"><span class="led led-success"></span>${escapeHtml(L.lblPingMonitorUp || 'Up')}: ${s.up}</span>
-            <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>`;
+            <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>
+            <span class="status idle"><span class="led led-discovered"></span>${escapeHtml(L.invKpiUnknownLabel || 'Non misurabile')}: ${s.unknown || 0}</span>`;
     }
 
     // Delegated and static event listeners

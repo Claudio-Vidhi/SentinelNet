@@ -57,11 +57,21 @@ async function loadHome() {
     const devs = globalDevices || [];
 
     let online = 0;
+    let notMeasurable = 0;
     const attention = [];
     devs.forEach(d => {
         const scan = globalVersions[d.IP] || {};
+        // A jump-site device has no measurable reachability: the bastion tunnel
+        // carries no ICMP. It is neither online nor something to act on, so it
+        // stays out of both counters and out of the percentage's denominator.
+        // Without this a customer whose whole estate sits behind one bastion
+        // read "Online: 0", "0% of the fleet", "Needs attention: 40 of 40",
+        // permanently — while the bays right below correctly said "not
+        // measurable". icmp_reachable comes from /api/local-devices, scan.status
+        // from the ping monitor; either one is enough to know.
+        if (d.icmp_reachable === false || scan.status === 'unknown') { notMeasurable++; return; }
         if (scan.status === 'online') online++;
-        else attention.push(d); // auth_failed / offline / unknown / missing
+        else attention.push(d); // auth_failed / offline / missing
     });
 
     const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -71,9 +81,14 @@ async function loadHome() {
 
     // Righe di contesto sotto ogni bay: un numero nudo non dice se sia molto.
     const L = i18n[currentLang];
-    const pct = devs.length ? Math.round((online / devs.length) * 100) : 0;
-    setText('homeStatOnline', `${pct}% ${L.homeOfFleet}`);
-    setText('homeStatAttention', `${L.homeOutOf} ${devs.length}`);
+    // The percentage is honest about what it can see: the denominator is the
+    // measurable part of the fleet, and when nothing is measurable there is no
+    // percentage to give, only the state itself.
+    const measurable = devs.length - notMeasurable;
+    setText('homeStatOnline', measurable
+        ? `${Math.round((online / measurable) * 100)}% ${L.homeOfFleet}`
+        : L.homeStUnknown);
+    setText('homeStatAttention', `${L.homeOutOf} ${measurable}`);
 
     // Cartiglio del disegno: revisione = istante dell'ultima lettura.
     setText('homeOnelineRev', new Date().toLocaleString(currentLang === 'en' ? 'en-GB' : 'it-IT'));
