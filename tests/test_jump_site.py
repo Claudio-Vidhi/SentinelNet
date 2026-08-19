@@ -564,6 +564,103 @@ class FleetOnelineBayIsNotPaintedDownForUnmeasurable(unittest.TestCase):
         self.assertIn('.oneline-bay[data-state="unknown"] .oneline-sw', css)
 
 
+class HomeKpiTilesDoNotCollapseTheThirdState(unittest.TestCase):
+    """The last consumer in static/js/home.js: the three Operations Home KPI
+    tiles. homeStatusInfo and renderFleetOneline were fixed earlier, but the
+    tiles above them still counted every non-'online' device as attention and
+    divided by the whole fleet, so a customer entirely behind one bastion read
+    "Online: 0", "0% of the fleet", "Needs attention: 40 of 40" forever, while
+    the bays right below said "not measurable".
+
+    Source-text assertions, like the sibling frontend classes above: the loop
+    lives inside the async loadHome() and cannot be sliced out for the node
+    harness the way renderFleetOneline's state() can."""
+
+    def setUp(self):
+        import os
+        self.base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _read(self, *parts):
+        import os
+        with open(os.path.join(self.base, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_not_measurable_devices_leave_both_counters(self):
+        src = self._read("static", "js", "home.js")
+        self.assertIn(
+            "if (d.icmp_reachable === false || scan.status === 'unknown') "
+            "{ notMeasurable++; return; }", src)
+
+    def test_percentage_denominator_excludes_what_cannot_be_measured(self):
+        src = self._read("static", "js", "home.js")
+        self.assertIn("const measurable = devs.length - notMeasurable;", src)
+        # The old denominator was the whole fleet; it must be gone, not merely
+        # shadowed somewhere further down.
+        self.assertNotIn("Math.round((online / devs.length) * 100)", src)
+        self.assertIn("Math.round((online / measurable) * 100)", src)
+
+    def test_a_fully_unmeasurable_fleet_shows_the_state_not_a_zero(self):
+        # measurable === 0: there is no percentage to give, so the tile shows
+        # the state itself (existing key, no new vocabulary).
+        src = self._read("static", "js", "home.js")
+        self.assertIn(": L.homeStUnknown);", src)
+
+    def test_attention_subline_counts_out_of_the_measurable_fleet(self):
+        src = self._read("static", "js", "home.js")
+        self.assertIn("setText('homeStatAttention', `${L.homeOutOf} ${measurable}`)", src)
+
+
+class PingMonitorPanelRendersTheThirdBucket(unittest.TestCase):
+    """routers/settings.py and services/ping_monitor.py both emit
+    summary.unknown, and static/js/settings.js is that summary's only
+    consumer: rendering just total/up/down made every bastion-reached device
+    disappear from the panel with no explanation (50 devices, 35 behind a
+    bastion, panel reading "Devices: 50 - Up: 10 - Down: 5")."""
+
+    def setUp(self):
+        import os
+        self.base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _read(self, *parts):
+        import os
+        with open(os.path.join(self.base, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_summary_panel_renders_unknown(self):
+        src = self._read("static", "js", "settings.js")
+        self.assertIn("${s.unknown || 0}", src)
+        self.assertIn("L.invKpiUnknownLabel", src)
+
+    def test_summary_fallback_object_carries_the_third_bucket(self):
+        src = self._read("static", "js", "settings.js")
+        self.assertIn("{ total: 0, up: 0, down: 0, unknown: 0 }", src)
+
+    def test_the_reused_label_key_exists_in_both_languages(self):
+        from tests.test_helpers_frontend import frontend_source
+        self.assertEqual(frontend_source().count("invKpiUnknownLabel:"), 2)
+
+
+class JumpLimitsRestNoLongerClaimsAWlcRestApi(unittest.TestCase):
+    """A previous ruling removed the WLC half of this claim from
+    docs/remote-sites.md — there is no WLC REST path in this codebase, WLC is
+    CLI-only and already works through the tunnel — but the fix never reached
+    the string the operator actually reads in the site-creation panel."""
+
+    def test_both_locales_and_the_template_fallback_drop_wlc(self):
+        import os
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for parts in (("static", "js", "i18n.js"), ("templates", "dashboard.html")):
+            with open(os.path.join(base, *parts), encoding="utf-8") as f:
+                text = f.read()
+            for line in text.splitlines():
+                if "jumpLimitsRest" in line:
+                    self.assertNotIn("WLC", line, f"{parts[-1]}: {line.strip()}")
+
+    def test_the_key_is_still_present_in_both_languages(self):
+        from tests.test_helpers_frontend import frontend_source
+        self.assertEqual(frontend_source().count("jumpLimitsRest:"), 2)
+
+
 class NoDirectNetmikoImports(unittest.TestCase):
     """Every SSH call site must go through core.net_ssh, otherwise a jump site
     silently bypasses the tunnel and tries to reach the device directly."""
