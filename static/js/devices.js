@@ -6,11 +6,11 @@
 // _scanJobInterval, pingInProgress) vivono qui perche' usati solo da questo
 // modulo.
 //
-// promoteDevice (Pannello Dispositivi & Categorie / mappa di rete) e
-// updateTopologyMapNodeStatus (overlay Visio) restano inline in dashboard.html:
-// appartengono alla tab di mappa/topologia, non ancora estratta -- vengono
-// richiamati da qui via riferimento cross-modulo a runtime (funzione-corpo),
-// il che e' consentito dalla regola di caricamento.
+// updateTopologyMapNodeStatus (Visio overlay) belongs to topology.js, which
+// core.js lazy-loads only for the map and categories tabs. Calling it bare
+// from here is a ReferenceError whenever the user has not opened one of those
+// tabs first, so every call goes through setMapNodeStatus below, which treats
+// the map overlay as optional. Do not "simplify" it back to a direct call.
 
     // Globals di stato per triage/scan/device-edit, scoped a questo modulo.
     let isTriagePolling = false;
@@ -1635,6 +1635,15 @@
         selectEl.disabled = false;
     }
 
+    // topology.js is lazy-loaded only for the map/categories tabs (see
+    // LAZY_TAB_SCRIPTS in core.js), so on the devices tab the identifier is
+    // simply not there. Calling it bare threw a ReferenceError that aborted
+    // the caller mid-way: a successful triage was repainted OFFLINE by its own
+    // catch, and the button was left spinning forever.
+    function setMapNodeStatus(ip, status) {
+        window.updateTopologyMapNodeStatus?.(ip, status);
+    }
+
     let pingInProgress = false;
 
     async function pingSingleDevice(ip, btnEl) {
@@ -1664,7 +1673,7 @@
                         ledContainer.appendChild(document.createTextNode('—'));
                     }
                     if (globalVersions[ip]) globalVersions[ip].status = "unknown";
-                    updateTopologyMapNodeStatus(ip, "unknown");
+                    setMapNodeStatus(ip, "unknown");
                 } else {
                     const statusTxt = data.reachable ? "ONLINE" : "OFFLINE";
                     if (led) {
@@ -1687,7 +1696,7 @@
                     globalVersions[ip].status = data.reachable ? "online" : "offline";
 
                     // Update map node status
-                    updateTopologyMapNodeStatus(ip, data.reachable ? "online" : "offline");
+                    setMapNodeStatus(ip, data.reachable ? "online" : "offline");
                 }
             }
         } catch(e) {}
@@ -1735,7 +1744,7 @@
                     const dev = globalDevices.find(d => d.IP === ip);
                     if (dev && data.hostname) dev.Hostname = data.hostname;
 
-                    updateTopologyMapNodeStatus(ip, "online");
+                    setMapNodeStatus(ip, "online");
 
                 } else {
                     if (led) led.className = "led led-offline";
@@ -1748,7 +1757,7 @@
                     if (globalVersions[ip]) {
                         globalVersions[ip].status = "offline";
                     }
-                    updateTopologyMapNodeStatus(ip, "offline");
+                    setMapNodeStatus(ip, "offline");
                     const msgDetail = data.message || (currentLang === 'en' ? "Unknown error" : "Errore sconosciuto");
                     alert(`${i18n[currentLang].alertTriageFailed}${msgDetail}`);
                 }
@@ -1764,11 +1773,11 @@
             if (globalVersions[ip]) {
                 globalVersions[ip].status = "offline";
             }
-            updateTopologyMapNodeStatus(ip, "offline");
+            setMapNodeStatus(ip, "offline");
+        } finally {
+            btnEl.disabled = false;
+            btnEl.innerHTML = '<i class="fa-solid fa-bolt-lightning"></i>';
         }
-
-        btnEl.disabled = false;
-        btnEl.innerHTML = '<i class="fa-solid fa-bolt-lightning"></i>';
     }
 
     async function runPingCheck() {
@@ -1827,7 +1836,7 @@
                     .forEach(n => n.remove());
                 ledContainer.appendChild(document.createTextNode('—'));
                 if (globalVersions[ip]) globalVersions[ip].status = "unknown";
-                updateTopologyMapNodeStatus(ip, "unknown");
+                setMapNodeStatus(ip, "unknown");
                 return;
             }
 
@@ -1851,7 +1860,7 @@
             globalVersions[ip].status = alive ? "online" : "offline";
 
             // Update map node status
-            updateTopologyMapNodeStatus(ip, alive ? "online" : "offline");
+            setMapNodeStatus(ip, alive ? "online" : "offline");
         });
     }
 

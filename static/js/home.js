@@ -298,8 +298,14 @@ document.getElementById('homeAttentionBody')?.addEventListener('click', (e) => {
     }
 });
 
-document.getElementById('homeAnomSummary')?.addEventListener('click', (e) => {
+document.getElementById('homeAnomSummary')?.addEventListener('click', async (e) => {
     if (e.target.closest('[data-action="open-traffico-anomalies"]')) {
-        openTrafficoAnomalies();
+        // observability.js owns openTrafficoAnomalies and is lazy-loaded with
+        // the Flows tab. Calling it bare from Home was a ReferenceError until
+        // the user had opened Flows once, i.e. a silently dead button;
+        // switching tab first is what loads the module.
+        const nav = document.querySelector('[data-tabs="tab-flows"]');
+        await switchTab('tab-flows', nav || undefined);
+        window.openTrafficoAnomalies?.();
     }
 });
