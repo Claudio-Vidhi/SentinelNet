@@ -259,6 +259,17 @@ def _read_inventory_csv(raw: str):
     return out
 
 
+# hosts.csv has readers (every dashboard poll) and writers (triage runs up to
+# 10 devices in parallel, each calling update_version_inventory) with nothing
+# between them. On Windows both the os.replace below and its in-place fallback
+# make the file briefly unopenable, and a reader landing in that window dies
+# with PermissionError - a 500 on /api/local-devices, i.e. the whole inventory
+# blank. One lock over read and write closes it.
+# ponytail: in-process lock only. If a second process ever writes this file
+# (a stray Excel, two app instances on one data dir), move to a file lock.
+_hosts_csv_lock = threading.RLock()
+
+
 def safe_write_hosts_csv(devices):
     invalidate_device_ip_cache()  # l'inventario cambia: la cache IP→device decade
     from ai import config_analyzer
@@ -271,40 +282,41 @@ def safe_write_hosts_csv(devices):
     # 'Site' identifica la sede multi-sede (default 'central'); 'extrasaction=ignore'
     # tollera dizionari con chiavi extra (retrocompatibilità).
     _fieldnames = ['IP', 'Vendor', 'Profile', 'Username', 'Password', 'Enable Secret', 'Group', 'Hostname', 'Site', 'SSH Port', 'Transports', 'SNMP Community', 'SNMP Disabled']
-    try:
-        with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
-            writer.writeheader()
-            for d in devices:
-                writer.writerow(d)
+    with _hosts_csv_lock:
         try:
-            os.replace(temp_filename, hosts_csv)
-        except PermissionError:
-            # Fallback per sistemi Windows
-            with open(hosts_csv, mode='w', newline='', encoding='utf-8') as f:
+            with open(temp_filename, mode='w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
                 writer.writeheader()
                 for d in devices:
                     writer.writerow(d)
+            try:
+                os.replace(temp_filename, hosts_csv)
+            except PermissionError:
+                # Fallback per sistemi Windows
+                with open(hosts_csv, mode='w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=_fieldnames, extrasaction='ignore')
+                    writer.writeheader()
+                    for d in devices:
+                        writer.writerow(d)
+                if os.path.exists(temp_filename):
+                    try:
+                        os.remove(temp_filename)
+                    except OSError:
+                        pass
+        except Exception as e:
             if os.path.exists(temp_filename):
                 try:
                     os.remove(temp_filename)
                 except OSError:
                     pass
-    except Exception as e:
-        if os.path.exists(temp_filename):
-            try:
-                os.remove(temp_filename)
-            except OSError:
-                pass
-        raise e
+            raise e
 
 def get_all_devices():
     devices = []
     hosts_csv = get_hosts_csv()
     if not os.path.exists(hosts_csv):
         return devices
-    with open(hosts_csv, mode='r', encoding='utf-8') as f:
+    with _hosts_csv_lock, open(hosts_csv, mode='r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             # Inventari legacy senza colonna 'Site': default alla sede centrale.
