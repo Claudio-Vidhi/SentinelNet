@@ -49,6 +49,10 @@ async def lifespan(app: "FastAPI"):
     yield
 
     ping_monitor.stop()
+    # Close the cached SSH transports to the jump-site bastions: they are real
+    # long-lived sockets kept open for the process lifetime.
+    from core import net_ssh
+    net_ssh.close_all()
     await listener_manager.shutdown()
     db.stop_writer()
 

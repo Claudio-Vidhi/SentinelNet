@@ -583,7 +583,12 @@ class NoDirectNetmikoImports(unittest.TestCase):
             if rel in self.ALLOWED:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
-            if re.search(r"from netmiko import [^\n]*ConnectHandler", text):
+            # Two idioms reach netmiko.ConnectHandler, and the second one is
+            # what core/net_ssh.py itself demonstrates internally (`import
+            # netmiko` + `netmiko.ConnectHandler(...)`), so a future module
+            # copied from it bypassed the tunnel with this guard still green.
+            if re.search(r"from netmiko import [^\n]*ConnectHandler"
+                         r"|netmiko\.ConnectHandler", text):
                 offenders.append(rel)
         self.assertEqual(offenders, [])
 
@@ -657,6 +662,45 @@ class JumpSiteApi(unittest.TestCase):
         forbidden_keys = {"token_hash", "password", "enable_secret",
                           "enable secret", "username"}
         self.assertEqual(forbidden_keys & set(site.keys()), set())
+
+
+class JumpChannelIsClosedWhenNetmikoFails(unittest.TestCase):
+    """The direct-tcpip channel lives on the shared, long-lived per-site
+    transport. `with ConnectHandler(...)` at the call sites cannot reclaim it
+    when the netmiko constructor raises, because the context manager never
+    binds. Rotated bastion-site credentials plus a scheduled collector would
+    then pile one channel per device per cycle onto the transport until the
+    process restarts."""
+
+    JUMP_SITE = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
+                 "jump_port": 22, "jump_identity": "id-1"}
+    DEVICE = {"ip": "192.0.2.5", "site": "customer-a"}
+
+    def test_channel_is_closed_and_the_error_propagates(self):
+        from core import net_ssh
+        chan = mock.MagicMock()
+        boom = Exception("Authentication failed")
+        with mock.patch.object(net_ssh, "jump_channel", return_value=chan), \
+             mock.patch.object(net_ssh, "_netmiko_connect", side_effect=boom), \
+             mock.patch("services.inventory_manager.get_device_by_ip", return_value=self.DEVICE), \
+             mock.patch("services.site_manager.get_site", return_value=self.JUMP_SITE):
+            with self.assertRaises(Exception) as ctx:
+                net_ssh.ConnectHandler(device_type="cisco_ios", host="192.0.2.5",
+                                       username="u", password="p")
+        self.assertIs(ctx.exception, boom)   # propagated unchanged, not wrapped
+        chan.close.assert_called_once_with()
+
+    def test_channel_is_left_open_when_netmiko_succeeds(self):
+        # The live session owns the channel; closing it here would kill it.
+        from core import net_ssh
+        chan = mock.MagicMock()
+        with mock.patch.object(net_ssh, "jump_channel", return_value=chan), \
+             mock.patch.object(net_ssh, "_netmiko_connect"), \
+             mock.patch("services.inventory_manager.get_device_by_ip", return_value=self.DEVICE), \
+             mock.patch("services.site_manager.get_site", return_value=self.JUMP_SITE):
+            net_ssh.ConnectHandler(device_type="cisco_ios", host="192.0.2.5",
+                                   username="u", password="p")
+        chan.close.assert_not_called()
 
 
 class CliPathsSkipTheDirectPrecheckForJumpSites(unittest.TestCase):
