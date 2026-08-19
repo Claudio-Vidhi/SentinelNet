@@ -146,11 +146,11 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
         devices = [d for d in devices if d.get('Group') in scope]
 
     # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
-    # same tri-state vocabulary as services.ping_monitor / is_reachable_by_icmp.
+    # same tri-state vocabulary as services.ping_monitor / has_direct_path.
     results: Dict[str, Optional[bool]] = {}
 
     def _ping(d):
-        if not site_manager.is_reachable_by_icmp(d.get('Site')):
+        if not site_manager.has_direct_path(d.get('Site')):
             results[d['IP']] = None
             return
         from collectors.network_scanner import _ping as icmp_ping
@@ -194,7 +194,7 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
     # same tri-state as ping_check above / services.ping_monitor.
     alive: Optional[bool]
-    if _dev is not None and not site_manager.is_reachable_by_icmp(_dev.get('Site')):
+    if _dev is not None and not site_manager.has_direct_path(_dev.get('Site')):
         alive = None
     else:
         from collectors.network_scanner import _ping as icmp_ping

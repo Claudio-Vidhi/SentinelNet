@@ -81,7 +81,7 @@ def start_subnet_scan(
         raise HTTPException(status_code=400, detail=str(exc))
 
     site = _site_for_network(hosts)
-    if site and not site_manager.is_reachable_by_icmp(site["id"]):
+    if site and not site_manager.has_direct_path(site["id"]):
         raise HTTPException(status_code=409,
                             detail="Sito jump: la scansione ICMP non e' possibile.")
 

@@ -85,7 +85,7 @@ def _run_cycle() -> None:
     # tunnel, so these devices are never pinged and are reported "unknown"
     # rather than a false "down".
     pingable_ips = sorted(ip for ip, site in ip_site.items()
-                          if site_manager.is_reachable_by_icmp(site))
+                          if site_manager.has_direct_path(site))
     unknown_ips = sorted(ip for ip in ip_site if ip not in pingable_ips)
 
     results = {}

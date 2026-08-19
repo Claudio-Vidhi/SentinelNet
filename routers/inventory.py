@@ -92,8 +92,8 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         dev_copy["redundancy"] = redundancy_service.device_redundancy_badge(d["IP"])
         # ICMP cannot cross the bastion tunnel of a jump site: the inventory
         # table's status cell must not paint one of its devices "offline" from
-        # a ping it never actually ran (see services.site_manager.is_reachable_by_icmp).
-        dev_copy["icmp_reachable"] = site_manager.is_reachable_by_icmp(d.get("Site"))
+        # a ping it never actually ran (see services.site_manager.has_direct_path).
+        dev_copy["icmp_reachable"] = site_manager.has_direct_path(d.get("Site"))
         # La community non esce mai da qui, nemmeno cifrata: alla UI serve
         # sapere SE il polling SNMP è configurato, non quale sia il segreto.
         # Alla UI serve sapere SE il polling e' configurato e DA DOVE arriva
