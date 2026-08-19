@@ -324,9 +324,15 @@ def build_config(cfg: dict) -> str:
 
 def push_via_ssh(host: str, username: str, password: str, secret: str,
                   config_text: str, port: int = 22, save: bool = True,
-                  device_type: str = "cisco_ios") -> dict:
+                  device_type: str = "cisco_ios", site: str = "") -> dict:
     """Applica la config generata via SSH (Netmiko) su un apparato
-    raggiungibile e opzionalmente esegue 'write memory'."""
+    raggiungibile e opzionalmente esegue 'write memory'.
+
+    # A day-0 device is usually not in hosts.csv yet, so core.net_ssh cannot
+    # resolve its site from the inventory: `site` names it explicitly so a
+    # switch inside a jump site is reached through the bastion instead of
+    # being dialled directly and timing out.
+    """
     from core.net_ssh import ConnectHandler
 
     commands = [ln for ln in config_text.splitlines()
@@ -344,7 +350,7 @@ def push_via_ssh(host: str, username: str, password: str, secret: str,
         "banner_timeout": 15,
     }
     try:
-        with ConnectHandler(**device_params) as conn:
+        with ConnectHandler(site_id=site or None, **device_params) as conn:
             conn.enable()
             output = conn.send_config_set(commands)
             if save:

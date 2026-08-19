@@ -358,7 +358,22 @@ function provInitToggles() {
     document.getElementById('provDeliveryMode').addEventListener('change', (e) => {
         document.getElementById('provSshFields').style.display = e.target.value === 'ssh' ? 'grid' : 'none';
         document.getElementById('provSerialFields').style.display = e.target.value === 'serial' ? 'grid' : 'none';
+        if (e.target.value === 'ssh') populateProvSiteSelect();
     });
+
+    // A day-0 device is not in the inventory yet, so the server cannot resolve
+    // its site from the target IP: inside a jump site the push would be dialled
+    // directly instead of through the bastion. The operator names the site here.
+    async function populateProvSiteSelect() {
+        const sel = document.getElementById('provSshSite');
+        if (!sel || sel.dataset.loaded) return;
+        const res = await apiFetch('/api/sites');
+        if (!res || !res.ok) return;
+        const sites = (await res.json()).sites || [];
+        sel.insertAdjacentHTML('beforeend', sites.map(st =>
+            `<option value="${escapeHtml(st.id)}">${escapeHtml(st.name)}</option>`).join(''));
+        sel.dataset.loaded = '1';
+    }
     document.getElementById('btnProvGenerate').addEventListener('click', async () => {
         const { payload, base } = provPayloadAndBase();
         const res = await apiFetch(`${base}/generate`, {
@@ -393,6 +408,7 @@ function provInitToggles() {
             ssh_port: parseInt(document.getElementById('provSshPort').value, 10) || 22,
             ssh_username: document.getElementById('provSshUser').value.trim(),
             ssh_password: document.getElementById('provSshPass').value,
+            ssh_site: document.getElementById('provSshSite').value,
         });
         if (!provVendorIsFgt()) {
             payload.ssh_secret = document.getElementById('provSshSecret').value;

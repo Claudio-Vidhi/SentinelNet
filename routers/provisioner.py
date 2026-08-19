@@ -76,6 +76,10 @@ class SwitchProvisionSSHSchema(SwitchProvisionSchema):
     ssh_password: str
     ssh_secret: str = ""
     save_after: bool = True
+    # Site id of the target. A day-0 device is not in the inventory yet, so
+    # core.net_ssh cannot resolve its site: without this a switch inside a
+    # jump site would be dialled directly instead of through the bastion.
+    ssh_site: str = ""
 
 class SwitchProvisionSerialSchema(SwitchProvisionSchema):
     com_port: str
@@ -129,6 +133,7 @@ class FortiGateProvisionSSHSchema(FortiGateProvisionSchema):
     ssh_port: int = 22
     ssh_username: str
     ssh_password: str
+    ssh_site: str = ""   # see SwitchProvisionSSHSchema.ssh_site
 
 class FortiGateProvisionSerialSchema(FortiGateProvisionSchema):
     com_port: str
@@ -186,6 +191,7 @@ def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depen
         config_text=config_text,
         port=payload.ssh_port,
         save=payload.save_after,
+        site=payload.ssh_site,
     )
     log_audit(
         f"Push SSH config day-0 su '{payload.ssh_host}' (hostname target: "
@@ -266,6 +272,7 @@ def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user 
             password=payload.ssh_password,
             config_text=config_text,
             port=payload.ssh_port,
+            site=payload.ssh_site,
         )
         result["method"] = "ssh"
         if api_err:
