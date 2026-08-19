@@ -366,7 +366,8 @@ device" stays broken.
 |---|---|
 | CLI collection: inventory, version, config backup (`core/core_engine.py:313,511,555,602`) | netmiko over a `direct-tcpip` channel |
 | MAC table and ARP collection (`collectors/mac_collector.py`, `collectors/arp_collector.py`) | same |
-| Port actions (`services/port_action.py`), switch and FortiGate provisioning via CLI | same |
+| Port actions (`services/port_action.py`) | same |
+| Switch and FortiGate day-0 provisioning via CLI | same, but pick the site in **Sede del target / Target site** on the SSH delivery panel: a day-0 device is not in the inventory yet, so the site cannot be derived from its IP |
 | WLC CLI (`services/wlc_service.py`) | same |
 | Bulk command, CLI modal, config analyzer, netsec audit (they consume CLI output) | same |
 
@@ -404,7 +405,16 @@ devices; each device gets its own `direct-tcpip` channel over the shared
 transport. A dead transport is rebuilt on the next call. Connecting to the
 bastion is bounded by an explicit TCP connect timeout and an SSH banner
 timeout, so a black-holed or silent bastion cannot hang a thread for the OS's
-TCP retransmit ceiling; a failed connect leaves nothing cached.
+TCP retransmit ceiling; a failed connect leaves nothing cached. A channel whose
+netmiko session fails to start (bad credentials, for instance) is closed
+immediately rather than left on the shared transport, and every cached
+transport is closed when the application shuts down.
+
+Because the central has no direct IP route to a jump site's devices, the
+direct-socket reachability pre-check that guards the CLI paths (triage and
+backup, bulk command, the Linux health poller) is skipped for them: those
+paths go straight to the tunnel. It still runs, unchanged, for central and
+agent sites.
 
 ## 7. Troubleshooting
 
