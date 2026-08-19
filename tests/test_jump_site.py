@@ -659,5 +659,100 @@ class JumpSiteApi(unittest.TestCase):
         self.assertEqual(forbidden_keys & set(site.keys()), set())
 
 
+class CliPathsSkipTheDirectPrecheckForJumpSites(unittest.TestCase):
+    """Every CLI entry point gates on core_engine.is_reachable, a raw socket
+    connect from the central to the device. For a jump site that route does
+    not exist by definition — the session is tunnelled through the bastion by
+    core.net_ssh — so the gate always failed and netmiko was never reached:
+    no backup, no inventory, and a false "offline" persisted from a probe of a
+    path the product never intended to use.
+
+    The predicate is site_manager.has_direct_path (renamed from
+    is_reachable_by_icmp: it always meant "the central has a direct IP path to
+    this site's devices", which is what both the ICMP and the TCP callers
+    need).
+
+    ConnectHandler is made to fail with an authentication error rather than
+    succeed: that keeps the test away from the whole driver/backup pipeline
+    while still proving the tunnel layer was reached, and it lands in the
+    "auth_failed" branch, so any "offline" write would come from the
+    pre-check and nowhere else.
+    """
+
+    JUMP_SITE = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
+                 "jump_port": 22, "jump_identity": "id-1"}
+    CENTRAL_SITE = {"id": "central", "mode": "central"}
+
+    def _device(self, ip, site):
+        return {"IP": ip, "Vendor": "cisco", "Site": site, "Group": "Generale"}
+
+    def test_triage_of_a_jump_device_reaches_netmiko(self):
+        from core import core_engine
+        device = self._device("192.0.2.10", "customer-a")
+        with mock.patch("services.site_manager.get_site", return_value=self.JUMP_SITE),              mock.patch.object(core_engine, "is_reachable") as reach,              mock.patch.object(core_engine, "get_device_credentials",
+                               return_value=("u", "p", "s")),              mock.patch.object(core_engine, "update_version_inventory") as upd,              mock.patch.object(core_engine, "ConnectHandler",
+                               side_effect=Exception("Authentication failed")) as ch:
+            res = core_engine.run_backup_and_triage(device)
+        reach.assert_not_called()
+        ch.assert_called_once()
+        self.assertEqual(ch.call_args.kwargs["host"], "192.0.2.10")
+        self.assertEqual(res["status"], "error")
+        self.assertNotIn("offline", [c.args[3] for c in upd.call_args_list])
+
+    def test_triage_of_a_central_device_is_still_prechecked(self):
+        from core import core_engine
+        device = self._device("192.0.2.11", "central")
+        with mock.patch("services.site_manager.get_site", return_value=self.CENTRAL_SITE),              mock.patch.object(core_engine, "is_reachable", return_value=False) as reach,              mock.patch.object(core_engine, "update_version_inventory") as upd,              mock.patch.object(core_engine, "ConnectHandler") as ch:
+            res = core_engine.run_backup_and_triage(device)
+        reach.assert_called_once_with("192.0.2.11", 22)
+        ch.assert_not_called()
+        self.assertEqual(res["status"], "error")
+        self.assertEqual(upd.call_args.args[3], "offline")
+
+    def test_bulk_command_on_a_jump_device_reaches_netmiko(self):
+        from core import core_engine
+        device = self._device("192.0.2.12", "customer-a")
+        with mock.patch("services.site_manager.get_site", return_value=self.JUMP_SITE),              mock.patch.object(core_engine, "is_reachable") as reach,              mock.patch.object(core_engine, "get_device_credentials",
+                               return_value=("u", "p", "s")),              mock.patch.object(core_engine, "ConnectHandler",
+                               side_effect=Exception("Authentication failed")) as ch:
+            res = core_engine.run_bulk_command(device, ["show version"])
+        reach.assert_not_called()
+        ch.assert_called_once()
+        self.assertEqual(res["status"], "error")
+
+    def test_bulk_command_on_a_central_device_is_still_prechecked(self):
+        from core import core_engine
+        device = self._device("192.0.2.13", "central")
+        with mock.patch("services.site_manager.get_site", return_value=self.CENTRAL_SITE),              mock.patch.object(core_engine, "is_reachable", return_value=False) as reach,              mock.patch.object(core_engine, "ConnectHandler") as ch:
+            res = core_engine.run_bulk_command(device, ["show version"])
+        reach.assert_called_once_with("192.0.2.13", 22)
+        ch.assert_not_called()
+        self.assertEqual(res["status"], "error")
+
+    def test_linux_poller_on_a_jump_device_reaches_netmiko(self):
+        from observability.ingesters import linux_poller
+        from core import core_engine
+        device = {"IP": "192.0.2.14", "Vendor": "linux", "Site": "customer-a",
+                  "Group": "Generale"}
+        with mock.patch("services.site_manager.get_site", return_value=self.JUMP_SITE),              mock.patch.object(core_engine, "is_reachable") as reach,              mock.patch.object(core_engine, "get_device_credentials",
+                               return_value=("u", "p", "s")),              mock.patch("core.net_ssh.ConnectHandler",
+                        side_effect=Exception("Authentication failed")) as ch:
+            out = linux_poller._poll_device(device)
+        reach.assert_not_called()
+        ch.assert_called_once()
+        self.assertEqual(out, [])
+
+    def test_linux_poller_on_a_central_device_is_still_prechecked(self):
+        from observability.ingesters import linux_poller
+        from core import core_engine
+        device = {"IP": "192.0.2.15", "Vendor": "linux", "Site": "central",
+                  "Group": "Generale"}
+        with mock.patch("services.site_manager.get_site", return_value=self.CENTRAL_SITE),              mock.patch.object(core_engine, "is_reachable", return_value=False) as reach,              mock.patch("core.net_ssh.ConnectHandler") as ch:
+            out = linux_poller._poll_device(device)
+        reach.assert_called_once_with("192.0.2.15", 22)
+        ch.assert_not_called()
+        self.assertEqual(out, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,7 @@ from drivers.cisco_wlc import CiscoWlcDriver
 from drivers.paloalto_panos import PaloAltoDriver
 from drivers.linux import LinuxDriver, sanitize_session
 from security.crypto_vault import decrypt_password
+from services import site_manager
 from security.security_manager import log_audit
 from core import data_config
 
@@ -281,7 +282,10 @@ def run_backup_and_triage(device):
         return _fortigate_backup_and_triage(device)
 
     cli_kind, ssh_port = get_cli_transport(device)
-    if not is_reachable(ip, ssh_port):
+    # A jump-site device has no direct route from the central by design: the
+    # session is tunnelled through the bastion by core.net_ssh. Probing the
+    # direct path here would always fail and persist a false "offline".
+    if site_manager.has_direct_path(device.get('Site')) and not is_reachable(ip, ssh_port):
         update_version_inventory(ip, vendor, "Non Rilevata", "offline")
         log_audit(f"Triage fallito per dispositivo '{ip}': non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()}).")
         return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}
@@ -576,7 +580,8 @@ def run_bulk_command(device, commands, config_mode=False, save_after=False):
     """
     ip = device['IP']
     cli_kind, ssh_port = get_cli_transport(device)
-    if not is_reachable(ip, ssh_port):
+    # See run_backup_and_triage: no direct probe for a bastion-only site.
+    if site_manager.has_direct_path(device.get('Site')) and not is_reachable(ip, ssh_port):
         return {"status": "error", "message": f"Device {ip} non raggiungibile sulla porta {ssh_port} ({cli_kind.upper()})"}
 
     vendor = device['Vendor'].lower()

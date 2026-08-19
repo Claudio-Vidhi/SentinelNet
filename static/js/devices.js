@@ -95,7 +95,7 @@
         (globalDevices || []).forEach(d => {
             // Jump site: same "not measurable" bucket as the row's em dash
             // (icmp_reachable is set per-device by /api/local-devices, Task 4's
-            // is_reachable_by_icmp). Without this branch a jump-site device
+            // has_direct_path). Without this branch a jump-site device
             // that has never been triaged falls into `else offline++` and the
             // "Offline: N" tile contradicts the row directly below it.
             if (d.icmp_reachable === false) { unknown++; return; }
@@ -142,7 +142,7 @@
 
             // Jump site: ICMP cannot cross the bastion tunnel, so any "offline"
             // here would be a ping that never ran, not a real down (Task 4's
-            // is_reachable_by_icmp, surfaced per-device as icmp_reachable by
+            // has_direct_path, surfaced per-device as icmp_reachable by
             // /api/local-devices). Show the same "not measurable" em dash used
             // elsewhere instead of a misleading led.
             const isJumpUnmeasurable = d.icmp_reachable === false;

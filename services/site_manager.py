@@ -144,8 +144,15 @@ def get_site(site_id: str):
         return _public(s) if s else None
 
 
-def is_reachable_by_icmp(site_id: str) -> bool:
-    """False for bastion-only sites: ICMP cannot cross an SSH tunnel."""
+def has_direct_path(site_id: Optional[str]) -> bool:
+    """True when the central has a direct IP path to this site's devices.
+
+    False only for bastion-only ('jump') sites: their devices are reached
+    exclusively through an SSH tunnel we initiate, so neither ICMP nor a raw
+    TCP connect from the central can reach them. Callers use it to SKIP a
+    direct probe, never to report the device as down: the state is "not
+    measurable".
+    """
     site = get_site(site_id or "")
     return not (site and site.get("mode") == "jump")
 
