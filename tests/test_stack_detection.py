@@ -132,7 +132,7 @@ class TestStackUpsert(unittest.TestCase):
         from redundancy import service
 
         members = parse_switch_stack(STACK_2X_3850, "cisco")
-        gid = service.upsert_stack_from_cli("Sede1", "10.0.0.1", "SW-CORE-01", members)
+        gid = service.upsert_redundancy_from_cli("Sede1", "10.0.0.1", "SW-CORE-01", members)
         self.assertIsNotNone(gid)
 
         badge = service.device_redundancy_badge("10.0.0.1")
@@ -150,7 +150,7 @@ class TestStackUpsert(unittest.TestCase):
                         {"role": "member", "serial": "OVERRIDE2"},
                         {"role": "member", "serial": "OVERRIDE3"}],
         })
-        service.upsert_stack_from_cli("Sede1", "10.0.0.1", "SW-CORE-01", members)
+        service.upsert_redundancy_from_cli("Sede1", "10.0.0.1", "SW-CORE-01", members)
         badge = service.device_redundancy_badge("10.0.0.1")
         assert badge is not None
         self.assertEqual(badge["member_count"], 3)
@@ -159,11 +159,11 @@ class TestStackUpsert(unittest.TestCase):
     def test_standalone_dissolves_detected_group(self):
         from redundancy import service
 
-        service.upsert_stack_from_cli("Sede1", "10.0.0.2", "SW-2",
+        service.upsert_redundancy_from_cli("Sede1", "10.0.0.2", "SW-2",
                                       parse_switch_stack(STACK_3X_9300, "cisco"))
         self.assertIsNotNone(service.device_redundancy_badge("10.0.0.2"))
         # Lo stack è stato smontato: il triage successivo scioglie il gruppo.
-        service.upsert_stack_from_cli("Sede1", "10.0.0.2", "SW-2",
+        service.upsert_redundancy_from_cli("Sede1", "10.0.0.2", "SW-2",
                                       parse_switch_stack(STANDALONE, "cisco"))
         self.assertIsNone(service.device_redundancy_badge("10.0.0.2"))
 

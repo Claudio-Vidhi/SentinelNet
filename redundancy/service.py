@@ -159,9 +159,16 @@ def _find_group_by_logical_ip(logical_ip: str) -> Optional[dict]:
     return None
 
 
-def upsert_stack_from_cli(group_name: str, device_ip: str, name: str,
-                          members: Optional[list[dict]]) -> Optional[int]:
-    """Crea/aggiorna il gruppo STACK rilevato dal parser CLI per un dispositivo.
+def upsert_redundancy_from_cli(group_name: str, device_ip: str, name: str,
+                               members: Optional[list[dict]],
+                               group_type: GroupType = GroupType.STACK) -> Optional[int]:
+    """Crea/aggiorna il gruppo rilevato dal parser CLI per un dispositivo.
+
+    `group_type` distingue lo StackWise di uno switch (STACK) dall'HA SSO di un
+    controller wireless (SSO): un apparato e' l'uno o l'altro, mai entrambi, e
+    il gruppo e' indicizzato sull'IP di management, quindi il chiamante deve
+    passare il tipo giusto una volta sola. Chiamare due volte lo stesso IP con
+    tipi diversi farebbe sciogliere al secondo giro il gruppo del primo.
 
     `members=None` (apparato standalone) scioglie un gruppo rilevato in
     precedenza. Un gruppo modificato a mano (detection_source='manual') non
@@ -186,12 +193,12 @@ def upsert_stack_from_cli(group_name: str, device_ip: str, name: str,
         )
         for m in members
     ]
-    g_info = GroupInfo(group_type=GroupType.STACK, name=name, members=infos)
+    g_info = GroupInfo(group_type=group_type, name=name, members=infos)
 
     payload = {
         "id": existing["id"] if existing else None,
         "group_name": group_name,
-        "group_type": GroupType.STACK.value,
+        "group_type": group_type.value,
         "name": name,
         "virtual_ip": None,
         "logical_device_ip": device_ip,
@@ -208,7 +215,7 @@ def upsert_stack_from_cli(group_name: str, device_ip: str, name: str,
                 "model": info.model,
                 "state": info.state.value,
                 "mgmt_ip": device_ip,
-                "details": {},
+                "details": m.get("details") or {},
             }
             for idx, (m, info) in enumerate(zip(members, infos))
         ],

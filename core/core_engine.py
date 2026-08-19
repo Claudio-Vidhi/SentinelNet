@@ -403,7 +403,37 @@ def run_backup_and_triage(device):
                         config_out += f"\n{tag}\n{out_str}"
                     except Exception:
                         pass
-            elif vendor in ('fortinet', 'cisco_wlc', 'paloalto'):
+            elif vendor == 'cisco_9800':
+                # Catalyst 9800 is IOS-XE: it answers the switch commands, and
+                # 'show chassis' is where an HA pair names both of its members.
+                for cmd, tag in [
+                    ("show cdp neighbors detail",  "--- SHOW CDP NEIGHBORS DETAIL ---"),
+                    ("show lldp neighbors detail", "--- SHOW LLDP NEIGHBORS DETAIL ---"),
+                    ("show chassis",               "--- SHOW CHASSIS ---"),
+                    ("show redundancy",            "--- SHOW REDUNDANCY ---"),
+                    ("show inventory",             "--- SHOW INVENTORY ---"),
+                ]:
+                    try:
+                        out = net_connect.send_command(cmd, read_timeout=30)
+                        out_str = out if isinstance(out, str) else str(out or "")
+                        config_out += f"\n{tag}\n{out_str}"
+                    except Exception:
+                        pass
+            elif vendor == 'cisco_wlc':
+                # AireOS: 'show redundancy summary' is the only place the HA
+                # SSO pair is described, and it is not an IOS command.
+                for cmd, tag in [
+                    ("show system info",           "--- SYSTEM INFO ---"),
+                    ("show inventory",             "--- SHOW INVENTORY ---"),
+                    ("show redundancy summary",    "--- SHOW REDUNDANCY SUMMARY ---"),
+                ]:
+                    try:
+                        out = net_connect.send_command(cmd, read_timeout=30)
+                        out_str = out if isinstance(out, str) else str(out or "")
+                        config_out += f"\n{tag}\n{out_str}"
+                    except Exception:
+                        pass
+            elif vendor in ('fortinet', 'paloalto'):
                 for cmd, tag in [
                     ("get system status",          "--- SYSTEM STATUS ---"),
                     ("show system info",           "--- SYSTEM INFO ---"),
@@ -498,16 +528,19 @@ def run_backup_and_triage(device):
 
             file_path = save_backup(device, sys_name, config_out)
 
-            # Stack detection (StackWise & co.): updates/dissolves the STACK
-            # group associated with this management IP.
+            # Redundancy detection: updates/dissolves the group associated
+            # with this management IP. A switch stack and a controller HA pair
+            # are the same slot on the same key, so exactly ONE upsert runs
+            # per device -- see parse_device_redundancy.
             try:
                 from redundancy import service as redundancy_service
-                redundancy_service.upsert_stack_from_cli(
+                group_type, redundancy_members = parse_device_redundancy(config_out, vendor)
+                redundancy_service.upsert_redundancy_from_cli(
                     device.get("Group", "Generale"), ip, sys_name,
-                    parse_switch_stack(config_out, vendor),
+                    redundancy_members, group_type,
                 )
             except Exception as stack_err:
-                logging.warning(f"Rilevamento stack fallito per {ip}: {stack_err}")
+                logging.warning(f"Rilevamento ridondanza fallito per {ip}: {stack_err}")
 
             log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' (Firmware: '{version}').")
             return {"status": "success", "version": version, "hostname": sys_name, "file": file_path}
@@ -1075,6 +1108,21 @@ def parse_switch_stack(content: str, vendor: str) -> list[dict] | None:
         return None
     members = parser(content)
     return members if len(members) >= 2 else None
+
+
+def parse_device_redundancy(content: str, vendor: str):
+    """(group_type, members) for this device's redundancy, members None if none.
+
+    A device is a switch stack OR a controller HA pair, never both, and the
+    group is keyed on its management IP. Deciding here keeps the triage to a
+    single upsert: running both would make the second one dissolve the group
+    the first had just written.
+    """
+    from redundancy.models import GroupType
+    from redundancy.parsers.cisco_wlc import SSO_PARSERS, parse_wlc_sso
+    if str(vendor or '').lower() in SSO_PARSERS:
+        return GroupType.SSO, parse_wlc_sso(content, vendor)
+    return GroupType.STACK, parse_switch_stack(content, vendor)
 
 
 def parse_vtp_status(content: str) -> tuple[str | None, str | None]:
