@@ -330,6 +330,31 @@
         </div>
       </div>
 
+      <!-- Jump-site devices sit outside the two counters above (no ICMP through
+           the bastion), so without a panel of their own they were simply absent
+           from Home. Here they are listed with the outcome of the last thing
+           that DID reach them: the SSH triage. -->
+      <div class="panel" id="homeBastionPanel" style="display:none; margin-top:18px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px;">
+          <h3 style="margin:0; font-size:17px;" data-i18n="homeBastionTitle"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Raggiungibili via bastione</h3>
+          <span id="homeBastionCount" class="chip"></span>
+        </div>
+        <p style="margin:0 0 8px; color:var(--text-muted); font-size:12px;" data-i18n="homeBastionHint">Nessun ICMP attraversa il tunnel: lo stato qui sotto e' l'esito dell'ultimo triage SSH, non un ping.</p>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="homeColHost">Hostname</th>
+                <th data-i18n="homeColIp">Indirizzo IP</th>
+                <th data-i18n="homeColSite">Sede</th>
+                <th data-i18n="homeBastionColTriage">Ultimo triage SSH</th>
+              </tr>
+            </thead>
+            <tbody id="homeBastionBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="panel requires-admin" style="margin-top:18px;">
         <h3 style="margin:0 0 6px; font-size:17px;" data-i18n="homeAnomTitle"><i class="fa-solid fa-shield-halved" style="color:var(--primary);"></i> Anomalie recenti</h3>
         <!-- Le anomalie si leggono in Traffico. Qui si contano soltanto: la

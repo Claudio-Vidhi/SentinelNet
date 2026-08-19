@@ -5,6 +5,39 @@
 
 // Mirror renderDeviceTable's canonical status mapping: status is on
 // globalVersions[device.IP].status, NOT on the device object itself.
+// Devices reachable only through an SSH bastion. They are excluded from the
+// online/attention counters on purpose (no ICMP crosses the tunnel, so any
+// up/down there would be invented), which used to make them vanish from Home
+// altogether. The status shown is the last SSH triage outcome, which is a real
+// measurement -- it went through the bastion and talked to the device.
+function renderBastionPanel(devices) {
+    const panel = document.getElementById('homeBastionPanel');
+    const body = document.getElementById('homeBastionBody');
+    if (!panel || !body) return;
+    if (!devices.length) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    const L = i18n[currentLang];
+    const count = document.getElementById('homeBastionCount');
+    if (count) count.textContent = `${devices.length} ${L.homeBastionDevices}`;
+    body.innerHTML = devices.slice(0, 8).map(d => {
+        // scan.status here comes from the triage (update_version_inventory),
+        // never from a ping: the ping monitor reports 'unknown' for these.
+        const scan = globalVersions[d.IP] || {};
+        const triaged = scan.status && scan.status !== 'unknown';
+        const info = triaged ? homeStatusInfo(scan.status) : homeStatusInfo('unknown');
+        const label = triaged
+            ? (i18n[currentLang][info.key] || scan.status)
+            : L.homeBastionNeverTriaged;
+        const host = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">&mdash;</span>';
+        return `<tr>
+            <td>${host}</td>
+            <td><code>${escapeHtml(d.IP || '')}</code></td>
+            <td><span class="badge">${escapeHtml(d.Site || 'central')}</span></td>
+            <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
+        </tr>`;
+    }).join('');
+}
+
 function homeStatusInfo(status) {
     if (status === 'online')      return { cls: 'ok',   led: 'led-success', key: 'homeStOnline' };
     if (status === 'auth_failed') return { cls: 'warn', led: 'led-warning', key: 'homeStAuth' };
@@ -44,7 +77,17 @@ async function loadHome() {
                     // server-side: for a jump-site device (bastion tunnel, no ICMP)
                     // d.up is null and d.status is 'unknown' — never collapse that
                     // to 'offline', it would report a false down.
-                    globalVersions[d.ip].status = d.status === 'unknown' ? 'unknown' : (d.up ? 'online' : 'offline');
+                    // 'unknown' from the monitor means "I could not measure
+                    // this" (jump site: no ICMP through the bastion), not "the
+                    // state is unknown". Writing it over a status the SSH
+                    // triage established would erase a real result with a
+                    // non-result, which is what made a triaged jump device go
+                    // back to an em dash on the next render.
+                    if (d.status === 'unknown') {
+                        if (!globalVersions[d.ip].status) globalVersions[d.ip].status = 'unknown';
+                    } else {
+                        globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                    }
                 });
                 // Keep the home tab live: re-poll at the monitor cadence.
                 // loadHome() is cheap here — globalDevices is cached, so
@@ -59,6 +102,8 @@ async function loadHome() {
     let online = 0;
     let notMeasurable = 0;
     const attention = [];
+    // Out of the counters, but not out of sight: these get their own panel.
+    const viaBastion = [];
     devs.forEach(d => {
         const scan = globalVersions[d.IP] || {};
         // A jump-site device has no measurable reachability: the bastion tunnel
@@ -69,7 +114,11 @@ async function loadHome() {
         // permanently — while the bays right below correctly said "not
         // measurable". icmp_reachable comes from /api/local-devices, scan.status
         // from the ping monitor; either one is enough to know.
-        if (d.icmp_reachable === false || scan.status === 'unknown') { notMeasurable++; return; }
+        if (d.icmp_reachable === false || scan.status === 'unknown') {
+            notMeasurable++;
+            viaBastion.push(d);
+            return;
+        }
         if (scan.status === 'online') online++;
         else attention.push(d); // auth_failed / offline / missing
     });
@@ -115,6 +164,8 @@ async function loadHome() {
             }).join('');
         }
     }
+
+    renderBastionPanel(viaBastion);
 
     if (currentRole === 'admin') loadHomeAnomalies();
     else renderEventStripDenied();

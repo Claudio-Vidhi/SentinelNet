@@ -488,9 +488,18 @@ class FrontendJumpStatusIsNotCollapsedToOffline(unittest.TestCase):
             return f.read()
 
     def test_home_js_no_longer_collapses_null_to_offline(self):
-        self.assertIn(
-            "d.status === 'unknown' ? 'unknown' : (d.up ? 'online' : 'offline')",
-            self._read("static", "js", "home.js"))
+        # The original one-liner mapped the monitor's tri-state; it is now a
+        # block, because 'unknown' additionally must not overwrite a status the
+        # SSH triage established (that erased a real result with a non-result).
+        compact = " ".join(self._read("static", "js", "home.js").split())
+        marker = "pm.devices.forEach(d => {"
+        block = compact[compact.index(marker):]
+        block = block[:block.index("});")]
+        self.assertIn("d.up ? 'online' : 'offline'", block)
+        self.assertNotIn("d.up ? 'online' : 'offline' ; }", block)
+        # A monitor 'unknown' is only ever written when nothing is known yet.
+        self.assertIn("if (!globalVersions[d.ip].status) "
+                      "globalVersions[d.ip].status = 'unknown';", block)
 
     def test_topology_js_no_longer_collapses_null_to_offline(self):
         self.assertIn(
@@ -588,10 +597,18 @@ class HomeKpiTilesDoNotCollapseTheThirdState(unittest.TestCase):
             return f.read()
 
     def test_not_measurable_devices_leave_both_counters(self):
-        src = self._read("static", "js", "home.js")
-        self.assertIn(
-            "if (d.icmp_reachable === false || scan.status === 'unknown') "
-            "{ notMeasurable++; return; }", src)
+        # Asserted on the shape of the guard, not its exact formatting: the
+        # invariant is that such a device increments notMeasurable and returns
+        # before either counter, whether the block is one line or five.
+        compact = " ".join(self._read("static", "js", "home.js").split())
+        guard = "if (d.icmp_reachable === false || scan.status === 'unknown') {"
+        self.assertIn(guard, compact, "the not-measurable guard is gone from loadHome")
+        start = compact.index(guard)
+        block = compact[start:compact.index("if (scan.status === 'online')", start)]
+        self.assertIn("notMeasurable++", block)
+        self.assertIn("return;", block)
+        self.assertNotIn("online++", block)
+        self.assertNotIn("attention.push", block)
 
     def test_percentage_denominator_excludes_what_cannot_be_measured(self):
         src = self._read("static", "js", "home.js")
@@ -1156,3 +1173,51 @@ class BastionAuthIsReportedSeparately(unittest.TestCase):
         self.assertEqual(core_engine._failure_status(net_ssh.BastionAuthError("x")),
                          "auth_failed")
         self.assertEqual(core_engine._failure_status(OSError("timed out")), "offline")
+
+
+class DeviceSiteIsEditableFromInventory(unittest.TestCase):
+    """The site decides HOW a device is reached (direct, agent, bastion), so it
+    has to be changeable after import, not only at creation time."""
+
+    # None is a meaningful value for `site` here ("the site does not
+    # exist"), so the default cannot be None.
+    _DEFAULT = object()
+
+    def _call(self, ip, new_site, devices, site=_DEFAULT):
+        from routers import inventory as inv_router
+        if site is self._DEFAULT:
+            site = {"id": new_site, "mode": "jump"}
+        with mock.patch("services.site_manager.get_site",
+                        return_value=site),\
+             mock.patch.object(inventory_manager, "get_all_devices", return_value=devices),\
+             mock.patch.object(inventory_manager, "safe_write_hosts_csv") as write,\
+             mock.patch("routers.inventory.assert_group_allowed"),\
+             mock.patch("routers.inventory.log_audit"):
+            res = inv_router.reassign_device_site(
+                inv_router.DeviceSiteSchema(ip=ip, new_site=new_site),
+                {"sub": "admin", "role": "admin"})
+        return res, write
+
+    def test_moving_a_device_rewrites_only_its_site(self):
+        devices = [{"IP": "192.0.2.40", "Group": "Generale", "Site": "central", "Vendor": "cisco"},
+                   {"IP": "192.0.2.41", "Group": "Generale", "Site": "central", "Vendor": "cisco"}]
+        res, write = self._call("192.0.2.40", "customer-a", devices)
+        self.assertEqual(res["status"], "success")
+        write.assert_called_once()
+        self.assertEqual(devices[0]["Site"], "customer-a")
+        self.assertEqual(devices[1]["Site"], "central")   # untouched
+        self.assertEqual(devices[0]["Group"], "Generale")  # tenant untouched
+
+    def test_an_unknown_site_is_refused_before_any_write(self):
+        from fastapi import HTTPException
+        devices = [{"IP": "192.0.2.42", "Group": "Generale", "Site": "central"}]
+        with self.assertRaises(HTTPException) as ctx:
+            self._call("192.0.2.42", "does-not-exist", devices, site=None)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(devices[0]["Site"], "central")
+
+    def test_an_unknown_device_is_a_404(self):
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as ctx:
+            self._call("192.0.2.99", "customer-a", [])
+        self.assertEqual(ctx.exception.status_code, 404)
