@@ -839,6 +839,7 @@ const i18n = {
         invKpiOnlineLabel: "Dispositivi Online",
         invKpiOfflineLabel: "Dispositivi Offline",
         invKpiAuthFailedLabel: "Autenticazione Fallita",
+        invKpiUnknownLabel: "Non misurabile",
         titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
         optFilterAll: "Filtra per Tenant: Tutti",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale',
@@ -1486,6 +1487,7 @@ const i18n = {
         phFgtConsolePass: "(vuota su unità vergine)",
         phNewUserName: "es. mario.rossi",
         phNewSiteName: "es. Milano",
+        phNewSiteJumpHost: "es. 198.51.100.10",
 
     },
     en: {
@@ -2326,6 +2328,7 @@ const i18n = {
         invKpiOnlineLabel: "Online Devices",
         invKpiOfflineLabel: "Offline Devices",
         invKpiAuthFailedLabel: "Auth Failed",
+        invKpiUnknownLabel: "Not measurable",
         titleInventoryTable: "Monitored Network Devices",
         optFilterAll: "Filter by Tenant: All",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run Global Triage',
@@ -2971,6 +2974,7 @@ const i18n = {
         phFgtConsolePass: "(empty on factory default units)",
         phNewUserName: "e.g. john.doe",
         phNewSiteName: "e.g. Milan",
+        phNewSiteJumpHost: "e.g. 198.51.100.10",
 
     }
 };

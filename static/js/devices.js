@@ -91,8 +91,14 @@
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
     // da ricerca/tenant), stessa mappatura stato->led usata per le righe della tabella.
     function updateInventoryKpis() {
-        let online = 0, offline = 0, authFailed = 0;
+        let online = 0, offline = 0, authFailed = 0, unknown = 0;
         (globalDevices || []).forEach(d => {
+            // Jump site: same "not measurable" bucket as the row's em dash
+            // (icmp_reachable is set per-device by /api/local-devices, Task 4's
+            // is_reachable_by_icmp). Without this branch a jump-site device
+            // that has never been triaged falls into `else offline++` and the
+            // "Offline: N" tile contradicts the row directly below it.
+            if (d.icmp_reachable === false) { unknown++; return; }
             const scan = globalVersions[d.IP] || {};
             if (scan.status === 'online') online++;
             else if (scan.status === 'auth_failed') authFailed++;
@@ -102,6 +108,7 @@
         setText('invKpiOnline', online);
         setText('invKpiOffline', offline);
         setText('invKpiAuthFailed', authFailed);
+        setText('invKpiUnknown', unknown);
     }
 
     function renderDeviceTable() {
@@ -1613,28 +1620,45 @@
             const res = await apiFetch(`/api/ping/${ip}`);
             if (res && res.ok) {
                 const data = await res.json();
-                const statusTxt = data.reachable ? "ONLINE" : "OFFLINE";
-                if (led) {
-                    led.className = data.reachable ? "led led-online" : "led led-offline";
-                }
-                if (ledContainer) {
-                    Array.from(ledContainer.childNodes)
-                        .filter(n => n.nodeType === Node.TEXT_NODE)
-                        .forEach(n => n.remove());
-                    ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
-                }
+                // null = not measurable (jump site: ICMP cannot cross the
+                // bastion tunnel, see routers/triage.py's ping_single). Show
+                // the same em dash the row already uses on load, not a false
+                // "OFFLINE" from a ping that never ran.
+                if (data.reachable === null) {
+                    if (led) led.className = "led";
+                    if (ledContainer) {
+                        ledContainer.title = i18n[currentLang].jumpLimitsPing;
+                        Array.from(ledContainer.childNodes)
+                            .filter(n => n.nodeType === Node.TEXT_NODE)
+                            .forEach(n => n.remove());
+                        ledContainer.appendChild(document.createTextNode('—'));
+                    }
+                    if (globalVersions[ip]) globalVersions[ip].status = "unknown";
+                    updateTopologyMapNodeStatus(ip, "unknown");
+                } else {
+                    const statusTxt = data.reachable ? "ONLINE" : "OFFLINE";
+                    if (led) {
+                        led.className = data.reachable ? "led led-online" : "led led-offline";
+                    }
+                    if (ledContainer) {
+                        Array.from(ledContainer.childNodes)
+                            .filter(n => n.nodeType === Node.TEXT_NODE)
+                            .forEach(n => n.remove());
+                        ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
+                    }
 
-                // Update globalVersions cache
-                if (!globalVersions[ip]) {
-                    globalVersions[ip] = {
-                        version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
-                        vendor: "cisco"
-                    };
-                }
-                globalVersions[ip].status = data.reachable ? "online" : "offline";
+                    // Update globalVersions cache
+                    if (!globalVersions[ip]) {
+                        globalVersions[ip] = {
+                            version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
+                            vendor: "cisco"
+                        };
+                    }
+                    globalVersions[ip].status = data.reachable ? "online" : "offline";
 
-                // Update map node status
-                updateTopologyMapNodeStatus(ip, data.reachable ? "online" : "offline");
+                    // Update map node status
+                    updateTopologyMapNodeStatus(ip, data.reachable ? "online" : "offline");
+                }
             }
         } catch(e) {}
 
@@ -1759,11 +1783,27 @@
             const ledContainer = row.cells[0].querySelector(".led-container");
             if (!ledContainer) return;
 
-            const alive     = results[ip];
+            const alive = results[ip];
+            const led = ledContainer.querySelector(".led");
+
+            // null = not measurable (jump site: ICMP cannot cross the bastion
+            // tunnel, see routers/triage.py's ping_check) — same em dash the
+            // row already uses on load, not a false "OFFLINE".
+            if (alive === null) {
+                if (led) led.className = "led";
+                ledContainer.title = i18n[currentLang].jumpLimitsPing;
+                Array.from(ledContainer.childNodes)
+                    .filter(n => n.nodeType === Node.TEXT_NODE)
+                    .forEach(n => n.remove());
+                ledContainer.appendChild(document.createTextNode('—'));
+                if (globalVersions[ip]) globalVersions[ip].status = "unknown";
+                updateTopologyMapNodeStatus(ip, "unknown");
+                return;
+            }
+
             const ledClass  = alive ? "led-online" : "led-offline";
             const statusTxt = alive ? "ONLINE" : "OFFLINE";
 
-            const led = ledContainer.querySelector(".led");
             if (led) led.className = `led ${ledClass}`;
 
             Array.from(ledContainer.childNodes)
