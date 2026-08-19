@@ -8,6 +8,7 @@ determines how central interacts with that site's devices:
 |---|---|---|
 | **Central poll** (Mode A) | Central opens SSH connections directly to remote devices through site-to-site VPN routing. No extra process. | Stable site-to-site VPN, remote subnets directly reachable from central. |
 | **Site agent** (Mode B) | A lightweight process (`services/site_agent.py`) runs on a server or VM inside the site and connects **outbound** to central over HTTPS. It pushes inventory, MAC tables and status; CLI commands travel through a job queue. | NAT or firewalls that block inbound connections to the site, an unstable VPN, or a requirement to keep credentials inside the site. |
+| **Jump site** (Mode C) | Central opens one SSH connection to a bastion host inside the customer's network and tunnels every device SSH session through it (`core/net_ssh.py`, `direct-tcpip` channel). Nothing is installed at the site beyond the bastion's own `sshd`. | Customer refuses any installed agent or software, and grants only SSH access to a single Linux host that can reach the managed devices. |
 
 The default site `central` always exists and cannot be deleted.
 
@@ -300,7 +301,110 @@ downstream starts from the IP.
 
 ---
 
-## 6. Troubleshooting
+## 6. Jump site (bastion SSH, Mode C)
+
+Pick this mode when the customer will not allow any SentinelNet process inside
+their network — no agent, nothing installed — and grants only SSH access to a
+single Linux host (the **bastion**) that can itself reach the managed devices.
+Central tunnels every device SSH session through one connection to that
+bastion; the customer never installs anything beyond the bastion's own
+`sshd`.
+
+### 6.1 Bastion prerequisites
+
+- The bastion is reachable over SSH from central.
+- The bastion account central logs in as is permitted to open TCP forwards
+  (`AllowTcpForwarding yes` in `sshd_config` — the OpenSSH default; only an
+  explicit `no` blocks it).
+- The bastion has IP reachability to the devices central needs to manage.
+
+### 6.2 Create the identity first, then the site
+
+Bastion credentials are not stored on the site. They live as an **identity**
+(`security/identity_manager.py`), and the site stores only that identity's id
+— `sites.json` never holds the secret itself.
+
+1. **Identities** tab (or `POST /api/identities`) — create an identity with
+   the bastion's username and password.
+2. **Multi-site** tab → *New site* → **Mode**: `Jump (bastion SSH)`. Three
+   fields appear:
+   - **Host bastione** — the bastion's IP or hostname, e.g. `198.51.100.10`.
+   - **Porta SSH bastione** — the bastion's SSH port, default `22`.
+   - **Identità (credenziali) bastione** — the identity created in step 1.
+
+No token is issued for a jump site (there is no agent to configure).
+
+### Creating a jump site via API
+
+```bash
+TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"<ADMIN_PASSWORD>"}' | jq -r .access_token)
+
+# 1. Create the bastion identity
+IDENTITY_ID=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/identities \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"Bastion","tenant":"Customer_A","username":"svc-jump","password":"<BASTION_PASSWORD>","secret":""}' \
+  | jq -r .id)
+
+# 2. Create the jump site, referencing the identity by id
+curl -X POST http://<CENTRAL_IP>:8765/api/sites \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "{\"name\": \"Customer A\", \"mode\": \"jump\", \"subnets\": [\"192.0.2.0/24\"], \
+       \"jump_host\": \"198.51.100.10\", \"jump_port\": 22, \"jump_identity\": \"$IDENTITY_ID\"}"
+```
+
+### 6.3 What is doable, and what is not
+
+The bastion gives us **outbound TCP only, initiated by us**. Everything
+SentinelNet does that is not "open a TCP connection from central to a
+device" stays broken.
+
+**Works through a jump site:**
+
+| Capability | Why it works |
+|---|---|
+| CLI collection: inventory, version, config backup (`core/core_engine.py:313,511,555,602`) | netmiko over a `direct-tcpip` channel |
+| MAC table and ARP collection (`collectors/mac_collector.py`, `collectors/arp_collector.py`) | same |
+| Port actions (`services/port_action.py`), switch and FortiGate provisioning via CLI | same |
+| WLC CLI (`services/wlc_service.py`) | same |
+| Bulk command, CLI modal, config analyzer, netsec audit (they consume CLI output) | same |
+
+**Does not work, and is visibly disabled:**
+
+| Capability | Why |
+|---|---|
+| ICMP ping monitor (`services/ping_monitor.py:59`, `collectors/network_scanner._ping`) | ICMP is not TCP; an SSH channel cannot carry it |
+| Subnet scan and discovery from the central | same, plus it needs broadcast/ARP adjacency |
+| Syslog reception, NetFlow/flow ingestion | inbound UDP from devices to us; the bastion never initiates back |
+| FortiGate REST, WLC REST, any `requests`-based vendor API | needs a listening local port, not a channel — not built |
+| SNMP (if ever wired up; `pysnmp` is a dependency but currently unused in code) | UDP |
+| Real-time device status in the inventory KPIs | derives from ping |
+
+A jump site shows inventory and configs but never shows online/offline:
+triage on a jump site reports reachability as **"not measurable"**, never as
+"down". Manual ping (single or bulk) on a jump-site device returns that same
+"not measurable" result instead of attempting ICMP; a subnet scan targeting a
+jump site's subnet is refused outright with `HTTP 409` rather than answered
+with a false "down".
+
+### 6.4 No bastion host-key verification
+
+SentinelNet does **not** verify the bastion's SSH host key. This matches
+every other netmiko connection in this codebase, none of which verify host
+keys either — but it is a real limitation: a machine-in-the-middle on the
+network path to the bastion would not be detected.
+
+### 6.5 Connection lifecycle
+
+One SSH transport is kept per jump site and shared by all of that site's
+devices; each device gets its own `direct-tcpip` channel over the shared
+transport. A dead transport is rebuilt on the next call. Connecting to the
+bastion is bounded by an explicit TCP connect timeout and an SSH banner
+timeout, so a black-holed or silent bastion cannot hang a thread for the OS's
+TCP retransmit ceiling; a failed connect leaves nothing cached.
+
+## 7. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
