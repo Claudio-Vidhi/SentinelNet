@@ -498,8 +498,30 @@ function updateDevSecretField() {
     if (hint) hint.style.display = vendor === 'linux' ? 'block' : 'none';
 }
 
+async function populateSiteOptions(preserve) {
+    const siteSelect = document.getElementById('devSiteSelect');
+    if (!siteSelect) return;
+    const current = preserve || siteSelect.value || 'central';
+    let sites = [];
+    try {
+        const res = await apiFetch('/api/sites');
+        if (res && res.ok) {
+            sites = (await res.json()).sites || [];
+        }
+    } catch (e) {}
+    if (!sites.length) {
+        sites = [{ id: 'central', name: 'Central', mode: 'central' }];
+    }
+    siteSelect.innerHTML = sites.map(s => {
+        const modeLabel = s.mode === 'jump' ? ' [Jump/Bastion]' : (s.mode === 'agent' ? ' [Agent]' : '');
+        return `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}${escapeHtml(modeLabel)} (${escapeHtml(s.id)})</option>`;
+    }).join('');
+    siteSelect.value = Array.from(siteSelect.options).some(o => o.value === current) ? current : 'central';
+}
+window.populateSiteOptions = populateSiteOptions;
+
 // Popola le select del form di Provisioning Apparato (devVendor,
-// scanVerifyVendorSelect, devGroupSelect). Estratto da appInit() perché ora
+// scanVerifyVendorSelect, devGroupSelect, devSiteSelect). Estratto da appInit() perché ora
 // serve anche quando si apre la tab dedicata tab-provisioning senza passare da
 // un reload completo.
 function populateProvisioningFormSelects() {
@@ -516,6 +538,7 @@ function populateProvisioningFormSelects() {
             `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
         ).join('');
     }
+    populateSiteOptions();
     if (typeof window.populateGenCfgTenants === 'function') {
         window.populateGenCfgTenants();
     }
@@ -530,6 +553,7 @@ async function loadProvisioningTab() {
         }
     } catch (e) {}
     populateProvisioningFormSelects();
+    await populateSiteOptions();
     await refreshIdentityOptions();
     renderIdentitiesPanel();
 }

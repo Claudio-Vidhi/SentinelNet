@@ -29,6 +29,16 @@ import netmiko
 CONNECT_TIMEOUT = 10  # seconds: raw TCP connect to the bastion
 BANNER_TIMEOUT = 15   # seconds: SSH banner exchange once the socket is up
 
+class BastionAuthError(Exception):
+    """The BASTION refused our login — the device was never contacted.
+
+    Without a distinct type both hops collapse into one paramiko
+    AuthenticationException, and a wrong bastion password is reported as a
+    device with bad credentials: the operator then rotates the credential on
+    the wrong machine.
+    """
+
+
 _transports: "dict[str, paramiko.Transport]" = {}
 _site_locks: "dict[str, threading.Lock]" = {}
 _registry_lock = threading.Lock()  # guards _site_locks/_transports lookups only, never I/O
@@ -45,40 +55,66 @@ def _lock_for(site_id: str) -> threading.Lock:
         return lock
 
 
+def _dial(site: dict) -> paramiko.Transport:
+    """Open and authenticate one transport to the site's bastion. No caching."""
+    from security import identity_manager
+    site_id = site["id"]
+    creds = identity_manager.get_identity_credentials(site["jump_identity"])
+    if not creds:
+        raise ValueError(f"Identita' {site['jump_identity']} non trovata.")
+    username, password = creds[0], creds[1]
+    sock = socket.create_connection(
+        (site["jump_host"], int(site.get("jump_port") or 22)),
+        timeout=CONNECT_TIMEOUT)
+    tr = None
+    try:
+        tr = paramiko.Transport(sock)
+        tr.banner_timeout = BANNER_TIMEOUT
+        tr.connect(username=username, password=password)
+    except Exception as e:
+        # paramiko only owns/closes the socket when handed a (host, port)
+        # tuple; handing it an already-open socket (needed for
+        # CONNECT_TIMEOUT above) makes that socket ours to close on
+        # failure. Without this, a site polled on a schedule with bad or
+        # rotated bastion credentials leaks one fd (plus a half-started
+        # Transport) per attempt until the process runs out of them.
+        if tr is not None:
+            tr.close()
+        sock.close()
+        if isinstance(e, paramiko.AuthenticationException):
+            raise BastionAuthError(
+                f"Il bastione {site['jump_host']} della sede "
+                f"'{site_id}' ha rifiutato l'utente '{username}': "
+                f"credenziali del bastione, non del dispositivo.") from e
+        raise
+    return tr
+
+
 def _transport(site: dict) -> paramiko.Transport:
     """Return a live SSH transport to the site's bastion, opening it if needed."""
-    from security import identity_manager
     site_id = site["id"]
     with _lock_for(site_id):
         tr = _transports.get(site_id)
         if tr is not None and tr.is_active():
             return tr
-        creds = identity_manager.get_identity_credentials(site["jump_identity"])
-        if not creds:
-            raise ValueError(f"Identita' {site['jump_identity']} non trovata.")
-        username, password = creds[0], creds[1]
-        sock = socket.create_connection(
-            (site["jump_host"], int(site.get("jump_port") or 22)),
-            timeout=CONNECT_TIMEOUT)
-        tr = None
         try:
-            tr = paramiko.Transport(sock)
-            tr.banner_timeout = BANNER_TIMEOUT
-            tr.connect(username=username, password=password)
+            tr = _dial(site)
         except Exception:
-            # paramiko only owns/closes the socket when handed a (host, port)
-            # tuple; handing it an already-open socket (needed for
-            # CONNECT_TIMEOUT above) makes that socket ours to close on
-            # failure. Without this, a site polled on a schedule with bad or
-            # rotated bastion credentials leaks one fd (plus a half-started
-            # Transport) per attempt until the process runs out of them.
-            if tr is not None:
-                tr.close()
-            sock.close()
             _transports.pop(site_id, None)
             raise
         _transports[site_id] = tr
         return tr
+
+
+def probe_bastion(site: dict) -> None:
+    """Dial the bastion with the site's current identity and hang up.
+
+    Deliberately does NOT go through _transport: the point is to test the
+    credential as configured now, and a cached transport opened with the
+    previous one would answer 'fine'. Raises BastionAuthError on a refused
+    login, or the underlying socket/SSH error otherwise.
+    """
+    _dial(site).close()
 
 
 def _netmiko_connect(**params):
@@ -98,7 +134,7 @@ def jump_channel(site: dict, host: str, port: int) -> paramiko.Channel:
         "direct-tcpip", (host, int(port)), ("127.0.0.1", 0))
 
 
-def _jump_site_for(host: str):
+def jump_site_for(host: str):
     """Return the jump site owning this device IP, or None.
 
     get_device_by_ip's cache entry carries "site" (lowercase — see
@@ -123,7 +159,7 @@ def ConnectHandler(site_id: "str | None" = None, **params):
     inventory lookup, and site_id is only consulted when that finds nothing.
     """
     host = params.get("host") or params.get("ip")
-    site = _jump_site_for(host) if host else None
+    site = jump_site_for(host) if host else None
     if site is None and site_id:
         from services import site_manager
         candidate = site_manager.get_site(site_id)

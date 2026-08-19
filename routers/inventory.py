@@ -30,6 +30,7 @@ class DeviceSchema(BaseModel):
     password: str = ""
     enable_secret: str = ""
     group: str = "Generale"
+    site: str = "central"
     ssh_port: int = Field(22, ge=1, le=65535)
     # §11.6: mappa trasporti per-device {protocollo: porta|None}. None = legacy
     # (deriva ssh-only dalla porta SSH). Validazione in inventory_manager.
@@ -173,17 +174,24 @@ def add_device(device: DeviceSchema, current_user = Depends(require_operator)):
     existing = next((d for d in inventory_manager.get_all_devices() if d['IP'] == device.ip), None)
     if existing:
         assert_group_allowed(current_user, existing.get('Group', 'Generale'))
+
+    site_val = (device.site or 'central').strip()
+    all_sites = {s['id'] for s in site_manager.list_sites()}
+    if site_val not in all_sites:
+        raise HTTPException(status_code=400, detail=f"Sede '{site_val}' inesistente")
+
     try:
         inventory_manager.add_or_update_device(
             device.ip, device.vendor, device.profile,
             device.username, device.password, device.enable_secret, device.group,
+            site=site_val,
             ssh_port=device.ssh_port, transports=device.transports,
             snmp_community=device.snmp_community,
             snmp_disabled=device.snmp_disabled,
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
-    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
+    log_audit(f"Dispositivo '{device.ip}' (vendor: '{device.vendor}', gruppo: '{device.group}', sede: '{site_val}') aggiunto/aggiornato dall'utente '{current_user.get('sub')}'.")
     # §11.6: Telnet è in chiaro — traccia esplicitamente l'abilitazione.
     if device.transports and 'telnet' in device.transports:
         log_audit(f"ATTENZIONE: Telnet (trasmissione in chiaro) abilitato per il dispositivo '{device.ip}' dall'utente '{current_user.get('sub')}'.")

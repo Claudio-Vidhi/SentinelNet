@@ -117,7 +117,7 @@ class JumpChannel(unittest.TestCase):
 class JumpChannelRealDeviceLookup(unittest.TestCase):
     """Exercises the real services.inventory_manager.get_device_by_ip instead
     of mocking it: the mocked tests above assume a shape, this test proves
-    _jump_site_for actually works against the live cache. Isolates hosts.csv
+    jump_site_for actually works against the live cache. Isolates hosts.csv
     the way tests/test_bulk_assign_identity.py does (HOSTS_CSV attribute
     override, not the env var, since inventory_manager may already be
     imported with a resolved path by the time this test runs)."""
@@ -225,7 +225,9 @@ class JumpTransportLocking(unittest.TestCase):
              mock.patch.object(net_ssh.paramiko, "Transport", return_value=fake_transport), \
              mock.patch("security.identity_manager.get_identity_credentials",
                         return_value=("u", "wrong-password", "s")):
-            with self.assertRaises(paramiko.AuthenticationException):
+            # Re-raised as BastionAuthError: a refused bastion login must not
+            # look like the device's own credentials being wrong.
+            with self.assertRaises(net_ssh.BastionAuthError):
                 net_ssh._transport(site)
         # The socket the module opened is ours to close on a failed connect —
         # paramiko doesn't do it for us once we hand it an already-open sock.
@@ -802,7 +804,7 @@ class JumpChannelIsClosedWhenNetmikoFails(unittest.TestCase):
 
 class ProvisioningNamesTheSiteExplicitly(unittest.TestCase):
     """A device being provisioned (day 0) is not in hosts.csv yet, so
-    core.net_ssh._jump_site_for cannot resolve its site from the inventory and
+    core.net_ssh.jump_site_for cannot resolve its site from the inventory and
     the push would be dialled directly — a connect timeout for a switch that
     the bastion could have reached. Both push_via_ssh entry points therefore
     take an explicit site, forwarded to ConnectHandler as site_id; the
@@ -970,3 +972,187 @@ class CliPathsSkipTheDirectPrecheckForJumpSites(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _FakeWebSocket:
+    """Minimal WebSocket double: ws_terminal only accepts, sends and closes on
+    the failure paths exercised here."""
+
+    def __init__(self, token, send_exc=None):
+        self.query_params = {"token": token}
+        self.sent = []
+        self.closed = False
+        self._send_exc = send_exc
+
+    async def accept(self):
+        pass
+
+    async def send_text(self, text):
+        self.sent.append(text)
+        # Only the failure report blows up: the browser is still there for the
+        # banner, and leaves while paramiko is dialling.
+        if self._send_exc is not None and "Errore Connessione" in text:
+            raise self._send_exc
+
+    async def close(self, code=1000):
+        self.closed = True
+
+
+class WsTerminalThroughBastion(unittest.TestCase):
+    """The web terminal drives paramiko directly instead of netmiko, so it does
+    not get core.net_ssh's tunnel for free."""
+
+    DEVICE = {"IP": "192.0.2.20", "Group": "Generale", "Site": "customer-a"}
+
+    def _run(self, send_exc=None, site=object()):
+        import asyncio
+        from routers import commands
+        from core import core_engine
+        from security import user_manager
+
+        otp = "otp-test"
+        commands._ws_tokens[otp] = ("admin-user", time.time())
+        ws = _FakeWebSocket(otp, send_exc)
+        client = mock.MagicMock()
+        client.connect.side_effect = Exception("boom")
+        chan = object()
+        with mock.patch.object(inventory_manager, "get_all_devices",
+                               return_value=[self.DEVICE]),\
+             mock.patch.object(user_manager, "get_role", return_value="admin"),\
+             mock.patch.object(user_manager, "is_disabled", return_value=False),\
+             mock.patch.object(core_engine, "get_device_credentials",
+                               return_value=("u", "p", "s")),\
+             mock.patch.object(core_engine, "get_cli_transport",
+                               return_value=("ssh", 22)),\
+             mock.patch.object(commands, "_prepare_host_keys"),\
+             mock.patch.object(commands.paramiko, "SSHClient", return_value=client),\
+             mock.patch("core.net_ssh.jump_site_for", return_value=site),\
+             mock.patch("core.net_ssh.jump_channel", return_value=chan) as jc:
+            asyncio.run(commands.ws_terminal(ws, self.DEVICE["IP"]))
+        return client, chan, jc, ws
+
+    def test_terminal_to_a_jump_device_goes_through_the_bastion_channel(self):
+        client, chan, jc, _ws = self._run()
+        jc.assert_called_once()
+        self.assertIs(client.connect.call_args.kwargs["sock"], chan)
+
+    def test_terminal_to_a_central_device_still_dials_direct(self):
+        client, _chan, jc, _ws = self._run(site=None)
+        jc.assert_not_called()
+        self.assertIsNone(client.connect.call_args.kwargs["sock"])
+
+    def test_a_browser_that_left_does_not_raise_out_of_the_endpoint(self):
+        from fastapi import WebSocketDisconnect
+        # No assertion needed beyond _run() returning: before the fix the
+        # WebSocketDisconnect escaped and uvicorn logged an ASGI traceback.
+        self._run(send_exc=WebSocketDisconnect(code=1006))
+
+
+class JumpSiteDeviceIdentity(unittest.TestCase):
+    """A jump site declares two credentials: one for the bastion, one as the
+    default for the devices behind it."""
+
+    def test_device_identity_is_stored_and_clearable(self):
+        site, _ = site_manager.create_site(
+            "Customer DI", "jump", jump_host="198.51.100.11",
+            jump_identity="id-bastion", device_identity="id-devices")
+        self.assertEqual(site["device_identity"], "id-devices")
+        site_manager.update_site(site["id"], device_identity="")
+        self.assertEqual(site_manager.get_site(site["id"])["device_identity"], "")
+
+    def test_device_identity_is_optional(self):
+        site, _ = site_manager.create_site(
+            "Customer DI2", "jump", jump_host="198.51.100.12",
+            jump_identity="id-bastion")
+        self.assertEqual(site["device_identity"], "")
+
+    def test_renaming_a_jump_site_keeps_the_device_identity(self):
+        # update_site revalidates the whole jump block on every edit; a rename
+        # must not drop the field the way an explicit None would.
+        site, _ = site_manager.create_site(
+            "Customer DI3", "jump", jump_host="198.51.100.13",
+            jump_identity="id-bastion", device_identity="id-devices")
+        site_manager.update_site(site["id"], name="Customer DI3 rinominata")
+        self.assertEqual(site_manager.get_site(site["id"])["device_identity"], "id-devices")
+
+
+class DeviceCredentialFallback(unittest.TestCase):
+    """Profile 'default' on a device behind a bastion must not mean the global
+    admin account: that is this installation's credential, sent to somebody
+    else's device."""
+
+    SITE = {"id": "customer-a", "mode": "jump", "device_identity": "id-devices"}
+
+    def _creds(self, device, site=None):
+        from core import core_engine
+        from security import identity_manager
+        with mock.patch("services.site_manager.get_site",
+                        return_value=self.SITE if site is None else site),\
+             mock.patch.object(identity_manager, "get_identity_credentials",
+                               side_effect=lambda i: ("site-user", "site-pw", "site-secret")
+                               if i == "id-devices" else ("row-user", "row-pw", "row-secret")):
+            return core_engine.get_device_credentials(device)
+
+    def test_profile_default_uses_the_site_identity(self):
+        creds = self._creds({"IP": "192.0.2.30", "Site": "customer-a", "Profile": "default"})
+        self.assertEqual(creds, ("site-user", "site-pw", "site-secret"))
+
+    def test_the_device_own_identity_still_wins(self):
+        creds = self._creds({"IP": "192.0.2.31", "Site": "customer-a",
+                             "Profile": "identity:id-row"})
+        self.assertEqual(creds, ("row-user", "row-pw", "row-secret"))
+
+    def test_a_site_without_a_default_identity_falls_back_to_the_globals(self):
+        from core import core_engine
+        creds = self._creds({"IP": "192.0.2.32", "Site": "customer-a", "Profile": "default"},
+                            site={"id": "customer-a", "mode": "jump", "device_identity": ""})
+        self.assertEqual(creds, (core_engine.DEFAULT_USERNAME,
+                                 core_engine.DEFAULT_PASSWORD,
+                                 core_engine.DEFAULT_SECRET))
+
+    def test_an_empty_username_on_a_custom_row_uses_the_site_identity(self):
+        creds = self._creds({"IP": "192.0.2.33", "Site": "customer-a",
+                             "Profile": "custom", "Username": "", "Password": ""})
+        self.assertEqual(creds, ("site-user", "site-pw", "site-secret"))
+
+
+class BastionAuthIsReportedSeparately(unittest.TestCase):
+    SITE = {"id": "customer-a", "mode": "jump", "jump_host": "198.51.100.10",
+            "jump_port": 22, "jump_identity": "id-1"}
+
+    def test_a_refused_bastion_login_is_not_a_device_credential_problem(self):
+        from core import net_ssh
+        from security import identity_manager
+        tr = mock.MagicMock()
+        tr.connect.side_effect = paramiko.AuthenticationException("bad password")
+        with mock.patch.object(identity_manager, "get_identity_credentials",
+                               return_value=("bastion-user", "pw", "")),\
+             mock.patch.object(net_ssh.socket, "create_connection"),\
+             mock.patch.object(net_ssh.paramiko, "Transport", return_value=tr):
+            with self.assertRaises(net_ssh.BastionAuthError) as ctx:
+                net_ssh._transport(dict(self.SITE))
+        msg = str(ctx.exception)
+        self.assertIn("bastion-user", msg)
+        self.assertIn("198.51.100.10", msg)
+        self.assertNotIn("customer-a", net_ssh._transports)
+
+    def test_probe_bastion_ignores_the_cached_transport(self):
+        # Testing a credential against a transport opened with the PREVIOUS one
+        # would always answer "fine".
+        from core import net_ssh
+        cached = mock.MagicMock()
+        cached.is_active.return_value = True
+        net_ssh._transports["customer-a"] = cached
+        try:
+            with mock.patch.object(net_ssh, "_dial") as dial:
+                net_ssh.probe_bastion(dict(self.SITE))
+            dial.assert_called_once()
+            dial.return_value.close.assert_called_once()
+        finally:
+            net_ssh._transports.pop("customer-a", None)
+
+    def test_triage_marks_a_refused_bastion_as_an_auth_failure(self):
+        from core import core_engine, net_ssh
+        self.assertEqual(core_engine._failure_status(net_ssh.BastionAuthError("x")),
+                         "auth_failed")
+        self.assertEqual(core_engine._failure_status(OSError("timed out")), "offline")

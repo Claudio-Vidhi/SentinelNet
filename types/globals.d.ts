@@ -112,4 +112,5 @@ interface Window {
     trafState: any;          // observability.js, read by flow-analytics.js
     _vwLoaded: any;          // threat-intel.js, first-load flag
     webkitAudioContext: any; // legacy Safari fallback in devices.js
+    populateSiteOptions: any; // provisioning.js
 }

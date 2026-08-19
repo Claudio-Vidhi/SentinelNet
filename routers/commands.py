@@ -2,6 +2,7 @@
 """Router Commands. Estratto da app_server.py (fase 6.6)."""
 
 import asyncio
+import contextlib
 import logging
 import os
 import re
@@ -21,6 +22,7 @@ from security import user_manager
 from services import site_manager
 from core import core_engine
 from core import data_config
+from core import net_ssh
 from security import crypto_vault
 from security.security_manager import log_audit
 from core.app_settings import get_app_settings
@@ -301,6 +303,11 @@ def _ssh_failure_hint(exc) -> str:
     solo testo di paramiko.
     """
     msg = str(exc) or type(exc).__name__
+    if isinstance(exc, net_ssh.BastionAuthError):
+        return (msg + "\r\n[Il dispositivo non e' stato contattato: la "
+                "sessione si e' fermata al bastione. Correggi l'identita' "
+                "del bastione nella scheda Sedi, non le credenziali del "
+                "dispositivo in inventario.]")
     if isinstance(exc, paramiko.BadHostKeyException):
         return (msg + "\r\n[La chiave host SSH non e' quella registrata al "
                 "primo collegamento. Puo' essere un apparato sostituito o "
@@ -392,8 +399,13 @@ async def ws_terminal(websocket: WebSocket, ip: str):
     # paramiko e' bloccante: chiamarlo diretto qui fermerebbe l'event loop —
     # e con esso ogni altra rotta async — per tutto il timeout di connessione.
     def _ssh_connect(pwd):
+        # Same bastion hop netmiko gets from core.net_ssh: paramiko here is
+        # raw, so without the channel a jump-site device stays reachable
+        # from triage and unreachable from the terminal.
+        site = net_ssh.jump_site_for(ip)
         client.connect(ip, port=ssh_port, username=username, password=pwd,
-                       look_for_keys=False, allow_agent=False, timeout=10)
+                       look_for_keys=False, allow_agent=False, timeout=10,
+                       sock=net_ssh.jump_channel(site, ip, ssh_port) if site else None)
 
     try:
         # 2. Primo tentativo di connessione invisibile
@@ -424,13 +436,18 @@ async def ws_terminal(websocket: WebSocket, ip: str):
             await asyncio.to_thread(_ssh_connect, manual_password)
             connected = True
         except Exception as e:
-            await websocket.send_text(f"\r\n[Accesso Negato] {_ssh_failure_hint(e)}\r\n")
-            await websocket.close()
+            with contextlib.suppress(WebSocketDisconnect):
+                await websocket.send_text(f"\r\n[Accesso Negato] {_ssh_failure_hint(e)}\r\n")
+                await websocket.close()
             return
 
     except Exception as e:
-        await websocket.send_text(f"\r\n[Errore Connessione] {_ssh_failure_hint(e)}\r\n")
-        await websocket.close()
+        # The browser may already be gone: send_text on a closed socket
+        # raises WebSocketDisconnect out of the endpoint, which uvicorn
+        # then logs as an unhandled ASGI exception.
+        with contextlib.suppress(WebSocketDisconnect):
+            await websocket.send_text(f"\r\n[Errore Connessione] {_ssh_failure_hint(e)}\r\n")
+            await websocket.close()
         return
 
     # 5. Connessione riuscita, apriamo la shell interattiva!

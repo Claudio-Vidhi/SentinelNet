@@ -875,6 +875,7 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-endpoint') locSwitchView(_locView);
     else if (tabId === 'tab-config') loadConfigAnalyzer();
     else if (tabId === 'tab-ai') loadAiTab();
+    else if (tabId === 'tab-import' && typeof loadImportSiteIds === 'function') loadImportSiteIds();
     else if (tabId === 'tab-users') loadUsers();
     else if (tabId === 'tab-sites') loadSites();
     else if (tabId === 'tab-mcp') loadMcpTab();

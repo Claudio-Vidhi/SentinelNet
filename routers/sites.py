@@ -38,6 +38,8 @@ class SiteSchema(BaseModel):
     jump_host: Optional[str] = None
     jump_port: Optional[int] = None
     jump_identity: Optional[str] = None
+    # Default identity for the devices behind the bastion (not the bastion's own).
+    device_identity: Optional[str] = None
 
 class SiteUpdateSchema(BaseModel):
     id: str
@@ -47,6 +49,7 @@ class SiteUpdateSchema(BaseModel):
     jump_host: Optional[str] = None
     jump_port: Optional[int] = None
     jump_identity: Optional[str] = None
+    device_identity: Optional[str] = None
 
 class SiteIdSchema(BaseModel):
     id: str
@@ -56,8 +59,17 @@ class SiteCommandSchema(BaseModel):
     command: str
 
 @router.get("/api/sites")
-def list_sites_ep(current_user = Depends(require_admin)):
-    return {"sites": site_manager.list_sites()}
+def list_sites_ep(current_user = Depends(require_operator)):
+    # Operators read this to fill the site selectors, so it is not admin-only.
+    # They get the three fields those selectors need. The bastion address of a
+    # jump site, its identity, its subnets and its token state stay with the
+    # admins who configure them: a dropdown does not need any of it.
+    # (Comment, not a docstring: a docstring here becomes the endpoint's
+    # OpenAPI description and changes the contract snapshot.)
+    sites = site_manager.list_sites()
+    if current_user.get("role") != "admin":
+        sites = [{"id": s["id"], "name": s["name"], "mode": s["mode"]} for s in sites]
+    return {"sites": sites}
 
 @router.post("/api/sites")
 def create_site_ep(payload: SiteSchema, current_user = Depends(require_admin)):
@@ -65,7 +77,8 @@ def create_site_ep(payload: SiteSchema, current_user = Depends(require_admin)):
         site, token = site_manager.create_site(
             payload.name, payload.mode, payload.subnets,
             jump_host=payload.jump_host, jump_port=payload.jump_port,
-            jump_identity=payload.jump_identity)
+            jump_identity=payload.jump_identity,
+            device_identity=payload.device_identity)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     log_audit(f"Sede '{site['id']}' (mode: {payload.mode}) creata da '{current_user.get('sub')}'.")
@@ -85,6 +98,8 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_adm
         jump_kwargs["jump_port"] = payload.jump_port
     if payload.jump_identity is not None:
         jump_kwargs["jump_identity"] = payload.jump_identity
+    if payload.device_identity is not None:
+        jump_kwargs["device_identity"] = payload.device_identity
     try:
         ok = site_manager.update_site(payload.id, payload.name, payload.mode,
                                       payload.subnets, **jump_kwargs)
@@ -100,6 +115,29 @@ def delete_site_ep(payload: SiteIdSchema, current_user = Depends(require_admin))
     if not site_manager.delete_site(payload.id):
         raise HTTPException(status_code=400, detail="Sede non eliminabile o inesistente.")
     log_audit(f"Sede '{payload.id}' eliminata da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+@router.post("/api/sites/test-bastion")
+def test_bastion_ep(payload: SiteIdSchema, current_user = Depends(require_admin)):
+    # Answers the question the device errors cannot: is it the BASTION login
+    # that is wrong? A refused bastion and a refused device both surface as
+    # "authentication failed" on the device row, and the operator ends up
+    # rotating the credential on the wrong machine.
+    from core import net_ssh
+    site = site_manager.get_site(payload.id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Sede non trovata.")
+    if site.get("mode") != "jump":
+        raise HTTPException(status_code=400, detail="La sede non e' in modalita' jump.")
+    try:
+        net_ssh.probe_bastion(site)
+    except net_ssh.BastionAuthError as e:
+        log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': credenziali rifiutate.")
+        return {"status": "auth_failed", "message": str(e)}
+    except Exception as e:
+        log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': irraggiungibile.")
+        return {"status": "unreachable", "message": str(e)}
+    log_audit(f"Test bastione sede '{payload.id}' da '{current_user.get('sub')}': OK.")
     return {"status": "success"}
 
 @router.post("/api/sites/regenerate-token")

@@ -326,13 +326,36 @@ Bastion credentials are not stored on the site. They live as an **identity**
 
 1. **Identities** tab (or `POST /api/identities`) — create an identity with
    the bastion's username and password.
-2. **Multi-site** tab → *New site* → **Mode**: `Jump (bastion SSH)`. Three
+2. **Multi-site** tab → *New site* → **Mode**: `Jump (bastion SSH)`. Four
    fields appear:
    - **Bastion host (IP/hostname)** — the bastion's IP or hostname, e.g. `198.51.100.10`.
    - **Bastion SSH port** — the bastion's SSH port, default `22`.
    - **Bastion identity (credentials)** — the identity created in step 1.
+   - **Default device identity** — optional, and a *different* credential:
+     the login used on the devices behind the bastion. See 6.2.1.
 
 No token is issued for a jump site (there is no agent to configure).
+
+#### 6.2.1 Two credentials, not one
+
+The bastion login and the device login are separate. A device row picks its
+own credential through the `Profile` column (`identity:<id>`, or an inline
+username/password); when that column says `default`, the site's **default
+device identity** is used, and only if the site declares none does the
+resolution fall back to the installation-wide `SENTINELNET_ADMIN_USER` /
+`SENTINELNET_ADMIN_PASS`. Setting the site default is what stops a customer's
+devices from being dialled with this installation's own admin account.
+
+The field can be changed later from the site row in the **Multi-site** tab, or
+with `POST /api/sites/update` (`{"id": "...", "device_identity": "<id>"}`);
+an empty string clears it.
+
+Because the two hops have their own credential, a refused login is reported
+per hop: the bastion refusing us raises `BastionAuthError`
+(`core/net_ssh.py`), whose message says the device was never contacted. The
+**Test bastion** button on the site row (`POST /api/sites/test-bastion`) dials
+the bastion with the identity as currently configured — bypassing the cached
+transport on purpose — and answers `success`, `auth_failed` or `unreachable`.
 
 ### Creating a jump site via API
 
@@ -351,7 +374,8 @@ IDENTITY_ID=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/identities \
 curl -X POST http://<CENTRAL_IP>:8765/api/sites \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"name\": \"Customer A\", \"mode\": \"jump\", \"subnets\": [\"192.0.2.0/24\"], \
-       \"jump_host\": \"198.51.100.10\", \"jump_port\": 22, \"jump_identity\": \"$IDENTITY_ID\"}"
+       \"jump_host\": \"198.51.100.10\", \"jump_port\": 22, \"jump_identity\": \"$IDENTITY_ID\", \
+       \"device_identity\": \"$DEVICE_IDENTITY_ID\"}"
 ```
 
 ### 6.3 What is doable, and what is not

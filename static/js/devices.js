@@ -395,6 +395,7 @@
     }
 
     document.getElementById('btnSaveDevice').addEventListener('click', async () => {
+        const siteSel = document.getElementById('devSiteSelect');
         const payload = {
             ip: document.getElementById('devIp').value.trim(),
             vendor: document.getElementById('devVendor').value,
@@ -403,6 +404,7 @@
             password: document.getElementById('devPass').value,
             enable_secret: document.getElementById('devSecret').value,
             group: document.getElementById('devGroupSelect').value,
+            site: (siteSel && siteSel.value) ? siteSel.value : 'central',
             transports: readTransportsForm()
         };
 
@@ -449,6 +451,14 @@
         switchTab('tab-provisioning');
 
         document.getElementById('devGroupSelect').value = dev.Group || 'Generale';
+        const siteSel = document.getElementById('devSiteSelect');
+        if (siteSel) {
+            if (typeof populateSiteOptions === 'function') {
+                await populateSiteOptions(dev.Site || 'central');
+            } else {
+                siteSel.value = dev.Site || 'central';
+            }
+        }
         const ipInput = document.getElementById('devIp');
         ipInput.value = dev.IP;
         ipInput.readOnly = true;
@@ -514,6 +524,8 @@
         ipInput.readOnly = false;
         ipInput.style.opacity = '';
         document.getElementById('devProfile').value = 'default';
+        const siteSelReset = document.getElementById('devSiteSelect');
+        if (siteSelReset) siteSelReset.value = 'central';
         setTransportsForm(null, 22);
         document.getElementById('customCredsForm').style.display = 'none';
         document.getElementById('devUser').value = '';
@@ -1452,6 +1464,24 @@
         '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,sede-roma,hpe',
         ''
     ].join('\n');
+
+    // The Site column has to carry the site id, not its name, and that id is a
+    // slug the operator never typed. Showing the real ones next to the rule
+    // saves a trip to the Sites tab. If the call fails the row stays hidden and
+    // the written rule above still stands.
+    async function loadImportSiteIds() {
+        const box = document.getElementById('importSiteIds');
+        const list = document.getElementById('importSiteIdsList');
+        if (!box || !list) return;
+        const res = await apiFetch('/api/sites');
+        if (!res || !res.ok) return;
+        const sites = (await res.json()).sites || [];
+        if (!sites.length) return;
+        list.innerHTML = sites.map(s =>
+            `<code style="margin-right:6px;">${escapeHtml(s.id)}</code>`).join('');
+        box.style.display = 'block';
+    }
+    window.loadImportSiteIds = loadImportSiteIds;
 
     const btnTemplate = document.getElementById('btnDownloadCsvTemplate');
     if (btnTemplate) {
