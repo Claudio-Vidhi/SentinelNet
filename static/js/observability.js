@@ -1003,7 +1003,7 @@
 
     // Anomaly row -> the incident it belongs to. The Incidenti tab is
     // admin-only, so a viewer gets told rather than sent to an empty tab.
-    function anomOpenIncident(id) {
+    async function anomOpenIncident(id) {
         const nav = document.getElementById('navIncidents');
         if (!nav || nav.offsetParent === null) {
             showToast(currentLang === 'en'
@@ -1011,9 +1011,13 @@
                 : 'Il tab Incidenti non e\' disponibile per il tuo ruolo.', 'warning');
             return;
         }
-        switchTab('tab-incidents', nav);
-        loadIncidentsTab();
-        openIncident(id);
+        // switchTab is async: it lazy-loads incidents.js and then calls that
+        // tab's own loadIncidentsTab(). Calling incidents.js functions before
+        // awaiting it hit a ReferenceError whenever the Incidents tab had not
+        // been opened yet in this session, so the first click on an anomaly's
+        // incident button did nothing at all.
+        await switchTab('tab-incidents', nav);
+        window.openIncident?.(id);
     }
 
     // Home counts the anomalies, Traffico shows them. One queue, one table.

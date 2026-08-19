@@ -139,5 +139,123 @@ class LazyTabScripts(unittest.TestCase):
             f"loads, so opening the tab cold throws a ReferenceError: {unreachable}")
 
 
+
+_FUNC_DEF = re.compile(r"^\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(", re.M)
+_CONST_DEF = re.compile(r"^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", re.M)
+_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
+
+
+def _strip_comments(src: str) -> str:
+    """Drop comments before scanning for calls: a function name mentioned in
+    prose is not a call site."""
+    return _COMMENT.sub("", src)
+
+
+def _defined_in(path: pathlib.Path) -> set:
+    """The module's callable surface: its `function f()` declarations.
+
+    Only this form, because only a hoisted top-level function is what a bare
+    cross-module call would have resolved to. A local `const f = ...` inside
+    some other function is not reachable from outside and must not be counted
+    as owned, or every one-letter helper becomes a false positive.
+    """
+    return set(_FUNC_DEF.findall(path.read_text(encoding="utf-8")))
+
+
+def _declared_in(path: pathlib.Path) -> set:
+    """Every name the file binds itself, `function f()` or `const f = ...`.
+
+    Used only to subtract: a module with its own local `const sevColor = s =>`
+    is not calling the same-named function of another module.
+    """
+    src = path.read_text(encoding="utf-8")
+    return set(_FUNC_DEF.findall(src)) | set(_CONST_DEF.findall(src))
+
+
+def _bare_calls(src: str, names: set) -> set:
+    """Names in ``names`` that ``src`` calls as bare identifiers.
+
+    window.NAME(...), obj.NAME(...) and window.NAME?.(...) do not count: those
+    are undefined rather than a ReferenceError when the module is absent. A
+    `typeof NAME === 'function'` guard makes a bare call safe too.
+    """
+    hits = set()
+    for name in names:
+        if re.search(r"typeof\s+" + re.escape(name) + r"\s*===", src):
+            continue
+        if re.search(r"(?<![.\w$])" + re.escape(name) + r"\s*\(", src):
+            hits.add(name)
+    return hits
+
+
+class CrossModuleCallsMustBeOptional(unittest.TestCase):
+    """A function owned by a lazily-loaded module is not there until its tab
+    has been opened.
+
+    devices.js called topology.js's updateTopologyMapNodeStatus as a bare
+    identifier. On a session that never opened the map tab that is a
+    ReferenceError, and it aborted the caller mid-way: a triage that had just
+    succeeded got repainted OFFLINE by its own catch block, and the button was
+    left spinning forever. Calling through `window.` makes the dependency
+    optional, which is what these call sites actually want.
+    """
+
+    # core.js is exempt as a caller: it IS the loader, and switchTab awaits
+    # loadTabScripts(tabId) before calling that tab's entry point.
+    EXEMPT_CALLERS = {"core.js"}
+
+    def test_an_always_loaded_module_never_bare_calls_a_lazy_one(self):
+        """A module in a <script src> is live on every tab, so a bare call into
+        a lazily-loaded one is unsafe with no further analysis needed."""
+        js_dir = ROOT / "static/js"
+        template = (ROOT / "templates/dashboard.html").read_text(encoding="utf-8")
+        always_loaded = set(_SCRIPT_SRC.findall(template)) - self.EXEMPT_CALLERS
+        lazy_modules = {m for mods in _lazy_map().values() for m in mods}
+        offenders = []
+        for owner_name in sorted(lazy_modules - always_loaded):
+            owner = js_dir / owner_name
+            if not owner.exists():
+                continue
+            owned = _defined_in(owner)
+            for caller_name in sorted(always_loaded):
+                caller = js_dir / caller_name
+                if not caller.exists():
+                    continue
+                src = _strip_comments(caller.read_text(encoding="utf-8"))
+                for name in sorted(_bare_calls(src, owned - _declared_in(caller))):
+                    offenders.append(f"{caller_name} calls {owner_name}:{name}() bare")
+        self.assertEqual(offenders, [], "\n".join(offenders))
+
+    def test_modules_that_never_share_a_tab_never_bare_call_each_other(self):
+        """Two lazy modules that appear together on some tab always load
+        together, so a bare call between them is fine. Two that share no tab
+        never do, and the call is a ReferenceError until the user happens to
+        have visited the other module's tab first — a control that is dead on
+        the first click and works on the second.
+
+        That was observability.js jumping from an anomaly row to the incident:
+        it called switchTab('tab-incidents') without awaiting it and then used
+        incidents.js straight away.
+        """
+        js_dir = ROOT / "static/js"
+        tabs_of = {}
+        for tab, mods in _lazy_map().items():
+            for m in mods:
+                tabs_of.setdefault(m, set()).add(tab)
+        offenders = []
+        for caller_name, caller_tabs in sorted(tabs_of.items()):
+            caller = js_dir / caller_name
+            if not caller.exists() or caller_name in self.EXEMPT_CALLERS:
+                continue
+            src = _strip_comments(caller.read_text(encoding="utf-8"))
+            local = _declared_in(caller)
+            for owner_name, owner_tabs in sorted(tabs_of.items()):
+                owner = js_dir / owner_name
+                if owner_name == caller_name or (caller_tabs & owner_tabs) or not owner.exists():
+                    continue
+                for name in sorted(_bare_calls(src, _defined_in(owner) - local)):
+                    offenders.append(f"{caller_name} calls {owner_name}:{name}() bare")
+        self.assertEqual(offenders, [], "\n".join(offenders))
+
 if __name__ == "__main__":
     unittest.main()
