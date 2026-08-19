@@ -328,9 +328,9 @@ Bastion credentials are not stored on the site. They live as an **identity**
    the bastion's username and password.
 2. **Multi-site** tab → *New site* → **Mode**: `Jump (bastion SSH)`. Three
    fields appear:
-   - **Host bastione** — the bastion's IP or hostname, e.g. `198.51.100.10`.
-   - **Porta SSH bastione** — the bastion's SSH port, default `22`.
-   - **Identità (credenziali) bastione** — the identity created in step 1.
+   - **Bastion host (IP/hostname)** — the bastion's IP or hostname, e.g. `198.51.100.10`.
+   - **Bastion SSH port** — the bastion's SSH port, default `22`.
+   - **Bastion identity (credentials)** — the identity created in step 1.
 
 No token is issued for a jump site (there is no agent to configure).
 
@@ -344,7 +344,7 @@ TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/auth/login \
 # 1. Create the bastion identity
 IDENTITY_ID=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/identities \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"Bastion","tenant":"Customer_A","username":"svc-jump","password":"<BASTION_PASSWORD>","secret":""}' \
+  -d '{"name":"Bastion","tenant":"Customer_A","username":"svc-jump","password":"<BASTION_PASSWORD>","enable_secret":""}' \
   | jq -r .id)
 
 # 2. Create the jump site, referencing the identity by id
@@ -370,14 +370,16 @@ device" stays broken.
 | WLC CLI (`services/wlc_service.py`) | same |
 | Bulk command, CLI modal, config analyzer, netsec audit (they consume CLI output) | same |
 
-**Does not work, and is visibly disabled:**
+**Cannot work over a jump site (only ping and subnet scan are actively
+refused — the rest simply have no working code path, and fail with a plain
+connection error if you try):**
 
 | Capability | Why |
 |---|---|
 | ICMP ping monitor (`services/ping_monitor.py:59`, `collectors/network_scanner._ping`) | ICMP is not TCP; an SSH channel cannot carry it |
 | Subnet scan and discovery from the central | same, plus it needs broadcast/ARP adjacency |
 | Syslog reception, NetFlow/flow ingestion | inbound UDP from devices to us; the bastion never initiates back |
-| FortiGate REST, WLC REST, any `requests`-based vendor API | needs a listening local port, not a channel — not built |
+| FortiGate REST, and any other `requests`-based vendor API | needs a listening local port, not a channel — not built |
 | SNMP (if ever wired up; `pysnmp` is a dependency but currently unused in code) | UDP |
 | Real-time device status in the inventory KPIs | derives from ping |
 
