@@ -116,7 +116,9 @@ class GroupInfo:
         active_count = sum(1 for m in self.members if m.role in (MemberRole.ACTIVE, MemberRole.MASTER))
         if active_count > 1:
             return GroupHealth.SPLIT_BRAIN
-        if self.group_type == GroupType.HA_PAIR and len(self.members) < 2:
+        # An SSO pair is a pair by definition: one member means the peer is
+        # gone, which is degraded, not healthy. A stack of one is legitimate.
+        if self.group_type in (GroupType.HA_PAIR, GroupType.SSO) and len(self.members) < 2:
             return GroupHealth.DEGRADED
         if any(m.state in (MemberState.DOWN, MemberState.RP_DOWN, MemberState.VERSION_MISMATCH)
                for m in self.members):

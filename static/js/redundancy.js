@@ -74,7 +74,10 @@
             (isDegraded ? `<span class="status warn"><span class="led led-warning"></span>DEGRADED</span>` : `<span class="status bad"><span class="led led-danger"></span>CRITICAL</span>`);
 
         const isStack = g.group_type === 'stack' || (g.protocol || '').toLowerCase().includes('stack');
-        const protoLabel = g.protocol || (isStack ? 'Cisco StackWise' : (g.group_type === 'ha_pair' ? 'HA Pair' : (g.group_type || 'HA')));
+        const protoLabel = g.protocol || (isStack ? 'Cisco StackWise'
+            : g.group_type === 'ha_pair' ? 'HA Pair'
+            : g.group_type === 'sso' ? 'Cisco HA SSO'
+            : (g.group_type || 'HA'));
 
         const members = (g.members || []).map((m, idx) => {
             const isMaster = (m.role || '').toLowerCase().includes('master') || (m.role || '').toLowerCase().includes('active') || (m.state || '').toLowerCase().includes('active') || (m.role || '').toLowerCase().includes('primary');
