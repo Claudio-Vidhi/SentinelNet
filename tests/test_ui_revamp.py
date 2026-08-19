@@ -1446,8 +1446,9 @@ class TestSitesTabRestyle(unittest.TestCase):
         for cls in ('class="hero"', 'class="hero-card"',
                     'class="table-wrap"'):
             self.assertIn(cls, tab)
-        # sites-table panel + create-site-form panel
-        self.assertEqual(tab.count('class="panel"'), 2)
+        # sites-table panel + create-site-form panel + jump-site limitations
+        # panel (jump-host-sites Task 5, nested inside the create-site panel).
+        self.assertEqual(tab.count('class="panel"'), 3)
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):

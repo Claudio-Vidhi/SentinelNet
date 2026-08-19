@@ -133,6 +133,13 @@
             if (scan.status === "online")           ledClass = "led-online";
             else if (scan.status === "auth_failed") ledClass = "led-auth_failed";
 
+            // Jump site: ICMP cannot cross the bastion tunnel, so any "offline"
+            // here would be a ping that never ran, not a real down (Task 4's
+            // is_reachable_by_icmp, surfaced per-device as icmp_reachable by
+            // /api/local-devices). Show the same "not measurable" em dash used
+            // elsewhere instead of a misleading led.
+            const isJumpUnmeasurable = d.icmp_reachable === false;
+
             const groupOptions = Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}" ${g === d.Group ? "selected" : ""}>${escapeHtml(g)}</option>`
             ).join("");
@@ -148,10 +155,12 @@
 
             devBody.innerHTML += `<tr>
                 <td>
-                  <span class="led-container">
+                  ${isJumpUnmeasurable
+                    ? `<span class="led-container" title="${escapeHtml(i18n[currentLang].jumpLimitsPing)}">—</span>`
+                    : `<span class="led-container">
                     <span class="led ${ledClass}"></span>
                     ${scan.status.toUpperCase()}
-                  </span>
+                  </span>`}
                 </td>
                 <td>
                   <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">

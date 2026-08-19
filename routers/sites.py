@@ -32,14 +32,21 @@ def _device_in_scope(current_user, device_ip: str) -> bool:
 
 class SiteSchema(BaseModel):
     name: str
-    mode: str = "central"          # "central" | "agent"
+    mode: str = "central"          # "central" | "agent" | "jump"
     subnets: List[str] = []
+    # Bastion fields, required by site_manager only when mode == "jump".
+    jump_host: Optional[str] = None
+    jump_port: Optional[int] = None
+    jump_identity: Optional[str] = None
 
 class SiteUpdateSchema(BaseModel):
     id: str
     name: Optional[str] = None
     mode: Optional[str] = None
     subnets: Optional[List[str]] = None
+    jump_host: Optional[str] = None
+    jump_port: Optional[int] = None
+    jump_identity: Optional[str] = None
 
 class SiteIdSchema(BaseModel):
     id: str
@@ -55,7 +62,10 @@ def list_sites_ep(current_user = Depends(require_admin)):
 @router.post("/api/sites")
 def create_site_ep(payload: SiteSchema, current_user = Depends(require_admin)):
     try:
-        site, token = site_manager.create_site(payload.name, payload.mode, payload.subnets)
+        site, token = site_manager.create_site(
+            payload.name, payload.mode, payload.subnets,
+            jump_host=payload.jump_host, jump_port=payload.jump_port,
+            jump_identity=payload.jump_identity)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     log_audit(f"Sede '{site['id']}' (mode: {payload.mode}) creata da '{current_user.get('sub')}'.")
@@ -64,8 +74,20 @@ def create_site_ep(payload: SiteSchema, current_user = Depends(require_admin)):
 
 @router.post("/api/sites/update")
 def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_admin)):
+    # Only forward jump fields the caller actually supplied: update_site merges
+    # kwargs over the stored site before re-validating a jump site (see its
+    # docstring), so an explicit None here would clobber an unrelated field
+    # (e.g. renaming a jump site) with a blank and make it fail revalidation.
+    jump_kwargs: Dict[str, Any] = {}
+    if payload.jump_host is not None:
+        jump_kwargs["jump_host"] = payload.jump_host
+    if payload.jump_port is not None:
+        jump_kwargs["jump_port"] = payload.jump_port
+    if payload.jump_identity is not None:
+        jump_kwargs["jump_identity"] = payload.jump_identity
     try:
-        ok = site_manager.update_site(payload.id, payload.name, payload.mode, payload.subnets)
+        ok = site_manager.update_site(payload.id, payload.name, payload.mode,
+                                      payload.subnets, **jump_kwargs)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
