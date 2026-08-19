@@ -115,13 +115,34 @@ def _jump_site_for(host: str):
     return site if site and site.get("mode") == "jump" else None
 
 
-def ConnectHandler(**params):
-    """netmiko.ConnectHandler, tunnelled when the device sits behind a bastion."""
+def ConnectHandler(site_id: "str | None" = None, **params):
+    """netmiko.ConnectHandler, tunnelled when the device sits behind a bastion.
+
+    site_id names the site explicitly, for callers whose target is not in the
+    inventory yet (day-0 provisioning): the default path is still the
+    inventory lookup, and site_id is only consulted when that finds nothing.
+    """
     host = params.get("host") or params.get("ip")
     site = _jump_site_for(host) if host else None
-    if host and site:
-        params["sock"] = jump_channel(site, host, int(params.get("port") or 22))
-    return _netmiko_connect(**params)
+    if site is None and site_id:
+        from services import site_manager
+        candidate = site_manager.get_site(site_id)
+        site = candidate if candidate and candidate.get("mode") == "jump" else None
+    if not (host and site):
+        return _netmiko_connect(**params)
+    chan = jump_channel(site, host, int(params.get("port") or 22))
+    try:
+        return _netmiko_connect(sock=chan, **params)
+    except Exception:
+        # The channel lives on the shared, long-lived per-site transport, so
+        # nothing reclaims it on failure: `with ConnectHandler(...)` at the
+        # call sites cannot help, because the context manager never binds
+        # when the constructor raises. Without this, a site polled on a
+        # schedule with wrong credentials piles channels onto the transport
+        # until the process restarts. Same leak class as the bastion socket
+        # in _transport, one layer up.
+        chan.close()
+        raise
 
 
 def close_all() -> None:
