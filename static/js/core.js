@@ -772,9 +772,17 @@ const LAZY_TAB_SCRIPTS = {
     'tab-flows': ['/static/js/flow-analytics.js', '/static/js/observability.js'],
     'tab-config': ['/static/js/config-analyzer.js'],
     'tab-ai': ['/static/js/ai.js'],
+    // The AI config generator is a panel of the Provisioner sub-tab, so its
+    // module has to load there too, not only on the AI tab.
+    'tab-provisioner': ['/static/js/ai.js'],
     'tab-fortigate': ['/static/js/fortigate-management.js'],
     'tab-wlc': ['/static/js/wlc.js'],
+    // settings.js owns the CRUD of four tabs, not just Settings: opening any of
+    // the other three cold left every control on it dead and its table empty.
     'tab-settings': ['/static/js/settings.js', '/static/js/observability.js'],
+    'tab-sites': ['/static/js/settings.js'],
+    'tab-users': ['/static/js/settings.js'],
+    'tab-mcp': ['/static/js/settings.js'],
     'tab-incidents': ['/static/js/incidents.js'],
     'tab-redundancy': ['/static/js/redundancy.js'],
     // The Firewall Audit Checklist is a sub-tab of NetSec Audit: its module
