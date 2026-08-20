@@ -44,6 +44,19 @@
                 actions += `<button data-action="regen-site-token" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
             }
             if (s.mode === 'jump') {
+                // Two identities, two selects. One unlabelled dropdown next to
+                // "Test bastion" read as the bastion credential while it set
+                // the DEVICE one, so an operator could fix the login the test
+                // does not use and see the same refusal again — with no way to
+                // reach the bastion identity at all after site creation.
+                actions += `<span style="font-size:10px; color:var(--text-muted); margin-right:3px;">${escapeHtml(L.lblIdentityBastionShort)}</span>`;
+                // A select whose stored value matches no option silently
+                // displays the FIRST one, which reads as "configured" while
+                // the site still points at an identity that no longer exists.
+                const jumpKnown = identities.some(i => i.id === s.jump_identity);
+                const jumpMissing = jumpKnown ? '' : `<option value="" selected>${escapeHtml(L.optMissingIdentity)}</option>`;
+                actions += `<select data-action="set-site-jump-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblJumpIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;">${jumpMissing}${identityOptions(identities, s.jump_identity || '')}</select>`;
+                actions += `<span style="font-size:10px; color:var(--text-muted); margin-right:3px;">${escapeHtml(L.lblIdentityDeviceShort)}</span>`;
                 actions += `<select data-action="set-site-device-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblDeviceIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;"><option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>${identityOptions(identities, s.device_identity || '')}</select>`;
                 actions += `<button data-action="test-bastion" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-plug-circle-check"></i> ${L.btnTestBastion}</button>`;
             }
@@ -166,6 +179,21 @@
         if (data.status === 'success') alert(L.msgBastionOk);
         else if (data.status === 'auth_failed') alert(L.msgBastionAuthFailed + '\n\n' + (data.message || ''));
         else alert(L.msgBastionUnreachable + '\n\n' + (data.message || ''));
+    }
+
+    async function setSiteJumpIdentity(id, identityId) {
+        // A jump site cannot exist without a bastion identity, so there is no
+        // empty option to send.
+        if (!identityId) { loadSites(); return; }
+        const res = await apiFetch('/api/sites/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, jump_identity: identityId })
+        });
+        if (res && !res.ok) {
+            const e = await res.json();
+            alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+        }
+        loadSites();
     }
 
     async function setSiteDeviceIdentity(id, identityId) {
@@ -774,6 +802,8 @@
     document.getElementById('sitesTableBody')?.addEventListener('change', (e) => {
         const sel = e.target.closest('[data-action="set-site-device-identity"]');
         if (sel && sel.dataset.siteId) setSiteDeviceIdentity(sel.dataset.siteId, sel.value);
+        const jump = e.target.closest('[data-action="set-site-jump-identity"]');
+        if (jump && jump.dataset.siteId) setSiteJumpIdentity(jump.dataset.siteId, jump.value);
     });
 
     document.getElementById('usersTableBody')?.addEventListener('change', (e) => {

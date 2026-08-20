@@ -106,6 +106,26 @@ def _transport(site: dict) -> paramiko.Transport:
         return tr
 
 
+def invalidate_site(site_id: str) -> None:
+    """Drop the cached transport for a site so the next call re-authenticates.
+
+    One transport per site is kept and reused. It was opened with the bastion
+    credentials as they were at dial time and stays usable afterwards, so
+    editing the identity changed nothing for a site that already had a live
+    session: the old login kept working until the transport happened to die.
+    Called whenever the bastion address, port or identity is edited.
+    """
+    with _lock_for(site_id):
+        tr = _transports.pop(site_id, None)
+    if tr is not None:
+        try:
+            tr.close()
+        except Exception:
+            # Already dead. The point was to stop reusing it, and it is out of
+            # the registry either way.
+            pass
+
+
 def probe_bastion(site: dict) -> None:
     """Dial the bastion with the site's current identity and hang up.
 

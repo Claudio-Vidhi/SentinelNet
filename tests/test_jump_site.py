@@ -1221,3 +1221,109 @@ class DeviceSiteIsEditableFromInventory(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             self._call("192.0.2.99", "customer-a", [])
         self.assertEqual(ctx.exception.status_code, 404)
+
+
+class ChangingTheBastionIdentityTakesEffect(unittest.TestCase):
+    """Editing the bastion login must apply to the next connection.
+
+    Reported from the field: the operator set a site's credential after
+    creating the site and 'Test bastion' still authenticated as the original
+    user. Two causes, both here: the row dropdown edited the DEVICE identity
+    while the bastion one was reachable only in the create-site form, and a
+    live transport authenticated with the old credential was reused.
+    """
+
+    def test_invalidate_site_drops_and_closes_the_transport(self):
+        from core import net_ssh
+        cached = mock.MagicMock()
+        cached.is_active.return_value = True
+        net_ssh._transports["customer-a"] = cached
+        try:
+            net_ssh.invalidate_site("customer-a")
+            self.assertNotIn("customer-a", net_ssh._transports)
+            cached.close.assert_called_once()
+        finally:
+            net_ssh._transports.pop("customer-a", None)
+
+    def test_invalidate_site_survives_an_already_dead_transport(self):
+        from core import net_ssh
+        cached = mock.MagicMock()
+        cached.close.side_effect = OSError("socket already gone")
+        net_ssh._transports["customer-a"] = cached
+        try:
+            net_ssh.invalidate_site("customer-a")  # must not raise
+            self.assertNotIn("customer-a", net_ssh._transports)
+        finally:
+            net_ssh._transports.pop("customer-a", None)
+
+    def test_invalidate_site_on_an_unknown_site_is_a_no_op(self):
+        from core import net_ssh
+        net_ssh.invalidate_site("never-dialled")
+
+    def test_updating_the_identity_invalidates_the_cached_transport(self):
+        from routers import sites as sites_router
+        payload = sites_router.SiteUpdateSchema(id="customer-a",
+                                                jump_identity="new-identity")
+        with mock.patch.object(sites_router.site_manager, "update_site",
+                               return_value=True),\
+             mock.patch.object(sites_router, "log_audit"),\
+             mock.patch("core.net_ssh.invalidate_site") as inv:
+            sites_router.update_site_ep(payload, {"sub": "tester"})
+        inv.assert_called_once_with("customer-a")
+
+    def test_updating_only_the_device_identity_leaves_the_transport_alone(self):
+        """The bastion session is unaffected by the devices' own credential."""
+        from routers import sites as sites_router
+        payload = sites_router.SiteUpdateSchema(id="customer-a",
+                                                device_identity="new-identity")
+        with mock.patch.object(sites_router.site_manager, "update_site",
+                               return_value=True),\
+             mock.patch.object(sites_router, "log_audit"),\
+             mock.patch("core.net_ssh.invalidate_site") as inv:
+            sites_router.update_site_ep(payload, {"sub": "tester"})
+        inv.assert_not_called()
+
+
+class TheBastionIdentityIsEditableAfterCreation(unittest.TestCase):
+    """The settings row must expose BOTH identities, distinguishably.
+
+    A jump site requires a bastion identity, so its select carries no empty
+    option; the device one keeps its "global credentials" choice.
+    """
+
+    def setUp(self):
+        import os
+        path = os.path.join(os.path.dirname(__file__), "..", "static", "js",
+                            "settings.js")
+        with open(path, encoding="utf-8") as fh:
+            self.js = fh.read()
+
+    def test_the_row_renders_a_bastion_identity_select(self):
+        self.assertIn('data-action="set-site-jump-identity"', self.js)
+        self.assertIn("s.jump_identity", self.js)
+
+    def test_the_bastion_select_is_bound(self):
+        self.assertIn("setSiteJumpIdentity(jump.dataset.siteId", self.js)
+
+    def test_the_handler_sends_jump_identity(self):
+        self.assertIn("jump_identity: identityId", self.js)
+
+    def test_both_selects_are_labelled(self):
+        for key in ("lblIdentityBastionShort", "lblIdentityDeviceShort"):
+            self.assertIn(key, self.js)
+
+    def test_a_deleted_identity_is_shown_as_missing(self):
+        # Otherwise the select falls back to displaying the first identity,
+        # which reads as configured.
+        self.assertIn("jumpKnown", self.js)
+        self.assertIn("optMissingIdentity", self.js)
+
+    def test_the_labels_exist_in_both_languages(self):
+        import os
+        path = os.path.join(os.path.dirname(__file__), "..", "static", "js",
+                            "i18n.js")
+        with open(path, encoding="utf-8") as fh:
+            i18n = fh.read()
+        for key in ("lblIdentityBastionShort", "lblIdentityDeviceShort",
+                    "optMissingIdentity"):
+            self.assertEqual(i18n.count(key + ":"), 2, key)
