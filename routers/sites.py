@@ -107,6 +107,12 @@ def update_site_ep(payload: SiteUpdateSchema, current_user = Depends(require_adm
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
         raise HTTPException(status_code=404, detail="Sede non trovata.")
+    # An edited bastion login must take effect now. The transport cached for
+    # this site was authenticated with the previous credentials and keeps
+    # working, so without this the change only applies once that session dies.
+    if any(k in jump_kwargs for k in ("jump_host", "jump_port", "jump_identity")):
+        from core import net_ssh
+        net_ssh.invalidate_site(payload.id)
     log_audit(f"Sede '{payload.id}' aggiornata da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
