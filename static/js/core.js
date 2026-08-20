@@ -788,6 +788,7 @@ const LAZY_TAB_SCRIPTS = {
     // The Firewall Audit Checklist is a sub-tab of NetSec Audit: its module
     // has to load together with the tab that contains it.
     'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js'],
+    'tab-policy-test': ['/static/js/policy-test.js'],
 };
 
 const _lazyLoaded = new Set();
@@ -890,6 +891,7 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-incidents') loadIncidentsTab();
     else if (tabId === 'tab-redundancy') loadRedundancyTab();
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
+    else if (tabId === 'tab-policy-test') loadPolicyTestTab();
 }
 
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------

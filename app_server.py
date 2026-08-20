@@ -92,6 +92,7 @@ from routers import audit_checklist as _audit_checklist_router
 from routers import incidents as _incidents_router
 from routers import diagnosis as _diagnosis_router
 from routers import endpoint_inventory as _endpoint_inventory_router
+from routers import policy_test as _policy_test_router
 from redundancy import router as _redundancy_router
 
 app.include_router(_fortigate_router.router)
@@ -121,6 +122,7 @@ app.include_router(_incidents_router.router)
 app.include_router(_diagnosis_router.router)
 app.include_router(_endpoint_inventory_router.router)
 app.include_router(_redundancy_router.router)
+app.include_router(_policy_test_router.router)
 
 _default_origins = f"http://localhost:{effective_port()},http://127.0.0.1:{effective_port()}"
 ALLOWED_ORIGINS = [

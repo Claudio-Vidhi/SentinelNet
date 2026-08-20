@@ -474,6 +474,29 @@ TOOLS = {
         lambda a: api("GET", "/api/observability/api-context",
                       params={"device_ip": a["ip"]}),
     ),
+    "policy_trace": (
+        "Traces a packet flow through device ACLs, routes, and firewall policies from backup configs (offline). Answers reachability and path validation questions.",
+        _obj({
+            "ip": {**_S, "description": "Device IP"},
+            "src": {**_S, "description": "Source IP address"},
+            "dst": {**_S, "description": "Destination IP address"},
+            "proto": {**_S, "description": "Protocol: tcp (default), udp, icmp, ip"},
+            "dport": {"type": "integer", "description": "Destination port (e.g. 443, 80)"},
+            "ingress": {**_S, "description": "Ingress interface name (optional)"},
+        }, ["ip", "src", "dst"]),
+        lambda a: api("POST", f"/api/policy-test/{a['ip']}/trace", body={
+            "src_ip": a["src"],
+            "dst_ip": a["dst"],
+            "proto": a.get("proto", "tcp"),
+            "dport": a.get("dport"),
+            "ingress_intf": a.get("ingress"),
+        }),
+    ),
+    "policy_findings": (
+        "Returns static configuration findings (shadowed rules, unreachable rules, any-any permits, routes to nowhere, unresolved objects) for a device.",
+        _obj({"ip": {**_S, "description": "Device IP"}}, ["ip"]),
+        lambda a: api("GET", f"/api/policy-test/{a['ip']}/findings"),
+    ),
 }
 
 

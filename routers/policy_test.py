@@ -1,0 +1,125 @@
+# -*- coding: utf-8 -*-
+"""Router Policy Test: reachability tracing, rule example generator, and static findings.
+
+Endpoints for offline policy and route validation against stored device backups.
+Tenant-scoped via assert_device_allowed.
+"""
+
+from typing import Any, Dict, List, Optional, Tuple
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from ai import config_analyzer
+from routers.deps import assert_device_allowed, get_current_user
+from services.policy_test.engine import evaluate
+from services.policy_test.examples import generate_ruleset_examples
+from services.policy_test.findings import analyze_policy_findings
+from services.policy_test.fortios import parse_fortios_config
+from services.policy_test.ios import parse_ios_config
+from services.policy_test.model import Flow
+
+router = APIRouter(tags=["PolicyTest"])
+
+
+class FlowRequest(BaseModel):
+    src_ip: str
+    dst_ip: str
+    proto: str = "tcp"
+    sport: Optional[int] = Field(None, ge=1, le=65535)
+    dport: Optional[int] = Field(None, ge=1, le=65535)
+    ingress_intf: Optional[str] = None
+    egress_intf: Optional[str] = None
+    tcp_flags: Optional[str] = None
+    established: bool = False
+
+
+def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
+    """Load backup text and detect config type for device IP.
+
+    Returns (content, config_type). Raises HTTP 404/403/500 as appropriate.
+    """
+    device = assert_device_allowed(current_user, ip)
+    if device is None:
+        raise HTTPException(status_code=404, detail=f"Dispositivo {ip} non trovato.")
+
+    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    if not path:
+        raise HTTPException(status_code=404, detail=f"Nessun backup trovato per {ip}.")
+
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            raw_content = fh.read()
+    except OSError:
+        raise HTTPException(status_code=500, detail=f"Impossibile leggere il backup di {ip}.")
+
+    content = "\n".join(config_analyzer.running_config(raw_content))
+    config_type = config_analyzer.detect_config_type(content, device)
+    return content, config_type
+
+
+# Vendors whose config this feature knows how to evaluate. Anything else has
+# to be refused: routing every unknown type to the IOS parser produced an
+# empty environment, so /findings answered [] and the UI painted a green
+# "no defects" panel for a device that was never analysed at all.
+_SUPPORTED_CONFIG_TYPES = {"ios", "fortios"}
+
+
+def _parse_environment(content: str, config_type: str) -> Any:
+    """Parse policy environment based on vendor. 422 on an unsupported one."""
+    if config_type == "fortios":
+        return parse_fortios_config(content)
+    if config_type == "ios":
+        return parse_ios_config(content)
+    raise HTTPException(
+        status_code=422,
+        detail=f"Validazione policy non supportata per configurazioni '{config_type}'. "
+               f"Vendor supportati: {', '.join(sorted(_SUPPORTED_CONFIG_TYPES))}.",
+    )
+
+
+@router.post("/api/policy-test/{ip}/trace")
+def policy_trace(ip: str, flow_req: FlowRequest, current_user = Depends(get_current_user)):
+    """Evaluate a Flow through the device policy and route chain."""
+    content, config_type = _load_device_backup(ip, current_user)
+    env = _parse_environment(content, config_type)
+
+    flow = Flow(
+        src_ip=flow_req.src_ip,
+        dst_ip=flow_req.dst_ip,
+        proto=flow_req.proto,
+        sport=flow_req.sport,
+        dport=flow_req.dport,
+        ingress_intf=flow_req.ingress_intf,
+        egress_intf=flow_req.egress_intf,
+        tcp_flags=flow_req.tcp_flags,
+        established=flow_req.established,
+    )
+
+    trace = evaluate(env, flow)
+    return trace.to_dict()
+
+
+@router.get("/api/policy-test/{ip}/examples")
+def policy_examples(ip: str, current_user = Depends(get_current_user)):
+    """Generate representative matching and near-miss flows per rule."""
+    content, config_type = _load_device_backup(ip, current_user)
+    env = _parse_environment(content, config_type)
+
+    if hasattr(env, "policies"):
+        # FortiOS
+        examples = generate_ruleset_examples(env.policies)
+    else:
+        # IOS
+        rules = [r for acl in env.acls.values() for r in acl.rules]
+        examples = generate_ruleset_examples(rules)
+
+    return [e.to_dict() for e in examples]
+
+
+@router.get("/api/policy-test/{ip}/findings")
+def policy_findings(ip: str, current_user = Depends(get_current_user)):
+    """Analyze device configuration for static policy and routing findings."""
+    content, config_type = _load_device_backup(ip, current_user)
+    env = _parse_environment(content, config_type)
+    findings = analyze_policy_findings(env)
+    return [f.to_dict() for f in findings]

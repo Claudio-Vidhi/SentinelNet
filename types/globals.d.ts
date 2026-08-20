@@ -80,6 +80,12 @@ declare var switchNetSecSubtab: any;
 declare var toggleAuditDetail: any;
 declare var toggleAuditSaveNameInput: any;
 
+// policy-test.js
+declare var loadPolicyTestTab: any;
+declare var runPolicyTrace: any;
+declare var switchPolicySubtab: any;
+declare var usePolicyExample: any;
+
 // observability.js
 declare var trafSelectedTenants: any;
 
