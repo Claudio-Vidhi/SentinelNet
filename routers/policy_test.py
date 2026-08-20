@@ -99,6 +99,28 @@ def policy_trace(ip: str, flow_req: FlowRequest, current_user = Depends(get_curr
     return trace.to_dict()
 
 
+def _acl_declaration(name: str, kind: str) -> str:
+    """The configuration line that declares this rule set.
+
+    The name alone does not say what the rules can express: a standard ACL
+    matches source addresses only, an extended one carries protocol, ports and
+    destination. Showing the declaration the device actually holds —
+    'ip access-list extended ACL-NAME' — tells the reader which of the two they
+    are looking at, in the syntax they would type.
+    """
+    if kind == "firewall_policy":
+        return "config firewall policy"
+    if kind == "named-ext":
+        return f"ip access-list extended {name}"
+    if kind == "named-std":
+        return f"ip access-list standard {name}"
+    # Numbered ACLs are declared per line, not by a block header; the number
+    # and its range are what identify the kind.
+    if kind in ("standard", "extended"):
+        return f"access-list {name} ({kind})"
+    return name
+
+
 def _acl_bindings(env: Any, acl_name: str) -> List[Dict[str, str]]:
     """Interfaces where an ACL is applied, and in which direction.
 
@@ -131,6 +153,7 @@ def policy_examples(ip: str, current_user = Depends(get_current_user)):
         groups.append({
             "name": "firewall policy",
             "kind": "firewall_policy",
+            "declaration": _acl_declaration("firewall policy", "firewall_policy"),
             "bindings": [],
             "default_action": "deny",
             "examples": [e.to_dict() for e in generate_ruleset_examples(env.policies)],
@@ -140,6 +163,7 @@ def policy_examples(ip: str, current_user = Depends(get_current_user)):
             groups.append({
                 "name": acl_name,
                 "kind": ruleset.kind,
+                "declaration": _acl_declaration(acl_name, ruleset.kind),
                 "bindings": _acl_bindings(env, acl_name),
                 "default_action": ruleset.default_action,
                 "examples": [e.to_dict()
