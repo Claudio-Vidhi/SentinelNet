@@ -278,78 +278,124 @@
         }
     }
 
-    function renderExamples(examples) {
+    function renderExamples(groups) {
         const container = document.getElementById('ptExamplesContainer');
         if (!container) return;
 
-        if (!examples || examples.length === 0) {
+        if (!groups || groups.length === 0) {
             container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">Nessuna regola trovata nel backup di configurazione.</div>`;
             return;
         }
 
-        let html = `
-        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:16px;">`;
-
-        examples.forEach(ex => {
-            const mf = ex.matching_flow || {};
-            const nm = ex.near_miss_flow;
-            const mfDport = mf.dport ? `:${mf.dport}` : '';
-            const nmDport = nm && nm.dport ? `:${nm.dport}` : '';
+        // Grouped per rule set. A device carries several ACLs whose sequence
+        // numbers each restart at 10, so a flat list of "Regola 10" cards left
+        // the reader no way to tell which ACL a rule belonged to.
+        let html = '';
+        groups.forEach(group => {
+            const bindings = group.bindings || [];
+            const boundLabel = bindings.length
+                ? bindings.map(b => `${escapeHtml(b.interface)} ${b.direction === 'in' ? 'in' : 'out'}`).join(', ')
+                : '';
+            const examples = group.examples || [];
+            // The interface an ACL is bound to is the ingress the tracer needs;
+            // prefilling it from the binding saves the reader guessing.
+            const boundIngress = (bindings.find(b => b.direction === 'in') || {}).interface || '';
 
             html += `
-            <div style="border:1px solid var(--border); background:var(--surface-2); padding:14px; display:flex; flex-direction:column; justify-content:space-between;">
-                <div>
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                        <div>
-                            <span style="font-weight:700; font-size:13px;">Regola ${escapeHtml(ex.rule_id)}</span>
-                            ${ex.rule_name ? `<span style="font-size:12px; color:var(--text-muted); margin-left:6px;">${escapeHtml(ex.rule_name)}</span>` : ''}
+            <section style="margin-bottom:24px;">
+                <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:8px 0 10px; border-bottom:var(--seam) solid var(--border-strong); margin-bottom:14px;">
+                    <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+                        <span style="font-family:var(--font-legend); font-size:15px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;">${escapeHtml(group.name)}</span>
+                        ${boundLabel
+                            ? `<span style="font-size:11px; color:var(--text-muted);">applicata su <code>${boundLabel}</code></span>`
+                            : `<span style="font-size:11px; color:var(--text-muted);">non applicata ad alcuna interfaccia</span>`}
+                    </div>
+                    <span style="font-family:var(--font-legend); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-soft);">
+                        ${examples.length} regole &middot; default ${escapeHtml(group.default_action || 'deny')}
+                    </span>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:16px;">`;
+
+            examples.forEach(ex => {
+                const mf = ex.matching_flow;
+                const nm = ex.near_miss_flow;
+
+                // An unparseable rule has no example: its coverage is unknown,
+                // so no flow can be claimed to match it.
+                if (!mf) {
+                    html += `
+                    <div style="border:var(--seam) solid var(--warning); background:var(--lamp-warn-wash); padding:14px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                            <span style="font-weight:600; font-size:13px;">Regola ${escapeHtml(ex.rule_id)}</span>
+                            <span class="badge badge-warning">NON INTERPRETATA</span>
                         </div>
-                        <span class="badge ${ex.action === 'permit' ? 'badge-success' : 'badge-danger'}">${escapeHtml(ex.action.toUpperCase())}</span>
-                    </div>
-                    ${ex.raw_text ? `<div style="font-family:var(--font-data); font-size:11px; background:var(--surface); padding:6px 8px; border:1px solid var(--border); margin-bottom:10px; word-break:break-all;">${escapeHtml(ex.raw_text)}</div>` : ''}
-                    
-                    <div style="font-size:12px; margin-bottom:6px;">
-                        <span class="badge badge-success" style="font-size:10px; margin-right:4px;">MATCH</span>
-                        <code>${escapeHtml(mf.src_ip)}</code> &rarr; <code>${escapeHtml(mf.dst_ip)}${escapeHtml(mfDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((mf.proto || 'tcp').toUpperCase())})</span>
+                        ${ex.raw_text ? `<div style="font-family:var(--font-data); font-size:11px; background:var(--surface); padding:6px 8px; border:1px solid var(--border); margin-bottom:8px; word-break:break-all;">${escapeHtml(ex.raw_text)}</div>` : ''}
+                        <div style="font-size:11px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason || 'copertura ignota')}</div>
+                    </div>`;
+                    return;
+                }
+
+                const mfDport = mf.dport ? `:${mf.dport}` : '';
+                const nmDport = nm && nm.dport ? `:${nm.dport}` : '';
+                const mfIngress = mf.ingress_intf || boundIngress;
+                const nmIngress = (nm && nm.ingress_intf) || boundIngress;
+
+                html += `
+                <div style="border:1px solid var(--border); background:var(--surface-2); padding:14px; display:flex; flex-direction:column; justify-content:space-between;">
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                            <div>
+                                <span style="font-weight:600; font-size:13px;">Regola ${escapeHtml(ex.rule_id)}</span>
+                                ${ex.rule_name ? `<span style="font-size:12px; color:var(--text-muted); margin-left:6px;">${escapeHtml(ex.rule_name)}</span>` : ''}
+                            </div>
+                            <span class="badge ${ex.action === 'permit' ? 'badge-success' : 'badge-danger'}">${escapeHtml((ex.action || '').toUpperCase())}</span>
+                        </div>
+                        ${ex.raw_text ? `<div style="font-family:var(--font-data); font-size:11px; background:var(--surface); padding:6px 8px; border:1px solid var(--border); margin-bottom:10px; word-break:break-all;">${escapeHtml(ex.raw_text)}</div>` : ''}
+
+                        <div style="font-size:12px; margin-bottom:6px;">
+                            <span class="badge badge-success" style="margin-right:4px;">MATCH</span>
+                            <code>${escapeHtml(mf.src_ip)}</code> &rarr; <code>${escapeHtml(mf.dst_ip)}${escapeHtml(mfDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((mf.proto || 'tcp').toUpperCase())})</span>
+                        </div>
+
+                        ${nm ? `
+                        <div style="font-size:12px; margin-bottom:6px;">
+                            <span class="badge badge-warning" style="margin-right:4px;">NEAR-MISS</span>
+                            <code>${escapeHtml(nm.src_ip)}</code> &rarr; <code>${escapeHtml(nm.dst_ip)}${escapeHtml(nmDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((nm.proto || 'tcp').toUpperCase())})</span>
+                            ${ex.near_miss_reason ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px; padding-left:2px;"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason)}</div>` : ''}
+                        </div>` : ''}
                     </div>
 
-                    ${nm ? `
-                    <div style="font-size:12px; margin-bottom:6px;">
-                        <span class="badge badge-warning" style="font-size:10px; margin-right:4px;">NEAR-MISS</span>
-                        <code>${escapeHtml(nm.src_ip)}</code> &rarr; <code>${escapeHtml(nm.dst_ip)}${escapeHtml(nmDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((nm.proto || 'tcp').toUpperCase())})</span>
-                        ${ex.near_miss_reason ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px; padding-left:2px;"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason)}</div>` : ''}
-                    </div>` : ''}
-                </div>
+                    <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
+                        <button class="btn btn-secondary btn-small" data-action="use-example"
+                            data-src="${escapeHtml(mf.src_ip)}"
+                            data-dst="${escapeHtml(mf.dst_ip)}"
+                            data-proto="${escapeHtml(mf.proto || 'tcp')}"
+                            data-dport="${escapeHtml(mf.dport || '')}"
+                            data-sport="${escapeHtml(mf.sport || '')}"
+                            data-ingress="${escapeHtml(mfIngress)}"
+                            data-est="${mf.established ? '1' : '0'}"
+                            style="width:auto; margin:0;">
+                            <i class="fa-solid fa-arrow-right-to-bracket"></i> Prova Match
+                        </button>
+                        ${nm ? `
+                        <button class="btn btn-secondary btn-small" data-action="use-example"
+                            data-src="${escapeHtml(nm.src_ip)}"
+                            data-dst="${escapeHtml(nm.dst_ip)}"
+                            data-proto="${escapeHtml(nm.proto || 'tcp')}"
+                            data-dport="${escapeHtml(nm.dport || '')}"
+                            data-sport="${escapeHtml(nm.sport || '')}"
+                            data-ingress="${escapeHtml(nmIngress)}"
+                            data-est="${nm.established ? '1' : '0'}"
+                            style="width:auto; margin:0;">
+                            <i class="fa-solid fa-crosshairs"></i> Prova Near-Miss
+                        </button>` : ''}
+                    </div>
+                </div>`;
+            });
 
-                <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
-                    <button class="btn btn-secondary btn-small" data-action="use-example"
-                        data-src="${escapeHtml(mf.src_ip)}"
-                        data-dst="${escapeHtml(mf.dst_ip)}"
-                        data-proto="${escapeHtml(mf.proto || 'tcp')}"
-                        data-dport="${escapeHtml(mf.dport || '')}"
-                        data-sport="${escapeHtml(mf.sport || '')}"
-                        data-ingress="${escapeHtml(mf.ingress_intf || '')}"
-                        data-est="${mf.established ? '1' : '0'}"
-                        style="width:auto; margin:0; font-size:11px;">
-                        <i class="fa-solid fa-arrow-right-to-bracket"></i> Prova Match
-                    </button>
-                    ${nm ? `
-                    <button class="btn btn-secondary btn-small" data-action="use-example"
-                        data-src="${escapeHtml(nm.src_ip)}"
-                        data-dst="${escapeHtml(nm.dst_ip)}"
-                        data-proto="${escapeHtml(nm.proto || 'tcp')}"
-                        data-dport="${escapeHtml(nm.dport || '')}"
-                        data-sport="${escapeHtml(nm.sport || '')}"
-                        data-ingress="${escapeHtml(nm.ingress_intf || '')}"
-                        data-est="${nm.established ? '1' : '0'}"
-                        style="width:auto; margin:0; font-size:11px;">
-                        <i class="fa-solid fa-crosshairs"></i> Prova Near-Miss
-                    </button>` : ''}
-                </div>
-            </div>`;
+            html += `</div></section>`;
         });
 
-        html += `</div>`;
         container.innerHTML = html;
     }
 
