@@ -223,13 +223,52 @@ def fgt_firewall_policy_objects(ip: str, current_user = Depends(get_current_user
     """Policy firewall (cmdb) con soli campi rilevanti per l'osservabilità."""
     return _fgt_call(fortigate_service.get_firewall_policy_objects, _fgt_device(ip, current_user))
 
+def _shadow_by_policy_id(ip: str) -> dict:
+    """Difetti statici per policyid, letti dal backup piu' recente.
+
+    I contatori dicono che una regola non ha mai colpito; non dicono perche'.
+    L'analisi statica dice che una regola e' coperta da una precedente; non
+    dice se il traffico ci sarebbe mai passato. Le due insieme distinguono
+    "regola morta per come e' scritta" da "regola che nessuno ha ancora usato",
+    e solo la prima e' un difetto da correggere.
+
+    Il join e' sul backup, non sulla risposta REST: il motore di analisi legge
+    il testo della configurazione, e il backup e' la stessa configurazione.
+    Senza backup non si sa: si restituisce vuoto e la colonna non compare,
+    invece di dichiarare sane delle regole mai esaminate.
+    """
+    from ai import config_analyzer
+    path, _tenant = config_analyzer._find_freshest_backup(ip)
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            content = fh.read()
+    except OSError:
+        return {}
+    out: dict = {}
+    for f in config_analyzer.policy_findings(content, 'fortios'):
+        rid = f.get("rule_id")
+        if rid:
+            out.setdefault(str(rid), []).append(f)
+    return out
+
+
 @router.get("/api/fortigate/{ip}/firewall/policies-with-stats")
 def fgt_firewall_policies_with_stats(ip: str, current_user = Depends(get_current_user)):
-    """Policy firewall unite ai contatori runtime (hit, byte, sessioni):
-    una sola richiesta invece di due, e le regole mai colpite sono già
-    marcate."""
-    return _fgt_call(fortigate_service.get_policies_with_stats,
-                     _fgt_device(ip, current_user))
+    """Policy firewall unite ai contatori runtime (hit, byte, sessioni) e ai
+    difetti statici del backup: una sola richiesta invece di due, le regole mai
+    colpite sono gia' marcate, e quelle che non possono scattare per come sono
+    scritte lo dicono."""
+    result = _fgt_call(fortigate_service.get_policies_with_stats,
+                       _fgt_device(ip, current_user))
+    shadows = _shadow_by_policy_id(ip)
+    if isinstance(result, dict):
+        result["shadow_analysis"] = "backup" if shadows else "unavailable"
+        for row in (result.get("policies") or result.get("data") or []):
+            if isinstance(row, dict):
+                row["findings"] = shadows.get(str(row.get("policyid")), [])
+    return result
 
 @router.get("/api/fortigate/{ip}/firewall/services")
 def fgt_firewall_services(ip: str, current_user = Depends(get_current_user)):

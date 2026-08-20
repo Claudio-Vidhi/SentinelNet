@@ -157,4 +157,25 @@ def run_netsec_audit(config_text: Optional[str] = None,
         "score": score,
         "summary": summary,
         "rules": evaluated,
+        # FUORI dal punteggio, deliberatamente. "La regola 20 e' coperta dalla
+        # 10" e' un difetto reale, ma non e' un controllo CIS: inventargli un
+        # id di benchmark per farlo entrare nel conteggio falserebbe la
+        # percentuale di conformita', che e' l'unica cosa per cui questo
+        # report viene consegnato. Sta nel documento, non nel voto.
+        "policy_defects": _policy_defects(config_text, vendor),
     }
+
+
+def _policy_defects(config_text: Optional[str],
+                    vendor: Optional[str]) -> List[Dict[str, Any]]:
+    """Regole che non possono mai scattare, dal motore di ``policy_test``.
+
+    Non e' una regola di benchmark e non tocca il punteggio: vedi il commento
+    su ``policy_defects``. Tollerante come il resto del motore, perche' un
+    extra non deve far fallire un audit che senza di lui funzionerebbe.
+    """
+    if not config_text:
+        return []
+    from ai import config_analyzer
+    return config_analyzer.policy_findings(
+        config_text, 'ios' if vendor == IOS else 'fortios')
