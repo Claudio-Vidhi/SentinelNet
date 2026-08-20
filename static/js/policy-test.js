@@ -9,47 +9,101 @@
     let ptFindingsCache = {};
 
     function loadPolicyTestTab() {
+        populatePolicyTenantSelect();
         populatePolicyDeviceSelect();
-        const sel = document.getElementById('ptDeviceSelect');
-        if (sel && sel.value) {
-            ptSelectedIp = sel.value;
-            updateDeviceMeta();
-            if (ptActiveSubtab === 'examples') loadPolicyExamples();
-            else if (ptActiveSubtab === 'findings') loadPolicyFindings();
-        }
+        renderPolicySelectionState();
+    }
+
+    function populatePolicyTenantSelect() {
+        const sel = document.getElementById('ptTenantSelect');
+        if (!sel) return;
+        const L = i18n[currentLang];
+        const cur = sel.value;
+        // globalGroups is declared `let` in core.js, so it is NOT a window
+        // property: reading it as window.globalGroups yields undefined and the
+        // usual `|| {}` fallback hides it. Read the bare identifier.
+        const groups = Object.keys(globalGroups || {});
+        sel.innerHTML = `<option value="">${escapeHtml(L.ptChooseTenant)}</option>` +
+            groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+        sel.value = groups.includes(cur) ? cur : '';
+    }
+
+    function policyTenant() {
+        const sel = document.getElementById('ptTenantSelect');
+        return sel ? sel.value : '';
     }
 
     function populatePolicyDeviceSelect() {
         const sel = document.getElementById('ptDeviceSelect');
         if (!sel) return;
+        const L = i18n[currentLang];
+        const tenant = policyTenant();
         const cur = sel.value;
-        const devices = globalDevices || [];
 
-        sel.innerHTML = devices.map(d => {
-            const ip = d.IP || '';
-            const host = d.Hostname || ip;
-            const vendor = (d.Vendor || d.Type || 'cisco').toUpperCase();
-            return `<option value="${escapeHtml(ip)}">${escapeHtml(host)} (${escapeHtml(ip)}) — ${escapeHtml(vendor)}</option>`;
-        }).join('');
-
-        if (devices.length > 0) {
-            sel.value = devices.some(d => d.IP === cur) ? cur : devices[0].IP;
-            ptSelectedIp = sel.value;
+        if (!tenant) {
+            // No tenant, no device list. A flat list across every tenant puts
+            // several customers' devices in one dropdown; on the estate this
+            // product is built for that is a disclosure, not a convenience.
+            sel.innerHTML = `<option value="">${escapeHtml(L.ptChooseTenantFirst)}</option>`;
+            sel.disabled = true;
+            ptSelectedIp = null;
             updateDeviceMeta();
+            return;
         }
+
+        const devices = (globalDevices || []).filter(
+            d => (d.Group || 'Generale') === tenant);
+        sel.disabled = devices.length === 0;
+
+        if (devices.length === 0) {
+            sel.innerHTML = `<option value="">${escapeHtml(L.ptNoDevicesInTenant)}</option>`;
+            ptSelectedIp = null;
+            updateDeviceMeta();
+            return;
+        }
+
+        // Deliberately NOT auto-selecting devices[0]. Landing on the tab and
+        // finding a verdict already computed for a device nobody picked reads
+        // as a statement about that device.
+        sel.innerHTML = `<option value="">${escapeHtml(L.ptChooseDevice)}</option>` +
+            devices.map(d => {
+                const ip = d.IP || '';
+                const host = d.Hostname || ip;
+                const vendor = (d.Vendor || d.Type || 'cisco').toUpperCase();
+                return `<option value="${escapeHtml(ip)}">${escapeHtml(host)} (${escapeHtml(ip)}) — ${escapeHtml(vendor)}</option>`;
+            }).join('');
+        sel.value = devices.some(d => d.IP === cur) ? cur : '';
+        ptSelectedIp = sel.value || null;
+        updateDeviceMeta();
+    }
+
+    /** Placeholder in every panel until a tenant AND a device are chosen.
+     *  Returns true when it painted, i.e. when there is nothing to show yet. */
+    function renderPolicySelectionState() {
+        if (ptSelectedIp) return false;
+        const L = i18n[currentLang];
+        const msg = !policyTenant() ? L.ptChooseTenantFirst : L.ptChooseDeviceFirst;
+        const empty = `<div style="text-align:center; padding:40px 20px; color:var(--text-muted);">
+            <i class="fa-solid fa-hand-pointer fa-2x" style="margin-bottom:12px; opacity:0.4;"></i>
+            <div style="font-size:13px;">${escapeHtml(msg)}</div>
+        </div>`;
+        ['ptTraceResultsContainer', 'ptExamplesContainer', 'ptFindingsContainer']
+            .forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = empty;
+            });
+        return true;
     }
 
     function updateDeviceMeta() {
         const metaEl = document.getElementById('ptDeviceMeta');
-        if (!metaEl || !ptSelectedIp) return;
-        const dev = (globalDevices || []).find(d => d.IP === ptSelectedIp);
-        if (dev) {
-            const group = dev.Group || 'Generale';
-            const vendor = (dev.Vendor || dev.Type || 'cisco').toUpperCase();
-            metaEl.innerHTML = `<span class="badge" style="font-size:11px;">Tenant: <strong>${escapeHtml(group)}</strong></span> <span class="badge" style="font-size:11px;">Vendor: <strong>${escapeHtml(vendor)}</strong></span>`;
-        } else {
-            metaEl.innerHTML = '';
-        }
+        if (!metaEl) return;
+        const dev = ptSelectedIp
+            ? (globalDevices || []).find(d => d.IP === ptSelectedIp) : null;
+        if (!dev) { metaEl.innerHTML = ''; return; }
+        const group = dev.Group || 'Generale';
+        const vendor = (dev.Vendor || dev.Type || 'cisco').toUpperCase();
+        metaEl.innerHTML = `<span class="badge">${escapeHtml(i18n[currentLang].ptTenantLabel)}: ${escapeHtml(group)}</span> <span class="badge">Vendor: ${escapeHtml(vendor)}</span>`;
     }
 
     function switchPolicySubtab(subtab) {
@@ -66,16 +120,19 @@
         if (examplesEl) examplesEl.style.display = (subtab === 'examples') ? '' : 'none';
         if (findingsEl) findingsEl.style.display = (subtab === 'findings') ? '' : 'none';
 
-        if (subtab === 'examples' && ptSelectedIp && !ptExamplesCache[ptSelectedIp]) {
+        if (renderPolicySelectionState()) return;
+
+        if (subtab === 'examples' && !ptExamplesCache[ptSelectedIp]) {
             loadPolicyExamples();
-        } else if (subtab === 'findings' && ptSelectedIp && !ptFindingsCache[ptSelectedIp]) {
+        } else if (subtab === 'findings' && !ptFindingsCache[ptSelectedIp]) {
             loadPolicyFindings();
         }
     }
 
     async function runPolicyTrace() {
         if (!ptSelectedIp) {
-            alert('Seleziona prima un dispositivo target.');
+            alert(policyTenant() ? i18n[currentLang].ptChooseDeviceFirst
+                                 : i18n[currentLang].ptChooseTenantFirst);
             return;
         }
 
@@ -325,6 +382,7 @@
                             ${examples.length} ${escapeHtml(L.ptRulesWord)} &middot; ${escapeHtml(L.ptDefaultWord)} ${escapeHtml(group.default_action || 'deny')}
                         </span>
                     </div>
+                    ${group.declaration ? `<div style="margin-top:5px; font-family:var(--font-data); font-size:12.5px; color:var(--text-muted);">${escapeHtml(group.declaration)}</div>` : ''}
                     <div style="margin-top:7px; font-size:13px; color:var(--text);">${bindingRow}</div>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:16px;">`;
@@ -544,11 +602,26 @@
     // failure was silent. The sibling lazy modules (redundancy.js and the
     // rest) bind directly in their IIFE for exactly this reason.
     function bindPolicyTestControls() {
+        const tenantSel = document.getElementById('ptTenantSelect');
+        if (tenantSel) {
+            tenantSel.addEventListener('change', () => {
+                // Changing tenant invalidates the whole view: the selected
+                // device belongs to the previous one, and its cached results
+                // must not survive the switch.
+                ptSelectedIp = null;
+                ptExamplesCache = {};
+                ptFindingsCache = {};
+                populatePolicyDeviceSelect();
+                renderPolicySelectionState();
+            });
+        }
+
         const sel = document.getElementById('ptDeviceSelect');
         if (sel) {
             sel.addEventListener('change', (e) => {
-                ptSelectedIp = e.target.value;
+                ptSelectedIp = e.target.value || null;
                 updateDeviceMeta();
+                if (renderPolicySelectionState()) return;
                 if (ptActiveSubtab === 'examples') loadPolicyExamples();
                 else if (ptActiveSubtab === 'findings') loadPolicyFindings();
             });
