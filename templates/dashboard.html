@@ -225,6 +225,10 @@
           <span class="nav-left"><i class="fa-solid fa-shield-cat"></i> NetSec Audit</span>
           <span class="preview-badge">preview</span>
         </button>
+        <button id="navPolicyTest" class="nav-item" data-tab="tab-policy-test">
+          <span class="nav-left" data-i18n="tabPolicyTest"><i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing</span>
+          <span class="preview-badge">preview</span>
+        </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navChange">Modifica</h3>
         <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" data-tab="tab-provisioning">
@@ -3432,6 +3436,119 @@
       </div>
     </div> <!-- End #netsecSubtabChecklist -->
   </div> <!-- End #tab-netsec-audit -->
+
+  <!-- TAB: POLICY & ROUTE VALIDATION -->
+  <div id="tab-policy-test" class="tab-content">
+    <div class="hero" style="margin-bottom:18px;">
+      <div class="hero-card" style="flex:1;">
+        <h2 data-i18n="ptTitle">Validazione Policy &amp; Routing</h2>
+        <p data-i18n="ptDesc">Tracciamento offline della raggiungibilità, generatore di flussi di test per regola e analisi difetti statici dai backup di configurazione.</p>
+      </div>
+    </div>
+
+    <!-- Selettore Dispositivo Target -->
+    <div class="panel" style="display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:14px;">
+      <div class="form-group" style="margin-bottom:0; min-width:280px;">
+        <label for="ptDeviceSelect" data-i18n="ptDeviceLabel">Dispositivo Target</label>
+        <select id="ptDeviceSelect"></select>
+      </div>
+      <div id="ptDeviceMeta" style="display:flex; gap:6px; padding-bottom:8px;"></div>
+    </div>
+
+    <!-- Sotto-tab Navigazione -->
+    <div id="ptSubtabNav" class="subtab-bar">
+      <button id="ptSubtabBtnTracer" class="btn btn-secondary active" data-subtab="tracer">
+        <i class="fa-solid fa-play"></i> <span data-i18n="ptSubtabTracer">Packet Tracer</span>
+      </button>
+      <button id="ptSubtabBtnExamples" class="btn btn-secondary" data-subtab="examples">
+        <i class="fa-solid fa-list-check"></i> <span data-i18n="ptSubtabExamples">Esempi per Regola</span>
+      </button>
+      <button id="ptSubtabBtnFindings" class="btn btn-secondary" data-subtab="findings">
+        <i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span>
+      </button>
+    </div>
+
+    <!-- Sotto-tab 1: Packet Tracer -->
+    <div id="ptSubtabTracer">
+      <div style="display:grid; grid-template-columns: 360px 1fr; gap:18px;">
+        <div class="panel">
+          <h3><i class="fa-solid fa-sliders"></i> <span data-i18n="ptFormTitle">Parametri del Flusso</span></h3>
+          <div>
+            <div class="form-group">
+              <label data-i18n="ptSrcIpLabel">IP Sorgente *</label>
+              <input id="ptSrcIp" type="text" placeholder="es. 192.0.2.50">
+            </div>
+            <div class="form-group">
+              <label data-i18n="ptDstIpLabel">IP Destinazione *</label>
+              <input id="ptDstIp" type="text" placeholder="es. 198.51.100.10">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="form-group">
+                <label data-i18n="ptProtoLabel">Protocollo</label>
+                <select id="ptProto">
+                  <option value="tcp" selected>TCP</option>
+                  <option value="udp">UDP</option>
+                  <option value="icmp">ICMP</option>
+                  <option value="ip">IP (Any)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label data-i18n="ptDportLabel">Porta Dest.</label>
+                <input id="ptDport" type="number" placeholder="443" min="1" max="65535">
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div class="form-group">
+                <label data-i18n="ptSportLabel">Porta Sorg.</label>
+                <input id="ptSport" type="number" placeholder="opzionale" min="1" max="65535">
+              </div>
+              <div class="form-group">
+                <label data-i18n="ptIngressLabel">Ingress Intf</label>
+                <input id="ptIngressIntf" type="text" placeholder="auto-derived">
+              </div>
+            </div>
+            <div style="margin-top:4px;">
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer;">
+                <input id="ptEstablished" type="checkbox"> <span data-i18n="ptEstablishedLabel">Sessione TCP Stabilita (ACK/RST)</span>
+              </label>
+            </div>
+            <button id="btnPtRunTrace" class="btn btn-primary" style="width:100%; margin-top:8px;">
+              <i class="fa-solid fa-play"></i> <span data-i18n="ptBtnTrace">Traccia Flusso</span>
+            </button>
+          </div>
+        </div>
+        <div class="panel">
+          <h3><i class="fa-solid fa-diagram-project"></i> Path Trace &amp; Risultato</h3>
+          <div id="ptTraceResultsContainer">
+            <div style="text-align:center; padding:40px 20px; color:var(--text-muted);">
+              <i class="fa-solid fa-route fa-2x" style="margin-bottom:12px; opacity:0.4;"></i>
+              <div>Imposta i parametri del flusso e clicca su <strong>Traccia Flusso</strong> per visualizzare il path decisionale.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sotto-tab 2: Rule Examples -->
+    <div id="ptSubtabExamples" style="display:none;">
+      <div class="panel">
+        <h3><i class="fa-solid fa-list-check"></i> <span data-i18n="ptSubtabExamples">Esempi per Regola</span></h3>
+        <div id="ptExamplesContainer">
+          <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Caricamento esempi...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sotto-tab 3: Static Findings -->
+    <div id="ptSubtabFindings" style="display:none;">
+      <div class="panel">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="ptSubtabFindings">Anomalie &amp; Difetti</span></h3>
+        <div id="ptFindingsContainer">
+          <div style="text-align:center; padding:30px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Analisi difetti in corso...</div>
+        </div>
+      </div>
+    </div>
+  </div> <!-- End #tab-policy-test -->
   </main>
 
   <!-- Progress Box dei Job in Background -->

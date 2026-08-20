@@ -34,5 +34,30 @@ class TestDiagnoseClientTenant(unittest.TestCase):
         self.assertNotIn("tenant", kwargs["body"])
 
 
+class TestPolicyMCPTools(unittest.TestCase):
+
+    def test_policy_trace_tool(self):
+        self.assertIn("policy_trace", mcp_server.TOOLS)
+        _desc, schema, fn = mcp_server.TOOLS["policy_trace"]
+        self.assertEqual(schema["required"], ["ip", "src", "dst"])
+
+        with patch("ai.mcp_server.api") as mock_api:
+            fn({"ip": "192.0.2.1", "src": "192.0.2.50", "dst": "198.51.100.10", "proto": "tcp", "dport": 443})
+        mock_api.assert_called_once_with(
+            "POST", "/api/policy-test/192.0.2.1/trace",
+            body={"src_ip": "192.0.2.50", "dst_ip": "198.51.100.10", "proto": "tcp", "dport": 443, "ingress_intf": None},
+        )
+
+    def test_policy_findings_tool(self):
+        self.assertIn("policy_findings", mcp_server.TOOLS)
+        _desc, schema, fn = mcp_server.TOOLS["policy_findings"]
+        self.assertEqual(schema["required"], ["ip"])
+
+        with patch("ai.mcp_server.api") as mock_api:
+            fn({"ip": "192.0.2.1"})
+        mock_api.assert_called_once_with("GET", "/api/policy-test/192.0.2.1/findings")
+
+
 if __name__ == "__main__":
     unittest.main()
+
