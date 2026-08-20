@@ -99,21 +99,53 @@ def policy_trace(ip: str, flow_req: FlowRequest, current_user = Depends(get_curr
     return trace.to_dict()
 
 
+def _acl_bindings(env: Any, acl_name: str) -> List[Dict[str, str]]:
+    """Interfaces where an ACL is applied, and in which direction.
+
+    An ACL name on its own does not tell an operator what the rules govern.
+    'EDGE_IN on Vlan10 inbound' does.
+    """
+    out: List[Dict[str, str]] = []
+    for iface_name, info in (getattr(env, "interfaces", {}) or {}).items():
+        for key, direction in (("acl_in", "in"), ("acl_out", "out")):
+            if info.get(key) == acl_name:
+                out.append({"interface": iface_name, "direction": direction})
+    return out
+
+
 @router.get("/api/policy-test/{ip}/examples")
 def policy_examples(ip: str, current_user = Depends(get_current_user)):
-    """Generate representative matching and near-miss flows per rule."""
+    """Generate representative matching and near-miss flows, grouped by rule set.
+
+    Grouped, not flat: a device carries several ACLs and their sequence
+    numbers restart in each one. Flattening them lost the ACL name, so two
+    different 'rule 10's reached the UI indistinguishable and no reader could
+    tell what either one governed.
+    """
     content, config_type = _load_device_backup(ip, current_user)
     env = _parse_environment(content, config_type)
 
+    groups: List[Dict[str, Any]] = []
     if hasattr(env, "policies"):
-        # FortiOS
-        examples = generate_ruleset_examples(env.policies)
+        # FortiOS: a single ordered policy list, evaluated top-down.
+        groups.append({
+            "name": "firewall policy",
+            "kind": "firewall_policy",
+            "bindings": [],
+            "default_action": "deny",
+            "examples": [e.to_dict() for e in generate_ruleset_examples(env.policies)],
+        })
     else:
-        # IOS
-        rules = [r for acl in env.acls.values() for r in acl.rules]
-        examples = generate_ruleset_examples(rules)
-
-    return [e.to_dict() for e in examples]
+        for acl_name, ruleset in env.acls.items():
+            groups.append({
+                "name": acl_name,
+                "kind": ruleset.kind,
+                "bindings": _acl_bindings(env, acl_name),
+                "default_action": ruleset.default_action,
+                "examples": [e.to_dict()
+                             for e in generate_ruleset_examples(ruleset.rules)],
+            })
+    return groups
 
 
 @router.get("/api/policy-test/{ip}/findings")
