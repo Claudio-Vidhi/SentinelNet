@@ -73,12 +73,12 @@ From the dashboard (**admin** account): **Multi-site** tab → *New site*.
 
 ```bash
 # 1. Admin authentication to obtain the JWT
-TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/auth/login \
+TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"<ADMIN_PASSWORD>"}' | jq -r .access_token)
 
 # 2. Create the agent site
-curl -X POST http://<CENTRAL_IP>:8765/api/sites \
+curl -X POST http://<CENTRAL_IP>:8000/api/sites \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "Milan-VM", "mode": "agent", "subnets": ["192.168.56.0/24"]}'
@@ -105,7 +105,7 @@ Create `agent.json` in the `SentinelNet` root:
 
 ```json
 {
-  "central_url": "http://<CENTRAL_IP>:8765",
+  "central_url": "http://<CENTRAL_IP>:8000",
   "site_id": "milan-vm",
   "token": "<TOKEN_SHOWN_AT_CREATION>",
   "interval": 15,
@@ -117,7 +117,7 @@ Create `agent.json` in the `SentinelNet` root:
 Or pass everything on the command line:
 
 ```bash
-python3 services/site_agent.py --central-url http://<CENTRAL_IP>:8765 \
+python3 services/site_agent.py --central-url http://<CENTRAL_IP>:8000 \
                                --site-id milan-vm \
                                --token <TOKEN> \
                                --no-verify-tls \
@@ -129,7 +129,7 @@ present:
 
 ```bash
 python3 scripts/vm_agent_test_helper.py setup \
-  --central-url http://<CENTRAL_IP>:8765 \
+  --central-url http://<CENTRAL_IP>:8000 \
   --site-id milan-vm \
   --token <TOKEN> \
   --interval 15 \
@@ -172,7 +172,7 @@ does not hold the agent's key.
 ### 3.4 Verify connectivity before starting
 
 ```bash
-curl -i -X POST http://<CENTRAL_IP>:8765/api/agent/heartbeat \
+curl -i -X POST http://<CENTRAL_IP>:8000/api/agent/heartbeat \
   -H "X-Site-Id: milan-vm" \
   -H "X-Site-Token: <TOKEN>" \
   -H "Content-Type: application/json" \
@@ -191,7 +191,7 @@ python services/site_agent.py --config agent.json
 Expected output:
 
 ```text
-[agent] avviato: centrale=http://192.168.1.100:8765 sede=milano-vm intervallo=15s
+[agent] avviato: centrale=http://192.168.1.100:8000 sede=milano-vm intervallo=15s
 [heartbeat] sede 'milano-vm' ok, 1 dispositivi locali
 ```
 
@@ -265,7 +265,7 @@ nssm start SentinelNetAgent
 - The outcome can be retrieved at any time:
 
   ```bash
-  curl -H "Authorization: Bearer $JWT" http://<CENTRAL_IP>:8765/api/command-jobs/job_1234567890_abc
+  curl -H "Authorization: Bearer $JWT" http://<CENTRAL_IP>:8000/api/command-jobs/job_1234567890_abc
   ```
 
 - Commands on the security blacklist are blocked during relay too.
@@ -360,18 +360,18 @@ transport on purpose — and answers `success`, `auth_failed` or `unreachable`.
 ### Creating a jump site via API
 
 ```bash
-TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/auth/login \
+TOKEN=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"<ADMIN_PASSWORD>"}' | jq -r .access_token)
 
 # 1. Create the bastion identity
-IDENTITY_ID=$(curl -s -X POST http://<CENTRAL_IP>:8765/api/identities \
+IDENTITY_ID=$(curl -s -X POST http://<CENTRAL_IP>:8000/api/identities \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name":"Bastion","tenant":"Customer_A","username":"svc-jump","password":"<BASTION_PASSWORD>","enable_secret":""}' \
   | jq -r .id)
 
 # 2. Create the jump site, referencing the identity by id
-curl -X POST http://<CENTRAL_IP>:8765/api/sites \
+curl -X POST http://<CENTRAL_IP>:8000/api/sites \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"name\": \"Customer A\", \"mode\": \"jump\", \"subnets\": [\"192.0.2.0/24\"], \
        \"jump_host\": \"198.51.100.10\", \"jump_port\": 22, \"jump_identity\": \"$IDENTITY_ID\", \

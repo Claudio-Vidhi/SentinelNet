@@ -15,7 +15,7 @@ network_hosts.csv nella sua data dir (SENTINELNET_DATA_DIR), gestito con gli
 stessi strumenti/CLI del centrale.
 
 Uso:
-    python site_agent.py --central-url https://central:8765 \
+    python site_agent.py --central-url https://central:8000 \
                          --site-id milano --token <TOKEN> [--interval 60]
 oppure:
     python site_agent.py --config agent.json

@@ -44,7 +44,7 @@ server {
     add_header X-Frame-Options DENY always;
 
     location / {
-        proxy_pass http://127.0.0.1:8765;
+        proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
         # WebSocket (SSH terminal)
@@ -66,7 +66,7 @@ sentinelnet.example.com {
         Referrer-Policy no-referrer
         X-Frame-Options DENY
     }
-    reverse_proxy sentinelnet:8765
+    reverse_proxy sentinelnet:8000
 }
 ```
 
@@ -162,7 +162,7 @@ SENTINELNET_OBS_RETENTION_FLOWS_DAYS=30   # _SYSLOG_DAYS=7, _EVENTS_DAYS=90
 
 ## 5. Other recommendations
 
-- Never publish port 8765 directly on the Internet.
+- Never publish port 8000 directly on the Internet.
 - Restrict panel access to a VPN or management network.
 - Set `SENTINELNET_JWT_SECRET` and `SENTINELNET_MASTER_KEY` explicitly in
   production; otherwise they are generated and stored in

@@ -120,7 +120,7 @@ uv run app_server.py     # with uv
 python app_server.py     # with standard Python
 ```
 
-SentinelNet opens the default browser at **`http://localhost:8765/`**.
+SentinelNet opens the default browser at **`http://localhost:8000/`**.
 
 On first start a setup wizard asks you to create the local administrator
 account. Credentials are stored in `users.json` as bcrypt hashes and are never
@@ -139,7 +139,7 @@ Or run the pre-built official image without cloning the source:
 
 ```bash
 docker run -d \
-  -p 8765:8765 \
+  -p 8000:8000 \
   -v ./data:/app/data \
   -e SENTINELNET_DATA_DIR=/app/data \
   --name sentinelnet \
@@ -151,7 +151,7 @@ docker run -d \
 > and publish your own customized image, replace `claudiovidhi` with your Docker
 > username.
 
-The application is available at **`http://localhost:8765/`**.
+The application is available at **`http://localhost:8000/`**.
 
 ---
 
@@ -169,9 +169,9 @@ keys in local files (`secret.key`, `jwt_secret.key`).
 | `SENTINELNET_ADMIN_SECRET` | Enable secret used by the `default` credential profile and as a fallback. | `admin` |
 | `SENTINELNET_DATA_DIR` | Data directory path (inventory, logs, keys). | `./data` |
 | `SENTINELNET_HOST` | Server bind address. | `127.0.0.1` |
-| `SENTINELNET_PORT` | Listening port. | `8765` |
+| `SENTINELNET_PORT` | Listening port. | `8000` |
 | `SENTINELNET_NO_BROWSER` | If `true`, does not open the browser at startup (set automatically when the host is `0.0.0.0`). | `false` |
-| `SENTINELNET_CORS_ORIGINS` | Comma-separated list of allowed CORS origins. | `http://localhost:8765,http://127.0.0.1:8765` |
+| `SENTINELNET_CORS_ORIGINS` | Comma-separated list of allowed CORS origins. | `http://localhost:8000,http://127.0.0.1:8000` |
 | `SENTINELNET_SSL_CERTFILE` | TLS certificate (PEM) for native HTTPS; also requires `SENTINELNET_SSL_KEYFILE`. Relative paths resolve inside `SENTINELNET_DATA_DIR`. | HTTP |
 | `SENTINELNET_SSL_KEYFILE` | TLS private key (PEM) for native HTTPS. | HTTP |
 
@@ -211,7 +211,7 @@ Example Claude Desktop configuration (`claude_desktop_config.json`):
       "command": "python",
       "args": ["/path/to/SentinelNet/ai/mcp_server.py"],
       "env": {
-        "SENTINELNET_URL": "http://127.0.0.1:8765",
+        "SENTINELNET_URL": "http://127.0.0.1:8000",
         "SENTINELNET_USERNAME": "admin",
         "SENTINELNET_PASSWORD": "..."
       }
