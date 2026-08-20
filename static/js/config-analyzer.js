@@ -686,6 +686,54 @@
         return { total, body: sections.join('') };
     }
 
+    // Severity -> the lamp token for that state. Colour means state here, as
+    // everywhere else in this interface; it is never decoration.
+    const CA_DEFECT_LAMP = {
+        high: { color: 'var(--danger)', wash: 'var(--lamp-fault-wash)', icon: 'fa-circle-xmark' },
+        medium: { color: 'var(--warning)', wash: 'var(--lamp-warn-wash)', icon: 'fa-triangle-exclamation' },
+        low: { color: 'var(--text-muted)', wash: 'var(--surface-2)', icon: 'fa-circle-info' },
+        info: { color: 'var(--text-muted)', wash: 'var(--surface-2)', icon: 'fa-circle-info' },
+    };
+
+    function caDefectLine(f, L) {
+        const p = f.params || {};
+        const acl = f.acl_name || p.acl || '';
+        const rule = f.rule_id || p.rule_id || '';
+        switch (f.key) {
+            case 'shadowed':
+                return L.msgCaDefectShadowed
+                    .replace('{rule}', rule).replace('{by}', p.shadowed_by || '?').replace('{acl}', acl);
+            case 'unreachable':
+                return L.msgCaDefectUnreachable
+                    .replace('{rule}', rule).replace('{by}', p.blocked_by || '?').replace('{acl}', acl);
+            case 'any_any':
+                return L.msgCaDefectAnyAny.replace('{rule}', rule).replace('{acl}', acl);
+            case 'unresolved_object':
+                return L.msgCaDefectUnresolved
+                    .replace('{rule}', rule).replace('{acl}', acl)
+                    .replace('{objects}', (p.objects || []).join(', '));
+            case 'route_to_nowhere':
+                return L.msgCaDefectRouteNowhere
+                    .replace('{prefix}', p.prefix || '?').replace('{next_hop}', p.next_hop || '?');
+            default:
+                return `${f.key} - ${acl} ${rule}`.trim();
+        }
+    }
+
+    function caPolicyDefectsSection(defects, L) {
+        const order = { high: 0, medium: 1, low: 2, info: 3 };
+        const sorted = defects.slice().sort(
+            (a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9));
+        const rows = sorted.map(f => {
+            const lamp = CA_DEFECT_LAMP[f.severity] || CA_DEFECT_LAMP.info;
+            return `<div style="display:flex; align-items:flex-start; gap:8px; padding:7px 10px; background:${lamp.wash}; border-left:1px solid ${lamp.color}; margin-bottom:4px; font-size:12px;">
+                <i class="fa-solid ${lamp.icon}" style="color:${lamp.color}; margin-top:2px;"></i>
+                <span>${escapeHtml(caDefectLine(f, L))}</span>
+            </div>`;
+        }).join('');
+        return `<h4 style="font-size:12px; margin:10px 0 4px; color:var(--danger);">${L.titleCaPolicyDefects}</h4><div>${rows}</div>`;
+    }
+
     function caRenderValidation(dev, L, en) {
         if (dev.config_type === 'fortios' || dev.config_type === 'wlc-aireos') {
             const mv = caRenderMvValidationBody(dev, L, en);
@@ -708,7 +756,8 @@
         const unusedVlans = v.unused_vlans || [];
         const undefinedVlans = v.undefined_vlans || [];
         const routeAclRefs = v.route_acl_refs || [];
-        const total = unusedAcls.length + missingAcls.length + unusedVlans.length + undefinedVlans.length + routeAclRefs.length;
+        const policyDefects = v.policy_findings || [];
+        const total = unusedAcls.length + missingAcls.length + unusedVlans.length + undefinedVlans.length + routeAclRefs.length + policyDefects.length;
         const tenant = dev.tenant ? ` <span class="badge" style="font-size:10px;">${escapeHtml(dev.tenant)}</span>` : '';
         const chips = arr => arr.map(x => `<span class="ca-chip" style="color:var(--warning); border-color:var(--warning);">${escapeHtml(x)}</span>`).join('');
         let body;
@@ -717,6 +766,11 @@
                 <i class="fa-solid fa-circle-check"></i><span>${escapeHtml(L.msgCaNoIssues)}</span></div>`;
         } else {
             const sections = [];
+            // First, not last: a rule that can never fire is the worst defect
+            // in this list. An unused ACL does nothing and was never applied;
+            // a shadowed ACE is applied, states an intent, and silently does
+            // nothing anyway.
+            if (policyDefects.length) sections.push(caPolicyDefectsSection(policyDefects, L));
             if (unusedAcls.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${L.titleCaUnusedAcls}</h4><div>${chips(unusedAcls)}</div>`);
             if (missingAcls.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--danger);">${L.titleCaMissingAcls}</h4><div>${missingAcls.map(m => `<span class="ca-chip" style="color:var(--danger); border-color:var(--danger);">${escapeHtml(m.name)} (${L.lblCaReferencedIn}: ${escapeHtml(m.referenced_in || '—')})</span>`).join('')}</div>`);
             if (unusedVlans.length) sections.push(`<h4 style="font-size:12px; margin:10px 0 4px; color:var(--warning);">${L.titleCaUnusedVlans}</h4><div>${chips(unusedVlans)}</div>`);

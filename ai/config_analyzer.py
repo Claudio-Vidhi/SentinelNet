@@ -256,6 +256,31 @@ def _parse_router_block(header, body):
 
 # --- Main analysis (pure, testable) ----------------------------------
 
+def policy_findings(content, config_type='ios'):
+    """Shadowed / unreachable / any-any / route defects for a config.
+
+    Delegates to the ``services.policy_test`` engine instead of growing a
+    second overlap analysis here: the Policy & Routing tab answers exactly
+    this question, and two implementations of rule containment would drift
+    apart on the first wildcard nobody thought about.
+
+    Tolerant like the rest of this module: a parse failure yields no findings
+    rather than an exception, because a validation extra must never take down
+    an analysis that works without it.
+    """
+    try:
+        from services.policy_test import findings as pt_findings
+        if config_type == 'fortios':
+            from services.policy_test.fortios import parse_fortios_config
+            env = parse_fortios_config(content)
+        else:
+            from services.policy_test.ios import parse_ios_config
+            env = parse_ios_config(content)
+        return [f.to_dict() for f in pt_findings.analyze_policy_findings(env)]
+    except Exception:
+        return []
+
+
 def analyze_config(content):
     """Analyzes the text of a running-config and returns the contract structure
     (without the ip/hostname/tenant meta fields, added downstream)."""
@@ -530,6 +555,10 @@ def analyze_config(content):
             "unused_vlans": unused_vlans,
             "undefined_vlans": undefined_vlans,
             "route_acl_refs": route_acl_refs,
+            # An ACE that can never fire is a worse defect than an unused ACL:
+            # the ACL is applied, the intent is written down, and it silently
+            # does nothing.
+            "policy_findings": policy_findings(content, 'ios'),
         },
     }
 
@@ -766,6 +795,7 @@ def analyze_fortios_config(content):
         "routing": {"static": static_routes},
         "vpn": {"phase1": phase1, "phase2": phase2},
         "validation": {
+            "policy_findings": policy_findings(content, 'fortios'),
             "any_any_policies": any_any,
             "disabled_policies": disabled_pol,
             "unlogged_policies": unlogged_pol,

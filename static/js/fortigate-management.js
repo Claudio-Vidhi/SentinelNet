@@ -592,7 +592,22 @@ function _fgtColTable(cols, rows, filter, L, key) {
         const r = rows[i];
         // Una policy con contatore a zero è un rilievo d'audit, non una riga
         // qualunque: si evidenzia.
-        const dead = r && r.never_hit ? 'color:var(--warning);' : '';
+        //
+        // I difetti statici dal backup e i contatori rispondono a due domande
+        // diverse. "Mai colpita" puo' voler dire solo che quel traffico non si
+        // e' ancora presentato. "Coperta da una regola precedente" dice che non
+        // potrebbe scattare comunque. Insieme non lasciano scampo: e' una
+        // regola morta, e va segnalata piu' forte di entrambe le meta'.
+        const defects = (r && r.findings) || [];
+        const blocked = defects.some(f => f.key === 'shadowed' || f.key === 'unreachable');
+        const confirmedDead = blocked && r && r.never_hit;
+        const dead = confirmedDead ? 'color:var(--danger);'
+                   : (blocked || (r && r.never_hit)) ? 'color:var(--warning);' : '';
+        const mark = confirmedDead
+            ? `<i class="fa-solid fa-circle-xmark" style="color:var(--danger); font-size:10px;" title="${escapeHtml(L.lblFgtPolDeadRule || 'Regola morta: coperta da una precedente e mai colpita')}"></i>`
+            : blocked
+            ? `<i class="fa-solid fa-triangle-exclamation" style="color:var(--warning); font-size:10px;" title="${escapeHtml(L.lblFgtPolShadowed || 'Coperta da una regola precedente')}"></i>`
+            : `<i class="fa-solid fa-chevron-right" style="font-size:10px;"></i>`;
         const tds = cols.map(([k, , fmt]) =>
             `<td style="padding:8px 12px; font-family:var(--font-code); font-size:12px;${dead}">${_fgtFmtCell(r, k, fmt)}</td>`).join('');
         // Le colonne mostrano una manciata di campi; un log di traffico ne ha
@@ -602,7 +617,7 @@ function _fgtColTable(cols, rows, filter, L, key) {
         return `<tr class="fgt-row" style="border-bottom:1px solid var(--border); cursor:pointer;"
                     data-fgt-key="${escapeHtml(key)}" data-fgt-idx="${i}"
                     title="${escapeHtml(L.lblFgtRowDetails || 'Dettagli')}">
-              <td style="padding:8px 6px; color:var(--text-muted);"><i class="fa-solid fa-chevron-right" style="font-size:10px;"></i></td>
+              <td style="padding:8px 6px; color:var(--text-muted);">${mark}</td>
               ${tds}</tr>
             <tr class="fgt-row-detail" style="display:none;"><td colspan="${cols.length + 1}" style="padding:0 12px 12px;"></td></tr>`;
     }).join('');

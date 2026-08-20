@@ -194,6 +194,11 @@ class TestFullParity(unittest.TestCase):
         # Port-channel: stato vivo da SNMP accanto ai membri da configurazione.
         # Campi aggiunti, nessuno rimosso.
         ("get", "/api/portchannels"),
+        # Policy FortiGate: accanto ai contatori runtime arrivano i difetti
+        # statici letti dal backup (``shadow_analysis`` e ``findings`` per
+        # riga). Aggiunta puramente additiva — nessun campo rimosso o
+        # ritipizzato — ma la descrizione dell'operazione la dichiara.
+        ("get", "/api/fortigate/{ip}/firewall/policies-with-stats"),
         # Filtro telemetria: query param ``exclude_telemetry`` opzionale con
         # default False. Aggiunta additiva — omettendolo il comportamento è
         # quello storico — ma i parametri dell'operazione cambiano.

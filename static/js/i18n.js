@@ -1534,6 +1534,12 @@ const i18n = {
         ptNearMiss: "Quasi-Match",
         ptMatching: "Match",
         ptUnresolvedTitle: "Oggetti non risolvibili offline",
+        titleCaPolicyDefects: "Regole che non possono mai scattare",
+        msgCaDefectShadowed: "ACL {acl}: la regola {rule} e' completamente coperta dalla {by}, che la precede. Non scattera' mai.",
+        msgCaDefectUnreachable: "ACL {acl}: la regola {rule} e' irraggiungibile, la {by} intercetta gia' tutto il traffico.",
+        msgCaDefectAnyAny: "ACL {acl}: la regola {rule} consente qualunque sorgente verso qualunque destinazione su qualunque servizio.",
+        msgCaDefectUnresolved: "ACL {acl}: la regola {rule} riferisce oggetti non risolvibili dal backup ({objects}): la sua copertura e' ignota.",
+        msgCaDefectRouteNowhere: "Rotta statica {prefix} via {next_hop}: il next-hop non appartiene ad alcuna subnet connessa.",
     },
     en: {
         wizTitle: "First Access Detected",
@@ -3066,6 +3072,12 @@ const i18n = {
         ptNearMiss: "Near-Miss",
         ptMatching: "Matching",
         ptUnresolvedTitle: "Objects that cannot be resolved offline",
+        titleCaPolicyDefects: "Rules that can never fire",
+        msgCaDefectShadowed: "ACL {acl}: rule {rule} is fully covered by rule {by}, which precedes it. It will never fire.",
+        msgCaDefectUnreachable: "ACL {acl}: rule {rule} is unreachable, rule {by} already catches all traffic.",
+        msgCaDefectAnyAny: "ACL {acl}: rule {rule} permits any source to any destination on any service.",
+        msgCaDefectUnresolved: "ACL {acl}: rule {rule} references objects that cannot be resolved from the backup ({objects}): its coverage is unknown.",
+        msgCaDefectRouteNowhere: "Static route {prefix} via {next_hop}: the next hop is in no connected subnet.",
     }
 };
 
