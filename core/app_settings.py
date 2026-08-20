@@ -18,7 +18,7 @@ import threading
 
 from core import data_config
 
-PORT = 8765
+PORT = 8000
 
 
 def _app_adv_setting(key, default=None):
