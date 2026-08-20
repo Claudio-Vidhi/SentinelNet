@@ -21,6 +21,18 @@ from services.policy_test.model import (
 )
 
 
+# Policy flags that INVERT the address or service match. Ignoring one does
+# not widen the rule, it points it at the complement of the set we built.
+_NEGATE_KEYS = ("srcaddr-negate", "dstaddr-negate", "service-negate",
+                "internet-service-negate", "internet-service-src-negate")
+
+# Policy conditions that further restrict the match and are not evaluated
+# offline. Same reasoning as the IOS trailing qualifiers: unmodelled means
+# wider here than on the box, so the policy must not claim to cover another.
+_NARROWING_KEYS = ("groups", "users", "fsso-groups", "application",
+                   "app-category", "app-group", "url-category")
+
+
 def _is_ip(tok: str) -> bool:
     parts = tok.split('.')
     if len(parts) != 4:
@@ -196,11 +208,22 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
             if protocol == "IP" and proto_num:
                 try:
                     p_num = int(proto_num)
-                    raw_services[name] = {"protos": {p_num}, "dst_ports": None}
+                    raw_services[name] = {"protos": {p_num}, "dst_ports": None,
+                                          "icmp_types": None}
                 except Exception:
                     pass
             elif protocol == "ICMP":
-                raw_services[name] = {"protos": {1}, "dst_ports": None}
+                # 'set icmptype 8' is the FortiOS spelling of the Cisco 'echo'
+                # keyword, and it matters for the same reason: a service that
+                # names one message does not cover another. Left unread, two
+                # ICMP services collapse into one and the shadow detector
+                # reports a redundancy that does not exist.
+                icmptype = _forti_set1(entry, "icmptype")
+                svc_icmp: Optional[Set[int]] = None
+                if icmptype.isdigit():
+                    svc_icmp = {int(icmptype)}
+                raw_services[name] = {"protos": {1}, "dst_ports": None,
+                                      "icmp_types": svc_icmp}
             else:
                 protos: Set[int] = set()
                 ports: List[Tuple[int, int]] = []
@@ -215,6 +238,7 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                 raw_services[name] = {
                     "protos": protos if protos else None,
                     "dst_ports": ports if ports else None,
+                    "icmp_types": None,
                 }
 
     # 4. Parse service groups
@@ -229,8 +253,10 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
     for gname, members in svc_groups_raw.items():
         all_protos: Set[int] = set()
         all_ports: List[Tuple[int, int]] = []
+        all_icmp: Set[int] = set()
         any_proto = False
         any_ports = False
+        any_icmp = False
 
         seen = {gname}
         queue = list(members)
@@ -250,12 +276,17 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                     any_ports = True
                 else:
                     all_ports.extend(svc_def["dst_ports"])
+                if svc_def.get("icmp_types") is None:
+                    any_icmp = True
+                else:
+                    all_icmp.update(svc_def["icmp_types"])
             elif m in svc_groups_raw:
                 queue.extend(svc_groups_raw[m])
 
         resolved_services[gname] = {
             "protos": None if any_proto else (all_protos if all_protos else None),
             "dst_ports": None if any_ports else (all_ports if all_ports else None),
+            "icmp_types": None if any_icmp else (all_icmp if all_icmp else None),
         }
 
     env.services = resolved_services
@@ -349,6 +380,10 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
             sets = entry.get("sets", {})
             name = _forti_set1(entry, "name", "")
             action_raw = _forti_set1(entry, "action", "deny").lower()
+            # 'accept' permits, an absent action denies. 'ipsec' is the legacy
+            # policy-based VPN action: it forwards the traffic into a tunnel,
+            # so reading it as a deny inverts the verdict on every flow the
+            # policy carries.
             action = "permit" if action_raw == "accept" else "deny"
             status = _forti_set1(entry, "status", "enable").lower()
             disabled = (status == "disable")
@@ -362,6 +397,10 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
             service_list = sets.get("service", ["ALL"])
 
             policy_unresolved: List[str] = []
+            if action_raw == "ipsec":
+                policy_unresolved.append(
+                    f"policy {pid} uses the legacy 'ipsec' action: the traffic is "
+                    "forwarded into a VPN tunnel, which is neither a plain accept nor a deny")
 
             # Ingress interfaces
             ingress_intfs = None if "any" in srcintf_list else set(srcintf_list)
@@ -384,8 +423,10 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
             has_service = False
             service_protos: Set[int] = set()
             service_ports: List[Tuple[int, int]] = []
+            service_icmp: Set[int] = set()
             any_proto = False
             any_port = False
+            any_icmp_type = False
 
             for s in service_list:
                 b_svc = lookup_builtin_service(s)
@@ -400,16 +441,46 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                         any_port = True
                     else:
                         service_ports.extend(s_def["dst_ports"])
+                    if s_def.get("icmp_types") is None:
+                        any_icmp_type = True
+                    else:
+                        service_icmp.update(s_def["icmp_types"])
                 else:
                     policy_unresolved.append(f"service '{s}' referenced by policy {pid} is not defined")
 
+            pol_icmp: Optional[Set[int]] = None
             if has_service:
                 pol_protos = None if any_proto else (service_protos if service_protos else None)
                 pol_ports = None if any_port else (service_ports if service_ports else None)
+                pol_icmp = None if any_icmp_type else (service_icmp if service_icmp else None)
 
-            # Check internet-service
-            if _forti_set1(entry, "internet-service") == "enable" or sets.get("internet-service-name"):
+            # Check internet-service, both directions
+            if (_forti_set1(entry, "internet-service") == "enable"
+                    or sets.get("internet-service-name")
+                    or _forti_set1(entry, "internet-service-src") == "enable"
+                    or sets.get("internet-service-src-name")):
                 policy_unresolved.append(f"policy {pid} references ISDB internet-service which cannot be resolved offline")
+
+            # A negate flag inverts the match: the real policy covers the
+            # COMPLEMENT of the address or service set assembled above. That
+            # is not a narrower rule, it is a different one, so the policy is
+            # undecidable here rather than merely imprecise.
+            for neg_key in _NEGATE_KEYS:
+                if _forti_set1(entry, neg_key) == "enable":
+                    policy_unresolved.append(
+                        f"policy {pid} sets {neg_key}: the match is inverted and cannot be modelled")
+
+            # Conditions that restrict the policy and are not evaluated here.
+            policy_narrowing: List[str] = []
+            schedule = _forti_set1(entry, "schedule", "always")
+            if schedule and schedule != "always":
+                policy_narrowing.append(f"schedule {schedule}")
+            for narrow_key in _NARROWING_KEYS:
+                if sets.get(narrow_key):
+                    policy_narrowing.append(narrow_key)
+            if policy_narrowing:
+                policy_unresolved.append(
+                    f"policy {pid} condition not evaluated: " + ", ".join(policy_narrowing))
 
             field_set = FieldSet(
                 src_ips=src_cubes if src_cubes else [Cube.any()],
@@ -417,9 +488,11 @@ def parse_fortios_config(config_text: str) -> FortiOSPolicyEnvironment:
                 src_ports=None,
                 dst_ports=PortSet.from_list(pol_ports) if pol_ports is not None else None,
                 protos=pol_protos,
+                icmp_types=pol_icmp,
                 ingress_intfs=ingress_intfs,
                 egress_intfs=egress_intfs,
                 opaque=len(policy_unresolved) > 0,
+                narrowing_quals=tuple(policy_narrowing),
             )
 
             raw_txt = f"edit {pid}\n" + "\n".join(f"  set {k} {' '.join(v)}" for k, v in sets.items())

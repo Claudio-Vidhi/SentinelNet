@@ -20,7 +20,10 @@ BUILTIN_SERVICES: Dict[str, Dict[str, Any]] = {
     "all_tcp": {"protos": {6}, "dst_ports": [(1, 65535)]},
     "all_udp": {"protos": {17}, "dst_ports": [(1, 65535)]},
     "all_icmp": {"protos": {1}, "dst_ports": None},
-    "ping": {"protos": {1}, "dst_ports": None},
+    # The factory PING service is 'set protocol ICMP / set icmptype 8': echo
+    # request only. Left unrestricted it would appear to cover an echo-reply
+    # service it can never match.
+    "ping": {"protos": {1}, "dst_ports": None, "icmp_types": {8}},
     "http": {"protos": {6}, "dst_ports": [(80, 80)]},
     "https": {"protos": {6}, "dst_ports": [(443, 443)]},
     "ssh": {"protos": {6}, "dst_ports": [(22, 22)]},

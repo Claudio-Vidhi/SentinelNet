@@ -31,6 +31,7 @@ class FlowRequest(BaseModel):
     egress_intf: Optional[str] = None
     tcp_flags: Optional[str] = None
     established: bool = False
+    icmp_type: Optional[int] = Field(None, ge=0, le=255)
 
 
 def _load_device_backup(ip: str, current_user) -> Tuple[str, str]:
@@ -93,6 +94,7 @@ def policy_trace(ip: str, flow_req: FlowRequest, current_user = Depends(get_curr
         egress_intf=flow_req.egress_intf,
         tcp_flags=flow_req.tcp_flags,
         established=flow_req.established,
+        icmp_type=flow_req.icmp_type,
     )
 
     trace = evaluate(env, flow)
