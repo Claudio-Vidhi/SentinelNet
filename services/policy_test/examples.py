@@ -44,6 +44,9 @@ class RuleExample:
     matching_flow: Optional[Flow] = None
     near_miss_flow: Optional[Flow] = None
     near_miss_reason: str = ""
+    # True when every field of the rule is ANY. The example flow is then one
+    # arbitrary member of "all traffic" and must be presented as such.
+    matches_all: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +54,7 @@ class RuleExample:
             "rule_name": self.rule_name,
             "action": self.action,
             "raw_text": self.raw_text,
+            "matches_all": self.matches_all,
             "matching_flow": self.matching_flow.to_dict() if self.matching_flow else None,
             "near_miss_flow": self.near_miss_flow.to_dict() if self.near_miss_flow else None,
             "near_miss_reason": self.near_miss_reason,
@@ -289,7 +293,8 @@ def generate_rule_example(
         near_miss_reason = "Connection is not established (SYN packet without ACK/RST)"
 
     else:
-        # Rule matches ANY-ANY
+        # Rule matches ANY-ANY: no field is constrained, so there is nothing to
+        # move just outside and no near-miss exists.
         near_miss_flow = None
         near_miss_reason = "Rule matches all traffic (no near-miss)"
 
@@ -298,6 +303,11 @@ def generate_rule_example(
         rule_name=rule.name,
         action=rule.action,
         raw_text=rule.raw_text,
+        # Flagged, not left for the reader to infer from the prose. Every field
+        # of such a rule is ANY, so the generated flow is one arbitrary member
+        # of "everything" — shown bare it reads as a claim about HTTPS, which
+        # is exactly the wrong conclusion.
+        matches_all=fields.is_any_any(),
         matching_flow=matching_flow,
         near_miss_flow=near_miss_flow,
         near_miss_reason=near_miss_reason,
