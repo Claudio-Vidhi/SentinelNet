@@ -281,38 +281,51 @@
     function renderExamples(groups) {
         const container = document.getElementById('ptExamplesContainer');
         if (!container) return;
+        const L = i18n[currentLang];
 
         if (!groups || groups.length === 0) {
-            container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">Nessuna regola trovata nel backup di configurazione.</div>`;
+            container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">${escapeHtml(L.ptNoExamples)}</div>`;
             return;
         }
+
+        // Said once, up front: these flows are synthesised from the rules, not
+        // captured off the wire. Without it a reader can take a generated
+        // 5-tuple for observed traffic.
+        let html = `
+        <div style="display:flex; align-items:flex-start; gap:10px; padding:10px 14px; margin-bottom:18px; border:var(--seam) solid var(--border-strong); background:var(--surface-2); font-size:13px; line-height:1.5;">
+            <i class="fa-solid fa-flask" style="color:var(--text-soft); margin-top:2px;"></i>
+            <span>${escapeHtml(L.ptExamplesCaption)}</span>
+        </div>`;
 
         // Grouped per rule set. A device carries several ACLs whose sequence
         // numbers each restart at 10, so a flat list of "Regola 10" cards left
         // the reader no way to tell which ACL a rule belonged to.
-        let html = '';
         groups.forEach(group => {
             const bindings = group.bindings || [];
-            const boundLabel = bindings.length
-                ? bindings.map(b => `${escapeHtml(b.interface)} ${b.direction === 'in' ? 'in' : 'out'}`).join(', ')
-                : '';
             const examples = group.examples || [];
-            // The interface an ACL is bound to is the ingress the tracer needs;
-            // prefilling it from the binding saves the reader guessing.
+            // Where an ACL is applied is the context that makes every rule
+            // under it readable: "governs traffic entering Vlan10" is the
+            // difference between a list of ACEs and an understandable policy.
+            // It gets real size, not fine print.
+            const bindingRow = bindings.length
+                ? bindings.map(b => `
+                    <span style="display:inline-flex; align-items:center; gap:7px; margin-right:14px;">
+                        <span class="badge">${escapeHtml(b.direction === 'in' ? L.ptDirIn : L.ptDirOut)}</span>
+                        <code style="font-size:13px;">${escapeHtml(b.interface)}</code>
+                    </span>`).join('')
+                : `<span style="color:var(--warning);"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(L.ptAclNotApplied)}</span>`;
             const boundIngress = (bindings.find(b => b.direction === 'in') || {}).interface || '';
 
             html += `
-            <section style="margin-bottom:24px;">
-                <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:8px 0 10px; border-bottom:var(--seam) solid var(--border-strong); margin-bottom:14px;">
-                    <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
-                        <span style="font-family:var(--font-legend); font-size:15px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;">${escapeHtml(group.name)}</span>
-                        ${boundLabel
-                            ? `<span style="font-size:11px; color:var(--text-muted);">applicata su <code>${boundLabel}</code></span>`
-                            : `<span style="font-size:11px; color:var(--text-muted);">non applicata ad alcuna interfaccia</span>`}
+            <section style="margin-bottom:26px;">
+                <div style="padding:10px 0 12px; border-bottom:var(--seam) solid var(--border-strong); margin-bottom:14px;">
+                    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                        <span style="font-family:var(--font-legend); font-size:17px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase;">${escapeHtml(group.name)}</span>
+                        <span style="font-family:var(--font-legend); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-soft);">
+                            ${examples.length} ${escapeHtml(L.ptRulesWord)} &middot; ${escapeHtml(L.ptDefaultWord)} ${escapeHtml(group.default_action || 'deny')}
+                        </span>
                     </div>
-                    <span style="font-family:var(--font-legend); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-soft);">
-                        ${examples.length} regole &middot; default ${escapeHtml(group.default_action || 'deny')}
-                    </span>
+                    <div style="margin-top:7px; font-size:13px; color:var(--text);">${bindingRow}</div>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:16px;">`;
 
@@ -326,11 +339,11 @@
                     html += `
                     <div style="border:var(--seam) solid var(--warning); background:var(--lamp-warn-wash); padding:14px;">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                            <span style="font-weight:600; font-size:13px;">Regola ${escapeHtml(ex.rule_id)}</span>
-                            <span class="badge badge-warning">NON INTERPRETATA</span>
+                            <span style="font-weight:600; font-size:13px;">${escapeHtml(L.ptRuleWord)} ${escapeHtml(ex.rule_id)}</span>
+                            <span class="badge badge-warning">${escapeHtml(L.ptNotParsed)}</span>
                         </div>
                         ${ex.raw_text ? `<div style="font-family:var(--font-data); font-size:11px; background:var(--surface); padding:6px 8px; border:1px solid var(--border); margin-bottom:8px; word-break:break-all;">${escapeHtml(ex.raw_text)}</div>` : ''}
-                        <div style="font-size:11px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason || 'copertura ignota')}</div>
+                        <div style="font-size:11px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason || L.ptCoverageUnknown)}</div>
                     </div>`;
                     return;
                 }
@@ -340,29 +353,43 @@
                 const mfIngress = mf.ingress_intf || boundIngress;
                 const nmIngress = (nm && nm.ingress_intf) || boundIngress;
 
+                // A rule with every field ANY matches everything. Printing one
+                // arbitrary 5-tuple beside it reads as a claim about that
+                // traffic specifically, so the card leads with what the rule
+                // actually does and labels the flow as one illustration.
+                const catchAll = !!ex.matches_all;
+
                 html += `
                 <div style="border:1px solid var(--border); background:var(--surface-2); padding:14px; display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div>
-                                <span style="font-weight:600; font-size:13px;">Regola ${escapeHtml(ex.rule_id)}</span>
+                                <span style="font-weight:600; font-size:13px;">${escapeHtml(L.ptRuleWord)} ${escapeHtml(ex.rule_id)}</span>
                                 ${ex.rule_name ? `<span style="font-size:12px; color:var(--text-muted); margin-left:6px;">${escapeHtml(ex.rule_name)}</span>` : ''}
                             </div>
                             <span class="badge ${ex.action === 'permit' ? 'badge-success' : 'badge-danger'}">${escapeHtml((ex.action || '').toUpperCase())}</span>
                         </div>
                         ${ex.raw_text ? `<div style="font-family:var(--font-data); font-size:11px; background:var(--surface); padding:6px 8px; border:1px solid var(--border); margin-bottom:10px; word-break:break-all;">${escapeHtml(ex.raw_text)}</div>` : ''}
 
+                        ${catchAll ? `
+                        <div style="display:flex; align-items:flex-start; gap:8px; padding:8px 10px; margin-bottom:8px; background:var(--lamp-warn-wash); border-left:1px solid var(--warning); font-size:12px;">
+                            <i class="fa-solid fa-circle-exclamation" style="color:var(--warning); margin-top:2px;"></i>
+                            <span><strong>${escapeHtml(L.ptMatchesAll)}</strong></span>
+                        </div>` : ''}
+
                         <div style="font-size:12px; margin-bottom:6px;">
-                            <span class="badge badge-success" style="margin-right:4px;">MATCH</span>
+                            <span class="badge badge-success" style="margin-right:4px;">${escapeHtml(catchAll ? L.ptExampleWord : L.ptMatching)}</span>
                             <code>${escapeHtml(mf.src_ip)}</code> &rarr; <code>${escapeHtml(mf.dst_ip)}${escapeHtml(mfDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((mf.proto || 'tcp').toUpperCase())})</span>
+                            ${catchAll ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(L.ptArbitraryExample)}</div>` : ''}
                         </div>
 
                         ${nm ? `
                         <div style="font-size:12px; margin-bottom:6px;">
-                            <span class="badge badge-warning" style="margin-right:4px;">NEAR-MISS</span>
+                            <span class="badge badge-warning" style="margin-right:4px;">${escapeHtml(L.ptNearMiss)}</span>
                             <code>${escapeHtml(nm.src_ip)}</code> &rarr; <code>${escapeHtml(nm.dst_ip)}${escapeHtml(nmDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((nm.proto || 'tcp').toUpperCase())})</span>
-                            ${ex.near_miss_reason ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px; padding-left:2px;"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason)}</div>` : ''}
                         </div>` : ''}
+
+                        ${(!catchAll && ex.near_miss_reason) ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason)}</div>` : ''}
                     </div>
 
                     <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
@@ -375,7 +402,7 @@
                             data-ingress="${escapeHtml(mfIngress)}"
                             data-est="${mf.established ? '1' : '0'}"
                             style="width:auto; margin:0;">
-                            <i class="fa-solid fa-arrow-right-to-bracket"></i> Prova Match
+                            <i class="fa-solid fa-arrow-right-to-bracket"></i> ${escapeHtml(L.ptUseInTracer)}
                         </button>
                         ${nm ? `
                         <button class="btn btn-secondary btn-small" data-action="use-example"
@@ -387,7 +414,7 @@
                             data-ingress="${escapeHtml(nmIngress)}"
                             data-est="${nm.established ? '1' : '0'}"
                             style="width:auto; margin:0;">
-                            <i class="fa-solid fa-crosshairs"></i> Prova Near-Miss
+                            <i class="fa-solid fa-crosshairs"></i> ${escapeHtml(L.ptTryNearMiss)}
                         </button>` : ''}
                     </div>
                 </div>`;
