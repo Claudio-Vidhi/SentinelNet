@@ -3502,6 +3502,16 @@
                 <label data-i18n="ptDportLabel">Porta Dest.</label>
                 <input id="ptDport" type="number" placeholder="443" min="1" max="65535">
               </div>
+              <div class="form-group" id="ptIcmpTypeGroup" hidden>
+                <label data-i18n="ptIcmpTypeLabel">Tipo messaggio ICMP</label>
+                <select id="ptIcmpType">
+                  <option value="8" selected>echo request (8)</option>
+                  <option value="0">echo reply (0)</option>
+                  <option value="3">destination unreachable (3)</option>
+                  <option value="11">time exceeded (11)</option>
+                  <option value="" data-i18n="ptIcmpTypeAny">Non specificato</option>
+                </select>
+              </div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <div class="form-group">

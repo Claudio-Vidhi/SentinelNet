@@ -105,6 +105,7 @@ def evaluate_ios(env: IOSPolicyEnvironment, flow: Flow) -> Trace:
         egress_intf=flow.egress_intf,
         tcp_flags=flow.tcp_flags,
         established=flow.established,
+        icmp_type=flow.icmp_type,
     )
 
     # 2. Ingress ACL evaluation
@@ -383,6 +384,7 @@ def evaluate_fortios_chain(
         egress_intf=egress,
         tcp_flags=flow.tcp_flags,
         established=flow.established,
+        icmp_type=flow.icmp_type,
     )
 
     steps.append(Step(

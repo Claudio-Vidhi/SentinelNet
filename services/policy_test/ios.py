@@ -73,6 +73,126 @@ _PORT_NAMES: Dict[str, int] = {
 }
 
 
+# ICMP message names that pin a message TYPE and nothing finer.
+_ICMP_TYPE_NAMES: Dict[str, int] = {
+    "echo-reply": 0,
+    "unreachable": 3,
+    "source-quench": 4,
+    "redirect": 5,
+    "alternate-address": 6,
+    "echo": 8,
+    "router-advertisement": 9,
+    "router-solicitation": 10,
+    "time-exceeded": 11,
+    "parameter-problem": 12,
+    "timestamp-request": 13,
+    "timestamp-reply": 14,
+    "information-request": 15,
+    "information-reply": 16,
+    "mask-request": 17,
+    "mask-reply": 18,
+    "traceroute": 30,
+    "conversion-error": 31,
+    "mobile-redirect": 32,
+}
+
+# ICMP message names that pin a type AND a code. The type is modelled; the
+# code is not, so these are also recorded as narrowing — otherwise
+# 'host-unreachable' and 'port-unreachable' both collapse to type 3 and one
+# looks shadowed by the other, which is the same defect as echo/echo-reply.
+_ICMP_CODE_NAMES: Dict[str, int] = {
+    "net-unreachable": 3,
+    "host-unreachable": 3,
+    "protocol-unreachable": 3,
+    "port-unreachable": 3,
+    "packet-too-big": 3,
+    "source-route-failed": 3,
+    "network-unknown": 3,
+    "host-unknown": 3,
+    "host-isolated": 3,
+    "dod-net-prohibited": 3,
+    "dod-host-prohibited": 3,
+    "net-tos-unreachable": 3,
+    "host-tos-unreachable": 3,
+    "administratively-prohibited": 3,
+    "host-precedence-unreachable": 3,
+    "precedence-unreachable": 3,
+    "net-redirect": 5,
+    "host-redirect": 5,
+    "net-tos-redirect": 5,
+    "host-tos-redirect": 5,
+    "ttl-exceeded": 11,
+    "reassembly-timeout": 11,
+    "general-parameter-problem": 12,
+    "option-missing": 12,
+    "no-room-for-option": 12,
+}
+
+# TCP header bits usable as a trailing match condition.
+_TCP_FLAG_NAMES = {"ack", "fin", "psh", "rst", "syn", "urg",
+                   "match-all", "match-any"}
+
+# Trailing keywords that take a value and narrow the rule.
+_QUALIFIERS_WITH_VALUE = {"precedence", "tos", "dscp", "time-range", "option"}
+
+# Trailing keywords with no matching effect at all: safe to drop.
+_QUALIFIERS_IGNORED = {"log", "log-input"}
+
+
+def _consume_trailing_qualifiers(
+    toks: List[str], idx: int, proto_tok: str,
+) -> Tuple[bool, Optional[Set[int]], List[str]]:
+    """Classify everything after the address and port specs.
+
+    Returns (established, icmp_types, narrowing).
+
+    The old loop scanned this tail for the single word ``established`` and
+    threw the rest away. Every discarded keyword narrows the ACE on the
+    device, so discarding one silently WIDENS the rule here — and a widened
+    rule swallows its neighbours, which is how 'permit icmp <net> any echo'
+    came to be reported as shadowed by 'permit icmp <net> any echo-reply',
+    two rules that can never catch the same packet. A qualifier is now either
+    modelled, known to be inert, or recorded so the rule stops claiming
+    certainty it does not have.
+    """
+    established = False
+    icmp_types: Optional[Set[int]] = None
+    narrowing: List[str] = []
+    is_icmp = proto_tok in ("icmp", "1")
+
+    while idx < len(toks):
+        tok = toks[idx]
+        low = tok.lower()
+        idx += 1
+
+        if low == "established":
+            established = True
+        elif low in _QUALIFIERS_IGNORED:
+            pass
+        elif low in _QUALIFIERS_WITH_VALUE:
+            narrowing.append(low)
+            idx += 1  # the value belongs to the keyword
+        elif low == "fragments":
+            narrowing.append(low)
+        elif low in _TCP_FLAG_NAMES:
+            narrowing.append(low)
+        elif is_icmp and low in _ICMP_TYPE_NAMES:
+            icmp_types = {_ICMP_TYPE_NAMES[low]}
+        elif is_icmp and low in _ICMP_CODE_NAMES:
+            icmp_types = {_ICMP_CODE_NAMES[low]}
+            narrowing.append(low)
+        elif is_icmp and low.isdigit():
+            icmp_types = {int(low)}
+            # A second bare number is the ICMP code, which is not modelled.
+            if idx < len(toks) and toks[idx].isdigit():
+                narrowing.append("icmp code " + toks[idx])
+                idx += 1
+        else:
+            narrowing.append(low)
+
+    return established, icmp_types, narrowing
+
+
 def _parse_port_val(tok: str) -> Optional[int]:
     """Parse port token to int (handles '80', 'www', 'https', etc.)."""
     s = tok.strip().lower()
@@ -453,13 +573,13 @@ def parse_ace_line(
         # Destination port spec (optional)
         dst_ports, curr_idx = _consume_port_spec(toks, curr_idx, groups, unresolved)
 
-        # Check remaining tokens for 'established', 'log', etc.
-        established = False
-        while curr_idx < len(toks):
-            t_low = toks[curr_idx].lower()
-            if t_low == "established":
-                established = True
-            curr_idx += 1
+        # Trailing qualifiers: established, ICMP message type, log, and the
+        # ones this model cannot evaluate.
+        established, icmp_types, narrowing = _consume_trailing_qualifiers(
+            toks, curr_idx, proto_tok)
+        if narrowing:
+            unresolved.append(
+                "ACE qualifier not evaluated: " + ", ".join(narrowing))
 
         return Rule(
             id=rule_id or "ext",
@@ -471,6 +591,8 @@ def parse_ace_line(
                 dst_ports=dst_ports,
                 protos=protos,
                 established=established,
+                icmp_types=icmp_types,
+                narrowing_quals=tuple(narrowing),
             ),
             raw_text=raw_line,
             unresolved=unresolved,

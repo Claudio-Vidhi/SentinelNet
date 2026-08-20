@@ -144,6 +144,7 @@
         const sportRaw = (document.getElementById('ptSport')?.value || '').trim();
         const ingress = (document.getElementById('ptIngressIntf')?.value || '').trim() || null;
         const established = !!document.getElementById('ptEstablished')?.checked;
+        const icmpTypeRaw = (document.getElementById('ptIcmpType')?.value || '').trim();
 
         if (!srcIp || !dstIp) {
             alert('Inserisci IP Sorgente e IP Destinazione.');
@@ -163,6 +164,9 @@
             sport: sportRaw ? parseInt(sportRaw, 10) : null,
             ingress_intf: ingress,
             established: established,
+            // Only meaningful for ICMP, and only when the operator picked a
+            // message: left unset the engine cannot tell an echo from a reply.
+            icmp_type: (proto === 'icmp' && icmpTypeRaw) ? parseInt(icmpTypeRaw, 10) : null,
         };
 
         try {
@@ -438,14 +442,14 @@
 
                         <div style="font-size:12px; margin-bottom:6px;">
                             <span class="badge badge-success" style="margin-right:4px;">${escapeHtml(catchAll ? L.ptExampleWord : L.ptMatching)}</span>
-                            <code>${escapeHtml(mf.src_ip)}</code> &rarr; <code>${escapeHtml(mf.dst_ip)}${escapeHtml(mfDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((mf.proto || 'tcp').toUpperCase())})</span>
+                            <code>${escapeHtml(mf.src_ip)}</code> &rarr; <code>${escapeHtml(mf.dst_ip)}${escapeHtml(mfDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml(ptFlowProto(mf))})</span>
                             ${catchAll ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${escapeHtml(L.ptArbitraryExample)}</div>` : ''}
                         </div>
 
                         ${nm ? `
                         <div style="font-size:12px; margin-bottom:6px;">
                             <span class="badge badge-warning" style="margin-right:4px;">${escapeHtml(L.ptNearMiss)}</span>
-                            <code>${escapeHtml(nm.src_ip)}</code> &rarr; <code>${escapeHtml(nm.dst_ip)}${escapeHtml(nmDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml((nm.proto || 'tcp').toUpperCase())})</span>
+                            <code>${escapeHtml(nm.src_ip)}</code> &rarr; <code>${escapeHtml(nm.dst_ip)}${escapeHtml(nmDport)}</code> <span style="color:var(--text-muted);">(${escapeHtml(ptFlowProto(nm))})</span>
                         </div>` : ''}
 
                         ${(!catchAll && ex.near_miss_reason) ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;"><i class="fa-solid fa-circle-info"></i> ${escapeHtml(ex.near_miss_reason)}</div>` : ''}
@@ -460,6 +464,7 @@
                             data-sport="${escapeHtml(mf.sport || '')}"
                             data-ingress="${escapeHtml(mfIngress)}"
                             data-est="${mf.established ? '1' : '0'}"
+                            data-icmp="${mf.icmp_type === null || mf.icmp_type === undefined ? '' : mf.icmp_type}"
                             style="width:auto; margin:0;">
                             <i class="fa-solid fa-arrow-right-to-bracket"></i> ${escapeHtml(L.ptUseInTracer)}
                         </button>
@@ -472,6 +477,7 @@
                             data-sport="${escapeHtml(nm.sport || '')}"
                             data-ingress="${escapeHtml(nmIngress)}"
                             data-est="${nm.established ? '1' : '0'}"
+                            data-icmp="${nm.icmp_type === null || nm.icmp_type === undefined ? '' : nm.icmp_type}"
                             style="width:auto; margin:0;">
                             <i class="fa-solid fa-crosshairs"></i> ${escapeHtml(L.ptTryNearMiss)}
                         </button>` : ''}
@@ -485,7 +491,7 @@
         container.innerHTML = html;
     }
 
-    function usePolicyExample(src, dst, proto, dport, sport, ingress, est) {
+    function usePolicyExample(src, dst, proto, dport, sport, ingress, est, icmpType) {
         switchPolicySubtab('tracer');
         const srcEl = document.getElementById('ptSrcIp');
         const dstEl = document.getElementById('ptDstIp');
@@ -502,6 +508,13 @@
         if (sportEl) sportEl.value = sport || '';
         if (ingEl) ingEl.value = ingress || '';
         if (estEl) estEl.checked = (est === '1' || est === true);
+        // The message type travels with the example: handing an echo-reply
+        // packet to the tracer as a bare 'ICMP' would trace a different packet
+        // from the one the card showed.
+        const icmpEl = document.getElementById('ptIcmpType');
+        if (icmpEl) icmpEl.value = (icmpType === undefined || icmpType === null) ? '' : String(icmpType);
+        const icmpGrp = document.getElementById('ptIcmpTypeGroup');
+        if (icmpGrp) icmpGrp.hidden = (proto || 'tcp') !== 'icmp';
 
         runPolicyTrace();
     }
@@ -594,7 +607,7 @@
                     </div>
                     <div style="font-size:12px; margin-bottom:8px;">
                         <code>${escapeHtml(w.src_ip)}</code> &rarr; <code>${escapeHtml(w.dst_ip)}${w.dport ? escapeHtml(':' + w.dport) : ''}</code>
-                        <span style="color:var(--text-muted);">(${escapeHtml((w.proto || 'ip').toUpperCase())})</span>
+                        <span style="color:var(--text-muted);">(${escapeHtml(ptFlowProto(w))})</span>
                         <div style="font-size:11px; color:var(--text-muted); margin-top:3px;">${escapeHtml(L.ptProofExplain.replace('{rule}', p.rule_id || '').replace('{by}', f.expected_rule_id))}</div>
                     </div>
                     <button class="btn btn-secondary btn-small" data-action="prove-finding"
@@ -671,6 +684,22 @@
     // already past never runs, so every control below stayed dead and the
     // failure was silent. The sibling lazy modules (redundancy.js and the
     // rest) bind directly in their IIFE for exactly this reason.
+    // ICMP message names for flow labels. 'ICMP' alone hides the one field
+    // that decides whether an echo rule or a reply rule catches the packet.
+    const PT_ICMP_TYPE_NAMES = {
+        0: 'echo-reply', 3: 'unreachable', 5: 'redirect', 8: 'echo',
+        11: 'time-exceeded', 13: 'timestamp-request', 14: 'timestamp-reply',
+        17: 'mask-request', 18: 'mask-reply', 30: 'traceroute',
+    };
+
+    function ptFlowProto(flow) {
+        const proto = String(flow.proto || 'tcp').toUpperCase();
+        const t = flow.icmp_type;
+        if (t === null || t === undefined) return proto;
+        const name = PT_ICMP_TYPE_NAMES[t];
+        return name ? `${proto} ${name} (${t})` : `${proto} type ${t}`;
+    }
+
     function bindPolicyTestControls() {
         const tenantSel = document.getElementById('ptTenantSelect');
         if (tenantSel) {
@@ -684,6 +713,16 @@
                 populatePolicyDeviceSelect();
                 renderPolicySelectionState();
             });
+        }
+
+        const protoSel = document.getElementById('ptProto');
+        if (protoSel) {
+            const syncIcmpType = () => {
+                const grp = document.getElementById('ptIcmpTypeGroup');
+                if (grp) grp.hidden = protoSel.value !== 'icmp';
+            };
+            protoSel.addEventListener('change', syncIcmpType);
+            syncIcmpType();
         }
 
         const sel = document.getElementById('ptDeviceSelect');
@@ -732,7 +771,8 @@
                         btn.dataset.dport,
                         btn.dataset.sport,
                         btn.dataset.ingress,
-                        btn.dataset.est === '1'
+                        btn.dataset.est === '1',
+                        btn.dataset.icmp
                     );
                 }
             });

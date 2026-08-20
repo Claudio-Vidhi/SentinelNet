@@ -268,6 +268,9 @@ class Flow:
     egress_intf: Optional[str] = None
     tcp_flags: Optional[str] = None
     established: bool = False
+    # ICMP message type. An echo request (8) and an echo reply (0) are
+    # different packets, and an ACE naming one does not catch the other.
+    icmp_type: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -280,6 +283,7 @@ class Flow:
             "egress_intf": self.egress_intf,
             "tcp_flags": self.tcp_flags,
             "established": self.established,
+            "icmp_type": self.icmp_type,
         }
 
 
@@ -295,6 +299,14 @@ class FieldSet:
     egress_intfs: Optional[Set[str]] = None  # None = ANY
     established: bool = False
     opaque: bool = False  # True for unparseable rules that match nothing
+    icmp_types: Optional[Set[int]] = None  # None = ANY ICMP message type
+    # Qualifiers the ACE carries that this model does not evaluate — dscp,
+    # tos, precedence, fragments, time-range, TCP flag bits. Every one of them
+    # NARROWS the rule on the device, so a FieldSet carrying any of them is
+    # wider here than the real rule is. It may therefore never be used to
+    # claim it covers another rule: dropping 'echo-reply' off an ACE is what
+    # made an ICMP echo rule look shadowed by a reply rule it can never catch.
+    narrowing_quals: Tuple[str, ...] = ()
 
     def is_any_any(self) -> bool:
         """Check if rule matches any source, any destination, any service and any interface.
@@ -312,15 +324,22 @@ class FieldSet:
         dst_any = all(c.is_any() for c in self.dst_ips)
         sport_any = self.src_ports is None or self.src_ports.is_any()
         dport_any = self.dst_ports is None or self.dst_ports.is_any()
-        proto_any = self.protos is None
+        proto_any = self.protos is None and self.icmp_types is None
         intf_any = self.ingress_intfs is None and self.egress_intfs is None
         return (src_any and dst_any and sport_any and dport_any and proto_any
-                and intf_any and not self.established)
+                and intf_any and not self.established and not self.narrowing_quals)
 
     def contains(self, other: FieldSet) -> bool:
         """Superset containment test: returns True if self fully covers other."""
         # ponytail: single-rule superset check. Multi-rule subtraction requires BDD.
         if self.opaque or other.opaque:
+            return False
+
+        # A rule carrying a qualifier this model ignores is narrower on the
+        # device than it is here, so it cannot be trusted to cover anything.
+        # Only self's qualifiers matter: if OTHER is narrower than modelled,
+        # covering the modelled version still covers the real one.
+        if self.narrowing_quals:
             return False
 
         # Established: if self requires established, it cannot cover non-established other
@@ -332,6 +351,13 @@ class FieldSet:
             if other.protos is None:
                 return False
             if not other.protos.issubset(self.protos):
+                return False
+
+        # ICMP message types
+        if self.icmp_types is not None:
+            if other.icmp_types is None:
+                return False
+            if not other.icmp_types.issubset(self.icmp_types):
                 return False
 
         # Source IPs: every cube in other must be contained in at least one cube in self
@@ -386,6 +412,11 @@ class FieldSet:
         # Protocols
         if self.protos is not None and other.protos is not None:
             if not (self.protos & other.protos):
+                return False
+
+        # ICMP message types
+        if self.icmp_types is not None and other.icmp_types is not None:
+            if not (self.icmp_types & other.icmp_types):
                 return False
 
         # Source IPs: any cube in self must intersect any cube in other
@@ -460,6 +491,12 @@ class FieldSet:
         flow_pnum = proto_from_name(flow.proto)
         if self.protos is not None:
             if flow_pnum is not None and flow_pnum not in self.protos:
+                return False
+
+        # ICMP message type. Unset on the flow means the caller did not say
+        # which ICMP message this is, so the dimension cannot exclude it.
+        if self.icmp_types is not None and flow.icmp_type is not None:
+            if flow.icmp_type not in self.icmp_types:
                 return False
 
         # Source IP

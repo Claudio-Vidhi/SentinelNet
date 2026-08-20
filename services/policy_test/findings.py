@@ -27,9 +27,11 @@ def _witness_for(rule: Rule, bound_ingress: str = "") -> Optional[Dict[str, Any]
     Reuses the example generator rather than picking fields a second time: a
     witness IS a matching example, and two independent pickers would disagree
     on the first odd wildcard. A rule the parser could not read has unknown
-    coverage, so no packet can be claimed to exercise it.
+    coverage, so no packet can be claimed to exercise it — and neither can a
+    rule carrying a qualifier the model does not evaluate, since the packet we
+    would build might miss it on the dimension we cannot see.
     """
-    if rule.fields.opaque:
+    if rule.fields.opaque or rule.fields.narrowing_quals:
         return None
     from services.policy_test.examples import generate_rule_example
     example = generate_rule_example(rule)

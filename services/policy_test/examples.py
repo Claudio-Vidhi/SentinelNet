@@ -186,6 +186,11 @@ def generate_rule_example(
         else:
             sport = 52100
 
+    # 5b. Pick ICMP message type, when the rule names one
+    icmp_type: Optional[int] = None
+    if fields.icmp_types:
+        icmp_type = next(iter(fields.icmp_types))
+
     # 6. Ingress and Egress interfaces
     ingress_intf = next(iter(fields.ingress_intfs)) if fields.ingress_intfs else None
     egress_intf = next(iter(fields.egress_intfs)) if fields.egress_intfs else None
@@ -199,14 +204,35 @@ def generate_rule_example(
         ingress_intf=ingress_intf,
         egress_intf=egress_intf,
         established=fields.established,
+        icmp_type=icmp_type,
     )
 
     # 7. Generate Near-Miss Flow (single most discriminating mutation)
     near_miss_flow: Optional[Flow] = None
     near_miss_reason = ""
 
+    # Check 0: ICMP message type. For a rule that names one, the sharpest
+    # near miss is the same packet carrying a different message: an echo
+    # request is not caught by an echo-reply rule, however identical the
+    # addresses are.
+    if icmp_type is not None:
+        other_type = 0 if icmp_type == 8 else 8
+        near_miss_flow = Flow(
+            src_ip=src_ip,
+            dst_ip=dst_ip,
+            proto=proto_str,
+            sport=sport,
+            dport=dport,
+            ingress_intf=ingress_intf,
+            egress_intf=egress_intf,
+            established=fields.established,
+            icmp_type=other_type,
+        )
+        near_miss_reason = (
+            f"ICMP message type {other_type} instead of {icmp_type}")
+
     # Check 1: Destination Port constraint
-    if fields.dst_ports and fields.dst_ports.intervals and dport is not None:
+    elif fields.dst_ports and fields.dst_ports.intervals and dport is not None:
         # Mutate port to one just outside the allowed intervals
         intervals = fields.dst_ports.intervals
         mutated_port: Optional[int] = None
@@ -230,6 +256,7 @@ def generate_rule_example(
                 ingress_intf=ingress_intf,
                 egress_intf=egress_intf,
                 established=fields.established,
+                icmp_type=icmp_type,
             )
             near_miss_reason = f"Destination port {mutated_port} outside allowed ports"
 
@@ -245,6 +272,7 @@ def generate_rule_example(
             ingress_intf=ingress_intf,
             egress_intf=egress_intf,
             established=fields.established,
+            icmp_type=icmp_type,
         )
         near_miss_reason = f"Destination IP {outside_dst} outside target network"
 
@@ -260,6 +288,7 @@ def generate_rule_example(
             ingress_intf=ingress_intf,
             egress_intf=egress_intf,
             established=fields.established,
+            icmp_type=icmp_type,
         )
         near_miss_reason = f"Source IP {outside_src} outside allowed source network"
 
@@ -275,6 +304,7 @@ def generate_rule_example(
             ingress_intf=ingress_intf,
             egress_intf=egress_intf,
             established=fields.established,
+            icmp_type=icmp_type,
         )
         near_miss_reason = f"Protocol {mutated_proto} does not match allowed protocol ({proto_str})"
 
