@@ -21,6 +21,26 @@ from services.policy_test.model import (
 )
 
 
+def _witness_for(rule: Rule, bound_ingress: str = "") -> Optional[Dict[str, Any]]:
+    """A packet the rule was written to catch, or None if one cannot be built.
+
+    Reuses the example generator rather than picking fields a second time: a
+    witness IS a matching example, and two independent pickers would disagree
+    on the first odd wildcard. A rule the parser could not read has unknown
+    coverage, so no packet can be claimed to exercise it.
+    """
+    if rule.fields.opaque:
+        return None
+    from services.policy_test.examples import generate_rule_example
+    example = generate_rule_example(rule)
+    if example.matching_flow is None:
+        return None
+    flow = example.matching_flow.to_dict()
+    if bound_ingress and not flow.get("ingress_intf"):
+        flow["ingress_intf"] = bound_ingress
+    return flow
+
+
 def find_ruleset_defects(ruleset: RuleSet) -> List[Finding]:
     """Analyze a single RuleSet for shadowed, unreachable, any_any, and unresolved rules."""
     findings: List[Finding] = []
@@ -50,6 +70,8 @@ def find_ruleset_defects(ruleset: RuleSet) -> List[Finding]:
                 acl_name=ruleset.name,
                 params={"rule_id": rule.id, "blocked_by": covering_any_any.id, "acl": ruleset.name},
                 message_key="finding.unreachable",
+                witness=_witness_for(rule),
+                expected_rule_id=covering_any_any.id,
             ))
             continue  # Already unreachable, skip single-rule shadow check
 
@@ -81,6 +103,8 @@ def find_ruleset_defects(ruleset: RuleSet) -> List[Finding]:
                             "curr_action": rule.action,
                         },
                         message_key="finding.shadowed",
+                        witness=_witness_for(rule),
+                        expected_rule_id=prev.id,
                     ))
                     break  # Report only first covering rule
 

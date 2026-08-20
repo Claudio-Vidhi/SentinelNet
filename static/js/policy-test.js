@@ -7,6 +7,7 @@
     let ptSelectedIp = null;
     let ptExamplesCache = {};
     let ptFindingsCache = {};
+    let ptRenderedFindings = [];
 
     function loadPolicyTestTab() {
         populatePolicyTenantSelect();
@@ -529,6 +530,8 @@
     function renderFindings(findings) {
         const container = document.getElementById('ptFindingsContainer');
         if (!container) return;
+        const L = i18n[currentLang];
+        ptRenderedFindings = findings || [];
 
         if (!findings || findings.length === 0) {
             container.innerHTML = `
@@ -542,7 +545,7 @@
 
         let html = `<div style="display:flex; flex-direction:column; gap:12px;">`;
 
-        findings.forEach(f => {
+        findings.forEach((f, idx) => {
             // Severity carries a wash plus a 1px rule, per DESIGN.md "Schedules":
             // the state is the fill, not a slab of colour down the edge.
             let sevBadge = 'badge badge-warning';
@@ -579,6 +582,28 @@
                 desc = `La regola <strong>${escapeHtml(p.rule_id || '')}</strong> fa riferimento a oggetti indirizzo o servizio non definiti nel backup: <code>${escapeHtml((p.objects || []).join(', '))}</code>.`;
             }
 
+            // A finding asserts a rule cannot fire. The witness turns that into
+            // something the reader can check: a packet the rule was written to
+            // catch, traced live by the same engine the tracer uses. Without it
+            // the panel only says "trust me".
+            const w = f.witness;
+            const proofBlock = (w && f.expected_rule_id) ? `
+                <div style="margin-top:10px; padding-top:10px; border-top:var(--seam) solid var(--border);">
+                    <div style="font-family:var(--font-legend); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-soft); margin-bottom:6px;">
+                        ${escapeHtml(L.ptProofTitle)}
+                    </div>
+                    <div style="font-size:12px; margin-bottom:8px;">
+                        <code>${escapeHtml(w.src_ip)}</code> &rarr; <code>${escapeHtml(w.dst_ip)}${w.dport ? escapeHtml(':' + w.dport) : ''}</code>
+                        <span style="color:var(--text-muted);">(${escapeHtml((w.proto || 'ip').toUpperCase())})</span>
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:3px;">${escapeHtml(L.ptProofExplain.replace('{rule}', p.rule_id || '').replace('{by}', f.expected_rule_id))}</div>
+                    </div>
+                    <button class="btn btn-secondary btn-small" data-action="prove-finding"
+                        data-idx="${escapeHtml(String(idx))}" style="width:auto; margin:0;">
+                        <i class="fa-solid fa-vial"></i> ${escapeHtml(L.ptProofRun)}
+                    </button>
+                    <div id="ptProofResult${escapeHtml(String(idx))}" style="margin-top:8px;"></div>
+                </div>` : '';
+
             html += `
             <div style="border:1px solid var(--border); background:${washCol}; padding:14px 18px; border-left:1px solid ${borderCol};">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -586,11 +611,56 @@
                     <span class="${sevBadge}">${escapeHtml((f.severity || 'medium').toUpperCase())}</span>
                 </div>
                 <div style="font-size:13px; color:var(--text); line-height:1.5;">${desc}</div>
+                ${proofBlock}
             </div>`;
         });
 
         html += `</div>`;
         container.innerHTML = html;
+    }
+
+    /** Run a finding's witness packet and show whether the claim held.
+     *
+     *  The verdict comes from the same engine the tracer uses, so a green
+     *  result is a real second opinion and a red one is a genuine
+     *  disagreement between the detector and the evaluator - worth seeing,
+     *  not worth hiding.
+     */
+    async function proveFinding(idx) {
+        const f = ptRenderedFindings[idx];
+        const out = document.getElementById('ptProofResult' + idx);
+        if (!f || !out || !f.witness || !f.expected_rule_id) return;
+        const L = i18n[currentLang];
+
+        out.innerHTML = `<span style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(L.ptProofRunning)}</span>`;
+        try {
+            const res = await apiFetch(`/api/policy-test/${encodeURIComponent(ptSelectedIp)}/prove`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ witness: f.witness, expected_rule_id: f.expected_rule_id }),
+            });
+            if (!res || !res.ok) {
+                out.innerHTML = `<span style="font-size:12px; color:var(--danger);">${escapeHtml(L.ptProofError)}</span>`;
+                return;
+            }
+            const r = await res.json();
+            const ok = !!r.proven;
+            const col = ok ? 'var(--success)' : 'var(--warning)';
+            const wash = ok ? 'var(--lamp-up-wash)' : 'var(--lamp-warn-wash)';
+            const icon = ok ? 'fa-circle-check' : 'fa-circle-question';
+            const msg = ok
+                ? L.ptProofConfirmed.replace('{by}', r.actual_rule_id || '?')
+                : L.ptProofNotConfirmed
+                    .replace('{expected}', r.expected_rule_id || '?')
+                    .replace('{actual}', r.actual_rule_id || '-');
+            out.innerHTML = `
+                <div style="display:flex; align-items:flex-start; gap:8px; padding:8px 10px; background:${wash}; border:1px solid ${col}; font-size:12px;">
+                    <i class="fa-solid ${icon}" style="color:${col}; margin-top:2px;"></i>
+                    <span>${escapeHtml(msg)} <span style="color:var(--text-muted);">(${escapeHtml(L.ptProofVerdict)}: ${escapeHtml((r.trace && r.trace.verdict) || '-')})</span></span>
+                </div>`;
+        } catch (e) {
+            out.innerHTML = `<span style="font-size:12px; color:var(--danger);">${escapeHtml(L.ptProofError)}</span>`;
+        }
     }
 
     // Delegated event listener initialization.
@@ -624,6 +694,14 @@
                 if (renderPolicySelectionState()) return;
                 if (ptActiveSubtab === 'examples') loadPolicyExamples();
                 else if (ptActiveSubtab === 'findings') loadPolicyFindings();
+            });
+        }
+
+        const findingsBox = document.getElementById('ptFindingsContainer');
+        if (findingsBox) {
+            findingsBox.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-action="prove-finding"]');
+                if (btn) proveFinding(parseInt(btn.dataset.idx, 10));
             });
         }
 
