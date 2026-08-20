@@ -305,7 +305,7 @@ class RemoteSiteE2E(unittest.TestCase):
 
         # Test setup subcommand logic
         args_setup = type("Args", (), {
-            "central_url": "http://127.0.0.1:8765",
+            "central_url": "http://127.0.0.1:8000",
             "site_id": "vm-test-site",
             "token": "dummy-token-123",
             "interval": 10,
@@ -392,7 +392,7 @@ class RemoteSiteE2E(unittest.TestCase):
 
         # Test agent _execute_agent_rpc handler
         from services.site_agent import Agent
-        cfg = {"central_url": "http://127.0.0.1:8765", "site_id": site_id, "token": token, "syslog_enabled": False}
+        cfg = {"central_url": "http://127.0.0.1:8000", "site_id": site_id, "token": token, "syslog_enabled": False}
         agent_inst = Agent(cfg)
         rpc_out = agent_inst._execute_agent_rpc("_agent_self_update")
         self.assertIn("status", rpc_out)
@@ -422,7 +422,7 @@ class RemoteSiteE2E(unittest.TestCase):
         from services.site_agent import Agent
 
         site_obj, token = site_manager.create_site("Conformita Sede", "agent")
-        agent_inst = Agent({"central_url": "http://127.0.0.1:8765",
+        agent_inst = Agent({"central_url": "http://127.0.0.1:8000",
                             "site_id": site_obj["id"], "token": token,
                             "syslog_enabled": False})
 

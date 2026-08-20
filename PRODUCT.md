@@ -66,7 +66,7 @@ the cost of the others:
    with.
 
 Deployment: PyInstaller executable and Docker image, both built from the same
-tree; the app opens a browser at `localhost:8765`. First start is a setup wizard
+tree; the app opens a browser at `localhost:8000`. First start is a setup wizard
 that creates the local administrator. Devices are reached over SSH, vendor REST
 and SNMP from the management LAN; remote sites via site agents.
 

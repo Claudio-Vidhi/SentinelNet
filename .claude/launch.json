@@ -5,7 +5,7 @@
       "name": "sentinelnet",
       "runtimeExecutable": "uv",
       "runtimeArgs": ["run", "python", "app_server.py"],
-      "port": 8765
+      "port": 8000
     }
   ]
 }

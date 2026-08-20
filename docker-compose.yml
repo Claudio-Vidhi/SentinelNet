@@ -4,7 +4,7 @@ services:
     build: .
     container_name: sentinelnet
     ports:
-      - "8765:8765"
+      - "8000:8000"
     volumes:
       # Monta solo la cartella dei dati persistenti (db di autenticazione, credenziali degli apparati, chiavi crittografiche, backup)
       # Questo consente di distribuire ed eseguire l'applicazione come immagine standalone pre-compilata da Docker Hub
@@ -14,7 +14,7 @@ services:
       # Forza l'applicazione a salvare database, chiavi e backup all'interno della directory del volume condiviso
       - SENTINELNET_DATA_DIR=/app/data
       - SENTINELNET_HOST=0.0.0.0
-      - SENTINELNET_PORT=8765
+      - SENTINELNET_PORT=8000
       - SENTINELNET_NO_BROWSER=true
       # - SENTINELNET_MASTER_KEY=chiave_segreta_fernet_personalizzata
       # - SENTINELNET_JWT_SECRET=chiave_segreta_jwt_personalizzata

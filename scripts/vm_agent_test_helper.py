@@ -12,7 +12,7 @@ Caratteristiche:
 
 Uso:
   # Inizializza configurazione e inventario locale sulla VM:
-  python scripts/vm_agent_test_helper.py setup --central-url http://192.168.1.100:8765 \
+  python scripts/vm_agent_test_helper.py setup --central-url http://192.168.1.100:8000 \
                                                 --site-id vm-lab \
                                                 --token <TOKEN_MOSTRATO_SU_CENTRALE>
 
@@ -150,7 +150,7 @@ def main():
 
     # Subcommand: setup
     p_setup = subparsers.add_parser("setup", help="Crea agent.json e inizializza directory dati")
-    p_setup.add_argument("--central-url", required=True, help="URL base del centrale (es. http://192.168.1.100:8765)")
+    p_setup.add_argument("--central-url", required=True, help="URL base del centrale (es. http://192.168.1.100:8000)")
     p_setup.add_argument("--site-id", required=True, help="ID della sede (es. milano-vm)")
     p_setup.add_argument("--token", required=True, help="Token per-sede ottenuto dal centrale")
     p_setup.add_argument("--interval", type=int, default=15, help="Intervallo polling in secondi")

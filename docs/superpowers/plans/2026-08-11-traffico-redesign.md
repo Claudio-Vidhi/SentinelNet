@@ -266,7 +266,7 @@ assert.ok(!/window=7d/.test(src), 'finestra anomalie ancora cablata');
 >    viste — e il fallback EN nel markup lo avrebbe mostrato al caricamento
 >    prima di applyI18n().
 >
-> Istanza usa e getta su porta 8765 con `SENTINELNET_DATA_DIR` in una cartella
+> Istanza usa e getta su porta 8000 con `SENTINELNET_DATA_DIR` in una cartella
 > temporanea: il `data/` reale non e' stato toccato.
 
 The docs name element ids that this plan deletes. They go stale the moment Task 5 lands, so they are part of the work, not follow-up.

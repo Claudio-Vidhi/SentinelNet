@@ -9,7 +9,7 @@ SentinelNet's HTTP API. Authorization (roles, groups/tenant, command blacklist)
 remains entirely server-side.
 
 Configuration (environment variables):
-    SENTINELNET_URL        Base URL of the central server (default http://127.0.0.1:8765)
+    SENTINELNET_URL        Base URL of the central server (default http://127.0.0.1:8000)
     SENTINELNET_USERNAME   SentinelNet user for authentication
     SENTINELNET_PASSWORD   Password
     SENTINELNET_VERIFY_TLS "0" to skip certificate verification (default "1")
@@ -17,7 +17,7 @@ Configuration (environment variables):
 Example (Claude Desktop / claude_desktop_config.json):
     {"mcpServers": {"sentinelnet": {
         "command": "python", "args": ["/path/to/SentinelNet/mcp_server.py"],
-        "env": {"SENTINELNET_URL": "http://127.0.0.1:8765",
+        "env": {"SENTINELNET_URL": "http://127.0.0.1:8000",
                 "SENTINELNET_USERNAME": "admin",
                 "SENTINELNET_PASSWORD": "..."}}}}
 
@@ -37,7 +37,7 @@ PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "sentinelnet", "version": "1.0.0"}
 MAX_TEXT = 200_000   # conservative limit on text returned to an LLM client
 
-BASE_URL = os.environ.get("SENTINELNET_URL", "http://127.0.0.1:8765").rstrip("/")
+BASE_URL = os.environ.get("SENTINELNET_URL", "http://127.0.0.1:8000").rstrip("/")
 USERNAME = os.environ.get("SENTINELNET_USERNAME", "")
 PASSWORD = os.environ.get("SENTINELNET_PASSWORD", "")
 VERIFY_TLS = os.environ.get("SENTINELNET_VERIFY_TLS", "1") != "0"

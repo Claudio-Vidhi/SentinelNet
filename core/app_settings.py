@@ -34,7 +34,7 @@ def _app_adv_setting(key, default=None):
 
 
 def effective_port() -> int:
-    """Effective HTTP port: env SENTINELNET_PORT > app_settings 'app.port' > 8765."""
+    """Effective HTTP port: env SENTINELNET_PORT > app_settings 'app.port' > 8000."""
     try:
         return int(os.environ.get("SENTINELNET_PORT") or _app_adv_setting("port") or PORT)
     except (TypeError, ValueError):

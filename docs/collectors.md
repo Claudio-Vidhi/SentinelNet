@@ -21,7 +21,7 @@ No collector is enabled by default. Configuration and exposure:
 | FortiGate REST | outbound HTTPS | — | [ingesters/api_poller.py](../observability/ingesters/api_poller.py) | `api_observations` |
 | SNMP v2c | outbound UDP 161 | — | [ingesters/snmp_poller.py](../observability/ingesters/snmp_poller.py) | `api_observations` |
 | Linux health | outbound SSH | 22 | [ingesters/linux_poller.py](../observability/ingesters/linux_poller.py) | `api_observations` |
-| Site agent | inbound HTTPS | 8765 | [services/site_agent.py](../services/site_agent.py) | inventory, MAC, syslog |
+| Site agent | inbound HTTPS | 8000 | [services/site_agent.py](../services/site_agent.py) | inventory, MAC, syslog |
 | ARP / MAC tables | SSH · NETCONF · RESTCONF | — | [collectors/](../collectors/) | `mac_history.db`, `arp_entries` |
 
 The first four are **passive**: devices send, SentinelNet listens. The rest are
