@@ -134,5 +134,78 @@ class NetsecAuditKeepsDefectsOutOfTheScore(unittest.TestCase):
         self.assertEqual(result["policy_defects"], [])
 
 
+
+
+class FindingsCarryTheirOwnProof(unittest.TestCase):
+    """A finding must be checkable, not merely asserted.
+
+    Each containment finding ships a witness: a packet the reported rule was
+    written to catch. Tracing it has to land on the rule the finding blames,
+    which is the claim made testable by the same engine that answers the
+    tracer.
+    """
+
+    def _env(self):
+        from services.policy_test import ios
+        return ios.parse_ios_config(IOS_SHADOWED)
+
+    def test_shadowed_finding_ships_a_witness(self):
+        from services.policy_test import findings as pt
+        shadowed = [f for f in pt.analyze_policy_findings(self._env())
+                    if f.key == "shadowed"]
+        self.assertEqual(len(shadowed), 1)
+        self.assertIsNotNone(shadowed[0].witness)
+        self.assertEqual(shadowed[0].expected_rule_id, "10")
+
+    def test_the_witness_actually_matches_the_reported_rule(self):
+        """Otherwise it proves nothing about that rule."""
+        from services.policy_test import findings as pt
+        from services.policy_test.model import Flow
+        env = self._env()
+        finding = next(f for f in pt.analyze_policy_findings(env)
+                       if f.key == "shadowed")
+        rule = next(r for acl in env.acls.values() for r in acl.rules
+                    if r.id == finding.params["rule_id"])
+        assert finding.witness is not None
+        self.assertTrue(rule.fields.matches(Flow(**finding.witness)))
+
+    def test_tracing_the_witness_lands_on_the_blamed_rule(self):
+        from services.policy_test import engine, findings as pt
+        from services.policy_test.model import Flow
+        env = self._env()
+        finding = next(f for f in pt.analyze_policy_findings(env)
+                       if f.key == "shadowed")
+        assert finding.witness is not None
+        flow = dict(finding.witness)
+        flow["ingress_intf"] = flow.get("ingress_intf") or "Vlan10"
+        trace = engine.evaluate(env, Flow(**flow))
+        caught_by = next((s.rule_id for s in trace.steps
+                          if s.kind == "acl_in" and s.rule_id), None)
+        self.assertEqual(caught_by, finding.expected_rule_id)
+
+    def test_a_clean_acl_produces_no_finding_to_prove(self):
+        from services.policy_test import ios, findings as pt
+        env = ios.parse_ios_config(IOS_CLEAN)
+        self.assertEqual(
+            [f for f in pt.analyze_policy_findings(env) if f.key == "shadowed"],
+            [])
+
+    def test_unparseable_rule_gets_no_witness(self):
+        """Unknown coverage: no packet can be claimed to exercise it."""
+        from services.policy_test import ios, findings as pt
+        env = ios.parse_ios_config("""hostname switch-01
+ip access-list extended EDGE_IN
+ 10 permit object-group SVC object-group SRC any
+ 20 deny ip any any
+!
+interface Vlan10
+ ip address 192.0.2.1 255.255.255.0
+ ip access-group EDGE_IN in
+""")
+        for f in pt.analyze_policy_findings(env):
+            if f.key == "unresolved_object":
+                self.assertIsNone(f.witness)
+
+
 if __name__ == "__main__":
     unittest.main()

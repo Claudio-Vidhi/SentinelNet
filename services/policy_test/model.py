@@ -657,11 +657,20 @@ class Finding:
     acl_name: Optional[str] = None
     params: Dict[str, Any] = field(default_factory=dict)
     message_key: str = ""
+    # A packet that demonstrates the finding instead of asserting it. For a
+    # shadowed rule it is a flow the rule was written to catch; tracing it
+    # lands on the earlier rule, which is the whole claim made checkable.
+    # None where the defect is not about packet coverage.
+    witness: Optional[Dict[str, Any]] = None
+    # What tracing the witness must show for the finding to hold.
+    expected_rule_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "key": self.key,
             "severity": self.severity,
+            "witness": self.witness,
+            "expected_rule_id": self.expected_rule_id,
             "rule_id": self.rule_id,
             "acl_name": self.acl_name,
             "params": self.params,

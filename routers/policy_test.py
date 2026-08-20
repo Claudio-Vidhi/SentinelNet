@@ -179,3 +179,39 @@ def policy_findings(ip: str, current_user = Depends(get_current_user)):
     env = _parse_environment(content, config_type)
     findings = analyze_policy_findings(env)
     return [f.to_dict() for f in findings]
+
+
+class ProofRequest(BaseModel):
+    """A finding's witness packet plus the rule the finding says will catch it."""
+    witness: FlowRequest
+    expected_rule_id: str
+
+
+@router.post("/api/policy-test/{ip}/prove")
+def policy_prove(ip: str, req: ProofRequest, current_user = Depends(get_current_user)):
+    """Run a finding's witness packet and report whether the claim holds.
+
+    A finding asserts that a rule cannot fire. This turns the assertion into
+    something checkable: the witness is a packet that rule was written to
+    catch, so tracing it must land on the rule the finding blames instead.
+    The verdict is computed by the same engine that answers the tracer, not by
+    a second code path that could agree with the detector by construction.
+
+    ``proven`` false is a real answer, not an error: it means the detector and
+    the evaluator disagree about this configuration, and that is worth seeing.
+    """
+    content, config_type = _load_device_backup(ip, current_user)
+    env = _parse_environment(content, config_type)
+
+    flow = Flow(**req.witness.model_dump())
+    trace = evaluate(env, flow)
+
+    # The rule that actually caught the packet, from the ACL/policy step.
+    actual = next((s.rule_id for s in trace.steps
+                   if s.kind in ("acl_in", "acl_out", "policy") and s.rule_id), None)
+    return {
+        "proven": actual == req.expected_rule_id,
+        "expected_rule_id": req.expected_rule_id,
+        "actual_rule_id": actual,
+        "trace": trace.to_dict(),
+    }

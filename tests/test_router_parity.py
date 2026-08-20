@@ -171,7 +171,12 @@ class TestFullParity(unittest.TestCase):
                     "TracerouteGatewaySchema",
                     # Corpo di POST /api/scan-verify (rotta gia' in NEW_PREFIXES):
                     # IP selezionati + vendor + identita' con cui provare il login.
-                    "ScanVerifyRequest", "FlowRequest")
+                    "ScanVerifyRequest", "FlowRequest",
+                    # Corpo di POST /api/policy-test/{ip}/prove (rotta gia' in
+                    # ALLOWED_NEW_PREFIXES, come FlowRequest): il pacchetto
+                    # testimone di una segnalazione piu' la regola che secondo
+                    # la segnalazione lo intercetta.
+                    "ProofRequest")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
