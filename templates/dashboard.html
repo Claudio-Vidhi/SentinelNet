@@ -986,7 +986,11 @@
       <div class="panel">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
           <h3 style="margin:0; font-size:16px;" data-i18n="titleActiveRedundancyGroups"><i class="fa-solid fa-server"></i> Gruppi di Ridondanza Attivi</h3>
-          <div style="display:flex; gap:8px;">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <label for="haTenantFilter" style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em;" data-i18n="lblHaTenantFilter">Tenant</label>
+            <select id="haTenantFilter" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; outline:none;">
+              <option value="" data-i18n="optHaAllTenants">Tutti i tenant</option>
+            </select>
             <button class="btn btn-primary btn-small requires-admin" data-action="open-create-redundancy" style="width:auto;" data-i18n="btnNewHaGroup">
               <i class="fa-solid fa-plus"></i> Nuovo Gruppo HA
             </button>
@@ -3830,6 +3834,61 @@
         </div>
         <div id="bulkResultsList" style="max-height:280px; overflow-y:auto; border:1px solid var(--border); border-radius:0; background:var(--surface-2);"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Export CSV Inventario: filtri + scelta colonne -->
+  <div class="modal-overlay" id="deviceExportModal">
+    <div class="modal" style="width: 860px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleDeviceExport"><i class="fa-solid fa-file-csv" style="color: var(--primary);"></i> Esporta inventario CSV</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseDeviceExport"></i>
+      </div>
+
+      <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descDeviceExport">
+        Scegli quali apparati esportare e quali informazioni includere. Nessuna casella spuntata in un filtro significa «tutti».
+      </p>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
+        <div>
+          <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportFilters">Filtri</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px;">
+            <div>
+              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thGroup">Gruppo</div>
+              <div id="exportFilterGroups" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+            </div>
+            <div>
+              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportSites">Sede</div>
+              <div id="exportFilterSites" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+            </div>
+            <div>
+              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thVendor">Vendor</div>
+              <div id="exportFilterVendors" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+            </div>
+            <div>
+              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportRedundancy">Ridondanza</div>
+              <div id="exportFilterRedundancy" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportColumns">Colonne</label>
+            <button class="btn btn-secondary btn-small" id="btnExportColsToggle" style="width:auto; margin:0; font-size:11px; padding:3px 8px;" data-i18n="btnExportSelectAll">Tutte / nessuna</button>
+          </div>
+          <div id="exportColumnList" style="max-height:326px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px; margin-top:6px;"></div>
+        </div>
+      </div>
+
+      <p id="exportMemberHint" style="display:none; color:var(--warning); font-size:12px; margin:12px 0 0;" data-i18n="hintExportMembers">
+        Hai scelto colonne per singola unità (*): gli apparati in stack o in HA occuperanno una riga per unità fisica.
+      </p>
+
+      <button class="btn btn-primary" id="btnRunDeviceExport"
+              style="margin-top:16px; background:var(--cta); color:var(--cta-text);" data-i18n="btnRunDeviceExport">
+        <i class="fa-solid fa-download"></i> Scarica CSV
+      </button>
     </div>
   </div>
 

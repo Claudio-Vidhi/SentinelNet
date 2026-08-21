@@ -19,5 +19,10 @@ class FortinetDriver(BaseDriver):
             match = re.search(r'Model\s*name\s*:\s*(\S+)', output, re.IGNORECASE)
         return match.group(1).strip() if match else "Non Rilevato"
 
+    def get_serial(self) -> str:
+        output = self.connection.send_command("get system status")
+        match = re.search(r'Serial-Number\s*:\s*(\S+)', output, re.IGNORECASE)
+        return match.group(1).strip() if match else ""
+
     def get_backup_command(self) -> str:
         return "show full-configuration"

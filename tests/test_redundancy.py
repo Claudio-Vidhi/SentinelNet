@@ -1,5 +1,7 @@
 import json
 import pathlib
+import shutil
+import subprocess
 import unittest
 
 from redundancy.models import (
@@ -246,6 +248,40 @@ class TestRedundancyDiscovery(unittest.TestCase):
             gid = self.service.discover_fgcp(dev)
             group = self.service.get_group(gid)
             self.assertEqual(group["health"], "degraded")
+
+
+class TestRedundancyTabTenantView(unittest.TestCase):
+    """The HA tab splits its cards per tenant and filters them.
+
+    The rendering itself is grep-checkable, but the two ways this breaks are
+    not: the KPI tiles staying on the whole fleet while the list shows one
+    tenant, and the template's "all tenants" option being rebuilt away when
+    the select is repopulated. Both need the real module to run."""
+
+    _REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_cards_are_grouped_and_filtered_by_tenant(self):
+        harness = self._REPO_ROOT / "tests" / "js" / "test_redundancy_tenant_filter.mjs"
+        proc = subprocess.run([shutil.which("node"), str(harness)],
+                              capture_output=True, text=True, cwd=str(self._REPO_ROOT))
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+    def test_the_filter_control_exists_in_the_template(self):
+        # The module binds the select through a delegated listener: an id that
+        # does not exist in dashboard.html raises nothing and leaves the filter
+        # silently dead (see CLAUDE.md, Frontend).
+        with open(self._REPO_ROOT / "templates" / "dashboard.html",
+                  encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn('id="haTenantFilter"', html)
+        self.assertIn('data-i18n="optHaAllTenants"', html)
+
+    def test_the_filter_labels_exist_in_both_languages(self):
+        from tests.test_helpers_frontend import frontend_source
+        src = frontend_source()
+        self.assertEqual(src.count("lblHaTenantFilter:"), 2)
+        self.assertEqual(src.count("optHaAllTenants:"), 2)
 
 
 if __name__ == "__main__":

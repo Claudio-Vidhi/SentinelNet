@@ -281,6 +281,7 @@ def _fortigate_backup_and_triage(device):
 
     version = "Non Rilevata"
     fg_model = "FortiGate"
+    fg_serial = ""
     try:
         status = fortigate_service.get_system_status(device)
         data = status.get("data")
@@ -289,6 +290,7 @@ def _fortigate_backup_and_triage(device):
             results = data.get("results") if isinstance(data.get("results"), dict) else {}
             raw = data.get("version") or results.get("version")
             fg_model = data.get("platform") or results.get("platform") or results.get("model") or "FortiGate"
+            fg_serial = data.get("serial") or results.get("serial") or ""
         elif isinstance(data, str):
             m = re.search(r'^Version:\s*(.+)$', data, re.MULTILINE)
             if m:
@@ -296,12 +298,16 @@ def _fortigate_backup_and_triage(device):
             m_mod = re.search(r'Version:\s*([A-Za-z0-9\-_]+)\s+v', data)
             if m_mod:
                 fg_model = m_mod.group(1).strip()
+            m_sn = re.search(r'Serial-Number:\s*(\S+)', data, re.IGNORECASE)
+            if m_sn:
+                fg_serial = m_sn.group(1).strip()
         if raw:
             # "FortiGate-VM64 v7.4.12,build2902,..." / "v7.4.12" -> "7.4.12"
             version = extract_version(raw) or raw
     except Exception:
         pass
-    update_version_inventory(ip, vendor, version, "online", model=fg_model)
+    update_version_inventory(ip, vendor, version, "online", model=fg_model,
+                             serial=fg_serial)
 
     sys_name = extract_hostname_from_config(config_out) or f"{vendor}_{ip}"
     update_device_hostname(ip, sys_name)
@@ -369,9 +375,11 @@ def run_backup_and_triage(device):
 
             version    = driver.get_version()
             model      = driver.get_model() if hasattr(driver, "get_model") else "Non Rilevato"
+            serial     = driver.get_serial()
             backup_cmd = driver.get_backup_command()
 
-            update_version_inventory(ip, vendor, version, "online", model=model)
+            update_version_inventory(ip, vendor, version, "online", model=model,
+                                     serial=serial)
 
             raw_out = net_connect.send_command(backup_cmd)
             config_out = raw_out if isinstance(raw_out, str) else str(raw_out or "")

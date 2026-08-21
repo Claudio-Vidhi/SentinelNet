@@ -847,7 +847,8 @@ def get_detected_versions():
             return {}
     return {}
 
-def update_version_inventory(ip, vendor, version, status="online", model=None):
+def update_version_inventory(ip, vendor, version, status="online", model=None,
+                             serial=None):
     with _io_lock:
         data = get_detected_versions()
         entry = data.get(ip, {})
@@ -858,6 +859,10 @@ def update_version_inventory(ip, vendor, version, status="online", model=None):
             entry["model"] = model
         elif "model" not in entry:
             entry["model"] = "Non Rilevato"
+        # A failed triage must not erase the serial read by the previous one:
+        # the chassis is the same device, an unreachable one just says nothing.
+        if serial:
+            entry["serial"] = serial
         data[ip] = entry
         safe_json_write(VERSION_DATA_FILE, data)
 
