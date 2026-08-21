@@ -2,6 +2,20 @@
 // ===== High Availability & Redundancy Groups (HA) =====
 
 (function () {
+    // Every group carries the tenant that owns it, and the API already scopes
+    // the list to what the user may see. The full list is kept here so the
+    // tenant filter never has to hit the network again.
+    let allRedundancyGroups = [];
+
+    const tenantOf = (g) => g.group_name || 'default';
+
+    function healthBucket(g) {
+        const h = (g.health || '').toLowerCase();
+        if (h === 'healthy' || h === 'ok') return 'healthy';
+        if (h === 'degraded' || h === 'warning') return 'degraded';
+        return 'critical';
+    }
+
     async function loadRedundancyTab() {
         const container = document.getElementById('redundancyGroupsContainer');
         if (!container) return;
@@ -14,20 +28,47 @@
                 return;
             }
             const data = await res.json();
-            const groups = data.results || [];
-            renderRedundancyGroups(groups);
-            updateRedundancyKpis(groups);
+            allRedundancyGroups = data.results || [];
+            populateTenantFilter(allRedundancyGroups);
+            applyRedundancyFilter();
         } catch (e) {
             container.innerHTML = `<div class="alert-box alert-danger">${escapeHtml(e.message)}</div>`;
         }
     }
 
+    function populateTenantFilter(groups) {
+        const sel = document.getElementById('haTenantFilter');
+        if (!sel) return;
+        const previous = sel.value;
+        const tenants = Array.from(new Set(groups.map(tenantOf))).sort();
+        // Option 0 ("all tenants") lives in the template and carries its
+        // data-i18n: rebuilding it here would drop its translation.
+        sel.length = 1;
+        tenants.forEach(t => sel.add(new Option(t, t)));
+        // A refresh must not silently widen the view back to every tenant, but
+        // a tenant whose last group just disappeared has no option left.
+        sel.value = tenants.includes(previous) ? previous : '';
+    }
+
+    function applyRedundancyFilter() {
+        const sel = document.getElementById('haTenantFilter');
+        const tenant = sel ? sel.value : '';
+        const groups = tenant
+            ? allRedundancyGroups.filter(g => tenantOf(g) === tenant)
+            : allRedundancyGroups;
+        renderRedundancyGroups(groups, tenant);
+        // The KPIs describe what is on screen: leaving them on the whole fleet
+        // while the list shows one tenant is how a degraded cluster gets
+        // attributed to the wrong customer.
+        updateRedundancyKpis(groups);
+    }
+
     function updateRedundancyKpis(groups) {
         let healthy = 0, degraded = 0, critical = 0;
         groups.forEach(g => {
-            const h = (g.health || '').toLowerCase();
-            if (h === 'healthy' || h === 'ok') healthy++;
-            else if (h === 'degraded' || h === 'warning') degraded++;
+            const bucket = healthBucket(g);
+            if (bucket === 'healthy') healthy++;
+            else if (bucket === 'degraded') degraded++;
             else critical++;
         });
         const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -37,12 +78,22 @@
         setText('haKpiCritical', critical);
     }
 
-    function renderRedundancyGroups(groups) {
+    function renderRedundancyGroups(groups, activeTenant) {
         const container = document.getElementById('redundancyGroupsContainer');
         if (!container) return;
 
         if (groups.length === 0) {
-            container.innerHTML = `
+            // An empty tenant is not an empty install: offering "create your
+            // first group" to someone who just filtered would read as data loss.
+            container.innerHTML = activeTenant ? `
+                <div class="panel" style="text-align:center; padding:40px;">
+                    <i class="fa-solid fa-filter-circle-xmark" style="font-size:36px; color:var(--text-muted); margin-bottom:12px;"></i>
+                    <h3 style="margin-bottom:8px; font-size:16px;">Nessun gruppo di ridondanza per il tenant «${escapeHtml(activeTenant)}»</h3>
+                    <p style="color:var(--text-muted); font-size:13px; max-width:500px; margin:0 auto;">
+                        Scegli «Tutti i tenant» per vedere gli altri cluster.
+                    </p>
+                </div>
+            ` : `
                 <div class="panel" style="text-align:center; padding:40px;">
                     <i class="fa-solid fa-layer-group" style="font-size:36px; color:var(--text-muted); margin-bottom:12px;"></i>
                     <h3 style="margin-bottom:8px; font-size:16px;">Nessun gruppo di ridondanza registrato</h3>
@@ -58,10 +109,36 @@
             return;
         }
 
-        container.innerHTML = `
-            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:18px;">
-                ${groups.map(g => renderRedundancyCard(g)).join('')}
-            </div>
+        const byTenant = new Map();
+        groups.forEach(g => {
+            const t = tenantOf(g);
+            if (!byTenant.has(t)) byTenant.set(t, []);
+            byTenant.get(t).push(g);
+        });
+
+        container.innerHTML = Array.from(byTenant.keys()).sort()
+            .map(t => renderTenantSection(t, byTenant.get(t))).join('');
+    }
+
+    function renderTenantSection(tenant, groups) {
+        const unhealthy = groups.filter(g => healthBucket(g) !== 'healthy').length;
+        const alertChip = unhealthy ? `
+            <span class="chip" style="font-size:10px; color:var(--warning); border-color:var(--warning);">
+                <i class="fa-solid fa-triangle-exclamation" style="margin-right:4px;"></i>${unhealthy} da verificare
+            </span>` : '';
+
+        return `
+            <section style="margin-bottom:24px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding-bottom:6px; border-bottom:1px solid var(--border);">
+                    <i class="fa-solid fa-building" style="color:var(--text-muted); font-size:12px;"></i>
+                    <h4 style="margin:0; font-size:13px; text-transform:uppercase; letter-spacing:.06em;">${escapeHtml(tenant)}</h4>
+                    <span class="chip" style="font-size:10px;">${groups.length} cluster</span>
+                    ${alertChip}
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:18px;">
+                    ${groups.map(g => renderRedundancyCard(g)).join('')}
+                </div>
+            </section>
         `;
     }
 
@@ -279,6 +356,10 @@
         if (modalBackdrop && e.target === modalBackdrop) {
             closeCreateRedundancyModal();
         }
+    });
+
+    document.addEventListener('change', (e) => {
+        if (e.target && e.target.id === 'haTenantFilter') applyRedundancyFilter();
     });
 
     window.loadRedundancyTab = loadRedundancyTab;

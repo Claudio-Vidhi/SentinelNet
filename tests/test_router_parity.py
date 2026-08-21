@@ -55,7 +55,7 @@ class TestRouterParity(unittest.TestCase):
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
-    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-site", "/api/policy-test")
+    ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-site", "/api/policy-test", "/api/export/devices/columns")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -76,6 +76,13 @@ class TestRouterParity(unittest.TestCase):
         ("post", "/api/groups/rename"),
         ("post", "/api/groups/delete"),
         ("get", "/api/mac/locate"),
+        # Inventory export: optional query params (groups, sites, vendors,
+        # redundancy, columns) plus the column registry served alongside it.
+        # Purely additive -- omitting them all yields the historic six-column
+        # export -- but the operation's parameters change. Covered by
+        # test_export_customizable.TestColumnSelection
+        # .test_no_columns_asked_keeps_the_historic_export.
+        ("get", "/api/export/devices"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (
@@ -151,7 +158,8 @@ class TestFullParity(unittest.TestCase):
                     "/api/mac/port-control", "/api/wlc/{ip}/ap-summary", "/api/wlc/{ip}/client-summary", "/api/wlc/{ip}/client/{mac}", "/api/wlc/{ip}/rogue-aps", "/api/wlc/{ip}/status", "/api/wlc/{ip}/overview",
                     # La scansione non tenta piu' il login: l'autenticazione e'
                     # diventata un passo esplicito e opzionale, su un endpoint suo.
-                    "/api/scan-verify", "/api/version", "/api/policy-test")
+                    "/api/scan-verify", "/api/version", "/api/policy-test",
+                    "/api/export/devices/columns")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
@@ -221,6 +229,8 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/flow-siem/events"),
         ("get", "/api/flow-siem/histogram"),
         ("get", "/api/flow-siem/facets"),
+        # Inventory export: see TestRouterParity.ALLOWED_CHANGED_OPERATIONS.
+        ("get", "/api/export/devices"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (

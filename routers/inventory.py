@@ -137,33 +137,129 @@ def _csv_cell(value):
     return "'" + s if s[:1] in _CSV_FORMULA_LEADERS else s
 
 
+# Exportable columns. The key is the stable name the ?columns= query param
+# uses, the value is (CSV header, extractor). Every extractor takes the same
+# four arguments: inventory device, scan row, redundancy badge (None when
+# standalone) and physical member (empty when the row is not exploded per
+# member).
+_EXPORT_COLUMNS = {
+    "hostname":   ("Hostname",   lambda d, s, b, m: d.get("Hostname") or d["IP"]),
+    "ip":         ("IP",         lambda d, s, b, m: d["IP"]),
+    "vendor":     ("Vendor",     lambda d, s, b, m: d.get("Vendor", "")),
+    "model":      ("Model",      lambda d, s, b, m: d.get("Model") or s.get("model", "")),
+    "serial":     ("Serial",     lambda d, s, b, m: s.get("serial", "")),
+    "group":      ("Tenant",     lambda d, s, b, m: d.get("Group", "")),
+    "site":       ("Site",       lambda d, s, b, m: d.get("Site", "")),
+    "version":    ("Version",    lambda d, s, b, m: s.get("version", "Non Scansionato")),
+    "status":     ("Status",     lambda d, s, b, m: s.get("status", "unknown")),
+    "profile":    ("Profile",    lambda d, s, b, m: d.get("Profile", "")),
+    "ssh_port":   ("SSH Port",   lambda d, s, b, m: d.get("SSH Port", "")),
+    "transports": ("Transports", lambda d, s, b, m: d.get("Transports", "")),
+    "redundancy_type":   ("Redundancy",        lambda d, s, b, m: (b or {}).get("type", "standalone")),
+    "redundancy_role":   ("Redundancy Role",   lambda d, s, b, m: (b or {}).get("role", "")),
+    "redundancy_health": ("Redundancy Health", lambda d, s, b, m: (b or {}).get("health", "")),
+    "redundancy_name":   ("Redundancy Group",  lambda d, s, b, m: (b or {}).get("name", "")),
+    "member_count":      ("Members",           lambda d, s, b, m: (b or {}).get("member_count", "")),
+    "member_index":  ("Member #",      lambda d, s, b, m: m.get("index", "")),
+    "member_role":   ("Member Role",   lambda d, s, b, m: m.get("role", "")),
+    "member_serial": ("Member Serial", lambda d, s, b, m: m.get("serial", "")),
+    "member_model":  ("Member Model",  lambda d, s, b, m: m.get("model", "")),
+    "member_state":  ("Member State",  lambda d, s, b, m: m.get("state", "")),
+}
+
+# Asking for one of these columns means asking for one row per physical unit:
+# the serial of every switch in a stack, or of every HA node, does not fit in a
+# single row without being concatenated, and a concatenated serial cannot be
+# filtered or looked up in a spreadsheet.
+_MEMBER_COLUMNS = frozenset(
+    k for k in _EXPORT_COLUMNS if k.startswith("member_") and k != "member_count"
+)
+
+_DEFAULT_EXPORT_COLUMNS = ["hostname", "ip", "vendor", "group", "version", "status"]
+
+
+def _csv_filter(raw: str) -> Optional[set]:
+    """List-shaped query param: empty means no filter (None), non-empty means
+    the set of accepted values."""
+    values = {v.strip() for v in (raw or "").split(",") if v.strip()}
+    return values or None
+
+
+@router.get("/api/export/devices/columns")
+def export_devices_columns(current_user = Depends(get_current_user)):
+    """Available columns and defaults, so the UI does not duplicate the
+    registry and drift from it."""
+    return {
+        "columns": [
+            {"key": k, "header": h, "per_member": k in _MEMBER_COLUMNS}
+            for k, (h, _) in _EXPORT_COLUMNS.items()
+        ],
+        "default": _DEFAULT_EXPORT_COLUMNS,
+    }
+
+
 @router.get("/api/export/devices")
-def export_devices_csv(current_user = Depends(get_current_user)):
+def export_devices_csv(
+    groups: str = "",
+    sites: str = "",
+    vendors: str = "",
+    redundancy: str = "",
+    columns: str = "",
+    current_user = Depends(get_current_user),
+):
     import csv, io
+    from redundancy import service as redundancy_service
+
+    selected = [c.strip() for c in columns.split(",") if c.strip()] or _DEFAULT_EXPORT_COLUMNS
+    unknown = [c for c in selected if c not in _EXPORT_COLUMNS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Colonne sconosciute: {', '.join(unknown)}")
+
+    want_groups = _csv_filter(groups)
+    want_sites = _csv_filter(sites)
+    want_vendors = _csv_filter(vendors)
+    want_redundancy = _csv_filter(redundancy)
+
     scope = user_group_scope(current_user)
     devices = inventory_manager.get_all_devices()
     if scope is not None:
         devices = [d for d in devices if d.get('Group') in scope]
+    if want_groups is not None:
+        devices = [d for d in devices if d.get('Group', '') in want_groups]
+    if want_sites is not None:
+        devices = [d for d in devices if d.get('Site', '') in want_sites]
+    if want_vendors is not None:
+        devices = [d for d in devices if str(d.get('Vendor', '')).lower() in
+                   {v.lower() for v in want_vendors}]
+
     versions = inventory_manager.get_detected_versions()
+    explode = any(c in _MEMBER_COLUMNS for c in selected)
+
     output = io.StringIO()
-    writer = csv.DictWriter(
-        output,
-        fieldnames=["Hostname", "IP", "Vendor", "Group", "Version", "Status"],
-        extrasaction="ignore"
-    )
-    writer.writeheader()
+    writer = csv.writer(output)
+    writer.writerow([_EXPORT_COLUMNS[c][0] for c in selected])
     for d in devices:
         scan = versions.get(d["IP"], {})
-        writer.writerow({k: _csv_cell(v) for k, v in {
-            "Hostname": d.get("Hostname") or d.get("IP"),
-            "IP":       d["IP"],
-            "Vendor":   d.get("Vendor", ""),
-            "Group":    d.get("Group", ""),
-            "Version":  scan.get("version", "Non Scansionato"),
-            "Status":   scan.get("status", "unknown"),
-        }.items()})
+        badge = redundancy_service.device_redundancy_badge(d["IP"])
+        if want_redundancy is not None:
+            if ((badge or {}).get("type") or "standalone") not in want_redundancy:
+                continue
+        members = (badge or {}).get("members") or []
+        # With no members (standalone, or a group declared without units) the
+        # device still gets one row: the per-member columns come out empty
+        # instead of the device vanishing from the export.
+        rows = members if (explode and members) else [{}]
+        for member in rows:
+            writer.writerow([
+                _csv_cell(_EXPORT_COLUMNS[c][1](d, scan, badge, member))
+                for c in selected
+            ])
+
     content = output.getvalue()
-    log_audit(f"Export CSV dispositivi richiesto dall'utente '{current_user.get('sub')}'.")
+    log_audit(
+        f"Export CSV dispositivi richiesto dall'utente '{current_user.get('sub')}' "
+        f"(colonne: {','.join(selected)})."
+    )
     from fastapi.responses import Response as FastResponse
     return FastResponse(
         content=content,

@@ -1476,8 +1476,90 @@
         }
     }
 
+    // --- CUSTOMIZABLE CSV EXPORT ---
+
+    // Columns come from /api/export/devices/columns: the registry lives in the
+    // backend, so no second copy here that could drift away from it.
+    let exportColumns = [];
+    const EXPORT_PREFS_KEY = 'sentinelnet.exportPrefs';
+
+    function readExportPrefs() {
+        try { return JSON.parse(localStorage.getItem(EXPORT_PREFS_KEY)) || {}; }
+        catch (e) { return {}; }
+    }
+
+    function checkedValues(containerId) {
+        return Array.from(document.querySelectorAll(`#${containerId} input:checked`))
+            .map(el => el.value);
+    }
+
+    function renderCheckList(containerId, values, checked) {
+        const box = document.getElementById(containerId);
+        const want = new Set(checked || []);
+        box.innerHTML = values.map(v => `
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; padding:2px 0; cursor:pointer;">
+              <input type="checkbox" value="${escapeHtml(v.value)}" ${want.has(v.value) ? 'checked' : ''}
+                     style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
+              <span>${escapeHtml(v.label)}</span>
+            </label>`).join('');
+    }
+
+    function updateMemberHint() {
+        const perMember = new Set(exportColumns.filter(c => c.per_member).map(c => c.key));
+        const hit = checkedValues('exportColumnList').some(k => perMember.has(k));
+        document.getElementById('exportMemberHint').style.display = hit ? 'block' : 'none';
+    }
+
+    async function openDeviceExportModal() {
+        if (!exportColumns.length) {
+            const res = await apiFetch("/api/export/devices/columns");
+            if (!res || !res.ok) {
+                alert(i18n[currentLang].alertExportError);
+                return;
+            }
+            const data = await res.json();
+            exportColumns = data.columns;
+            const prefs = readExportPrefs();
+            if (!prefs.columns) prefs.columns = data.default;
+            localStorage.setItem(EXPORT_PREFS_KEY, JSON.stringify(prefs));
+        }
+        const prefs = readExportPrefs();
+        const uniq = (key) => Array.from(new Set(globalDevices.map(d => d[key]).filter(Boolean)))
+            .sort().map(v => ({ value: v, label: v }));
+
+        renderCheckList('exportFilterGroups', uniq('Group'), prefs.groups);
+        renderCheckList('exportFilterSites', uniq('Site'), prefs.sites);
+        renderCheckList('exportFilterVendors', uniq('Vendor'), prefs.vendors);
+        renderCheckList('exportFilterRedundancy', [
+            { value: 'standalone', label: 'standalone' },
+            { value: 'stack', label: 'stack' },
+            { value: 'ha_pair', label: 'ha_pair' },
+            { value: 'sso', label: 'sso' },
+        ], prefs.redundancy);
+        renderCheckList('exportColumnList',
+            exportColumns.map(c => ({ value: c.key, label: c.header + (c.per_member ? ' *' : '') })),
+            prefs.columns);
+        updateMemberHint();
+        document.getElementById('deviceExportModal').style.display = 'flex';
+    }
+
     async function exportDeviceCsv() {
-        const res = await apiFetch("/api/export/devices");
+        const prefs = {
+            groups: checkedValues('exportFilterGroups'),
+            sites: checkedValues('exportFilterSites'),
+            vendors: checkedValues('exportFilterVendors'),
+            redundancy: checkedValues('exportFilterRedundancy'),
+            columns: checkedValues('exportColumnList'),
+        };
+        if (!prefs.columns.length) {
+            alert(i18n[currentLang].alertExportNoColumns);
+            return;
+        }
+        localStorage.setItem(EXPORT_PREFS_KEY, JSON.stringify(prefs));
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(prefs)) if (v.length) qs.set(k, v.join(','));
+
+        const res = await apiFetch("/api/export/devices?" + qs.toString());
         if (!res || !res.ok) {
             alert(i18n[currentLang].alertExportError);
             return;
@@ -1489,6 +1571,7 @@
         a.download = "sentinelnet-devices-" + new Date().toISOString().slice(0,10) + ".csv";
         a.click();
         URL.revokeObjectURL(url);
+        document.getElementById('deviceExportModal').style.display = 'none';
     }
 
     // --- CSV UPLOAD ---
@@ -1962,7 +2045,20 @@
     document.getElementById('btnBulkCommand')?.addEventListener('click', () => {
         if (typeof openBulkCommandModal === 'function') openBulkCommandModal();
     });
-    document.getElementById('btnExportDevices')?.addEventListener('click', exportDeviceCsv);
+    document.getElementById('btnExportDevices')?.addEventListener('click', openDeviceExportModal);
+    document.getElementById('btnRunDeviceExport')?.addEventListener('click', exportDeviceCsv);
+    document.getElementById('exportColumnList')?.addEventListener('change', updateMemberHint);
+    document.getElementById('btnExportColsToggle')?.addEventListener('click', () => {
+        const boxes = Array.from(document.querySelectorAll('#exportColumnList input'));
+        const turnOn = boxes.some(b => !b.checked);
+        boxes.forEach(b => { b.checked = turnOn; });
+        updateMemberHint();
+    });
+    document.getElementById('deviceExportModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'deviceExportModal' || e.target.closest('#btnCloseDeviceExport')) {
+            document.getElementById('deviceExportModal').style.display = 'none';
+        }
+    });
     document.getElementById('btnCancelEditDevice')?.addEventListener('click', resetDeviceForm);
     document.getElementById('btnAddVendor')?.addEventListener('click', addVendor);
 
