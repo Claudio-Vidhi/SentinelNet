@@ -57,6 +57,10 @@
   `/api/observability/linux-health`, `/api/observability/status`, `/api/topology/map`,
   `/api/provisioner/generate-fortigate-config`.
   *(`POST /api/topology/reset` does exist — it is not the same route as `/api/topology/map`.)*
+- Removed in August 2026 and **no longer existing**: `POST /api/provisioner/fgt/push-ssh` and
+  `POST /api/provisioner/fgt/push-serial`. SentinelNet no longer delivers a FortiGate day-0 config
+  — `/api/provisioner/fgt/generate` and `/fgt/download` remain and the operator applies the text
+  itself. The Cisco `POST /api/provisioner/push-ssh` and `/push-serial` are untouched and still work.
 
 ---
 
@@ -156,7 +160,8 @@ customer values.
      analyzer output.
   3. Review the generated FortiOS CLI (`config system interface`, LAN→WAN `config firewall policy`,
      hardening) and check logging/admin-access lines.
-  4. Deliver via `.txt` download, SSH push, serial/console push, or FortiGate REST push (SSH fallback).
+  4. Download the `.txt` and apply it yourself — SentinelNet does not push a FortiGate config.
+     (SSH and serial/console push exist for the Cisco switch only.)
 
 - **UI Navigation & Operational Workflow**:
   - **Tabs**: `Config Analyzer` (`navAssess` → `#tab-config`), and — under the single nav item
@@ -176,17 +181,18 @@ customer values.
   - **Provisioning (`#tab-provisioner`)**: FortiGate day-0 fields (`#fgtMgmtIf`, `#fgtMgmtIp`,
     `#fgtWanIf`, `#fgtWanMode`, `#fgtLanIf`, DNS/NTP/Syslog/SNMPv3/AAA, hardening checkboxes) or Cisco
     switch fields (`#provHostname`, `#provRole`, VLAN/port fields) → `#btnProvGenerate`,
-    `#btnProvDownload`, delivery mode `#provDeliveryMode`.
+    `#btnProvDownload`. Delivery mode `#provDeliveryMode` and its SSH / serial panels are for the
+    Cisco switch; a FortiGate stops at generate + download. The console-login fields
+    `#fgtConsoleUser` / `#fgtConsolePass` no longer exist.
 
 - **App Features Present**:
   - `GET /api/config-analyzer` ([routers/analyzer.py:52](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py#L52)),
     `GET /api/config-analyzer/{ip}` (L57), `POST /api/config-analyzer/convert` (L75, FortiOS ↔ PAN-OS)
-  - `POST /api/provisioner/fgt/generate` (L227), `/fgt/download` (L236), `/fgt/push-ssh` (L251 — REST
-    first when a token is stored, SSH fallback), `/fgt/push-serial` (L288); Cisco equivalents
-    `/api/provisioner/generate` (L157), `/download` (L167), `/push-ssh` (L182), `/push-serial` (L205),
-    `GET /api/provisioner/serial-ports` (L222)
+  - `POST /api/provisioner/fgt/generate`, `/fgt/download` (generation only — there is no FortiGate
+    push route); Cisco `/api/provisioner/generate`, `/download`, `/push-ssh`, `/push-serial`,
+    `GET /api/provisioner/serial-ports`
     ([routers/provisioner.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/provisioner.py)).
-    The four push routes are admin-gated (`require_admin`); generate/download are `require_operator`.
+    The two push routes are admin-gated (`require_admin`); generate/download are `require_operator`.
   - Identity store for push credentials: `GET/POST /api/identities` (L316/L321),
     `PUT/DELETE /api/identities/{id}` (L331/L343), `POST /api/identities/{id}/assign` (L360).
     The same store backs the bastion login of a jump site (§7.2).
@@ -196,8 +202,8 @@ customer values.
 - **Missing Features / Gaps**:
   - **Policy-Object Provisioning Form**: no UI/API generating a single policy block from
     (src, dst, services, interfaces, action).
-  - **Transactional Push With Rollback**: push exists (SSH/serial/REST) but no commit verification or
-    auto-rollback on failure/connectivity loss.
+  - **Transactional Push With Rollback**: the Cisco push (SSH/serial) has no commit verification and
+    no auto-rollback on failure/connectivity loss.
   - *(Withdrawn 2026-08-22: "Shadow Policy Detector" — `services/policy_test/findings.py` detects
     shadowed, unreachable, any-any, unresolved-object and route-to-nowhere rules, and §10 traces a
     proposed flow against the backup before anyone writes a new rule. It is still not wired into the

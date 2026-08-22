@@ -14,7 +14,6 @@ from security.security_manager import log_audit
 from routers.deps import require_operator, require_admin
 from services import switch_provisioner
 from services import fortigate_provisioner
-from services import fortigate_service
 from security import provisioning_secrets
 from security import identity_manager
 
@@ -162,26 +161,12 @@ class FortiGateProvisionSchema(BaseModel):
             raise ValueError("admin_password e' obbligatoria per admin_user.")
         return self
 
-class FortiGateProvisionSSHSchema(FortiGateProvisionSchema):
-    ssh_host: str
-    ssh_port: int = 22
-    ssh_username: str
-    ssh_password: str
-    ssh_site: str = ""   # see SwitchProvisionSSHSchema.ssh_site
-
-class FortiGateProvisionSerialSchema(FortiGateProvisionSchema):
-    com_port: str
-    baudrate: int = 9600
-    console_user: str = "admin"
-    console_password: str = ""
-
 def _assert_day_zero(ip: str) -> None:
     """Refuse to run the day-0 wizard against a device already in inventory.
 
-    The generated config takes policy 1, static route 1 and DHCP server 1, and
-    rewrites the WAN address. A typo in the host field was enough to aim all of
-    that at a production firewall — and when a REST token exists for that IP the
-    push does not even need SSH credentials.
+    The generated config rewrites the management address, the VLAN database and
+    the port layout. A typo in the host field was enough to aim all of that at a
+    production switch.
     """
     from services import inventory_manager
     if ip and inventory_manager.get_device_by_ip(ip):
@@ -319,62 +304,6 @@ def fgt_provisioner_download(payload: FortiGateProvisionSchema, materialized: bo
         media_type="text/plain",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
-
-@router.post("/api/provisioner/fgt/push-ssh")
-def fgt_provisioner_push_ssh(payload: FortiGateProvisionSSHSchema, current_user = Depends(require_admin)):
-    """Genera la config FortiOS e la applica sul device: REST API prima (se un
-    token e' salvato per l'host, stesso pattern dell'osservabilità), con
-    fallback SSH (Netmiko 'fortinet'). 'method' nel risultato indica il canale
-    usato; 'api_error' spiega l'eventuale fallback."""
-    _assert_day_zero(payload.ssh_host)
-    config_text = fortigate_provisioner.build_config(payload.dict())
-    result = None
-    api_err = None
-    token, _, _ = fortigate_service.get_api_config(payload.ssh_host)
-    if token:
-        result = fortigate_provisioner.push_via_api(payload.ssh_host, config_text)
-        if result.get("status") == "success":
-            result["method"] = "api"
-        else:
-            api_err = result.get("message")
-            result = None
-    if result is None:
-        result = fortigate_provisioner.push_via_ssh(
-            host=payload.ssh_host,
-            username=payload.ssh_username,
-            password=payload.ssh_password,
-            config_text=config_text,
-            port=payload.ssh_port,
-            site=payload.ssh_site,
-        )
-        result["method"] = "ssh"
-        if api_err:
-            result["api_error"] = api_err
-    log_audit(
-        f"Push config FortiGate day-0 via {result.get('method')} su '{payload.ssh_host}' "
-        f"(hostname target: '{payload.hostname}') da '{current_user.get('sub')}': "
-        f"{result.get('status')}."
-    )
-    result["config"] = fortigate_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
-    return result
-
-@router.post("/api/provisioner/fgt/push-serial")
-def fgt_provisioner_push_serial(payload: FortiGateProvisionSerialSchema, current_user = Depends(require_admin)):
-    """Genera la config FortiOS e la applica via console/seriale (day-0)."""
-    config_text = fortigate_provisioner.build_config(payload.dict())
-    result = fortigate_provisioner.push_via_serial(
-        com_port=payload.com_port,
-        config_text=config_text,
-        baudrate=payload.baudrate,
-        username=payload.console_user,
-        password=payload.console_password,
-    )
-    log_audit(
-        f"Push seriale ({payload.com_port}) config FortiGate day-0 (hostname target: "
-        f"'{payload.hostname}') da '{current_user.get('sub')}': {result.get('status')}."
-    )
-    result["config"] = fortigate_provisioner.build_config(provisioning_secrets.mask_secrets(payload.dict()))
-    return result
 
 # ── Identita' tenant (profili credenziali riusabili) ────────────────────────
 from security import identity_manager

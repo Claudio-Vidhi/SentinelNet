@@ -50,8 +50,22 @@ class TestRouterParity(unittest.TestCase):
             cls.golden = json.load(f)
         cls.current = app_server.app.openapi()
 
+    # Percorsi rimossi DELIBERATAMENTE dal prodotto. Si elencano qui invece di
+    # rigenerare il golden: il golden e' la memoria di cosa esisteva, e
+    # riscriverlo per far passare un parity fallito cancellerebbe proprio la
+    # guardia che serve. Ogni voce va motivata.
+    #
+    # /api/provisioner/fgt/push-ssh, /api/provisioner/fgt/push-serial:
+    #   il push FortiGate (SSH, REST e console/seriale) e' stato rimosso ad
+    #   agosto 2026 — il modo di lavorare corrente non ne ha bisogno. Restano
+    #   generate/download; il push Cisco e' intatto.
+    ALLOWED_REMOVED_PATHS = ("/api/provisioner/fgt/push-ssh",
+                             "/api/provisioner/fgt/push-serial")
+
     def test_all_golden_paths_still_exist(self):
-        missing = [p for p in self.golden["paths"] if p not in self.current["paths"]]
+        missing = [p for p in self.golden["paths"]
+                   if p not in self.current["paths"]
+                   and p not in self.ALLOWED_REMOVED_PATHS]
         self.assertEqual(missing, [], f"endpoint spariti dal refactor: {missing}")
 
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
@@ -244,14 +258,16 @@ class TestFullParity(unittest.TestCase):
     # SiteSchema/SiteUpdateSchema: jump-host-sites Task 5 adds jump_host,
     # jump_port, jump_identity (all optional) so /api/sites can create and
     # update bastion-mode sites; no existing field removed or retyped.
-    # SwitchProvisionSSHSchema/FortiGateProvisionSSHSchema: jump-host-sites adds
-    # ssh_site (optional, defaults to ""), the site id of a day-0 target that is
-    # not in the inventory yet, so the push can be tunnelled through a bastion;
-    # no existing field removed or retyped.
+    # SwitchProvisionSSHSchema: jump-host-sites adds ssh_site (optional,
+    # defaults to ""), the site id of a day-0 target that is not in the
+    # inventory yet, so the push can be tunnelled through a bastion; no
+    # existing field removed or retyped.
+    # FortiGateProvisionSchema: admin_user/admin_password became mandatory
+    # (validator, not a field change) when the day-0 defaults were removed.
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema",
                                "SubnetScanRequest", "AiGenerateConfigSchema",
                                "SiteSchema", "SiteUpdateSchema",
-                               "SwitchProvisionSSHSchema", "FortiGateProvisionSSHSchema")
+                               "SwitchProvisionSSHSchema", "FortiGateProvisionSchema")
 
     @classmethod
     def setUpClass(cls):
@@ -259,8 +275,15 @@ class TestFullParity(unittest.TestCase):
             cls.snap = json.load(f)
         cls.current = app_server.app.openapi()
 
+    # Vedi TestRouterParity.ALLOWED_REMOVED_PATHS/_SCHEMAS: rimozioni volute,
+    # non regressioni del destructuring.
+    REMOVED_PATHS = TestRouterParity.ALLOWED_REMOVED_PATHS
+    REMOVED_SCHEMAS = ("FortiGateProvisionSSHSchema", "FortiGateProvisionSerialSchema")
+
     def test_path_set_identical(self):
-        snap_paths = [p for p in self.snap["paths"] if not p.startswith(self.NEW_PREFIXES)]
+        snap_paths = [p for p in self.snap["paths"]
+                      if not p.startswith(self.NEW_PREFIXES)
+                      and p not in self.REMOVED_PATHS]
         cur_paths = [p for p in self.current["paths"] if not p.startswith(self.NEW_PREFIXES)]
         self.assertEqual(sorted(snap_paths), sorted(cur_paths),
                          "l'insieme dei percorsi è cambiato")
@@ -282,7 +305,8 @@ class TestFullParity(unittest.TestCase):
                 )
 
     def test_every_schema_identical(self):
-        snap_schemas = {k: v for k, v in self.snap.get("components", {}).get("schemas", {}).items() if k not in self.NEW_SCHEMAS}
+        snap_schemas = {k: v for k, v in self.snap.get("components", {}).get("schemas", {}).items()
+                        if k not in self.NEW_SCHEMAS and k not in self.REMOVED_SCHEMAS}
         cur_schemas = {k: v for k, v in self.current.get("components", {}).get("schemas", {}).items() if k not in self.NEW_SCHEMAS}
         self.assertEqual(sorted(snap_schemas), sorted(cur_schemas),
                          "l'insieme degli schemi componenti è cambiato")

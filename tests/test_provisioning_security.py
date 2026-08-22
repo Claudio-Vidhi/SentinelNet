@@ -17,6 +17,9 @@ from pydantic import ValidationError
 from routers import provisioner as prov_router
 from services import fortigate_provisioner, switch_provisioner
 
+FGT_CFG = {"hostname": "fw-01", "admin_user": "netadmin",
+           "admin_password": "S3cret-Passphrase"}
+
 
 def _switch_cfg(**over):
     cfg = {
@@ -36,10 +39,19 @@ class NoKnownDefaultCredentialEverReachesADevice(unittest.TestCase):
     field was left empty, so an operator who skipped a box shipped a published
     password to the hardware."""
 
-    def test_the_literal_defaults_are_gone_from_the_generator(self):
-        source = open(switch_provisioner.__file__, encoding="utf-8").read()
-        for literal in ('"changeme"', '"authpass123"', '"privpass123"'):
-            self.assertNotIn(literal, source)
+    def test_the_literal_defaults_are_gone_from_the_generators(self):
+        """Comments are allowed to name the old defaults — that is how the next
+        reader learns why the fallback is not coming back. Code is not."""
+        for module in (switch_provisioner, fortigate_provisioner):
+            with open(module.__file__, encoding="utf-8") as fh:
+                code = "\n".join(line.split("#")[0] for line in fh)
+            for literal in ("changeme", "authpass123", "privpass123"):
+                self.assertNotIn(literal, code, module.__name__)
+
+    def test_fortigate_emits_no_admin_block_without_a_password(self):
+        text = fortigate_provisioner.build_config(dict(FGT_CFG, admin_password=""))
+        self.assertNotIn("changeme", text)
+        self.assertNotIn("config system admin", text)
 
     def test_no_username_line_without_a_password(self):
         text = switch_provisioner.build_config(
@@ -107,11 +119,6 @@ class APushNeverReportsSuccessOnARejectedConfig(unittest.TestCase):
         self.assertEqual("success", res["status"])
         self.assertEqual([], res["rejected"])
 
-    def test_fortios_rejection_is_reported_as_partial(self):
-        res = fortigate_provisioner._push_result(
-            "set hostname fw-01\nCommand fail. Return code -3\n")
-        self.assertEqual("partial", res["status"])
-
 
 class ThePushTranscriptCarriesNoCleartextSecret(unittest.TestCase):
     """The session echoes back every command, so the transcript held every
@@ -127,17 +134,11 @@ class ThePushTranscriptCarriesNoCleartextSecret(unittest.TestCase):
         for secret in ("Sup3r-Enable", "S3cret-Passphrase", "AuthPhrase", "PrivPhrase"):
             self.assertNotIn(secret, out)
 
-    def test_fortios_secrets_are_redacted(self):
-        out = fortigate_provisioner._push_result(
-            'set password "FgtAdminPass"\nset psksecret "TunnelKey"\n')["output"]
-        self.assertNotIn("FgtAdminPass", out)
-        self.assertNotIn("TunnelKey", out)
-
 
 class TheWizardRefusesAnAlreadyManagedDevice(unittest.TestCase):
-    """The generated config takes policy 1, static route 1 and DHCP server 1
-    and rewrites the WAN address: a typo in the host field aimed all of that
-    at a production firewall."""
+    """The generated config rewrites the management address, the VLAN database
+    and the port layout: a typo in the host field aimed all of that at a
+    production switch."""
 
     def test_a_device_in_inventory_is_refused(self):
         from fastapi import HTTPException
@@ -171,25 +172,6 @@ class APlaceholderConfigSaysSoAboutItself(unittest.TestCase):
         text = prov_router._with_placeholder_warning(
             'set password "{{VAULT:admin_password}}"\n', "fortigate")
         self.assertTrue(text.startswith("#"))
-
-
-class AForcedPasswordChangeAbortsTheSerialPush(unittest.TestCase):
-    """A factory FortiGate demands a new password at first console login.
-    Typing the config into that prompt sets the first line as the password and
-    leaves the unit with a credential nobody knows."""
-
-    def test_the_prompt_is_detected_and_the_push_refuses(self):
-        fake_serial = mock.MagicMock()
-        fake_serial.__enter__.return_value = fake_serial
-        fake_serial.in_waiting = 0
-        fake_serial.read.return_value = b"You must change your password now\r\n"
-        serial_mod = mock.MagicMock()
-        serial_mod.Serial.return_value = fake_serial
-        with mock.patch.dict("sys.modules", {"serial": serial_mod}):
-            res = fortigate_provisioner.push_via_serial(
-                "COM9", "config system global\nend\n")
-        self.assertEqual("error", res["status"])
-        self.assertIn("cambio password", res["message"])
 
 
 if __name__ == "__main__":

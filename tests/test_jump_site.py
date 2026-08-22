@@ -909,30 +909,6 @@ class ProvisioningNamesTheSiteExplicitly(unittest.TestCase):
         jc.assert_not_called()
         self.assertNotIn("sock", nm.call_args.kwargs)
 
-    def test_fortigate_push_tunnels_when_the_site_is_named(self):
-        from services import fortigate_provisioner
-        chan = object()
-        with mock.patch("core.net_ssh.jump_channel", return_value=chan) as jc, \
-             mock.patch("core.net_ssh._netmiko_connect") as nm, \
-             mock.patch("services.inventory_manager.get_device_by_ip", return_value=None), \
-             mock.patch("services.site_manager.get_site", return_value=self.JUMP_SITE):
-            fortigate_provisioner.push_via_ssh(
-                host="192.0.2.22", username="u", password="p",
-                config_text="config system global", site="customer-a")
-        jc.assert_called_once_with(self.JUMP_SITE, "192.0.2.22", 22)
-        self.assertIs(nm.call_args.kwargs["sock"], chan)
-
-    def test_fortigate_push_without_a_site_is_untouched(self):
-        from services import fortigate_provisioner
-        with mock.patch("core.net_ssh.jump_channel") as jc, \
-             mock.patch("core.net_ssh._netmiko_connect") as nm, \
-             mock.patch("services.inventory_manager.get_device_by_ip", return_value=None):
-            fortigate_provisioner.push_via_ssh(
-                host="192.0.2.23", username="u", password="p",
-                config_text="config system global")
-        jc.assert_not_called()
-        self.assertNotIn("sock", nm.call_args.kwargs)
-
     def test_a_named_site_that_is_not_jump_mode_is_not_tunnelled(self):
         from services import switch_provisioner
         with mock.patch("core.net_ssh.jump_channel") as jc, \
