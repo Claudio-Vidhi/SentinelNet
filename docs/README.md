@@ -46,6 +46,7 @@ for user-facing strings, logs and comments, English for identifiers — see
 | Document | Contents |
 |---|---|
 | [operations.md](operations.md) | Runbook: paths, logs, metrics, retention, symptoms and causes, backup |
+| [provisioning-tutorial.md](provisioning-tutorial.md) | Day-0 walkthrough: generate a switch/FortiGate config, push it via SSH or console, and what to do when it fails |
 | [hardening.md](hardening.md) | TLS, reverse proxy, session cookie, listener exposure |
 
 ### Building

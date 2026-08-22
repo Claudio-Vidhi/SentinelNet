@@ -9,7 +9,10 @@ config come testo FortiOS a partire da un dict di parametri.
 """
 
 import json
+import re
 import time
+
+from security import redaction
 
 
 def _q(s):
@@ -349,6 +352,34 @@ def build_config(cfg: dict) -> str:
 # CONSEGNA: REST API (token), SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
 # ---------------------------------------------------------------------------
 
+# Prompt shown by a factory unit at first console login, in the wordings
+# FortiOS uses across versions.
+_PASSWORD_PROMPT = re.compile(
+    r"change\s+your\s+password|new\s+password|password\s+must\s+be\s+changed",
+    re.IGNORECASE)
+
+# FortiOS answers a rejected command on the session and carries on, so the
+# transport succeeding says nothing about the config having applied.
+_CLI_ERRORS = ("Command fail", "command parse error", "Unknown action",
+               "entry not found", "value parse error", "invalid ")
+
+
+def _push_result(output: str) -> dict:
+    """Turn a raw session transcript into a push result.
+
+    The transcript echoes back every command, including the 'set password'
+    lines just typed, so it is redacted here — the single point every caller
+    goes through.
+    """
+    rejected = [ln.strip() for ln in output.splitlines()
+                if any(err in ln for err in _CLI_ERRORS)]
+    return {
+        "status": "partial" if rejected else "success",
+        "output": redaction.redact(output),
+        "rejected": redaction.redact(rejected),
+    }
+
+
 def push_via_api(ip: str, config_text: str, filename: str = "sentinelnet-day0") -> dict:
     """Applica la config FortiOS via REST API usando il token salvato
     (fortigate_service): POST /api/v2/monitor/system/config-script/upload
@@ -397,7 +428,7 @@ def push_via_ssh(host: str, username: str, password: str, config_text: str,
         with ConnectHandler(site_id=site or None, **device_params) as conn:
             output = conn.send_config_set(commands, exit_config_mode=False,
                                           cmd_verify=False)
-            return {"status": "success", "output": output}
+            return _push_result(output)
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -429,10 +460,28 @@ def push_via_serial(com_port: str, config_text: str, baudrate: int = 9600,
             send("", 0.6)
             send(username or "admin", 0.6)
             send(password or "", 0.8)
+
+            # A factory unit forces a password change at first console login.
+            # Typing the config into that prompt sets the first line as the new
+            # password and the second as its confirmation: the unit ends up with
+            # an admin password nobody knows, and the day-0 config unapplied.
+            # Refuse instead, and say what to do.
+            if _PASSWORD_PROMPT.search("".join(log[-2:])):
+                return {
+                    "status": "error",
+                    "message": (
+                        "Il FortiGate chiede il cambio password obbligatorio al "
+                        "primo accesso console. Impostare la password dalla "
+                        "console, poi rilanciare il push indicandola nel campo "
+                        "'Login console (password)'."
+                    ),
+                    "output": redaction.redact("".join(log)),
+                }
+
             for cmd in commands:
                 send(cmd, 0.4)
 
-        return {"status": "success", "output": "".join(log)}
+        return _push_result("".join(log))
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

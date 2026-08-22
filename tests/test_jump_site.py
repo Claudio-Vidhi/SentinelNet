@@ -183,6 +183,7 @@ class JumpTransportLocking(unittest.TestCase):
         with mock.patch.object(net_ssh.socket, "create_connection",
                                 side_effect=fake_create_connection), \
              mock.patch.object(net_ssh.paramiko, "Transport", return_value=mock.Mock()), \
+             mock.patch.object(net_ssh, "_pin_host_key"), \
              mock.patch("security.identity_manager.get_identity_credentials",
                         return_value=("u", "p", "s")):
             t = threading.Thread(target=net_ssh._transport, args=(site_a,))
@@ -233,6 +234,60 @@ class JumpTransportLocking(unittest.TestCase):
         # paramiko doesn't do it for us once we hand it an already-open sock.
         fake_sock.close.assert_called_once()
         self.assertNotIn("lock-test-fail", net_ssh._transports)
+
+
+class BastionHostKeyIsPinned(unittest.TestCase):
+    """A bastion carries every device behind it: an unverified hop there is a
+    MITM on the whole site, silently."""
+
+    def _site(self, sid):
+        return {"id": sid, "jump_host": "198.51.100.50", "jump_port": 22,
+                "jump_identity": "id-hk"}
+
+    def _dial(self, net_ssh, site, server_key):
+        fake_transport = mock.Mock()
+        fake_transport.get_remote_server_key.return_value = server_key
+        with mock.patch.object(net_ssh.socket, "create_connection",
+                               return_value=mock.Mock()),              mock.patch.object(net_ssh.paramiko, "Transport",
+                               return_value=fake_transport),              mock.patch("security.identity_manager.get_identity_credentials",
+                        return_value=("u", "p", "s")):
+            net_ssh._dial(site)
+        return fake_transport
+
+    def test_first_contact_pins_then_later_dials_verify(self):
+        from core import net_ssh
+        key = paramiko.ECDSAKey.generate()
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "ssh_known_hosts")
+            with mock.patch("core.data_config.get_path", return_value=path):
+                tr = self._dial(net_ssh, self._site("hk-first"), key)
+                # Nothing to check against yet: connect must not be told a key.
+                self.assertIsNone(tr.connect.call_args.kwargs["hostkey"])
+                with open(path, encoding="utf-8") as f:
+                    self.assertIn("198.51.100.50", f.read())
+
+                # Second dial: the pinned key is handed to connect(), which is
+                # what makes paramiko refuse any other one.
+                tr2 = self._dial(net_ssh, self._site("hk-second"), key)
+                self.assertEqual(tr2.connect.call_args.kwargs["hostkey"], key)
+
+    def test_changed_key_is_refused_with_a_remediable_error(self):
+        from core import net_ssh
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "ssh_known_hosts")
+            with mock.patch("core.data_config.get_path", return_value=path):
+                self._dial(net_ssh, self._site("hk-pin"), paramiko.ECDSAKey.generate())
+
+                fake_transport = mock.Mock()
+                fake_transport.connect.side_effect = paramiko.SSHException(
+                    "Bad host key from server")
+                with mock.patch.object(net_ssh.socket, "create_connection",
+                                       return_value=mock.Mock()),                      mock.patch.object(net_ssh.paramiko, "Transport",
+                                       return_value=fake_transport),                      mock.patch("security.identity_manager.get_identity_credentials",
+                                return_value=("u", "p", "s")):
+                    with self.assertRaises(net_ssh.BastionHostKeyError) as ctx:
+                        net_ssh._dial(self._site("hk-changed"))
+                self.assertIn("ssh_known_hosts", str(ctx.exception))
 
 
 class IcmpSkippedForJumpSites(unittest.TestCase):

@@ -75,6 +75,7 @@ different from a normal one:
 | `test_router_parity.py` | The OpenAPI schema must match the golden snapshot in `tests_data/`. A failure means an endpoint changed shape. Regenerate the snapshot (`uv run python scripts/snapshot_openapi.py`) **only** for deliberate additions, never to make the test pass |
 | `test_router_smoke.py` | Every router is importable and mountable |
 | `test_observability_ui.py` | Tab markup and wiring — catches JS/HTML drift the Python tests can't see |
+| `test_i18n_parity.py` | Every i18n key exists in both `it` and `en` language dictionaries in `static/js/i18n.js` |
 
 The permanent security gates (`test_provisioning_secrets.py`,
 `test_redaction.py`, `test_tls_config.py`, plus the grep checks) are listed in

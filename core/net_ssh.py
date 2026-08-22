@@ -16,6 +16,7 @@ only stall the threads dialling THAT site, not every jump-mode connection in
 the process. The registry lock below only ever guards a dict lookup, never
 network I/O, so it is held for microseconds.
 """
+import os
 import socket
 import threading
 
@@ -55,6 +56,51 @@ def _lock_for(site_id: str) -> threading.Lock:
         return lock
 
 
+class BastionHostKeyError(Exception):
+    """The bastion presented a different host key than the one we pinned.
+
+    Either the bastion was rebuilt or someone is sitting on the path. Both
+    need a human: the fix is to delete the stale line from ssh_known_hosts,
+    never to reconnect anyway.
+    """
+
+
+def _known_hosts_path() -> str:
+    """The same known_hosts the WS terminal pins to, created if missing.
+
+    paramiko.HostKeys.save() does not create the parent file's directory tree
+    but does need the file to exist to be re-read; the terminal path in
+    routers/commands.py bootstraps it the same way.
+    """
+    from core import data_config
+    path = data_config.get_path("ssh_known_hosts")
+    if not os.path.exists(path):
+        open(path, "a").close()
+    return path
+
+
+def _host_key_id(host: str, port: int) -> str:
+    """known_hosts entry name: bare host on 22, '[host]:port' otherwise —
+    the OpenSSH convention paramiko's SSHClient also writes."""
+    return host if port == 22 else f"[{host}]:{port}"
+
+
+def _pinned_host_key(host: str, port: int):
+    """The key pinned for this bastion, or None on first contact."""
+    entry = paramiko.HostKeys(_known_hosts_path()).lookup(_host_key_id(host, port))
+    if not entry:
+        return None
+    return next(iter(entry.values()))
+
+
+def _pin_host_key(host: str, port: int, key) -> None:
+    """Trust on first use: record the key so a later change is detectable."""
+    path = _known_hosts_path()
+    keys = paramiko.HostKeys(path)
+    keys.add(_host_key_id(host, port), key.get_name(), key)
+    keys.save(path)
+
+
 def _dial(site: dict) -> paramiko.Transport:
     """Open and authenticate one transport to the site's bastion. No caching."""
     from security import identity_manager
@@ -63,14 +109,21 @@ def _dial(site: dict) -> paramiko.Transport:
     if not creds:
         raise ValueError(f"Identita' {site['jump_identity']} non trovata.")
     username, password = creds[0], creds[1]
-    sock = socket.create_connection(
-        (site["jump_host"], int(site.get("jump_port") or 22)),
-        timeout=CONNECT_TIMEOUT)
+    host = site["jump_host"]
+    port = int(site.get("jump_port") or 22)
+    sock = socket.create_connection((host, port), timeout=CONNECT_TIMEOUT)
+    # Trust on first use, like the WS terminal: paramiko.Transport has no
+    # policy hook, so the pinned key is handed to connect() (which then
+    # refuses any other) and a first contact is recorded afterwards. Without
+    # it every reconnection silently re-accepts whatever key answers, so a
+    # MITM on the hop to the bastion leaves no trace — and every device
+    # behind it is reached through that hop.
+    pinned = _pinned_host_key(host, port)
     tr = None
     try:
         tr = paramiko.Transport(sock)
         tr.banner_timeout = BANNER_TIMEOUT
-        tr.connect(username=username, password=password)
+        tr.connect(username=username, password=password, hostkey=pinned)
     except Exception as e:
         # paramiko only owns/closes the socket when handed a (host, port)
         # tuple; handing it an already-open socket (needed for
@@ -83,10 +136,19 @@ def _dial(site: dict) -> paramiko.Transport:
         sock.close()
         if isinstance(e, paramiko.AuthenticationException):
             raise BastionAuthError(
-                f"Il bastione {site['jump_host']} della sede "
+                f"Il bastione {host} della sede "
                 f"'{site_id}' ha rifiutato l'utente '{username}': "
                 f"credenziali del bastione, non del dispositivo.") from e
+        if pinned is not None and isinstance(e, paramiko.SSHException) and                 "host key" in str(e).lower():
+            raise BastionHostKeyError(
+                f"Il bastione {host} della sede '{site_id}' presenta una "
+                f"chiave host diversa da quella registrata. Se il bastione e' "
+                f"stato reinstallato, rimuovere la riga "
+                f"'{_host_key_id(host, port)}' da ssh_known_hosts; "
+                f"altrimenti la tratta non e' fidata.") from e
         raise
+    if pinned is None:
+        _pin_host_key(host, port, tr.get_remote_server_key())
     return tr
 
 
