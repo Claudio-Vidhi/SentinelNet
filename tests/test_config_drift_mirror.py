@@ -39,6 +39,15 @@ class TheMirrorFailsLoudly(unittest.TestCase):
                         side_effect=subprocess.CalledProcessError(1, "git")):
             mirror.commit_version(DEVICE, "switch-01.txt")   # must not raise
 
+    def test_a_failure_before_the_git_calls_never_escapes(self):
+        """history_dir() calls os.makedirs, which raises on a full disk or a
+        permission problem. It used to sit outside the try, so it escaped into
+        the backup path — the one thing this module must never do."""
+        with mock.patch.object(mirror, "is_enabled", return_value=True), \
+             mock.patch("services.config_drift.history.history_dir",
+                        side_effect=OSError("disk full")):
+            mirror.commit_version(DEVICE, "switch-01.txt")   # must not raise
+
 
 if __name__ == "__main__":
     unittest.main()
