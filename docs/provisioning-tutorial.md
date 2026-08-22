@@ -19,16 +19,20 @@ carry, [operations.md](operations.md) for where `audit.log` lives.
 
 | Requirement | Why |
 |---|---|
-| An **admin** account | `POST /api/provisioner/push-ssh` and `/push-serial` (and their `/fgt/` twins) are `require_admin`. Generating, downloading and listing serial ports are `require_operator`. A `viewer` never sees the tab at all — the nav entry is `requires-write`. |
+| An **admin** account, to push | `POST /api/provisioner/push-ssh` and `/push-serial` are `require_admin`. Generating, downloading and listing serial ports are `require_operator`. A `viewer` never sees the tab at all — the nav entry is `requires-write`. |
 | A decided IP plan | The wizard validates nothing. The first thing that checks your input is the device. |
-| Physical access **or** a reachable temporary address | Serial delivery needs the cable plugged into the machine running the SentinelNet server, not into your laptop (§7). SSH delivery needs the device already answering on some address. |
-| The site record, if the device sits behind a bastion | Create the jump site first ([remote-sites.md §6](remote-sites.md)) — a day-0 device cannot be resolved to a site by IP. |
+| Physical access **or** a reachable temporary address, for a Cisco push | Serial delivery needs the cable plugged into the machine running the SentinelNet server, not into your laptop (§7). SSH delivery needs the device already answering on some address. |
+| The site record, if the Cisco switch sits behind a bastion | Create the jump site first ([remote-sites.md §6](remote-sites.md)) — a day-0 device cannot be resolved to a site by IP. |
+
+**SentinelNet delivers a config only to Cisco switches.** For a FortiGate the
+workflow ends at the generated text: you review it, download it and apply it
+yourself (§5.5).
 
 Two things this feature does **not** do, and you should plan around them:
 
 - **No rollback, no commit-confirm.** There is no `reload in`, no
-  `configure replace`, no scheduled revert anywhere in either provisioner. If
-  the push half-lands, you go and look.
+  `configure replace`, no scheduled revert in the switch provisioner. If the
+  push half-lands, you go and look.
 - **No inventory write.** A successful push does not add the device to
   `network_hosts.csv`. That is a separate step (§9).
 
@@ -62,14 +66,14 @@ the page do mention a tenant or a site, and neither is what you might assume:
   is never pushed. It is a separate path from the deterministic wizard and is
   out of scope here.
 - `#provSshSite` ("Sede del target") is on the SSH delivery panel and only
-  affects whether the push is tunnelled through a bastion. See §6.2.
+  affects whether the Cisco push is tunnelled through a bastion. See §6.2.
 
 **Vendor** is `#provVendorChips` — two chips, Cisco switch or FortiGate
 firewall. The chips are a skin over the hidden `<select id="provVendor">`,
 which stays the source of truth; clicking a chip dispatches a real `change`
-event, which swaps `#provCiscoSection` for `#provFgtSection` and reveals the
-FortiGate console-login fields. Everything downstream (which endpoint is
-called, which payload is collected) keys off `#provVendor`.
+event, which swaps `#provCiscoSection` for `#provFgtSection`. Everything
+downstream (which endpoint is called, which payload is collected) keys off
+`#provVendor`.
 
 ---
 
@@ -279,6 +283,23 @@ Same rule as the switch: emitted only when `#fgtSnmpUser` is non-empty, and
 blank auth/priv passwords silently become `authpass123` / `privpass123`.
 Security level `auth-priv`, `auth-proto sha`, `priv-proto aes`.
 
+### 5.5 Applying it: that part is yours
+
+SentinelNet does not deliver a config to a FortiGate. The whole FortiGate
+workflow is: fill the form, **Genera Config**, read the text, **Scarica .txt**,
+then paste or load it onto the box yourself — console, SSH or the FortiGate's
+own upload path, whichever suits the site.
+
+Two consequences:
+
+- The generated text masks every secret as `{{VAULT:<path>}}` (§6). Substitute
+  the real values before you apply it, or generate a materialised copy and
+  treat that file as a credential.
+- The `execute api-user generate-key ...` line in the output is a reminder, not
+  a command SentinelNet runs. Token creation stays manual.
+
+The delivery modes described in §6.1 and §7 apply to the Cisco switch only.
+
 ---
 
 ## 6. Generate and review first
@@ -287,9 +308,9 @@ Set `#provDeliveryMode` to **Solo visualizzazione** and click **Genera Config**.
 The text lands in `#provOutput`. **Scarica .txt** downloads the same text as
 `<hostname>-day0.txt`.
 
-Read it before you push. In particular check the port ranges, the trunk-allowed
-list and the management interface, since none of them were validated on the way
-in.
+Read it before you apply it. In particular check the port ranges, the
+trunk-allowed list and the management interface, since none of them were
+validated on the way in.
 
 > **The generated text is not deployable as-is.** Every secret is replaced by a
 > `{{VAULT:<path>}}` placeholder — `{{VAULT:enable_secret}}`,
@@ -297,7 +318,9 @@ in.
 > deliberate and pinned by
 > [tests/test_provisioning_secrets.py](../tests/test_provisioning_secrets.py):
 > a config you can paste into a ticket must not carry cleartext credentials.
-> The push path (§6.1, §7) uses the real values; only the *text* is masked.
+> The Cisco push path (§6.1, §7) uses the real values; only the *text* is
+> masked. A FortiGate config, which you apply by hand, therefore needs the
+> placeholders resolved first.
 
 A fully materialised file is still possible, but only by calling the endpoint
 directly with `?materialized=true` — the UI never sets it — and doing so writes
@@ -309,7 +332,7 @@ Empty inputs interact badly with masking: a secret you left blank is not masked
 §4.7 appear in the generated text in the clear. If you see one, you forgot a
 field.
 
-### 6.1 Push via SSH
+### 6.1 Push via SSH (Cisco switch)
 
 Switch `#provDeliveryMode` to **Push via SSH** to reveal `#provSshFields`:
 
@@ -317,26 +340,17 @@ Switch `#provDeliveryMode` to **Push via SSH** to reveal `#provSshFields`:
 |---|---|
 | `#provSshHost`, `#provSshPort` | The address the device answers on **now**, not the one you are about to give it. |
 | `#provSshUser`, `#provSshPass` | Credentials the device has now. |
-| `#provSshSecret` | Cisco only — the field is not sent for FortiGate. **Left empty, the login password is used as the enable secret.** |
+| `#provSshSecret` | **Left empty, the login password is used as the enable secret.** |
 | `#provSshSite` | See §6.2. Default "Automatica (da inventario)". |
 
 Then **Applica via SSH**. What happens on the server:
 
-- Comment lines are stripped before sending — `!` for Cisco, `#` for FortiGate.
-  The FortiGate `execute api-user generate-key ...` reminder is a comment, so
-  it never reaches the device; that step stays manual.
-- **Cisco:** netmiko `cisco_ios` → `enable()` → `send_config_set(...)` →
-  `save_config()`. The save is unconditional (`save_after` is hardcoded true in
-  the JS). If the save itself fails, the message
+- Comment lines (`!`) are stripped before sending.
+- netmiko `cisco_ios` → `enable()` → `send_config_set(...)` → `save_config()`.
+  The save is unconditional (`save_after` is hardcoded true in the JS). If the
+  save itself fails, the message
   `[Salvataggio configurazione non riuscito: ...]` is appended to the output
   **but the status stays `success`** — read the output, not just the header.
-- **FortiGate:** REST first, SSH second. If a FortiGate API token is stored for
-  that exact IP (`fortigate_tokens.json`), the config is uploaded as a
-  config-script over REST. Otherwise, or if REST fails, netmiko `fortinet` is
-  used with `exit_config_mode=False, cmd_verify=False`. The result line in
-  `#provOutput` shows ` via api` or ` via ssh`, and `(REST API fallita: ...)`
-  when it fell back. FortiOS persists on each `end`, so there is no separate
-  save.
 
 > **`status: success` means "the transport did not raise".** Nothing scans the
 > device output for `% Invalid input detected`, `command parse error` or any
@@ -370,13 +384,12 @@ by IP.
 
 ---
 
-## 7. Push via console / serial
+## 7. Push via console / serial (Cisco switch)
 
-This is the real day-0 path: a device straight out of the box has no IP.
+This is the real day-0 path: a switch straight out of the box has no IP.
 
 Switch `#provDeliveryMode` to **Push via Console/Seriale** to reveal
-`#provSerialFields`: `#provComPort`, `#provBaudrate` (default 9600), and — for
-FortiGate only — `#fgtConsoleUser` (default `admin`) and `#fgtConsolePass`.
+`#provSerialFields`: `#provComPort` and `#provBaudrate` (default 9600).
 
 > **The serial port is enumerated on the SentinelNet server, not on your
 > browser's machine.** `#btnProvRefreshPorts` calls
@@ -390,15 +403,11 @@ The refresh button pops an alert listing every port found *and overwrites
 whatever you typed in `#provComPort` with the first one*. Check the field after
 clicking it.
 
-What gets sent, with fixed delays and **no prompt matching whatsoever**:
-
-- **Cisco:** blank line → `enable` → `configure terminal` → every config line →
-  `end` → `write memory`. There is no login step. The code assumes the console
-  is sitting at an unauthenticated or already-privileged prompt, which is true
-  for a factory-fresh switch and false for one you have already provisioned
-  once (see §8.4).
-- **FortiGate:** blank line → username → password → every config line. Nothing
-  handles FortiOS's forced first-password change.
+What gets sent, with fixed delays and **no prompt matching whatsoever**: blank
+line → `enable` → `configure terminal` → every config line → `end` →
+`write memory`. There is no login step. The code assumes the console is sitting
+at an unauthenticated or already-privileged prompt, which is true for a
+factory-fresh switch and false for one you have already provisioned once.
 
 Delays are fixed (0.3–1.0 s per line) and the "output" is whatever happened to
 be in the receive buffer when each delay expired. It is a rough echo, not a
@@ -408,22 +417,25 @@ transcript, and it can miss the device's replies entirely.
 
 ## 8. Verify
 
+Steps 1 and 3 concern the Cisco push. After applying a FortiGate config by hand
+you have the device's own replies in front of you — read them there.
+
 1. **Read `#provOutput` in full.** Not the `[success]` header — the body. Look
    for `% Invalid input`, `command parse error`, `Command fail`.
 2. **Reconnect independently** — console, or SSH to the new management address —
    and confirm the running-config. Nothing in SentinelNet re-reads the device
-   after a push.
+   afterwards.
 3. **Cisco: confirm it was saved.** A save failure is reported inside a
    `success` response (§6.1). `show startup-config` is the only real answer.
 4. **Check `audit.log`** (see [operations.md §1](operations.md)). One line is
-   written per download, per materialised generation and per push, naming the
-   user, the target host and the resulting status.
+   written per download, per materialised generation and per Cisco push, naming
+   the user, the target host and the resulting status.
 
 ---
 
 ## 9. Register the device
 
-The push does not touch the inventory. Go to the sibling sub-tab,
+Neither generating nor pushing touches the inventory. Go to the sibling sub-tab,
 **Provisioning Apparato** (`#tab-provisioning`), and add the device:
 
 1. **Tenant** `#devGroupSelect` (`#btnInlineNewTenant` creates one inline).
@@ -441,7 +453,7 @@ The push does not touch the inventory. Go to the sibling sub-tab,
 
 ## 10. Troubleshooting
 
-### 10.1 The push cuts the path it is riding on
+### 10.1 The push cuts the path it is riding on (Cisco)
 
 The single most common way to brick a remote day-0 push. The generated config
 touches, among other things, `interface Vlan<mgmt>` and its IP, `line vty`,
@@ -453,14 +465,12 @@ What the code does then: the exception is caught and you get
 `{"status": "error", "message": "<netmiko error>"}`. That is all.
 
 - Nothing is rolled back. There is no `reload in`, no `configure replace`, no
-  commit-confirm anywhere in either provisioner.
+  commit-confirm in the switch provisioner.
 - The response carries **no partial output** — you cannot tell from it how far
   the push got.
-- On Cisco, `save_config()` is the last step and never runs, so the device's
+- `save_config()` is the last step and never runs, so the device's
   *startup*-config is still the old one. Whether power-cycling it recovers the
   box is device behaviour, not something SentinelNet arranges or verifies.
-- On FortiOS there is no such grace: FortiOS persists at each `end`, so an
-  interrupted FortiGate push is already saved up to the last completed block.
 
 **Avoid it rather than recover from it:** deliver day-0 over console/serial, or
 SSH in on an address the config does not touch and move management afterwards.
@@ -493,12 +503,6 @@ mean the *bastion* refused you, not the device:
   the path. Remove the stale line from `ssh_known_hosts` in the data directory
   *only if you know why it changed*.
 
-One more bastion wrinkle, FortiGate only: FortiGate REST does **not** work
-through a jump site ([remote-sites.md §6.3](remote-sites.md)). If a token
-happens to be stored for that IP, the REST attempt is made first, fails, and
-you get `(REST API fallita: ...)` prefixed to the result before the SSH
-fallback runs. That line is noise; the real outcome is what follows it.
-
 ### 10.3 Wrong or missing enable secret (Cisco)
 
 Two fields are labelled "Enable secret" and they are not the same thing:
@@ -515,9 +519,6 @@ That is the benign failure.
 
 On a second push to the same switch, the credential you need in
 `#provSshSecret` is the one the *first* push installed.
-
-FortiGate has no enable concept — the field is not sent for that vendor, and
-`#provSshSecret` being filled is simply ignored.
 
 ### 10.4 The COM port is not available
 
@@ -536,7 +537,7 @@ If you type the port name manually and the open fails, you get a proper
 else holds the port: a terminal emulator, a previous session), or no such file.
 Close the other terminal program first; the port is exclusive.
 
-### 10.5 A push that fails partway
+### 10.5 A Cisco push that fails partway
 
 What you can and cannot learn from the response:
 
@@ -544,7 +545,7 @@ What you can and cannot learn from the response:
 |---|---|
 | SSH session dies mid-push | `status: error` + the exception text. **No partial output.** How far it got is unknowable from here — reconnect and read the running-config. |
 | SSH survives, device rejects some lines | `status: success` + the rejections inside the output text. Nothing scans for them. |
-| Cisco save fails after a good push | `status: success` + `[Salvataggio configurazione non riuscito: ...]` appended. |
+| Save fails after a good push | `status: success` + `[Salvataggio configurazione non riuscito: ...]` appended. |
 | Serial, port opened | `status: success`, essentially always. There is no prompt matching and no verification of any kind. |
 | Serial, port could not be opened | `status: error` + the OS message. |
 
@@ -569,14 +570,13 @@ certainly an `operator` rather than an `admin` — pushes are admin-only.
 
 Open the browser's network tab to see the real status.
 
-### 10.7 Interactive prompts
+### 10.7 Interactive prompts (Cisco)
 
 Neither delivery path answers a question from the device. Serial sends bytes on
 a fixed timer with no prompt matching; SSH uses netmiko's defaults with no
 custom expect strings and no `confirm` handling. Any generated command that
-asks something (`crypto key generate rsa` where keys already exist, FortiOS's
-forced password change on first console login, and so on) is unhandled: the
-next config line goes into the prompt as the answer.
+asks something — `crypto key generate rsa` where keys already exist, and so
+on — is unhandled: the next config line goes into the prompt as the answer.
 
 What the device does in response was **not verified** here — see §11.
 
@@ -606,10 +606,10 @@ Not verified, and deliberately not documented as fact:
 - **What real hardware does with an interactive prompt** (§10.7). The absence of
   prompt handling in SentinelNet is verified; the device's reaction to it was
   not tested and is not described here.
-- **Whether re-running a push is idempotent.** Re-sending the full line set is
-  what the code does; whether that is safe for a given command on a given
-  platform — `crypto key generate rsa`, `channel-group`, an existing
-  `config system admin` entry — was not tested.
+- **Whether re-running a Cisco push is idempotent.** Re-sending the full line
+  set is what the code does; whether that is safe for a given command on a
+  given platform — `crypto key generate rsa`, `channel-group`, an existing
+  `username` entry — was not tested.
 - **The AI config generator panel** (`#btnGenCfg`, `/api/ai/generate-config`,
   [static/js/ai.js](../static/js/ai.js)). Verified only that it writes text
   into `#genCfgOutput` with a Copy button and does not feed the wizard form or

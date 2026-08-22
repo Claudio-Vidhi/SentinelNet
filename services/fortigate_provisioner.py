@@ -1,18 +1,14 @@
 # -*- coding: utf-8 -*-
 """FortiGate Provisioner — genera una configurazione FortiOS "day-0" per un
 firewall FortiGate appena installato (zero-touch), seguendo le linee guida di
-hardening Fortinet, e la consegna nelle stesse tre modalita' dello Switch
-Provisioner: solo testo, push via SSH (Netmiko), push via console/seriale.
+hardening Fortinet.
 
-Come switch_provisioner: ``build_config`` e' una funzione pura che assembla la
-config come testo FortiOS a partire da un dict di parametri.
+``build_config`` e' una funzione pura che assembla la config come testo FortiOS
+a partire da un dict di parametri. Questo modulo genera soltanto: la config si
+scarica e la applica l'operatore. A differenza dello Switch Provisioner qui non
+esiste alcun push (SSH, REST o console/seriale) — rimosso perche' il modo di
+lavorare corrente non ne ha bisogno.
 """
-
-import json
-import re
-import time
-
-from security import redaction
 
 
 def _q(s):
@@ -89,11 +85,14 @@ def build_config(cfg: dict) -> str:
         lines.append(f"    set buffer {_q(cfg['banner'])}")
         lines.append("end")
 
-    if cfg.get("admin_user"):
+    if cfg.get("admin_user") and cfg.get("admin_password"):
         sec("ADMIN LOCALE AGGIUNTIVO")
         lines.append("config system admin")
         lines.append(f"    edit {_q(cfg['admin_user'])}")
-        lines.append(f"        set password {_q(cfg.get('admin_password') or 'changeme')}")
+        # No 'changeme' fallback: a known default password shipped to the
+        # device was the switch generator's bug too. The boundary
+        # (FortiGateProvisionSchema) rejects an empty password.
+        lines.append(f"        set password {_q(cfg['admin_password'])}")
         lines.append("        set accprofile \"super_admin\"")
         lines.append("    next")
         lines.append("end")
@@ -234,7 +233,10 @@ def build_config(cfg: dict) -> str:
         lines.append("end")
 
     snmpv3 = cfg.get("snmpv3") or {}
-    if snmpv3.get("user"):
+    # Both passphrases are required. The published defaults that used to fill an
+    # empty field shipped a known SNMP credential to the firewall, exactly as
+    # the switch generator did.
+    if snmpv3.get("user") and snmpv3.get("auth_pass") and snmpv3.get("priv_pass"):
         sec("SNMPv3")
         lines.append("config system snmp sysinfo")
         lines.append("    set status enable")
@@ -244,9 +246,9 @@ def build_config(cfg: dict) -> str:
         lines.append(f"    edit {_q(snmpv3['user'])}")
         lines.append("        set security-level auth-priv")
         lines.append("        set auth-proto sha")
-        lines.append(f"        set auth-pwd {_q(snmpv3.get('auth_pass') or 'authpass123')}")
+        lines.append(f"        set auth-pwd {_q(snmpv3['auth_pass'])}")
         lines.append("        set priv-proto aes")
-        lines.append(f"        set priv-pwd {_q(snmpv3.get('priv_pass') or 'privpass123')}")
+        lines.append(f"        set priv-pwd {_q(snmpv3['priv_pass'])}")
         lines.append("    next")
         lines.append("end")
 
@@ -346,144 +348,6 @@ def build_config(cfg: dict) -> str:
         lines.append("end")
 
     return "\n".join(lines).lstrip("\n") + "\n"
-
-
-# ---------------------------------------------------------------------------
-# CONSEGNA: REST API (token), SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
-# ---------------------------------------------------------------------------
-
-# Prompt shown by a factory unit at first console login, in the wordings
-# FortiOS uses across versions.
-_PASSWORD_PROMPT = re.compile(
-    r"change\s+your\s+password|new\s+password|password\s+must\s+be\s+changed",
-    re.IGNORECASE)
-
-# FortiOS answers a rejected command on the session and carries on, so the
-# transport succeeding says nothing about the config having applied.
-_CLI_ERRORS = ("Command fail", "command parse error", "Unknown action",
-               "entry not found", "value parse error", "invalid ")
-
-
-def _push_result(output: str) -> dict:
-    """Turn a raw session transcript into a push result.
-
-    The transcript echoes back every command, including the 'set password'
-    lines just typed, so it is redacted here — the single point every caller
-    goes through.
-    """
-    rejected = [ln.strip() for ln in output.splitlines()
-                if any(err in ln for err in _CLI_ERRORS)]
-    return {
-        "status": "partial" if rejected else "success",
-        "output": redaction.redact(output),
-        "rejected": redaction.redact(rejected),
-    }
-
-
-def push_via_api(ip: str, config_text: str, filename: str = "sentinelnet-day0") -> dict:
-    """Applica la config FortiOS via REST API usando il token salvato
-    (fortigate_service): POST /api/v2/monitor/system/config-script/upload
-    esegue lo stesso script CLI generato da build_config. Riusa il client
-    REST dell'osservabilità (stesso pattern REST-primary/SSH-fallback)."""
-    import base64
-    from services import fortigate_service
-
-    body = {"filename": filename,
-            "file_content": base64.b64encode(config_text.encode("utf-8")).decode("ascii")}
-    try:
-        data = fortigate_service.api_post(
-            ip, "monitor/system/config-script/upload", json_body=body)
-        status = (data or {}).get("status", "success")
-        if status != "success":
-            return {"status": "error", "message": f"config-script upload: {data}"}
-        return {"status": "success", "output": json.dumps(data, indent=1)}
-    except fortigate_service.FortiGateError as e:
-        return {"status": "error", "message": str(e)}
-
-def push_via_ssh(host: str, username: str, password: str, config_text: str,
-                 port: int = 22, site: str = "") -> dict:
-    """Applica la config FortiOS via SSH (Netmiko, device_type 'fortinet').
-    FortiOS salva automaticamente a ogni 'end': nessun write memory.
-
-    # `site` names the site explicitly for a day-0 device that is not in the
-    # inventory yet; without it core.net_ssh would dial a jump-site FortiGate
-    # directly instead of through the bastion.
-    """
-    from core.net_ssh import ConnectHandler
-
-    commands = [ln for ln in config_text.splitlines()
-                if ln.strip() and not ln.strip().startswith("#")]
-
-    device_params = {
-        "device_type": "fortinet",
-        "host": host,
-        "port": port,
-        "username": username,
-        "password": password,
-        "timeout": 20,
-        "auth_timeout": 15,
-        "banner_timeout": 15,
-    }
-    try:
-        with ConnectHandler(site_id=site or None, **device_params) as conn:
-            output = conn.send_config_set(commands, exit_config_mode=False,
-                                          cmd_verify=False)
-            return _push_result(output)
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-def push_via_serial(com_port: str, config_text: str, baudrate: int = 9600,
-                    timeout: float = 2.0, username: str = "admin",
-                    password: str = "") -> dict:
-    """Applica la config via console/seriale per il provisioning day-0 di un
-    FortiGate vergine (default: login 'admin' senza password; al primo accesso
-    FortiOS chiede di impostarne una — qui si inviano comunque le credenziali
-    fornite). Invio riga per riga con pausa, come per gli switch."""
-    import serial  # pyserial
-
-    commands = [ln for ln in config_text.splitlines()
-                if ln.strip() and not ln.strip().startswith("#")]
-
-    log = []
-    try:
-        with serial.Serial(com_port, baudrate=baudrate, timeout=timeout) as ser:
-            def send(line, delay=0.4):
-                ser.write((line + "\r\n").encode("utf-8"))
-                time.sleep(delay)
-                try:
-                    log.append(ser.read(ser.in_waiting or 1).decode("utf-8", "ignore"))
-                except Exception:
-                    pass
-
-            # Login console: username, poi password (vuota su unita' vergine).
-            send("", 0.6)
-            send(username or "admin", 0.6)
-            send(password or "", 0.8)
-
-            # A factory unit forces a password change at first console login.
-            # Typing the config into that prompt sets the first line as the new
-            # password and the second as its confirmation: the unit ends up with
-            # an admin password nobody knows, and the day-0 config unapplied.
-            # Refuse instead, and say what to do.
-            if _PASSWORD_PROMPT.search("".join(log[-2:])):
-                return {
-                    "status": "error",
-                    "message": (
-                        "Il FortiGate chiede il cambio password obbligatorio al "
-                        "primo accesso console. Impostare la password dalla "
-                        "console, poi rilanciare il push indicandola nel campo "
-                        "'Login console (password)'."
-                    ),
-                    "output": redaction.redact("".join(log)),
-                }
-
-            for cmd in commands:
-                send(cmd, 0.4)
-
-        return _push_result("".join(log))
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 
 if __name__ == "__main__":

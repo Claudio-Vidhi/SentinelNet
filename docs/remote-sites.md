@@ -405,7 +405,7 @@ device" stays broken.
 | CLI collection: inventory, version, config backup (`core/core_engine.py:313,511,555,602`) | netmiko over a `direct-tcpip` channel |
 | MAC table and ARP collection (`collectors/mac_collector.py`, `collectors/arp_collector.py`) | same |
 | Port actions (`services/port_action.py`) | same |
-| Switch and FortiGate day-0 provisioning via CLI | same, but pick the site in **Sede del target / Target site** on the SSH delivery panel: a day-0 device is not in the inventory yet, so the site cannot be derived from its IP |
+| Switch day-0 provisioning via CLI | same, but pick the site in **Sede del target / Target site** on the SSH delivery panel: a day-0 device is not in the inventory yet, so the site cannot be derived from its IP. A FortiGate day-0 config is not pushed by SentinelNet at all, so nothing crosses the bastion |
 | WLC CLI (`services/wlc_service.py`) | same |
 | Bulk command, CLI modal, config analyzer, netsec audit (they consume CLI output) | same |
 

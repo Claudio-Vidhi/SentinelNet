@@ -286,6 +286,18 @@ function provPayloadAndBase() {
         : { payload: provCollectPayload(), base: '/api/provisioner' };
 }
 
+// FortiGate has no push: the config is generated, downloaded and applied by the
+// operator. Hiding the delivery options is not enough on its own - the mode has
+// to be forced back to 'view', or switching vendor while 'ssh' was selected
+// would leave a hidden SSH form armed behind a dead endpoint.
+function provSyncDeliveryMode(isFgt) {
+    const mode = document.getElementById('provDeliveryMode');
+    if (!mode) return;
+    if (isFgt) mode.value = 'view';
+    mode.style.display = isFgt ? 'none' : '';
+    mode.dispatchEvent(new Event('change'));
+}
+
 // I chip "Tipo apparato" sono solo una skin del <select id="provVendor">, che
 // resta la fonte di verità: qui li riallineiamo al value corrente del select.
 function provSyncVendorChips() {
@@ -318,9 +330,10 @@ function provInitToggles() {
         const fgt = provVendorIsFgt();
         document.getElementById('provCiscoSection').style.display = fgt ? 'none' : '';
         document.getElementById('provFgtSection').style.display = fgt ? '' : 'none';
-        // Campi login console: servono solo al push seriale FortiGate.
-        document.getElementById('fgtConsoleUserGroup').style.display = fgt ? 'block' : 'none';
-        document.getElementById('fgtConsolePassGroup').style.display = fgt ? 'block' : 'none';
+        // FortiGate generates only: the config is downloaded and applied by the
+        // operator, so the whole delivery half of the wizard is hidden and the
+        // mode forced back to view-only.
+        provSyncDeliveryMode(fgt);
         const ciscoHint = document.getElementById('provCiscoTokenHint');
         if (ciscoHint) ciscoHint.style.display = fgt ? 'none' : 'flex';
         provSyncVendorChips();
@@ -410,10 +423,8 @@ function provInitToggles() {
             ssh_password: document.getElementById('provSshPass').value,
             ssh_site: document.getElementById('provSshSite').value,
         });
-        if (!provVendorIsFgt()) {
-            payload.ssh_secret = document.getElementById('provSshSecret').value;
-            payload.save_after = true;
-        }
+        payload.ssh_secret = document.getElementById('provSshSecret').value;
+        payload.save_after = true;
         document.getElementById('provOutput').value = 'Invio in corso via SSH...';
         const res = await apiFetch(`${base}/push-ssh`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -421,12 +432,10 @@ function provInitToggles() {
         });
         if (res) {
             const data = await res.json();
-            // 'method' (api|ssh) è valorizzato solo dal push FortiGate; 'api_error'
-            // spiega l'eventuale fallback da REST a SSH.
-            const method = data.method ? ` via ${data.method}` : '';
-            const apiErr = data.api_error ? `\n(REST API fallita: ${data.api_error})` : '';
+            const rejected = (data.rejected || []).length
+                ? `\n\nComandi rifiutati dall'apparato:\n${data.rejected.join('\n')}` : '';
             document.getElementById('provOutput').value =
-                `[${data.status}${method}]${apiErr}\n${data.message || data.output || ''}`;
+                `[${data.status}]\n${data.message || data.output || ''}${rejected}`;
         }
     });
     document.getElementById('btnProvPushSerial').addEventListener('click', async () => {
@@ -435,10 +444,6 @@ function provInitToggles() {
             com_port: document.getElementById('provComPort').value.trim(),
             baudrate: parseInt(document.getElementById('provBaudrate').value, 10) || 9600,
         });
-        if (provVendorIsFgt()) {
-            payload.console_user = document.getElementById('fgtConsoleUser').value.trim() || 'admin';
-            payload.console_password = document.getElementById('fgtConsolePass').value;
-        }
         document.getElementById('provOutput').value = 'Invio in corso via console/seriale...';
         const res = await apiFetch(`${base}/push-serial`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

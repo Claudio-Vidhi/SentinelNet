@@ -112,8 +112,7 @@ class TestProvisionerPushIsAdminOnly(unittest.TestCase):
     operatore di sede aveva raggio d'azione su tutta la rete. Test strutturale
     sulle dipendenze della rotta: nessun payload da inventare."""
 
-    PATHS = ("/api/provisioner/push-ssh", "/api/provisioner/push-serial",
-             "/api/provisioner/fgt/push-ssh", "/api/provisioner/fgt/push-serial")
+    PATHS = ("/api/provisioner/push-ssh", "/api/provisioner/push-serial")
 
     def test_push_endpoints_require_admin(self):
         import app_server
