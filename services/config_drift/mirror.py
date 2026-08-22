@@ -52,8 +52,8 @@ def commit_version(device: dict, filename: str) -> None:
     if not is_enabled():
         return
     from services.config_drift import history
-    repo = history.history_dir(device)
     try:
+        repo = history.history_dir(device)
         git = _git()
         if not os.path.isdir(os.path.join(repo, ".git")):
             subprocess.run([git, "init", "-q"], cwd=repo, check=True)
