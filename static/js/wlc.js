@@ -29,7 +29,7 @@ async function loadWlcTab() {
         // a dead end.
         const tenants = [...new Set(wlcInventory.map(d => d.Group || 'Generale'))].sort();
         const curTenant = tenantSel.value;
-        tenantSel.innerHTML = '<option value="">-- Seleziona tenant --</option>' +
+        tenantSel.innerHTML = `<option value="">${i18n[currentLang].wlcOptTenant}</option>` +
             tenants.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
         tenantSel.value = tenants.includes(curTenant) ? curTenant : '';
         onWlcTenantChanged();
@@ -48,7 +48,7 @@ function onWlcTenantChanged() {
     const tenant = tenantSel.value;
     const devs = tenant ? wlcInventory.filter(d => (d.Group || 'Generale') === tenant) : [];
     select.disabled = !tenant;
-    select.innerHTML = `<option value="">${tenant ? '-- Seleziona Cisco WLC --' : '-- Scegli prima un tenant --'}</option>` +
+    select.innerHTML = `<option value="">${tenant ? i18n[currentLang].wlcOptTarget : i18n[currentLang].wlcOptTargetFirst}</option>` +
         devs.map(d => `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.Hostname || d.IP)} (${escapeHtml(d.IP)}) - ${escapeHtml(d.Vendor)}</option>`).join('');
     select.value = '';
     onWlcTargetChanged();
@@ -164,7 +164,7 @@ function renderWlcAps(apData) {
     const aps = Array.isArray(apData) ? apData : (apData.aps || []);
     
     if (aps.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">Nessun Access Point rilevato</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted);">${i18n[currentLang].wlcNoAps}</td></tr>`;
         return;
     }
 
@@ -233,7 +233,7 @@ function renderWlcClientRows() {
 
     if (clients.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">${
-            q ? 'Nessun client corrisponde alla ricerca' : 'Nessun client associato'}</td></tr>`;
+            q ? i18n[currentLang].wlcNoClientsSearch : i18n[currentLang].wlcNoClients}</td></tr>`;
         return;
     }
 
@@ -265,7 +265,7 @@ function renderWlcWlans(wlanData) {
     const wlans = Array.isArray(wlanData) ? wlanData : (wlanData.wlans || []);
 
     if (wlans.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Nessun WLAN/SSID configurato</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">${i18n[currentLang].wlcNoWlans}</td></tr>`;
         return;
     }
 
@@ -285,7 +285,7 @@ function renderWlcRogues(rogueData) {
     const rogues = Array.isArray(rogueData) ? rogueData : (rogueData.rogues || []);
 
     if (rogues.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);"><i class="fa-solid fa-shield-cat"></i> Nessun Rogue AP rilevato nelle vicinanze</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted);"><i class="fa-solid fa-shield-cat"></i> ${i18n[currentLang].wlcNoRogues}</td></tr>`;
         return;
     }
 

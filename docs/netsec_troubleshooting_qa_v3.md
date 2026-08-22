@@ -1,51 +1,72 @@
 # Network Security Operational Triage & Troubleshooting Q&A Guide — v3
 
 > **Status**: supersedes `netsec_troubleshooting_qa.md` (original, many wrong routes/IDs) and
-> `netsec_troubleshooting_qa_corrected.md` (correct on 2026-08-08, now partly stale).
-> Verified on **2026-08-11** against `HEAD = e14c0c1`, checking `routers/*.py`,
+> `netsec_troubleshooting_qa_corrected.md` (correct on 2026-08-08, superseded).
+> Verified on **2026-08-22** against `HEAD = e8f006b`, checking `routers/*.py`, `redundancy/router.py`,
 > `ai/mcp_server.py`, `routers/mcp.py`, `templates/dashboard.html` and `static/js/*.js`.
+> Two items below were read from the **uncommitted working tree**, ahead of that commit, and say so
+> where they appear: the bastion SSH host-key pinning (`core/net_ssh.py`) and the numbered-ACL
+> declaration string (`routers/policy_test.py`).
 > Line numbers are those of that commit and drift with any edit — treat them as hints, not contracts.
+> `templates/dashboard.html` is being annotated with `data-i18n` attributes as this is written, so it
+> is cited **by element id only**, never by line number.
 
-## What changed since the 2026-08-08 corrected version
+## What changed since the 2026-08-11 verification
 
 | Area | Change |
 | :--- | :--- |
-| **Cisco WLC** | Tab now loads through a single consolidated route `GET /api/wlc/{ip}/overview` (one SSH session: AP + client + WLAN + rogue). Controller selection is **tenant-first** (`#wlcTenantSelect` → `#wlcTargetSelect`). AP table gained a 5 GHz channel/width column from `show ap auto-rf 802.11a`; client table gained a quality column and a live search box. The per-object routes (`/status`, `/ap-summary`, …) still exist for API/MCP consumers; the UI no longer calls them one by one. Route line numbers shifted (status is now L50, not L39). |
-| **FortiGate** | New aggregated client diagnosis: `POST /api/fortigate/{ip}/diagnose-client` + pill **Diagnosi Client** (`#fgtPill-clientDiagnosis`) + MCP `fortigate_diagnose_client`. |
-| **Client Diagnosis (new §9)** | The Diagnosi Client pane (`#locPane-diagnosi`, formerly its own `#tab-diagnosi` tab — merged into `#tab-endpoint` on 2026-08-12) and `routers/diagnosis.py` (`/api/diagnose/client`, `/gateway-candidates`, `/traceroute-gateway`, `/port-bounce`) were not covered at all by either previous document. **`/api/diagnose/port-bounce` does have a UI button** — and since 2026-08-12 so does `/api/mac/port-control` (Isola / Riattiva porta, same block). |
-| **NetSec Audit** | Config **file upload / drag-and-drop now exists** in the UI (`#auditDropZone`, `#auditFileInput` → `config_text`), plus PDF export (`#btnPdfNetsec`), benchmark select, severity/category filters and a score/grade badge. The corrected doc's gap "no ad-hoc config file upload UI" is **withdrawn**. |
-| **Subnet scan** | Scan is now **discovery-only**; credential verification is a separate opt-in step `POST /api/scan-verify` using stored identities. Relevant to unknown-host workflows (§2.2). |
-| **Line numbers** | Many shifted, notably `POST /api/send-command` (now `routers/commands.py:159`) and the `netsec-audit` routes (`analyzer.py:97` / `:137`). |
+| **Policy & Routing Validation (new §10)** | A whole new tab, `#tab-policy-test` (nav `#navPolicyTest`, "Validazione Policy & Routing", preview badge, under **Valuta**), served by `routers/policy_test.py` over `services/policy_test/`. Offline evaluation of a packet against the freshest stored backup: `POST /api/policy-test/{ip}/trace`, `GET /examples`, `GET /findings` and `POST /prove`. Two new MCP tools, `policy_trace` and `policy_findings` — the surface is **45 tools**, not 43. |
+| **Findings that prove themselves** | Every finding about packet coverage (`shadowed`, `unreachable`) now carries a **witness packet** (`witness` + `expected_rule_id`). `POST /api/policy-test/{ip}/prove` re-traces that packet through the same evaluator the tracer uses and answers `proven: true/false`; a disagreement between detector and evaluator is reported, not hidden. |
+| **Findings surfaced across the app** | The same detector feeds four surfaces, not only its own tab: Config Analyzer pill **Validazione** (`data-view="validation"`), FortiGate pill **Policy** (a rule both shadowed *and* never hit is marked as a dead rule), the NetSec Audit report (`policy_defects`, deliberately **outside** the compliance score), and MCP `policy_findings`. |
+| **Jump / bastion sites (new §7.2)** | Site `mode: "jump"` tunnels netmiko through an SSH bastion (`core/net_ssh.py`). The bastion identity is editable after site creation, editing host/port/identity invalidates the cached transport, and `POST /api/sites/test-bastion` probes the credential as configured *now*. |
+| **HA / Redundancy** | `#tab-redundancy` gained a tenant filter `#haTenantFilter` that also re-scopes the KPI tiles, and Cisco wireless-controller HA (SSO) joined stack / ha_pair among the detected group types. |
+| **Customizable device export (new §11)** | `GET /api/export/devices` gained a column registry (published by `GET /api/export/devices/columns`) plus group/site/vendor/redundancy filters, still clipped by `user_group_scope`. Per-member columns explode one row per physical unit. |
+| **Device serial** | `get_serial()` on the drivers, persisted by `services/inventory_manager.py` and exportable as the `serial` column (§11). |
+| **NetSec Audit** | The **Checklist Audit Firewall tab was merged into NetSec Audit** as a sub-tab: `#tab-audit-checklist` and `#navAuditChecklist` no longer exist. The tab is **no longer admin-only**. Saved-run history, a status filter and PDF/DOCX/HTML export from a report modal all landed. |
+| **No inline handlers** | `templates/dashboard.html` now contains **zero** `onclick=`. Every `onclick="…"` quoted by the 2026-08-11 version is gone; controls are cited by id or by `data-action` below. |
+| **Line numbers** | Most `routers/*.py` line numbers moved; FortiGate moved furthest (policy-lookup 264 → 303, diagnose-client 327 → 366) and `routers/observability.py` moved *up* (health 671 → 635). |
 
 ## Still true from the corrected version (do not regress)
 
 - MCP tools live in `ai/mcp_server.py` (`TOOLS` dict), **not** `routers/mcp.py` — that router only serves
   `/api/mcp/settings` and `/api/mcp/tool-config`.
 - `get_top_talkers`, `get_anomalies`, `linux_health` are **disabled by default**
-  (`routers/mcp.py:15`, `_MCP_DEFAULT_DISABLED`) until an admin enables them.
-- The FortiGate tab is built from panes `#fgtPane-*` (switched by the `#fgtSub-*` button bar) and view
-  pills `#fgtPill-*` rendering into `#fgtView-*`. There is no `#subtab-*` family anywhere.
+  (`routers/mcp.py:15`, `_MCP_DEFAULT_DISABLED`) until an admin enables them. No other tool is.
+- The FortiGate tab is built from panes `#fgtPane-*` (switched by the `#fgtSub-*` button bar, delegated
+  from `#fgtSubtabBar`) and view pills `#fgtPill-*` rendering into `#fgtView-*`. There is no
+  `#subtab-*` family anywhere. Still 7 panes and 25 pills.
   *(Both earlier documents, and the first draft of this one, called `#fgtSub-*` the panes — those are
   the bar buttons; the containers are `#fgtPane-*`.)*
-- Routes that exist **API-only, with no UI button**: `POST /api/flow-siem/shun-ip` (deferred by the
-  owner, see `docs/Improvements`). `POST /api/mac/port-control` **got its buttons on 2026-08-12**
-  (Isola / Riattiva porta, in the Diagnosi port-action block).
-  `DELETE /api/fortigate/{ip}/sessions` and `POST /api/observability/prune-logs` **got their buttons on
-  2026-08-11** — session kill sits next to the Sessioni form (`#btnFgtSessionKill`, refuses an empty
-  filter set, which would have killed every session), the purge sits in Settings -> Observability.
-- These routes named by the original document **do not exist**: `/api/fortigate/{ip}/managed-aps`,
-  `/api/mac/mac-to-ip`, `/api/mac/client-map`, `/api/endpoint-inventory`, `/api/flow-siem/top-talkers`,
-  `/api/flow-siem/anomalies`, `/api/analyzer/config`, `/api/triage/status`, `/api/ai/diagnose`,
+- The Cisco WLC tab loads through the single consolidated `GET /api/wlc/{ip}/overview` (one SSH
+  session: AP + client + WLAN + rogue), with tenant-first selection `#wlcTenantSelect` →
+  `#wlcTargetSelect`. The per-object routes still exist for API/MCP consumers; the UI does not call
+  them one by one.
+- The subnet scan is **discovery-only**; credential verification is the separate opt-in
+  `POST /api/scan-verify` using stored identities.
+- Traffico is one tab with four views (`#trafPill-*` → `#trafPane-*`); `#tab-flow-siem` does not exist.
+  Localizzazione Endpoint is one tab with four panes (`#locPill-*` → `#locPane-*`); `#tab-diagnosi`
+  does not exist.
+- Routes that exist **API-only, with no UI button**: `POST /api/flow-siem/shun-ip` is now the *only*
+  one (deferred by the owner, see `docs/Improvements`). `POST /api/mac/port-control`,
+  `DELETE /api/fortigate/{ip}/sessions` and `POST /api/observability/prune-logs` all got their buttons
+  during August 2026 and are **not** API-only — do not re-add them to this list.
+- These routes named by the original document **still do not exist**:
+  `/api/fortigate/{ip}/managed-aps`, `/api/mac/mac-to-ip`, `/api/mac/client-map`,
+  `/api/endpoint-inventory`, `/api/flow-siem/top-talkers`, `/api/flow-siem/anomalies`,
+  `/api/analyzer/config`, `/api/triage/status`, `/api/ai/diagnose`,
   `/api/observability/linux-health`, `/api/observability/status`, `/api/topology/map`,
   `/api/provisioner/generate-fortigate-config`.
+  *(`POST /api/topology/reset` does exist — it is not the same route as `/api/topology/map`.)*
 
 ---
 
 ## Overview & System Context
 
-SentinelNet provides network security observability, triage, client diagnosis and configuration
-auditing across multi-vendor infrastructure: Fortinet FortiGate firewalls, Cisco Wireless LAN
-Controllers (AireOS and Catalyst 9800), campus switches (Cisco, Aruba, HP) and Linux hosts.
+SentinelNet provides network security observability, triage, client diagnosis, offline policy
+validation and configuration auditing across multi-vendor infrastructure: Fortinet FortiGate
+firewalls, Cisco Wireless LAN Controllers (AireOS and Catalyst 9800), campus switches (Cisco, Aruba,
+HP) and Linux hosts. Remote sites are reached by direct poll, by a site agent, or through an SSH
+bastion (§7.2).
 
 All addresses, hostnames and MACs below are documentation examples (RFC 5737 / RFC 7042), never real
 customer values.
@@ -66,27 +87,34 @@ customer values.
   5. Check the route for `198.51.100.45` (Routing pill) to confirm the egress interface matches the
      policy's interface pair.
   6. Shortcut: the **Diagnosi Client** pill runs steps 1–4 in one call for a client IP/MAC.
+  7. If the matched policy is not the one you expected, the rule that shadows it is already named:
+     the **Policy** pill marks a rule covered by an earlier one, and §10 traces the same packet
+     offline against the backup.
 
 - **UI Navigation & Operational Workflow**:
   - **Tab**: `Fortigate Management` (`#navFortigate` → `#tab-fortigate`) under **Inventario**, admin-only.
   - **Structure**: a subtab bar of buttons `#fgtSub-overview` / `-network` / `-firewall` / `-traffic` /
-    `-security` / `-wifi` / `-settings` (`fgtSwitchView('<pane>')`) toggles the pane containers
+    `-security` / `-wifi` / `-settings` (delegated from `#fgtSubtabBar`) toggles the pane containers
     `#fgtPane-overview` … `#fgtPane-settings`. Each pane holds view pills `#fgtPill-*`
-    (`fgtPickView('<pane>','<view>')`) rendering into `#fgtView-*`, plus a shared `Aggiorna`
-    (`refreshFgtView()`). Target selector `#fgtTargetSelect`. 7 panes, 25 pills.
+    rendering into `#fgtView-*`, plus a shared `Aggiorna` (`data-action="fgt-refresh"`, delegated on
+    `#tab-fortigate`). Target selector `#fgtTargetSelect`. 7 panes, 25 pills.
   - **Policy Lookup**: pane **Firewall** → pill `Verifica Policy` (`#fgtPill-policyLookup`) → form
     `#fgtForm-policyLookup`: `#fgtLookupSrc`, `#fgtLookupDst`, `#fgtLookupProto` (TCP/UDP/ICMP),
-    `#fgtLookupPort`, `#fgtLookupIntf` → run button (no ID, `onclick="loadFgtDataset('policyLookup')"`,
-    i18n `btnFgtLookupRun`).
+    `#fgtLookupPort`, `#fgtLookupIntf` → run button `#btnFgtLookupRun`.
   - **Sessions**: pane **Traffico** → pill `Sessioni` (`#fgtPill-sessions`) → `#fgtSessSrc`,
-    `#fgtSessDst`, `#fgtSessPort` → `onclick="loadFgtDataset('sessions')"`.
-  - **Logs**: pane **Traffico** → pill `Log` (`#fgtPill-logs`) → `#fgtLogDevice` (disk/memory),
+    `#fgtSessDst`, `#fgtSessPort` → `#btnFgtSessLoad`, with `#btnFgtSessionKill` next to it.
+  - **Logs**: pane **Traffico** → pill `Log` (`#fgtPill-logs`) → `#btnFgtLogLoad`, `#fgtLogDevice` (disk/memory),
     `#fgtLogType` (traffic/event/utm), `#fgtLogSubtype` (forward/local/virus/webfilter/ips),
     `#fgtLogSrc`, `#fgtLogDst`, `#fgtLogAction`, `#fgtLogSince`/`#fgtLogUntil`, `#fgtLogCount`.
-  - **Client diagnosis (new)**: pane **Traffico** → pill `Diagnosi Client` (`#fgtPill-clientDiagnosis`,
-    `fgtPickView('traffic','clientDiagnosis')`) → aggregated device-inventory + ARP + DHCP + sessions +
+  - **Client diagnosis**: pane **Traffico** → pill `Diagnosi Client` (`#fgtPill-clientDiagnosis`) →
+    run button `#btnFgtDiagRun` → aggregated device-inventory + ARP + DHCP + sessions +
     policy match + recent logs for one client. The same pane also holds `Inventario Dispositivi`
     (`#fgtPill-deviceInventory` — FortiGate-discovered devices, unrelated to the Network Inventory tab).
+  - **Dead rules**: pane **Firewall** → pill `Policy` (`#fgtPill-policies`) joins the runtime counters
+    to the static findings read from the backup. A rule merely never hit is amber; a rule that is
+    shadowed **and** never hit is red and labelled a dead rule. The response carries
+    `shadow_analysis: "backup" | "unavailable"` — without a backup the column simply does not appear,
+    rather than declaring never-examined rules healthy.
 - **Workflow Step-by-Step**:
     1. Open **Fortigate Management** under **Inventario**; pick `192.0.2.1` in `#fgtTargetSelect`.
     2. Pane **Firewall** → pill **Verifica Policy**; fill `192.0.2.105` / `198.51.100.45` / `443`, run.
@@ -95,14 +123,15 @@ customer values.
     5. Or skip 2–4: pill **Diagnosi Client**, enter the client and the destination.
 
 - **App Features Present**:
-  - `POST /api/fortigate/{ip}/policy-lookup` ([routers/fortigate.py:264](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L264))
-  - `POST /api/fortigate/{ip}/sessions` ([routers/fortigate.py:272](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L272))
-  - `DELETE /api/fortigate/{ip}/sessions` ([routers/fortigate.py:279](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L279)) — **API-only, no UI button**
-  - `POST /api/fortigate/{ip}/logs` ([routers/fortigate.py:302](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L302))
-  - `POST /api/fortigate/{ip}/diagnose-client` ([routers/fortigate.py:327](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L327)) — **new since 2026-08-08**
-  - `GET /api/fortigate/{ip}/firewall/policies-with-stats` ([routers/fortigate.py:226](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L226)) — hit counts, active sessions, last used
+  - `POST /api/fortigate/{ip}/policy-lookup` ([routers/fortigate.py:303](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L303))
+  - `POST /api/fortigate/{ip}/sessions` ([routers/fortigate.py:311](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L311))
+  - `DELETE /api/fortigate/{ip}/sessions` ([routers/fortigate.py:318](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L318)) — button `#btnFgtSessionKill`, refuses an empty filter set
+  - `POST /api/fortigate/{ip}/logs` ([routers/fortigate.py:341](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L341))
+  - `POST /api/fortigate/{ip}/diagnose-client` ([routers/fortigate.py:366](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L366))
+  - `GET /api/fortigate/{ip}/firewall/policies-with-stats` ([routers/fortigate.py:257](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L257)) — hit counts, active sessions, last used, **plus per-policy `findings`** joined from the backup by `_shadow_by_policy_id` (L226)
   - **MCP**: `fortigate_policy_lookup`, `fortigate_sessions`, `fortigate_traffic_logs`,
-    `fortigate_policies`, `fortigate_policy_stats`, `fortigate_diagnose_client`, `fortigate_full_config`
+    `fortigate_policies`, `fortigate_policy_stats`, `fortigate_diagnose_client`, `fortigate_full_config`,
+    and — offline, from the backup — `policy_trace` / `policy_findings` (§10)
     ([ai/mcp_server.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/ai/mcp_server.py))
   - **UI**: `static/js/fortigate-management.js` (views registered in `FGT_DATASETS`)
 
@@ -136,26 +165,31 @@ customer values.
     **`#tab-provisioner`** ("Apparato da Zero" = day-0 config generation). Everything below lives in
     `#tab-provisioner`, not `#tab-provisioning`.
   - **Config Analyzer**: tenant filter `#configGroupSelect`, search `#caSearch`, pills `#caPills`
-    (Home / Firewall / Server / VLAN / Routing / ACL / Interfacce / Converti), results `#caResults`.
+    (Home / VLAN / Routing / ACL / Interfacce / **Validazione** / Firewall / Server / Converti, as
+    `data-view="home|vlan|routing|acl|iface|validation|firewall|server|convert"`), results `#caResults`.
     The analysis auto-loads from `GET /api/config-analyzer?group=<group>`; there is **no**
     `#configSelectBackup`, **no** `#btnAnalyzeConfig` and **no** upload control in this tab
-    (upload lives in NetSec Audit, see §6).
+    (upload lives in NetSec Audit, see §6). The **Validazione** view lists unused/missing ACLs,
+    unused/undefined VLANs, route→ACL references and — first in the list, because a rule that states
+    an intent and silently does nothing is worse than one that was never applied — the
+    `policy_findings` from the §10 engine.
   - **Provisioning (`#tab-provisioner`)**: FortiGate day-0 fields (`#fgtMgmtIf`, `#fgtMgmtIp`,
     `#fgtWanIf`, `#fgtWanMode`, `#fgtLanIf`, DNS/NTP/Syslog/SNMPv3/AAA, hardening checkboxes) or Cisco
     switch fields (`#provHostname`, `#provRole`, VLAN/port fields) → `#btnProvGenerate`,
     `#btnProvDownload`, delivery mode `#provDeliveryMode`.
 
 - **App Features Present**:
-  - `GET /api/config-analyzer` ([routers/analyzer.py:44](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py#L44)),
-    `GET /api/config-analyzer/{ip}` (L49), `POST /api/config-analyzer/convert` (L67, FortiOS ↔ PAN-OS)
-  - `POST /api/provisioner/fgt/generate` (L221), `/fgt/download` (L230), `/fgt/push-ssh` (L245 — REST
-    first when a token is stored, SSH fallback), `/fgt/push-serial` (L281); Cisco equivalents
-    `/api/provisioner/generate` (L152), `/download` (L162), `/push-ssh` (L177), `/push-serial` (L199),
-    `GET /api/provisioner/serial-ports` (L216)
+  - `GET /api/config-analyzer` ([routers/analyzer.py:52](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py#L52)),
+    `GET /api/config-analyzer/{ip}` (L57), `POST /api/config-analyzer/convert` (L75, FortiOS ↔ PAN-OS)
+  - `POST /api/provisioner/fgt/generate` (L227), `/fgt/download` (L236), `/fgt/push-ssh` (L251 — REST
+    first when a token is stored, SSH fallback), `/fgt/push-serial` (L288); Cisco equivalents
+    `/api/provisioner/generate` (L157), `/download` (L167), `/push-ssh` (L182), `/push-serial` (L205),
+    `GET /api/provisioner/serial-ports` (L222)
     ([routers/provisioner.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/provisioner.py)).
-    Push routes are admin-gated.
-  - Identity store for push credentials: `GET/POST /api/identities` (L309/L314),
-    `PUT/DELETE /api/identities/{id}` (L324/L336), `POST /api/identities/{id}/assign` (L353)
+    The four push routes are admin-gated (`require_admin`); generate/download are `require_operator`.
+  - Identity store for push credentials: `GET/POST /api/identities` (L316/L321),
+    `PUT/DELETE /api/identities/{id}` (L331/L343), `POST /api/identities/{id}/assign` (L360).
+    The same store backs the bastion login of a jump site (§7.2).
   - **MCP**: `generate_fortigate_config`, `generate_switch_config`, `analyze_config`
   - **UI**: `static/js/config-analyzer.js`, `static/js/provisioning.js`
 
@@ -164,8 +198,10 @@ customer values.
     (src, dst, services, interfaces, action).
   - **Transactional Push With Rollback**: push exists (SSH/serial/REST) but no commit verification or
     auto-rollback on failure/connectivity loss.
-  - **Shadow Policy Detector**: nothing checks whether a higher-priority rule already permits or denies
-    the pattern before a new policy is suggested.
+  - *(Withdrawn 2026-08-22: "Shadow Policy Detector" — `services/policy_test/findings.py` detects
+    shadowed, unreachable, any-any, unresolved-object and route-to-nowhere rules, and §10 traces a
+    proposed flow against the backup before anyone writes a new rule. It is still not wired into the
+    provisioning form as a pre-flight check: the operator has to go and look.)*
 
 ---
 
@@ -190,15 +226,20 @@ customer values.
     Client), `#locPill-inventory` (Inventario Endpoint) over panes `#locPane-mac` / `#locPane-clientmap`
     / `#locPane-diagnosi` / `#locPane-inventory`, sharing one header and tenant selector.
   - **MAC Tracker**: `#macSearchMac` (partial/OUI ok), `#macSearchVlan`, `#macSearchIface`,
-    `#macSearchSwitch`; search button (no ID, `onclick="macSearch()"`, i18n `btnMacSearchGo`); reset
-    `macSearchReset()`; results `#macResults`; stats chip `#macStats`.
+    `#macSearchSwitch`; search `#btnMacSearch`, reset `#btnMacSearchReset`; results `#macResults`.
+    KPI tiles above the pane: `#kpiMacSightings`, `#kpiMacUniqueMacs` (clickable,
+    `data-action="focus-mac-results"`), `#kpiMacSwitches`, `#kpiMacRetention` — there is **no**
+    `#macStats` chip any more. Collection controls: `#macDeviceMenu` / `#macDeviceList`,
+    `#macScanTransport`, `#btnMacScan`, plus per-device command overrides (`#macOvDevice`,
+    `#macOvCommand`, `#macOvFmt`, `#btnSaveMacOverride`, `#macOverridesList`).
   - **Client Map**: MAC↔IP bindings from gateway ARP tables cross-referenced with tracker ports.
 
 - **App Features Present**:
   - `GET /api/mac/search` ([routers/mac.py:139](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/mac.py#L139)),
     `GET /api/mac/locate` (L158), `GET /api/mac/switch/{ip}` (L190), `GET /api/mac/stats` (L195)
-  - `POST /api/mac/scan` (L105) — on-demand MAC-table collection
-  - `POST /api/mac/port-control` (L241) — admin; persistent isolation, refused on an uplink or a
+  - `POST /api/mac/scan` (L105) — on-demand MAC-table collection;
+    `POST /api/mac/settings` (L206) and the override CRUD (L212/L216/L227)
+  - `POST /api/mac/port-control` (L242) — admin; persistent isolation, refused on an uplink or a
     stale position; re-enabling asks for neither
   - MAC→IP / Client Map: `GET /api/arp/search` ([routers/arp.py:53](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/arp.py#L53)),
     `GET /api/arp/client-map` (L62), `GET /api/arp/stats` (L85)
@@ -230,9 +271,9 @@ customer values.
 - **UI Navigation & Operational Workflow**:
   - The ARP collection panel lives in **Client Map** (`#locPane-clientmap`), **not** in the MAC Tracker
     pane (`#locPane-mac`).
-  - Controls: gateway multi-select `#arpDeviceMenu`, `#btnArpScan`
-    (`runArpScan()`), filters `#arpSearchMac` / `#arpSearchIp` (`arpClientSearch()`), KPIs
-    `#kpiArpBindings`, `#kpiArpUniqueMacs`, `#kpiArpGateways`.
+  - Controls: gateway multi-select `#arpDeviceMenu`, `#btnArpScan`, filters `#arpSearchMac` /
+    `#arpSearchIp` with `#btnArpSearch`, KPIs `#kpiArpBindings`, `#kpiArpUniqueMacs`,
+    `#kpiArpGateways`.
   - **Inventario Endpoint** (`#locPane-inventory`): mode buttons `#epModeListBtn` / `#epModePortsBtn`,
     switch select `#epPortsSwitch`, filters `#epFilterQ`, `#epFilterStale`,
     exports `endpointsExport('csv'|'json')`, KPIs `#epKpis`, results `#epResults`.
@@ -241,8 +282,8 @@ customer values.
   - `POST /api/arp/scan` ([routers/arp.py:21](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/arp.py#L21))
   - `GET /api/endpoints/list` ([routers/endpoint_inventory.py:35](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/endpoint_inventory.py#L35)),
     `GET /api/endpoints/ports` (L52) — there is no `/api/endpoint-inventory`
-  - `POST /api/scan-subnet` ([routers/scan.py:54](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/scan.py#L54)),
-    `POST /api/scan-verify` (L141, **new**), `GET /api/scan-subnet/{job_id}` (L181)
+  - `POST /api/scan-subnet` ([routers/scan.py:73](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/scan.py#L73)),
+    `POST /api/scan-verify` (L165), `GET /api/scan-subnet/{job_id}` (L205)
   - **MCP**: `arp_scan`
   - **UI**: `static/js/endpoint-inventory.js`, `static/js/devices.js`
 
@@ -265,19 +306,21 @@ customer values.
   3. Read the client row: connected AP, SSID/WLAN, RSSI/SNR, quality verdict, bytes.
   4. Run the per-client diagnostic (`GET /api/wlc/{ip}/diagnose-client/{mac}`) for authentication,
      DHCP, EAPOL and low-RSSI flags.
-  5. Check the AP row for client density and the 5 GHz channel/width reported by
-     `show ap auto-rf 802.11a` (AireOS) to spot co-channel or width mismatches.
+  5. Check the AP row for client density and the per-band channel/width reported by
+     `show ap auto-rf 802.11a` (5 GHz) and `show ap auto-rf 802.11b` (2.4 GHz) on AireOS, to spot
+     co-channel or width mismatches. Channel utilization is carried in the cell's tooltip.
 
 - **UI Navigation & Operational Workflow**:
   - **Tab**: `Cisco WLC` (`#navWlc` → `#tab-wlc`).
-  - **Controls**: tenant select `#wlcTenantSelect` (`onWlcTenantChanged()`), controller select
-    `#wlcTargetSelect` (disabled until a tenant is picked, `onWlcTargetChanged()`), `Aggiorna`
-    (`refreshWlcData()`), status panel `#wlcStatusBox`.
-  - **Tables**: AP `#wlcApTableBody` (name, IP, ethernet MAC, state, clients, **5 GHz channel/width**,
-    model), clients `#wlcClientTableBody` (MAC, IP, AP, WLAN/SSID, RSSI/SNR, **quality**, actions) with
-    counter `#wlcClientCount` and live filter `#wlcClientSearch` (`onWlcClientSearch()`), WLANs
-    `#wlcWlanTableBody`, rogues `#wlcRogueTableBody`.
-  - **Diagnostics**: row action `wlcDiagnoseClient(mac)` → modal `#wlcDiagModal` / `#wlcDiagModalBody`.
+  - **Controls**: tenant select `#wlcTenantSelect`, controller select `#wlcTargetSelect` (disabled
+    until a tenant is picked), `Aggiorna`, status panel `#wlcStatusBox`.
+  - **Tables**: AP `#wlcApTableBody` (name, IP, ethernet MAC, state, clients, **5 GHz** and
+    **2.4 GHz** channel `@` width — one column each, utilization in the `title` — model),
+    clients `#wlcClientTableBody` (MAC, IP, AP, WLAN/SSID, RSSI/SNR, **quality**, actions) with
+    counter `#wlcClientCount` and live filter `#wlcClientSearch`, WLANs `#wlcWlanTableBody`,
+    rogues `#wlcRogueTableBody`.
+  - **Diagnostics**: row action → modal `#wlcDiagModal` / `#wlcDiagModalBody`. The same route is
+    reachable from the Diagnosi Client report (§9), on demand.
 
 - **App Features Present**:
   - `GET /api/wlc/{ip}/overview` ([routers/wlc.py:39](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L39)) — **the only route the tab calls for telemetry**
@@ -315,8 +358,8 @@ customer values.
 
 - **App Features Present**:
   - `GET /api/wlc/{ip}/rogue-aps` ([routers/wlc.py:70](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L70))
-  - `GET /api/fortigate/{ip}/wifi/aps` ([routers/fortigate.py:317](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L317)),
-    `GET /api/fortigate/{ip}/wifi/clients` (L313) — there is no `/managed-aps` route
+  - `GET /api/fortigate/{ip}/wifi/aps` ([routers/fortigate.py:356](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L356)),
+    `GET /api/fortigate/{ip}/wifi/clients` (L352) — there is no `/managed-aps` route
   - **MCP**: `wlc_rogue_aps`, `fortigate_managed_aps` (→ `/wifi/aps`), `fortigate_wifi_clients`
 
 - **Missing Features / Gaps**:
@@ -365,10 +408,10 @@ customer values.
 - **App Features Present**:
   - `GET /api/observability/top` ([routers/observability.py:78](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py#L78)) — top talkers
   - `GET /api/observability/protocol-distribution` (L115), `GET /api/observability/syslog` (L274),
-    `GET /api/observability/events` (L295), `GET /api/observability/flowgraph` (L448)
+    `GET /api/observability/events` (L295), `GET /api/observability/flowgraph` (L412)
   - `GET /api/observability/anomalies` (L340), `POST /api/observability/anomalies/{event_id}/status`
-    (L385) — the latter is **deprecated** and delegates to `POST /api/incidents/{id}/status`;
-    the Traffico tab calls the incidents route directly
+    (L382) — the latter is flagged `deprecated=True` in the decorator and delegates to
+    `POST /api/incidents/{id}/status`; the Traffico tab calls the incidents route directly
   - Flow SIEM (prefix `/api/flow-siem`, [routers/flow_siem.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/flow_siem.py)):
     `GET /events` (L178), `GET /histogram` (L242), `GET /facets` (L288), `POST /alerts/suppress` (L341),
     `POST /shun-ip` (L379), `GET /shun-list` (L390)
@@ -391,25 +434,31 @@ customer values.
   2. Filter sessions by the suspect source IP.
   3. Check per-policy hit counts and active sessions to see which rule carries the load.
   4. Look for states typical of SYN flood or half-closed connections.
-  5. Drain: `DELETE /api/fortigate/{ip}/sessions` (API/MCP only) or `diagnose sys session clear` via
-     `POST /api/send-command` / MCP `send_cli_command`. There is no CLI console button in this tab.
+  5. Drain: `DELETE /api/fortigate/{ip}/sessions` via `#btnFgtSessionKill`, or
+     `diagnose sys session clear` via `POST /api/send-command` / MCP `send_cli_command`. There is no
+     CLI console button **in this tab** (the WS terminal lives in the device inventory).
 
 - **UI Navigation & Operational Workflow**:
   - Pane **Panoramica** (`#fgtSub-overview`): status tiles + `#fgtView-resources` + `#fgtView-ha`.
-  - Pane **Traffico** → pill **Sessioni**: `#fgtSessSrc`, `#fgtSessDst`, `#fgtSessPort`.
-  - Pane **Firewall** → pill **Policy** (`#fgtPill-policies`): hit counts / active sessions / last used.
-  - There is **no** `#btnFgtSessionKill` and **no** `#btnOpenCli`.
+  - Pane **Traffico** → pill **Sessioni**: `#fgtSessSrc`, `#fgtSessDst`, `#fgtSessPort`, load
+    `#btnFgtSessLoad`, kill `#btnFgtSessionKill` (refuses to run with all three filters empty, which
+    would have killed every session).
+  - Pane **Firewall** → pill **Policy** (`#fgtPill-policies`): hit counts / active sessions / last used
+    / static findings.
+  - There is **no** `#btnOpenCli`.
 
 - **App Features Present**:
   - `GET /api/fortigate/{ip}/status` (L155), `/system/resources` (L159), `/system/ha` (L164)
-  - `POST` / `DELETE /api/fortigate/{ip}/sessions` (L272 / L279)
-  - `GET /api/fortigate/{ip}/policy-stats` (L212), `/firewall/policies-with-stats` (L226)
-  - `POST /api/send-command` ([routers/commands.py:159](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/commands.py#L159)),
-    `POST /api/bulk-command` (L208), `GET /api/bulk-command/{job_id}` (L265), `POST /api/ws-token` (L284)
+  - `POST` / `DELETE /api/fortigate/{ip}/sessions` (L311 / L318)
+  - `GET /api/fortigate/{ip}/policy-stats` (L212), `/firewall/policies-with-stats` (L257)
+  - `POST /api/send-command` ([routers/commands.py:161](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/commands.py#L161)),
+    `POST /api/bulk-command` (L210), `GET /api/bulk-command/{job_id}` (L267), `POST /api/ws-token` (L286),
+    `WS /api/ws-terminal/{ip}` (L326)
   - **MCP**: `fortigate_status`, `fortigate_sessions`, `fortigate_policy_stats`, `send_cli_command`
 
 - **Missing Features / Gaps**:
-  - **CLI Console UI**: no embedded console in the tab (session kill got its button on 2026-08-11).
+  - **CLI Console UI in this tab**: no embedded console on the FortiGate tab (session kill got its
+    button on 2026-08-11).
   - **Session Threshold Alerts**: no webhook/paging when session utilisation crosses a threshold.
 
 ---
@@ -443,9 +492,9 @@ customer values.
     `POST /interfaces/expected` (L177)
   - Triage ([routers/triage.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/triage.py)):
     `POST /api/run-triage` (L80), `POST /api/triage/{ip}` (L111), `GET /api/triage-status` (L125) —
-    **not** `/api/triage/status`, `POST /api/ping-check` (L130), `GET /api/ping/{ip}` (L179)
+    **not** `/api/triage/status`, `POST /api/ping-check` (L130), `GET /api/ping/{ip}` (L185)
   - AI ([routers/ai.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/ai.py)):
-    `POST /api/ai/chat` (L509), `POST /api/ai/generate-config` (L676), profiles/conversations CRUD.
+    `POST /api/ai/chat` (L509), `POST /api/ai/generate-config` (L677), profiles/conversations CRUD.
     There is **no** `/api/ai/diagnose`.
   - **MCP**: `get_triage_status`, `locate_mac`, `get_anomalies` (disabled by default)
   - **UI**: `static/js/incidents.js`, `static/js/ai.js`
@@ -468,42 +517,63 @@ customer values.
   2. Use **Config Analyzer** for structural inspection of stored backups: policies (incl. `logtraffic`),
      objects, VLANs, routing, ACLs, interfaces; FortiOS insecure management access (http/telnet in
      `allowaccess`) is flagged, IOS SNMP communities are parsed with their ACL references.
-  3. Use **Checklist Audit Firewall** for engagement-style audits: templates, per-item status, evidence
-     upload, final report.
+  3. Use **Checklist Audit Firewall** — since the merge a **sub-tab of NetSec Audit**, not its own tab —
+     for engagement-style audits: templates, per-item status, evidence upload, final report.
   4. Download raw backups when needed.
 
 - **UI Navigation & Operational Workflow**:
-  - **Tabs**: `NetSec Audit` (`#navNetSecAudit` → `#tab-netsec-audit`, admin-only, preview),
-    `Config Analyzer` (`#tab-config`), `Checklist Audit Firewall` (`#navAuditChecklist` →
-    `#tab-audit-checklist`, admin-only).
-  - **NetSec Audit controls** (rendered by `static/js/netsec-audit.js` into the empty `#tab-netsec-audit`):
-    benchmark `#auditBenchmarkSelect`, device `#auditDeviceSelect`, opt-in history retention `#auditSaveRun`, **config upload / drag-and-drop
-    `#auditDropZone` + `#auditFileInput` + `#auditDropText`** (sent as `config_text`), run
-    `#btnRunAuditScan`, score `#auditScoreValue` + `#auditGradeBadge`, filters `#auditSevFilter` /
-    `#auditCatFilter`, results `#auditRulesTableBody`, requirements view `#auditBenchmarkReqs` /
+  - **Tabs**: `NetSec Audit` (`#navNetSecAudit` → `#tab-netsec-audit`, preview badge, **not**
+    admin-only — a viewer can open it) and `Config Analyzer` (`#tab-config`), both under **Valuta**.
+    `#tab-audit-checklist` and `#navAuditChecklist` **no longer exist**: the checklist is the second
+    sub-tab of NetSec Audit.
+  - **NetSec Audit sub-tabs**: bar `#netsecSubtabNav` with `#subtabBtnAuditScan` (Scansione &
+    Compliance Automatica) and `#subtabBtnChecklist` (Checklist Audit Firewall), over the panes
+    `#netsecSubtabScan` / `#netsecSubtabChecklist`. `LAZY_TAB_SCRIPTS['tab-netsec-audit']` therefore
+    loads **both** `netsec-audit.js` and `audit_checklist.js` (plus the html2pdf vendor bundle) —
+    dropping either leaves one sub-tab dead when the tab is opened cold.
+  - **Scan sub-tab controls** (markup in `dashboard.html`, populated by `static/js/netsec-audit.js`):
+    benchmark `#auditBenchmarkSelect`, device `#auditDeviceSelect` (multi-device scan is *not*
+    implemented — the "all" option is a placeholder), opt-in history retention `#auditSaveRun` +
+    `#auditRunName`, **config upload / drag-and-drop `#auditDropZone` + `#auditFileInput` +
+    `#auditDropText`** (sent as `config_text`), run `#btnRunAuditScan`, score `#auditScoreValue` +
+    `#auditGradeBadge`, counters `#auditStatTotal` / `#auditStatFailed` / `#auditStatPassed` /
+    `#auditStatWarned` / `#auditStatUnknown`, filters `#auditSevFilter` / `#auditCatFilter` /
+    `#auditStatusFilter`, results `#auditRulesTableBody`, requirements view `#auditBenchmarkReqs` /
     `#auditBenchmarkReqsBody`, partial-coverage warning `#auditPartialWarning`, report language
-    `#auditReportLang`, PDF export `#btnPdfNetsec`, audit history `#auditHistoryPanel` / `#auditHistoryBody`.
+    `#auditReportLang`, export `#btnExportAuditReport` (**not** `#btnPdfNetsec`, which does not exist)
+    opening `#auditReportModal` / `#auditReportFrame` with `#auditModalBtnPdf` / `#auditModalBtnDoc` /
+    `#auditModalBtnHtml` / `#auditModalBtnPrint`, history `#auditHistoryPanel` / `#auditHistoryBody` +
+    `#btnRefreshAuditHistory`.
   - **Config Analyzer**: `#configGroupSelect`, `#caSearch`, `#caPills`, `#caResults` — auto-loads,
     no upload, no analyze button.
-  - **Audit Checklist**: engagements `#auditEngagementList`, new audit modal `openNewAuditModal()`.
+  - **Checklist sub-tab**: engagements `#auditEngagementList`, workspace `#auditWorkspace` /
+    `#auditWorkHeader` / `#auditWorkSub`, template editor `#auditTemplateEditor`, new-audit modal
+    fields `#auditCustomerName` / `#auditInterviewee` / `#auditModality`.
     There is no "Seleziona Modello Audit" select and no "Esegui Audit Checklist" button.
 
 - **App Features Present**:
-  - `GET /api/netsec-audit/benchmarks` ([routers/analyzer.py:97](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py#L97)),
-    `POST /api/netsec-audit/scan` (accepts `device_ip` **or** `config_text`, optional `save: true`),
-    `GET /api/netsec-audit/history` (saved runs), `GET /api/netsec-audit/history/{run_id}` (stored document),
-    `DELETE /api/netsec-audit/history/{run_id}` (admin-only run delete).
-  - `GET /api/config-analyzer` (L44), `/{ip}` (L49), `POST /api/config-analyzer/convert` (L67)
+  - `GET /api/netsec-audit/benchmarks` ([routers/analyzer.py:183](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py#L183)),
+    `POST /api/netsec-audit/scan` (L223 — accepts `device_ip` **or** `config_text`, optional
+    `save: true`; an empty/missing backup is a 404, not a silently empty audit),
+    `GET /api/netsec-audit/history` (L292), `GET /api/netsec-audit/history/{run_id}` (L339 — stored
+    document; out-of-scope and non-existent both answer 404),
+    `DELETE /api/netsec-audit/history/{run_id}` (L358, admin-only)
+  - `POST /api/netsec-audit/report/pdf` (L123 — prints the preview HTML with the system browser) and
+    `POST /api/netsec-audit/export/docx` (L275)
+  - The scan result carries `policy_defects` from the §10 engine. It is **deliberately excluded from
+    the compliance score**: a shadowed rule is a real defect but not a benchmark control, and giving
+    it an invented control id would skew the one number the report is delivered for.
+  - `GET /api/config-analyzer` (L52), `/{ip}` (L57), `POST /api/config-analyzer/convert` (L75)
   - Audit checklist (prefix `/api/audit-checklist`,
     [routers/audit_checklist.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/audit_checklist.py)):
     `GET /templates` (L50), `GET /templates/{id}` (L56), item CRUD (L80/L93/L106),
     `GET /engagements` (L119), `POST /engagements` (L127), `GET /engagements/{id}` (L145),
     `PATCH /engagements/{id}` (L154), `PUT /engagements/{id}/items/{ref}` (L172),
     `POST /engagements/{id}/evidence` (L191), `GET /engagements/{id}/report` (L208)
-  - `GET /api/download-backup/{ip_or_filename}` ([routers/backup.py:30](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/backup.py#L30)),
-    `GET /api/search` (L81)
-  - **MCP**: `analyze_config`
-  - **Engine**: `services/netsec_audit/`, `ai/config_analyzer.py`, `fw_analyzers/`
+  - `GET /api/download-backup/{ip_or_filename}` ([routers/backup.py:23](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/backup.py#L23)),
+    `GET /api/search` (L75)
+  - **MCP**: `analyze_config`, `policy_findings`
+  - **Engine**: `services/netsec_audit/`, `services/policy_test/`, `ai/config_analyzer.py`, `fw_analyzers/`
 
 - **Missing Features / Gaps**:
   - **Git Drift Alerting**: backups are stored in-app; no auto-commit with per-line diff alerts on
@@ -535,15 +605,18 @@ customer values.
   - FortiGate pane **Traffico** → pill `Log` with `#fgtLogType = event`.
 
 - **App Features Present**:
-  - `GET /api/sites` ([routers/sites.py:51](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/sites.py#L51)),
-    site CRUD + token regeneration (L55–L83), `POST /api/sites/{site_id}/command` (L91),
-    `GET /api/command-jobs/{job_id}` (L122), agent update/restart/config/inventory/flow-control
-    (L152–L235)
+  - `GET /api/sites` ([routers/sites.py:61](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/sites.py#L61) —
+    a non-admin gets only `id` / `name` / `mode`; bastion address, identity, subnets and token state
+    stay with the admins who configure them), site CRUD (L74/L88/L119),
+    `POST /api/sites/test-bastion` (L126), `POST /api/sites/regenerate-token` (L149),
+    `POST /api/sites/{site_id}/command` (L157), `GET /api/command-jobs/{job_id}` (L188),
+    `GET /api/sites/{site_id}/command-jobs` (L199), agent update/restart/config/inventory/flow-control
+    (L218–L301)
   - `GET /api/topology` ([routers/topology.py:55](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/topology.py#L55)),
     `GET /api/network-map` (L61) — **not** `/api/topology/map`, `POST /api/map/export/vsdx` (L67),
-    `GET /api/portchannels` (L83)
-  - `GET /api/fortigate/{ip}/interfaces` (L191), `/routes` (L287), `/vpn/tunnels` (L291),
-    `/sdwan/health` (L297)
+    `GET /api/portchannels` (L83), `POST /api/topology/reset` (L153)
+  - `GET /api/fortigate/{ip}/interfaces` (L191), `/routes` (L326), `/vpn/tunnels` (L330),
+    `/sdwan/health` (L336)
   - **MCP**: `list_sites`, `get_network_map`, `get_port_channels`, `fortigate_interfaces`,
     `fortigate_routes`, `fortigate_arp`, `fortigate_dhcp_leases`, `fortigate_device_inventory`
   - **UI**: `static/js/site-agent.js`, `static/js/fortigate-management.js`
@@ -552,6 +625,65 @@ customer values.
   - **IPsec IKE Debug Streaming**: no `diagnose debug application ike` stream; only tunnel state, logs
     and manual CLI.
   - **BGP / OSPF Neighbor Telemetry**: no parser/API for dynamic routing adjacency state.
+
+---
+
+### Q7.2: A remote site is only reachable through an SSH bastion. How to onboard it, and what breaks?
+
+- **Answer**:
+  1. Create the site with `mode = jump`. Beside name and subnets it needs a **bastion host/port** and
+     two identities, kept separate on purpose: the one that logs into the **bastion** and the default
+     one used for the **devices** behind it.
+  2. Every netmiko call for a device in that site is tunnelled through the bastion
+     (`core/net_ssh.py`: one cached `paramiko.Transport` per site, per-site lock, bounded connect).
+  3. Test the hop before blaming the device. A refused bastion login and a refused device login both
+     surface as "authentication failed" on the device row, and the operator ends up rotating the
+     credential on the wrong machine. `POST /api/sites/test-bastion` answers
+     `success` / `auth_failed` / `unreachable` for the **bastion**, and deliberately does **not** go
+     through the cached transport: `probe_bastion()` dials fresh, so it tests the credential as it is
+     configured now rather than the one a live session was opened with.
+  4. Editing the bastion host, port or identity calls `net_ssh.invalidate_site(site_id)`, which closes
+     and drops the cached transport. Without it an edited login changed nothing until the old session
+     happened to die.
+  5. *(working tree, ahead of `e8f006b`)* The bastion's SSH host key is pinned **trust-on-first-use**
+     into the same `ssh_known_hosts` file the WS terminal uses. `paramiko.Transport` has no policy
+     hook, so the pinned key is handed to `connect(hostkey=…)`, which refuses any other, and a first
+     contact is recorded afterwards. A changed key raises `BastionHostKeyError`, whose message names
+     the `known_hosts` entry (`host` on port 22, `[host]:port` otherwise) to remove if the bastion was
+     genuinely rebuilt. Reconnecting anyway is not offered.
+
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Sedi` (`navAdminister` → `#tab-sites`, admin-only). Sites table `#sitesTableBody`.
+  - **Create**: `#newSiteName`, `#newSiteMode` (`central` / `agent` / `jump`), `#newSiteSubnets`,
+    `#btnCreateSite`. Picking `jump` reveals `#jumpFields` — `#newSiteJumpHost`, `#newSiteJumpPort`,
+    `#newSiteJumpIdentity`, `#newSiteDeviceIdentity` — and the `#jumpLimits` panel that spells the
+    limitations out on screen.
+  - **Edit after creation**: each jump row carries an inline
+    `data-action="set-site-jump-identity"` select (the bastion identity **is** editable after the site
+    exists) and a `data-action="test-bastion"` button. Both are rendered by `static/js/settings.js`,
+    which `LAZY_TAB_SCRIPTS` loads for `tab-sites` as well as `tab-settings`, `tab-users` and `tab-mcp`.
+  - **What does not work on a jump site** (stated in `#jumpLimits`, not only in the docs): no ICMP, so
+    online/offline stays "non misurabile" rather than collapsing to *down*; no subnet scan or
+    discovery; no inbound syslog/flow/SNMP; no vendor REST (FortiGate token path) — CLI only.
+    Inventory, config backup, MAC/ARP, CLI commands and audits do work.
+
+- **App Features Present**:
+  - `POST /api/sites` (L74, `jump_host` / `jump_port` / `jump_identity` / `device_identity`),
+    `POST /api/sites/update` (L88 — only the jump fields actually supplied are forwarded, so renaming
+    a jump site cannot blank an unrelated field and fail revalidation),
+    `POST /api/sites/test-bastion` (L126, admin)
+  - `core/net_ssh.py`: `_dial` / `_transport` / `invalidate_site` / `probe_bastion` /
+    `jump_channel` / `jump_site_for` / `ConnectHandler` / `close_all`
+  - Identity store shared with provisioning push (§1.2): `GET/POST /api/identities`
+  - **UI**: `static/js/settings.js`
+
+- **Missing Features / Gaps**:
+  - **Key-based bastion auth**: `_dial` authenticates with username + password from the identity
+    store; there is no private-key identity type.
+  - **Host-key rotation from the UI**: a changed bastion key has to be cleared by editing
+    `ssh_known_hosts` on disk — the error names the entry, but nothing in the app removes it.
+  - **Bastion reachability monitoring**: `test-bastion` is operator-triggered; nothing polls the hop,
+    so a dead bastion is discovered by the next device operation that fails.
 
 ---
 
@@ -567,22 +699,23 @@ customer values.
      There is **no** `/api/observability/linux-health`.
   3. Verify listener configuration in Settings → Observability (bind address, API/SNMP/Linux polling).
   4. Reclaim space with `POST /api/observability/prune-logs` (`{"days": N}` — deletes `syslog_events`
-     and `flow_aggregates` older than N days). **API-only, no button.**
+     and `flow_aggregates` older than N days), from Settings → Observability.
 
 - **UI Navigation & Operational Workflow**:
   - **Tab**: `Impostazioni` (`navAdminister` → `#tab-settings`); observability settings render into
     `#obsSettingsBody` by `static/js/observability.js`: `#obs_enabled`, `#obs_bind`, `#obs_api_poll_s`,
-    `#obs_snmp_poll_s`, `#obs_linux_poll_s`, restart banner `#obsRestartBanner`.
-  - There are **no** `#tab-obs-settings`, `#subtab-health`, `#btnPruneLogs`, no CPU/RAM/disk KPI cards
-    and no service badges anywhere in the dashboard.
+    `#obs_snmp_poll_s`, `#obs_linux_poll_s`, restart banner `#obsRestartBanner`, and the one-off purge
+    `#obsPruneDays` + `#btnPruneObsLogs` (`data-action="prune-obs-logs"`).
+  - There are **no** `#tab-obs-settings`, `#subtab-health`, `#btnPruneLogs` (the purge button is
+    `#btnPruneObsLogs`), no CPU/RAM/disk KPI cards and no service badges anywhere in the dashboard.
 
 - **App Features Present**:
-  - `GET /api/observability/health` ([routers/observability.py:671](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py#L671))
-  - `GET /api/observability/api-context` (L642), `POST /api/observability/api-poll` (L661)
-  - `GET/POST /api/observability/config` (L597/L604)
-  - `POST /api/observability/prune-logs` (L699) — one-off purge, wired to the Settings panel since
+  - `GET /api/observability/health` ([routers/observability.py:635](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/observability.py#L635))
+  - `GET /api/observability/api-context` (L606), `POST /api/observability/api-poll` (L625)
+  - `GET/POST /api/observability/config` (L561/L568)
+  - `POST /api/observability/prune-logs` (L663) — one-off purge, wired to the Settings panel since
     2026-08-11; the scheduled per-table retention is `observability/rollup.py:71` `retention_loop()`
-  - `GET /api/ping-monitor/status` ([routers/settings.py:177](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/settings.py#L177))
+  - `GET /api/ping-monitor/status` ([routers/settings.py:179](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/settings.py#L179))
   - **MCP**: `linux_health` (→ `/api/observability/api-context`, **disabled by default**)
 
 - **Missing Features / Gaps**:
@@ -618,9 +751,15 @@ customer values.
   - **Tab**: `Diagnosi Client` (`#locPane-diagnosi`, pill `#locPill-diagnosi` under **Localizzazione
     Endpoint** / `#tab-endpoint`).
   - **Controls**: `#diagClientInput` (IP or MAC), `#diagDestInput`, gateway `#diagGatewaySelect` +
-    `#diagGatewayInput` + `Traceroute` (`detectGatewayTracerouteUI()`), `#diagProtoInput`,
-    `#diagPortInput`, run (`runDiagnosi()`), report `#diagResult`, and the port action
-    `diagBouncePort()` inside the report.
+    `#diagGatewayInput` + `#btnDiagTraceroute`, `#diagProtoInput`, `#diagPortInput`, run
+    `#btnRunDiagnosi`, report `#diagResult`.
+  - **Actions inside the report** (delegated on `#diagResult`, all `data-action`):
+    `rerun-diagnosi`, `diagnosi-pick-tenant`, `diagnose-wifi`, `diag-bounce-port`,
+    `diag-isolate-port`, `diag-restore-port`.
+  - **Wireless card**: `#diagWlcIp` + `data-action="diagnose-wifi"` → `#diagWifiBody`. It is manual on
+    purpose: the L2/L3 diagnosis cannot know *which* controller to ask (the inventory accepts a
+    generic `cisco` vendor, so a vendor-filtered list would offer every Cisco switch as if it were a
+    WLC), and an SSH session to a controller should not be charged to a wired client.
 
 - **App Features Present**:
   - `POST /api/diagnose/client` ([routers/diagnosis.py:48](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/diagnosis.py#L48)) — read-only, `get_current_user`
@@ -629,17 +768,163 @@ customer values.
     `assert_device_allowed`, because the target is not an inventory device
   - `POST /api/diagnose/port-bounce` (L103) — **admin-only, the only write in this tab**, and the only
     port action with a UI button
-  - `POST /api/fortigate/{ip}/diagnose-client` ([routers/fortigate.py:327](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L327)) — the firewall-side equivalent
+  - `POST /api/fortigate/{ip}/diagnose-client` ([routers/fortigate.py:366](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/fortigate.py#L366)) — the firewall-side equivalent
+  - `GET /api/wlc/{ip}/diagnose-client/{mac}` ([routers/wlc.py:78](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/wlc.py#L78)) — the wireless leg, on demand
   - **MCP**: `diagnose_client` (cross-site, accepts an optional `tenant`), `fortigate_diagnose_client`
-  - **Service**: `services/client_diagnosis.py`; **UI**: `static/js/diagnosi.js`
+  - **Service**: `services/client_diagnosis.py`, `services/port_action.py`;
+    **UI**: `static/js/diagnosi.js`
 
 - **Missing Features / Gaps**:
   - **Historical Replay**: the report is a point-in-time snapshot; there is no "how did this client look
     an hour ago" view.
-  - **Wireless Leg**: a wireless client is diagnosed from the wired/gateway side; the WLC client
-    diagnostic (§3.1) is a separate tab and is not merged into this report.
+  - *(Withdrawn 2026-08-22: "Wireless Leg" — the report now carries a wireless card that calls
+    `GET /api/wlc/{ip}/diagnose-client/{mac}`. It stays **manual**: the operator types the controller
+    address, because it cannot be inferred, and the client MAC comes from the report above. With no
+    MAC known the card says so instead of querying anything.)*
   - *(closed 2026-08-12)* **Persistent Isolation**: Isola porta shuts the access port and leaves it
     down; Riattiva porta is the way back and asks for no confirmation.
+
+---
+
+## 10. Offline Policy & Routing Validation *(new — landed 2026-08-19/20)*
+
+### Q10.1: "Will `192.0.2.50` reach `198.51.100.10:443` through `switch-01`?" — without touching the device.
+
+- **Answer**:
+  1. Pick a **tenant**, then a **device**. Both are mandatory and neither is auto-selected: a flat
+     device list across tenants would put several customers in one dropdown, and landing on the tab to
+     find a verdict already computed for a device nobody chose reads as a statement about that device.
+     Until both are chosen all three panels show a "pick one" placeholder.
+  2. The engine reads the **freshest stored backup** for that IP — nothing is sent to the device — and
+     parses it into a policy environment. Only `ios` and `fortios` are supported; any other config type
+     is a **422**, deliberately, because routing everything else to the IOS parser produced an empty
+     environment and painted a green "no defects" panel for a device that was never analysed.
+  3. **Packet Tracer**: fill the flow and read the decision path (ACL in, route, ACL out / policy) with
+     the rule that caught the packet at each step.
+  4. **Esempi per Regola**: for each rule, a flow that matches it and a *near miss* with the reason it
+     falls outside. Grouped **per rule set**, not flat: sequence numbers restart in every ACL, so two
+     different "rule 10"s were indistinguishable once flattened.
+  5. **Anomalie & Difetti**: the static findings, each with a witness packet you can run.
+
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Validazione Policy & Routing` (`#navPolicyTest` → `#tab-policy-test`), under **Valuta**,
+    preview badge, not admin-only. Lazy module `static/js/policy-test.js`.
+  - **Selection**: `#ptTenantSelect` → `#ptDeviceSelect` (disabled until a tenant is picked, and
+    empty-with-a-message when the tenant holds no devices), badges `#ptDeviceMeta` (tenant, vendor).
+  - **Sub-tabs**: `#ptSubtabNav` with `#ptSubtabBtnTracer` / `#ptSubtabBtnExamples` /
+    `#ptSubtabBtnFindings`, over `#ptSubtabTracer` / `#ptSubtabExamples` / `#ptSubtabFindings`.
+  - **Tracer form**: `#ptSrcIp`, `#ptDstIp`, `#ptProto` (tcp/udp/icmp/ip), `#ptDport`, `#ptSport`,
+    `#ptIngressIntf`, `#ptEstablished`, run `#btnPtRunTrace`, result `#ptTraceResultsContainer`.
+    Choosing `icmp` reveals `#ptIcmpTypeGroup` / `#ptIcmpType` (echo request 8 by default, echo reply,
+    unreachable, time exceeded, or unspecified) — without the message type, an echo rule and a reply
+    rule are indistinguishable to the reader and to the model.
+  - **Examples**: `#ptExamplesContainer`. Each group shows the **declaration line the device actually
+    holds** — `ip access-list extended <NAME>`, `ip access-list standard <NAME>`,
+    `access-list <n> (standard|extended)` *(the numbered form is the working-tree version, keyed off
+    `numbered-*`)*, or `config firewall policy` — plus the interfaces the ACL is bound to and in which
+    direction (`EDGE_IN on Vlan10 inbound`), and the rule set's default action.
+  - **Findings**: `#ptFindingsContainer`. Each finding that is about packet coverage renders a proof
+    block with the witness flow and a `data-action="prove-finding"` button writing into
+    `#ptProofResult<idx>`.
+  - **Listeners bind in the IIFE, not on `DOMContentLoaded`** — the module is lazy-loaded long after
+    that event has fired, so a `DOMContentLoaded` handler would never run and every control would be
+    silently dead. `policy-test.js` carries the comment; do not "fix" it back.
+
+- **App Features Present**:
+  - `POST /api/policy-test/{ip}/trace` ([routers/policy_test.py:81](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/policy_test.py#L81)) —
+    body `src_ip`, `dst_ip`, `proto`, `sport`, `dport`, `ingress_intf`, `egress_intf`, `tcp_flags`,
+    `established`, `icmp_type`
+  - `GET /api/policy-test/{ip}/examples` (L140) — groups of `{name, kind, declaration, bindings,
+    default_action, examples[{matching_flow, near_miss_flow, near_miss_reason}]}`
+  - `GET /api/policy-test/{ip}/findings` (L177) — keys `shadowed`, `unreachable`, `any_any`,
+    `route_to_nowhere`, `unresolved_object`; severity `high|medium|low|info`
+  - `POST /api/policy-test/{ip}/prove` (L192) — body `{witness, expected_rule_id}`, answers
+    `{proven, expected_rule_id, actual_rule_id, trace}`. The verdict is computed by the **same
+    evaluator** the tracer uses, not by a second code path that would agree with the detector by
+    construction, so `proven: false` is a real answer worth seeing, not an error.
+  - All four are tenant-scoped through `assert_device_allowed`; all four are read-only.
+  - **MCP**: `policy_trace` (`ip`, `src`, `dst`, `proto`, `dport`, `ingress`),
+    `policy_findings` (`ip`) — both enabled by default.
+  - **Engine**: `services/policy_test/` — `model.py` (Flow, Rule, RuleSet, RouteTable, Finding),
+    `ios.py` / `fortios.py` (parsers), `engine.py` (`evaluate`), `examples.py`, `findings.py`
+    (pure, zero I/O), `builtins.py`.
+  - **Other surfaces of the same findings**: Config Analyzer pill **Validazione**, FortiGate pill
+    **Policy** (`findings` per policy id + `shadow_analysis`), NetSec Audit `policy_defects`.
+
+- **Missing Features / Gaps**:
+  - **Vendors**: IOS and FortiOS only. Aruba, HP, PAN-OS and Junos backups get a 422 rather than a
+    partial answer.
+  - **Witness coverage**: a rule the parser could not read (`opaque`) or one carrying a qualifier the
+    model does not evaluate (`narrowing_quals`) gets **no** witness — its coverage is unknown, so no
+    packet can honestly be claimed to exercise it. Those findings show without a proof block.
+  - **Freshness**: the verdict describes the stored backup, not the running config. Nothing warns that
+    the backup is old, and there is no "re-fetch and re-trace" button.
+  - **Multi-hop**: one device per trace. The cross-device path lives in §9's L3 path, computed by a
+    different service.
+
+---
+
+## 11. Fleet Inventory Export & Asset Data *(new — landed 2026-08-19/21)*
+
+### Q11.1: An auditor wants an asset list with serials, one row per physical unit, for two tenants only.
+
+- **Answer**:
+  1. Serials are collected during triage by the driver's `get_serial()` and stored alongside the
+     detected version, so an export reads them from state rather than opening SSH sessions.
+  2. Open the export modal, tick the tenants/sites/vendors/redundancy types and the columns, download.
+  3. Ticking any **per-member** column (marked `*`) switches the export to one row per physical unit —
+     a stack's or an HA pair's serials cannot share one row without being concatenated, and a
+     concatenated serial cannot be filtered or looked up in a spreadsheet.
+  4. Whatever is ticked, the export never widens the caller's scope: `user_group_scope` is applied
+     first, the query filters narrow it further.
+
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Rete & Dispositivi` (`#tab-devices`, under **Inventario**). Button `#btnExportDevices`
+    opens `#deviceExportModal`.
+  - **Modal**: filter lists `#exportFilterGroups` / `#exportFilterSites` / `#exportFilterVendors` /
+    `#exportFilterRedundancy` (values `standalone`, `stack`, `ha_pair`, `sso`), column list
+    `#exportColumnList` with `#btnExportColsToggle` (all/none), per-member warning
+    `#exportMemberHint`, download `#btnRunDeviceExport`. Selections persist in `localStorage` under
+    `sentinelnet.exportPrefs`.
+  - The column list is **fetched**, never hard-coded in the frontend: the registry lives in the
+    backend so the two cannot drift.
+
+- **App Features Present**:
+  - `GET /api/export/devices/columns` ([routers/inventory.py:188](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/inventory.py#L188)) —
+    `{columns: [{key, header, per_member}], default}`
+  - `GET /api/export/devices` (L201) — query `groups`, `sites`, `vendors`, `redundancy`, `columns`
+    (comma-separated; an unknown column is a **400**, not a silently dropped one).
+    Registry `_EXPORT_COLUMNS` (L144) covers hostname, ip, vendor, model, **serial**, group/tenant,
+    site, version, status, profile, ssh_port, transports, the four redundancy fields, member_count,
+    and the per-member `member_index|role|serial|model|state`.
+    Defaults: hostname, ip, vendor, group, version, status.
+  - Cells beginning `=`, `+`, `-`, `@`, tab or CR are prefixed with an apostrophe: hostname and version
+    are written by the **device**, so whoever controls a device could otherwise write a formula into
+    the spreadsheet of whoever exports the inventory. CSV quoting does not address this and is a
+    different problem.
+  - A device in no redundancy group still gets exactly one row, with the per-member columns empty,
+    instead of vanishing from the export.
+  - **Serial collection**: `drivers/base_driver.py:11` `get_serial()` returns `""` by default;
+    implemented for Cisco IOS (`show version` → "System Serial Number", falling back to
+    "Processor board ID"), FortiOS (`get system status` → "Serial-Number"), HP ProCurve
+    (`show system`) and PAN-OS (`show system info`). `core/core_engine.py:378` calls it during triage
+    and hands it to `services/inventory_manager.py:851`, which **keeps the previous serial when the
+    new read is empty** — a failed triage must not erase what the last one learned.
+  - **HA / redundancy**: `GET /api/redundancy/groups` ([redundancy/router.py:39](file:///c:/Users/vidhi/dev_ved/SentinelNet/redundancy/router.py#L39)),
+    `/groups/{id}` (L45), `POST /groups` (L56), `PUT /groups/{id}` (L67), `DELETE /groups/{id}` (L84).
+    Tab `#tab-redundancy` (`#navRedundancy`): KPI tiles `#haKpiTotal` / `#haKpiHealthy` /
+    `#haKpiDegraded` / `#haKpiCritical`, tenant filter `#haTenantFilter`, list
+    `#redundancyGroupsContainer`, create modal `#createRedundancyModal` (`#haGroupName`,
+    `#haProtocol`, `#haVirtualIp`, `#haTenant`). The filter re-scopes the KPI tiles too: leaving them
+    on the whole fleet while the list shows one tenant is how a degraded cluster gets attributed to
+    the wrong customer. The list is fetched once and filtered client-side.
+
+- **Missing Features / Gaps**:
+  - **Serial coverage**: Aruba, Cisco CBS, Cisco WLC, Junos and Linux drivers inherit the base
+    `get_serial()` and return `""` — those rows export an empty serial rather than a wrong one.
+  - **Export formats**: CSV only. No XLSX, and the PDF/DOCX exporters belong to the audit report, not
+    to the inventory.
+  - **Scheduled export**: operator-triggered only; nothing mails or drops a nightly asset list.
 
 ---
 
@@ -647,12 +932,15 @@ customer values.
 
 | Domain | Present App Features | Key Missing Features / Gaps |
 | :--- | :--- | :--- |
-| **FortiGate** | Policy lookup, sessions (+kill API), traffic/event/UTM logs, policies with hit counts & last-used, interfaces/ARP/DHCP/routes/VPN/SD-WAN, managed FortiAP, **aggregated client diagnosis**, full-config fetch, day-0 generation + push (SSH/serial/REST), REST driver with SSH fallback | Packet capture (`sniffer`), deep UTM sub-log parsing, session-kill & CLI-console UI buttons |
-| **Cisco WLC** | **Tenant-scoped controller selection**, single-call `overview` (AP/clients/WLAN/rogue), **2.4 & 5 GHz auto-RF channel, width and utilization**, client quality + live search, rogue table, per-client diagnostics modal | Roaming (802.11r/k/v) timeline, RF floor-plan heatmap, 6 GHz auto-RF (needs the IOS-XE path), active rogue containment |
-| **MAC / ARP / Endpoints** | MAC search & locate, on-demand MAC scan, ARP collection from L3 gateways, client map, endpoint inventory with exports, **discovery-only subnet scan + opt-in credential verification** | 802.1X/RADIUS correlation, DHCP-snooping cross-check, OS fingerprinting |
-| **Client Diagnosis** | **L2+L3 single-client report, gateway auto/traceroute detection, tenant-scoped, admin port bounce and persistent isolation with uplink + staleness guards** | Historical replay, merged wireless leg |
+| **FortiGate** | Policy lookup, sessions (+kill button), traffic/event/UTM logs, policies with hit counts, last-used **and static findings** (dead-rule marking), interfaces/ARP/DHCP/routes/VPN/SD-WAN, managed FortiAP, aggregated client diagnosis, full-config fetch, day-0 generation + push (SSH/serial/REST), REST driver with SSH fallback | Packet capture (`sniffer`), deep UTM sub-log parsing, CLI console button on this tab |
+| **Cisco WLC** | Tenant-scoped controller selection, single-call `overview` (AP/clients/WLAN/rogue), 2.4 & 5 GHz auto-RF channel, width and utilization, client quality + live search, rogue table, per-client diagnostics modal **reachable from the Diagnosi report too** | Roaming (802.11r/k/v) timeline, RF floor-plan heatmap, 6 GHz auto-RF (needs the IOS-XE path), active rogue containment |
+| **MAC / ARP / Endpoints** | MAC search & locate, on-demand MAC scan with per-device command overrides, ARP collection from L3 gateways, client map, endpoint inventory with exports, discovery-only subnet scan + opt-in credential verification | 802.1X/RADIUS correlation, DHCP-snooping cross-check, OS fingerprinting |
+| **Client Diagnosis** | L2+L3 single-client report, gateway auto/traceroute detection, tenant-scoped, admin port bounce and persistent isolation with uplink + staleness guards, **on-demand wireless leg** | Historical replay, wireless controller still typed by hand |
+| **Policy & Routing Validation** | **Offline packet tracer, per-rule matching + near-miss examples with the real ACL declaration and bindings, ICMP message types, static findings (shadowed / unreachable / any-any / route-to-nowhere / unresolved object) each with a witness packet and a `prove` verdict, surfaced in four places + 2 MCP tools** | IOS & FortiOS only (422 otherwise), no witness for opaque or narrowed rules, no backup-freshness warning, single-device traces |
 | **Flow SIEM & Anomalies** | Top talkers, protocol distribution, flow graph, syslog/events, anomaly triage with status, Flow SIEM events/histogram/facets/suppression, shun API | Shun UI button, ACL/Flowspec auto-injection, JA3/SNI inspection, external threat intel |
-| **Config & Compliance** | Config Analyzer (structural, FortiOS↔PAN-OS converter), **NetSec Audit with CIS/NIST 800-53/PCI-DSS v4.0, config upload & PDF report**, checklist engagements with evidence, backup storage/download | Git drift alerting, scheduled/recurring audits with score trend, policy-object provisioning form, transactional push with rollback |
+| **Config & Compliance** | Config Analyzer (structural, FortiOS↔PAN-OS converter, Validazione view), NetSec Audit with CIS/NIST 800-53/PCI-DSS v4.0, config upload, saved-run history and PDF/DOCX/HTML report, **checklist engagements now a sub-tab of it**, backup storage/download | Git drift alerting, scheduled/recurring audits with score trend, policy-object provisioning form, transactional push with rollback, findings not used as a provisioning pre-flight |
+| **Multi-site & Bastion** | Central-poll, site-agent and **jump (SSH bastion)** modes, per-site cached transport with invalidation on edit, `test-bastion` probe, TOFU host-key pinning *(working tree)*, on-screen list of what a jump site cannot do | Key-based bastion auth, host-key rotation from the UI, no bastion reachability monitoring |
+| **Inventory & Assets** | **Customizable CSV export (column registry, group/site/vendor/redundancy filters, per-member row explosion, formula-injection neutralised), serial collection on IOS/FortiOS/ProCurve/PAN-OS**, HA & redundancy groups incl. Cisco SSO with a tenant filter | Serial unread on Aruba/CBS/WLC/Junos/Linux, CSV only, no scheduled export |
 | **Incidents & AI** | Rule-based incident engine (reasoning, evidence, timeline, status), AI narrative per incident, AI Assistant chat with device/tenant attachments, triage & ping endpoints | External threat-intel enrichment, SOAR webhook export |
-| **Observability / Health** | Pipeline health, per-device REST snapshots, listener configuration, prune API, ping monitor status | Health UI panel, auto-purge watermark, service badges |
-| **MCP surface** | 43 tools in `ai/mcp_server.py`, per-tool enable/disable via `/api/mcp/settings` | `get_top_talkers`, `get_anomalies`, `linux_health` disabled until an admin enables them |
+| **Observability / Health** | Pipeline health panel, per-device REST snapshots, listener configuration, one-off purge button + scheduled per-table retention, ping monitor status | Auto-purge on a size watermark, service badges |
+| **MCP surface** | **45 tools** in `ai/mcp_server.py`, per-tool enable/disable via `/api/mcp/settings` | `get_top_talkers`, `get_anomalies`, `linux_health` disabled until an admin enables them |

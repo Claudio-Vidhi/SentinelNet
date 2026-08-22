@@ -14,6 +14,8 @@ parametri; ``push_via_ssh``/``push_via_serial`` si occupano della consegna.
 
 import time
 
+from security import redaction
+
 ROLES = ("access", "distribution")
 
 
@@ -86,8 +88,12 @@ def build_config(cfg: dict) -> str:
     lines.append(f"hostname {hostname}")
     lines.append("!")
     lines.append("no ip domain-lookup")
-    if cfg.get("domain"):
-        lines.append(f"ip domain-name {cfg['domain']}")
+    ssh_only = cfg.get("ssh_only", True)
+    if cfg.get("domain") or ssh_only:
+        # 'crypto key generate rsa' below refuses to run without a domain name.
+        # Emitting it only when the operator typed one left the SSH-only path
+        # with no host key AND telnet already disabled: console-only device.
+        lines.append(f"ip domain-name {cfg.get('domain') or 'local'}")
     lines.append("no ip http server")
     lines.append("no ip http secure-server")
     if cfg.get("no_vstack", True):
@@ -98,9 +104,13 @@ def build_config(cfg: dict) -> str:
     sec("AUTENTICAZIONE LOCALE / ENABLE")
     if cfg.get("enable_secret"):
         lines.append(f"enable secret {cfg['enable_secret']}")
-    if cfg.get("admin_user"):
-        pwd = cfg.get("admin_password") or "changeme"
-        lines.append(f"username {cfg['admin_user']} privilege 15 secret {pwd}")
+    # No fallback password here on purpose: 'changeme' was a known credential
+    # pushed to real hardware whenever the field was left empty. The boundary
+    # (SwitchProvisionSchema) now rejects an empty user or password, so an
+    # absent one here means a direct caller, not an operator.
+    if cfg.get("admin_user") and cfg.get("admin_password"):
+        lines.append(
+            f"username {cfg['admin_user']} privilege 15 secret {cfg['admin_password']}")
     lines.append("aaa new-model")
 
     aaa_protocol = cfg.get("aaa_protocol") or "none"
@@ -137,7 +147,6 @@ def build_config(cfg: dict) -> str:
         lines.append("login on-failure log")
         lines.append("login on-success log")
 
-    ssh_only = cfg.get("ssh_only", True)
     if ssh_only:
         sec("SSH-ONLY MANAGEMENT")
         lines.append("crypto key generate rsa modulus 2048")
@@ -289,12 +298,15 @@ def build_config(cfg: dict) -> str:
         lines.append("logging source-interface Vlan%s" % mgmt_vlan if mgmt_vlan else "logging on")
 
     snmpv3 = cfg.get("snmpv3") or {}
-    if snmpv3.get("user"):
+    # Both passphrases are required: 'authpass123'/'privpass123' used to be
+    # substituted on an empty field, shipping a known credential to the device.
+    # Emitting nothing is the safe half-answer; the boundary rejects the input.
+    if snmpv3.get("user") and snmpv3.get("auth_pass") and snmpv3.get("priv_pass"):
         sec("SNMPv3")
         group = snmpv3.get("group", "SNMP-GROUP")
         lines.append(f"snmp-server group {group} v3 priv")
-        auth_pass = snmpv3.get("auth_pass", "authpass123")
-        priv_pass = snmpv3.get("priv_pass", "privpass123")
+        auth_pass = snmpv3["auth_pass"]
+        priv_pass = snmpv3["priv_pass"]
         lines.append(
             f"snmp-server user {snmpv3['user']} {group} v3 auth sha {auth_pass} "
             f"priv aes 128 {priv_pass}"
@@ -321,6 +333,29 @@ def build_config(cfg: dict) -> str:
 # ---------------------------------------------------------------------------
 # CONSEGNA: SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
 # ---------------------------------------------------------------------------
+
+# IOS never raises on a rejected command: it answers on the same session and
+# carries on. Reporting 'success' on that meant a wrong interface range, or a
+# rejected hardening line, looked identical to a clean push.
+_CLI_ERRORS = ("% Invalid input", "% Incomplete command", "% Ambiguous command",
+               "% Bad", "% Unrecognized", "Command rejected")
+
+
+def _push_result(output: str) -> dict:
+    """Turn a raw session transcript into a push result.
+
+    The transcript echoes every command back, so it also carries the secrets
+    that were just typed: it is redacted before leaving this function, which
+    is the single point every caller (router, MCP, tests) goes through.
+    """
+    rejected = [ln.strip() for ln in output.splitlines()
+                if any(err in ln for err in _CLI_ERRORS)]
+    return {
+        "status": "partial" if rejected else "success",
+        "output": redaction.redact(output),
+        "rejected": redaction.redact(rejected),
+    }
+
 
 def push_via_ssh(host: str, username: str, password: str, secret: str,
                   config_text: str, port: int = 22, save: bool = True,
@@ -358,7 +393,7 @@ def push_via_ssh(host: str, username: str, password: str, secret: str,
                     output += "\n" + conn.save_config()
                 except Exception as se:
                     output += f"\n[Salvataggio configurazione non riuscito: {se}]"
-            return {"status": "success", "output": output}
+            return _push_result(output)
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -396,7 +431,7 @@ def push_via_serial(com_port: str, config_text: str, baudrate: int = 9600,
             send("end", 0.5)
             send("write memory", 1.0)
 
-        return {"status": "success", "output": "".join(log)}
+        return _push_result("".join(log))
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

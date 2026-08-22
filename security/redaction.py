@@ -31,6 +31,10 @@ _PATTERNS = [
     re.compile(r"(?im)^(\s*username\s+\S+.*?\s(?:password|secret)(?:\s+\d)?\s+)(?P<secret>\S+)"),
     # SNMP community
     re.compile(r"(?im)^(\s*snmp-server\s+community\s+)(?P<secret>\S+)"),
+    # SNMPv3 user: both passphrases sit on one line
+    # (snmp-server user U G v3 auth sha <auth> priv aes 128 <priv>)
+    re.compile(r"(?im)(\bauth\s+(?:md5|sha)\s+)(?P<secret>\S+)"),
+    re.compile(r"(?im)(\bpriv\s+(?:aes(?:\s+\d+)?|des|3des)\s+)(?P<secret>\S+)"),
     # RADIUS/TACACS key (also "key 7 <hash>")
     re.compile(r"(?im)^(\s*(?:key|pac\s+key|shared-secret)(?:\s+\d)?\s+)(?P<secret>\S+)"),
     re.compile(r"(?im)((?:radius|tacacs)(?:-server)?\s+.*?\bkey(?:\s+\d)?\s+)(?P<secret>\S+)"),

@@ -207,5 +207,18 @@ interface Vlan10
                 self.assertIsNone(f.witness)
 
 
+class NumberedAclDeclarationTest(unittest.TestCase):
+    """A numbered ACL must still say whether it is standard or extended."""
+
+    def test_numbered_kinds_render_the_declaration(self):
+        from routers.policy_test import _acl_declaration
+        self.assertEqual(
+            _acl_declaration("101", "numbered-extended"), "access-list 101 (extended)"
+        )
+        self.assertEqual(
+            _acl_declaration("10", "numbered-standard"), "access-list 10 (standard)"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

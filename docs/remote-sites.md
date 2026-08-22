@@ -357,6 +357,20 @@ per hop: the bastion refusing us raises `BastionAuthError`
 the bastion with the identity as currently configured — bypassing the cached
 transport on purpose — and answers `success`, `auth_failed` or `unreachable`.
 
+**Host-key pinning:** On first connection to a bastion, its SSH host key is
+pinned to `ssh_known_hosts` inside the data directory. On subsequent
+connections, the key must match exactly; if it differs, a `BastionHostKeyError`
+is raised and the connection refused. This protects against path interception.
+If the bastion is rebuilt and the key changes, the stale entry must be manually
+removed from `ssh_known_hosts` before reconnecting.
+
+**Editing the bastion identity:** The bastion identity (username, password, or
+enable secret) can be changed in the **Multi-site** tab or via `POST
+/api/sites/update`. When the identity changes, the cached transport is
+automatically invalidated by `invalidate_site()` (`core/net_ssh.py`), so the
+next connection uses the updated credentials. This allows credential rotation
+without restarting the application.
+
 ### Creating a jump site via API
 
 ```bash

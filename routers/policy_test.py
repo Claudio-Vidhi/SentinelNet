@@ -118,8 +118,8 @@ def _acl_declaration(name: str, kind: str) -> str:
         return f"ip access-list standard {name}"
     # Numbered ACLs are declared per line, not by a block header; the number
     # and its range are what identify the kind.
-    if kind in ("standard", "extended"):
-        return f"access-list {name} ({kind})"
+    if kind.startswith("numbered-"):
+        return f"access-list {name} ({kind.split('-', 1)[1]})"
     return name
 
 

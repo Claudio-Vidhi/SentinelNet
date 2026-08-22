@@ -209,7 +209,7 @@ function provCollectPayload() {
         bpduguard: document.getElementById('provBpduguard').checked,
         port_security: document.getElementById('provPortSecurity').checked,
         dhcp_snooping: document.getElementById('provDhcpSnooping').checked,
-        dhcp_snooping_vlans: document.getElementById('provTrunkVlans').value.trim(),
+        dhcp_snooping_vlans: document.getElementById('provDhcpSnoopingVlans').value.trim(),
         cdp_enabled: document.getElementById('provCdp').checked,
         lldp_enabled: document.getElementById('provLldp').checked,
         access_ports: provParseRanges(document.getElementById('provAccessPorts').value),
