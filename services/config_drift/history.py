@@ -90,6 +90,8 @@ def record_version(device: dict, config_text: str) -> bool:
     versions.insert(0, {"hash": digest, "seen_at": stamp,
                         "size": len(config_text), "file": filename})
     _save_index(device, index)
+    from services.config_drift import mirror
+    mirror.commit_version(device, filename)
     return True
 
 
