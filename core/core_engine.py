@@ -68,28 +68,60 @@ def group_backup_dir(group: str, vendor: Optional[str] = None) -> str:
 
 def save_backup(device, sys_name: str, config_out: str) -> str:
     """Saves the text backup in backup-config/<group>/<vendor>/<name>-<ip>.txt,
-    removing first any residual copies of the same IP elsewhere."""
+    moving first any residual copies of the same IP elsewhere."""
     ip = device['IP']
-    remove_stale_backups(ip)
     group_dir = group_backup_dir(device.get('Group', 'Generale'),
                                  device.get('Vendor', ''))
+    remove_stale_backups(ip, new_dir=group_dir)
     file_path = os.path.join(group_dir, f"{sanitize_filename(sys_name)}-{ip}.txt")
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(config_out)
     return file_path
 
-def remove_stale_backups(ip: str):
-    """Deletes previous backups of the same IP in any subfolder,
-    so a device that changes group is not left duplicated on the map."""
+def remove_stale_backups(ip: str, new_dir: Optional[str] = None):
+    """Move a device's backup and its history when it changes group/vendor.
+
+    This used to delete every file for the IP found anywhere in the tree. With
+    a config archive beside the backup, deleting would throw away the device's
+    whole history because someone re-assigned it to another tenant — a normal
+    operational event. Files move to ``new_dir`` instead; with no destination
+    there is nothing to preserve them for and they are removed, as before.
+    """
     if not os.path.exists(BACKUP_FOLDER):
         return
     for root, _dirs, files in os.walk(BACKUP_FOLDER):
+        if new_dir and os.path.abspath(root) == os.path.abspath(new_dir):
+            continue
         for f in files:
-            if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
-                try:
-                    os.remove(os.path.join(root, f))
-                except OSError as e:
-                    logging.warning(f"Backup obsoleto non rimosso ({f}): {e}")
+            if not (f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt"):
+                continue
+            src = os.path.join(root, f)
+            try:
+                if new_dir:
+                    os.makedirs(new_dir, exist_ok=True)
+                    os.replace(src, os.path.join(new_dir, f))
+                else:
+                    os.remove(src)
+            except OSError as e:
+                logging.warning(f"Backup obsoleto non spostato ({f}): {e}")
+        _move_history(root, ip, new_dir)
+
+
+def _move_history(root: str, ip: str, new_dir: Optional[str]) -> None:
+    """Carry the device's .history entries across with its current backup."""
+    src_hist = os.path.join(root, ".history")
+    if not new_dir or not os.path.isdir(src_hist):
+        return
+    dst_hist = os.path.join(new_dir, ".history")
+    if os.path.abspath(src_hist) == os.path.abspath(dst_hist):
+        return
+    os.makedirs(dst_hist, exist_ok=True)
+    for f in os.listdir(src_hist):
+        if f"-{ip}." in f or f.startswith(f"{ip}-"):
+            try:
+                os.replace(os.path.join(src_hist, f), os.path.join(dst_hist, f))
+            except OSError as e:
+                logging.warning(f"Storico non spostato ({f}): {e}")
 
 def _failure_status(exc) -> str:
     """Inventory status for a failed triage: 'auth_failed' or 'offline'.
@@ -313,6 +345,15 @@ def _fortigate_backup_and_triage(device):
     update_device_hostname(ip, sys_name)
 
     file_path = save_backup(device, sys_name, config_out)
+    # The single point every collected config flows through: no second
+    # scheduler and no separate collection path for drift.
+    try:
+        from services.config_drift import history
+        history.record_version(device, config_out)
+    except Exception as e:
+        # History is an observer. A failure here must never fail a backup
+        # that succeeded.
+        logging.warning(f"Storico config non aggiornato per {device.get('IP')}: {e}")
     log_audit(f"Triage e backup completati con successo per dispositivo '{ip}' "
               f"(Firmware: '{version}', fonte config: {cfg['source']}).")
     return {"status": "success", "version": version, "hostname": sys_name,
@@ -535,6 +576,15 @@ def run_backup_and_triage(device):
             update_device_hostname(ip, sys_name)
 
             file_path = save_backup(device, sys_name, config_out)
+            # The single point every collected config flows through: no second
+            # scheduler and no separate collection path for drift.
+            try:
+                from services.config_drift import history
+                history.record_version(device, config_out)
+            except Exception as e:
+                # History is an observer. A failure here must never fail a backup
+                # that succeeded.
+                logging.warning(f"Storico config non aggiornato per {device.get('IP')}: {e}")
 
             # Redundancy detection: updates/dissolves the group associated
             # with this management IP. A switch stack and a controller HA pair
