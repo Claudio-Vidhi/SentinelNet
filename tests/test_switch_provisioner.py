@@ -2,6 +2,9 @@
 """Unit test minimale per switch_provisioner.build_config: verifica che la
 config generata contenga le sezioni chiave attese per un input di esempio."""
 
+import unittest
+from unittest import mock
+
 from services import switch_provisioner as sp
 from pydantic import ValidationError
 from routers.provisioner import SwitchProvisionSchema
@@ -193,6 +196,109 @@ def test_aaa_protocol_rejects_invalid_literal():
         pass
     else:
         raise AssertionError("expected ValidationError for invalid aaa_protocol")
+
+
+class PushSurvivesTheDeviceItConfigures(unittest.TestCase):
+    """Reliability guards around a push that can cut its own path.
+
+    NOTE: the checks above this class are bare functions, so `unittest
+    discover` does not collect them — they only run via __main__ below. These
+    are a TestCase so the suite actually executes them.
+    """
+
+    def _cfg(self, **over):
+        cfg = _sample_cfg()
+        cfg.update(over)
+        return cfg
+
+    def test_trunk_encapsulation_precedes_trunk_mode(self):
+        """'switchport mode trunk' is rejected outright on a port whose trunk
+        encapsulation is 'auto', leaving every uplink an access port."""
+        text = sp.build_config(self._cfg(trunk_ports=["GigabitEthernet1/0/25-28"]))
+        enc = text.index("switchport trunk encapsulation dot1q")
+        mode = text.index("switchport mode trunk")
+        self.assertLess(enc, mode)
+
+    def test_management_vlan_is_declared_before_its_svi(self):
+        """vtp transparent: an SVI on a VLAN nobody declared comes up
+        down/down, so the day-0 switch has no management address."""
+        text = sp.build_config(self._cfg(mgmt_vlan=99, vlans=[{"id": 10, "name": "DATA"}]))
+        self.assertIn("vlan 99", text)
+        self.assertLess(text.index("vlan 99"), text.index("interface Vlan99"))
+
+    def test_access_vlan_is_declared_too(self):
+        text = sp.build_config(self._cfg(access_vlan=20, vlans=[{"id": 10, "name": "DATA"}]))
+        self.assertIn("vlan 20", text)
+
+    def test_an_explicitly_declared_vlan_is_not_duplicated(self):
+        text = sp.build_config(self._cfg(mgmt_vlan=99, vlans=[{"id": 99, "name": "MGMT-REAL"}]))
+        self.assertEqual(1, text.count("\nvlan 99\n"))
+        self.assertIn("name MGMT-REAL", text)
+
+    def test_key_generation_is_stripped_from_the_ssh_push_only(self):
+        """Over SSH the device already has keys, so the line only produces an
+        unanswered yes/no prompt that swallows the rest of the config."""
+        sent = {}
+
+        class _Conn:
+            def __enter__(self_): return self_
+            def __exit__(self_, *a): return False
+            def enable(self_): pass
+            def send_command_timing(self_, cmd): return ""
+            def send_config_set(self_, commands):
+                sent["commands"] = commands
+                return ""
+            def save_config(self_): return ""
+
+        with mock.patch("core.net_ssh.ConnectHandler", return_value=_Conn()):
+            sp.push_via_ssh("192.0.2.10", "netadmin", "pw", "",
+                            "crypto key generate rsa modulus 2048\nhostname switch-01\n")
+        self.assertNotIn("crypto key generate rsa modulus 2048", sent["commands"])
+        self.assertIn("hostname switch-01", sent["commands"])
+        # The console path is day-0 and must keep generating the first key.
+        self.assertIn("crypto key generate rsa", sp.build_config(self._cfg(ssh_only=True)))
+
+    def test_a_reload_is_armed_before_the_push_and_cancelled_after(self):
+        calls = []
+
+        class _Conn:
+            def __enter__(self_): return self_
+            def __exit__(self_, *a): return False
+            def enable(self_): pass
+            def send_command_timing(self_, cmd):
+                calls.append(cmd)
+                return ""
+            def send_config_set(self_, commands):
+                calls.append("CONFIG")
+                return ""
+            def save_config(self_):
+                calls.append("SAVE")
+                return ""
+
+        with mock.patch("core.net_ssh.ConnectHandler", return_value=_Conn()):
+            sp.push_via_ssh("192.0.2.10", "netadmin", "pw", "", "hostname switch-01\n")
+        self.assertEqual(f"reload in {sp.RELOAD_GUARD_MINUTES}", calls[0])
+        self.assertEqual("CONFIG", calls[1])
+        self.assertIn("reload cancel", calls)
+        # Cancelled only after the save: a push that never saved must reboot.
+        self.assertLess(calls.index("SAVE"), calls.index("reload cancel"))
+
+    def test_a_failed_save_leaves_the_reload_armed(self):
+        calls = []
+
+        class _Conn:
+            def __enter__(self_): return self_
+            def __exit__(self_, *a): return False
+            def enable(self_): pass
+            def send_command_timing(self_, cmd):
+                calls.append(cmd)
+                return ""
+            def send_config_set(self_, commands): return ""
+            def save_config(self_): raise OSError("session lost")
+
+        with mock.patch("core.net_ssh.ConnectHandler", return_value=_Conn()):
+            sp.push_via_ssh("192.0.2.10", "netadmin", "pw", "", "hostname switch-01\n")
+        self.assertNotIn("reload cancel", calls)
 
 
 if __name__ == "__main__":
