@@ -16,9 +16,16 @@ _INDEX = "index.json"
 
 
 def _now() -> str:
-    """UTC stamp used both as the version id and in the archived filename."""
+    """UTC stamp used both as the version id and in the archived filename.
+
+    Microsecond precision, not second: two versions recorded inside the same
+    second would otherwise share a stamp, and the archived filename with it —
+    the second write would overwrite the first and read_version could not tell
+    them apart.
+    """
     ts = time.time()
-    return time.strftime("%Y%m%dT%H%M%S", time.gmtime(ts)) + f"{int((ts % 1) * 1000000):06d}Z"
+    return (time.strftime("%Y%m%dT%H%M%S", time.gmtime(ts))
+            + f".{int((ts % 1) * 1_000_000):06d}Z")
 
 
 def _device_dir(device: dict) -> str:
