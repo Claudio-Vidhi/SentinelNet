@@ -158,6 +158,14 @@ def build_config(cfg: dict) -> str:
     lines.append(f"vtp mode {cfg.get('vtp_mode', 'transparent')}")
 
     vlans = _expand_vlan_ids(cfg.get("vlans"))
+    # 'vtp mode transparent' above means a VLAN exists only if it is in the
+    # local database. An SVI or an access port pointed at a VLAN nobody
+    # declared comes up down/down — a day-0 switch with no management address,
+    # or a floor of ports in an inactive VLAN. Declare what we are about to use.
+    for vid, fallback_name in ((cfg.get("mgmt_vlan"), "MGMT"),
+                               (cfg.get("access_vlan"), "DATA")):
+        if vid and not any(int(v["id"]) == int(vid) for v in vlans):
+            vlans.append({"id": int(vid), "name": fallback_name})
     if vlans:
         sec("VLAN DATABASE")
         for v in vlans:
@@ -258,6 +266,11 @@ def build_config(cfg: dict) -> str:
         pc_id = cfg.get("uplink_pc_id")
         for rng in trunk_ports:
             lines.append(f"interface range {rng}")
+            # On 3560/3650/3750-class IOS a port whose trunk encapsulation is
+            # 'auto' rejects 'switchport mode trunk' outright, leaving every
+            # uplink an access port. 2960-class rejects this line harmlessly
+            # instead — the same tolerance 'no vstack' above relies on.
+            lines.append(" switchport trunk encapsulation dot1q")
             lines.append(" switchport mode trunk")
             if allowed:
                 lines.append(f" switchport trunk allowed vlan {allowed}")
@@ -341,6 +354,33 @@ _CLI_ERRORS = ("% Invalid input", "% Incomplete command", "% Ambiguous command",
                "% Bad", "% Unrecognized", "Command rejected")
 
 
+# Minutes the switch waits before rebooting into the saved config if this
+# session never gets far enough to cancel it. Long enough for a slow push,
+# short enough that an operator who cut the path is not stuck for an hour.
+RELOAD_GUARD_MINUTES = 10
+
+
+def _arm_reload(conn) -> bool:
+    """Schedule 'reload in N' so a push that cuts its own path self-recovers.
+
+    Returns whether it was armed: on a device that refuses the command there
+    is nothing to cancel later, and the push proceeds without the net rather
+    than failing over the safety measure itself.
+    """
+    try:
+        out = str(conn.send_command_timing(f"reload in {RELOAD_GUARD_MINUTES}"))
+        if "confirm" in out.lower() or "[yes/no]" in out.lower():
+            # 'System configuration has been modified. Save? [yes/no]' first,
+            # then 'Proceed with reload? [confirm]'. Never save here: saving is
+            # what the reload is supposed to undo.
+            if "yes/no" in out.lower():
+                out += str(conn.send_command_timing("no"))
+            conn.send_command_timing("\n")
+        return "%" not in out
+    except Exception:
+        return False
+
+
 def _push_result(output: str) -> dict:
     """Turn a raw session transcript into a push result.
 
@@ -372,6 +412,13 @@ def push_via_ssh(host: str, username: str, password: str, secret: str,
 
     commands = [ln for ln in config_text.splitlines()
                 if ln.strip() and not ln.strip().startswith("!")]
+    # A device we can already reach over SSH has RSA keys, so this line only
+    # ever asks '% They will be replaced ... [yes/no]:'. send_config_set does
+    # not answer prompts, so the rest of the config would be typed into that
+    # question — and replacing the key can drop the session carrying it. The
+    # console path keeps the line: there it is a genuine day-0 first key.
+    commands = [c for c in commands
+                if not c.strip().startswith("crypto key generate rsa")]
 
     device_params = {
         "device_type": device_type,
@@ -387,12 +434,23 @@ def push_via_ssh(host: str, username: str, password: str, secret: str,
     try:
         with ConnectHandler(site_id=site or None, **device_params) as conn:
             conn.enable()
+            # Rollback net. This config rewrites the access VLAN of the range
+            # we may be connected through, applies bpduguard, and replaces the
+            # default gateway: any of those can kill this session mid-push,
+            # after which save_config() never runs and the switch is left half
+            # configured and unreachable. An armed 'reload in' reboots it into
+            # the last saved config; it is cancelled once the push AND the save
+            # have both come back.
+            armed = _arm_reload(conn)
             output = conn.send_config_set(commands)
             if save:
                 try:
                     output += "\n" + conn.save_config()
                 except Exception as se:
                     output += f"\n[Salvataggio configurazione non riuscito: {se}]"
+                    return _push_result(output)   # leave the reload armed
+            if armed:
+                output += "\n" + str(conn.send_command_timing("reload cancel"))
             return _push_result(output)
     except Exception as e:
         return {"status": "error", "message": str(e)}
