@@ -1,7 +1,7 @@
 # Config Drift — design
 
 Date: 2026-08-23
-Status: approved, not yet implemented
+Status: shipped
 
 > Example addresses are RFC 5737 (`192.0.2.x`, `198.51.100.x`) and hostnames are
 > placeholders, as required by CLAUDE.md: `data/` holds real customer state and
@@ -37,29 +37,33 @@ needing an index.
 
 ```
 backup-config/<tenant>/<vendor>/
-  switch-01-192.0.2.10.txt                       <- current, unchanged contract
+  switch-01-192.0.2.10.txt                                 <- current, unchanged contract
   .history/
-    index.json
-    switch-01-192.0.2.10.20260819T110233Z.txt
-    switch-01-192.0.2.10.20260722T093011Z.txt
+    192.0.2.10-index.json
+    switch-01-192.0.2.10.20260819T110233.451207Z.txt
+    switch-01-192.0.2.10.20260722T093011.118004Z.txt
 ```
 
-`index.json`, one entry per retained version, newest first:
+`<ip>-index.json`, one entry per retained version, newest first:
 
 ```json
 {
   "device": "192.0.2.10",
   "versions": [
-    {"hash": "sha256:1f0a…", "seen_at": "2026-08-19T110233Z", "size": 48210,
-     "file": "switch-01-192.0.2.10.20260819T110233Z.txt"}
+    {"hash": "sha256:1f0a…", "seen_at": "20260819T110233.451207Z", "size": 48210,
+     "file": "switch-01-192.0.2.10.20260819T110233.451207Z.txt"}
   ],
-  "last_seen_at": "2026-08-22T031407Z"
+  "last_seen_at": "20260822T031407.902113Z"
 }
 ```
 
-`seen_at` is UTC in the compact form `YYYYMMDDTHHMMSSZ`, and the same string is
-the timestamp in the archived filename, so a file can be located from its index
-entry without a second lookup.
+`seen_at` is UTC in the compact form `YYYYMMDDTHHMMSS.ffffffZ` (microsecond
+precision, not the second-precision `YYYYMMDDTHHMMSSZ` originally planned here:
+two versions recorded inside the same second would otherwise share a stamp
+*and* the archived filename built from it, and the second write would silently
+overwrite the first with no way for `read_version` to tell the two apart). The
+same string is the timestamp in the archived filename, so a file can be
+located from its index entry without a second lookup.
 
 **Every changed version is kept, never pruned.** Disk grows only when a config
 actually changes, which is why normalisation (below) has to be right: a
