@@ -26,6 +26,7 @@
 | **No inline handlers** | `templates/dashboard.html` now contains **zero** `onclick=`. Every `onclick="…"` quoted by the 2026-08-11 version is gone; controls are cited by id or by `data-action` below. |
 | **Line numbers** | Most `routers/*.py` line numbers moved; FortiGate moved furthest (policy-lookup 264 → 303, diagnose-client 327 → 366) and `routers/observability.py` moved *up* (health 671 → 635). |
 | **Config Drift (new §12, landed 2026-08-23, after this doc's 2026-08-22 verification pass)** | A whole new tab, `#tab-config-drift` (nav `#navConfigDrift`, "Config Drift", no preview badge, under **Valuta**), served by `routers/config_drift.py` over `services/config_drift/`. Per-tenant version history with no pruning, a rule-based (not scored) baseline, and an optional git mirror for archive redundancy only. Seven routes, all under `/api/drift`; no new MCP tool. This section was written and spot-checked against source at commit `4b40ea0f`, not against the same full-doc verification pass as the rest — treat citations here with the same care, not as re-verified history. |
+| **Classification export (new §11 Q11.2, landed 2026-08-23, after this doc's 2026-08-22 verification pass)** | `Dispositivi Scoperti & Classificazione` gained a server-side CSV export mirroring the fleet inventory export: `GET /api/export/classification/columns` and `GET /api/export/classification`, replacing the old browser-side CSV builder in `static/js/topology.js`. Two columns the inventory export does not have: **serial** and **neighbour device/port**. Written and spot-checked against source at commit `7f14a04`, not against the same full-doc pass as the rest. |
 
 ## Still true from the corrected version (do not regress)
 
@@ -932,6 +933,49 @@ customer values.
   - **Export formats**: CSV only. No XLSX, and the PDF/DOCX exporters belong to the audit report, not
     to the inventory.
   - **Scheduled export**: operator-triggered only; nothing mails or drops a nightly asset list.
+
+### Q11.2: An operator wants a CSV of discovered/classified devices including an access point's serial and which switch port it hangs off. *(new — landed 2026-08-23, not part of this doc's 2026-08-22 verification pass)*
+
+- **Answer**:
+  1. `Dispositivi Scoperti & Classificazione` gained its own server-side export, mirroring §11.1's
+     inventory export rather than sharing it: a column registry, a picker modal, and group/category
+     filters, all clipped by `user_group_scope`. The old browser-side CSV builder in
+     `static/js/topology.js` is gone.
+  2. Two columns the inventory export does not have: **Serial** and **Neighbour Device** /
+     **Neighbour Port**. An inventoried device's serial comes from scan data, same source as §11.1.
+     A discovered access point's serial comes from `data/ap_inventory.json` instead, written the last
+     time someone opened that AP's controller in the WLC tab — **Serial Seen At** shows how old that
+     read is. An AP whose controller nobody has opened exports an empty serial; nothing queries a
+     controller during the export itself.
+  3. Ticking **Neighbour Device** or **Neighbour Port** switches to one row per link, same reasoning
+     as §11.1's per-member columns: a device with two uplinks needs two lookable-up rows, not one
+     concatenated cell. A device with no links still exports one row, with the neighbour columns
+     empty. The port shown is the **neighbour's** own port — the one a technician actually patches —
+     not a port on the device whose row it is.
+
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Dispositivi Scoperti & Classificazione`. Button `#btnExportClassification` opens
+    `#classificationExportModal`.
+  - **Modal**: filter lists `#clsFilterGroups` / `#clsFilterCategories`, column list `#clsColumnList`,
+    close `#btnCloseClassificationExport`, download `#btnRunClassificationExport`. Selections persist
+    in `localStorage` under `sentinelnet.classificationExportPrefs`, a key of its own, separate from
+    the inventory export's.
+
+- **App Features Present**:
+  - `GET /api/export/classification/columns` (`routers/catalog.py`) —
+    `{columns: [{key, header, per_neighbour}], default}`.
+  - `GET /api/export/classification` (`routers/catalog.py`) — query `columns`, `groups`, `categories`
+    (comma-separated; an unknown column is a **400**). Registry `_CLASSIFICATION_COLUMNS` covers
+    hostname, ip, tenant, category, subcategory, vendor, model, version, status, discovered,
+    **serial**, **serial_seen_at**, **neighbour_device**, **neighbour_port**. Defaults: hostname, ip,
+    tenant, category, status.
+  - **AP serial collection**: the WLC tab's `overview()` (`services/wlc_service.py`) runs one bulk
+    command, `show ap inventory all`, on AireOS controllers and writes an AP-name-to-serial map to
+    `data/ap_inventory.json` via `services/ap_store.py`. **There is no verified IOS-XE bulk
+    equivalent** (`COMMANDS["ap_inventory"]` has no `iosxe` entry in `services/wlc_service.py`), so
+    the serial column is left empty by design on Catalyst 9800 controllers rather than falling back
+    to one SSH round-trip per AP.
+  - Same CSV-injection guard as §11.1 (`core/csv_safe.py`).
 
 ---
 

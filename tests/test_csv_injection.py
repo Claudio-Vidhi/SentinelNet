@@ -118,8 +118,8 @@ class TestExportFrontend(unittest.TestCase):
         # Per file, non sul sorgente concatenato: cosi' si sa QUALE export ha
         # smesso di usarla. E si cerca il nome, non 'csvCell(' -- passarla a
         # .map() come riferimento e' uso legittimo quanto chiamarla.
-        # topology.js non costruisce piu' CSV lato browser: la classificazione
-        # e' esportata dal server (vedi /api/export/classification).
+        # topology.js no longer builds CSV in the browser: classification is
+        # now exported by the server (see /api/export/classification).
         import os
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         for rel in ("static/js/endpoint-inventory.js",):
