@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from services import inventory_manager, site_manager
 from security.security_manager import log_audit
+from core.csv_safe import csv_cell as _csv_cell
 from routers.deps import (
     get_current_user, require_operator, user_group_scope,
     assert_group_allowed, assert_device_allowed,
@@ -122,23 +123,6 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         "detected_versions": versions,
         "groups": groups
     }
-
-# Excel e LibreOffice eseguono come formula qualunque cella che cominci per
-# questi caratteri. Hostname e versione li scrive l'APPARATO, quindi chi
-# controlla un apparato scriverebbe una formula nel foglio di chi esporta
-# l'inventario. La quotatura CSV non c'entra e non basta: sono due problemi
-# diversi, e il modulo csv risolve solo il primo.
-_CSV_FORMULA_LEADERS = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _csv_cell(value):
-    """Neutralizza una cella che il foglio di calcolo eseguirebbe.
-
-    L'apostrofo in testa e' la neutralizzazione standard: il foglio mostra il
-    testo e non lo valuta."""
-    s = "" if value is None else str(value)
-    return "'" + s if s[:1] in _CSV_FORMULA_LEADERS else s
-
 
 # Exportable columns. The key is the stable name the ?columns= query param
 # uses, the value is (CSV header, extractor). Every extractor takes the same

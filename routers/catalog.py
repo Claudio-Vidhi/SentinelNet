@@ -206,9 +206,133 @@ def device_classification(current_user = Depends(get_current_user)):
     """Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con
     categoria, sede e conteggi per categoria. Usato dal pannello Dispositivi."""
     data = assemble_classification(user_group_scope(current_user))
-    # `links` serve solo all'export: aggiungerlo qui cambierebbe la forma della
-    # risposta su cui poggiano il frontend e lo snapshot OpenAPI.
+    # `links` is only needed by the export: adding it here would change the
+    # shape of this response, which the frontend and the OpenAPI snapshot rely on.
     return {k: v for k, v in data.items() if k != "links"}
+
+
+_CLASSIFICATION_COLUMNS = {
+    "hostname":         ("Hostname",         lambda n, l: n.get("label") or n["id"]),
+    "ip":               ("IP",               lambda n, l: n.get("display_ip", "")),
+    "tenant":           ("Tenant",           lambda n, l: n.get("group", "")),
+    "category":         ("Category",         lambda n, l: n.get("device_type", "")),
+    "subcategory":      ("Subcategory",      lambda n, l: n.get("subcategory", "")),
+    "vendor":           ("Vendor",           lambda n, l: n.get("vendor", "")),
+    "model":            ("Model",            lambda n, l: n.get("model", "")),
+    "version":          ("Version",          lambda n, l: n.get("version") or ""),
+    "status":           ("Status",           lambda n, l: n.get("status", "")),
+    "discovered":       ("Discovered",       lambda n, l: "yes" if n.get("discovered") else "no"),
+    "serial":           ("Serial",           lambda n, l: n.get("serial", "")),
+    "serial_seen_at":   ("Serial Seen At",   lambda n, l: n.get("serial_seen_at", "")),
+    "neighbour_device": ("Neighbour Device", lambda n, l: l.get("device", "")),
+    "neighbour_port":   ("Neighbour Port",   lambda n, l: l.get("port", "")),
+}
+
+# Asking for one of these columns means asking for one row per neighbour: a
+# device with redundant uplinks has more than one, and a joined cell cannot be
+# filtered or looked up in a spreadsheet -- the same reason _MEMBER_COLUMNS
+# explodes rows in the device export.
+_NEIGHBOUR_COLUMNS = frozenset(("neighbour_device", "neighbour_port"))
+
+_DEFAULT_CLASSIFICATION_COLUMNS = ["hostname", "ip", "tenant", "category", "status"]
+
+
+def _neighbours_of(node_id: str, links: list, label_of: dict) -> list:
+    """Neighbours of one node, each as {device, port}.
+
+    The port reported is the NEIGHBOUR's own port -- the one you patch -- not
+    the port on the device whose row this is. A link stores local_port for its
+    source and remote_port for its target, so which one to read depends on
+    which end this node sits at.
+    """
+    out = []
+    for link in links:
+        if link.get("target") == node_id:
+            other, port = link.get("source"), link.get("local_port")
+        elif link.get("source") == node_id:
+            other, port = link.get("target"), link.get("remote_port")
+        else:
+            continue
+        out.append({"device": label_of.get(other, other or ""), "port": port or ""})
+    return out
+
+
+@router.get("/api/export/classification/columns")
+def export_classification_columns(current_user = Depends(get_current_user)):
+    """Available columns and defaults, so the UI does not duplicate the
+    registry."""
+    return {
+        "columns": [
+            {"key": k, "header": h, "per_neighbour": k in _NEIGHBOUR_COLUMNS}
+            for k, (h, _) in _CLASSIFICATION_COLUMNS.items()
+        ],
+        "default": _DEFAULT_CLASSIFICATION_COLUMNS,
+    }
+
+
+@router.get("/api/export/classification")
+def export_classification_csv(
+    columns: str = "",
+    groups: str = "",
+    categories: str = "",
+    current_user = Depends(get_current_user),
+):
+    import csv, io
+    from fastapi.responses import Response as FastResponse
+    from core.csv_safe import csv_cell
+    from services import ap_store
+
+    selected = [c.strip() for c in columns.split(",") if c.strip()] \
+        or _DEFAULT_CLASSIFICATION_COLUMNS
+    unknown = [c for c in selected if c not in _CLASSIFICATION_COLUMNS]
+    if unknown:
+        raise HTTPException(status_code=400,
+                            detail=f"Colonne sconosciute: {', '.join(unknown)}")
+
+    data = assemble_classification(user_group_scope(current_user))
+    nodes, links = data["nodes"], data["links"]
+
+    want_groups = {v.strip() for v in groups.split(",") if v.strip()}
+    want_categories = {v.strip() for v in categories.split(",") if v.strip()}
+    if want_groups:
+        nodes = [n for n in nodes if n.get("group", "") in want_groups]
+    if want_categories:
+        nodes = [n for n in nodes if n.get("device_type", "") in want_categories]
+
+    versions = inventory_manager.get_detected_versions()
+    label_of = {n["id"]: (n.get("label") or n["id"]) for n in data["nodes"]}
+    explode = any(c in _NEIGHBOUR_COLUMNS for c in selected)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([_CLASSIFICATION_COLUMNS[c][0] for c in selected])
+    for node in nodes:
+        # Serial has two sources and one of them is a cache: an inventoried
+        # device carries it from the last scan, an access point only from
+        # whatever controller last reported it.
+        scan = versions.get(node["id"], {})
+        entry = ap_store.lookup(node.get("label") or "") if node.get("discovered") else None
+        row_node = dict(node)
+        row_node["serial"] = scan.get("serial") or (entry or {}).get("serial", "")
+        row_node["serial_seen_at"] = (entry or {}).get("seen_at", "")
+
+        # A device with no links still gets its row: selecting a column must
+        # never make devices disappear from the export.
+        neighbours = _neighbours_of(node["id"], links, label_of) if explode else []
+        for link in (neighbours or [{}]):
+            writer.writerow([
+                csv_cell(_CLASSIFICATION_COLUMNS[c][1](row_node, link))
+                for c in selected
+            ])
+
+    log_audit(f"Export CSV classificazione richiesto dall'utente "
+              f"'{current_user.get('sub')}' (colonne: {','.join(selected)}).")
+    return FastResponse(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=sentinelnet-classification.csv"},
+    )
 
 @router.post("/api/device-categories")
 def create_device_category(payload: CategoryCreateSchema, current_user = Depends(require_operator)):
