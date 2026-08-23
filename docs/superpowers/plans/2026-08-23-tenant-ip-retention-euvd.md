@@ -66,7 +66,7 @@ The data-loss bug. Do this first; nothing else in Part A matters if adding a dev
 - Consumes: nothing new.
 - Produces: `add_or_update_device(...)` keyed on `(Group, IP)`. Same signature; the `group` argument now participates in identity.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # -*- coding: utf-8 -*-
@@ -115,12 +115,12 @@ if __name__ == "__main__":
 
 **Step 1 note:** `add_or_update_device`'s real signature and the data-dir isolation pattern must be read from the code and from a neighbouring test. `tests/test_sites.py` and `tests/test_rbac_scope.py` both set `SENTINELNET_DATA_DIR` to a temp dir *before* importing the module — that ordering matters. Replace the `setUp` above with that pattern and correct the call signature to match reality. Do not guess it.
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `uv run python -m unittest tests.test_tenant_ip_overlap -v`
 Expected: FAIL — the second add removes the first row, so only one comes back.
 
-- [ ] **Step 3: Make identity composite**
+- [x] **Step 3: Make identity composite**
 
 In `services/inventory_manager.py`, change every place that rebuilds the device list by IP alone so it also compares the group. Grep for `['IP'] != ip` and `['IP'] == ip` in that file and fix each, reading its surrounding function first — one is a delete path where IP-only may be intended.
 
@@ -136,11 +136,11 @@ def _same_device(row: dict, ip: str, group: str) -> bool:
     return row.get("IP") == ip and (row.get("Group") or "Generale") == (group or "Generale")
 ```
 
-- [ ] **Step 4: Run the tests and make sure they pass**
+- [x] **Step 4: Run the tests and make sure they pass**
 
 Run the new module, then the full suite. Other inventory tests assume IP-only identity; read each failure before changing it, and report any test you modify with the reason.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/inventory_manager.py tests/test_tenant_ip_overlap.py
@@ -159,7 +159,7 @@ git commit -m "fix(inventory): identity is (tenant, IP), so adding a device stop
 - Consumes: `user_group_scope(current_user)` — `None` for an admin, else a set of allowed group names.
 - Produces: `assert_device_allowed(current_user, ip, tenant=None)` — `tenant` is optional and consulted only when the IP is ambiguous for this caller. Existing call sites keep working unchanged.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Extend `tests/test_tenant_ip_overlap.py` with a class that seeds the same IP in two tenants and asserts:
 
@@ -170,11 +170,11 @@ Extend `tests/test_tenant_ip_overlap.py` with a class that seeds the same IP in 
 
 Follow `tests/test_rbac_scope.py` for constructing scoped users.
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Expected: the scoped cases return whichever row is first in CSV order, so at least one assertion fails.
 
-- [ ] **Step 3: Implement scope-aware resolution**
+- [x] **Step 3: Implement scope-aware resolution**
 
 ```python
 def assert_device_allowed(current_user, ip, tenant=None):
@@ -206,11 +206,11 @@ def assert_device_allowed(current_user, ip, tenant=None):
 
 Decide deliberately whether 409 is right and whether the detail should name the tenants — only an unscoped admin can reach that branch, and an admin already sees every tenant, so it leaks nothing. Record the reasoning in your report.
 
-- [ ] **Step 4: Run the tests, then the full suite**
+- [x] **Step 4: Run the tests, then the full suite**
 
 53 routes call this. Read every failure before touching it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -222,21 +222,21 @@ Decide deliberately whether 409 is right and whether the detail should name the 
 - Modify: `core/core_engine.py` — `remove_stale_backups`, `_move_history`, `save_backup`
 - Test: `tests/test_tenant_ip_overlap.py` (extend)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Seed a current backup plus two archived history versions for `192.0.2.10` under tenant `BETA`. Then call `save_backup` for a different device with the same IP under tenant `ACME`. Assert BETA's current backup and both archived versions are still under BETA, and ACME has only its own.
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
-- [ ] **Step 3: Scope the walk to the device's own tenant**
+- [x] **Step 3: Scope the walk to the device's own tenant**
 
 The function exists to clean up after a device that changed *group or vendor* — a move within one owner's tree. It should never touch a directory belonging to a different tenant. The tree is `backup-config/<tenant>/<vendor>/`, so the tenant is the first path component under `BACKUP_FOLDER`: skip any root whose tenant component differs from the device's.
 
 Read the current implementation whole before editing — it changed recently and carries a `keep=` argument that must not break. `tests/test_config_drift_history.py` covers both the cross-tenant move and the same-tenant hostname change; both must still pass.
 
-- [ ] **Step 4: Run `tests.test_config_drift_history` and `tests.test_tenant_ip_overlap`, then the full suite**
+- [x] **Step 4: Run `tests.test_config_drift_history` and `tests.test_tenant_ip_overlap`, then the full suite**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 

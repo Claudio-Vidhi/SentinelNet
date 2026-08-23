@@ -64,8 +64,8 @@
         };
     }
 
-    // Popola i pulsanti vendor dal registro (solo vendor con euvd_term configurato)
-    // e avvia il primo caricamento sul primo vendor disponibile.
+    // Populate vendor buttons from every registered vendor (the server resolves
+    // the display name to its NVD term) and select the first available vendor.
     async function vwInit() {
         const btnWrap = document.getElementById('vwVendorBtns');
         if (!btnWrap) return;
