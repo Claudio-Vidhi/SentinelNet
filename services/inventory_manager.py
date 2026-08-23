@@ -4,7 +4,7 @@ import os
 import csv
 import re
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from security import crypto_vault
 from core import data_config
 
@@ -332,39 +332,57 @@ def get_all_devices():
 # Invalidata a ogni scrittura dell'inventario (safe_write_hosts_csv).
 
 _device_ip_cache = None
+_device_tenant_ip_cache = None
 _device_ip_cache_lock = threading.Lock()
 
 
 def invalidate_device_ip_cache():
-    global _device_ip_cache
+    global _device_ip_cache, _device_tenant_ip_cache
     with _device_ip_cache_lock:
         _device_ip_cache = None
+        _device_tenant_ip_cache = None
 
 
-def get_device_by_ip(ip: str):
+def get_device_by_ip(ip: str, tenant: Optional[str] = None):
     """Resolve an IP to {'ip', 'hostname', 'tenant', 'site'}, or None if
     unknown. 'tenant' is the device's Group column, 'site' its Site column
-    (defaulting to 'central'). If MULTIPLE devices share the same IP, returns
-    the sentinel {'collision': True} instead (attribution refused, an anomaly
-    to audit) — callers that need a per-key field must check for it first."""
-    global _device_ip_cache
+    (defaulting to 'central').
+
+    If tenant is given, resolves directly within that tenant:
+    (tenant, ip) -> {'ip', 'hostname', 'tenant', 'site'}.
+
+    If tenant is None:
+    If MULTIPLE devices share the same IP, returns the sentinel
+    {'collision': True} instead (attribution refused, an anomaly to audit) —
+    callers that need a per-key field must check for it first.
+    """
+    global _device_ip_cache, _device_tenant_ip_cache
     with _device_ip_cache_lock:
-        if _device_ip_cache is None:
-            cache: Dict[str, Dict[str, Any]] = {}
+        if _device_ip_cache is None or _device_tenant_ip_cache is None:
+            ip_cache: Dict[str, Dict[str, Any]] = {}
+            tenant_ip_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
             for d in get_all_devices():
                 key = d.get('IP')
                 if not key:
                     continue
-                if key in cache:
-                    cache[key] = {"collision": True}
-                    continue
-                cache[key] = {
+                tenant_val = d.get('Group') or 'Generale'
+                dev_entry = {
                     "ip": key,
                     "hostname": d.get('Hostname') or "",
-                    "tenant": d.get('Group') or 'Generale',
+                    "tenant": tenant_val,
                     "site": d.get('Site') or 'central',
                 }
-            _device_ip_cache = cache
+                tenant_ip_cache[(tenant_val, key)] = dev_entry
+
+                if key in ip_cache:
+                    ip_cache[key] = {"collision": True}
+                else:
+                    ip_cache[key] = dev_entry
+            _device_ip_cache = ip_cache
+            _device_tenant_ip_cache = tenant_ip_cache
+
+        if tenant is not None:
+            return _device_tenant_ip_cache.get((tenant or "Generale", ip))
         return _device_ip_cache.get(ip)
 
 def _same_device(row: dict, ip: str, group: str) -> bool:

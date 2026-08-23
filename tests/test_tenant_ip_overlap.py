@@ -178,5 +178,51 @@ class BackupTreeDoesNotCrossTenants(unittest.TestCase):
         self.assertEqual(1, len(history.list_versions(dev_acme)))
 
 
+class GetDeviceByIpTenantAware(unittest.TestCase):
+    def setUp(self):
+        inventory_manager.add_group("ACME", "ACME Corp")
+        inventory_manager.add_group("BETA", "Beta LLC")
+        hosts_csv = inventory_manager.get_hosts_csv()
+        if os.path.exists(hosts_csv):
+            os.remove(hosts_csv)
+        inventory_manager.invalidate_device_ip_cache()
+
+        # Seed same IP in ACME and BETA
+        inventory_manager.add_or_update_device(
+            ip="192.0.2.10", vendor="cisco", profile="custom",
+            username="admin_a", password="pwd", enable_secret="sec",
+            group="ACME"
+        )
+        inventory_manager.update_device_hostname("192.0.2.10", "switch-01", group="ACME")
+
+        inventory_manager.add_or_update_device(
+            ip="192.0.2.10", vendor="cisco", profile="custom",
+            username="admin_b", password="pwd", enable_secret="sec",
+            group="BETA"
+        )
+        inventory_manager.update_device_hostname("192.0.2.10", "switch-99", group="BETA")
+
+    def test_calling_with_tenant_resolves_the_correct_device(self):
+        dev_acme = inventory_manager.get_device_by_ip("192.0.2.10", tenant="ACME")
+        self.assertIsNotNone(dev_acme)
+        self.assertEqual("192.0.2.10", dev_acme["ip"])
+        self.assertEqual("ACME", dev_acme["tenant"])
+        self.assertEqual("switch-01", dev_acme["hostname"])
+
+        dev_beta = inventory_manager.get_device_by_ip("192.0.2.10", tenant="BETA")
+        self.assertIsNotNone(dev_beta)
+        self.assertEqual("192.0.2.10", dev_beta["ip"])
+        self.assertEqual("BETA", dev_beta["tenant"])
+        self.assertEqual("switch-99", dev_beta["hostname"])
+
+    def test_calling_without_tenant_returns_collision_sentinel_on_duplicate(self):
+        res = inventory_manager.get_device_by_ip("192.0.2.10")
+        self.assertEqual({"collision": True}, res)
+
+    def test_nonexistent_device_returns_none(self):
+        self.assertIsNone(inventory_manager.get_device_by_ip("198.51.100.1", tenant="ACME"))
+        self.assertIsNone(inventory_manager.get_device_by_ip("198.51.100.1"))
+
+
 if __name__ == "__main__":
     unittest.main()
