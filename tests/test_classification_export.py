@@ -28,18 +28,20 @@ CATS = {"categories": {}, "assignments": {}}
 VERSIONS = {"192.0.2.1": {"serial": "SW0000AAAA", "version": "1.0", "status": "online"}}
 AP_ENTRY = {"serial": "FCW0000AAAA", "model": "AIR-EXAMPLE", "wlc_ip": "192.0.2.10",
             "tenant": "ACME", "seen_at": "2026-08-23T10:00:00+00:00"}
+AP_STORE = {"ap-lobby": AP_ENTRY}
 
 
-def _export(query="", user=None, ap_lookup=None):
+def _export(query="", user=None, ap_store_data=None):
     from fastapi.testclient import TestClient
     import app_server
     from routers.deps import get_current_user
 
-    # Default: only "ap-lobby" is known to a controller. A caller can pass its
-    # own ap_lookup (e.g. "no controller has reported it") -- nesting a second
-    # mock.patch of the same target around this call would not work, since the
-    # one entered last (this function's) is the one active during the request.
-    lookup = ap_lookup or (lambda n: AP_ENTRY if "ap-lobby" in (n or "").lower() else None)
+    # Default store: only "ap-lobby" is known, reported by an ACME controller.
+    # A caller can pass its own ap_store_data (e.g. "no controller has
+    # reported it" is {}) -- nesting a second mock.patch of the same target
+    # around this call would not work, since the one entered last (this
+    # function's) is the one active during the request.
+    store = AP_STORE if ap_store_data is None else ap_store_data
 
     app_server.app.dependency_overrides[get_current_user] = \
         lambda: user or {"sub": "tester", "role": "admin"}
@@ -49,7 +51,7 @@ def _export(query="", user=None, ap_lookup=None):
              mock.patch("services.inventory_manager.get_all_vendors", return_value={}), \
              mock.patch("services.inventory_manager.get_models", return_value={}), \
              mock.patch("services.inventory_manager.get_detected_versions", return_value=VERSIONS), \
-             mock.patch("services.ap_store.lookup", side_effect=lookup), \
+             mock.patch("services.ap_store.read_all", return_value=store), \
              mock.patch("routers.catalog.log_audit"):
             client = TestClient(app_server.app)
             return client.get("/api/export/classification" + query,
@@ -122,7 +124,15 @@ class SerialResolution(unittest.TestCase):
         self.assertEqual("FCW0000AAAA", next(r for r in rows if r[0] == "ap-lobby")[1])
 
     def test_an_ap_no_controller_has_reported_exports_an_empty_serial(self):
-        rows = _rows(_export("?columns=hostname,serial", ap_lookup=lambda n: None))[1:]
+        rows = _rows(_export("?columns=hostname,serial", ap_store_data={}))[1:]
+        self.assertEqual("", next(r for r in rows if r[0] == "ap-lobby")[1])
+
+    def test_an_ap_reported_by_a_different_tenant_exports_an_empty_serial(self):
+        """A name collision across tenants must never leak a serial: 'ap-lobby'
+        is ACME's node here, but the store entry belongs to BETA."""
+        beta_entry = dict(AP_ENTRY, tenant="BETA")
+        rows = _rows(_export("?columns=hostname,serial",
+                             ap_store_data={"ap-lobby": beta_entry}))[1:]
         self.assertEqual("", next(r for r in rows if r[0] == "ap-lobby")[1])
 
     def test_the_seen_at_date_is_available_so_staleness_is_visible(self):

@@ -4,7 +4,15 @@
 'show ap summary' carries no serial on either platform. The inventory command
 does, and it returns every AP in a single round-trip.
 """
+import os
+import tempfile
 import unittest
+
+_TMP_DATA_DIR = tempfile.mkdtemp(prefix="sentinelnet_test_apstore_")
+os.environ["SENTINELNET_DATA_DIR"] = _TMP_DATA_DIR
+
+from core import data_config  # noqa: E402
+data_config.DATA_DIR = _TMP_DATA_DIR
 
 # Shape of 'show ap inventory all' on AireOS. Invented names and serials.
 INVENTORY_OUTPUT = """
@@ -60,7 +68,45 @@ class OverviewRecordsSerials(unittest.TestCase):
 
         self.assertEqual(1, len(result["aps"]))
         self.assertNotIn("serial", result["aps"][0])
+        # record_aps is still called once with this harvest -- record_aps
+        # itself is the guard now (a serial-less call must write nothing),
+        # not the caller.
         rec.assert_called_once()
+
+
+class RecordApsSurvivesAnEmptyHarvest(unittest.TestCase):
+    """A failed inventory command must cost the serial column, not the
+    controller's previously stored serials (design doc: 'a controller that
+    will not answer costs the serial column, not the tab')."""
+
+    def setUp(self):
+        from services import ap_store
+        self.ap_store = ap_store
+
+    def test_a_harvest_with_no_serials_does_not_erase_stored_ones(self):
+        self.ap_store.record_aps("192.0.2.10", "ACME",
+                                 [{"name": "ap-lobby", "serial": "FCW0000AAAA"},
+                                  {"name": "ap-floor2", "serial": "FCW0000BBBB"}])
+
+        written = self.ap_store.record_aps(
+            "192.0.2.10", "ACME",
+            [{"name": "ap-lobby", "model": "AIR-EXAMPLE"},
+             {"name": "ap-floor2", "model": "AIR-EXAMPLE"}])
+
+        self.assertEqual(0, written)
+        self.assertEqual("FCW0000AAAA", self.ap_store.lookup("ap-lobby")["serial"])
+        self.assertEqual("FCW0000BBBB", self.ap_store.lookup("ap-floor2")["serial"])
+
+    def test_a_harvest_that_does_carry_serials_still_replaces_the_controller_s_entries(self):
+        self.ap_store.record_aps("192.0.2.10", "ACME",
+                                 [{"name": "ap-lobby", "serial": "FCW0000AAAA"}])
+
+        written = self.ap_store.record_aps(
+            "192.0.2.10", "ACME",
+            [{"name": "ap-lobby", "serial": "FCW0000CCCC"}])
+
+        self.assertEqual(1, written)
+        self.assertEqual("FCW0000CCCC", self.ap_store.lookup("ap-lobby")["serial"])
 
 
 if __name__ == "__main__":
