@@ -1321,8 +1321,14 @@ def parse_cdp_lldp_neighbors(content: str) -> list:
     # ------------------------------------------------------------------
     # 4. LLDP detail IP harvest (legacy Cisco formats)
     # ------------------------------------------------------------------
+    # The gaps are bounded on purpose. With an unbounded `.*?` under DOTALL,
+    # every "System Name" not followed by a "PortId" made the engine scan to
+    # the end of the file: 21 of 30 real backups hit that, it cost ~0.8s per
+    # pass and matched nothing at all. One LLDP entry's fields sit within a few
+    # hundred characters of each other, never megabytes apart.
     lldp_details_old = re.findall(
-        r'System Name\s*:\s*([^\n\r]+).*?PortId\s*:\s*([^\n\r]+).*?IPv4 Address\s*:\s*([^\n\r]+)',
+        r'System Name\s*:\s*([^\n\r]+).{0,2000}?PortId\s*:\s*([^\n\r]+)'
+        r'.{0,2000}?IPv4 Address\s*:\s*([^\n\r]+)',
         content, re.DOTALL | re.IGNORECASE
     )
     for sys_name, port_id, ip in lldp_details_old:
@@ -1988,7 +1994,11 @@ def _generate_network_map(group_filter=None) -> dict:
     # as an AP for lack of better signals (only hostname+vendor).
     neighbor_info: dict = {}
     for _ip, _info in parsed_devices.items():
-        for _n in parse_cdp_lldp_neighbors(_info["content"]):
+        # Parsed once and kept: the links loop further down walks the same
+        # backups again, and parsing each file twice was half the cost of
+        # building the map.
+        _info["neighbors"] = parse_cdp_lldp_neighbors(_info["content"])
+        for _n in _info["neighbors"]:
             _nid  = _n["neighbor_id"]
             _base = _nid.split('.')[0] if '.' in _nid else _nid
             _entry = {
@@ -2061,7 +2071,7 @@ def _generate_network_map(group_filter=None) -> dict:
     for ip, info in parsed_devices.items():
         iface_pc_local = info.get("iface_pc", {})
 
-        for neigh in parse_cdp_lldp_neighbors(info["content"]):
+        for neigh in info["neighbors"]:
             neigh_id    = neigh["neighbor_id"]
             neigh_ip    = neigh["neighbor_ip"]
             local_port  = neigh["local_port"]
