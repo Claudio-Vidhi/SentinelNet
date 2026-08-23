@@ -997,8 +997,10 @@ customer values.
     `log_audit`).
   - `POST /api/drift/baseline/{tenant}/seed?ip=` — candidate `+` patterns
     pulled from one device's newest archived version (security-relevant
-    prefixes only — AAA, SSH, SNMP, DHCP snooping, port-security — never
-    hostname, address or VLAN, which differ by device by design). Saves
+    prefixes only — AAA, SSH, SNMP, DHCP snooping, password encryption,
+    portfast bpduguard, NTP/logging host, FortiOS strong-crypto/admin-lockout
+    (`_SEED_PREFIXES` in `baseline.py`) — never hostname, address or VLAN,
+    which differ by device by design). Saves
     nothing; admin only, same as the PUT.
   - `GET /api/drift/{ip}/baseline` — that device's deviations against its
     tenant's baseline: `{deviations: [{rule, pattern, problem}], checked}`.
@@ -1033,12 +1035,15 @@ customer values.
     on `PATH` **fails loudly** (raises, does not silently no-op) — a
     redundancy feature that is silently not running is worse than one that
     is visibly off.
-  - Normalisation (`services/config_drift/normalize.py`) is vendor-specific,
-    same structure as `services/policy_test/`: one pattern set per vendor
-    plus a vendor-neutral set applied to everyone. An unknown vendor gets
-    only the neutral set — noisier drift, never a crash, never a skipped
-    device. Normalisation applies to the hash and the diff only; the archived
-    file is always the config exactly as collected.
+  - Normalisation (`services/config_drift/normalize.py`) is vendor-specific:
+    one `normalize(vendor, text)` entry point dispatching to inline pattern
+    tuples (`_IOS`, `_FORTIOS`) plus a vendor-neutral set applied to
+    everyone — no per-vendor module split (`services/policy_test/` splits
+    its parsers into files; this package doesn't need to, the pattern lists
+    are short). An unknown vendor gets only the neutral set — noisier drift,
+    never a crash, never a skipped device. Normalisation applies to the hash
+    and the diff only; the archived file is always the config exactly as
+    collected.
   - `history.record_version` is called from `run_backup_and_triage` /
     `_fortigate_backup_and_triage` right after the existing `save_backup`
     call, wrapped in try/except at the call site — a history-recording
