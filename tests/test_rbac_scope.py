@@ -42,6 +42,7 @@ ROUTES = [
     ("/api/fortigate/10.3.0.1/status", "sede-c"),
     ("/api/wlc/10.1.0.2/status", "sede-a"),
     ("/api/wlc/10.3.0.2/status", "sede-c"),
+    ("/api/drift/10.3.0.1/diff", "sede-c"),
 ]
 
 
@@ -61,6 +62,11 @@ class TestRbacScope(unittest.TestCase):
             patch("routers.fortigate.fortigate_service.get_system_status",
                   side_effect=RuntimeError("no-op")),
             patch("routers.wlc.wlc_service.query", side_effect=RuntimeError("no-op")),
+            # Same reasoning: an in-scope device with no archived history would
+            # otherwise return a legitimate 404 from drift_diff, indistinguishable
+            # from the 403 this test exists to detect.
+            patch("routers.config_drift.history.read_version",
+                  side_effect=RuntimeError("no-op")),
         ]
         for p in cls.patches:
             p.start()

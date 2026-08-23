@@ -105,6 +105,9 @@ def drift_baseline_put(tenant: str, payload: BaselineSchema,
 def drift_baseline_seed(tenant: str, ip: str, current_user=Depends(require_admin)):
     """Candidate rules from one device, for the operator to prune. Saves nothing."""
     device = _device_or_404(current_user, ip)
+    if device.get("Group") != tenant:
+        raise HTTPException(status_code=400,
+                            detail=f"Apparato {ip} non appartiene al tenant '{tenant}'.")
     versions = history.list_versions(device)
     if not versions:
         raise HTTPException(status_code=404, detail="Nessuna configurazione archiviata.")
