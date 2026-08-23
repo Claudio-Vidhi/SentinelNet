@@ -45,7 +45,7 @@ Non-negotiable, verify by running them and reading output:
 ```sh
 uv run pyrefly check                          # 0 errors
 uv run python scripts/check_frontend.py       # if static/js or templates/ changed
-uv run python -m unittest discover -s tests   # all green
+uv run pytest tests -n 4                      # all green
 graphify update .                             # after code changes
 ```
 

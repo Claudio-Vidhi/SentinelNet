@@ -56,14 +56,24 @@ importing project modules — that ordering is load-bearing, since
 `data_config.DATA_DIR` is resolved at import time.
 
 ```sh
-uv run python -m unittest discover -s tests -v     # everything
-uv run python -m unittest tests.test_db -v         # one file
+uv run pytest tests -n 4                           # everything
+uv run pytest tests/test_db.py                     # one file
 ```
 
-Run from the repository root, and use the module path form.
-`uv run python tests/test_db.py` fails with `ModuleNotFoundError: core`,
-because that puts `tests/` on `sys.path` instead of the root. (The instruction
-in [CONTRIBUTING.md](../CONTRIBUTING.md) §7 predates the move into `tests/`.)
+pytest is the runner; the tests themselves stay `unittest.TestCase`, which
+pytest executes unchanged. Use it rather than `unittest discover`, which
+collects only `TestCase` methods and therefore silently skips the module-level
+`def test_*()` functions some files use — twelve of them in
+`test_switch_provisioner.py` and `test_fortigate_provisioner.py` went unrun for
+exactly that reason. `-n 4` splits the suite across four processes; each worker
+is its own process, so the per-worker `SENTINELNET_DATA_DIR` stays isolated.
+Prefer `-n 4` over `-n auto`: oversubscribing every core is slower here, and it
+starves the latency assertion in `test_load_5kpps_loop_latency`.
+
+Run from the repository root. `uv run python tests/test_db.py` fails with
+`ModuleNotFoundError: core`, because that puts `tests/` on `sys.path` instead
+of the root. (The instruction in [CONTRIBUTING.md](../CONTRIBUTING.md) §7
+predates the move into `tests/`.)
 
 Every new module ships its own `test_<module>.py`. Tests never touch real state.
 Config drift is split into six focused files rather than one, matching its

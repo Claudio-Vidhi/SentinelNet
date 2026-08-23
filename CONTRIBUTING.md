@@ -135,12 +135,17 @@ documentation, not from `data/`.
 
 ## 7. Tests
 
-`unittest`, under `tests/`, run from the repository root:
+`unittest.TestCase` classes under `tests/`, run with pytest from the repository
+root:
 
 ```sh
-uv run python -m unittest discover -s tests -v   # everything
-uv run python -m unittest tests.test_db -v       # one file
+uv run pytest tests -n 4                         # everything
+uv run pytest tests/test_db.py                   # one file
 ```
+
+Do not use `unittest discover`: it collects only `TestCase` methods, so any
+module-level `def test_*()` silently never runs. See
+[docs/development.md](docs/development.md) §3.
 
 Every new module ships its own `test_<module>.py`. Tests use a temporary
 `SENTINELNET_DATA_DIR`, never real state.
