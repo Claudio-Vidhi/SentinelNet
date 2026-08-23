@@ -924,7 +924,7 @@
               <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
               <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:170px; box-shadow:var(--shadow-float);"></div>
             </details>
-            <button class="btn btn-secondary btn-small" id="btnExportCategoriesCsv" style="width:auto; margin:0;" data-i18n="btnExportCsv">
+            <button class="btn btn-secondary btn-small" id="btnExportClassification" style="width:auto; margin:0;" data-i18n="btnExportCsv">
               <i class="fa-solid fa-file-csv"></i> Esporta CSV
             </button>
             <button class="btn btn-secondary btn-small" id="btnRefreshCategories" style="width:auto; margin:0;" data-i18n="btnRefreshCategories">
@@ -3987,6 +3987,34 @@
               style="margin-top:16px; background:var(--cta); color:var(--cta-text);" data-i18n="btnRunDeviceExport">
         <i class="fa-solid fa-download"></i> Scarica CSV
       </button>
+    </div>
+  </div>
+
+  <!-- Export CSV Classificazione: filtri + scelta colonne -->
+  <div class="modal-overlay" id="classificationExportModal">
+    <div class="modal" style="width: 720px; max-width: 96%;">
+      <div class="modal-header">
+        <h3 data-i18n="titleClassificationExport"><i class="fa-solid fa-file-csv" style="color: var(--primary);"></i> Esporta classificazione CSV</h3>
+        <i class="fa-solid fa-xmark modal-close" id="btnCloseClassificationExport"></i>
+      </div>
+      <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descClassificationExport">
+        Nessuna casella spuntata in un filtro significa «tutti». Le colonne del vicino producono una riga per ogni collegamento.
+      </p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
+        <div>
+          <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thGroup">Gruppo</div>
+          <div id="clsFilterGroups" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+          <div style="font-size:12px; font-weight:700; margin:10px 0 4px;" data-i18n="lblClsCategory">Categoria</div>
+          <div id="clsFilterCategories" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+        </div>
+        <div>
+          <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportColumns">Colonne</div>
+          <div id="clsColumnList" style="max-height:310px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+        </div>
+      </div>
+      <div class="modal-footer" style="margin-top:16px;">
+        <button class="btn btn-primary btn-small" id="btnRunClassificationExport" style="width:auto; margin:0;" data-i18n="btnExportClassification">Esporta CSV</button>
+      </div>
     </div>
   </div>
 

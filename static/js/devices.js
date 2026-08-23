@@ -1501,6 +1501,9 @@
               <span>${escapeHtml(v.label)}</span>
             </label>`).join('');
     }
+    // Shared with topology.js, which lazy-loads separately and cannot assume
+    // devices.js has already run.
+    window.renderCheckList = renderCheckList;
 
     function updateMemberHint() {
         const perMember = new Set(exportColumns.filter(c => c.per_member).map(c => c.key));

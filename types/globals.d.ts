@@ -125,4 +125,5 @@ interface Window {
     updateTopologyMapNodeStatus: any; // topology.js, called from devices.js
     openTrafficoAnomalies: any; // observability.js, called from home.js
     openIncident: any; // incidents.js, called from observability.js
+    renderCheckList: any; // devices.js, called from topology.js
 }

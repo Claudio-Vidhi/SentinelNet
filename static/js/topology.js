@@ -2029,23 +2029,6 @@
         if (save) save.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save changes':'Salva Modifiche'}${n?` (${n})`:''}`;
     }
 
-    // Valore testuale di una cella (usato anche per l'export CSV) — usa i valori salvati.
-    function catCellValue(key, n) {
-        switch (key) {
-            case 'hostname': return n.label || '';
-            case 'ip':       return n.display_ip || '';
-            case 'source':   return n.discovered ? (currentLang==='en'?'discovered':'scoperto') : (currentLang==='en'?'managed':'gestito');
-            case 'vendor':   return n.vendor && n.vendor !== 'discovered' ? n.vendor : '';
-            case 'model':    return n.model || '';
-            case 'version':  return n.version || '';
-            case 'vtp':      return [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' / ');
-            case 'ha':       return n.ha_group || '';
-            case 'stack':    return n.stack ? stackLine(n.stack, '', n.model) : '';
-            case 'category': return deviceTypeLabel(n.device_type) + (n.subcategory ? ' / ' + n.subcategory : '');
-            default: return '';
-        }
-    }
-
     function renderCategoriesPanel() {
         const cats = categoriesData.categories;
         const canWrite = (currentRole === 'admin' || currentRole === 'operator');
@@ -2274,21 +2257,6 @@
         else if (act === 'stage-edit-subcategory') stageEdit(nodeId, 'subcategory', actEl.value);
         else if (act === 'stage-category') stageCategory(nodeId, actEl.value);
     });
-
-    function exportCategoriesCsv() {
-        const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
-        const nodes = getFilteredCategoryNodes();
-        const lines = [['Group', ...cols.map(colLabel)].map(csvCell).join(',')];
-        nodes.forEach(n => {
-            lines.push([n.group, ...cols.map(c => catCellValue(c.key, n))].map(csvCell).join(','));
-        });
-        const blob = new Blob(["﻿" + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'sentinelnet-devices-categories.csv';
-        document.body.appendChild(a); a.click(); a.remove();
-        URL.revokeObjectURL(url);
-    }
 
     // Cambio categoria: azzera la sottocategoria (cambiano le opzioni) e ridisegna
     // così il menù sottocategoria si aggiorna alla nuova categoria.
@@ -2901,6 +2869,76 @@
     document.getElementById('categoriesCatFilter')?.addEventListener('change', renderCategoriesPanel);
     document.getElementById('btnSaveCatEdits')?.addEventListener('click', saveCategoryEdits);
     document.getElementById('btnDiscardCatEdits')?.addEventListener('click', discardCategoryEdits);
-    document.getElementById('btnExportCategoriesCsv')?.addEventListener('click', exportCategoriesCsv);
     document.getElementById('btnRefreshCategories')?.addEventListener('click', loadCategoriesData);
     document.getElementById('btnCreateCategory')?.addEventListener('click', createCategory);
+
+    // The column registry lives in the backend, like the inventory export: a
+    // second copy here is what lets the two drift apart.
+    const CLS_EXPORT_PREFS_KEY = 'sentinelnet.classificationExportPrefs';
+    let clsExportColumns = [];
+
+    function readClsPrefs() {
+        try { return JSON.parse(localStorage.getItem(CLS_EXPORT_PREFS_KEY)) || {}; }
+        catch (e) { return {}; }
+    }
+
+    function clsChecked(containerId) {
+        return Array.from(document.querySelectorAll(`#${containerId} input:checked`))
+            .map(el => el.value);
+    }
+
+    async function openClassificationExportModal() {
+        if (!clsExportColumns.length) {
+            const res = await apiFetch('/api/export/classification/columns');
+            if (!res || !res.ok) { alert(i18n[currentLang].alertExportError); return; }
+            const data = await res.json();
+            clsExportColumns = data.columns;
+            const seed = readClsPrefs();
+            if (!seed.columns) {
+                seed.columns = data.default;
+                localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify(seed));
+            }
+        }
+        const prefs = readClsPrefs();
+        const nodes = (categoriesData && categoriesData.nodes) || [];
+        const uniq = key => Array.from(new Set(nodes.map(n => n[key]).filter(Boolean)))
+            .sort().map(v => ({ value: v, label: v }));
+        renderCheckList('clsFilterGroups', uniq('group'), prefs.groups);
+        renderCheckList('clsFilterCategories', uniq('device_type'), prefs.categories);
+        renderCheckList('clsColumnList',
+            clsExportColumns.map(c => ({
+                value: c.key, label: c.header + (c.per_neighbour ? ' *' : '') })),
+            prefs.columns);
+        document.getElementById('classificationExportModal').style.display = 'flex';
+    }
+
+    async function runClassificationExport() {
+        const prefs = {
+            groups: clsChecked('clsFilterGroups'),
+            categories: clsChecked('clsFilterCategories'),
+            columns: clsChecked('clsColumnList'),
+        };
+        if (!prefs.columns.length) { alert(i18n[currentLang].alertExportNoColumns); return; }
+        localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify(prefs));
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(prefs)) if (v.length) qs.set(k, v.join(','));
+        const res = await apiFetch('/api/export/classification?' + qs.toString());
+        if (!res || !res.ok) { alert(i18n[currentLang].alertExportError); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'sentinelnet-classification-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        document.getElementById('classificationExportModal').style.display = 'none';
+    }
+
+    document.getElementById('btnExportClassification')
+        ?.addEventListener('click', openClassificationExportModal);
+    document.getElementById('btnRunClassificationExport')
+        ?.addEventListener('click', runClassificationExport);
+    document.getElementById('btnCloseClassificationExport')
+        ?.addEventListener('click', () => {
+            document.getElementById('classificationExportModal').style.display = 'none';
+        });
