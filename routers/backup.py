@@ -319,7 +319,6 @@ async def proxy_enisa_search(request: Request, current_user = Depends(get_curren
                 "id": cid,
                 "cve": cid,
                 "cveId": cid,
-                "euvd": cwe_str or "",
                 "cwe": cwe_str or "",
                 "vendor": resolved_vendor or vendor_val or "—",
                 "product": prod_display,

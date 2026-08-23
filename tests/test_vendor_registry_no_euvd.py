@@ -48,5 +48,54 @@ class VendorRegistryNoEuvd(unittest.TestCase):
         self.assertEqual("hpe", inventory_manager.resolve_euvd_term("hpe"))
 
 
+class SearchApiPayloadNoEuvd(unittest.TestCase):
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from app_server import app
+        from security import user_manager
+        self.client = TestClient(app)
+        try:
+            user_manager.create_user("operator_search_test", "Pass123!", role="operator")
+        except Exception:
+            pass
+        from security.security_manager import create_access_token
+        token = create_access_token({"sub": "operator_search_test", "role": "operator", "groups": ["*"]})
+        self._headers = {"Authorization": f"Bearer {token}", "X-Requested-With": "SentinelNet"}
+
+    def test_search_api_item_has_no_euvd_key_and_carries_cve_and_cwe(self):
+        nvd_response = {
+            "vulnerabilities": [
+                {
+                    "cve": {
+                        "id": "CVE-2026-1234",
+                        "descriptions": [{"lang": "en", "value": "Example vulnerability"}],
+                        "metrics": {
+                            "cvssMetricV31": [{"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}]
+                        },
+                        "weaknesses": [
+                            {"description": [{"value": "CWE-79"}]}
+                        ],
+                        "published": "2026-01-01T00:00:00.000",
+                        "references": []
+                    }
+                }
+            ]
+        }
+        mock_resp = mock.MagicMock()
+        mock_resp.json.return_value = nvd_response
+        mock_resp.status_code = 200
+
+        with mock.patch("requests.get", return_value=mock_resp):
+            res = self.client.get("/api/search?vendor=cisco", headers=self._headers)
+            self.assertEqual(200, res.status_code)
+            data = res.json()
+            self.assertIn("items", data)
+            self.assertEqual(1, len(data["items"]))
+            item = data["items"][0]
+            self.assertNotIn("euvd", item, "item payload must not contain euvd key")
+            self.assertEqual("CVE-2026-1234", item.get("cve"))
+            self.assertEqual("CWE-79", item.get("cwe"))
+
+
 if __name__ == "__main__":
     unittest.main()
