@@ -119,7 +119,7 @@ Read back out of the artefact by other parts of the app:
 | Fact | Source | Where it shows |
 |---|---|---|
 | Hostname | `--- HOSTNAME ---`, written as `hostname <name>` so the existing regex finds it | inventory |
-| Version | `get_version()` — `PRETTY_NAME` + kernel | inventory, EUVD lookup |
+| Version | `get_version()` — `PRETTY_NAME` + kernel | inventory, NIST NVD lookup |
 | **Model** | `dmidecode -s system-product-name`, else `lscpu` → `Hypervisor vendor` as `VM (VMware)`, else empty | inventory *Modello* |
 | Device category | `classify_device_type()` maps `linux`/`ubuntu`/`debian`/`proxmox` → `server` | map, inventory |
 | CIS verdicts | `netsec_audit.linux_rules` over the same sections | NetSec Audit |

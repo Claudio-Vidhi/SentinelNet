@@ -5,8 +5,8 @@
 
 **SentinelNet** is a self-hosted platform for centralized management of network
 infrastructure. It automates configuration backup, detects the firmware versions
-running on active devices and compares them in real time against the European
-ENISA EUVD vulnerability database — and it collects passive network telemetry
+running on active devices and compares them in real time against the
+NIST NVD vulnerability database — and it collects passive network telemetry
 (NetFlow, IPFIX, sFlow, syslog, SNMP), correlates it with deterministic rules,
 and turns it into explainable incidents. Everything is reachable from a single
 browser console.
@@ -22,7 +22,7 @@ browser console.
   Alto PAN-OS. The vendor → driver → netmiko `device_type` mapping is
   centralized and easy to extend.
 - **Firmware and vulnerability triage** — detects the installed firmware version
-  and checks it against ENISA EUVD, with CVSS severity classification
+  and checks it against NIST NVD, with CVSS severity classification
   (CRITICAL / HIGH / MEDIUM / LOW).
 - **Network observability** — passive collectors for IPFIX, NetFlow, sFlow and
   syslog, plus active FortiGate REST and SNMP polling, feeding a deterministic

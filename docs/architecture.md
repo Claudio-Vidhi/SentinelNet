@@ -20,7 +20,7 @@ at 96% because Backup01 started transferring 2.4 Gbps to NAS01 at 09:31; the
 traffic is entirely east-west and never crosses the firewall".
 
 Alongside this, the platform also does classic device-fleet management: config
-backup, firmware triage against ENISA EUVD, topology map, SSH terminal, day-0
+backup, firmware triage against NIST NVD, topology map, SSH terminal, day-0
 provisioning, multi-site. Those are independent of the observability pipeline
 and share inventory, RBAC and audit with it.
 
