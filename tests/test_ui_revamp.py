@@ -1715,7 +1715,7 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # subsection it renders under. Presentation only -- saveAppAdvSettings()
         # still posts one combined payload to /api/settings/app.
         self.assertEqual(html.count("grp: 'appAdvGrpServer'"), 4)
-        self.assertEqual(html.count("grp: 'appAdvGrpRetention'"), 4)
+        self.assertEqual(html.count("grp: 'appAdvGrpRetention'"), 5)
         self.assertIn("subhead('appAdvGrpStartup', 'Avvio')", html)
         self.assertIn("const L = i18n[currentLang];", html)
 

@@ -105,8 +105,15 @@ def prune(device: dict) -> int:
     """
     from core import app_settings
     settings = app_settings.get_app_settings()
+    app_sec = settings.get("app") if isinstance(settings.get("app"), dict) else {}
+    env_val = os.environ.get("SENTINELNET_DRIFT_KEEP_VERSIONS")
+    raw = env_val if env_val is not None else (
+        app_sec.get("config_drift_keep_versions")
+        if app_sec.get("config_drift_keep_versions") is not None
+        else settings.get("config_drift_keep_versions", 0)
+    )
     try:
-        keep = int(settings.get("config_drift_keep_versions", 0) or 0)
+        keep = int(raw or 0)
     except (TypeError, ValueError):
         keep = 0
 

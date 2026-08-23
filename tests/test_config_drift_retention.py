@@ -63,5 +63,36 @@ class RetentionCap(unittest.TestCase):
         self.assertEqual(2, len(history.list_versions(DEVICE)))
 
 
+class SettingsApiRoundTrip(unittest.TestCase):
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from app_server import app
+        from security import user_manager
+        self.client = TestClient(app)
+        try:
+            user_manager.create_user("admin_ret_test", "Pass123!", role="admin")
+        except Exception:
+            pass
+        from security.security_manager import create_access_token
+        token = create_access_token({"sub": "admin_ret_test", "role": "admin", "groups": ["*"]})
+        self._headers = {"Authorization": f"Bearer {token}", "X-Requested-With": "SentinelNet"}
+
+    def test_setting_round_trips_through_api(self):
+        res = self.client.post("/api/settings/app", json={"config_drift_keep_versions": 5}, headers=self._headers)
+        self.assertEqual(200, res.status_code)
+
+        get_res = self.client.get("/api/settings/app", headers=self._headers)
+        self.assertEqual(200, get_res.status_code)
+        data = get_res.json()
+        self.assertEqual(5, data["settings"].get("config_drift_keep_versions"))
+
+    def test_negative_or_invalid_value_rejected(self):
+        res_neg = self.client.post("/api/settings/app", json={"config_drift_keep_versions": -2}, headers=self._headers)
+        self.assertEqual(400, res_neg.status_code)
+
+        res_str = self.client.post("/api/settings/app", json={"config_drift_keep_versions": "not-a-number"}, headers=self._headers)
+        self.assertEqual(400, res_str.status_code)
+
+
 if __name__ == "__main__":
     unittest.main()
