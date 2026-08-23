@@ -314,7 +314,13 @@
            per evento, la piu' recente in alto. -->
       <div class="panel">
         <h3 data-i18n="homeEventStrip">Registro eventi</h3>
-        <div class="eventstrip" id="homeEventStrip"></div>
+        <div class="eventstrip" id="homeEventStrip">
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:78%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:64%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:71%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:58%"></span><span class="sk" style="width:18px"></span></div>
+          <div class="eventstrip-row" aria-hidden="true"><span class="sk" style="width:44px"></span><span class="sk" style="width:67%"></span><span class="sk" style="width:18px"></span></div>
+        </div>
       </div>
 
       <div class="panel">
@@ -332,7 +338,16 @@
                 <th data-i18n="homeColStatus">Stato</th>
               </tr>
             </thead>
-            <tbody id="homeAttentionBody"></tbody>
+            <tbody id="homeAttentionBody">
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+              <tr class="sk-row" aria-hidden="true"><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:40%"></span></td><td><span class="sk" style="width:34%"></span></td></tr>
+            </tbody>
           </table>
         </div>
       </div>
@@ -367,7 +382,9 @@
         <!-- Le anomalie si leggono in Traffico. Qui si contano soltanto: la
              stessa coda in tre tabelle diverse erano tre inbox per un flusso
              di allarmi solo. -->
-        <div id="homeAnomSummary"></div>
+        <div id="homeAnomSummary">
+          <div aria-hidden="true" style="display:flex; gap:12px; align-items:center; padding:4px 0;"><span class="sk" style="width:28px; height:20px"></span><span class="sk" style="width:180px"></span></div>
+        </div>
       </div>
     </div>
 
