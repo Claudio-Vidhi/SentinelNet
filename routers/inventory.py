@@ -85,6 +85,9 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         groups = {g: v for g, v in groups.items() if g in scope}
     from security.snmp_defaults import tenants_with_default
     _snmp_default_tenants = tenants_with_default()
+    # One store read for the whole fleet: the per-IP lookup re-reads every
+    # redundancy group each time it is called.
+    badges = redundancy_service.redundancy_badges_by_ip()
     devices_enriched = []
     for d in devices:
         dev_copy = dict(d)
@@ -94,7 +97,7 @@ def get_devices_and_versions(current_user = Depends(get_current_user)):
         # un viewer non deve poter scaricare il cifrato dell'intera flotta.
         dev_copy.pop("Password", None)
         dev_copy.pop("Enable Secret", None)
-        dev_copy["redundancy"] = redundancy_service.device_redundancy_badge(d["IP"])
+        dev_copy["redundancy"] = badges.get(d["IP"])
         # ICMP cannot cross the bastion tunnel of a jump site: the inventory
         # table's status cell must not paint one of its devices "offline" from
         # a ping it never actually ran (see services.site_manager.has_direct_path).
@@ -233,6 +236,7 @@ def export_devices_csv(
                    {v.lower() for v in want_vendors}]
 
     versions = inventory_manager.get_detected_versions()
+    badges = redundancy_service.redundancy_badges_by_ip()
     explode = any(c in _MEMBER_COLUMNS for c in selected)
 
     output = io.StringIO()
@@ -240,7 +244,7 @@ def export_devices_csv(
     writer.writerow([_EXPORT_COLUMNS[c][0] for c in selected])
     for d in devices:
         scan = versions.get(d["IP"], {})
-        badge = redundancy_service.device_redundancy_badge(d["IP"])
+        badge = badges.get(d["IP"])
         if want_redundancy is not None:
             if ((badge or {}).get("type") or "standalone") not in want_redundancy:
                 continue

@@ -315,6 +315,27 @@ def _badge_for(g: dict, role: str) -> dict:
     }
 
 
+def redundancy_badges_by_ip() -> dict:
+    """{device_ip: badge} built from ONE store read.
+
+    device_redundancy_badge re-reads every group for each IP it is asked about,
+    and all three of its callers ask inside a per-device loop — 140 full store
+    reads to draw one network map, ~1.8s of the request. Same precedence as the
+    single lookup: groups in order, the logical device before its members, first
+    match wins.
+    """
+    index: dict = {}
+    for g in store.list_groups():
+        logical = g.get("logical_device_ip")
+        if logical and logical not in index:
+            index[logical] = _badge_for(g, "logical")
+        for m in g.get("members", []):
+            ip = m.get("device_ip")
+            if ip and ip not in index:
+                index[ip] = _badge_for(g, m.get("role"))
+    return index
+
+
 def device_redundancy_badge(device_ip: str) -> Optional[dict]:
     all_groups = store.list_groups()
     for g in all_groups:

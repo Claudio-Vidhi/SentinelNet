@@ -1,5 +1,6 @@
 import os
 import re
+import copy
 import time
 import logging
 import socket
@@ -1680,6 +1681,31 @@ def parse_etherchannel_status(content: str) -> dict:
 
 
 def get_portchannel_report(group_filter=None) -> list:
+    """Cached wrapper: see _get_portchannel_report for the real logic.
+
+    Parsing every backup took ~1s per request. It reads exactly the files the
+    network-map signature already tracks, so it rides the same invalidation.
+    The result is deep-copied on the way out because the caller decorates the
+    members with live SNMP state, which would otherwise poison the cache.
+    """
+    # The inventory is part of the key, not just the backups: the report joins
+    # the two, and a device added or removed changes the answer with every
+    # backup file untouched. Reading it costs ~1ms against the ~1s it guards.
+    inventory = tuple(sorted((d.get("IP", ""), d.get("Group", "")) for d in get_all_devices()))
+    sig = (_netmap_signature(), inventory)
+    if _pcreport_cache["sig"] != sig:
+        _pcreport_cache["sig"] = sig
+        _pcreport_cache["by_filter"] = {}
+    key = group_filter or "all"
+    cached = _pcreport_cache["by_filter"].get(key)
+    if cached is None:
+        cached = _get_portchannel_report(group_filter)
+        if _pcreport_cache["sig"] == sig:
+            _pcreport_cache["by_filter"][key] = cached
+    return copy.deepcopy(cached)
+
+
+def _get_portchannel_report(group_filter=None) -> list:
     """Port-channel report per device (for the Adjacency List tab). Reads the
     backups and returns [{ip, hostname, group, portchannels, singles}], filtered by group."""
     devices = get_all_devices()
@@ -1775,6 +1801,9 @@ def get_portchannel_report(group_filter=None) -> list:
 # backups, mtime of the category-assignments file) computed with a single
 # os.walk/stat pass, much lighter than the full scan it replaces.
 _netmap_cache: dict = {"sig": None, "by_filter": {}, "sig_ts": 0.0, "last_sig": None}
+# Same signature, different payload: the port-channel report parses the very
+# same backup files.
+_pcreport_cache: dict = {"sig": None, "by_filter": {}}
 
 def _netmap_signature():
     now = time.time()
@@ -1799,7 +1828,16 @@ def _netmap_signature():
         cat_mtime = os.path.getmtime(CATEGORIES_FILE)
     except OSError:
         cat_mtime = 0.0
-    sig = (count, max_mtime, cat_mtime)
+    # The inventory belongs in the signature too: both cached reports join the
+    # backups against it for group and hostname, so adding or removing a device
+    # changes the answer without any backup file changing.
+    from services.inventory_manager import get_hosts_csv
+    try:
+        st = os.stat(get_hosts_csv())
+        inv = (st.st_mtime, st.st_size)
+    except OSError:
+        inv = (0.0, 0)
+    sig = (count, max_mtime, cat_mtime, inv)
     _netmap_cache["last_sig"] = sig
     _netmap_cache["sig_ts"] = now
     return sig
@@ -1815,6 +1853,7 @@ def _enrich_map_with_redundancy(data: dict) -> dict:
     except Exception:
         pm_devices = {}
     versions = get_detected_versions()
+    badges = redundancy_service.redundancy_badges_by_ip()
 
     nodes = data.get("nodes", [])
     links = list(data.get("links", []))
@@ -1841,7 +1880,7 @@ def _enrich_map_with_redundancy(data: dict) -> dict:
             if v_info.get("vendor"):
                 node_copy["vendor"] = v_info.get("vendor")
 
-        node_copy["redundancy"] = redundancy_service.device_redundancy_badge(n["id"])
+        node_copy["redundancy"] = badges.get(n["id"])
         nodes_decorated.append(node_copy)
 
     node_ids = {n["id"] for n in nodes_decorated}
@@ -2249,4 +2288,5 @@ def _generate_network_map(group_filter=None) -> dict:
 
 def invalidate_netmap_cache():
     _netmap_cache["by_filter"] = {}
+    _pcreport_cache["by_filter"] = {}
 

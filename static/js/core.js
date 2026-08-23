@@ -841,7 +841,10 @@ document.addEventListener('click', e => {
 });
 
 async function switchTab(tabId, clickedBtn) {
-    await ensureTabScripts(tabId);
+    // Swap the visible panel FIRST, then await the module. Awaiting up here
+    // meant a cold tab looked frozen for the whole download of its script
+    // (vis-network, the html2pdf bundle): no active class, no panel change.
+    // Only the data-loading dispatch below actually needs the module.
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
@@ -854,6 +857,8 @@ async function switchTab(tabId, clickedBtn) {
     if (btn) {
         btn.classList.add('active');
     }
+
+    await ensureTabScripts(tabId);
 
     if (tabId === 'tab-home') {
         loadHome();

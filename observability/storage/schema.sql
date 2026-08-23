@@ -183,6 +183,11 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_ts_tenant  ON events(ts, tenant);
 CREATE INDEX IF NOT EXISTS idx_events_type       ON events(event_type, ts);
 CREATE INDEX IF NOT EXISTS idx_events_entity     ON events(tenant, entity_id, ts);
+-- Covering index for "latest event per entity of a given type". Without it the
+-- port-channel report's GROUP BY built a temp B-tree over every interface.state
+-- row in the table (~3.1s on a 1M-row events table); with it the same lookup is
+-- a covering index scan.
+CREATE INDEX IF NOT EXISTS idx_events_type_entity ON events(event_type, tenant, entity_id, id);
 -- Il correlatore seleziona per ts OPPURE per ingested_ts (vedi correlator.py):
 -- senza questo indice il secondo ramo dell'OR sarebbe una scansione.
 CREATE INDEX IF NOT EXISTS idx_events_ingested   ON events(ingested_ts);
