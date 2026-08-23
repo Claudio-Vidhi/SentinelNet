@@ -91,6 +91,12 @@ class ExportRows(unittest.TestCase):
         for r in body:
             by_host.setdefault(r[0], []).append(r[1:])
         self.assertEqual(2, len(by_host["switch-01"]))
+        # switch-01 is this link's `source`, so the neighbour is switch-02 and
+        # the port must be `remote_port` -- switch-02's OWN port, not
+        # switch-01's `local_port`. Pins the source-side branch of the
+        # direction rule (the target-side branch is pinned separately by
+        # test_the_port_reported_is_the_neighbour_s_own_port).
+        self.assertIn(["switch-02", "Gi1/0/24"], by_host["switch-01"])
 
     def test_the_port_reported_is_the_neighbour_s_own_port(self):
         """The AP hangs off switch-01 Gi1/0/1 -- that is the port you patch."""
