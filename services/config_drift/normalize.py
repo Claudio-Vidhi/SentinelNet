@@ -33,10 +33,11 @@ _FORTIOS = (
     re.compile(r"^\s*#global_vdom=.*$", re.IGNORECASE),
 )
 
-# Vendor strings as they appear in the inventory's Vendor column (the
-# canonical values in services.inventory_manager.VENDOR_ALIASES / get_all_vendors,
-# not the raw CSV spellings the alias table maps away from cisco_ios/fortigate
-# never reach here, so there is no alias to keep for them).
+# Keyed on the canonical vendor values (services.inventory_manager
+# .get_all_vendors()). normalize() below runs every vendor string through
+# normalize_vendor() first, so a raw CSV spelling like "cisco_ios" or
+# "fortigate" resolves to its canonical form here instead of needing its own
+# entry — one lookup table, not two.
 _BY_VENDOR = {
     "cisco": _IOS,
     "cisco_9800": _IOS,
@@ -52,6 +53,8 @@ def normalize(vendor: str, text: str) -> str:
     An unknown vendor gets the vendor-neutral rules only: noisier drift is an
     acceptable answer, a crash or a skipped device is not.
     """
+    from services import inventory_manager
+    vendor = inventory_manager.normalize_vendor(vendor)
     patterns = _COMMON + _BY_VENDOR.get((vendor or "").strip().lower(), ())
     kept = [line.rstrip()
             for line in (text or "").splitlines()
