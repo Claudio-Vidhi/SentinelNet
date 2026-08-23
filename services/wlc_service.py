@@ -39,6 +39,12 @@ COMMANDS = {
         "aireos": "show ap summary",
         "iosxe": "show ap summary",
     },
+    # IOS-XE bulk form is not established in this repo's docs; leave it out
+    # rather than guess a spelling. COMMANDS["ap_inventory"].get(platform)
+    # returns None on IOS-XE and the serial column stays empty there.
+    "ap_inventory": {
+        "aireos": "show ap inventory all",
+    },
     "client_summary": {
         "aireos": "show client summary",
         "iosxe": "show wireless client summary",
@@ -277,6 +283,26 @@ def parse_ap_autorf(text: str) -> dict:
     return out
 
 
+def parse_ap_inventory(text: str) -> dict:
+    """{ap name: serial} from the bulk AP inventory output.
+
+    'show ap summary' prints no serial on either platform, and asking per AP
+    would be one SSH round-trip each. Entries without an SN are skipped: a
+    missing serial must read as unknown, not as an empty string.
+    """
+    out, current = {}, None
+    for line in (text or "").splitlines():
+        m = re.match(r"\s*AP Name\s*:\s*(\S+)", line, re.IGNORECASE)
+        if m:
+            current = m.group(1).strip()
+            continue
+        m = re.search(r"\bSN\s*:\s*(\S+)", line, re.IGNORECASE)
+        if m and current:
+            out[current] = m.group(1).strip()
+            current = None
+    return out
+
+
 def parse_client_detail(text: str) -> dict:
     """IP, RSSI e SNR dal dettaglio di un client. AireOS scrive
     'Etichetta.......... valore', IOS-XE 'Etichetta : valore'."""
@@ -337,6 +363,18 @@ def overview(device: dict) -> dict:
             except Exception:
                 continue
         aps = _table_rows(raw["ap_summary"], _AP_FIELDS)
+        # Best-effort like every other command here: a controller that will not
+        # answer costs the serial column, not the tab.
+        cmd = COMMANDS["ap_inventory"].get(platform)
+        if cmd:
+            try:
+                serials = parse_ap_inventory(_send(conn, cmd))
+            except Exception:
+                serials = {}
+            for ap in aps:
+                serial = serials.get(ap.get("name", ""))
+                if serial:
+                    ap["serial"] = serial
         if platform == "aireos":
             # Canale e larghezza di canale non stanno in 'show ap summary':
             # l'auto-RF delle radio e' l'unico posto che li stampa. La 2.4 GHz
@@ -375,6 +413,10 @@ def overview(device: dict) -> dict:
         ssid = ssid_by_id.get(client.get("wlan"), "").split("/")[-1].strip()
         if ssid:
             client["wlan"] = f"{client['wlan']} - {ssid}"
+
+    from services import ap_store
+    ap_store.record_aps(device["IP"], device.get("Group", "Generale"), aps)
+
     return {"platform": platform, "version": version, "uptime": uptime,
             "ap_count": len(aps), "client_count": len(clients),
             "aps": aps, "clients": clients, "wlans": wlans, "rogues": rogues,
