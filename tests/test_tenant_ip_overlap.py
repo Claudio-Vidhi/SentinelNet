@@ -140,5 +140,43 @@ class ResolveDeviceAllowedScopeAware(unittest.TestCase):
             self.assertEqual("switch-99", dev["Hostname"])
 
 
+class BackupTreeDoesNotCrossTenants(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        patcher = mock.patch("core.core_engine.BACKUP_FOLDER", self._tmp.name)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_saving_backup_in_one_tenant_does_not_touch_or_move_other_tenant(self):
+        from core import core_engine
+        from services.config_drift import history
+
+        dev_beta = {"IP": "192.0.2.10", "Group": "BETA", "Vendor": "cisco", "Hostname": "switch-99"}
+        dev_acme = {"IP": "192.0.2.10", "Group": "ACME", "Vendor": "cisco", "Hostname": "switch-01"}
+
+        # Seed BETA current backup and 2 history versions
+        core_engine.save_backup(dev_beta, "switch-99", "hostname switch-99\n! beta v0\n")
+        history.record_version(dev_beta, "hostname switch-99\n! beta v1\n")
+        history.record_version(dev_beta, "hostname switch-99\n! beta v2\n")
+
+        self.assertEqual(2, len(history.list_versions(dev_beta)))
+        beta_backup_file = os.path.join(core_engine.group_backup_dir("BETA", "cisco"), "switch-99-192.0.2.10.txt")
+        self.assertTrue(os.path.exists(beta_backup_file))
+
+        # Now save backup for ACME with the same IP
+        core_engine.save_backup(dev_acme, "switch-01", "hostname switch-01\n! acme v0\n")
+        history.record_version(dev_acme, "hostname switch-01\n! acme v1\n")
+
+        # BETA must still have its backup and both history versions intact
+        self.assertTrue(os.path.exists(beta_backup_file), "BETA current backup was moved or deleted!")
+        self.assertEqual(2, len(history.list_versions(dev_beta)), "BETA history was moved or truncated!")
+
+        # ACME must have its own backup and history
+        acme_backup_file = os.path.join(core_engine.group_backup_dir("ACME", "cisco"), "switch-01-192.0.2.10.txt")
+        self.assertTrue(os.path.exists(acme_backup_file))
+        self.assertEqual(1, len(history.list_versions(dev_acme)))
+
+
 if __name__ == "__main__":
     unittest.main()

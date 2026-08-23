@@ -70,9 +70,9 @@ class HistoryRecordsOnlyRealChanges(unittest.TestCase):
             {"IP": "192.0.2.99", "Group": "ACME", "Vendor": "cisco"}))
 
 
-class ChangingTenantKeepsTheHistory(unittest.TestCase):
-    """A device moving between tenants is a normal operational event. It used
-    to delete the device's config; with history it would delete the archive."""
+class ChangingVendorKeepsTheHistory(unittest.TestCase):
+    """A device changing vendor within a tenant is a normal operational event. It used
+    to delete the device's config; with history it moves the archive."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -81,7 +81,7 @@ class ChangingTenantKeepsTheHistory(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.addCleanup(self._tmp.cleanup)
 
-    def test_history_follows_the_device_to_the_new_tenant(self):
+    def test_history_follows_the_device_to_the_new_vendor(self):
         from core import core_engine
         from services.config_drift import history
 
@@ -89,7 +89,7 @@ class ChangingTenantKeepsTheHistory(unittest.TestCase):
         history.record_version(DEVICE, "hostname switch-01\nip http server\n")
         self.assertEqual(2, len(history.list_versions(DEVICE)))
 
-        moved = dict(DEVICE, Group="BETA")
+        moved = dict(DEVICE, Vendor="juniper")
         core_engine.save_backup(moved, "switch-01", "hostname switch-01\n")
 
         self.assertEqual(2, len(history.list_versions(moved)))

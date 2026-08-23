@@ -68,36 +68,33 @@ def group_backup_dir(group: str, vendor: Optional[str] = None) -> str:
 
 def save_backup(device, sys_name: str, config_out: str) -> str:
     """Saves the text backup in backup-config/<group>/<vendor>/<name>-<ip>.txt,
-    moving first any residual copies of the same IP elsewhere."""
+    moving first any residual copies of the same IP elsewhere within the tenant."""
     ip = device['IP']
-    group_dir = group_backup_dir(device.get('Group', 'Generale'),
-                                 device.get('Vendor', ''))
+    tenant = device.get('Group', 'Generale')
+    group_dir = group_backup_dir(tenant, device.get('Vendor', ''))
     target_name = f"{sanitize_filename(sys_name)}-{ip}.txt"
-    remove_stale_backups(ip, new_dir=group_dir, keep=target_name)
+    remove_stale_backups(ip, new_dir=group_dir, keep=target_name, tenant=tenant)
     file_path = os.path.join(group_dir, target_name)
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(config_out)
     return file_path
 
-def remove_stale_backups(ip: str, new_dir: Optional[str] = None, keep: Optional[str] = None):
-    """Move a device's backup and its history when it changes group/vendor.
+def remove_stale_backups(ip: str, new_dir: Optional[str] = None, keep: Optional[str] = None, tenant: Optional[str] = None):
+    """Move a device's backup and its history when it changes vendor or hostname.
 
-    This used to delete every file for the IP found anywhere in the tree. With
-    a config archive beside the backup, deleting would throw away the device's
-    whole history because someone re-assigned it to another tenant — a normal
-    operational event. Files move to ``new_dir`` instead; with no destination
-    there is nothing to preserve them for and they are removed, as before.
-
-    ``keep`` is the filename ``save_backup`` is about to (re)write inside
-    ``new_dir``. Skipping the whole destination root used to also skip a
-    same-IP file left over from a plain hostname change (sys_name is re-read
-    on every collection), orphaning it beside the new one forever; now only
-    that one filename survives untouched, and any other same-IP match in the
-    destination root is removed like everywhere else.
+    Scoped strictly to the device's tenant: never walks or moves directories
+    belonging to a different tenant.
     """
     if not os.path.exists(BACKUP_FOLDER):
         return
-    for root, _dirs, files in os.walk(BACKUP_FOLDER):
+    if tenant is not None:
+        walk_root = os.path.join(BACKUP_FOLDER, sanitize_filename(tenant or "Generale"))
+        if not os.path.exists(walk_root):
+            return
+    else:
+        walk_root = BACKUP_FOLDER
+
+    for root, _dirs, files in os.walk(walk_root):
         in_dest = new_dir and os.path.abspath(root) == os.path.abspath(new_dir)
         for f in files:
             if not (f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt"):
