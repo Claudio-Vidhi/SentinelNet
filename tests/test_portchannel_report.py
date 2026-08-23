@@ -95,6 +95,46 @@ class TestReport(unittest.TestCase):
         report = self._report([{"IP": "192.168.31.7", "Group": "test_cml"}])
         self.assertIsInstance(report[0]["backup_ts"], int)
 
+    def test_archived_versions_in_dot_history_are_not_reported(self):
+        # An archived version sits next to the current backup in ".history"
+        # and also ends in "-<ip>.txt": without pruning that folder from the
+        # walk, one switch would produce one report row per archived version.
+        hist = os.path.join(self.backup_dir, "test_cml", "cisco", ".history")
+        os.makedirs(hist)
+        with open(os.path.join(hist, "SW2-192.168.31.7.20260101T000000.000000Z.txt"),
+                  "w", encoding="utf-8") as f:
+            f.write(CONFIG)
+        report = self._report([{"IP": "192.168.31.7", "Group": "test_cml"}])
+        self.assertEqual([r["ip"] for r in report], ["192.168.31.7"])
+
+
+class TestNetworkMapIgnoresHistory(unittest.TestCase):
+
+    def setUp(self):
+        self.backup_dir = tempfile.mkdtemp(prefix="netmap_backup_")
+        self.vendor_dir = os.path.join(self.backup_dir, "test_cml", "cisco")
+        os.makedirs(self.vendor_dir)
+        with open(os.path.join(self.vendor_dir, "switch-01-192.0.2.7.txt"),
+                  "w", encoding="utf-8") as f:
+            f.write("hostname switch-01\n")
+        # An archived version with a different hostname: os.walk is topdown, so
+        # without pruning ".history" it is visited after the current backup and
+        # last-write-wins would leave the map showing the ARCHIVED hostname.
+        hist = os.path.join(self.vendor_dir, ".history")
+        os.makedirs(hist)
+        with open(os.path.join(hist, "switch-01-192.0.2.7.20260101T000000.000000Z.txt"),
+                  "w", encoding="utf-8") as f:
+            f.write("hostname stale-archived-name\n")
+
+    def test_the_map_reflects_the_current_backup_not_the_archive(self):
+        devices = [{"IP": "192.0.2.7", "Group": "test_cml", "Vendor": "cisco"}]
+        with patch.object(core_engine, "BACKUP_FOLDER", self.backup_dir), \
+             patch.object(core_engine, "get_all_devices", return_value=devices), \
+             patch.object(core_engine, "get_detected_versions", return_value={}):
+            result = core_engine._generate_network_map()
+        node = next(n for n in result["nodes"] if n["id"] == "192.0.2.7")
+        self.assertEqual(node["label"], "switch-01")
+
 
 if __name__ == "__main__":
     unittest.main()

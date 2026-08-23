@@ -158,7 +158,11 @@ def reset_topology(current_user = Depends(require_operator)):
         # Ricorsivo: i backup sono organizzati in sottocartelle per gruppo/sede.
         for root, _dirs, files in os.walk(backup_dir):
             for f in files:
-                if f.endswith(".txt"):
+                # ".txt" also matches archived versions under ".history"; their
+                # "{ip}-index.json" sits in the same folder and must go with
+                # them, or the drift tab lists versions whose files no longer
+                # exist and every diff/baseline call for that device 404s.
+                if f.endswith(".txt") or f.endswith("-index.json"):
                     try:
                         os.remove(os.path.join(root, f))
                         deleted_count += 1

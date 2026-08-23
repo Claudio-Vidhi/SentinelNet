@@ -26,26 +26,26 @@ class VolatileLinesAreStripped(unittest.TestCase):
             "hostname switch-01\n"
             "ntp clock-period 17179902\n"
         )
-        self.assertEqual(normalize.normalize("cisco_ios", first),
-                         normalize.normalize("cisco_ios", second))
+        self.assertEqual(normalize.normalize("cisco", first),
+                         normalize.normalize("cisco", second))
 
     def test_a_real_ios_change_survives(self):
         base = "hostname switch-01\nip http server\n"
         changed = "hostname switch-01\nno ip http server\n"
-        self.assertNotEqual(normalize.normalize("cisco_ios", base),
-                            normalize.normalize("cisco_ios", changed))
+        self.assertNotEqual(normalize.normalize("cisco", base),
+                            normalize.normalize("cisco", changed))
 
     def test_fortios_config_header_is_ignored(self):
         first = "#config-version=FGT-7.4.1-FW-build2463-230314:opmode=0\nconfig system global\n"
         second = "#config-version=FGT-7.4.1-FW-build2470-230501:opmode=0\nconfig system global\n"
-        self.assertEqual(normalize.normalize("fortigate", first),
-                         normalize.normalize("fortigate", second))
+        self.assertEqual(normalize.normalize("fortinet", first),
+                         normalize.normalize("fortinet", second))
 
     def test_a_real_fortios_change_survives(self):
         base = 'config system global\n    set hostname "fw-01"\nend\n'
         changed = 'config system global\n    set hostname "fw-02"\nend\n'
-        self.assertNotEqual(normalize.normalize("fortigate", base),
-                            normalize.normalize("fortigate", changed))
+        self.assertNotEqual(normalize.normalize("fortinet", base),
+                            normalize.normalize("fortinet", changed))
 
     def test_an_unknown_vendor_still_normalises_whitespace(self):
         self.assertEqual(normalize.normalize("", "hostname switch-01   \n\n\n"),
@@ -53,8 +53,8 @@ class VolatileLinesAreStripped(unittest.TestCase):
 
     def test_normalisation_is_idempotent(self):
         text = "Current configuration : 10 bytes\nhostname switch-01\n"
-        once = normalize.normalize("cisco_ios", text)
-        self.assertEqual(once, normalize.normalize("cisco_ios", once))
+        once = normalize.normalize("cisco", text)
+        self.assertEqual(once, normalize.normalize("cisco", once))
 
 
 if __name__ == "__main__":

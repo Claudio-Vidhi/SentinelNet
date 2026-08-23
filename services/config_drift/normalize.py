@@ -33,12 +33,15 @@ _FORTIOS = (
     re.compile(r"^\s*#global_vdom=.*$", re.IGNORECASE),
 )
 
-# Vendor strings as they appear in the inventory's Vendor column.
+# Vendor strings as they appear in the inventory's Vendor column (the
+# canonical values in services.inventory_manager.VENDOR_ALIASES / get_all_vendors,
+# not the raw CSV spellings the alias table maps away from cisco_ios/fortigate
+# never reach here, so there is no alias to keep for them).
 _BY_VENDOR = {
-    "cisco_ios": _IOS,
-    "cisco_ios_xe": _IOS,
+    "cisco": _IOS,
+    "cisco_9800": _IOS,
+    "cisco_cbs": _IOS,
     "cisco_wlc": _IOS,
-    "fortigate": _FORTIOS,
     "fortinet": _FORTIOS,
 }
 
