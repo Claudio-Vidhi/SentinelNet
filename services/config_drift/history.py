@@ -92,7 +92,57 @@ def record_version(device: dict, config_text: str) -> bool:
     _save_index(device, index)
     from services.config_drift import mirror
     mirror.commit_version(device, filename)
+    prune(device)
     return True
+
+
+def prune(device: dict) -> int:
+    """Prunes history versions according to config_drift_keep_versions setting.
+
+    0 (default) means keep everything. A positive integer keeps only the N newest
+    versions and deletes older version files from disk. Pinned versions are protected.
+    Returns the number of versions removed.
+    """
+    from core import app_settings
+    settings = app_settings.get_app_settings()
+    try:
+        keep = int(settings.get("config_drift_keep_versions", 0) or 0)
+    except (TypeError, ValueError):
+        keep = 0
+
+    if keep <= 0:
+        return 0
+
+    index = _load_index(device)
+    versions = index.get("versions", [])
+    if len(versions) <= keep:
+        return 0
+
+    to_keep = []
+    to_prune = []
+    for idx, v in enumerate(versions):
+        if idx < keep or v.get("pinned"):
+            to_keep.append(v)
+        else:
+            to_prune.append(v)
+
+    if not to_prune:
+        return 0
+
+    h_dir = history_dir(device)
+    for v in to_prune:
+        fname = v.get("file")
+        if fname:
+            try:
+                fpath = os.path.join(h_dir, fname)
+                if os.path.exists(fpath):
+                    os.remove(fpath)
+            except OSError:
+                pass
+
+    index["versions"] = to_keep
+    _save_index(device, index)
+    return len(to_prune)
 
 
 def list_versions(device: dict) -> list:
