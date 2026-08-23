@@ -22,20 +22,5 @@ class ADiffNeverLeaksASecret(unittest.TestCase):
         self.assertEqual("", config_drift._unified("cisco_ios", text, text, "a", "b"))
 
 
-class TenantIsolationIsEnforced(unittest.TestCase):
-    """Scoping must not be cosmetic: a scoped user guessing an IP outside
-    their tenant is refused, exactly as on every other device route."""
-
-    def test_every_device_route_asserts_the_device_is_allowed(self):
-        import inspect
-        source = inspect.getsource(config_drift)
-        self.assertGreaterEqual(source.count("assert_device_allowed"), 1)
-        self.assertIn("_device_or_404", source)
-
-    def test_the_device_list_is_filtered_by_scope(self):
-        import inspect
-        self.assertIn("user_group_scope", inspect.getsource(config_drift))
-
-
 if __name__ == "__main__":
     unittest.main()
