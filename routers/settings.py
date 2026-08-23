@@ -23,12 +23,14 @@ _APP_ADV_ENV = {
     "retention_syslog_days": "SENTINELNET_OBS_RETENTION_SYSLOG_DAYS",
     "retention_events_days": "SENTINELNET_OBS_RETENTION_EVENTS_DAYS",
     "audit_history_days": "SENTINELNET_AUDIT_HISTORY_DAYS",
+    "config_drift_keep_versions": "SENTINELNET_DRIFT_KEEP_VERSIONS",
 }
 _APP_ADV_INT_KEYS = {"port", "retention_flows_days", "retention_syslog_days",
-                     "retention_events_days", "audit_history_days"}
+                     "retention_events_days", "audit_history_days",
+                     "config_drift_keep_versions"}
 _APP_ADV_DEFAULTS = {"port": PORT, "retention_flows_days": 30,
                      "retention_syslog_days": 7, "retention_events_days": 90,
-                     "audit_history_days": 365}
+                     "audit_history_days": 365, "config_drift_keep_versions": 0}
 
 router = APIRouter(tags=["Settings"])
 
@@ -133,7 +135,10 @@ def set_app_advanced_settings(payload: dict, current_user = Depends(require_admi
                 raise HTTPException(status_code=400, detail=f"Invalid value for '{k}'.")
             if k == "port" and not (1 <= v <= 65535):
                 raise HTTPException(status_code=400, detail="Invalid port (1-65535).")
-            if k != "port" and v < 1:
+            if k in ("audit_history_days", "config_drift_keep_versions"):
+                if v < 0:
+                    raise HTTPException(status_code=400, detail=f"Invalid value for '{k}'.")
+            elif k != "port" and v < 1:
                 raise HTTPException(status_code=400, detail=f"Invalid value for '{k}'.")
         elif k == "no_browser":
             v = bool(v)

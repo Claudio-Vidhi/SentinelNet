@@ -549,7 +549,8 @@
         { key: 'retention_flows_days',  type: 'number', lbl: 'lblAppRetFlows',  grp: 'appAdvGrpRetention' },
         { key: 'retention_syslog_days', type: 'number', lbl: 'lblAppRetSyslog', grp: 'appAdvGrpRetention' },
         { key: 'retention_events_days', type: 'number', lbl: 'lblAppRetEvents', grp: 'appAdvGrpRetention' },
-        { key: 'audit_history_days',   type: 'number', lbl: 'lblAppRetAuditHist', grp: 'appAdvGrpRetention' },
+        { key: 'audit_history_days',   type: 'number', lbl: 'lblAppRetAuditHist', grp: 'appAdvGrpRetention', min: 0 },
+        { key: 'config_drift_keep_versions', type: 'number', lbl: 'lblAppRetDriftVersions', grp: 'appAdvGrpRetention', min: 0 },
     ];
 
     async function loadAppAdvSettings() {
@@ -574,10 +575,11 @@
             const envNote = over ? `<span style="font-size:11px; color:var(--warning);"> ${escapeHtml(L.msgEnvOverride || 'Sovrascritto da variabile d\'ambiente')}</span>` : '';
             let hdr = '';
             if (f.grp !== lastGrp) { hdr = subhead(f.grp, f.grp); lastGrp = f.grp; }
+            const minAttr = f.min != null ? `min="${f.min}"` : (f.type === 'number' ? 'min="1"' : '');
             return `${hdr}
             <div class="form-group" style="max-width:420px;">
                 <label data-i18n="${f.lbl}">${escapeHtml(L[f.lbl] || f.key)}</label>${envNote}
-                <input id="appadv_${f.key}" type="${f.type}" ${f.type === 'number' ? 'min="1"' : ''} ${over ? 'disabled' : ''}
+                <input id="appadv_${f.key}" type="${f.type}" ${minAttr} ${over ? 'disabled' : ''}
                        value="${s[f.key] != null ? escapeHtml(String(s[f.key])) : ''}"
                        placeholder="${def[f.key] != null ? def[f.key] : ''}" style="padding-left:12px;">
             </div>`;
