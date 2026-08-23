@@ -270,7 +270,8 @@ class TestFullParity(unittest.TestCase):
     ALLOWED_CHANGED_SCHEMAS = ("AgentDeviceSchema", "DeviceSchema", "FgtLogQuerySchema", "IdentitySchema",
                                "SubnetScanRequest", "AiGenerateConfigSchema",
                                "SiteSchema", "SiteUpdateSchema",
-                               "SwitchProvisionSSHSchema", "FortiGateProvisionSchema")
+                               "SwitchProvisionSSHSchema", "FortiGateProvisionSchema",
+                               "VendorSchema")
 
     @classmethod
     def setUpClass(cls):

@@ -527,18 +527,18 @@ def normalize_vendor(raw_vendor: str) -> str:
     return VENDOR_ALIASES.get(v, v)
 
 def get_all_vendors() -> dict:
-    """Returns {display_name: {euvd_term: str, driver: str|None}}"""
+    """Returns {display_name: {driver: str|None}}"""
     defaults = {
-        "cisco":   {"euvd_term": "cisco",                    "driver": "cisco_ios"},
-        "cisco_cbs":{"euvd_term": "cisco",                   "driver": "cisco_s300"},
-        "hpe":     {"euvd_term": "hpe",                      "driver": "hp_procurve"},
-        "juniper": {"euvd_term": "juniper",                  "driver": "juniper_junos"},
-        "aruba":   {"euvd_term": "aruba",                    "driver": "aruba_os"},
-        "fortinet":{"euvd_term": "fortinet",                 "driver": "fortinet"},
-        "paloalto":{"euvd_term": "palo alto",                "driver": "paloalto_panos"},
-        "cisco_wlc":{"euvd_term": "cisco",                   "driver": "cisco_wlc"},
-        "cisco_9800":{"euvd_term": "cisco",                  "driver": "cisco_9800"},
-        "linux":   {"euvd_term": "linux",                    "driver": "linux"},
+        "cisco":   {"driver": "cisco_ios"},
+        "cisco_cbs":{"driver": "cisco_s300"},
+        "hpe":     {"driver": "hp_procurve"},
+        "juniper": {"driver": "juniper_junos"},
+        "aruba":   {"driver": "aruba_os"},
+        "fortinet":{"driver": "fortinet"},
+        "paloalto":{"driver": "paloalto_panos"},
+        "cisco_wlc":{"driver": "cisco_wlc"},
+        "cisco_9800":{"driver": "cisco_9800"},
+        "linux":   {"driver": "linux"},
     }
     vendors_file = get_vendors_file()
     if not os.path.exists(vendors_file):
@@ -548,11 +548,13 @@ def get_all_vendors() -> dict:
         with open(vendors_file, "r") as f:
             stored = json.load(f)
         merged = {**defaults, **stored}
-        # Canonicalize legacy multi-word EUVD terms into clean NVD keywords
+        clean = {}
         for vname, vmeta in merged.items():
-            if isinstance(vmeta, dict) and "euvd_term" in vmeta:
-                vmeta["euvd_term"] = resolve_euvd_term(vmeta["euvd_term"])
-        return merged
+            if isinstance(vmeta, dict):
+                clean[vname] = {"driver": vmeta.get("driver")}
+            else:
+                clean[vname] = {"driver": None}
+        return clean
     except Exception:
         return defaults
 

@@ -75,19 +75,19 @@
             const res = await apiFetch('/api/vendors');
             if (!res || !res.ok) return;
             const vendors = await res.json();
-            const entries = Object.entries(vendors || {}).filter(([, v]) => v && v.euvd_term);
+            const entries = Object.entries(vendors || {});
             // Escape per il contesto stringa JS (dentro l'onclick single-quoted) PRIMA
             // di passare per escapeHtml (contesto attributo HTML) — stesso pattern di
             // analyzeTenant(tenant) più sopra: l'entity-encoding da solo non basta a
             // prevenire una breakout di stringa JS dentro l'attributo.
             const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-            btnWrap.innerHTML = entries.map(([name, v], idx) =>
-                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" data-action="vw-select-vendor" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
+            btnWrap.innerHTML = entries.map(([name], idx) =>
+                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(name)}" data-action="vw-select-vendor" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
             ).join('');
             if (entries.length) {
                 // Nessuna query EUVD automatica all'apertura: il fetch parte solo
                 // quando l'utente sceglie un vendor o preme aggiorna.
-                vwState.vendor = entries[0][1].euvd_term;
+                vwState.vendor = entries[0][0];
                 const statusEl = document.getElementById('vwStatus');
                 if (statusEl) statusEl.textContent = i18n[currentLang].vwStatusIdle;
             } else {

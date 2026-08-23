@@ -31,7 +31,6 @@ class GroupRenameSchema(BaseModel):
 
 class VendorSchema(BaseModel):
     name: str
-    euvd_term: str
     driver: Optional[str] = None
 
 class VendorDeleteSchema(BaseModel):
@@ -129,7 +128,7 @@ def list_vendors(current_user = Depends(get_current_user)):
 @router.post("/api/vendors")
 def create_vendor(v: VendorSchema, current_user = Depends(require_operator)):
     vendors = inventory_manager.get_all_vendors()
-    vendors[v.name.lower().strip()] = {"euvd_term": v.euvd_term, "driver": v.driver}
+    vendors[v.name.lower().strip()] = {"driver": v.driver}
     inventory_manager.save_vendors(vendors)
     log_audit(f"Vendor '{v.name}' aggiunto/aggiornato da '{current_user.get('sub')}'.")
     return {"status": "success"}

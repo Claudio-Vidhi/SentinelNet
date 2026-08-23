@@ -952,7 +952,6 @@ function renderVendorTable() {
         const deleteText = currentLang === 'en' ? 'Delete' : 'Elimina';
         body.innerHTML += `<tr>
             <td><strong>${escapeHtml(name)}</strong></td>
-            <td><span style="font-family:var(--font-code); font-size:12px; color:var(--primary);">${escapeHtml(meta.euvd_term) || '—'}</span></td>
             <td><span style="font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${escapeHtml(meta.driver) || '—'}</span></td>
             <td>${currentRole === 'viewer'
                 ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
