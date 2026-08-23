@@ -701,16 +701,14 @@
 
     async function addVendor() {
         const name = document.getElementById('newVendorName').value.trim().toLowerCase();
-        const term = document.getElementById('newVendorTerm').value.trim();
         const drv  = document.getElementById('newVendorDriver').value.trim() || null;
-        if (!name || !term) { alert(i18n[currentLang].alertVendorRequired); return; }
+        if (!name) { alert(i18n[currentLang].alertVendorRequired); return; }
         const res = await apiFetch('/api/vendors', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({name, euvd_term: term, driver: drv})
+            body: JSON.stringify({name, driver: drv})
         });
         if (res && res.ok) {
             document.getElementById('newVendorName').value = '';
-            document.getElementById('newVendorTerm').value = '';
             document.getElementById('newVendorDriver').value = '';
             await loadVendors();
         }

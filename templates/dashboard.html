@@ -699,14 +699,13 @@
       <div class="panel" style="margin-top: 18px;">
         <h3 style="margin-bottom: 8px; font-size: 17px;" data-i18n="titleVendorRegistry"><i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i> Gestione Vendor</h3>
         <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;" data-i18n="descVendorRegistry">
-          Registro dei vendor supportati. Il campo EUVD Term è usato nelle query al database europeo delle vulnerabilità ENISA.
+          Registro dei vendor supportati e dei relativi driver di connessione SSH.
         </p>
         <div class="table-wrap" style="margin-bottom: 20px;">
           <table>
             <thead>
               <tr>
                 <th data-i18n="thVendorName">Nome</th>
-                <th data-i18n="thVendorTerm">EUVD Term</th>
                 <th data-i18n="thVendorDriver">Driver Netmiko</th>
                 <th data-i18n="thVendorActions">Azioni</th>
               </tr>
@@ -714,14 +713,10 @@
             <tbody id="vendorTableBody"></tbody>
           </table>
         </div>
-        <div class="requires-write" style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: end;">
+        <div class="requires-write" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end;">
           <div class="form-group" style="margin-bottom: 0;">
             <label data-i18n="lblVendorName">Nome Vendor</label>
             <input id="newVendorName" type="text" placeholder="es. mikrotik" data-i18n-placeholder="placeholderVendorName" style="padding-left:12px;">
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label data-i18n="lblVendorTerm">EUVD Term</label>
-            <input id="newVendorTerm" type="text" placeholder="es. mikrotik" data-i18n-placeholder="placeholderVendorTerm" style="padding-left:12px;">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label data-i18n="lblVendorDriver">Driver Netmiko (opzionale)</label>
