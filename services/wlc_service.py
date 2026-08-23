@@ -105,7 +105,11 @@ def _session(device: dict, timeout: int = 30):
     username, password, secret = get_device_credentials(device)
     params = {"device_type": netmiko_type, "host": device["IP"],
               "username": username, "password": password, "secret": secret,
-              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15}
+              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15,
+              # An unreachable controller must fail on the TCP connect rather
+              # than spend the whole read budget on it: the WLC tab stays blank
+              # for exactly as long as this call takes.
+              "conn_timeout": 4}
     try:
         conn = ConnectHandler(**params)
     except Exception as e:

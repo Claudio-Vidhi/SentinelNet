@@ -177,6 +177,14 @@ def test_connection(ip: str) -> dict:
 
 # --- Trasporto REST ----------------------------------------------------------
 
+# Connect timeout, split from the caller's read timeout. An unreachable
+# FortiGate used to burn the whole read budget (30s by default, 60s on a config
+# pull) just failing to open the socket, and the dashboard tab that asked for it
+# stayed blank the entire time. A box that is up answers the TCP handshake in
+# milliseconds; one that is down should say so straight away.
+CONNECT_TIMEOUT = 4
+
+
 def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
                 json_body=None, timeout: int = 30):
     """Richiesta su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
@@ -199,7 +207,8 @@ def api_request(ip: str, method: str, path: str, params: Optional[dict] = None,
             r = requests.request(method, url,
                                  headers={"Authorization": f"Bearer {token}"},
                                  params=params or {}, json=json_body,
-                                 verify=verify, timeout=timeout)
+                                 verify=verify,
+                                 timeout=(CONNECT_TIMEOUT, timeout))
     except requests.exceptions.SSLError as e:
         raise FortiGateError(
             f"REST API {ip} non raggiungibile: certificato TLS non attendibile ({e}). "
@@ -269,7 +278,11 @@ def ssh_command(device: dict, command: str, timeout: int = 30) -> str:
     params = {"device_type": "fortinet", "host": device["IP"],
               "port": get_device_port(device),
               "username": username, "password": password,
-              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15}
+              "timeout": timeout, "auth_timeout": 15, "banner_timeout": 15,
+              # Same reason as CONNECT_TIMEOUT above: the SSH fallback runs
+              # after REST already failed, so an unreachable device must not
+              # spend another full timeout on the TCP connect.
+              "conn_timeout": CONNECT_TIMEOUT}
     try:
         with ConnectHandler(**params) as conn:
             res = conn.send_command(command, read_timeout=timeout)

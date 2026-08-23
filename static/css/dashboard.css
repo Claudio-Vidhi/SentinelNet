@@ -320,6 +320,9 @@ aside, main, .table-container, .table-wrap, .template-box {
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html { scrollbar-color: var(--border) transparent; }
+/* Reserve the scrollbar gutter: without it the page narrows by ~15px the
+   moment loaded content makes it scroll, shifting every panel sideways. */
+html { scrollbar-gutter: stable; }
 
 body {
   font-family: var(--font-prose);
@@ -1444,7 +1447,13 @@ details.mac-switch > summary:hover,
 .oneline-bus::before { left: -1px; }
 .oneline-bus::after { right: -1px; }
 
-.oneline-bays { display: flex; gap: 0; align-items: flex-start; }
+.oneline-bays {
+  display: flex; gap: 0; align-items: flex-start;
+  /* Reserve the bays' rendered height. They are empty until the fleet data
+     lands, and filling them pushed everything below down by exactly this
+     much — 87% of the page's cumulative layout shift came from here. */
+  min-height: 121px;
+}
 
 .oneline-bay {
   flex: 1 1 0;

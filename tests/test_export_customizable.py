@@ -78,8 +78,8 @@ def _export(query="", user=None, devices=None, versions=None, badges=None):
                    return_value=devices if devices is not None else DEVICES), \
              patch("services.inventory_manager.get_detected_versions",
                    return_value=versions if versions is not None else VERSIONS), \
-             patch("redundancy.service.device_redundancy_badge",
-                   side_effect=lambda ip: (badges if badges is not None else BADGES).get(ip)), \
+             patch("redundancy.service.redundancy_badges_by_ip",
+                   return_value=(badges if badges is not None else BADGES)), \
              patch("routers.inventory.log_audit"):
             client = TestClient(app_server.app)
             return client.get("/api/export/devices" + query,
