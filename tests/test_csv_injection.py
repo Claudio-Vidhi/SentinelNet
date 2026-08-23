@@ -114,13 +114,15 @@ class TestExportFrontend(unittest.TestCase):
                           f"csvCell non nomina il carattere {ch!r}")
         self.assertIn("'", body, "manca l'apostrofo di neutralizzazione")
 
-    def test_the_two_client_exports_use_it(self):
+    def test_the_client_export_uses_it(self):
         # Per file, non sul sorgente concatenato: cosi' si sa QUALE export ha
         # smesso di usarla. E si cerca il nome, non 'csvCell(' -- passarla a
         # .map() come riferimento e' uso legittimo quanto chiamarla.
+        # topology.js non costruisce piu' CSV lato browser: la classificazione
+        # e' esportata dal server (vedi /api/export/classification).
         import os
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        for rel in ("static/js/endpoint-inventory.js", "static/js/topology.js"):
+        for rel in ("static/js/endpoint-inventory.js",):
             with self.subTest(file=rel):
                 with open(os.path.join(base, rel), encoding="utf-8") as f:
                     body = f.read()
