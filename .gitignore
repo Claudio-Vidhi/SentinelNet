@@ -117,3 +117,4 @@ cont.txt
 
 # Frontend type-check tooling (nessun bundle: solo tsc)
 node_modules/
+data/config_baselines.json
