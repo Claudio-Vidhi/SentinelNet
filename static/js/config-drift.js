@@ -13,10 +13,14 @@
 
     async function loadConfigDriftTab() {
         const tenantSel = document.getElementById('driftTenantSelect');
+        const tbody = document.getElementById('driftDeviceList');
         if (!tenantSel) return;
         try {
             const res = await apiFetch('/api/drift/devices');
-            if (!res || !res.ok) return;
+            if (!res || !res.ok) {
+                if (tbody) tbody.innerHTML = `<tr><td colspan="3"><div class="alert-box alert-danger">${escapeHtml(i18n[currentLang].driftLoadError)}</div></td></tr>`;
+                return;
+            }
             const data = await res.json();
             driftDevices = data.devices || [];
 
@@ -29,6 +33,7 @@
             onDriftTenantChanged();
         } catch (e) {
             console.error('Config Drift: failed to load devices', e);
+            if (tbody) tbody.innerHTML = `<tr><td colspan="3"><div class="alert-box alert-danger">${escapeHtml(i18n[currentLang].driftLoadError)}</div></td></tr>`;
         }
     }
 
@@ -136,13 +141,17 @@
         if (!from || !to) return;
         try {
             const res = await apiFetch(`/api/drift/${encodeURIComponent(driftSelectedIp)}/diff?from_version=${encodeURIComponent(from)}&to_version=${encodeURIComponent(to)}`);
-            if (!res || !res.ok) { diffBox.textContent = ''; return; }
+            if (!res || !res.ok) {
+                showToast(i18n[currentLang].driftDiffLoadError, 'error');
+                return;
+            }
             const data = await res.json();
             // Config diff text comes from device backups: attacker-influenced,
             // must be escaped like any other device-supplied string.
             diffBox.innerHTML = escapeHtml(data.diff || '');
         } catch (e) {
             console.error('Config Drift: failed to load diff', e);
+            showToast(i18n[currentLang].driftDiffLoadError + ': ' + e.message, 'error');
         }
     }
 
@@ -168,11 +177,16 @@
         if (!driftTenant) { textEl.value = ''; return; }
         try {
             const res = await apiFetch(`/api/drift/baseline/${encodeURIComponent(driftTenant)}`);
-            if (!res || !res.ok) { textEl.value = ''; return; }
+            if (!res || !res.ok) {
+                textEl.value = '';
+                showToast(i18n[currentLang].driftBaselineLoadError, 'error');
+                return;
+            }
             const data = await res.json();
             textEl.value = data.text || '';
         } catch (e) {
             console.error('Config Drift: failed to load baseline', e);
+            showToast(i18n[currentLang].driftBaselineLoadError + ': ' + e.message, 'error');
         }
     }
 
@@ -262,9 +276,6 @@
     }
 
     document.addEventListener('click', e => {
-        const navBtn = e.target.closest('[data-tab="tab-config-drift"]');
-        if (navBtn) { loadConfigDriftTab(); return; }
-
         const row = e.target.closest('[data-action="drift-select-device"]');
         if (row) { onDriftDeviceSelected(row.getAttribute('data-ip')); return; }
 
@@ -279,4 +290,11 @@
     document.addEventListener('change', e => {
         if (e.target && e.target.id === 'driftTenantSelect') onDriftTenantChanged();
     });
+
+    // switchTab (core.js) calls this after the lazy script has loaded — see
+    // LAZY_TAB_SCRIPTS['tab-config-drift']. A self-registered click listener
+    // on the nav button does not work here: the click that triggers the lazy
+    // load has already finished dispatching by the time the listener for it
+    // would be attached, so the tab opens empty on the first click.
+    window.loadConfigDriftTab = loadConfigDriftTab;
 })();

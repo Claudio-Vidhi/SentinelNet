@@ -893,6 +893,7 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-redundancy') loadRedundancyTab();
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
     else if (tabId === 'tab-policy-test') loadPolicyTestTab();
+    else if (tabId === 'tab-config-drift') loadConfigDriftTab();
 }
 
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------

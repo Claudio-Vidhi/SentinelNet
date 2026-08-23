@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """The Config Drift tab must be wired, translated and lazily loaded."""
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -28,6 +29,28 @@ class TheTabIsWired(unittest.TestCase):
     def test_no_inline_handler_was_introduced(self):
         panel = self.html.split('id="tab-config-drift"', 1)[1]
         self.assertNotIn("onclick=", panel.split("</div>")[0])
+
+    def test_switchtab_dispatches_to_the_tab(self):
+        """A control existing is not enough: switchTab must actually call the
+        module's loader once the lazy script has loaded, or the tab opens
+        empty on its first click (the click that triggered the lazy load has
+        already finished dispatching before any listener the module adds
+        itself could catch it)."""
+        body = self.core[self.core.index("async function switchTab("):]
+        body = body[:body.index("\n}")]
+        calls = dict(re.findall(
+            r"tabId === '(tab-[a-z0-9-]+)'[^\n]*?\b([a-zA-Z_][A-Za-z0-9_]*)\s*\(\)",
+            body))
+        self.assertIn("tab-config-drift", calls,
+                       "switchTab never dispatches to tab-config-drift")
+        func = calls["tab-config-drift"]
+
+        drift_js = (ROOT / "static/js/config-drift.js").read_text(encoding="utf-8")
+        self.assertIn(f"function {func}(", drift_js,
+                       f"switchTab calls {func}() but config-drift.js never defines it")
+        self.assertIn(f"window.{func} = {func};", drift_js,
+                       f"{func} is defined but never exported on window, so switchTab's "
+                       "bare call throws a ReferenceError")
 
     def test_every_key_is_in_both_languages(self):
         it_block, en_block = self.i18n.split("    en: {", 1)
