@@ -44,7 +44,6 @@
 
         const cveRaw = vwPick(item, ['cve', 'cveId', 'cveID', 'aliases']);
         const cve = String(cveRaw).split('\n').find(v => v.trim().startsWith('CVE-')) || String(cveRaw).split('\n')[0] || '';
-        const euvd = vwPick(item, ['id', 'euvdId', 'enisaId']);
         const exploitedRaw = vwPick(item, ['exploited', 'isExploited']);
         const exploited = typeof exploitedRaw === 'boolean' ? exploitedRaw : String(exploitedRaw).toLowerCase() === 'true';
         const rawReferences = item.references || item.links || item.externalReferences || [];
@@ -53,7 +52,6 @@
         return {
             raw: item,
             cve: cve || 'N/A',
-            euvd: euvd || '—',
             product: product || '—',
             vendor: vendor || '—',
             score: Number.isFinite(score) ? score : NaN,
@@ -210,7 +208,7 @@
             if (onlyExploited && !r.exploited) return false;
             if (fromTs > 0 && vwParseTimestamp(r.date) < fromTs) return false;
             if (q) {
-                return [r.cve, r.euvd, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1;
+                return [r.cve, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1;
             }
             return true;
         });
@@ -242,15 +240,12 @@
         bodyEl.innerHTML = vwState.filtered.map((item, idx) => {
             const ts = vwParseTimestamp(item.date);
             const displayDate = ts > 0 ? new Date(ts).toLocaleDateString() : (item.date || '—');
-            const subCve = (item.euvd && item.euvd !== item.cve && item.euvd !== '—')
-                ? `<div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(item.euvd)}</div>`
-                : '';
             const productHtml = item.product && item.product !== '—'
                 ? `<div style="font-weight:600;">${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">${escapeHtml(item.vendor)}</div>`
                 : `<div style="font-weight:600; text-transform:uppercase;">${escapeHtml(item.vendor)}</div>`;
             return `
             <tr data-action="vw-open-drawer" data-idx="${idx}" style="cursor:pointer;">
-                <td><div style="font-family:var(--font-code); font-weight:700;">${escapeHtml(item.cve)}</div>${subCve}</td>
+                <td><div style="font-family:var(--font-code); font-weight:700;">${escapeHtml(item.cve)}</div></td>
                 <td>${productHtml}</td>
                 <td><span class="severity-pill severity-${item.severity}">${item.severity}</span></td>
                 <td style="font-family:var(--font-code); font-weight:600;">${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
@@ -280,7 +275,6 @@
                 ? `<div><a href="${escapeHtml(r.trim())}" target="_blank" rel="noopener">${escapeHtml(r)}</a></div>`
                 : `<div>${escapeHtml(r)}</div>`).join('')
             : '<div style="color:var(--text-muted);">—</div>';
-        const subInfo = (item.euvd && item.euvd !== item.cve && item.euvd !== '—') ? ` · ${escapeHtml(item.euvd)}` : '';
         drawer.innerHTML = `
             <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" data-action="vw-close-drawer"><i class="fa-solid fa-xmark"></i></button>
             <h3 style="margin:0 0 6px; font-family:var(--font-code);">${escapeHtml(item.cve)}</h3>
@@ -290,7 +284,7 @@
               <span style="color:var(--text-muted);">EPSS ${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</span>
               ${item.exploited ? '<span class="badge" style="color:var(--danger); border-color:var(--danger); font-weight:700;">Exploited</span>' : ''}
             </div>
-            <div style="margin-bottom:10px; font-weight:600;">${escapeHtml(item.vendor)}${item.product && item.product !== '—' ? ' · ' + escapeHtml(item.product) : ''}${subInfo}</div>
+            <div style="margin-bottom:10px; font-weight:600;">${escapeHtml(item.vendor)}${item.product && item.product !== '—' ? ' · ' + escapeHtml(item.product) : ''}</div>
             <div style="margin-bottom:14px; line-height:1.5;">${escapeHtml(item.summary)}</div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">${item.date ? new Date(item.date).toLocaleDateString() : '—'}</div>
             <div style="font-size:12px; word-break:break-all;">${refsHtml}</div>
