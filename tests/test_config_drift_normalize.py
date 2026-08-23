@@ -56,6 +56,19 @@ class VolatileLinesAreStripped(unittest.TestCase):
         once = normalize.normalize("cisco", text)
         self.assertEqual(once, normalize.normalize("cisco", once))
 
+    def test_a_raw_csv_alias_resolves_to_its_canonical_vendor(self):
+        # A hand-written hosts.csv row is never canonicalised on the way in
+        # (services.inventory_manager stores Vendor verbatim, lowercased),
+        # so "cisco_ios"/"fortigate" reach normalize() as typed. They must
+        # get the same rules as their canonical form, not the vendor-neutral
+        # fallback.
+        text = "Current configuration : 10 bytes\nhostname switch-01\n"
+        self.assertEqual(normalize.normalize("cisco_ios", text),
+                         normalize.normalize("cisco", text))
+        ftext = "#config-version=FGT-7.4.1-FW-build2463-230314:opmode=0\nx\n"
+        self.assertEqual(normalize.normalize("fortigate", ftext),
+                         normalize.normalize("fortinet", ftext))
+
 
 if __name__ == "__main__":
     unittest.main()
