@@ -56,9 +56,9 @@ def commit_version(device: dict, filename: str) -> None:
         repo = history.history_dir(device)
         git = _git()
         if not os.path.isdir(os.path.join(repo, ".git")):
-            subprocess.run([git, "init", "-q"], cwd=repo, check=True)
-        subprocess.run([git, "add", "--", filename], cwd=repo, check=True)
+            subprocess.run([git, "init", "-q"], cwd=repo, check=True, timeout=30)
+        subprocess.run([git, "add", "--", filename], cwd=repo, check=True, timeout=30)
         subprocess.run([git, "commit", "-q", "-m", f"{device.get('IP')} {filename}"],
-                       cwd=repo, check=True)
+                       cwd=repo, check=True, timeout=30)
     except (OSError, subprocess.SubprocessError, MirrorUnavailable) as e:
         logging.warning(f"Mirror git non aggiornato per {device.get('IP')}: {e}")

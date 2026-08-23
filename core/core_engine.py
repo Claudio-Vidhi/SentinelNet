@@ -72,13 +72,14 @@ def save_backup(device, sys_name: str, config_out: str) -> str:
     ip = device['IP']
     group_dir = group_backup_dir(device.get('Group', 'Generale'),
                                  device.get('Vendor', ''))
-    remove_stale_backups(ip, new_dir=group_dir)
-    file_path = os.path.join(group_dir, f"{sanitize_filename(sys_name)}-{ip}.txt")
+    target_name = f"{sanitize_filename(sys_name)}-{ip}.txt"
+    remove_stale_backups(ip, new_dir=group_dir, keep=target_name)
+    file_path = os.path.join(group_dir, target_name)
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(config_out)
     return file_path
 
-def remove_stale_backups(ip: str, new_dir: Optional[str] = None):
+def remove_stale_backups(ip: str, new_dir: Optional[str] = None, keep: Optional[str] = None):
     """Move a device's backup and its history when it changes group/vendor.
 
     This used to delete every file for the IP found anywhere in the tree. With
@@ -86,25 +87,34 @@ def remove_stale_backups(ip: str, new_dir: Optional[str] = None):
     whole history because someone re-assigned it to another tenant — a normal
     operational event. Files move to ``new_dir`` instead; with no destination
     there is nothing to preserve them for and they are removed, as before.
+
+    ``keep`` is the filename ``save_backup`` is about to (re)write inside
+    ``new_dir``. Skipping the whole destination root used to also skip a
+    same-IP file left over from a plain hostname change (sys_name is re-read
+    on every collection), orphaning it beside the new one forever; now only
+    that one filename survives untouched, and any other same-IP match in the
+    destination root is removed like everywhere else.
     """
     if not os.path.exists(BACKUP_FOLDER):
         return
     for root, _dirs, files in os.walk(BACKUP_FOLDER):
-        if new_dir and os.path.abspath(root) == os.path.abspath(new_dir):
-            continue
+        in_dest = new_dir and os.path.abspath(root) == os.path.abspath(new_dir)
         for f in files:
             if not (f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt"):
                 continue
+            if in_dest and f == keep:
+                continue
             src = os.path.join(root, f)
             try:
-                if new_dir:
+                if new_dir and not in_dest:
                     os.makedirs(new_dir, exist_ok=True)
                     os.replace(src, os.path.join(new_dir, f))
                 else:
                     os.remove(src)
             except OSError as e:
                 logging.warning(f"Backup obsoleto non spostato ({f}): {e}")
-        _move_history(root, ip, new_dir)
+        if not in_dest:
+            _move_history(root, ip, new_dir)
 
 
 def _move_history(root: str, ip: str, new_dir: Optional[str]) -> None:
@@ -1681,6 +1691,9 @@ def get_portchannel_report(group_filter=None) -> list:
     if not os.path.exists(BACKUP_FOLDER):
         return report
     for root, _dirs, files in os.walk(BACKUP_FOLDER):
+        # .history holds archived config versions, not current backups: without
+        # this the report grows one row per archived version per switch.
+        _dirs[:] = [d for d in _dirs if d != ".history"]
         for fn in files:
             if not fn.endswith('.txt'):
                 continue
@@ -1774,6 +1787,7 @@ def _netmap_signature():
     max_mtime = 0.0
     if os.path.exists(BACKUP_FOLDER):
         for root, _dirs, files in os.walk(BACKUP_FOLDER):
+            _dirs[:] = [d for d in _dirs if d != ".history"]
             for f in files:
                 if not f.endswith('.txt'):
                     continue
@@ -1895,6 +1909,10 @@ def _generate_network_map(group_filter=None) -> dict:
     backup_files = []
     if os.path.exists(BACKUP_FOLDER):
         for root, _dirs, files in os.walk(BACKUP_FOLDER):
+            # .history holds archived config versions: os.walk is topdown, so
+            # without this an archived file is visited after its current
+            # backup and last-write-wins overwrites the map with stale data.
+            _dirs[:] = [d for d in _dirs if d != ".history"]
             for f in files:
                 if f.endswith('.txt'):
                     backup_files.append(os.path.join(root, f))

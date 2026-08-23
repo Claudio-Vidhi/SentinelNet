@@ -31,6 +31,26 @@ class TheMirrorFailsLoudly(unittest.TestCase):
             mirror.commit_version(DEVICE, "switch-01.txt")
         self.assertTrue(run.called)
 
+    def test_git_calls_are_bounded_by_a_timeout(self):
+        # commit_version runs on the collection thread, inside the backup
+        # path: a wedged git commit (signing prompt, stalled hook, wedged
+        # filesystem) must not hang the scheduler for every remaining device.
+        with mock.patch.object(mirror, "is_enabled", return_value=True), \
+             mock.patch("shutil.which", return_value="/usr/bin/git"), \
+             mock.patch("subprocess.run") as run:
+            mirror.commit_version(DEVICE, "switch-01.txt")
+        self.assertTrue(run.called)
+        for call in run.call_args_list:
+            self.assertEqual(30, call.kwargs.get("timeout"))
+
+    def test_a_git_timeout_never_escapes(self):
+        import subprocess
+        with mock.patch.object(mirror, "is_enabled", return_value=True), \
+             mock.patch("shutil.which", return_value="/usr/bin/git"), \
+             mock.patch("subprocess.run",
+                        side_effect=subprocess.TimeoutExpired("git", 30)):
+            mirror.commit_version(DEVICE, "switch-01.txt")   # must not raise
+
     def test_a_git_failure_never_escapes(self):
         import subprocess
         with mock.patch.object(mirror, "is_enabled", return_value=True), \
