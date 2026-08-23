@@ -25,6 +25,7 @@
 | **NetSec Audit** | The **Checklist Audit Firewall tab was merged into NetSec Audit** as a sub-tab: `#tab-audit-checklist` and `#navAuditChecklist` no longer exist. The tab is **no longer admin-only**. Saved-run history, a status filter and PDF/DOCX/HTML export from a report modal all landed. |
 | **No inline handlers** | `templates/dashboard.html` now contains **zero** `onclick=`. Every `onclick="…"` quoted by the 2026-08-11 version is gone; controls are cited by id or by `data-action` below. |
 | **Line numbers** | Most `routers/*.py` line numbers moved; FortiGate moved furthest (policy-lookup 264 → 303, diagnose-client 327 → 366) and `routers/observability.py` moved *up* (health 671 → 635). |
+| **Config Drift (new §12, landed 2026-08-23, after this doc's 2026-08-22 verification pass)** | A whole new tab, `#tab-config-drift` (nav `#navConfigDrift`, "Config Drift", no preview badge, under **Valuta**), served by `routers/config_drift.py` over `services/config_drift/`. Per-tenant version history with no pruning, a rule-based (not scored) baseline, and an optional git mirror for archive redundancy only. Seven routes, all under `/api/drift`; no new MCP tool. This section was written and spot-checked against source at commit `4b40ea0f`, not against the same full-doc verification pass as the rest — treat citations here with the same care, not as re-verified history. |
 
 ## Still true from the corrected version (do not regress)
 
@@ -934,6 +935,131 @@ customer values.
 
 ---
 
+## 12. Per-Tenant Config Drift: History & Baseline *(new — landed 2026-08-23)*
+
+### Q12.1: A device's config changed overnight. What changed, when, and does it still match the tenant's standard?
+
+- **Answer**:
+  1. Every config collected by `run_backup_and_triage` is now hashed (after
+     per-vendor normalisation strips lines that change on their own — byte
+     counts, uptime, NTP drift) and compared against the newest archived
+     version for that IP. A real change archives a new version; an unchanged
+     config only bumps `last_seen_at`, so "unchanged for 14 days" and "not
+     collected for 14 days" read differently.
+  2. **History** answers *what changed* — pick two versions, read a redacted
+     unified diff.
+  3. **Baseline** answers *does it match the standard* — a tenant-authored
+     list of `+ must be present` / `- must be forbidden` line patterns,
+     checked against the device's newest version. There is **no score, grade
+     or severity**: this is not an audit. NetSec Audit (§6) already owns
+     compliance scoring, benchmarks and export; the baseline answers one
+     question per line, present or missing.
+
+- **UI Navigation & Operational Workflow**:
+  - **Tab**: `Config Drift` (`#navConfigDrift` → `#tab-config-drift`), under
+    **Valuta**, no preview badge, not admin-only. Lazy module
+    `static/js/config-drift.js`.
+  - **Selection**: `#driftTenantSelect` (populated from the devices the
+    caller can see); choosing a tenant renders `#driftDeviceList`, filtered
+    client-side from the one `/api/drift/devices` fetch.
+  - **Sub-tabs**: `#driftSubtabNav` (`#driftSubtabBtnHistory` /
+    `#driftSubtabBtnBaseline`) over `#driftSubtabHistory` /
+    `#driftSubtabBaseline`.
+  - **History pane**: selecting a device row loads `#driftVersionsContainer`
+    (hash, size, timestamp per version), then `#driftFromVersionSelect` /
+    `#driftToVersionSelect` (defaulted to the two newest), `#btnDriftShowDiff`
+    (disabled below two versions) renders into `#driftDiffContainer`.
+  - **Baseline pane**: `#driftBaselineText` holds the tenant's raw pattern
+    text, `#btnDriftSaveBaseline` (admin-only route) saves it,
+    `#btnDriftSeedBaseline` appends candidate `+` rules extracted from the
+    currently selected device — the operator prunes before saving, nothing is
+    saved by the seed call itself. `#driftDeviationsContainer` lists the
+    selected device's deviations, or a "no baseline set" placeholder when the
+    tenant has none.
+  - Diff text is device-supplied and rendered through `escapeHtml`, same
+    convention as every other config/log surface in the app.
+
+- **App Features Present**:
+  - `GET /api/drift/devices` — every device the caller's scope can see, with
+    version count, `last_change` and `last_seen`.
+  - `GET /api/drift/{ip}/versions` — the version list for one device, newest
+    first.
+  - `GET /api/drift/{ip}/diff?from_version=&to_version=` — redacted unified
+    diff (`difflib.unified_diff`, stdlib) between two archived versions,
+    identified by their `seen_at` stamp. Redaction runs on each side **before**
+    diffing, not on the assembled patch: `unified_diff` prefixes every line
+    with `+`/`-`/a space, and the redaction patterns in
+    `security/redaction.py` are anchored at line start, so a prefixed secret
+    line would not match and would pass through unredacted if redacted after
+    the fact.
+  - `GET /api/drift/baseline/{tenant}` — the tenant's raw baseline text.
+  - `PUT /api/drift/baseline/{tenant}` — replaces it (admin only, audited via
+    `log_audit`).
+  - `POST /api/drift/baseline/{tenant}/seed?ip=` — candidate `+` patterns
+    pulled from one device's newest archived version (security-relevant
+    prefixes only — AAA, SSH, SNMP, DHCP snooping, port-security — never
+    hostname, address or VLAN, which differ by device by design). Saves
+    nothing; admin only, same as the PUT.
+  - `GET /api/drift/{ip}/baseline` — that device's deviations against its
+    tenant's baseline: `{deviations: [{rule, pattern, problem}], checked}`.
+    `checked: false` when the tenant has no baseline text saved yet, so the
+    UI can tell "compliant" from "never evaluated".
+  - All seven routes live in `routers/config_drift.py`. The four list/read
+    routes are scoped through `user_group_scope`; every route naming a
+    specific device goes through `assert_device_allowed` — a scoped user
+    cannot read another tenant's drift by guessing an IP, same rule as every
+    other device route.
+  - **Storage** (`services/config_drift/history.py`): a `.history` folder
+    beside the existing current backup file, keyed by IP —
+    `<ip>-index.json` plus one file per retained version,
+    `<name>-<ip>.<stamp>.txt`. **The current backup file's path and name are
+    unchanged** — the policy test loader (§10), NetSec Audit (§6), Config
+    Analyzer and `download_backup` all read that exact path, so history is
+    purely additive. The stamp is UTC to microsecond precision,
+    `YYYYMMDDTHHMMSS.ffffffZ`: second precision let two versions collected
+    within the same second collide on both the index and the archived
+    filename, silently losing the first write. **Nothing is ever pruned** —
+    disk grows only when a config actually changes.
+  - **Tenant moves**: `remove_stale_backups` (`core/core_engine.py`) used to
+    delete every file for an IP anywhere in the backup tree. It now **moves**
+    the current file and its `.history` folder together when a device
+    changes tenant, instead of deleting them — re-assigning a device is a
+    normal operational event, not one that should erase its archive.
+  - **Git mirror** (`services/config_drift/mirror.py`), off by default, one
+    app setting: when enabled, each newly archived version is also committed
+    to a git repository rooted at the `.history` folder. It is **redundancy
+    only** — a second copy of the archive for disaster recovery. The drift
+    engine never reads from it. Enabling the mirror on a host without `git`
+    on `PATH` **fails loudly** (raises, does not silently no-op) — a
+    redundancy feature that is silently not running is worse than one that
+    is visibly off.
+  - Normalisation (`services/config_drift/normalize.py`) is vendor-specific,
+    same structure as `services/policy_test/`: one pattern set per vendor
+    plus a vendor-neutral set applied to everyone. An unknown vendor gets
+    only the neutral set — noisier drift, never a crash, never a skipped
+    device. Normalisation applies to the hash and the diff only; the archived
+    file is always the config exactly as collected.
+  - `history.record_version` is called from `run_backup_and_triage` /
+    `_fortigate_backup_and_triage` right after the existing `save_backup`
+    call, wrapped in try/except at the call site — a history-recording
+    failure can never fail the backup itself.
+
+- **Missing Features / Gaps**:
+  - **No restore-from-history.** Reading a past version is in scope; pushing
+    it back to the device is not.
+  - **No retention limit or pruning.** Every changed version is kept
+    indefinitely; revisit only if a real archive grows large enough to
+    matter.
+  - **No alerting on drift.** The tab answers the question when asked; there
+    is no notification when a device changes.
+  - **No per-device variable substitution in baselines** — a rule is a
+    literal or a regex against the normalised config text, nothing templated.
+  - **Two vendor pattern sets only**, both inline in `normalize.py` (Cisco
+    IOS/IOS-XE/WLC and FortiGate/Fortinet). Every other vendor is hashed with
+    the vendor-neutral rules only.
+
+---
+
 ## Summary Matrix of Capabilities vs Gaps (v3)
 
 | Domain | Present App Features | Key Missing Features / Gaps |
@@ -944,7 +1070,8 @@ customer values.
 | **Client Diagnosis** | L2+L3 single-client report, gateway auto/traceroute detection, tenant-scoped, admin port bounce and persistent isolation with uplink + staleness guards, **on-demand wireless leg** | Historical replay, wireless controller still typed by hand |
 | **Policy & Routing Validation** | **Offline packet tracer, per-rule matching + near-miss examples with the real ACL declaration and bindings, ICMP message types, static findings (shadowed / unreachable / any-any / route-to-nowhere / unresolved object) each with a witness packet and a `prove` verdict, surfaced in four places + 2 MCP tools** | IOS & FortiOS only (422 otherwise), no witness for opaque or narrowed rules, no backup-freshness warning, single-device traces |
 | **Flow SIEM & Anomalies** | Top talkers, protocol distribution, flow graph, syslog/events, anomaly triage with status, Flow SIEM events/histogram/facets/suppression, shun API | Shun UI button, ACL/Flowspec auto-injection, JA3/SNI inspection, external threat intel |
-| **Config & Compliance** | Config Analyzer (structural, FortiOS↔PAN-OS converter, Validazione view), NetSec Audit with CIS/NIST 800-53/PCI-DSS v4.0, config upload, saved-run history and PDF/DOCX/HTML report, **checklist engagements now a sub-tab of it**, backup storage/download | Git drift alerting, scheduled/recurring audits with score trend, policy-object provisioning form, transactional push with rollback, findings not used as a provisioning pre-flight |
+| **Config & Compliance** | Config Analyzer (structural, FortiOS↔PAN-OS converter, Validazione view), NetSec Audit with CIS/NIST 800-53/PCI-DSS v4.0, config upload, saved-run history and PDF/DOCX/HTML report, **checklist engagements now a sub-tab of it**, backup storage/download | Scheduled/recurring audits with score trend, policy-object provisioning form, transactional push with rollback, findings not used as a provisioning pre-flight |
+| **Config Drift** | **Per-tenant version history (no pruning) with redacted diffs, per-vendor normalisation so noise doesn't archive, rule-based baseline (present/forbidden) with seeding from a device, optional git mirror for archive redundancy, tenant move carries the archive instead of deleting it** | No restore-from-history, no retention limit, no drift alerting, no per-device variable substitution in baselines, only Cisco IOS/WLC and FortiGate normalised (others hashed raw) |
 | **Multi-site & Bastion** | Central-poll, site-agent and **jump (SSH bastion)** modes, per-site cached transport with invalidation on edit, `test-bastion` probe, TOFU host-key pinning *(working tree)*, on-screen list of what a jump site cannot do | Key-based bastion auth, host-key rotation from the UI, no bastion reachability monitoring |
 | **Inventory & Assets** | **Customizable CSV export (column registry, group/site/vendor/redundancy filters, per-member row explosion, formula-injection neutralised), serial collection on IOS/FortiOS/ProCurve/PAN-OS**, HA & redundancy groups incl. Cisco SSO with a tenant filter | Serial unread on Aruba/CBS/WLC/Junos/Linux, CSV only, no scheduled export |
 | **Incidents & AI** | Rule-based incident engine (reasoning, evidence, timeline, status), AI narrative per incident, AI Assistant chat with device/tenant attachments, triage & ping endpoints | External threat-intel enrichment, SOAR webhook export |

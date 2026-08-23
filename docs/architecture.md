@@ -312,7 +312,7 @@ and audit log unchanged.
 | [observability/](../observability/) | The whole §2 pipeline, plus `ingesters/` |
 | [collectors/](../collectors/) | ARP, MAC tables, MAC history, subnet scanner |
 | [routers/](../routers/) | ~24 FastAPI routers, one per area |
-| [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history) |
+| [services/](../services/) | FortiGate, WLC, inventory, provisioners, sites, agent, Visio export, `netsec_audit/` (compliance engine & `netsec_audit_runs` history), `config_drift/` (§10: per-tenant history & baseline) |
 | [security/](../security/) | JWT/RBAC/audit, credential encryption, keystore, identities, redaction |
 | [ai/](../ai/) | Multi-provider assistant, config analyzer, MCP server and client |
 | [drivers/](../drivers/) | One driver per vendor, `BaseDriver` as the contract |
@@ -335,7 +335,52 @@ and stay up — they're no-ops when there's nothing to do.
 
 ---
 
-## 10. What this architecture does not do
+## 10. Config drift
+
+[services/config_drift/](../services/config_drift/) answers two different
+questions per tenant, deliberately kept apart:
+
+- **History** — did this device change since we last saw it, and what changed?
+- **Baseline** — does this device match the standard this tenant expects?
+
+Both read from the archive `history.py` builds; neither scores anything — the
+existing NetSec Audit engine (§9, `services/netsec_audit/`) owns compliance
+scoring, benchmarks and export. The baseline answers one question per rule,
+present or missing, nothing else.
+
+**The archive is additive.** `backup-config/<tenant>/<vendor>/<name>-<ip>.txt`
+is read directly by the policy test loader, the NetSec Audit, the config
+analyzer and `download_backup` — that path is a contract the drift feature
+does not get to move. Every changed version instead lands in a `.history`
+folder beside it, keyed by IP, and nothing is ever pruned: disk only grows
+when a config actually changes, which is why per-vendor normalisation
+(`normalize.py`, stripping counters/timestamps that change on their own) has
+to be right — a normaliser that misses one volatile line turns every
+collection run into a fake new version.
+
+`run_backup_and_triage` calls `history.record_version` as an observer after
+the existing `save_backup` call, wrapped in try/except at the call site so a
+history-recording failure can never fail a backup. `remove_stale_backups`
+(`core/core_engine.py`), which used to delete every file for an IP anywhere in
+the tree, now moves the current file and its `.history` together when a
+device changes tenant — a re-assignment is a normal operational event, not a
+data-loss event.
+
+An optional git mirror (`mirror.py`) commits each new archived version to a
+git repository rooted at the `.history` folder. It exists purely as a second
+copy for disaster recovery: the drift engine never reads from it, and turning
+it on fails loudly, not silently, when git is not on the host — a redundancy
+feature that quietly isn't running is worse than one that's off.
+
+Seven tenant-scoped routes in `routers/config_drift.py`, all going through
+`user_group_scope` (list routes) or `assert_device_allowed` (device routes) —
+the same isolation rule as every other device route. A new tab
+`#tab-config-drift` (`static/js/config-drift.js`) follows the WLC tab's
+tenant-first pattern: choose a tenant, then its devices appear.
+
+---
+
+## 11. What this architecture does not do
 
 Stated, not forgotten:
 

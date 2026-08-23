@@ -66,6 +66,13 @@ because that puts `tests/` on `sys.path` instead of the root. (The instruction
 in [CONTRIBUTING.md](../CONTRIBUTING.md) §7 predates the move into `tests/`.)
 
 Every new module ships its own `test_<module>.py`. Tests never touch real state.
+Config drift is split into six focused files rather than one, matching its
+module split: `test_config_drift_normalize.py`, `test_config_drift_history.py`,
+`test_config_drift_mirror.py`, `test_config_drift_baseline.py`,
+`test_config_drift_api.py` and `test_config_drift_tab.py` (the last one is the
+`LAZY_TAB_SCRIPTS`-both-halves check, see §4). Tenant isolation for the new
+routes is covered by a row in `test_rbac_scope.py`, alongside every other
+scoped device route, rather than duplicated in the drift suite.
 
 Three tests are structural rather than functional, and a failure means something
 different from a normal one:
