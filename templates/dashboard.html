@@ -229,6 +229,9 @@
           <span class="nav-left" data-i18n="tabPolicyTest"><i class="fa-solid fa-route"></i> Validazione Policy &amp; Routing</span>
           <span class="preview-badge">preview</span>
         </button>
+        <button id="navConfigDrift" class="nav-item" data-tab="tab-config-drift">
+          <span class="nav-left" data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</span>
+        </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navChange">Modifica</h3>
         <button class="nav-item requires-write" data-tabs="tab-provisioning tab-provisioner" data-tab="tab-provisioning">
@@ -3568,6 +3571,90 @@
       </div>
     </div>
   </div> <!-- End #tab-policy-test -->
+
+  <div id="tab-config-drift" class="tab-content">
+    <div class="hero" style="margin-bottom:18px;">
+      <div class="hero-card" style="flex:1;">
+        <h2 data-i18n="tabConfigDrift"><i class="fa-solid fa-code-compare"></i> Config Drift</h2>
+        <p data-i18n="driftDesc">Cronologia delle versioni di configurazione archiviate e regole di base per tenant.</p>
+      </div>
+    </div>
+
+    <div class="panel" style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap;">
+      <div class="form-group" style="margin-bottom:0; min-width:220px;">
+        <label for="driftTenantSelect" data-i18n="driftTenantLabel">Tenant</label>
+        <select id="driftTenantSelect"></select>
+      </div>
+    </div>
+
+    <div id="driftSubtabNav" class="subtab-bar">
+      <button id="driftSubtabBtnHistory" class="btn btn-secondary active" data-subtab="history">
+        <i class="fa-solid fa-clock-rotate-left"></i> <span data-i18n="driftSubHistory">Cronologia</span>
+      </button>
+      <button id="driftSubtabBtnBaseline" class="btn btn-secondary" data-subtab="baseline">
+        <i class="fa-solid fa-list-check"></i> <span data-i18n="driftSubBaseline">Baseline</span>
+      </button>
+    </div>
+
+    <div id="driftSubtabHistory">
+      <div class="panel">
+        <h3><i class="fa-solid fa-server"></i> <span data-i18n="driftSubHistory">Cronologia</span></h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="thDriftDevice">Dispositivo</th>
+                <th data-i18n="thDriftLastChange">Ultima modifica</th>
+                <th data-i18n="thDriftLastSeen">Ultimo rilevamento</th>
+              </tr>
+            </thead>
+            <tbody id="driftDeviceList"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h3><i class="fa-solid fa-code-compare"></i> <span data-i18n="driftVersionsTitle">Versioni archiviate</span></h3>
+        <div id="driftVersionsContainer">
+          <div style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="driftNoVersions">Nessuna versione archiviata.</div>
+        </div>
+        <div style="display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-top:14px;">
+          <div class="form-group" style="margin-bottom:0; min-width:220px;">
+            <label for="driftFromVersionSelect" data-i18n="driftFromVersionLabel">Da versione</label>
+            <select id="driftFromVersionSelect" disabled></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0; min-width:220px;">
+            <label for="driftToVersionSelect" data-i18n="driftToVersionLabel">A versione</label>
+            <select id="driftToVersionSelect" disabled></select>
+          </div>
+          <button id="btnDriftShowDiff" class="btn btn-primary" style="width:auto;" disabled>
+            <i class="fa-solid fa-eye"></i> <span data-i18n="driftBtnShowDiff">Mostra diff</span>
+          </button>
+        </div>
+        <pre id="driftDiffContainer" style="margin-top:14px; font-family:var(--font-code); background:var(--surface-3); padding:12px; max-height:420px; overflow:auto; font-size:12px; white-space:pre-wrap;"></pre>
+      </div>
+    </div>
+
+    <div id="driftSubtabBaseline" style="display:none;">
+      <div class="panel">
+        <p style="color:var(--text-muted); font-size:13px;" data-i18n="driftBaselineHint">Regole di riferimento del tenant: righe che devono essere presenti o assenti dalla configurazione. Non è un audit e non assegna un punteggio.</p>
+        <textarea id="driftBaselineText" rows="12" style="width:100%; font-family:var(--font-code); font-size:12px;"></textarea>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+          <button id="btnDriftSaveBaseline" class="btn btn-primary requires-admin" style="width:auto;">
+            <i class="fa-solid fa-floppy-disk"></i> <span data-i18n="driftBtnSave">Salva</span>
+          </button>
+          <button id="btnDriftSeedBaseline" class="btn btn-secondary requires-admin" style="width:auto;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> <span data-i18n="driftBtnSeed">Genera dal dispositivo selezionato</span>
+          </button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="driftDeviationsTitle">Deviazioni dal dispositivo selezionato</span></h3>
+        <div id="driftDeviationsContainer">
+          <div style="text-align:center; padding:20px; color:var(--text-muted);" data-i18n="driftChooseDeviceFirst">Seleziona un dispositivo nella scheda Cronologia.</div>
+        </div>
+      </div>
+    </div>
+  </div> <!-- End #tab-config-drift -->
   </main>
 
   <!-- Progress Box dei Job in Background -->
