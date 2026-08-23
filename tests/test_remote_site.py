@@ -177,7 +177,7 @@ class RemoteSiteE2E(unittest.TestCase):
         self.assertEqual(r.json()["failed"], [])
         from services import inventory_manager
         dev = next(d for d in inventory_manager.get_all_devices()
-                   if d["IP"] == "192.0.2.77")
+                   if d["IP"] == "192.0.2.77" and d.get("Group") == "Generale")
         self.assertEqual(dev["Site"], sid)
         # E il tenant NON e' stato sovrascritto dalla sede.
         self.assertEqual(dev["Group"], "Generale")

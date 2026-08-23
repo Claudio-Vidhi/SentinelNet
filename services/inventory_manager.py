@@ -4,7 +4,7 @@ import os
 import csv
 import re
 import threading
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from security import crypto_vault
 from core import data_config
 
@@ -367,6 +367,14 @@ def get_device_by_ip(ip: str):
             _device_ip_cache = cache
         return _device_ip_cache.get(ip)
 
+def _same_device(row: dict, ip: str, group: str) -> bool:
+    """Identity is (tenant, IP), not IP.
+
+    Two customers each running 192.168.1.0/24 is ordinary. Keying on IP alone
+    meant adding the second tenant's device deleted the first tenant's row.
+    """
+    return row.get("IP") == ip and (row.get("Group") or "Generale") == (group or "Generale")
+
 
 def add_or_update_device(ip, vendor, profile, username, password, enable_secret, group, site=None, ssh_port=None, transports=None, snmp_community=None, snmp_disabled=None):
     # Validazione IP robusta
@@ -386,8 +394,9 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
 
     with _io_lock:
         devices = get_all_devices()
+        resolved_group = group if group in get_all_groups() else 'Generale'
         # Preserva l'hostname già rilevato sul dispositivo esistente
-        existing = next((d for d in devices if d['IP'] == ip), None)
+        existing = next((d for d in devices if _same_device(d, ip, resolved_group)), None)
 
         # Credenziali: su un dispositivo GIÀ ESISTENTE un valore vuoto vuole
         # dire "lascia quelle che ci sono", non "cancellale" — stessa regola
@@ -441,12 +450,12 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
             disabled_val = (existing.get('SNMP Disabled') if existing else '') or ''
         else:
             disabled_val = '1' if snmp_disabled else ''
-        devices = [d for d in devices if d['IP'] != ip]
+        devices = [d for d in devices if not _same_device(d, ip, resolved_group)]
 
         new_device = {
             'IP': ip, 'Vendor': vendor.lower(), 'Profile': profile,
             'Username': username, 'Password': enc_password, 'Enable Secret': enc_secret,
-            'Group': group if group in get_all_groups() else 'Generale',
+            'Group': resolved_group,
             'Site': resolved_site,
             'SSH Port': str(ssh_mirror),
             'Transports': json.dumps(resolved_transports, separators=(',', ':')),
@@ -458,10 +467,13 @@ def add_or_update_device(ip, vendor, profile, username, password, enable_secret,
         devices.append(new_device)
         safe_write_hosts_csv(devices)
 
-def delete_device(ip):
+def delete_device(ip: str, group: Optional[str] = None):
     with _io_lock:
         devices = get_all_devices()
-        devices = [d for d in devices if d['IP'] != ip]
+        if group is not None:
+            devices = [d for d in devices if not _same_device(d, ip, group)]
+        else:
+            devices = [d for d in devices if d.get('IP') != ip]
         safe_write_hosts_csv(devices)
 
 VENDOR_ALIASES = {
@@ -866,16 +878,23 @@ def update_version_inventory(ip, vendor, version, status="online", model=None,
         data[ip] = entry
         safe_json_write(VERSION_DATA_FILE, data)
 
-def update_device_hostname(ip: str, hostname: str):
+def update_device_hostname(ip: str, hostname: str, group: Optional[str] = None):
     with _io_lock:
         devices = get_all_devices()
         changed = False
         for d in devices:
-            if d['IP'] == ip:
-                if d.get('Hostname') != hostname:
-                    d['Hostname'] = hostname
-                    changed = True
-                break
+            if group is not None:
+                if _same_device(d, ip, group):
+                    if d.get('Hostname') != hostname:
+                        d['Hostname'] = hostname
+                        changed = True
+                    break
+            else:
+                if d.get('IP') == ip:
+                    if d.get('Hostname') != hostname:
+                        d['Hostname'] = hostname
+                        changed = True
+                    break
         if changed:
             safe_write_hosts_csv(devices)
 
