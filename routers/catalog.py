@@ -143,11 +143,10 @@ def delete_vendor(v: VendorDeleteSchema, current_user = Depends(require_operator
     log_audit(f"Vendor '{v.name}' eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.get("/api/device-classification")
-def device_classification(current_user = Depends(get_current_user)):
-    """Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con
-    categoria, sede e conteggi per categoria. Usato dal pannello Dispositivi."""
-    scope = user_group_scope(current_user)
+def assemble_classification(scope):
+    """Build the classification rows shared by the tab endpoint and the CSV
+    export: network map filtered to scope, merged with manual category
+    assignments, plus per-category/per-group counts."""
     data = core_engine.generate_network_map(group_filter="all")
     data = filter_map_to_scope(data, scope)
 
@@ -194,12 +193,22 @@ def device_classification(current_user = Depends(get_current_user)):
     return {
         "categories": cats["categories"],
         "nodes": nodes,
+        "links": data.get("links", []),
         "counts_by_category": counts_by_category,
         "counts_by_group": counts_by_group,
         "vendors": sorted(inventory_manager.get_all_vendors().keys()),
         "models": inventory_manager.get_models(),
         "total": len(nodes),
     }
+
+@router.get("/api/device-classification")
+def device_classification(current_user = Depends(get_current_user)):
+    """Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con
+    categoria, sede e conteggi per categoria. Usato dal pannello Dispositivi."""
+    data = assemble_classification(user_group_scope(current_user))
+    # `links` serve solo all'export: aggiungerlo qui cambierebbe la forma della
+    # risposta su cui poggiano il frontend e lo snapshot OpenAPI.
+    return {k: v for k, v in data.items() if k != "links"}
 
 @router.post("/api/device-categories")
 def create_device_category(payload: CategoryCreateSchema, current_user = Depends(require_operator)):
