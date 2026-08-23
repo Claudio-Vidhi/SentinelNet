@@ -88,6 +88,55 @@ class TestExportDispositiviServer(unittest.TestCase):
         self.assertNotIn("'switch-01", res.text)
 
 
+class TestExportClassificationServer(unittest.TestCase):
+    """/api/export/classification: Hostname and Neighbour Device also arrive
+    from the apparatus (CDP/LLDP-announced names), same threat as the
+    inventory export above."""
+
+    def _export(self, hostname):
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        import app_server
+        from routers.deps import get_current_user
+
+        map_data = {
+            "nodes": [{"id": "192.0.2.10", "label": hostname, "group": "sede-a",
+                       "status": "online", "device_type": "switch", "vendor": "cisco"}],
+            "links": [],
+        }
+        app_server.app.dependency_overrides[get_current_user] = \
+            lambda: {"sub": "tester", "role": "admin"}
+        try:
+            with patch("core.core_engine.generate_network_map", return_value=map_data), \
+                 patch("services.inventory_manager.get_device_categories",
+                       return_value={"categories": {}, "assignments": {}}), \
+                 patch("services.inventory_manager.get_all_vendors", return_value={}), \
+                 patch("services.inventory_manager.get_models", return_value={}), \
+                 patch("services.inventory_manager.get_detected_versions", return_value={}), \
+                 patch("services.ap_store.read_all", return_value={}), \
+                 patch("routers.catalog.log_audit"):
+                client = TestClient(app_server.app)
+                res = client.get("/api/export/classification?columns=hostname",
+                                 headers={"X-Requested-With": "x"})
+        finally:
+            app_server.app.dependency_overrides.pop(get_current_user, None)
+        return res
+
+    def test_a_formula_hostname_is_neutralised(self):
+        for payload in PAYLOADS:
+            with self.subTest(payload=payload):
+                res = self._export(payload)
+                self.assertEqual(res.status_code, 200)
+                import csv as _csv
+                import io as _io
+                rows = list(_csv.reader(_io.StringIO(res.text)))
+                for row in rows[1:]:
+                    for cell in row:
+                        self.assertFalse(
+                            cell[:1] in ("=", "+", "-", "@", "\t", "\r"),
+                            f"cella eseguibile in Excel: {cell!r}")
+
+
 class TestExportFrontend(unittest.TestCase):
     """Verifica grep-style: non c'e' un runner JS.
 

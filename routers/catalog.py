@@ -300,6 +300,7 @@ def export_classification_csv(
         nodes = [n for n in nodes if n.get("device_type", "") in want_categories]
 
     versions = inventory_manager.get_detected_versions()
+    ap_entries = ap_store.read_all()
     label_of = {n["id"]: (n.get("label") or n["id"]) for n in data["nodes"]}
     explode = any(c in _NEIGHBOUR_COLUMNS for c in selected)
 
@@ -309,9 +310,12 @@ def export_classification_csv(
     for node in nodes:
         # Serial has two sources and one of them is a cache: an inventoried
         # device carries it from the last scan, an access point only from
-        # whatever controller last reported it.
+        # whatever controller last reported it. The AP store lookup is
+        # scoped to the node's own tenant, so a name collision across
+        # tenants never hands one customer another's serial.
         scan = versions.get(node["id"], {})
-        entry = ap_store.lookup(node.get("label") or "") if node.get("discovered") else None
+        entry = (ap_store.lookup_in(ap_entries, node.get("label") or "", node.get("group"))
+                 if node.get("discovered") else None)
         row_node = dict(node)
         row_node["serial"] = scan.get("serial") or (entry or {}).get("serial", "")
         row_node["serial_seen_at"] = (entry or {}).get("seen_at", "")

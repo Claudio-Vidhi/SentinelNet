@@ -975,6 +975,11 @@ customer values.
     equivalent** (`COMMANDS["ap_inventory"]` has no `iosxe` entry in `services/wlc_service.py`), so
     the serial column is left empty by design on Catalyst 9800 controllers rather than falling back
     to one SSH round-trip per AP.
+  - **AP serial resolution is tenant-scoped**: a store entry is only used when its `tenant` matches
+    the discovered node's own group, never on name alone — two tenants can both have an `ap-lobby`,
+    and one must never see the other's serial. A single-tenant deployment whose WLC device is filed
+    under a different group from the switch that discovered the AP loses the serial as a result; that
+    is accepted, an empty cell rather than a wrong one.
   - Same CSV-injection guard as §11.1 (`core/csv_safe.py`).
 
 ---

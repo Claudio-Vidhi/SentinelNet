@@ -30,7 +30,9 @@ def normalize_ap_name(name: str) -> str:
     return (name or "").strip().lower().split(".")[0]
 
 
-def _read() -> dict:
+def read_all() -> dict:
+    """Load the whole store. Public so a caller that resolves many AP names
+    (e.g. an export row loop) can read the file once instead of once per row."""
     try:
         with open(_path(), encoding="utf-8") as f:
             data = json.load(f)
@@ -46,10 +48,17 @@ def record_aps(wlc_ip: str, tenant: str, aps: list) -> int:
     access points, and a visit to one must not erase what the other reported.
     An AP with no serial is skipped rather than stored empty -- an entry here
     is a claim to know the serial.
+
+    A harvest that carried no serial at all (inventory command failed, no
+    privilege, ...) writes nothing: an empty result must not erase what this
+    same controller already reported on a previous visit.
     """
+    if not any((ap.get("serial") or "").strip() for ap in aps or []):
+        return 0
+
     seen_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with _lock:
-        store = {k: v for k, v in _read().items()
+        store = {k: v for k, v in read_all().items()
                  if (v or {}).get("wlc_ip") != wlc_ip}
         written = 0
         for ap in aps or []:
@@ -67,5 +76,21 @@ def record_aps(wlc_ip: str, tenant: str, aps: list) -> int:
     return written
 
 
-def lookup(ap_name: str) -> Optional[dict]:
-    return _read().get(normalize_ap_name(ap_name))
+def lookup_in(store: dict, ap_name: str, tenant: Optional[str] = None) -> Optional[dict]:
+    """Resolve an AP name against an already-loaded store dict (see
+    read_all()), optionally scoped to a tenant.
+
+    Passing a tenant requires the stored entry's tenant to match, so an AP
+    name that collides across two tenants never hands one customer another's
+    serial. Passing None keeps the name-only match for other callers.
+    """
+    entry = store.get(normalize_ap_name(ap_name))
+    if entry is None:
+        return None
+    if tenant is not None and entry.get("tenant") != tenant:
+        return None
+    return entry
+
+
+def lookup(ap_name: str, tenant: Optional[str] = None) -> Optional[dict]:
+    return lookup_in(read_all(), ap_name, tenant)
