@@ -92,15 +92,18 @@ Hashing raw config text makes every run look like drift: `Current configuration
 : N bytes`, `uptime is ...`, `ntp clock-period`, and vendor-specific counters
 change without anyone touching the device.
 
-Normalisation is vendor-specific and follows the structure `services/policy_test/`
-already uses: a package with a module per vendor behind one entry point.
+Normalisation is vendor-specific: one entry point, `normalize(vendor, text)`,
+dispatching to per-vendor pattern tuples (`_IOS`, `_FORTIOS`) kept inline
+rather than split into a module per vendor the way `services/policy_test/`
+splits its parsers — the pattern lists are short enough that a file per
+vendor would be one tuple per file.
 
 ```
 services/config_drift/
-  normalize.py     # normalize(vendor, text) -> str, dispatches per vendor
-  ios.py           # volatile-line patterns
-  fortios.py
-  history.py       # hash, archive, index, git mirror
+  normalize.py     # normalize(vendor, text) -> str; _IOS / _FORTIOS pattern
+                    # tuples dispatched by _BY_VENDOR
+  history.py       # hash, archive, index
+  mirror.py        # optional git mirror of the archive
   baseline.py      # required/forbidden matching
 ```
 
@@ -171,7 +174,7 @@ drift by guessing an IP — the same rule every other device route follows.
 | :--- | :--- | :--- |
 | GET | `/api/drift/devices` | tenant's devices: last change, last seen, version count |
 | GET | `/api/drift/{ip}/versions` | version list for one device |
-| GET | `/api/drift/{ip}/diff?from=&to=` | redacted unified diff between two versions |
+| GET | `/api/drift/{ip}/diff?from_version=&to_version=` | redacted unified diff between two versions |
 | GET | `/api/drift/baseline/{tenant}` | the tenant's patterns |
 | PUT | `/api/drift/baseline/{tenant}` | replace them (admin only, audited) |
 | POST | `/api/drift/baseline/{tenant}/seed?ip=` | candidate patterns from a device |
