@@ -80,6 +80,9 @@ declare var switchNetSecSubtab: any;
 declare var toggleAuditDetail: any;
 declare var toggleAuditSaveNameInput: any;
 
+// config-drift.js
+declare var loadConfigDriftTab: any;
+
 // policy-test.js
 declare var loadPolicyTestTab: any;
 declare var runPolicyTrace: any;
