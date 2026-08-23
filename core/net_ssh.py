@@ -216,24 +216,24 @@ def jump_channel(site: dict, host: str, port: int) -> paramiko.Channel:
         "direct-tcpip", (host, int(port)), ("127.0.0.1", 0))
 
 
-def jump_site_for(host: str):
+def jump_site_for(host: str, tenant: "str | None" = None):
     """Return the jump site owning this device IP, or None.
 
     get_device_by_ip's cache entry carries "site" (lowercase — see
     services/inventory_manager.py:get_device_by_ip), not the raw CSV row's
     "Site" column. The collision sentinel {"collision": True} has no "site"
-    key, so a duplicated IP falls through here to a direct connection rather
-    than risking a tunnel to the wrong customer.
+    key, so a duplicated IP without tenant falls through here to a direct connection
+    rather than risking a tunnel to the wrong customer.
     """
     from services import inventory_manager, site_manager
-    device = inventory_manager.get_device_by_ip(host)
+    device = inventory_manager.get_device_by_ip(host, tenant=tenant)
     if not device:
         return None
     site = site_manager.get_site(device.get("site") or "")
     return site if site and site.get("mode") == "jump" else None
 
 
-def ConnectHandler(site_id: "str | None" = None, **params):
+def ConnectHandler(site_id: "str | None" = None, tenant: "str | None" = None, **params):
     """netmiko.ConnectHandler, tunnelled when the device sits behind a bastion.
 
     site_id names the site explicitly, for callers whose target is not in the
@@ -241,7 +241,7 @@ def ConnectHandler(site_id: "str | None" = None, **params):
     inventory lookup, and site_id is only consulted when that finds nothing.
     """
     host = params.get("host") or params.get("ip")
-    site = jump_site_for(host) if host else None
+    site = jump_site_for(host, tenant=tenant) if host else None
     if site is None and site_id:
         from services import site_manager
         candidate = site_manager.get_site(site_id)
