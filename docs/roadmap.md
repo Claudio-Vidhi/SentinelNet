@@ -162,7 +162,7 @@ credential ADR-0008 declined is the right answer.
    HTTP/S, database ports) against registered servers, with green/red state in
    the dashboard and on the map. Reuses `network_scanner`.
 
-5. **Server vulnerabilities via EUVD.** The EUVD lookup already exists for
+5. **Server vulnerabilities via NIST NVD.** The NVD lookup already exists for
    network vendors (`inventory_manager.resolve_euvd_term`); extending it to
    server operating systems needs only the version from SSH/WinRM inventory.
 

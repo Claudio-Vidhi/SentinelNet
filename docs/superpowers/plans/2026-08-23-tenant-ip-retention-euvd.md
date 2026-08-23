@@ -248,23 +248,23 @@ Read the current implementation whole before editing — it changed recently and
 
 The `{"collision": True}` sentinel exists because the function could not answer. With `(tenant, IP)` identity it can, given a tenant.
 
-- [ ] **Step 1: Read all 23 call sites first**
+- [x] **Step 1: Read all 23 call sites first**
 
 `grep -rn "get_device_by_ip" --include=*.py .` — two check the sentinel (`observability/ingesters/udp_server.py:73`; `core/net_ssh.py:jump_site_for` documents it). Every other caller currently receives a dict silently lacking the keys it expects when there is a collision.
 
 Write down, in your report, what each call site knows about the tenant at the point it calls. Some — the UDP ingester attributing an exporter IP — genuinely do not know, and for those the sentinel remains the honest answer.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Assert `get_device_by_ip("192.0.2.10", tenant="ACME")` returns ACME's row while BETA's identical IP exists, and that the no-tenant call still returns the collision sentinel rather than guessing.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add an optional `tenant` parameter. Key the cache on `(tenant, ip)` as well as `ip`, or keep two maps — decide after reading how `_device_ip_cache` is invalidated, and say why. Preserve the sentinel for the no-tenant ambiguous case: a caller that cannot name a tenant must not be handed a guess.
 
-- [ ] **Step 4: Update the callers that DO know their tenant** to pass it. Leave the ones that genuinely cannot.
+- [x] **Step 4: Update the callers that DO know their tenant** to pass it. Leave the ones that genuinely cannot.
 
-- [ ] **Step 5: Full suite, then commit**
+- [x] **Step 5: Full suite, then commit**
 
 ---
 
@@ -283,7 +283,7 @@ Config history keeps every changed version forever, deliberately. The operator s
 - Consumes: `core.app_settings.get_app_settings()`.
 - Produces: `prune(device: dict) -> int` — versions removed. Setting key `config_drift_keep_versions`, integer, `0` means keep everything (current behaviour, and the default).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # -*- coding: utf-8 -*-
@@ -355,17 +355,17 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
-- [ ] **Step 3: Implement `prune` and call it from `record_version`**
+- [x] **Step 3: Implement `prune` and call it from `record_version`**
 
 Prune *after* the new version is archived and the index saved, never before — a crash mid-prune must leave the index and the files consistent with each other. Remove a version's file and its index entry together. Never touch the current backup file; it is not a version.
 
 An index entry whose file is already gone must not raise — that is the state `reset_topology` can leave behind.
 
-- [ ] **Step 4: Run the retention tests, the drift history tests, then the full suite**
+- [x] **Step 4: Run the retention tests, the drift history tests, then the full suite**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ### Task B2: Expose the cap in Settings
 
@@ -376,15 +376,15 @@ An index entry whose file is already gone must not raise — that is the state `
 - Modify: the settings route that persists `app_settings`
 - Test: extend `tests/test_config_drift_retention.py`
 
-- [ ] **Step 1** Read how an existing numeric app setting is rendered, persisted and validated end to end, and follow it exactly. `#obsPruneDays` in the Observability settings block is the closest example.
+- [x] **Step 1** Read how an existing numeric app setting is rendered, persisted and validated end to end, and follow it exactly. `#obsPruneDays` in the Observability settings block is the closest example.
 
-- [ ] **Step 2** Write a test asserting the setting round-trips through the API and that a negative or non-numeric value is rejected at the boundary rather than stored.
+- [x] **Step 2** Write a test asserting the setting round-trips through the API and that a negative or non-numeric value is rejected at the boundary rather than stored.
 
-- [ ] **Step 3** Implement. The field needs a label and a hint saying `0` keeps everything; both need i18n keys in both languages.
+- [x] **Step 3** Implement. The field needs a label and a hint saying `0` keeps everything; both need i18n keys in both languages.
 
-- [ ] **Step 4** `uv run python scripts/check_frontend.py`, `tests.test_i18n_parity`, full suite.
+- [x] **Step 4** `uv run python scripts/check_frontend.py`, `tests.test_i18n_parity`, full suite.
 
-- [ ] **Step 5** Commit.
+- [x] **Step 5** Commit.
 
 ---
 
@@ -412,19 +412,19 @@ The vulnerability API is NIST NVD: `/api/search` in `routers/backup.py` already 
 
 Vendor Watch buttons currently list only vendors with a non-empty `euvd_term`. With the field gone, list every registered vendor and send the display name — `resolve_euvd_term()` resolves it server-side to the same term, so the NVD query is unchanged.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Assert that `/api/catalog`'s vendor payload has no `euvd_term` key; that a `vendors.json` **already containing** `euvd_term` — as every installed system has — still loads and its vendors still appear; and that `resolve_euvd_term("paloalto")` still returns `"palo alto"`, proving the NVD term survives the field's removal.
 
 That middle case is the one that breaks customers on upgrade. Write it first.
 
-- [ ] **Step 2: Run it, confirm it fails**
+- [x] **Step 2: Run it, confirm it fails**
 
-- [ ] **Step 3: Remove the field.** Loading must ignore a stale `euvd_term` key rather than choke on it — check whether `VendorSchema` forbids extra keys before assuming it tolerates them.
+- [x] **Step 3: Remove the field.** Loading must ignore a stale `euvd_term` key rather than choke on it — check whether `VendorSchema` forbids extra keys before assuming it tolerates them.
 
-- [ ] **Step 4:** `tests.test_i18n_parity`, `scripts/check_frontend.py`, `tests.test_router_parity` (the schema set changes — extend the allow-list, do NOT regenerate the golden), full suite.
+- [x] **Step 4:** `tests.test_i18n_parity`, `scripts/check_frontend.py`, `tests.test_router_parity` (the schema set changes — extend the allow-list, do NOT regenerate the golden), full suite.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ### Task C2: Remove the dead `euvd` payload and display
 
@@ -434,27 +434,27 @@ That middle case is the one that breaks customers on upgrade. Write it first.
 - Modify: `templates/dashboard.html` — the `CVE / EUVD` column header (line 1082) becomes `CVE`; give it an i18n key, which it currently lacks
 - Test: extend `tests/test_vendor_registry_no_euvd.py`
 
-- [ ] **Step 1** Write a test asserting the `/api/search` item shape has no `euvd` key and still carries `cve` and `cwe`. Mock the outbound NVD call — do not hit the real API from a test.
+- [x] **Step 1** Write a test asserting the `/api/search` item shape has no `euvd` key and still carries `cve` and `cwe`. Mock the outbound NVD call — do not hit the real API from a test.
 
-- [ ] **Step 2** Confirm it fails.
+- [x] **Step 2** Confirm it fails.
 
-- [ ] **Step 3** Remove. `cwe` is currently unused by the client; leave it in the payload and say so in your report, so surfacing it later is a one-line change rather than a re-investigation.
+- [x] **Step 3** Remove. `cwe` is currently unused by the client; leave it in the payload and say so in your report, so surfacing it later is a one-line change rather than a re-investigation.
 
-- [ ] **Step 4** Full suite, `check_frontend.py`, `tests.test_i18n_parity`.
+- [x] **Step 4** Full suite, `check_frontend.py`, `tests.test_i18n_parity`.
 
-- [ ] **Step 5** Commit.
+- [x] **Step 5** Commit.
 
 ### Task C3: Version, docs and the full gate
 
-- [ ] **Step 1** Bump `core/version.py` and `pyproject.toml` line 3 together — MINOR, for Part A's behaviour change. Run `tests.test_version`.
+- [x] **Step 1** Bump `core/version.py` and `pyproject.toml` line 3 together — MINOR, for Part A's behaviour change. Run `tests.test_version`.
 
-- [ ] **Step 2** Update the docs. Search `docs/`, `README.md` and `PRODUCT.md` for `euvd`, `EUVD` and `ENISA` and correct every hit — `docs/architecture.md` and `docs/roadmap.md` both mention it. `docs/netsec_troubleshooting_qa_v3.md` pins routes and element ids in a strict house style; match it.
+- [x] **Step 2** Update the docs. Search `docs/`, `README.md` and `PRODUCT.md` for `euvd`, `EUVD` and `ENISA` and correct every hit — `docs/architecture.md` and `docs/roadmap.md` both mention it. `docs/netsec_troubleshooting_qa_v3.md` pins routes and element ids in a strict house style; match it.
 
 Document the new tenant-IP behaviour and the retention setting in the same pass. Assert nothing you have not verified in the code.
 
-- [ ] **Step 3** `uv run pyrefly check`, `uv run python scripts/check_frontend.py`, `uv run python -m unittest discover -s tests`, `graphify update .`.
+- [x] **Step 3** `uv run pyrefly check`, `uv run python scripts/check_frontend.py`, `uv run python -m unittest discover -s tests`, `graphify update .`.
 
-- [ ] **Step 4** Commit.
+- [x] **Step 4** Commit.
 
 ---
 

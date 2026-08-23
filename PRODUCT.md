@@ -27,8 +27,8 @@ per browser.
 ## Product Purpose
 
 Self-hosted platform that centralizes management of network infrastructure:
-configuration backup, firmware and vulnerability triage against the European
-ENISA EUVD database, passive telemetry collection (NetFlow, IPFIX, sFlow,
+configuration backup, firmware and vulnerability triage against the
+NIST NVD database, passive telemetry collection (NetFlow, IPFIX, sFlow,
 syslog, SNMP), and single-client L2+L3 diagnosis — all reachable from one
 browser console.
 
