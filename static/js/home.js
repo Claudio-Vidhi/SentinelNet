@@ -273,7 +273,14 @@ async function loadHomeAnomalies() {
     // Una sola chiamata: la striscia eventi vuole le righe recenti, il
     // riepilogo vuole quante ne restano da lavorare.
     const res = await apiFetch('/api/observability/anomalies?status=all&limit=100');
-    if (!res || !res.ok) return;
+    if (!res || !res.ok) {
+        // The panels ship with skeleton placeholders. Returning without
+        // clearing them would leave the page shimmering forever, claiming to
+        // still be loading something that already failed.
+        box.innerHTML = `<p style="color:var(--text-muted); margin:0; padding:8px 0;">${escapeHtml(L.homeAnomLoadFailed)}</p>`;
+        renderEventStrip([]);
+        return;
+    }
     const rows = (await res.json()).anomalies || [];
     renderEventStrip(rows.slice(0, 5));
     if (rows.length === 0) {

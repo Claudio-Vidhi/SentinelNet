@@ -319,6 +319,7 @@ aside, main, .table-container, .table-wrap, .template-box {
    --------------------------------------------------------------- */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+:root { --home-table-h: 337px; --home-strip-h: 158px; --home-anom-h: 44px; }
 html { scrollbar-color: var(--border) transparent; }
 /* Reserve the scrollbar gutter: without it the page narrows by ~15px the
    moment loaded content makes it scroll, shifting every panel sideways. */
@@ -1591,6 +1592,29 @@ details.mac-switch > summary:hover,
 .eventstrip-time { color: var(--text-soft); font-size: 11px; }
 .eventstrip-text { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .eventstrip-empty { padding: 14px 0; color: var(--text-soft); font-family: var(--font-prose); font-size: 13px; }
+
+/* --- Skeleton placeholders -------------------------------------------------
+   Home paints its panels empty and fills them when the fleet data lands. The
+   shimmer says "loading" instead of "nothing here", and — more to the point —
+   it holds the loaded shape so the page does not jump when the rows arrive.
+   Every render path overwrites the container's innerHTML, so the skeletons
+   need no clearing of their own. */
+.sk {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: sk-shimmer 1.4s ease infinite;
+  height: 11px;
+  display: block;
+}
+@keyframes sk-shimmer { from { background-position: 100% 50%; } to { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
+/* Both Home tables cap at 8 rows (see home.js), so their loaded height has a
+   known ceiling: reserving it means the panel keeps one height from first
+   paint through the data arriving, whether 2 rows come back or 8. */
+#tab-home .table-container { min-height: var(--home-table-h); }
+#homeEventStrip { min-height: var(--home-strip-h); }
+#homeAnomSummary { min-height: var(--home-anom-h); }
 
 /* ---------------------------------------------------------------
    19. MOVIMENTO — un solo momento: la prova lampade
