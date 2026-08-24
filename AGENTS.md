@@ -38,6 +38,13 @@ Canonical for this repo. `CLAUDE.md` and `.agents/AGENTS.md` point here.
   real value, even "just as an illustration".
 - Security findings that name unfixed issues at `file:line` stay out of the
   public tree — see `.gitignore`.
+- **New state file under `data/` → `.gitignore` entry in the same change, before
+  the user runs the tool.** `data/` is ignored file by file, not wholesale: a
+  new `data/*.json` (or `.db`, `.db-shm`, `.db-wal`, and any sibling the code
+  writes) is tracked by default. As soon as the feature runs once against a real
+  network that file fills with customer state, and the next `git add` leaks it.
+  Add the ignore rule while writing the code that creates the file, never after
+  testing, and verify with `git status --porcelain data/` printing nothing.
 
 ## Before each commit
 

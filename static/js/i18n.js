@@ -863,6 +863,9 @@ const i18n = {
         hintSecretLinux: "Se compilata, il triage esegue anche i comandi che richiedono root. Lasciandola vuota la sessione resta non privilegiata.",
         btnMapClassic: "Classica",
         btnMapMinimal: "Nuova",
+        btnMapLayered: "A livelli",
+        btnLayeredReset: "Azzera piani",
+        lblLayeredHint: "Trascina in verticale per cambiare piano",
 
         // Tab 1
         invEyebrow: '<i class="fa-solid fa-server"></i> Inventario',
@@ -874,6 +877,7 @@ const i18n = {
         invKpiUnknownLabel: "Non misurabile",
         titleInventoryTable: "Dispositivi di Rete Sotto Monitoraggio",
         optFilterAll: "Filtra per Tenant: Tutti",
+        optSelectSite: "Scegli un Tenant…",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia Triage Globale',
         btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
         titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Scegli il Tenant per il Triage',
@@ -1528,6 +1532,11 @@ const i18n = {
         lblSelectedNode: "Dispositivo Selezionato",
         lblDrawerPortChannels: "Port-Channel & Interfacce",
         lblDrawerVlans: "VLAN Attive",
+        lblDrawerNeighbors: "Vicini & Collegamenti",
+        lblDrawerSite: "Sede / Tipo",
+        lblDrawerSerial: "Seriale",
+        lblDrawerSoftware: "Software",
+        lblDrawerMgmtVlan: "VLAN Mgmt / VTP",
         phNewTenant: "Es. Tenant_Torino",
         titleLegend: "Legenda",
         titleBtnRefresh: "Aggiorna",
@@ -2607,6 +2616,9 @@ const i18n = {
         hintSecretLinux: "When set, triage also runs the commands that need root. Leave it empty and the session stays unprivileged.",
         btnMapClassic: "Classic",
         btnMapMinimal: "New",
+        btnMapLayered: "Layered",
+        btnLayeredReset: "Reset tiers",
+        lblLayeredHint: "Drag vertically to change tier",
 
         // Tab 1
         invEyebrow: '<i class="fa-solid fa-server"></i> Inventory',
@@ -2618,6 +2630,7 @@ const i18n = {
         invKpiUnknownLabel: "Not measurable",
         titleInventoryTable: "Monitored Network Devices",
         optFilterAll: "Filter by Tenant: All",
+        optSelectSite: "Choose a Tenant…",
         btnRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run Global Triage',
         btnTriageSite: '<i class="fa-solid fa-bolt"></i> Triage Tenant',
         titleTriageScope: '<i class="fa-solid fa-bolt-lightning" style="color: var(--warning);"></i> Choose tenant for Triage',
@@ -3454,6 +3467,11 @@ const i18n = {
         lblSelectedNode: "Selected Device",
         lblDrawerPortChannels: "Port-Channels & Interfaces",
         lblDrawerVlans: "Active VLANs",
+        lblDrawerNeighbors: "Neighbors & Links",
+        lblDrawerSite: "Site / Type",
+        lblDrawerSerial: "Serial",
+        lblDrawerSoftware: "Software",
+        lblDrawerMgmtVlan: "Mgmt VLAN / VTP",
         titleTplItemEdit: 'Edit Question',
         titleTplItemNew: '<i class="fa-solid fa-list-check" style="color:var(--primary);"></i> New Question',
         lblAuditCustomerName: "Customer / Company Name *",
@@ -3555,8 +3573,10 @@ function changeLanguage(lang) {
         }
         const interSelect = document.getElementById('interactiveGroupSelect');
         if (interSelect) {
+            // options[0] è il segnaposto "nessuna Sede scelta", options[1] è "Tutte".
             const prev = interSelect.value;
-            interSelect.options[0].text = i18n[lang].optFilterAll;
+            interSelect.options[0].text = i18n[lang].optSelectSite;
+            if (interSelect.options[1]) interSelect.options[1].text = i18n[lang].optFilterAll;
             interSelect.value = prev;
         }
 

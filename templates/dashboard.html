@@ -790,7 +790,9 @@
       <div class="panel" style="margin-bottom:15px;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap: 15px; flex-wrap: wrap;">
         <div style="display:flex; align-items:center; gap: 15px; flex-wrap: wrap;">
+          <!-- Nessuna Sede preselezionata: la mappa si disegna solo su scelta esplicita -->
           <select id="interactiveGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+            <option value="" data-i18n="optSelectSite">Scegli un Tenant…</option>
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
 
@@ -831,7 +833,14 @@
           <div style="display:inline-flex; align-items:center; gap:4px; padding-left:10px; border-left:1px solid var(--border);">
             <button id="mapViewClassicBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapClassic">Classica</button>
             <button id="mapViewMinimalBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapMinimal">Nuova</button>
+            <button id="mapViewLayeredBtn" class="map-view-btn chip" style="width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnMapLayered">A livelli</button>
           </div>
+
+          <!-- Vista "A livelli": suggerimento + azzeramento dei piani riassegnati a mano -->
+          <span id="layeredResetWrap" style="display:none; align-items:center; gap:8px; padding-left:10px; border-left:1px solid var(--border);">
+            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare piano</span>
+            <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera piani</button>
+          </span>
 
           <!-- Interruttore tooltip al passaggio del mouse: solo per la nuova mappa,
                dove le etichette Port-Channel sono già sempre visibili sul disegno -->
@@ -907,7 +916,17 @@
                 <div class="drawer-kpi"><span class="kpi-label">Vendor / Model</span><strong id="drawerNodeModel">—</strong></div>
                 <div class="drawer-kpi"><span class="kpi-label">Stato</span><span id="drawerNodeStatus" class="badge">—</span></div>
                 <div class="drawer-kpi"><span class="kpi-label">Uptime / Backup</span><strong id="drawerNodeUptime">—</strong></div>
+                <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerSite">Sede / Tipo</span><strong id="drawerNodeSite">—</strong></div>
+                <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerSerial">Seriale</span><strong id="drawerNodeSerial">—</strong></div>
+                <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerSoftware">Software</span><strong id="drawerNodeSoftware">—</strong></div>
+                <div class="drawer-kpi"><span class="kpi-label" data-i18n="lblDrawerMgmtVlan">VLAN Mgmt / VTP</span><strong id="drawerNodeMgmtVlan">—</strong></div>
               </div>
+              <div id="drawerStackInfo" class="drawer-list" style="display:none; margin-top:10px;"></div>
+            </div>
+            <!-- Vicini CDP/LLDP -->
+            <div class="drawer-section">
+              <h4 class="drawer-section-title"><i class="fa-solid fa-diagram-project" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="lblDrawerNeighbors">Vicini &amp; Collegamenti</span></h4>
+              <div id="drawerNeighborList" class="drawer-list">—</div>
             </div>
             <!-- Port-Channel & Links -->
             <div class="drawer-section">
