@@ -1006,6 +1006,16 @@
         networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, isMinimal ? 2500 : 5000));
     }
 
+    // "visto dal WLC 3 h fa": età dell'ultimo censimento del controller, con la
+    // provenienza scritta nell'etichetta — non è un uptime dell'apparato.
+    function wlcSeenLabel(iso) {
+        if (!iso) return '';
+        const ts = Date.parse(iso);
+        if (isNaN(ts)) return '';
+        const age = relativeAge((Date.now() - ts) / 3600000);
+        return currentLang === 'en' ? `seen by WLC ${age} ago` : `visto dal WLC ${age} fa`;
+    }
+
     function openTopologyNodeDrawer(nodeId) {
         if (!nodeId) return;
         currentSelectedNodeId = nodeId;
@@ -1016,18 +1026,32 @@
         const topNode = (cachedTopologyNodes || []).find(n => n.id === nodeId || n.label === nodeId) || {};
 
         const hostname = dev.Hostname || topNode.label || nodeId;
-        const ip = dev.IP || (nodeId.includes('.') ? nodeId : (topNode.id && topNode.id.includes('.') ? topNode.id : '—'));
+        // Un nodo scoperto ha per id "discovered_<hostname>": l'indirizzo vero è
+        // quello annunciato via CDP/LLDP (o quello che il WLC conosce per l'AP).
+        const ip = dev.IP || topNode.display_ip
+            || (nodeId.includes('.') ? nodeId : '—');
         const vendor = (dev.Vendor || topNode.vendor || 'Discovered').toUpperCase();
         // Il modello vero viene dal backup/CDP; "device_type" è una categoria,
         // non un modello: mostrarlo come tale ("CISCO ap") diceva meno di nulla.
         const model = dev.Model || topNode.model || topNode.platform || dev.Type || '—';
         const status = (dev.Status || topNode.status || 'online').toLowerCase();
-        const uptime = dev.Uptime || (dev.LastBackup ? backupAgeLabel(dev.LastBackup) : '—');
+        // Un AP non ha backup: quello che si sa è quando il controller l'ha
+        // visto l'ultima volta, e va detto che viene da lì.
+        const uptime = dev.Uptime || (dev.LastBackup ? backupAgeLabel(dev.LastBackup) : '')
+            || wlcSeenLabel(topNode.wlc_seen_at) || '—';
         const site = dev.Group || topNode.group || '—';
-        const serial = dev.Serial || topNode.serial || '—';
+        // Il seriale di un AP lo sa solo il controller che l'ha adottato: arriva
+        // dal backend insieme al MAC, che per un apparato senza IP è l'unico
+        // identificativo stabile.
+        const serial = [dev.Serial || topNode.serial, topNode.mac].filter(Boolean).join(' · ') || '—';
         const software = (globalVersions[nodeId] || {}).version || topNode.version || '—';
         const mgmtVlan = topNode.mgmt_vlan ? `VLAN ${topNode.mgmt_vlan}` : '';
         const vtp = [topNode.vtp_domain, topNode.vtp_mode].filter(Boolean).join(' · ');
+        // Un AP non ha né VLAN di management né VTP: al loro posto vale sapere a
+        // quale controller si è agganciato.
+        const joinedWlc = topNode.wlc_ip
+            ? `${currentLang === 'en' ? 'joined WLC' : 'agganciato al WLC'} ${topNode.wlc_ip}`
+            : '';
 
         const hostEl = document.getElementById('drawerNodeHostname');
         if (hostEl) hostEl.textContent = hostname;
@@ -1041,7 +1065,9 @@
             statusEl.textContent = status.toUpperCase();
         }
         const uptimeEl = document.getElementById('drawerNodeUptime');
-        if (uptimeEl) uptimeEl.textContent = uptime;
+        // backupAgeLabel() restituisce markup (già con contenuto escapato): con
+        // textContent il riquadro mostrava i tag invece dell'età del backup.
+        if (uptimeEl) uptimeEl.innerHTML = uptime.startsWith('<') ? uptime : escapeHtml(uptime);
         const siteEl = document.getElementById('drawerNodeSite');
         if (siteEl) siteEl.textContent = `${site} · ${deviceTypeLabel(topNode.device_type)}`;
         const serialEl = document.getElementById('drawerNodeSerial');
@@ -1049,7 +1075,7 @@
         const swEl = document.getElementById('drawerNodeSoftware');
         if (swEl) swEl.textContent = software;
         const vlanMgmtEl = document.getElementById('drawerNodeMgmtVlan');
-        if (vlanMgmtEl) vlanMgmtEl.textContent = [mgmtVlan, vtp].filter(Boolean).join(' · ') || '—';
+        if (vlanMgmtEl) vlanMgmtEl.textContent = [mgmtVlan, vtp].filter(Boolean).join(' · ') || joinedWlc || '—';
 
         // Stack: presente solo sugli switch impilati, quindi la riga compare solo
         // quando c'è davvero qualcosa da dire (ruolo e seriale per membro).

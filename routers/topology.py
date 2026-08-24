@@ -58,11 +58,53 @@ def get_topology_adjacency(group: str = "all", current_user = Depends(get_curren
     data = core_engine.generate_network_map(group_filter=group)
     return filter_map_to_scope(data, user_group_scope(current_user))
 
+def enrich_map_nodes(data: dict) -> dict:
+    """Adds to the map the identity facts the app already holds elsewhere.
+
+    The inspector panel showed "—" for data that was merely stored in another
+    file: a discovered node carries the IP announced via CDP/LLDP, not its
+    synthetic ``discovered_<hostname>`` id, and an access point never announces
+    its own serial — only the controller that adopted it knows it. Same lookup
+    order as the classification table, so the two never disagree.
+    """
+    from services import ap_store
+
+    versions = inventory_manager.get_detected_versions()
+    entries = ap_store.read_all()
+    for node in data.get("nodes") or []:
+        discovered = node.get("status") == "discovered"
+        node["display_ip"] = (node.get("reported_ip") or "") if discovered else node["id"]
+        if node.get("serial"):
+            continue
+        name = node.get("label") or node["id"]
+        scan = (versions.get(node["id"])
+                or (versions.get(node["display_ip"]) if node["display_ip"] else None)
+                or {})
+        entry = (ap_store.lookup_in(entries, name, node.get("group"),
+                                    ip=node["display_ip"] or None)
+                 or ap_store.lookup_in(entries, name, node.get("group")))
+        node["serial"] = scan.get("serial") or (entry or {}).get("serial") or ""
+        if entry:
+            if entry.get("mac"):
+                node["mac"] = entry["mac"]
+            if entry.get("ip") and not node["display_ip"]:
+                node["display_ip"] = entry["ip"]
+            # Provenance: an access point has no backup and no management VLAN,
+            # but the controller that adopted it knows which one it joined and
+            # when it last reported it. Shown as coming from the WLC, never
+            # mixed with data the device itself gave.
+            if entry.get("wlc_ip"):
+                node["wlc_ip"] = entry["wlc_ip"]
+            if entry.get("seen_at"):
+                node["wlc_seen_at"] = entry["seen_at"]
+    return data
+
+
 @router.get("/api/network-map")
 def get_network_map(group: str = "all", current_user = Depends(get_current_user)):
     """Restituisce il grafo topologico strutturato per Vis.js."""
     data = core_engine.generate_network_map(group_filter=group)
-    return filter_map_to_scope(data, user_group_scope(current_user))
+    return enrich_map_nodes(filter_map_to_scope(data, user_group_scope(current_user)))
 
 @router.post("/api/map/export/vsdx")
 def export_map_vsdx(payload: VisioExportSchema, current_user = Depends(get_current_user)):
