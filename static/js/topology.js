@@ -32,6 +32,10 @@
             .replace(/^Port-channel/i, 'Po');
     }
 
+    let cachedPortchannelsData = null;
+    let cachedTopologyNodes = [];
+    let currentSelectedNodeId = null;
+
     // Riquadro Port-Channel per switch: aggregati + interfacce membro e interfacce
     // fisiche singole non aggregate (stile elenco).
     async function loadPortchannelReport(selectedGroup) {
@@ -41,6 +45,7 @@
             const res = await apiFetch('/api/portchannels?group=' + encodeURIComponent(selectedGroup || 'all'));
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
+            cachedPortchannelsData = data;
             const devices = (data.devices || []).filter(d => (d.portchannels || []).length);
             if (!devices.length) {
                 box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${currentLang==='en'?'No Port-Channel data (run a triage first).':'Nessun dato Port-Channel (esegui prima un triage).'}</p>`;
@@ -536,6 +541,7 @@
         const res = await apiFetch("/api/network-map?group=" + encodeURIComponent(selectedGroup));
         if (!res || !res.ok) return;
         const data = await res.json();
+        cachedTopologyNodes = data.nodes || [];
 
         // Stato degli interruttori di filtro/evidenziazione della mappa
         const highlightPC      = document.getElementById("togglePortChannel")?.checked || false;
@@ -826,6 +832,17 @@
                 if (p.nodes && p.nodes.length) resolveNodeOverlaps(p.nodes);
             });
         }
+        // Eventi di selezione nodo: apre il pannello ispettore laterale (Node Drawer)
+        networkInstance.on('selectNode', p => {
+            if (p.nodes && p.nodes.length) openTopologyNodeDrawer(p.nodes[0]);
+        });
+        networkInstance.on('deselectNode', () => {
+            closeTopologyNodeDrawer();
+        });
+        networkInstance.on('click', p => {
+            if (!p.nodes || !p.nodes.length) closeTopologyNodeDrawer();
+        });
+
         let mapFrozen = false;
         const isMinimal = getMapView() === 'minimal';
         const freezeLayout = () => {
@@ -843,6 +860,117 @@
         // in animazione percepibile "per sempre". La classica resta a 5s (invariata).
         networkInstance.once('afterDrawing', () => setTimeout(freezeLayout, isMinimal ? 2500 : 5000));
     }
+
+    function openTopologyNodeDrawer(nodeId) {
+        if (!nodeId) return;
+        currentSelectedNodeId = nodeId;
+        const drawer = document.getElementById('topologyNodeDrawer');
+        if (!drawer) return;
+
+        const dev = (globalDevices || []).find(d => d.IP === nodeId || d.Hostname === nodeId || d.ID === nodeId) || {};
+        const topNode = (cachedTopologyNodes || []).find(n => n.id === nodeId || n.label === nodeId) || {};
+
+        const hostname = dev.Hostname || topNode.label || nodeId;
+        const ip = dev.IP || (nodeId.includes('.') ? nodeId : (topNode.id && topNode.id.includes('.') ? topNode.id : '—'));
+        const vendor = (dev.Vendor || topNode.vendor || 'Discovered').toUpperCase();
+        const model = dev.Model || dev.Type || topNode.device_type || '—';
+        const status = (dev.Status || topNode.status || 'online').toLowerCase();
+        const uptime = dev.Uptime || (dev.LastBackup ? backupAgeLabel(dev.LastBackup) : '—');
+
+        const hostEl = document.getElementById('drawerNodeHostname');
+        if (hostEl) hostEl.textContent = hostname;
+        const ipEl = document.getElementById('drawerNodeIp');
+        if (ipEl) ipEl.textContent = ip;
+        const modelEl = document.getElementById('drawerNodeModel');
+        if (modelEl) modelEl.textContent = `${vendor} ${model !== '—' ? model : ''}`.trim();
+        const statusEl = document.getElementById('drawerNodeStatus');
+        if (statusEl) {
+            statusEl.className = `badge badge-${status === 'online' ? 'success' : (status === 'offline' ? 'danger' : 'warning')}`;
+            statusEl.textContent = status.toUpperCase();
+        }
+        const uptimeEl = document.getElementById('drawerNodeUptime');
+        if (uptimeEl) uptimeEl.textContent = uptime;
+
+        // Port-Channels
+        const pcListEl = document.getElementById('drawerPortChannelList');
+        if (pcListEl) {
+            let pcItems = [];
+            if (cachedPortchannelsData && cachedPortchannelsData.devices) {
+                const pcDev = cachedPortchannelsData.devices.find(d => d.ip === ip || d.hostname === hostname);
+                if (pcDev && pcDev.portchannels && pcDev.portchannels.length) {
+                    pcItems = pcDev.portchannels;
+                }
+            }
+            if (!pcItems.length && topNode.portchannels && topNode.portchannels.length) {
+                pcItems = topNode.portchannels;
+            }
+
+            if (pcItems.length > 0) {
+                pcListEl.innerHTML = pcItems.map(pc => {
+                    const members = (pc.members || pc.interfaces || []).map(shortIface).join(', ') || '—';
+                    const neigh = (pc.neighbors && pc.neighbors.length) ? pc.neighbors.join(', ') : (pc.neighbor || '—');
+                    return `<div class="drawer-list-item">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <strong style="color:var(--primary); font-family:var(--font-data); font-size:12.5px;">${escapeHtml(pc.name || 'Po')}</strong>
+                            <span class="badge badge-success" style="font-size:10px;">LACP ACTIVE</span>
+                        </div>
+                        <div style="font-size:11.5px; color:var(--text-muted);">
+                            <span>Membri: <code style="font-size:11px;">${escapeHtml(members)}</code></span>
+                        </div>
+                        ${neigh !== '—' ? `<div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">
+                            <span>Verso: <strong>${escapeHtml(neigh)}</strong></span>
+                        </div>` : ''}
+                    </div>`;
+                }).join('');
+            } else {
+                const noPcTxt = currentLang === 'en' ? 'No Port-Channels configured on this node.' : 'Nessun Port-Channel configurato su questo nodo.';
+                pcListEl.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(noPcTxt)}</div>`;
+            }
+        }
+
+        // Active VLANs
+        const vlanEl = document.getElementById('drawerVlanTags');
+        if (vlanEl) {
+            let vlans = [];
+            if (topNode.vlans && Array.isArray(topNode.vlans) && topNode.vlans.length) {
+                vlans = topNode.vlans;
+            } else if (dev.VLANs) {
+                vlans = Array.isArray(dev.VLANs) ? dev.VLANs : String(dev.VLANs).split(',').map(s => s.trim()).filter(Boolean);
+            } else if (topNode.vtp_domain) {
+                vlans = [`VTP: ${topNode.vtp_domain}`];
+            }
+
+            if (vlans.length > 0) {
+                vlanEl.innerHTML = vlans.map(v => `<span class="drawer-tag">${escapeHtml(String(v))}</span>`).join('');
+            } else {
+                vlanEl.innerHTML = `<span style="font-size:12px; color:var(--text-muted);">${currentLang === 'en' ? 'Default / Trunk' : 'Default / Trunk'}</span>`;
+            }
+        }
+
+        // Action buttons
+        const btnAnalyzer = document.getElementById('drawerBtnAnalyzer');
+        if (btnAnalyzer) {
+            btnAnalyzer.onclick = () => {
+                openPortInAnalyzer(ip, '');
+            };
+        }
+        const btnTriage = document.getElementById('drawerBtnTriage');
+        if (btnTriage) {
+            btnTriage.onclick = () => {
+                switchTab('tab-triage');
+            };
+        }
+
+        drawer.classList.add('open');
+    }
+
+    function closeTopologyNodeDrawer() {
+        const drawer = document.getElementById('topologyNodeDrawer');
+        if (drawer) drawer.classList.remove('open');
+        currentSelectedNodeId = null;
+    }
+
+    document.getElementById('btnCloseNodeDrawer')?.addEventListener('click', closeTopologyNodeDrawer);
 
     // Separazione AABB dei riquadri dopo un trascinamento: il nodo mosso viene
     // spinto fuori da ogni riquadro intersecato lungo l'asse di minima
