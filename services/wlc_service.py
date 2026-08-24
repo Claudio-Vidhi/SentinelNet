@@ -378,22 +378,25 @@ def overview(device: dict) -> dict:
                           or "")
                 if serial:
                     ap["serial"] = serial
-        if platform == "iosxe":
-            for ap in aps:
-                if ap.get("serial"):
-                    continue
-                name = ap.get("name", "")
-                if not name or not _AP_NAME_RE.match(name):
-                    continue
-                try:
-                    inv_out = _send(conn, f"show ap name {name} inventory", 15)
-                    m = re.search(r'\bSN\s*:\s*(\S+)', inv_out, re.IGNORECASE)
-                    if m:
-                        sn = m.group(1).split(',')[0].strip().strip('"')
-                        if sn and sn.upper() not in ("N/A", "NONE", ""):
-                            ap["serial"] = sn
-                except Exception:
-                    continue
+        for ap in aps:
+            if ap.get("serial"):
+                continue
+            name = ap.get("name", "")
+            if not name or not _AP_NAME_RE.match(name):
+                continue
+            try:
+                cmd_inv = f"show ap name {name} inventory" if platform == "iosxe" else f"show ap inventory {name}"
+                inv_out = _send(conn, cmd_inv, 15)
+                m = re.search(r'\bSN\s*:\s*(\S+)', inv_out, re.IGNORECASE)
+                if not m and platform == "aireos":
+                    inv_out = _send(conn, f"show ap config general {name}", 15)
+                    m = re.search(r'(?:Serial Number|SN)\s*[\.:]+\s*([A-Za-z0-9]{8,16})', inv_out, re.IGNORECASE)
+                if m:
+                    sn = m.group(1).split(',')[0].strip().strip('"')
+                    if sn and sn.upper() not in ("N/A", "NONE", ""):
+                        ap["serial"] = sn
+            except Exception:
+                continue
         if platform == "aireos":
             # Canale e larghezza di canale non stanno in 'show ap summary':
             # l'auto-RF delle radio e' l'unico posto che li stampa. La 2.4 GHz
