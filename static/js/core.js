@@ -529,12 +529,19 @@ async function logout() {
 // minuti fa altrimenti si leggono uguali.
 // Oltre una settimana il testo passa a var(--warning): e' il punto in cui il
 // dato smette di descrivere la rete di adesso.
+// Età in forma breve ("40 min", "6 h", "3 g"). Una sola formula per tutti i
+// riquadri che mostrano "quanto tempo fa": copiarla porta a unità divergenti.
+function relativeAge(h) {
+    const en = currentLang === 'en';
+    return h < 1 ? `${Math.max(1, Math.round(h * 60))} min`
+        : (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} ${en ? 'd' : 'g'}`);
+}
+
 function backupAgeLabel(ts) {
     if (!ts) return '';
     const en = currentLang === 'en';
     const h = (Date.now() / 1000 - ts) / 3600;
-    const txt = h < 1 ? `${Math.max(1, Math.round(h * 60))} min`
-        : (h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} ${en ? 'd' : 'g'}`);
+    const txt = relativeAge(h);
     const label = en ? `backup ${txt} ago` : `backup ${txt} fa`;
     return `<span style="font-size:11px; color:${h > 168 ? 'var(--warning)' : 'var(--text-muted)'};"`
         + ` title="${en ? 'backup age' : 'eta del backup'}">${escapeHtml(label)}</span>`;
