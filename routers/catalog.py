@@ -227,6 +227,10 @@ _CLASSIFICATION_COLUMNS = {
     "neighbour_device": ("Neighbour Device", lambda n, l: l.get("device", "")),
     "neighbour_port":   ("Neighbour Port",   lambda n, l: l.get("port", "")),
     "neighbour_category": ("Neighbour Category", lambda n, l: l.get("category", "")),
+    "member_index":     ("Member #",         lambda n, l: l.get("member_index", "")),
+    "member_role":      ("Member Role",      lambda n, l: l.get("member_role", "")),
+    "member_serial":    ("Member Serial",    lambda n, l: l.get("member_serial", "")),
+    "member_model":     ("Member Model",     lambda n, l: l.get("member_model", "")),
 }
 
 # Asking for one of these columns means asking for one row per neighbour: a
@@ -235,6 +239,13 @@ _CLASSIFICATION_COLUMNS = {
 # explodes rows in the device export.
 _NEIGHBOUR_COLUMNS = frozenset(("neighbour_device", "neighbour_port",
                                 "neighbour_category"))
+
+# A stack answers on one management IP but carries one serial per physical
+# unit, and the scan stores those on the redundancy group, not on the device:
+# without these columns the Serial cell of every stacked switch is empty.
+# Same rule as the device export -- one row per unit, never a joined cell.
+_MEMBER_COLUMNS = frozenset(("member_index", "member_role",
+                             "member_serial", "member_model"))
 
 _DEFAULT_CLASSIFICATION_COLUMNS = ["hostname", "ip", "tenant", "category", "status"]
 
@@ -267,7 +278,9 @@ def export_classification_columns(current_user = Depends(get_current_user)):
     registry."""
     return {
         "columns": [
-            {"key": k, "header": h, "per_neighbour": k in _NEIGHBOUR_COLUMNS}
+            {"key": k, "header": h,
+             "per_neighbour": k in _NEIGHBOUR_COLUMNS,
+             "explodes": k in _NEIGHBOUR_COLUMNS or k in _MEMBER_COLUMNS}
             for k, (h, _) in _CLASSIFICATION_COLUMNS.items()
         ],
         "default": _DEFAULT_CLASSIFICATION_COLUMNS,
@@ -286,6 +299,7 @@ def export_classification_csv(
     from fastapi.responses import Response as FastResponse
     from core.csv_safe import csv_cell
     from services import ap_store
+    from redundancy import service as redundancy_service
 
     selected = [c.strip() for c in columns.split(",") if c.strip()] \
         or _DEFAULT_CLASSIFICATION_COLUMNS
@@ -309,6 +323,8 @@ def export_classification_csv(
     label_of = {n["id"]: (n.get("label") or n["id"]) for n in data["nodes"]}
     category_of = {n["id"]: n.get("device_type", "") for n in data["nodes"]}
     explode = any(c in _NEIGHBOUR_COLUMNS for c in selected)
+    badges = (redundancy_service.redundancy_badges_by_ip()
+              if any(c in _MEMBER_COLUMNS for c in selected) else {})
     want_neighbour_categories = {v.strip()
                                  for v in neighbour_categories.split(",") if v.strip()}
 
@@ -337,11 +353,20 @@ def export_classification_csv(
         if want_neighbour_categories:
             neighbours = [x for x in neighbours
                           if x["category"] in want_neighbour_categories]
+        # Members and neighbours are two independent explosions: a stacked
+        # switch with two uplinks and four units gets every (uplink, unit)
+        # pair, so both the port and the serial stay in a cell of their own.
+        members = [
+            {"member_index": m.get("index", ""), "member_role": m.get("role", ""),
+             "member_serial": m.get("serial", ""), "member_model": m.get("model", "")}
+            for m in ((badges.get(node["id"]) or {}).get("members") or [])
+        ]
         for link in (neighbours or [{}]):
-            writer.writerow([
-                csv_cell(_CLASSIFICATION_COLUMNS[c][1](row_node, link))
-                for c in selected
-            ])
+            for member in (members or [{}]):
+                writer.writerow([
+                    csv_cell(_CLASSIFICATION_COLUMNS[c][1](row_node, {**link, **member}))
+                    for c in selected
+                ])
 
     log_audit(f"Export CSV classificazione richiesto dall'utente "
               f"'{current_user.get('sub')}' (colonne: {','.join(selected)}).")

@@ -2909,7 +2909,7 @@
                         prefs.neighbour_categories);
         renderCheckList('clsColumnList',
             clsExportColumns.map(c => ({
-                value: c.key, label: c.header + (c.per_neighbour ? ' *' : '') })),
+                value: c.key, label: c.header + (c.explodes ? ' *' : '') })),
             prefs.columns);
         document.getElementById('classificationExportModal').style.display = 'flex';
     }
