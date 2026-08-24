@@ -1375,16 +1375,16 @@
           <h2 style="margin:0 0 6px; font-family:var(--font-display); font-size:25px;"><i class="fa-solid fa-wifi" style="color:var(--primary); margin-right:8px;"></i>Cisco WLC Live Observability</h2>
           <p style="margin:0; color:var(--text-muted); font-size:13px;" data-i18n="wlcDesc">Monitoraggio in tempo reale di Access Point Cisco, client wireless associati, WLAN/SSID e rilevamento Rogue AP.</p>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <!-- Tenant first, controller second: the second select lists only the
                WLCs of the chosen tenant (vendor cisco_wlc / cisco_9800). -->
-          <select id="wlcTenantSelect" style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
+          <select id="wlcTenantSelect" style="padding:8px 12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
             <option value="" data-i18n="wlcOptTenant">-- Seleziona tenant --</option>
           </select>
-          <select id="wlcTargetSelect" disabled style="padding:8px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
+          <select id="wlcTargetSelect" disabled style="padding:8px 12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-weight:700;">
             <option value="" data-i18n="wlcOptTargetFirst">-- Scegli prima un tenant --</option>
           </select>
-          <button id="btnRefreshWlcData" class="btn btn-primary" style="width:auto;" data-i18n="btnRefreshWlc"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+          <button id="btnRefreshWlcData" class="btn btn-primary" style="width:auto; margin:0;" data-i18n="btnConnectWlc"><i class="fa-solid fa-bolt"></i> Interroga WLC</button>
         </div>
       </div>
 
@@ -2548,11 +2548,14 @@
         <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
           <div class="form-group" style="margin-bottom:0; min-width:260px;">
             <label for="fgtTargetSelect" data-i18n="lblFgtTargetSelect">Target FortiGate attivo</label>
-            <select id="fgtTargetSelect" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+            <select id="fgtTargetSelect" style="padding:6px 12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
               <option value="" data-i18n="optFgtNoTargets">-- nessun target configurato --</option>
             </select>
           </div>
-          <button type="button" id="btnFgtManageTargets" class="btn btn-secondary" style="width:auto;" data-i18n="btnFgtManageTargets">
+          <button type="button" id="btnFgtConnect" class="btn btn-primary" style="width:auto; margin:0;" data-i18n="btnFgtConnect">
+            <i class="fa-solid fa-bolt"></i> Interroga FortiGate (API)
+          </button>
+          <button type="button" id="btnFgtManageTargets" class="btn btn-secondary" style="width:auto; margin:0;" data-i18n="btnFgtManageTargets">
             <i class="fa-solid fa-gears"></i> Gestisci FortiGate
           </button>
         </div>

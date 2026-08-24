@@ -139,6 +139,7 @@ function _fgtVal(id) {
 }
 
 let fgtDatasetRows = {};   // key -> { rows, source, apiError, error }
+let fgtConnectedTarget = ''; // target IP per cui sono state autorizzate le chiamate API
 
 // Un solo loader per tutte le viste. Un dataset che fallisce non è un
 // errore della tab: su un FortiGate senza SD-WAN o senza controller WiFi
@@ -189,12 +190,19 @@ async function loadFgtDataset(key) {
     const spec = FGT_DATASETS[key];
     if (!spec) return;
     const ip = fgtCurrentTarget();
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    const en = currentLang === 'en';
     if (!ip) {
         const host = document.getElementById('fgtView-' + key);
         if (host) {
-            const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-            const en = currentLang === 'en';
             host.innerHTML = _fgtEmpty(L.msgFgtNoTarget || (en ? 'No target selected.' : 'Nessun target selezionato.'));
+        }
+        return;
+    }
+    if (!fgtConnectedTarget || fgtConnectedTarget !== ip) {
+        const host = document.getElementById('fgtView-' + key);
+        if (host) {
+            host.innerHTML = _fgtEmpty(L.fgtSelectPrompt || (en ? 'Target selected. Click "Query FortiGate (API)" to load data.' : 'Target selezionato. Clicca "Interroga FortiGate (API)" per caricare i dati.'));
         }
         return;
     }
@@ -847,21 +855,15 @@ function renderFgtTargetSelect() {
 
 async function onFgtTargetSelectChange() {
     const ip = document.getElementById('fgtTargetSelect')?.value;
-    if (!ip) return;
-    const res = await apiFetch('/api/fortigate/targets/active', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ip })
-    });
-    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
-    if (res && res.ok) {
-        showToast(L.msgFgtTargetActivated || 'Target FortiGate attivo aggiornato.', 'success');
-        await loadFgtTargets();
-        fgtDatasetRows = {};
-        fgtSwitchView(fgtPane);
-    } else {
-        const err = res ? await res.json().catch(() => ({})) : {};
-        showToast(`${currentLang === 'en' ? 'Error: ' : 'Errore: '}${err.detail || ''}`, 'error');
+    fgtConnectedTarget = '';
+    fgtDatasetRows = {};
+    if (ip) {
+        await apiFetch('/api/fortigate/targets/active', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip })
+        });
     }
+    fgtSwitchView(fgtPane);
 }
 
 function openFgtManageModal() {
@@ -1116,9 +1118,22 @@ function refreshFgtView() {
 async function renderFgtOverview() {
     const ip = fgtCurrentTarget();
     const host = document.getElementById('fgtOverviewTiles');
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
     const en = currentLang === 'en';
     if (!host) return;
-    if (!ip) { host.innerHTML = _fgtEmpty(en ? 'No target selected.' : 'Nessun target selezionato.'); return; }
+    if (!ip) {
+        host.style.display = 'block';
+        host.innerHTML = _fgtEmpty(L.msgFgtNoTarget || (en ? 'No target configured.' : 'Nessun target configurato.'));
+        return;
+    }
+    if (!fgtConnectedTarget || fgtConnectedTarget !== ip) {
+        host.style.display = 'block';
+        host.innerHTML = `<div class="panel" style="text-align:center; padding:32px; color:var(--text-muted); font-size:13.5px;">
+            <i class="fa-solid fa-shield-halved fa-2x" style="color:var(--primary); margin-bottom:12px; opacity:0.7; display:block;"></i>
+            ${escapeHtml(L.fgtSelectPrompt || (en ? 'Target selected. Click "Query FortiGate (API)" to start API calls and load telemetry.' : 'Target selezionato. Clicca "Interroga FortiGate (API)" per avviare le chiamate API e caricare la telemetria.'))}
+        </div>`;
+        return;
+    }
 
     const [status, resources, ha] = await Promise.all([
         apiFetch(`/api/fortigate/${encodeURIComponent(ip)}/status`).then(r => r && r.ok ? r.json() : null).catch(() => null),
@@ -1140,9 +1155,7 @@ async function renderFgtOverview() {
     // Una percentuale come barra: 62 da solo non dice se sia molto o poco.
     const gauge = v => `<div style="font-size:13px;">${FGT_FMT.meter(v)}</div>`;
 
-    // HA: lo stato del cluster E l'allineamento dei checksum. Un cluster che
-    // si dichiara in sync ma ha checksum divergenti è il caso che conta, ed è
-    // il motivo per cui il service li chiede insieme.
+    // HA: lo stato del cluster E l'allineamento dei checksum.
     const h = (ha && ha.data) || {};
     const hstat = (h.status && (h.status.mode || h.status.group_name)) || null;
     const csums = Array.isArray(h.checksums) ? h.checksums : null;
@@ -1170,8 +1183,48 @@ async function renderFgtOverview() {
     loadFgtDataset('ha');
 }
 
+async function connectAndLoadFgt() {
+    const ip = fgtCurrentTarget();
+    const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+    const en = currentLang === 'en';
+    if (!ip) {
+        showToast(en ? 'Select a FortiGate target first.' : 'Seleziona prima un target FortiGate.', 'warning');
+        return;
+    }
+    const btn = document.getElementById('btnFgtConnect');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${en ? 'Querying...' : 'Interrogazione...'}`;
+    }
+    try {
+        await apiFetch('/api/fortigate/targets/active', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ip })
+        });
+        fgtConnectedTarget = ip;
+        fgtDatasetRows = {};
+        if (fgtPane === 'overview') {
+            await renderFgtOverview();
+        } else {
+            const key = FGT_PANE_DEFAULT[fgtPane];
+            if (key) loadFgtDataset(key);
+        }
+        showToast(en ? 'FortiGate API queried successfully.' : 'Chiamata API FortiGate completata.', 'success');
+    } catch (e) {
+        console.error('Errore chiamata API FortiGate:', e);
+        showToast((en ? 'Error querying FortiGate API: ' : 'Errore durante la chiamata API FortiGate: ') + ((e && e.message) || e), 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        }
+    }
+}
+
 // Delegated and static event listeners
 document.getElementById('fgtTargetSelect')?.addEventListener('change', onFgtTargetSelectChange);
+document.getElementById('btnFgtConnect')?.addEventListener('click', connectAndLoadFgt);
 document.getElementById('btnFgtManageTargets')?.addEventListener('click', openFgtManageModal);
 
 document.getElementById('fgtSubtabBar')?.addEventListener('click', (e) => {
