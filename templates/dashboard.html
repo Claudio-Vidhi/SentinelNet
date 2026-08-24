@@ -3998,7 +3998,7 @@
         <i class="fa-solid fa-xmark modal-close" id="btnCloseClassificationExport"></i>
       </div>
       <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descClassificationExport">
-        Nessuna casella spuntata in un filtro significa «tutti». Le colonne del vicino producono una riga per ogni collegamento.
+        Nessuna casella spuntata in un filtro significa «tutti». Le colonne con * producono una riga per ogni collegamento o unità fisica. Filtrando la categoria del vicino gli altri collegamenti spariscono ma i dispositivi restano: spunta la casella per tenere solo quelli che hanno un vicino di quel tipo.
       </p>
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
         <div>
@@ -4008,6 +4008,11 @@
           <div id="clsFilterCategories" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
           <div style="font-size:12px; font-weight:700; margin:10px 0 4px;" data-i18n="lblClsNeighbourCategory">Categoria vicino *</div>
           <div id="clsFilterNeighbourCategories" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:6px; cursor:pointer;">
+            <input type="checkbox" id="clsOnlyMatchingNeighbours"
+                   style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
+            <span data-i18n="lblClsOnlyMatchingNeighbours">Solo dispositivi con un vicino corrispondente</span>
+          </label>
         </div>
         <div>
           <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportColumns">Colonne</div>
