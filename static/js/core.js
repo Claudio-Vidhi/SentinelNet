@@ -721,12 +721,15 @@ async function appInit() {
         // Popola tendina Filtro Gruppi in TAB 4
         const interSelect = document.getElementById('interactiveGroupSelect');
         if (interSelect) {
-            const prevInterFilter = interSelect.value || 'all';
-            interSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+            // Default = nessuna scelta: la mappa interattiva non disegna nulla
+            // finché l'utente non indica una Sede.
+            const prevInterFilter = interSelect.value || '';
+            interSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
+                `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
                 Object.keys(globalGroups).map(g =>
                     `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
             interSelect.value = prevInterFilter;
-            if (interSelect.selectedIndex === -1) interSelect.value = 'all';
+            if (interSelect.selectedIndex === -1) interSelect.value = '';
         }
 
         // Popola Tabella Dispositivi tramite la nuova funzione autonoma filtrabile

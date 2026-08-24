@@ -34,6 +34,9 @@
 
     let cachedPortchannelsData = null;
     let cachedTopologyNodes = [];
+    // Adiacenze dell'ultima mappa caricata: il pannello laterale ci legge i
+    // vicini del nodo scelto (porta locale ⇄ porta remota, Port-Channel).
+    let cachedTopologyLinks = [];
     let currentSelectedNodeId = null;
 
     // Riquadro Port-Channel per switch: aggregati + interfacce membro e interfacce
@@ -118,6 +121,10 @@
     // --- VIS.JS TOPOLOGY GRAPH VIEW ---
 
     let networkInstance = null;
+    // Piani correnti della vista "A livelli" e Sede a cui si riferiscono: servono
+    // al trascinamento verticale, che riassegna il piano del nodo mosso.
+    let layeredAssigned = {};
+    let layeredGroup = 'all';
 
     // Generatore dinamico di schede SVG ad alta tecnologia per i nodi del network
     // Metadati per tipo di apparato: colore distintivo (feature: colori per tipo
@@ -134,6 +141,79 @@
         pc:       { color: "#a3a3a3", it: "PC",            en: "PC" },
         other:    { color: "#8d9bb0", it: "Altro",         en: "Other" },
     };
+    // ===== Vista "A livelli": assegnazione dei piani =====
+    // Il tipo di apparato da solo NON basta: core, distribuzione e accesso sono
+    // tutti "switch", quindi finivano sulla stessa riga e il disegno restava
+    // piatto. Il piano viene dedotto dalla TOPOLOGIA (distanza in salti dalle
+    // radici); l'utente lo corregge trascinando il nodo in verticale.
+    const TIER_LEVEL = { firewall: 0, router: 1, wlc: 1, switch: 2, ap: 3, server: 3, phone: 4, camera: 4, pc: 4, other: 3 };
+    // Radici candidate in ordine di preferenza: chi sta al confine con l'esterno.
+    const ROOT_TYPES = ['firewall', 'router'];
+    const LAYERED_SEPARATION = 220;
+
+    function tierLevel(t) {
+        return TIER_LEVEL[t] === undefined ? TIER_LEVEL.other : TIER_LEVEL[t];
+    }
+
+    // Override manuali per Sede: {"<gruppo>": {"<id>": livello}}. Stessa forma e
+    // stessa persistenza della checklist dispositivi.
+    let layeredLevels = {};
+    try { layeredLevels = JSON.parse(localStorage.getItem('layeredLevels') || '{}'); } catch (e) { layeredLevels = {}; }
+    function saveLayeredLevels() { localStorage.setItem('layeredLevels', JSON.stringify(layeredLevels)); }
+    function setLayeredLevel(group, id, level) {
+        const m = layeredLevels[group] || (layeredLevels[group] = {});
+        m[id] = level;
+        saveLayeredLevels();
+    }
+    function resetLayeredLevels(group) {
+        delete layeredLevels[group];
+        saveLayeredLevels();
+        loadInteractiveMap();
+    }
+
+    // Piano di ogni nodo: BFS dalle radici (firewall, poi router, altrimenti il
+    // nodo con più adiacenze). Chi resta irraggiungibile ricade sul tipo di
+    // apparato. Gli override dell'utente vincono su tutto.
+    function computeLayeredLevels(nodesData, linksData, group) {
+        const adj = new Map();
+        nodesData.forEach(n => adj.set(n.id, []));
+        linksData.forEach(l => {
+            if (adj.has(l.source) && adj.has(l.target)) {
+                adj.get(l.source).push(l.target);
+                adj.get(l.target).push(l.source);
+            }
+        });
+        let roots = [];
+        for (const t of ROOT_TYPES) {
+            roots = nodesData.filter(n => n.device_type === t).map(n => n.id);
+            if (roots.length) break;
+        }
+        if (!roots.length && nodesData.length) {
+            const best = nodesData.slice().sort((a, b) => adj.get(b.id).length - adj.get(a.id).length)[0];
+            roots = [best.id];
+        }
+        const depth = new Map();
+        let frontier = roots;
+        let d = 0;
+        while (frontier.length) {
+            const next = [];
+            frontier.forEach(id => {
+                if (depth.has(id)) return;
+                depth.set(id, d);
+                adj.get(id).forEach(nb => { if (!depth.has(nb)) next.push(nb); });
+            });
+            frontier = next;
+            d++;
+        }
+        const overrides = layeredLevels[group] || {};
+        const levels = {};
+        nodesData.forEach(n => {
+            levels[n.id] = overrides[n.id] !== undefined
+                ? overrides[n.id]
+                : (depth.has(n.id) ? depth.get(n.id) : tierLevel(n.device_type));
+        });
+        return levels;
+    }
     function deviceTypeMeta(t) { return DEVICE_TYPE_META[t] || DEVICE_TYPE_META.other; }
     function deviceTypeLabel(t) { const m = deviceTypeMeta(t); return currentLang === 'en' ? m.en : m.it; }
 
@@ -516,10 +596,28 @@
         }
     });
 
+    // Nessuna Sede scelta: la mappa resta vuota. Disegnare d'ufficio TUTTE le
+    // sedi mescolava reti di tenant diversi appena si apriva la tab, oltre a
+    // interrogare il backend per dati che nessuno aveva chiesto.
+    function showMapPlaceholder() {
+        if (networkInstance) { networkInstance.destroy(); networkInstance = null; }
+        cachedTopologyNodes = [];
+        cachedTopologyLinks = [];
+        closeTopologyNodeDrawer();
+        const container = document.getElementById("networkGraphContainer");
+        if (!container) return;
+        container.style.background = '';
+        const txt = currentLang === 'en'
+            ? 'Choose a tenant to draw its map.'
+            : 'Scegli un Tenant per disegnarne la mappa.';
+        container.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); font-size:14px; gap:8px;"><i class="fa-solid fa-diagram-project"></i>${escapeHtml(txt)}</div>`;
+    }
+
     async function loadInteractiveMap() {
         const groupSelect = document.getElementById('interactiveGroupSelect');
-        const selectedGroup = groupSelect ? groupSelect.value : 'all';
-        
+        const selectedGroup = groupSelect ? groupSelect.value : '';
+        if (!selectedGroup) { showMapPlaceholder(); return; }
+
         // Sync fresh live reachability from ping monitor when available
         try {
             const pmRes = await apiFetch('/api/ping-monitor/status');
@@ -542,6 +640,7 @@
         if (!res || !res.ok) return;
         const data = await res.json();
         cachedTopologyNodes = data.nodes || [];
+        cachedTopologyLinks = data.links || [];
 
         // Stato degli interruttori di filtro/evidenziazione della mappa
         const highlightPC      = document.getElementById("togglePortChannel")?.checked || false;
@@ -584,6 +683,12 @@
         }
         minimalOverlayData = null;
 
+        // Piani della vista "A livelli" (ignorati dalle altre viste).
+        layeredAssigned = getMapView() === 'layered'
+            ? computeLayeredLevels(filteredNodesData, filteredLinksData, selectedGroup)
+            : {};
+        layeredGroup = selectedGroup;
+
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
             const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
@@ -609,6 +714,7 @@
                 // nodo vis.js deve crescere di conseguenza, altrimenti l'immagine più
                 // alta viene ridotta in scala e il testo torna illeggibile.
                 size: 38 + 8 * bandCount,
+                level: layeredAssigned[n.id] || 0,
                 labelVal: n.label,
                 deviceTypeVal: n.device_type,
                 isBoundaryVal: n.is_boundary || false,
@@ -726,13 +832,14 @@
             };
         });
 
-        renderNetwork(nodes, edges, classicMapOptions());
+        renderNetwork(nodes, edges, getMapView() === 'layered' ? layeredMapOptions() : classicMapOptions());
     }
 
     // ===== Selettore vista mappa (Classica / Nuova minimalista) =====
     // La scelta è ricordata in localStorage. Entrambe le viste condividono dati,
     // filtri, interruttori, selettore Sede/Categorie e istanza Vis.js.
-    let mapViewMode = localStorage.getItem('mapViewMode') === 'minimal' ? 'minimal' : 'classic';
+    const MAP_VIEWS = ['classic', 'minimal', 'layered'];
+    let mapViewMode = MAP_VIEWS.includes(localStorage.getItem('mapViewMode')) ? localStorage.getItem('mapViewMode') : 'classic';
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
         const base = 'width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
@@ -740,8 +847,12 @@
         const off = base + 'background:var(--surface-2); color:var(--text-muted); border-color:var(--border);';
         const c = document.getElementById('mapViewClassicBtn');
         const m = document.getElementById('mapViewMinimalBtn');
+        const l = document.getElementById('mapViewLayeredBtn');
         if (c) c.setAttribute('style', mapViewMode === 'classic' ? on : off);
         if (m) m.setAttribute('style', mapViewMode === 'minimal' ? on : off);
+        if (l) l.setAttribute('style', mapViewMode === 'layered' ? on : off);
+        const lrw = document.getElementById('layeredResetWrap');
+        if (lrw) lrw.style.display = mapViewMode === 'layered' ? 'inline-flex' : 'none';
         // L'interruttore "Info al passaggio" riguarda solo la nuova mappa.
         const hw = document.getElementById('minimalHoverWrap');
         if (hw) hw.style.display = mapViewMode === 'minimal' ? 'inline-flex' : 'none';
@@ -755,7 +866,7 @@
         if (cm) { cm.style.display = mapViewMode === 'minimal' ? 'inline-block' : 'none'; if (mapViewMode === 'minimal') renderMinimalCustomCatPanel(); }
     }
     function setMapView(mode) {
-        mapViewMode = (mode === 'minimal') ? 'minimal' : 'classic';
+        mapViewMode = MAP_VIEWS.includes(mode) ? mode : 'classic';
         localStorage.setItem('mapViewMode', mapViewMode);
         updateMapViewButtons();
         loadInteractiveMap();
@@ -785,6 +896,20 @@
             interaction: { hover: true, hoverConnectedEdges: true, selectConnectedEdges: true, tooltipDelay: 150, dragNodes: true, dragView: true, zoomView: true, multiselect: true },
             nodes: { shadow: { enabled: true, color: "rgba(0,0,0,0.5)", size: 10, x: 0, y: 4 } },
             edges: { smooth: { type: 'cubicBezier', forceDirection: 'none', roundness: 0.5 }, shadow: { enabled: true, color: "rgba(0,0,0,0.4)", size: 4, x: 0, y: 2 } }
+        };
+    }
+
+    // Vista "A livelli": stesse card, stessi dati, stessi tooltip/drawer della
+    // classica; cambia solo la disposizione, gerarchica dall'alto (firewall) al
+    // basso (access point/terminali) usando il layout nativo di vis.js.
+    function layeredMapOptions() {
+        const c = classicMapOptions();
+        return {
+            layout: { improvedLayout: false, randomSeed: 42, hierarchical: { enabled: true, direction: 'UD', sortMethod: 'directed', levelSeparation: LAYERED_SEPARATION, nodeSpacing: 260, treeSpacing: 260, shakeTowards: 'roots' } },
+            physics: { enabled: false },
+            interaction: c.interaction,
+            nodes: c.nodes,
+            edges: Object.assign({}, c.edges, { smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.45 } })
         };
     }
 
@@ -832,6 +957,26 @@
                 if (p.nodes && p.nodes.length) resolveNodeOverlaps(p.nodes);
             });
         }
+        // Vista "A livelli": trascinare un nodo IN VERTICALE lo sposta di piano e
+        // la scelta resta (per Sede). Uno spostamento solo orizzontale non
+        // ridisegna nulla, così il nodo resta dove l'utente lo lascia.
+        if (getMapView() === 'layered') {
+            let dragFrom = null;
+            networkInstance.on('dragStart', p => {
+                dragFrom = (p.nodes && p.nodes.length)
+                    ? networkInstance.getPositions(p.nodes)[p.nodes[0]] : null;
+            });
+            networkInstance.on('dragEnd', p => {
+                if (!dragFrom || !p.nodes || !p.nodes.length) return;
+                const id = p.nodes[0];
+                const to = networkInstance.getPositions([id])[id];
+                const steps = Math.round((to.y - dragFrom.y) / LAYERED_SEPARATION);
+                dragFrom = null;
+                if (!steps) return;
+                setLayeredLevel(layeredGroup, id, Math.max(0, (layeredAssigned[id] || 0) + steps));
+                loadInteractiveMap();
+            });
+        }
         // Eventi di selezione nodo: apre il pannello ispettore laterale (Node Drawer)
         networkInstance.on('selectNode', p => {
             if (p.nodes && p.nodes.length) openTopologyNodeDrawer(p.nodes[0]);
@@ -873,9 +1018,16 @@
         const hostname = dev.Hostname || topNode.label || nodeId;
         const ip = dev.IP || (nodeId.includes('.') ? nodeId : (topNode.id && topNode.id.includes('.') ? topNode.id : '—'));
         const vendor = (dev.Vendor || topNode.vendor || 'Discovered').toUpperCase();
-        const model = dev.Model || dev.Type || topNode.device_type || '—';
+        // Il modello vero viene dal backup/CDP; "device_type" è una categoria,
+        // non un modello: mostrarlo come tale ("CISCO ap") diceva meno di nulla.
+        const model = dev.Model || topNode.model || topNode.platform || dev.Type || '—';
         const status = (dev.Status || topNode.status || 'online').toLowerCase();
         const uptime = dev.Uptime || (dev.LastBackup ? backupAgeLabel(dev.LastBackup) : '—');
+        const site = dev.Group || topNode.group || '—';
+        const serial = dev.Serial || topNode.serial || '—';
+        const software = (globalVersions[nodeId] || {}).version || topNode.version || '—';
+        const mgmtVlan = topNode.mgmt_vlan ? `VLAN ${topNode.mgmt_vlan}` : '';
+        const vtp = [topNode.vtp_domain, topNode.vtp_mode].filter(Boolean).join(' · ');
 
         const hostEl = document.getElementById('drawerNodeHostname');
         if (hostEl) hostEl.textContent = hostname;
@@ -890,6 +1042,68 @@
         }
         const uptimeEl = document.getElementById('drawerNodeUptime');
         if (uptimeEl) uptimeEl.textContent = uptime;
+        const siteEl = document.getElementById('drawerNodeSite');
+        if (siteEl) siteEl.textContent = `${site} · ${deviceTypeLabel(topNode.device_type)}`;
+        const serialEl = document.getElementById('drawerNodeSerial');
+        if (serialEl) serialEl.textContent = serial;
+        const swEl = document.getElementById('drawerNodeSoftware');
+        if (swEl) swEl.textContent = software;
+        const vlanMgmtEl = document.getElementById('drawerNodeMgmtVlan');
+        if (vlanMgmtEl) vlanMgmtEl.textContent = [mgmtVlan, vtp].filter(Boolean).join(' · ') || '—';
+
+        // Stack: presente solo sugli switch impilati, quindi la riga compare solo
+        // quando c'è davvero qualcosa da dire (ruolo e seriale per membro).
+        const stackEl = document.getElementById('drawerStackInfo');
+        if (stackEl) {
+            const stack = nodeStack(topNode);
+            if (stack) {
+                const members = (stack.members || [])
+                    .map(m => `${escapeHtml(m.role || '?')} · ${escapeHtml(m.serial || '—')}`)
+                    .join('<br>');
+                stackEl.style.display = '';
+                stackEl.innerHTML = `<div class="drawer-list-item">
+                    <strong style="color:${STACK_COLOR}; font-size:12.5px;">${escapeHtml(stackLine(stack, '', model))}</strong>
+                    ${stack.health === 'degraded' ? ' <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning);"></i>' : ''}
+                    ${members ? `<div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">${members}</div>` : ''}
+                </div>`;
+            } else {
+                stackEl.style.display = 'none';
+                stackEl.innerHTML = '';
+            }
+        }
+
+        // Vicini: chi c'è dall'altra parte del cavo e su quali porte. Fino a ora
+        // il pannello non lo diceva, ed è la domanda per cui si apre una mappa.
+        const neighEl = document.getElementById('drawerNeighborList');
+        if (neighEl) {
+            const rows = (cachedTopologyLinks || [])
+                .filter(l => l.source === nodeId || l.target === nodeId)
+                .map(l => {
+                    const mine = l.source === nodeId;
+                    const otherId = mine ? l.target : l.source;
+                    const other = (cachedTopologyNodes || []).find(n => n.id === otherId);
+                    const localPorts = (mine ? l.local_ports : l.remote_ports) || [mine ? l.local_port : l.remote_port];
+                    const remotePorts = (mine ? l.remote_ports : l.local_ports) || [mine ? l.remote_port : l.local_port];
+                    const fmt = p => (p || []).map(shortIface).filter(Boolean).join('+') || '—';
+                    const pcTag = l.is_portchannel
+                        ? `<span class="badge badge-warning" style="font-size:10px;">${escapeHtml(l.pc_name ? shortIface(l.pc_name) : 'LAG')}</span>`
+                        : (l.kind === 'redundancy_heartbeat'
+                            ? '<span class="badge badge-warning" style="font-size:10px;">HA</span>' : '');
+                    return `<div class="drawer-list-item">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
+                            <strong style="font-size:12.5px;">${escapeHtml((other && other.label) || otherId)}</strong>
+                            ${pcTag}
+                        </div>
+                        <div style="font-size:11.5px; color:var(--text-muted);">
+                            <code style="font-size:11px;">${escapeHtml(fmt(localPorts))}</code> ⇄ <code style="font-size:11px;">${escapeHtml(fmt(remotePorts))}</code>
+                            ${other && other.id !== other.label ? ` · <span>${escapeHtml(other.id)}</span>` : ''}
+                        </div>
+                    </div>`;
+                });
+            neighEl.innerHTML = rows.length
+                ? rows.join('')
+                : `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(currentLang === 'en' ? 'No adjacency discovered for this node.' : 'Nessuna adiacenza rilevata su questo nodo.')}</div>`;
+        }
 
         // Port-Channels
         const pcListEl = document.getElementById('drawerPortChannelList');
@@ -2983,6 +3197,11 @@
     document.getElementById('toggleVtpDomain')?.addEventListener('change', loadInteractiveMap);
     document.getElementById('mapViewClassicBtn')?.addEventListener('click', () => setMapView('classic'));
     document.getElementById('mapViewMinimalBtn')?.addEventListener('click', () => setMapView('minimal'));
+    document.getElementById('mapViewLayeredBtn')?.addEventListener('click', () => setMapView('layered'));
+    document.getElementById('layeredResetBtn')?.addEventListener('click', () => {
+        const g = document.getElementById('interactiveGroupSelect');
+        resetLayeredLevels(g ? g.value : 'all');
+    });
     document.getElementById('toggleMinimalHover')?.addEventListener('change', (e) => {
         localStorage.setItem('minimalHoverInfo', e.target.checked ? '1' : '0');
         loadInteractiveMap();
