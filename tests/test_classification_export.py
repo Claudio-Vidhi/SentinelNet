@@ -106,6 +106,17 @@ class ExportRows(unittest.TestCase):
         row = next(r for r in rows if r[0] == "ap-lobby")
         self.assertEqual(["switch-01", "Gi1/0/1"], row[1:])
 
+    def test_the_neighbour_category_filter_keeps_only_matching_links(self):
+        rows = _rows(_export("?columns=hostname,neighbour_device"
+                             "&neighbour_categories=ap"))[1:]
+        by_host = {}
+        for r in rows:
+            by_host.setdefault(r[0], []).append(r[1])
+        # switch-01 links to an AP and to switch-02: only the AP link survives.
+        self.assertEqual(["ap-lobby"], by_host["switch-01"])
+        # A device whose every neighbour is filtered out keeps its row, empty.
+        self.assertEqual([""], by_host["switch-02"])
+
     def test_a_device_with_no_links_still_exports_one_row(self):
         """Selecting a column must never shrink the device list."""
         rows = [r for r in _rows(_export("?columns=hostname,neighbour_device"))[1:]
