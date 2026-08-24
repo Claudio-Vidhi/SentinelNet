@@ -221,7 +221,7 @@
         }
 
         let html = `
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-radius:0; border:1px solid ${vBorder}; background:${vBg}; margin-bottom:18px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-radius:var(--radius); border:1px solid ${vBorder}; background:${vBg}; margin-bottom:18px;">
             <div style="display:flex; align-items:center; gap:14px;">
                 <i class="fa-solid ${vIcon} fa-2x" style="color:${vColor};"></i>
                 <div>
@@ -242,9 +242,7 @@
             </div>`;
         }
 
-        // The reasons behind an UNKNOWN verdict. Without this the operator saw
-        // a bare "UNKNOWN" with nothing naming the object that could not be
-        // resolved, which is the whole content of the answer.
+        // The reasons behind an UNKNOWN verdict.
         const unresolved = trace.unresolved || [];
         if (unresolved.length) {
             html += `
@@ -259,18 +257,59 @@
         }
 
         const steps = trace.steps || [];
-        if (steps.length === 0) {
-            html += `<div style="color:var(--text-muted); font-size:13px;">Nessuno step attraversato nel pipeline decisionale.</div>`;
-        } else {
+        const routeStep = steps.find(s => s.kind === 'route');
+        const matchStep = steps.find(s => s.action === 'permit' || s.action === 'deny' || s.kind === 'policy' || s.kind === 'acl_in' || s.kind === 'acl_out') || steps[0];
+        const ingressLabel = (document.getElementById('ptIngressIntf')?.value || (routeStep && routeStep.ingress) || 'Auto / Ingress').trim();
+        const nextHopLabel = (routeStep && (routeStep.next_hop || routeStep.prefix)) ? `${routeStep.next_hop || 'Connected'} via ${routeStep.egress || 'auto'}` : 'Direct / Connected';
+        const matchLabel = matchStep ? `${matchStep.acl ? `[${matchStep.acl}] ` : ''}${matchStep.rule_id ? `Rule ${matchStep.rule_id}: ` : ''}${matchStep.raw_text || matchStep.action || 'Default Match'}` : 'Default Decision';
+        const egressLabel = (routeStep && routeStep.egress) || 'Target Egress Intf';
+
+        // Step-by-step visual flowchart decision pipeline
+        html += `
+        <div class="pt-pipeline">
+            <div class="pt-pipeline-node">
+                <div class="pt-pipeline-node-title"><i class="fa-solid fa-arrow-right-to-bracket" style="color:var(--primary);"></i> Ingress Interface</div>
+                <div class="pt-pipeline-node-body"><code>${escapeHtml(ingressLabel)}</code></div>
+            </div>
+            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+            <div class="pt-pipeline-node">
+                <div class="pt-pipeline-node-title"><i class="fa-solid fa-route" style="color:var(--accent);"></i> Route Lookup</div>
+                <div class="pt-pipeline-node-body"><code>${escapeHtml(nextHopLabel)}</code></div>
+            </div>
+            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+            <div class="pt-pipeline-node">
+                <div class="pt-pipeline-node-title"><i class="fa-solid fa-shield-halved" style="color:var(--warning);"></i> Policy &amp; ACL Match</div>
+                <div class="pt-pipeline-node-body" style="font-size:12px;">${escapeHtml(matchLabel)}</div>
+            </div>
+            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+            <div class="pt-pipeline-node" style="border-color:${vBorder}; background:${vBg};">
+                <div class="pt-pipeline-node-title" style="color:${vColor};"><i class="fa-solid ${vIcon}"></i> Verdict Decision</div>
+                <div class="pt-pipeline-node-body" style="font-weight:700; font-size:15px; color:${vColor}; letter-spacing:0.05em;">${escapeHtml(verdict)}</div>
+            </div>
+
+            ${trace.nat_applied ? `
+            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
+            <div class="pt-pipeline-node" style="border-color:rgba(59,130,246,0.5); background:rgba(59,130,246,0.08);">
+                <div class="pt-pipeline-node-title" style="color:var(--primary);"><i class="fa-solid fa-shuffle"></i> Source NAT Applied</div>
+                <div class="pt-pipeline-node-body"><code>Translated: Source NAT</code></div>
+            </div>` : ''}
+
+            <div class="pt-pipeline-connector"><i class="fa-solid fa-arrow-down"></i></div>
+            <div class="pt-pipeline-node">
+                <div class="pt-pipeline-node-title"><i class="fa-solid fa-arrow-right-from-bracket" style="color:var(--success);"></i> Egress Interface</div>
+                <div class="pt-pipeline-node-body"><code>${escapeHtml(egressLabel)}</code></div>
+            </div>
+        </div>`;
+
+        if (steps.length > 0) {
+            html += `<h4 style="margin:20px 0 10px; font-size:14px; font-weight:700;"><i class="fa-solid fa-list-ol" style="color:var(--primary); margin-right:6px;"></i> Dettaglio Sequenza Step</h4>`;
             html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
             steps.forEach((step, idx) => {
-                let stepColor = 'var(--text)';
                 let stepBadge = step.action || '';
                 let badgeClass = 'badge';
-
-                // The step's outcome is real information, so it keeps a colour —
-                // but as a state wash with a 1px rule, the form DESIGN.md gives
-                // for a row in a state, not a slab down the edge.
                 let stepWash = 'var(--lamp-idle-wash)';
                 let stepRule = 'var(--border)';
 
@@ -296,7 +335,7 @@
                 else if (step.kind === 'skipped_policy') kindLabel = 'Policy Disabilitata (Skipped)';
 
                 html += `
-                <div style="border:1px solid var(--border); background:${stepWash}; padding:12px 16px; border-left:1px solid ${stepRule};">
+                <div style="border:1px solid var(--border); background:${stepWash}; padding:12px 16px; border-left:1px solid ${stepRule}; border-radius:var(--radius);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                         <div style="font-weight:600; font-size:13px;">
                             <span style="color:var(--text-muted); margin-right:6px;">#${idx + 1}</span>

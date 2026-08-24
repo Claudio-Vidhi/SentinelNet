@@ -873,7 +873,7 @@
       </div>
       </div>
 
-      <div id="networkGraphWrapper" style="position: relative; flex-grow: 1;">
+      <div id="networkGraphWrapper" style="position: relative; flex-grow: 1; overflow: hidden;">
         <div id="networkGraphContainer"></div>
         <div class="network-legend" id="networkLegend">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
@@ -889,6 +889,42 @@
             <div id="deviceTypeLegend" style="display:flex; flex-wrap:wrap; gap:10px 14px; width:100%; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);"></div>
           </div>
         </div>
+
+        <!-- Sliding Node Inspector Drawer -->
+        <aside id="topologyNodeDrawer" class="topology-node-drawer" aria-label="Device Inspector">
+          <div class="drawer-header">
+            <div class="drawer-title-wrap">
+              <span class="drawer-eyebrow" data-i18n="lblSelectedNode">Dispositivo Selezionato</span>
+              <h3 id="drawerNodeHostname" class="drawer-title">—</h3>
+            </div>
+            <button type="button" id="btnCloseNodeDrawer" class="drawer-close-btn" aria-label="Chiudi"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="drawer-body">
+            <!-- Device Specs -->
+            <div class="drawer-section">
+              <div class="drawer-kpi-grid">
+                <div class="drawer-kpi"><span class="kpi-label">IP Management</span><strong id="drawerNodeIp">—</strong></div>
+                <div class="drawer-kpi"><span class="kpi-label">Vendor / Model</span><strong id="drawerNodeModel">—</strong></div>
+                <div class="drawer-kpi"><span class="kpi-label">Stato</span><span id="drawerNodeStatus" class="badge">—</span></div>
+                <div class="drawer-kpi"><span class="kpi-label">Uptime / Backup</span><strong id="drawerNodeUptime">—</strong></div>
+              </div>
+            </div>
+            <!-- Port-Channel & Links -->
+            <div class="drawer-section">
+              <h4 class="drawer-section-title"><i class="fa-solid fa-network-wired" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="lblDrawerPortChannels">Port-Channel &amp; Interfacce</span></h4>
+              <div id="drawerPortChannelList" class="drawer-list">—</div>
+            </div>
+            <!-- Active VLANs -->
+            <div class="drawer-section">
+              <h4 class="drawer-section-title"><i class="fa-solid fa-layer-group" style="color:var(--accent); margin-right:6px;"></i><span data-i18n="lblDrawerVlans">VLAN Attive</span></h4>
+              <div id="drawerVlanTags" class="drawer-tags">—</div>
+            </div>
+          </div>
+          <div class="drawer-footer">
+            <button type="button" id="drawerBtnAnalyzer" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-file-code"></i> Config Analyzer</button>
+            <button type="button" id="drawerBtnTriage" class="btn btn-primary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-stethoscope"></i> Triage SSH</button>
+          </div>
+        </aside>
       </div>
     </div>
 
