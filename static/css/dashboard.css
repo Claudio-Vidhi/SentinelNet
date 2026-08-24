@@ -43,7 +43,7 @@
 }
 
 /* ---------------------------------------------------------------
-   1. TOKEN — resa chiara: laminato inciso
+   1. TOKEN — Precision Telemetry (Light Mode)
    --------------------------------------------------------------- */
 :root,
 :root[data-theme="light"] {
@@ -59,227 +59,218 @@
   --font-size-2xl: 24px;
   --font-size-3xl: 26px;
   --font-size-4xl: 36px;
-  --card-border-radius: 0px;
+  --card-border-radius: 8px;
 
-  /* Superfici: laminato, targa, incasso */
-  --bg: #d4d7cf;                 /* laminato del quadro */
-  --surface: #e6e7e1;            /* targa: bay, card, pannello */
-  --surface-2: #dcded7;          /* incasso: input, corpo tabella */
-  --surface-3: #cbcec5;          /* rilievo: hover, intestazione tabella */
-  --border: #a8ada4;             /* solco di incisione */
-  --border-strong: #8b9188;      /* solco marcato: separazione di bay */
+  /* Superfici: Modern Slate */
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #e2e8f0;
+  --border: #cbd5e1;
+  --border-strong: #94a3b8;
 
-  /* Incisione: la profondità è un solco, non un'ombra */
-  --engrave-hi: rgba(255, 255, 255, 0.85);
-  --engrave-lo: rgba(30, 36, 32, 0.28);
+  /* Profondità e luci */
+  --engrave-hi: rgba(255, 255, 255, 0.9);
+  --engrave-lo: rgba(15, 23, 42, 0.08);
 
   /* Inchiostro */
-  --text: #16191c;
-  --text-muted: #4a5058;
-  --text-soft: #525860;
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-soft: #64748b;
 
-  /* Comando primario: blocco d'inchiostro, il contrasto più alto del quadro */
-  --cta: #16191c;
-  --cta-text: #e6e7e1;
-  --cta-press: #2b3036;
+  /* Comando primario: Precision Indigo/Blue */
+  --cta: #2563eb;
+  --cta-text: #ffffff;
+  --cta-press: #1d4ed8;
 
   /* Lampade — colore = stato */
-  --lamp-up: #2f8f4e;
-  --lamp-warn: #b8791a;
-  --lamp-fault: #c0392b;
-  --lamp-idle: #7d848b;
-  --lamp-up-ink: #1e6b3c;
-  --lamp-warn-ink: #8a5a0f;
-  --lamp-fault-ink: #9d2b20;
-  --lamp-idle-ink: #5c636a;
-  --lamp-up-wash: rgba(47, 143, 78, 0.14);
-  --lamp-warn-wash: rgba(184, 121, 26, 0.15);
-  --lamp-fault-wash: rgba(192, 57, 43, 0.13);
-  --lamp-idle-wash: rgba(125, 132, 139, 0.14);
+  --lamp-up: #10b981;
+  --lamp-warn: #f59e0b;
+  --lamp-fault: #ef4444;
+  --lamp-idle: #64748b;
+  --lamp-up-ink: #059669;
+  --lamp-warn-ink: #d97706;
+  --lamp-fault-ink: #dc2626;
+  --lamp-idle-ink: #475569;
+  --lamp-up-wash: rgba(16, 185, 129, 0.12);
+  --lamp-warn-wash: rgba(245, 158, 11, 0.12);
+  --lamp-fault-wash: rgba(239, 68, 68, 0.12);
+  --lamp-idle-wash: rgba(100, 116, 139, 0.12);
 
-  /* Inchiostro sopra una lampada PIENA (non sopra la sua velatura): l'unico
-     caso in cui il testo sta su un colore di stato invece che su una targa.
-     Si inverte con la resa, altrimenti resta bianco su rosso chiaro. */
   --on-lamp: #ffffff;
 
-  /* Conduttori dello schema unifilare (codice fasi) */
-  --cond-a: #1f6fb2;
-  --cond-b: #b8791a;
-  --cond-c: #2e8b57;
-  --cond-d: #6b4423;
-  --cond-trace: #7b3fb5;         /* percorso in tracciamento: sopra tutto */
+  /* Conduttori / Fasi */
+  --cond-a: #2563eb;
+  --cond-b: #f59e0b;
+  --cond-c: #10b981;
+  --cond-d: #8b5cf6;
+  --cond-trace: #ec4899;
 
-  /* Scala CVSS: rampa separata, solo triage vulnerabilità */
-  --sev-critical: #a3231a;
-  --sev-high: #985806;
-  --sev-medium: #6f6410;
-  --sev-low: #2c6b3f;
-  --sev-critical-wash: rgba(163, 35, 26, 0.12);
-  --sev-high-wash: rgba(154, 90, 8, 0.13);
-  --sev-medium-wash: rgba(111, 100, 16, 0.14);
-  --sev-low-wash: rgba(44, 107, 63, 0.12);
+  /* Scala CVSS */
+  --sev-critical: #ef4444;
+  --sev-high: #f97316;
+  --sev-medium: #eab308;
+  --sev-low: #10b981;
+  --sev-critical-wash: rgba(239, 68, 68, 0.12);
+  --sev-high-wash: rgba(249, 115, 22, 0.12);
+  --sev-medium-wash: rgba(234, 179, 8, 0.12);
+  --sev-low-wash: rgba(16, 185, 129, 0.12);
 
-  --focus: #16191c;
-  --shadow-float: 0 18px 40px -12px rgba(22, 25, 28, 0.42);
-  --shadow-lift: 0 8px 22px -10px rgba(22, 25, 28, 0.34);
-  --scrim: rgba(22, 25, 28, 0.6);
+  --focus: #2563eb;
+  --shadow-card: 0 4px 16px -2px rgba(15, 23, 42, 0.08);
+  --shadow-float: 0 16px 36px -8px rgba(15, 23, 42, 0.14);
+  --shadow-lift: 0 4px 12px -2px rgba(15, 23, 42, 0.06);
+  --scrim: rgba(15, 23, 42, 0.45);
 }
 
 /* ---------------------------------------------------------------
-   2. TOKEN — resa scura: schermo SCADA
-   Ardesia, non nero: un quadro di controllo non è mai spento.
+   2. TOKEN — Precision Telemetry (Dark Mode: Deep Slate Navy)
    --------------------------------------------------------------- */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #12171b;
-  --surface: #1e242a;
-  --surface-2: #181e23;
-  --surface-3: #2a333a;
-  --border: #333d44;
-  --border-strong: #46535c;
+  --bg: #0b0f17;
+  --surface: #121a24;
+  --surface-2: #16202d;
+  --surface-3: #1d2a3b;
+  --border: #233245;
+  --border-strong: #324760;
 
-  --engrave-hi: rgba(255, 255, 255, 0.07);
-  --engrave-lo: rgba(0, 0, 0, 0.45);
+  --engrave-hi: rgba(255, 255, 255, 0.05);
+  --engrave-lo: rgba(0, 0, 0, 0.5);
 
-  --text: #e8ebe6;
-  --text-muted: #a2acb2;
-  --text-soft: #909ba2;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-soft: #64748b;
 
-  --cta: #e8ebe6;
-  --cta-text: #12171b;
-  --cta-press: #ffffff;
+  --cta: #3b82f6;
+  --cta-text: #ffffff;
+  --cta-press: #2563eb;
 
-  --lamp-up: #56c07a;
-  --lamp-warn: #e0a03c;
-  --lamp-fault: #ef6b5e;
-  --lamp-idle: #6c7a83;
-  --lamp-up-ink: #6ed394;
-  --lamp-warn-ink: #e8b055;
-  --lamp-fault-ink: #ff8377;
-  --lamp-idle-ink: #93a0a8;
-  --lamp-up-wash: rgba(86, 192, 122, 0.14);
-  --lamp-warn-wash: rgba(224, 160, 60, 0.14);
-  --lamp-fault-wash: rgba(239, 107, 94, 0.14);
-  --lamp-idle-wash: rgba(108, 122, 131, 0.16);
-  --on-lamp: #12171b;
+  --lamp-up: #10b981;
+  --lamp-warn: #f59e0b;
+  --lamp-fault: #ef4444;
+  --lamp-idle: #64748b;
+  --lamp-up-ink: #34d399;
+  --lamp-warn-ink: #fbbf24;
+  --lamp-fault-ink: #f87171;
+  --lamp-idle-ink: #94a3b8;
+  --lamp-up-wash: rgba(16, 185, 129, 0.14);
+  --lamp-warn-wash: rgba(245, 158, 11, 0.14);
+  --lamp-fault-wash: rgba(239, 68, 68, 0.14);
+  --lamp-idle-wash: rgba(100, 116, 139, 0.16);
+  --on-lamp: #0b0f17;
 
-  --cond-a: #5aa9e6;
-  --cond-b: #e0a03c;
-  --cond-c: #63c88a;
-  --cond-d: #b98a5e;
-  --cond-trace: #b98ae8;
+  --cond-a: #3b82f6;
+  --cond-b: #f59e0b;
+  --cond-c: #10b981;
+  --cond-d: #a855f7;
+  --cond-trace: #f43f5e;
 
-  --sev-critical: #ff7a6e;
-  --sev-high: #f0a94e;
-  --sev-medium: #ddd06a;
-  --sev-low: #79cf99;
-  --sev-critical-wash: rgba(255, 122, 110, 0.13);
-  --sev-high-wash: rgba(240, 169, 78, 0.13);
-  --sev-medium-wash: rgba(221, 208, 106, 0.12);
-  --sev-low-wash: rgba(121, 207, 153, 0.12);
+  --sev-critical: #f87171;
+  --sev-high: #fb923c;
+  --sev-medium: #facc15;
+  --sev-low: #34d399;
+  --sev-critical-wash: rgba(248, 113, 113, 0.14);
+  --sev-high-wash: rgba(251, 146, 60, 0.14);
+  --sev-medium-wash: rgba(250, 204, 21, 0.13);
+  --sev-low-wash: rgba(52, 211, 153, 0.13);
 
-  --focus: #e8ebe6;
-  --shadow-float: 0 20px 44px -12px rgba(0, 0, 0, 0.72);
-  --shadow-lift: 0 10px 26px -12px rgba(0, 0, 0, 0.6);
-  --scrim: rgba(0, 0, 0, 0.6);
+  --focus: #3b82f6;
+  --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+  --shadow-float: 0 20px 44px -12px rgba(0, 0, 0, 0.75);
+  --shadow-lift: 0 8px 24px -6px rgba(0, 0, 0, 0.6);
+  --scrim: rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #12171b;
-    --surface: #1e242a;
-    --surface-2: #181e23;
-    --surface-3: #2a333a;
-    --border: #333d44;
-    --border-strong: #46535c;
-    --engrave-hi: rgba(255, 255, 255, 0.07);
-    --engrave-lo: rgba(0, 0, 0, 0.45);
-    --text: #e8ebe6;
-    --text-muted: #a2acb2;
-    --text-soft: #909ba2;
-    --cta: #e8ebe6;
-    --cta-text: #12171b;
-    --cta-press: #ffffff;
-    --lamp-up: #56c07a;
-    --lamp-warn: #e0a03c;
-    --lamp-fault: #ef6b5e;
-    --lamp-idle: #6c7a83;
-    --lamp-up-ink: #6ed394;
-    --lamp-warn-ink: #e8b055;
-    --lamp-fault-ink: #ff8377;
-    --lamp-idle-ink: #93a0a8;
-    --lamp-up-wash: rgba(86, 192, 122, 0.14);
-    --lamp-warn-wash: rgba(224, 160, 60, 0.14);
-    --lamp-fault-wash: rgba(239, 107, 94, 0.14);
-    --lamp-idle-wash: rgba(108, 122, 131, 0.16);
-    --on-lamp: #12171b;
-    --cond-a: #5aa9e6;
-    --cond-b: #e0a03c;
-    --cond-c: #63c88a;
-    --cond-d: #b98a5e;
-    --cond-trace: #b98ae8;
-    --sev-critical: #ff7a6e;
-    --sev-high: #f0a94e;
-    --sev-medium: #ddd06a;
-    --sev-low: #79cf99;
-    --sev-critical-wash: rgba(255, 122, 110, 0.13);
-    --sev-high-wash: rgba(240, 169, 78, 0.13);
-    --sev-medium-wash: rgba(221, 208, 106, 0.12);
-    --sev-low-wash: rgba(121, 207, 153, 0.12);
-    --focus: #e8ebe6;
-    --shadow-float: 0 20px 44px -12px rgba(0, 0, 0, 0.72);
-    --shadow-lift: 0 10px 26px -12px rgba(0, 0, 0, 0.6);
-    --scrim: rgba(0, 0, 0, 0.6);
+    --bg: #0b0f17;
+    --surface: #121a24;
+    --surface-2: #16202d;
+    --surface-3: #1d2a3b;
+    --border: #233245;
+    --border-strong: #324760;
+    --engrave-hi: rgba(255, 255, 255, 0.05);
+    --engrave-lo: rgba(0, 0, 0, 0.5);
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --text-soft: #64748b;
+    --cta: #3b82f6;
+    --cta-text: #ffffff;
+    --cta-press: #2563eb;
+    --lamp-up: #10b981;
+    --lamp-warn: #f59e0b;
+    --lamp-fault: #ef4444;
+    --lamp-idle: #64748b;
+    --lamp-up-ink: #34d399;
+    --lamp-warn-ink: #fbbf24;
+    --lamp-fault-ink: #f87171;
+    --lamp-idle-ink: #94a3b8;
+    --lamp-up-wash: rgba(16, 185, 129, 0.14);
+    --lamp-warn-wash: rgba(245, 158, 11, 0.14);
+    --lamp-fault-wash: rgba(239, 68, 68, 0.14);
+    --lamp-idle-wash: rgba(100, 116, 139, 0.16);
+    --on-lamp: #0b0f17;
+    --cond-a: #3b82f6;
+    --cond-b: #f59e0b;
+    --cond-c: #10b981;
+    --cond-d: #a855f7;
+    --cond-trace: #f43f5e;
+    --sev-critical: #f87171;
+    --sev-high: #fb923c;
+    --sev-medium: #facc15;
+    --sev-low: #34d399;
+    --sev-critical-wash: rgba(248, 113, 113, 0.14);
+    --sev-high-wash: rgba(251, 146, 60, 0.14);
+    --sev-medium-wash: rgba(250, 204, 21, 0.13);
+    --sev-low-wash: rgba(52, 211, 153, 0.13);
+    --focus: #3b82f6;
+    --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+    --shadow-float: 0 20px 44px -12px rgba(0, 0, 0, 0.75);
+    --shadow-lift: 0 8px 24px -6px rgba(0, 0, 0, 0.6);
+    --scrim: rgba(0, 0, 0, 0.7);
   }
 }
 
 /* ---------------------------------------------------------------
-   3. TOKEN — invarianti di forma
-   Il laminato non ha angoli morbidi: l'unica curva del sistema è la
-   lente della lampada.
+   3. TOKEN — Forme e Radii Moderni
    --------------------------------------------------------------- */
 :root {
   --font-legend: 'Saira Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
   --font-data: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --font-prose: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 
-  /* Alias di compatibilità: il markup esistente cita ancora questi nomi.
-     --surface-1 e --info erano citati da stili inline ma non sono mai stati
-     definiti: quei pannelli restavano trasparenti. Su fondo chiaro si vede. */
   --surface-1: var(--surface);
   --info: var(--lamp-idle-ink);
   --font-main: var(--font-prose);
   --font-display: var(--font-legend);
   --font-code: var(--font-data);
-  --primary: var(--text);
-  --primary-glow: transparent;
+  --primary: var(--cta);
+  --primary-glow: rgba(59, 130, 246, 0.25);
   --ring: var(--focus);
   --success: var(--lamp-up);
   --danger: var(--lamp-fault);
   --warning: var(--lamp-warn);
   --discovered: var(--lamp-idle);
   --ghost: transparent;
-  --lime: var(--text);
+  --lime: var(--lamp-up);
   --violet-mid: var(--surface-3);
   --violet-deep: var(--border);
-  --radius: 0;
-  --radius-lg: 0;
-  --radius-xxl: 0;
-  --success-glow: transparent;
-  --danger-glow: transparent;
 
-  --edge: 2px;                   /* raggio dei comandi: smusso, non curva */
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --edge: 6px;
   --seam: 1px;
-  --transition: 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  --transition: 150ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Solco inciso: chiaro sopra, scuro sotto. Su fondo scuro si inverte da sé
-   perché i due token cambiano insieme al tema. */
 .panel, .hero-card, .kpi, .vuln-card, .modal, .login-card,
 aside, main, .table-container, .table-wrap, .template-box {
-  box-shadow: inset 0 1px 0 var(--engrave-hi), inset 0 -1px 0 var(--engrave-lo);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
 }
 
 
@@ -553,9 +544,7 @@ main { padding: 18px 20px 24px; gap: 0; }
 }
 
 .nav-item .nav-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.nav-item .nav-left i { /* width:16px non è decorativo: è la cassetta fissa che
-     allinea le icone nella rail collassata; con width:auto si disallinea. */
-  width:16px; text-align: center; color: var(--text-soft); font-size: 13px; }
+.nav-item .nav-left i { width:16px; text-align: center; color: var(--text-soft); font-size: 13px; }
 .nav-item.active .nav-left i { color: var(--text); }
 
 /* ---------------------------------------------------------------
@@ -567,24 +556,25 @@ main { padding: 18px 20px 24px; gap: 0; }
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 9px 14px;
+  padding: 8px 14px;
   border-radius: var(--edge);
-  border: var(--seam) solid var(--border-strong);
+  border: var(--seam) solid var(--border);
   background-color: var(--surface-3);
   color: var(--text);
   font-family: var(--font-legend);
   font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.1em;
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1.25;
   cursor: pointer;
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition: background var(--transition), color var(--transition), border-color var(--transition), transform var(--transition), box-shadow var(--transition);
 }
 .btn:hover { background: var(--surface-2); border-color: var(--text-soft); }
-.btn:active { box-shadow: inset 0 1px 3px var(--engrave-lo); }
+.btn:active { transform: translateY(1px); box-shadow: none; }
 
-/* Comando primario: blocco d'inchiostro pieno. Uno per vista. */
+/* Comando primario */
 .btn-primary {
   background: var(--cta);
   color: var(--cta-text);
@@ -592,11 +582,9 @@ main { padding: 18px 20px 24px; gap: 0; }
 }
 .btn-primary:hover { background: var(--cta-press); border-color: var(--cta-press); color: var(--cta-text); }
 
-.btn-secondary { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.btn-secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
 .btn-secondary:hover { background: var(--surface-3); border-color: var(--text-soft); }
 
-/* Manovra irreversibile: contorno finché non è deliberatamente a fuoco,
-   e distanziata dai vicini. Disciplina di quadro, non decorazione. */
 .btn-danger {
   background: transparent;
   color: var(--lamp-fault-ink);
@@ -609,7 +597,7 @@ main { padding: 18px 20px 24px; gap: 0; }
   border-color: var(--lamp-fault);
 }
 
-.btn-small, .btn-sm { padding: 5px 10px; font-size: 11px; letter-spacing: 0.08em; width: auto; }
+.btn-small, .btn-sm { padding: 5px 10px; font-size: 11px; letter-spacing: 0.08em; width: auto; border-radius: var(--radius); }
 
 .btn:disabled, .btn[disabled] {
   opacity: 0.45;
@@ -652,7 +640,7 @@ main { padding: 18px 20px 24px; gap: 0; }
 .sidebar-toggle i { transition: transform var(--transition); }
 body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
 
-/* Selettore di resa: due stati incisi, non un interruttore decorativo */
+/* Selettore di resa */
 .theme-toggle {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; flex: none; padding: 0;
@@ -679,9 +667,9 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
 
 .form-group label {
   font-family: var(--font-legend);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-soft);
 }
@@ -692,14 +680,11 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
   color: var(--text-soft); font-size: 12px; pointer-events: none;
 }
 
-/* Le esclusioni checkbox/radio non sono cosmetiche: width:100% + padding-left
-   per liberare l'icona stirerebbe ogni checkbox dentro un .form-group su tutta
-   la riga (#devTransports, #aiAllowUnredacted). Presidiate da un test. */
 .form-group input:not([type="checkbox"]):not([type="radio"]), .form-group select {
   width: 100%;
   padding: 8px 10px 8px 30px;
-  border-radius: 0;
-  border: var(--seam) solid var(--border-strong);
+  border-radius: var(--radius);
+  border: var(--seam) solid var(--border);
   background-color: var(--surface-2);
   color: var(--text);
   font-family: var(--font-data);
@@ -708,14 +693,11 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
   transition: border-color var(--transition);
 }
 
-/* Un input dentro .input-wrapper ma FUORI da un .form-group non riceveva alcuno
-   stile. Regola separata di proposito: quella sopra è presidiata dal test sui
-   checkbox e non va allargata. */
 .input-wrapper input:not([type="checkbox"]):not([type="radio"]) {
   width: 100%;
   padding: 8px 10px 8px 30px;
-  border-radius: 0;
-  border: var(--seam) solid var(--border-strong);
+  border-radius: var(--radius);
+  border: var(--seam) solid var(--border);
   background-color: var(--surface-2);
   color: var(--text);
   font-family: var(--font-data);
@@ -726,9 +708,9 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
 
 .ui-input, textarea {
   width: 100%;
-  padding: 8px 10px;
-  border-radius: 0;
-  border: var(--seam) solid var(--border-strong);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: var(--seam) solid var(--border);
   background-color: var(--surface-2);
   color: var(--text);
   font-family: var(--font-data);
@@ -739,17 +721,17 @@ body.sidebar-collapsed .sidebar-toggle i { transform: rotate(180deg); }
 
 .form-group select { cursor: pointer; font-family: var(--font-prose); }
 
-.form-group input:focus, .form-group select:focus, .ui-input:focus, textarea:focus {
-  outline: 2px solid var(--focus);
-  outline-offset: -1px;
-  border-color: var(--text);
+.form-group input:focus, .form-group select:focus, .ui-input:focus, textarea:focus,
+.input-wrapper input:focus {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
 
-input[type="checkbox"], input[type="radio"] { accent-color: var(--text); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--cta); }
 
 /* ---------------------------------------------------------------
-   10. LAMPADE — l'unico colore del sistema
-   Stato leggibile anche senza colore: la geometria della lente cambia.
+   10. LAMPADE — Indicatori di Stato
    --------------------------------------------------------------- */
 .led-container {
   display: inline-flex; align-items: center; gap: 7px;
@@ -761,7 +743,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--text); }
   width: 11px; height: 11px;
   border-radius: 50%;
   flex: none;
-  border: 1.5px solid var(--border-strong);   /* ghiera */
+  border: 1.5px solid var(--border-strong);
   background: var(--lamp-idle);
   position: relative;
 }
@@ -769,53 +751,52 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--text); }
 .led-online, .led-success {
   background: var(--lamp-up);
   border-color: var(--lamp-up-ink);
-  box-shadow: 0 0 0 1px var(--lamp-up-wash), 0 1px 4px -1px var(--lamp-up);
+  box-shadow: 0 0 0 2px var(--lamp-up-wash), 0 0 6px var(--lamp-up);
 }
 .led-auth_failed, .led-warning {
   background: var(--lamp-warn);
   border-color: var(--lamp-warn-ink);
-  box-shadow: 0 0 0 1px var(--lamp-warn-wash), 0 1px 4px -1px var(--lamp-warn);
+  box-shadow: 0 0 0 2px var(--lamp-warn-wash), 0 0 6px var(--lamp-warn);
 }
 .led-offline, .led-danger {
   background: var(--lamp-fault);
   border-color: var(--lamp-fault-ink);
-  box-shadow: 0 0 0 1px var(--lamp-fault-wash), 0 1px 4px -1px var(--lamp-fault);
+  box-shadow: 0 0 0 2px var(--lamp-fault-wash), 0 0 6px var(--lamp-fault);
 }
-/* Rilevato ma non confermato: lente vuota. Si legge in scala di grigi. */
 .led-discovered {
   background: transparent;
   border-color: var(--lamp-idle);
   border-style: dashed;
 }
 
-/* Pastiglia di stato: lente + legenda incisa su lavaggio del proprio stato */
+/* Pastiglia di stato */
 .status {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 8px;
-  border-radius: 0;
+  padding: 3px 10px;
+  border-radius: 9999px;
   border: var(--seam) solid transparent;
   font-family: var(--font-legend);
-  font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
   white-space: nowrap;
 }
 .status.ok   { background: var(--lamp-up-wash);    color: var(--lamp-up-ink);    border-color: var(--lamp-up); }
 .status.warn { background: var(--lamp-warn-wash);  color: var(--lamp-warn-ink);  border-color: var(--lamp-warn); }
 .status.bad  { background: var(--lamp-fault-wash); color: var(--lamp-fault-ink); border-color: var(--lamp-fault); }
-/* Not measurable (e.g. a jump-site device: no ICMP through the bastion) — distinct from "bad", not a confirmed down. */
 .status.idle { background: var(--lamp-idle-wash);  color: var(--lamp-idle-ink);  border-color: var(--lamp-idle); }
 .status .led { margin-right: 2px; }
 
 /* ---------------------------------------------------------------
-   11. BAY — pannelli
+   11. BAY — PANNELLI & CARDS
    --------------------------------------------------------------- */
 .panel, .hero-card, .kpi, .vuln-card {
   background-color: var(--surface);
-  border: var(--seam) solid var(--border-strong);
-  border-radius: 0;
+  border: var(--seam) solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
-.panel { padding: 16px 18px 18px; margin-bottom: 14px; }
-.hero-card { padding: 18px 20px 20px; }
-.vuln-card { padding: 14px 16px; margin-bottom: 12px; }
+.panel { padding: 18px 20px; margin-bottom: 16px; }
+.hero-card { padding: 20px 22px; }
+.vuln-card { padding: 16px 18px; margin-bottom: 12px; }
 
 /* --- DROPDOWN ELEVATION & STACKING --- */
 details[open] {
@@ -838,12 +819,14 @@ details[open] > div[id*="Menu"],
   z-index: 10000 !important;
 }
 
-/* Intestazione di bay: targa incisa a filo del bordo superiore */
+/* Intestazione di bay */
 .panel > h3:first-child {
-  margin: -16px -18px 14px;
-  padding: 8px 18px;
+  margin: -18px -20px 16px;
+  padding: 10px 20px;
   background-color: var(--surface-3);
   border-bottom: var(--seam) solid var(--border);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
 }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr); gap: 14px; margin-bottom: 14px; }
@@ -853,20 +836,21 @@ details[open] > div[id*="Menu"],
 
 .split-footer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
 
-/* Strumenti: la misura, non la card. Numerale in mono, legenda incisa sopra. */
+/* Strumenti e KPI cards */
 .kpi {
-  padding: 12px 14px 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
+  border-radius: var(--radius-lg);
 }
 .kpi h4 {
   margin: 0;
   font-family: var(--font-legend);
-  font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -875,8 +859,8 @@ details[open] > div[id*="Menu"],
 .kpi strong {
   display: block;
   font-family: var(--font-data);
-  font-weight: 500;
-  font-size: clamp(17px, 1.8vw + 8px, 30px);
+  font-weight: 600;
+  font-size: clamp(18px, 1.8vw + 8px, 32px);
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -885,61 +869,12 @@ details[open] > div[id*="Menu"],
   word-break: break-word;
   max-width: 100%;
 }
-.kpi-clickable { cursor: pointer; transition: background var(--transition), border-color var(--transition); }
-.kpi-clickable:hover { background: var(--surface-3); border-color: var(--text-soft); }
+.kpi-clickable { cursor: pointer; transition: background var(--transition), border-color var(--transition), transform var(--transition); }
+.kpi-clickable:hover { background: var(--surface-3); border-color: var(--cta); transform: translateY(-2px); }
 .kpi-clickable:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-/* Top Path in the Live Flows one-line cartiglio. Row, not column: this was a
-   card layout (column + width:100%) and inside .oneline-foot it made its own
-   item three lines tall, so the strip inherited that height and the other
-   three labels stayed pinned to the top edge. */
-.kpi-top-path {
-  /* inline-flex, non flex: dentro lo <span> dell'etichetta un contenitore di
-     blocco manda il valore a capo da solo. */
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0 8px;
-  min-width: 0;
-}
-.kpi-path-line {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  line-height: 1.25;
-  min-width: 0;
-}
-.kpi-path-ip {
-  font-family: var(--font-data);
-  font-size: 15px;
-  /* Un indirizzo spezzato a meta' non e' piu' un indirizzo: se non entra,
-     va a capo la riga intera (il title= porta il valore completo). */
-  white-space: nowrap;
-}
-.kpi-path-arrow {
-  font-size: 11px;
-  color: var(--primary);
-  flex-shrink: 0;
-}
-.kpi-path-sub {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.kpi-path-pct {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  font-family: var(--font-data);
-}
-
-/* WLC and sub-tab KPI cards */
 .kpi-card {
-  padding: 12px 14px 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -948,13 +883,20 @@ details[open] > div[id*="Menu"],
   box-sizing: border-box;
   background: var(--surface-2);
   border: var(--seam) solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  transition: transform var(--transition), border-color var(--transition);
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--cta);
 }
 .kpi-label {
   margin: 0;
   font-family: var(--font-legend);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-soft);
   overflow: hidden;
@@ -964,8 +906,8 @@ details[open] > div[id*="Menu"],
 .kpi-value {
   display: block;
   font-family: var(--font-data);
-  font-weight: 500;
-  font-size: clamp(15px, 1.5vw + 8px, 25px);
+  font-weight: 600;
+  font-size: clamp(16px, 1.5vw + 8px, 26px);
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -974,38 +916,59 @@ details[open] > div[id*="Menu"],
   word-break: break-word;
 }
 
+/* Category Grid & Cards */
+#categoryCountCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.category-card {
+  position: relative;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-lift);
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+.category-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--cta);
+  box-shadow: var(--shadow-card);
+}
+
 /* ---------------------------------------------------------------
-   12. SCHEDULE — tabelle
+   12. TABELLE MODERNE
    --------------------------------------------------------------- */
 .table-container, .table-wrap {
   width: 100%;
-  overflow: auto;
-  border: var(--seam) solid var(--border-strong);
-  border-radius: 0;
-  background-color: var(--surface-2);
+  overflow-x: auto;
+  border: var(--seam) solid var(--border);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface);
+  box-shadow: var(--shadow-lift);
 }
 .table-wrap { margin-top: 12px; }
 
-table { width: 100%; border-collapse: collapse; background: var(--surface-2); text-align: left; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); text-align: left; }
 
 th {
   font-family: var(--font-legend);
   font-weight: 600;
-  font-size: 10px;
-  letter-spacing: 0.16em;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
   background-color: var(--surface-3);
-  padding: 9px 14px;
-  border-bottom: var(--seam) solid var(--border-strong);
+  padding: 10px 14px;
+  border-bottom: var(--seam) solid var(--border);
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
+  backdrop-filter: blur(8px);
 }
 
-/* L'indicatore di ordinamento e' disegnato dal CSS: vive negli attributi
-   del th, quindi sopravvive alla riscrittura di innerHTML fatta da
-   applyLanguage(). Il margine sinistro evita spazi nel content. */
 th[data-sortable="1"]::after {
   content: "⇅";
   margin-left: 4px;
@@ -1037,25 +1000,25 @@ td {
   color: var(--text);
 }
 
-tr:last-child td { border-bottom: none; }
+tbody tr { transition: background-color var(--transition); }
+tbody tr:nth-child(even) { background-color: rgba(255, 255, 255, 0.015); }
 tbody tr:hover td { background: var(--surface-3); }
 
-/* Riga con modifiche non salvate: lavaggio ambra + marca incisa da 1px.
-   La costa colorata spessa e' bandita, e a 1px resta comunque un bordo. */
 tr.row-dirty td { background: var(--lamp-warn-wash); }
-tr.row-dirty td:first-child { border-left: 1px solid var(--lamp-warn); }
+tr.row-dirty td:first-child { border-left: 2px solid var(--lamp-warn); }
 
 .actions-cell { display: flex; gap: 5px; align-items: center; }
 
 /* ---------------------------------------------------------------
-   13. ETICHETTE INCISE — badge, chip, pill
+   13. BADGE, CHIP & PILL
    --------------------------------------------------------------- */
 .badge, .chip, .count-badge, .preview-badge, .role-pill, .ca-chip {
-  display: inline-block;
-  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
   font-family: var(--font-legend);
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
   vertical-align: middle;
@@ -1065,16 +1028,16 @@ tr.row-dirty td:first-child { border-left: 1px solid var(--lamp-warn); }
   background-color: var(--surface-3);
   color: var(--text-muted);
   border: var(--seam) solid var(--border-strong);
-  padding: 2px 7px;
+  padding: 2px 8px;
   font-size: 10px;
 }
 
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  background: transparent;
+  background: var(--surface-2);
   color: var(--text-muted);
-  border: var(--seam) solid var(--border-strong);
-  padding: 3px 8px;
+  border: var(--seam) solid var(--border);
+  padding: 3px 10px;
   font-size: 10px;
 }
 
@@ -1086,22 +1049,22 @@ tr.row-dirty td:first-child { border-left: 1px solid var(--lamp-warn); }
   padding: 6px 12px;
   background-color: var(--surface-2);
   color: var(--text-muted);
-  border: var(--seam) solid var(--border-strong);
-  border-radius: var(--edge);
+  border: var(--seam) solid var(--border);
+  border-radius: var(--radius);
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 .chip-choice:hover { color: var(--text); border-color: var(--text-soft); }
 .chip-choice[aria-pressed="true"] {
   background-color: var(--surface-3);
   color: var(--text);
-  border-color: var(--text);
-  box-shadow: inset 0 1px 3px var(--engrave-lo);
+  border-color: var(--cta);
+  box-shadow: 0 0 0 1px var(--cta);
 }
 .chip-choice:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
 .count-badge {
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 1px 7px;
   background-color: var(--surface-3);
   color: var(--text-muted);
   border: var(--seam) solid var(--border);

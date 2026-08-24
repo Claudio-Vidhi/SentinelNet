@@ -2053,11 +2053,11 @@
                 const delBtn = (!c.builtin && canWrite)
                     ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" data-action="delete-category" data-k="${escapeHtml(k)}"></i>` : '';
                 const subChips = c.subcategories.length
-                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
-                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px;">
+                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface-3); border:1px solid var(--border); border-radius:9999px; padding:1px 8px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger); margin-left:3px;"></i>`:''}</span>`).join('')}</div>` : '';
+                return `<div class="category-card">
                     ${delBtn}
-                    <div style="font-size:25px; font-weight:900; color:${color};">${n}</div>
-                    <div style="font-size:12px; font-weight:700; color:var(--text); margin-top:2px;">${escapeHtml(c.label)}</div>
+                    <div style="font-size:24px; font-weight:800; color:${color}; font-family:var(--font-data); line-height:1.1;">${n}</div>
+                    <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-top:4px;">${escapeHtml(c.label)}</div>
                     ${subChips}
                 </div>`;
             }).join("");
