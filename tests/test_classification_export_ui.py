@@ -30,9 +30,17 @@ class ClassificationExportUi(unittest.TestCase):
     def test_both_languages_carry_every_new_key(self):
         js = _read("static/js/i18n.js")
         for key in ("titleClassificationExport", "descClassificationExport",
-                    "btnExportClassification", "lblClsCategory"):
+                    "btnExportClassification", "lblClsCategory",
+                    "lblClsNeighbourSource", "lblExportPreview", "btnPresetDefault",
+                    "btnPresetHardware", "btnPresetApNeighbours"):
             self.assertEqual(2, len(re.findall(r"\b%s\s*:" % key, js)),
                              f"{key} must appear in both the it and en blocks")
+
+    def test_preview_elements_exist_in_template(self):
+        html = _read("templates/dashboard.html")
+        self.assertIn('id="clsExportPreviewContainer"', html)
+        self.assertIn('id="clsFilterNeighbourSourceCategories"', html)
+        self.assertIn('id="deviceExportPreviewContainer"', html)
 
 
 if __name__ == "__main__":

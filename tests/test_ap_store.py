@@ -81,6 +81,23 @@ class ApNameMatching(unittest.TestCase):
         once = ap_store.normalize_ap_name("AP-Lobby.example.local")
         self.assertEqual(once, ap_store.normalize_ap_name(once))
 
+    def test_lookup_by_ip(self):
+        from services import ap_store
+        ap_store.record_aps("192.0.2.10", "ACME",
+                            [{"name": "ap-lobby", "ip": "192.0.2.55", "serial": "FCW0000AAAA"}])
+        entry = ap_store.lookup("ap-unknown-name", ip="192.0.2.55")
+        self.assertIsNotNone(entry)
+        self.assertEqual("FCW0000AAAA", entry["serial"])
+
+    def test_lookup_with_prefix_variation(self):
+        from services import ap_store
+        ap_store.record_aps("192.0.2.10", "ACME",
+                            [{"name": "ap04-lab", "serial": "FCW0000LAB1"}])
+        # CDP reports BLDG-AP04-LAB
+        entry = ap_store.lookup("BLDG-AP04-LAB")
+        self.assertIsNotNone(entry)
+        self.assertEqual("FCW0000LAB1", entry["serial"])
+
 
 if __name__ == "__main__":
     unittest.main()

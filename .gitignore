@@ -24,6 +24,8 @@ sites.json
 identities.json
 tenant_snmp.json
 vendors.json
+ap_inventory.json
+config_baselines.json
 
 # MAC address tracking history (local SQLite DB + WAL/SHM)
 mac_history.db
@@ -118,3 +120,4 @@ cont.txt
 # Frontend type-check tooling (nessun bundle: solo tsc)
 node_modules/
 data/config_baselines.json
+data/ap_inventory.json

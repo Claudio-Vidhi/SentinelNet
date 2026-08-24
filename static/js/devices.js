@@ -1511,6 +1511,88 @@
         document.getElementById('exportMemberHint').style.display = hit ? 'block' : 'none';
     }
 
+    let devExportPreviewTimer = null;
+
+    function renderExportPreviewTable(containerId, badgeId, statusId, data) {
+        const container = document.getElementById(containerId);
+        const badge = document.getElementById(badgeId);
+        const status = document.getElementById(statusId);
+        const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+
+        if (badge) {
+            badge.textContent = `${data.total_rows || 0} ${L.lblExportRowsCount || 'righe'}`;
+        }
+        if (status) {
+            status.textContent = (data.total_rows > (data.rows || []).length)
+                ? `(${(L.lblExportShowingFirst || 'Prime {n} righe').replace('{n}', (data.rows || []).length)})`
+                : '';
+        }
+        if (!container) return;
+        if (!data.rows || !data.rows.length) {
+            container.innerHTML = `<div style="color:var(--text-muted); padding:10px; font-size:12px;">${escapeHtml(L.lblExportNoData || 'Nessun record corrisponde ai filtri')}</div>`;
+            return;
+        }
+        container.innerHTML = `
+            <table style="width:100%; border-collapse:collapse; white-space:nowrap; font-size:11px;">
+              <thead>
+                <tr style="position:sticky; top:0; background:var(--surface-3); border-bottom:1px solid var(--border); z-index:1;">
+                  ${data.headers.map(h => `<th style="padding:4px 8px; text-align:left; font-weight:600; color:var(--text-bright); border-right:1px solid var(--border-subtle, rgba(255,255,255,0.05));">${escapeHtml(h)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${data.rows.map((row, idx) => `
+                  <tr style="border-bottom:1px solid var(--border-subtle, rgba(255,255,255,0.05)); background:${idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)'};">
+                    ${row.map(cell => `<td style="padding:3px 8px; color:var(--text); border-right:1px solid var(--border-subtle, rgba(255,255,255,0.05));">${escapeHtml(cell === null || cell === undefined ? '' : String(cell))}</td>`).join('')}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>`;
+    }
+
+    async function updateDeviceExportPreview() {
+        if (devExportPreviewTimer) clearTimeout(devExportPreviewTimer);
+        devExportPreviewTimer = setTimeout(async () => {
+            const cols = checkedValues('exportColumnList');
+            const container = document.getElementById('deviceExportPreviewContainer');
+            const badge = document.getElementById('deviceExportPreviewBadge');
+            const status = document.getElementById('deviceExportPreviewStatus');
+            const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+
+            if (!cols.length) {
+                if (badge) badge.textContent = `0 ${L.lblExportRowsCount || 'righe'}`;
+                if (status) status.textContent = '';
+                if (container) {
+                    container.innerHTML = `<div style="color:var(--warning); padding:10px; font-size:12px;">${escapeHtml(L.alertExportNoColumns || 'Seleziona almeno una colonna')}</div>`;
+                }
+                return;
+            }
+            if (status) status.textContent = L.lblExportLoading || 'Caricamento...';
+            const qs = new URLSearchParams({
+                groups: checkedValues('exportFilterGroups').join(','),
+                sites: checkedValues('exportFilterSites').join(','),
+                vendors: checkedValues('exportFilterVendors').join(','),
+                redundancy: checkedValues('exportFilterRedundancy').join(','),
+                columns: cols.join(','),
+                limit: '15',
+            });
+            const res = await apiFetch('/api/export/devices/preview?' + qs.toString());
+            if (!res || !res.ok) {
+                if (status) status.textContent = '';
+                return;
+            }
+            const data = await res.json();
+            renderExportPreviewTable('deviceExportPreviewContainer', 'deviceExportPreviewBadge', 'deviceExportPreviewStatus', data);
+        }, 150);
+    }
+
+    function applyDeviceColumnPreset(presetKeys) {
+        const want = new Set(presetKeys);
+        const boxes = Array.from(document.querySelectorAll('#exportColumnList input'));
+        boxes.forEach(b => { b.checked = want.has(b.value); });
+        updateMemberHint();
+        updateDeviceExportPreview();
+    }
+
     async function openDeviceExportModal() {
         if (!exportColumns.length) {
             const res = await apiFetch("/api/export/devices/columns");
@@ -1542,6 +1624,7 @@
             prefs.columns);
         updateMemberHint();
         document.getElementById('deviceExportModal').style.display = 'flex';
+        updateDeviceExportPreview();
     }
 
     async function exportDeviceCsv() {
@@ -2048,12 +2131,31 @@
     });
     document.getElementById('btnExportDevices')?.addEventListener('click', openDeviceExportModal);
     document.getElementById('btnRunDeviceExport')?.addEventListener('click', exportDeviceCsv);
-    document.getElementById('exportColumnList')?.addEventListener('change', updateMemberHint);
+    document.getElementById('exportColumnList')?.addEventListener('change', () => {
+        updateMemberHint();
+        updateDeviceExportPreview();
+    });
+    ['exportFilterGroups', 'exportFilterSites', 'exportFilterVendors', 'exportFilterRedundancy'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', updateDeviceExportPreview);
+    });
     document.getElementById('btnExportColsToggle')?.addEventListener('click', () => {
         const boxes = Array.from(document.querySelectorAll('#exportColumnList input'));
         const turnOn = boxes.some(b => !b.checked);
         boxes.forEach(b => { b.checked = turnOn; });
         updateMemberHint();
+        updateDeviceExportPreview();
+    });
+    document.getElementById('btnExportPresetDevDefault')?.addEventListener('click', () => {
+        applyDeviceColumnPreset(['hostname', 'ip', 'vendor', 'group', 'version', 'status']);
+    });
+    document.getElementById('btnExportPresetDevAll')?.addEventListener('click', () => {
+        applyDeviceColumnPreset(exportColumns.map(c => c.key));
+    });
+    document.getElementById('btnExportPresetDevHw')?.addEventListener('click', () => {
+        applyDeviceColumnPreset(['hostname', 'ip', 'vendor', 'model', 'serial', 'version', 'member_index', 'member_role', 'member_serial', 'member_model']);
+    });
+    document.getElementById('btnExportPresetDevNet')?.addEventListener('click', () => {
+        applyDeviceColumnPreset(['hostname', 'ip', 'group', 'site', 'ssh_port', 'transports', 'status', 'redundancy_type', 'redundancy_health']);
     });
     document.getElementById('deviceExportModal')?.addEventListener('click', (e) => {
         if (e.target.id === 'deviceExportModal' || e.target.closest('#btnCloseDeviceExport')) {

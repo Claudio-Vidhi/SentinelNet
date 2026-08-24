@@ -1100,6 +1100,101 @@ def extract_model_from_backup(content: str) -> str | None:
     return None
 
 
+def extract_serial_from_backup(content: str) -> str | None:
+    """Extracts chassis serial number from switch/device backup content."""
+    if not content:
+        return None
+    # 1. SHOW INVENTORY block (first chassis PID / SN)
+    inventory = _backup_section(content, 'SHOW INVENTORY')
+    if inventory is not None:
+        m = re.search(r'\bSN\s*:\s*(\S+)', inventory, re.IGNORECASE)
+        if m:
+            sn = m.group(1).split(',')[0].strip().strip('"')
+            if sn and sn.upper() not in ("N/A", "NONE", ""):
+                return sn
+
+    # Filter out CDP/LLDP neighbor sections to prevent grabbing neighbor serials
+    neighbor_sections = (
+        'SHOW CDP NEIGHBORS',
+        'SHOW CDP NEIGHBORS DETAIL',
+        'SHOW LLDP NEIGHBORS',
+        'SHOW LLDP NEIGHBORS DETAIL',
+    )
+    filtered_lines = []
+    skipping = False
+    for line in content.splitlines():
+        header = re.match(r'^---\s*(.*?)\s*---\s*$', line)
+        if header:
+            section = header.group(1).strip().strip('-').strip()
+            if section:
+                skipping = section.upper() in neighbor_sections
+                if not skipping:
+                    filtered_lines.append(line)
+                continue
+        if not skipping:
+            filtered_lines.append(line)
+    filtered = '\n'.join(filtered_lines)
+
+    for pat in (
+        r'System [Ss]erial [Nn]umber\s*:\s*(\S+)',
+        r'Processor board ID\s+(\S+)',
+        r'Serial-Number\s*:\s*(\S+)',
+        r'Serial Number\s*:\s*(\S+)',
+        r'^\s*serial\s*:\s*(\S+)',
+    ):
+        m = re.search(pat, filtered, re.IGNORECASE | re.MULTILINE)
+        if m:
+            sn = m.group(1).split(',')[0].strip().strip('"')
+            if sn and sn.upper() not in ("N/A", "NONE", ""):
+                return sn
+    return None
+
+
+def extract_ap_serials_from_config(content: str) -> list:
+    """Extract AP inventory {name, serial, model} from WLC config/backup text."""
+    if not content:
+        return []
+    aps = []
+    # 1. AireOS / IOS-XE inventory blocks or show ap inventory all
+    current_name = None
+    current_model = None
+    for line in content.splitlines():
+        m_name = re.match(r'(?:NAME:\s*"([^"]+)"|AP Name\s*:\s*(\S+))', line, re.IGNORECASE)
+        if m_name:
+            current_name = (m_name.group(1) or m_name.group(2)).strip()
+            current_model = None
+            continue
+        m_pid = re.search(r'PID:\s*(\S+)', line, re.IGNORECASE)
+        if m_pid:
+            current_model = m_pid.group(1).split(',')[0].strip()
+        m_sn = re.search(r'\bSN\s*:\s*(\S+)', line, re.IGNORECASE)
+        if m_sn and current_name:
+            sn = m_sn.group(1).strip().strip(',').strip('"')
+            if sn and sn.upper() not in ("N/A", "NONE", ""):
+                aps.append({
+                    "name": current_name,
+                    "serial": sn,
+                    "model": current_model or "",
+                })
+            current_name = None
+            current_model = None
+
+    # 2. FortiGate WTP configuration: config wireless-controller wtp -> edit "SERIAL"
+    wtp_blocks = re.findall(r'config\s+wireless-controller\s+wtp(.*?)(?:end\b|config\s+)', content, re.DOTALL | re.IGNORECASE)
+    for block in wtp_blocks:
+        for m_edit in re.finditer(r'edit\s+"?([A-Z0-9_\-]+)"?', block, re.IGNORECASE):
+            wtp_id = m_edit.group(1).strip()
+            if re.match(r'^(?:FP|FAP|FS|FGT)[A-Z0-9]{8,}$', wtp_id, re.IGNORECASE):
+                name_match = re.search(rf'edit\s+"?{re.escape(wtp_id)}"?.*?(?:set\s+name\s+"?([^"\n\r]+)"?|next\b)', block, re.DOTALL | re.IGNORECASE)
+                ap_name = (name_match.group(1).strip() if (name_match and name_match.group(1)) else wtp_id)
+                aps.append({
+                    "name": ap_name,
+                    "serial": wtp_id,
+                    "model": "FortiAP",
+                })
+    return aps
+
+
 def _backup_section(content: str, tag: str) -> str | None:
     """Returns the text block appended to the backup under '--- <TAG> ---'."""
     sec = re.search(rf'--- {tag} ---\s*\n(.*?)(?=\n--- |\n===|\Z)',
@@ -1997,7 +2092,8 @@ def _generate_network_map(group_filter=None) -> dict:
         # Parsed once and kept: the links loop further down walks the same
         # backups again, and parsing each file twice was half the cost of
         # building the map.
-        _info["neighbors"] = parse_cdp_lldp_neighbors(_info["content"])
+        _content = _info["content"]
+        _info["neighbors"] = parse_cdp_lldp_neighbors(_content)
         for _n in _info["neighbors"]:
             _nid  = _n["neighbor_id"]
             _base = _nid.split('.')[0] if '.' in _nid else _nid
@@ -2009,6 +2105,16 @@ def _generate_network_map(group_filter=None) -> dict:
             for _key in (_nid.lower(), _base.lower(), _n.get("neighbor_ip")):
                 if _key:
                     neighbor_info.setdefault(_key, _entry)
+
+        # Harvest AP serials from any WLC / switch backup configurations
+        try:
+            from services import ap_store
+            _aps = extract_ap_serials_from_config(_content)
+            if _aps:
+                _group = ip_to_device.get(_ip, {}).get('Group', 'Generale')
+                ap_store.record_aps(_ip, _group, _aps)
+        except Exception:
+            pass
 
     # Nodi inventariati
     versions = get_detected_versions()
@@ -2042,6 +2148,8 @@ def _generate_network_map(group_filter=None) -> dict:
             "vtp_mode":    pinfo.get("vtp_mode"),
             "vtp_domain":  pinfo.get("vtp_domain"),
             "model":       extract_model_from_backup(pinfo.get("content", "")) if pinfo else None,
+            "serial":      (versions.get(ip, {}).get("serial")
+                           or (extract_serial_from_backup(pinfo.get("content", "")) if pinfo else None)),
             # Management IP and VLAN shown inside the box on the minimalist
             # map. The IP is the inventory one (node id); the VLAN is
             # deduced from the SVI with that IP (None if on a routed interface).

@@ -88,8 +88,41 @@ def _export(query="", user=None, devices=None, versions=None, badges=None):
         app_server.app.dependency_overrides.pop(get_current_user, None)
 
 
+def _preview(query="", user=None, devices=None, versions=None, badges=None):
+    from fastapi.testclient import TestClient
+    import app_server
+    from routers.deps import get_current_user
+
+    app_server.app.dependency_overrides[get_current_user] = \
+        lambda: user or {"sub": "tester", "role": "admin"}
+    try:
+        with patch("services.inventory_manager.get_all_devices",
+                   return_value=devices if devices is not None else DEVICES), \
+             patch("services.inventory_manager.get_detected_versions",
+                   return_value=versions if versions is not None else VERSIONS), \
+             patch("redundancy.service.redundancy_badges_by_ip",
+                   return_value=(badges if badges is not None else BADGES)), \
+             patch("routers.inventory.log_audit"):
+            client = TestClient(app_server.app)
+            return client.get("/api/export/devices/preview" + query,
+                              headers={"X-Requested-With": "x"})
+    finally:
+        app_server.app.dependency_overrides.pop(get_current_user, None)
+
+
 def _rows(res):
     return list(csv.reader(io.StringIO(res.text)))
+
+
+class TestDeviceExportPreview(unittest.TestCase):
+    def test_preview_returns_correct_shape(self):
+        res = _preview("?columns=hostname,ip&limit=2")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["headers"], ["Hostname", "IP"])
+        self.assertEqual(data["total_rows"], 3)
+        self.assertEqual(len(data["rows"]), 2)
+        self.assertEqual(data["rows"][0], ["switch-01", "192.0.2.10"])
 
 
 class TestColumnRegistry(unittest.TestCase):
