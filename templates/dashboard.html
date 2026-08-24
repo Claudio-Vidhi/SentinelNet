@@ -904,17 +904,17 @@
       </div>
 
       <div class="panel" style="margin-bottom:18px;">
-        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
-          <div style="display:flex; align-items:center; gap: 15px; flex-wrap:wrap;">
-            <select id="categoriesGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+        <div class="filterbar" style="display:flex; justify-content:space-between; align-items:center; margin-top:0; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap: 12px; flex-wrap:wrap;">
+            <select id="categoriesGroupSelect" style="padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
             </select>
-            <select id="categoriesCatFilter" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
+            <select id="categoriesCatFilter" style="padding: 7px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none;">
               <option value="all" data-i18n="optCatAll">Tutte le categorie</option>
             </select>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <button class="btn btn-primary btn-small requires-write" id="btnSaveCatEdits" disabled style="width:auto; margin:0; background:var(--cta); color:var(--cta-text); opacity:0.5;" data-i18n="btnSaveEdits">
+            <button class="btn btn-primary btn-small requires-write" id="btnSaveCatEdits" disabled style="width:auto; margin:0; opacity:0.5;" data-i18n="btnSaveEdits">
               <i class="fa-solid fa-floppy-disk"></i> Salva Modifiche
             </button>
             <button class="btn btn-secondary btn-small requires-write" id="btnDiscardCatEdits" disabled style="width:auto; margin:0; opacity:0.5;" data-i18n="btnDiscardEdits">
@@ -922,7 +922,7 @@
             </button>
             <details id="categoryColumnsMenu" style="position:relative;">
               <summary class="btn btn-secondary btn-small" style="width:auto; margin:0; list-style:none; cursor:pointer;"><i class="fa-solid fa-table-columns"></i> <span data-i18n="btnColumns">Colonne</span></summary>
-              <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:10px 14px; min-width:170px; box-shadow:var(--shadow-float);"></div>
+              <div id="categoryColumnsList" style="position:absolute; right:0; top:110%; z-index:50; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; min-width:170px; box-shadow:var(--shadow-float);"></div>
             </details>
             <button class="btn btn-secondary btn-small" id="btnExportClassification" style="width:auto; margin:0;" data-i18n="btnExportCsv">
               <i class="fa-solid fa-file-csv"></i> Esporta CSV
@@ -936,13 +936,13 @@
 
       <!-- Riquadri di conteggio per categoria -->
       <div class="panel" style="margin-bottom:18px;">
-        <div id="categoryCountCards" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;"></div>
+        <div id="categoryCountCards"></div>
       </div>
 
       <!-- Creazione nuova categoria / sottocategoria (admin/operator) -->
       <div class="panel requires-write" style="margin-bottom:18px;">
-        <h4 style="font-size: 14px; margin-bottom: 10px;"><i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> <span data-i18n="titleNewCategory">Nuova Categoria / Sottocategoria</span></h4>
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items:end;">
+        <h4 style="font-size: 14px; margin-bottom: 12px;"><i class="fa-solid fa-folder-plus" style="color: var(--primary);"></i> <span data-i18n="titleNewCategory">Nuova Categoria / Sottocategoria</span></h4>
+        <div class="cat-add-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) auto; gap: 10px; align-items:end;">
           <div>
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewCatExisting">Categoria esistente (o nuova)</label>
             <input id="newCatKey" class="ui-input" list="catKeyList" type="text" placeholder="es. iot, ups, nas" data-i18n-placeholder="phNewCatKey">
@@ -956,7 +956,7 @@
             <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblNewSubcat">Sottocategoria (opzionale)</label>
             <input id="newSubcat" class="ui-input" type="text" placeholder="es. videosorveglianza" data-i18n-placeholder="phNewSubcat">
           </div>
-          <button class="btn btn-primary btn-small" id="btnCreateCategory" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnCreateCategory">
+          <button class="btn btn-primary btn-small" id="btnCreateCategory" style="width:auto; margin:0;" data-i18n="btnCreateCategory">
             <i class="fa-solid fa-plus"></i> Crea
           </button>
         </div>
