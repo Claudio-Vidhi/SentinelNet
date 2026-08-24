@@ -226,19 +226,22 @@ _CLASSIFICATION_COLUMNS = {
     "serial_seen_at":   ("Serial Seen At",   lambda n, l: n.get("serial_seen_at", "")),
     "neighbour_device": ("Neighbour Device", lambda n, l: l.get("device", "")),
     "neighbour_port":   ("Neighbour Port",   lambda n, l: l.get("port", "")),
+    "neighbour_category": ("Neighbour Category", lambda n, l: l.get("category", "")),
 }
 
 # Asking for one of these columns means asking for one row per neighbour: a
 # device with redundant uplinks has more than one, and a joined cell cannot be
 # filtered or looked up in a spreadsheet -- the same reason _MEMBER_COLUMNS
 # explodes rows in the device export.
-_NEIGHBOUR_COLUMNS = frozenset(("neighbour_device", "neighbour_port"))
+_NEIGHBOUR_COLUMNS = frozenset(("neighbour_device", "neighbour_port",
+                                "neighbour_category"))
 
 _DEFAULT_CLASSIFICATION_COLUMNS = ["hostname", "ip", "tenant", "category", "status"]
 
 
-def _neighbours_of(node_id: str, links: list, label_of: dict) -> list:
-    """Neighbours of one node, each as {device, port}.
+def _neighbours_of(node_id: str, links: list, label_of: dict,
+                   category_of: dict) -> list:
+    """Neighbours of one node, each as {device, port, category}.
 
     The port reported is the NEIGHBOUR's own port -- the one you patch -- not
     the port on the device whose row this is. A link stores local_port for its
@@ -253,7 +256,8 @@ def _neighbours_of(node_id: str, links: list, label_of: dict) -> list:
             other, port = link.get("target"), link.get("remote_port")
         else:
             continue
-        out.append({"device": label_of.get(other, other or ""), "port": port or ""})
+        out.append({"device": label_of.get(other, other or ""), "port": port or "",
+                    "category": category_of.get(other, "")})
     return out
 
 
@@ -275,6 +279,7 @@ def export_classification_csv(
     columns: str = "",
     groups: str = "",
     categories: str = "",
+    neighbour_categories: str = "",
     current_user = Depends(get_current_user),
 ):
     import csv, io
@@ -302,7 +307,10 @@ def export_classification_csv(
     versions = inventory_manager.get_detected_versions()
     ap_entries = ap_store.read_all()
     label_of = {n["id"]: (n.get("label") or n["id"]) for n in data["nodes"]}
+    category_of = {n["id"]: n.get("device_type", "") for n in data["nodes"]}
     explode = any(c in _NEIGHBOUR_COLUMNS for c in selected)
+    want_neighbour_categories = {v.strip()
+                                 for v in neighbour_categories.split(",") if v.strip()}
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -322,7 +330,13 @@ def export_classification_csv(
 
         # A device with no links still gets its row: selecting a column must
         # never make devices disappear from the export.
-        neighbours = _neighbours_of(node["id"], links, label_of) if explode else []
+        neighbours = _neighbours_of(node["id"], links, label_of, category_of) if explode else []
+        # Filtering neighbours never removes a device: a switch whose only
+        # neighbours are out of scope still gets its row, with the neighbour
+        # cells empty -- same rule as a device with no links at all.
+        if want_neighbour_categories:
+            neighbours = [x for x in neighbours
+                          if x["category"] in want_neighbour_categories]
         for link in (neighbours or [{}]):
             writer.writerow([
                 csv_cell(_CLASSIFICATION_COLUMNS[c][1](row_node, link))

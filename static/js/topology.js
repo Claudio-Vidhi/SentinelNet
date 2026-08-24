@@ -2905,6 +2905,8 @@
             .sort().map(v => ({ value: v, label: v }));
         renderCheckList('clsFilterGroups', uniq('group'), prefs.groups);
         renderCheckList('clsFilterCategories', uniq('device_type'), prefs.categories);
+        renderCheckList('clsFilterNeighbourCategories', uniq('device_type'),
+                        prefs.neighbour_categories);
         renderCheckList('clsColumnList',
             clsExportColumns.map(c => ({
                 value: c.key, label: c.header + (c.per_neighbour ? ' *' : '') })),
@@ -2916,6 +2918,7 @@
         const prefs = {
             groups: clsChecked('clsFilterGroups'),
             categories: clsChecked('clsFilterCategories'),
+            neighbour_categories: clsChecked('clsFilterNeighbourCategories'),
             columns: clsChecked('clsColumnList'),
         };
         if (!prefs.columns.length) { alert(i18n[currentLang].alertExportNoColumns); return; }
