@@ -6,6 +6,11 @@ import io
 import unittest
 from unittest import mock
 
+BADGES = {"192.0.2.1": {"type": "stack", "members": [
+    {"index": 1, "role": "master", "serial": "SW0000AAAA", "model": "EXAMPLE-48"},
+    {"index": 2, "role": "member", "serial": "SW0000BBBB", "model": "EXAMPLE-48"},
+]}}
+
 MAP = {
     "nodes": [
         {"id": "192.0.2.1", "label": "switch-01", "group": "ACME",
@@ -52,6 +57,7 @@ def _export(query="", user=None, ap_store_data=None):
              mock.patch("services.inventory_manager.get_models", return_value={}), \
              mock.patch("services.inventory_manager.get_detected_versions", return_value=VERSIONS), \
              mock.patch("services.ap_store.read_all", return_value=store), \
+             mock.patch("redundancy.service.redundancy_badges_by_ip", return_value=BADGES), \
              mock.patch("routers.catalog.log_audit"):
             client = TestClient(app_server.app)
             return client.get("/api/export/classification" + query,
@@ -116,6 +122,18 @@ class ExportRows(unittest.TestCase):
         self.assertEqual(["ap-lobby"], by_host["switch-01"])
         # A device whose every neighbour is filtered out keeps its row, empty.
         self.assertEqual([""], by_host["switch-02"])
+
+    def test_member_columns_give_one_row_per_stack_unit(self):
+        """A stack answers on one IP but carries a serial per physical unit:
+        without these columns the Serial cell of a stacked switch is empty."""
+        rows = [r for r in _rows(_export("?columns=hostname,member_serial"))[1:]
+                if r[0] == "switch-01"]
+        self.assertEqual(["SW0000AAAA", "SW0000BBBB"], [r[1] for r in rows])
+
+    def test_a_device_outside_any_stack_still_exports_one_row(self):
+        rows = [r for r in _rows(_export("?columns=hostname,member_serial"))[1:]
+                if r[0] == "switch-lonely"]
+        self.assertEqual([["switch-lonely", ""]], rows)
 
     def test_a_device_with_no_links_still_exports_one_row(self):
         """Selecting a column must never shrink the device list."""
