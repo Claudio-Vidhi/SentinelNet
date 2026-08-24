@@ -2876,6 +2876,7 @@
     // second copy here is what lets the two drift apart.
     const CLS_EXPORT_PREFS_KEY = 'sentinelnet.classificationExportPrefs';
     let clsExportColumns = [];
+    let clsExportPreviewTimer = null;
 
     function readClsPrefs() {
         try { return JSON.parse(localStorage.getItem(CLS_EXPORT_PREFS_KEY)) || {}; }
@@ -2885,6 +2886,80 @@
     function clsChecked(containerId) {
         return Array.from(document.querySelectorAll(`#${containerId} input:checked`))
             .map(el => el.value);
+    }
+
+    async function updateClsExportPreview() {
+        if (clsExportPreviewTimer) clearTimeout(clsExportPreviewTimer);
+        clsExportPreviewTimer = setTimeout(async () => {
+            const cols = clsChecked('clsColumnList');
+            const container = document.getElementById('clsExportPreviewContainer');
+            const badge = document.getElementById('clsExportPreviewBadge');
+            const status = document.getElementById('clsExportPreviewStatus');
+            const L = (typeof i18n !== 'undefined' && i18n[currentLang]) || {};
+
+            if (!cols.length) {
+                if (badge) badge.textContent = `0 ${L.lblExportRowsCount || 'righe'}`;
+                if (status) status.textContent = '';
+                if (container) {
+                    container.innerHTML = `<div style="color:var(--warning); padding:10px; font-size:12px;">${escapeHtml(L.alertExportNoColumns || 'Seleziona almeno una colonna')}</div>`;
+                }
+                return;
+            }
+            if (status) status.textContent = L.lblExportLoading || 'Caricamento...';
+            const qs = new URLSearchParams({
+                groups: clsChecked('clsFilterGroups').join(','),
+                categories: clsChecked('clsFilterCategories').join(','),
+                neighbour_source_categories: clsChecked('clsFilterNeighbourSourceCategories').join(','),
+                neighbour_categories: clsChecked('clsFilterNeighbourCategories').join(','),
+                columns: cols.join(','),
+                limit: '15',
+            });
+            if (document.getElementById('clsOnlyMatchingNeighbours')?.checked) {
+                qs.set('only_matching_neighbours', 'true');
+            }
+
+            const res = await apiFetch('/api/export/classification/preview?' + qs.toString());
+            if (!res || !res.ok) {
+                if (status) status.textContent = '';
+                return;
+            }
+            const data = await res.json();
+            if (badge) {
+                badge.textContent = `${data.total_rows || 0} ${L.lblExportRowsCount || 'righe'}`;
+            }
+            if (status) {
+                status.textContent = (data.total_rows > (data.rows || []).length)
+                    ? `(${(L.lblExportShowingFirst || 'Prime {n} righe').replace('{n}', (data.rows || []).length)})`
+                    : '';
+            }
+            if (!container) return;
+            if (!data.rows || !data.rows.length) {
+                container.innerHTML = `<div style="color:var(--text-muted); padding:10px; font-size:12px;">${escapeHtml(L.lblExportNoData || 'Nessun record corrisponde ai filtri')}</div>`;
+                return;
+            }
+            container.innerHTML = `
+                <table style="width:100%; border-collapse:collapse; white-space:nowrap; font-size:11px;">
+                  <thead>
+                    <tr style="position:sticky; top:0; background:var(--surface-3); border-bottom:1px solid var(--border); z-index:1;">
+                      ${data.headers.map(h => `<th style="padding:4px 8px; text-align:left; font-weight:600; color:var(--text-bright); border-right:1px solid var(--border-subtle, rgba(255,255,255,0.05));">${escapeHtml(h)}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.rows.map((row, idx) => `
+                      <tr style="border-bottom:1px solid var(--border-subtle, rgba(255,255,255,0.05)); background:${idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)'};">
+                        ${row.map(cell => `<td style="padding:3px 8px; color:var(--text); border-right:1px solid var(--border-subtle, rgba(255,255,255,0.05));">${escapeHtml(cell === null || cell === undefined ? '' : String(cell))}</td>`).join('')}
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>`;
+        }, 150);
+    }
+
+    function applyClsColumnPreset(presetKeys) {
+        const want = new Set(presetKeys);
+        const boxes = Array.from(document.querySelectorAll('#clsColumnList input'));
+        boxes.forEach(b => { b.checked = want.has(b.value); });
+        updateClsExportPreview();
     }
 
     async function openClassificationExportModal() {
@@ -2905,25 +2980,31 @@
             .sort().map(v => ({ value: v, label: v }));
         renderCheckList('clsFilterGroups', uniq('group'), prefs.groups);
         renderCheckList('clsFilterCategories', uniq('device_type'), prefs.categories);
+        renderCheckList('clsFilterNeighbourSourceCategories', uniq('device_type'),
+                        prefs.neighbour_source_categories);
         renderCheckList('clsFilterNeighbourCategories', uniq('device_type'),
                         prefs.neighbour_categories);
-        document.getElementById('clsOnlyMatchingNeighbours').checked =
-            !!prefs.only_matching_neighbours;
+        const matchChk = document.getElementById('clsOnlyMatchingNeighbours');
+        if (matchChk) {
+            matchChk.checked = !!prefs.only_matching_neighbours;
+        }
         renderCheckList('clsColumnList',
             clsExportColumns.map(c => ({
                 value: c.key, label: c.header + (c.explodes ? ' *' : '') })),
             prefs.columns);
         document.getElementById('classificationExportModal').style.display = 'flex';
+        updateClsExportPreview();
     }
 
     async function runClassificationExport() {
         const prefs = {
             groups: clsChecked('clsFilterGroups'),
             categories: clsChecked('clsFilterCategories'),
+            neighbour_source_categories: clsChecked('clsFilterNeighbourSourceCategories'),
             neighbour_categories: clsChecked('clsFilterNeighbourCategories'),
             columns: clsChecked('clsColumnList'),
             only_matching_neighbours:
-                document.getElementById('clsOnlyMatchingNeighbours').checked,
+                document.getElementById('clsOnlyMatchingNeighbours')?.checked,
         };
         if (!prefs.columns.length) { alert(i18n[currentLang].alertExportNoColumns); return; }
         localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify(prefs));
@@ -2952,3 +3033,26 @@
         ?.addEventListener('click', () => {
             document.getElementById('classificationExportModal').style.display = 'none';
         });
+    document.getElementById('clsColumnList')?.addEventListener('change', updateClsExportPreview);
+    ['clsFilterGroups', 'clsFilterCategories', 'clsFilterNeighbourSourceCategories', 'clsFilterNeighbourCategories'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', updateClsExportPreview);
+    });
+    document.getElementById('clsOnlyMatchingNeighbours')?.addEventListener('change', updateClsExportPreview);
+    document.getElementById('btnClsColsToggle')?.addEventListener('click', () => {
+        const boxes = Array.from(document.querySelectorAll('#clsColumnList input'));
+        const turnOn = boxes.some(b => !b.checked);
+        boxes.forEach(b => { b.checked = turnOn; });
+        updateClsExportPreview();
+    });
+    document.getElementById('btnExportPresetClsDefault')?.addEventListener('click', () => {
+        applyClsColumnPreset(['hostname', 'ip', 'tenant', 'category', 'status']);
+    });
+    document.getElementById('btnExportPresetClsAll')?.addEventListener('click', () => {
+        applyClsColumnPreset(clsExportColumns.map(c => c.key));
+    });
+    document.getElementById('btnExportPresetClsAp')?.addEventListener('click', () => {
+        applyClsColumnPreset(['hostname', 'ip', 'tenant', 'category', 'model', 'serial', 'neighbour_device', 'neighbour_port', 'neighbour_category', 'neighbour_serial']);
+    });
+    document.getElementById('btnExportPresetClsSerials')?.addEventListener('click', () => {
+        applyClsColumnPreset(['hostname', 'ip', 'tenant', 'category', 'model', 'serial', 'member_index', 'member_role', 'member_serial', 'member_model']);
+    });

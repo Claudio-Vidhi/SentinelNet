@@ -185,16 +185,14 @@ def export_devices_columns(current_user = Depends(get_current_user)):
     }
 
 
-@router.get("/api/export/devices")
-def export_devices_csv(
+def assemble_device_export_rows(
+    current_user: dict,
     groups: str = "",
     sites: str = "",
     vendors: str = "",
     redundancy: str = "",
     columns: str = "",
-    current_user = Depends(get_current_user),
 ):
-    import csv, io
     from redundancy import service as redundancy_service
 
     selected = [c.strip() for c in columns.split(",") if c.strip()] or _DEFAULT_EXPORT_COLUMNS
@@ -223,9 +221,8 @@ def export_devices_csv(
     badges = redundancy_service.redundancy_badges_by_ip()
     explode = any(c in _MEMBER_COLUMNS for c in selected)
 
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([_EXPORT_COLUMNS[c][0] for c in selected])
+    headers = [_EXPORT_COLUMNS[c][0] for c in selected]
+    all_rows = []
     for d in devices:
         scan = versions.get(d["IP"], {})
         badge = badges.get(d["IP"])
@@ -238,15 +235,42 @@ def export_devices_csv(
         # instead of the device vanishing from the export.
         rows = members if (explode and members) else [{}]
         for member in rows:
-            writer.writerow([
-                _csv_cell(_EXPORT_COLUMNS[c][1](d, scan, badge, member))
+            all_rows.append([
+                _EXPORT_COLUMNS[c][1](d, scan, badge, member)
                 for c in selected
             ])
+
+    return headers, all_rows
+
+
+@router.get("/api/export/devices")
+def export_devices_csv(
+    groups: str = "",
+    sites: str = "",
+    vendors: str = "",
+    redundancy: str = "",
+    columns: str = "",
+    current_user = Depends(get_current_user),
+):
+    import csv, io
+    headers, rows = assemble_device_export_rows(
+        current_user=current_user,
+        groups=groups,
+        sites=sites,
+        vendors=vendors,
+        redundancy=redundancy,
+        columns=columns,
+    )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for r in rows:
+        writer.writerow([_csv_cell(val) for val in r])
 
     content = output.getvalue()
     log_audit(
         f"Export CSV dispositivi richiesto dall'utente '{current_user.get('sub')}' "
-        f"(colonne: {','.join(selected)})."
+        f"(colonne: {columns or ','.join(_DEFAULT_EXPORT_COLUMNS)})."
     )
     from fastapi.responses import Response as FastResponse
     return FastResponse(
@@ -254,6 +278,32 @@ def export_devices_csv(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=sentinelnet-devices.csv"}
     )
+
+
+@router.get("/api/export/devices/preview")
+def preview_devices_export(
+    groups: str = "",
+    sites: str = "",
+    vendors: str = "",
+    redundancy: str = "",
+    columns: str = "",
+    limit: int = 15,
+    current_user = Depends(get_current_user),
+):
+    headers, rows = assemble_device_export_rows(
+        current_user=current_user,
+        groups=groups,
+        sites=sites,
+        vendors=vendors,
+        redundancy=redundancy,
+        columns=columns,
+    )
+    safe_limit = max(1, min(limit, 100))
+    return {
+        "headers": headers,
+        "rows": rows[:safe_limit],
+        "total_rows": len(rows),
+    }
 
 @router.post("/api/add-device")
 def add_device(device: DeviceSchema, current_user = Depends(require_operator)):

@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from typing import Optional
 
 from core.core_engine import resolve_driver, get_device_credentials
+from services.ap_store import normalize_ap_name
 
 
 class WlcError(Exception):
@@ -39,11 +40,9 @@ COMMANDS = {
         "aireos": "show ap summary",
         "iosxe": "show ap summary",
     },
-    # IOS-XE bulk form is not established in this repo's docs; leave it out
-    # rather than guess a spelling. COMMANDS["ap_inventory"].get(platform)
-    # returns None on IOS-XE and the serial column stays empty there.
     "ap_inventory": {
         "aireos": "show ap inventory all",
+        "iosxe": "show ap inventory all",
     },
     "client_summary": {
         "aireos": "show client summary",
@@ -134,6 +133,10 @@ def _session(device: dict, timeout: int = 30):
                 conn.send_command_timing("config paging disable")
             else:
                 conn.enable()
+                try:
+                    conn.send_command("terminal length 0")
+                except Exception:
+                    pass
         except Exception:
             pass
         yield conn, platform, sysinfo
@@ -234,12 +237,6 @@ def _table_rows(text: str, fields: dict) -> list:
             continue
         if _RULER_RE.match(line):
             continue
-        # I valori non stanno sempre sotto la loro intestazione: un modello o
-        # una location piu' larghi del titolo spostano a destra tutte le
-        # colonne seguenti, e tagliare a posizione fissa spezzava l'IP
-        # ("IP Address" prendeva la coda di Country + meta' indirizzo). Quando
-        # i campi separati da due o piu' spazi sono tanti quante le colonne,
-        # quelli sono i valori veri; altrimenti si torna al taglio a posizione.
         cells = re.split(r"\s{2,}", line.strip())
         if len(cells) != len(spans):
             cells = [line[a:b].strip() for a, b in spans]
@@ -284,21 +281,22 @@ def parse_ap_autorf(text: str) -> dict:
 
 
 def parse_ap_inventory(text: str) -> dict:
-    """{ap name: serial} from the bulk AP inventory output.
-
-    'show ap summary' prints no serial on either platform, and asking per AP
-    would be one SSH round-trip each. Entries without an SN are skipped: a
-    missing serial must read as unknown, not as an empty string.
-    """
+    """{ap name: serial} from the bulk AP inventory output."""
     out, current = {}, None
     for line in (text or "").splitlines():
-        m = re.match(r"\s*AP Name\s*:\s*(\S+)", line, re.IGNORECASE)
+        m = re.match(r"\s*(?:AP Name\s*:|NAME:\s*\"?)\s*([^,\"]+)", line, re.IGNORECASE)
         if m:
-            current = m.group(1).strip()
+            current = m.group(1).strip().strip('"')
             continue
         m = re.search(r"\bSN\s*:\s*(\S+)", line, re.IGNORECASE)
         if m and current:
-            out[current] = m.group(1).strip()
+            sn = m.group(1).split(',')[0].strip().strip('"')
+            if sn and sn.upper() not in ("N/A", "NONE", ""):
+                out[current] = sn
+                out[normalize_ap_name(current)] = sn
+                clean_name = re.sub(r"\s+Slot\s+\d+.*$", "", current, flags=re.IGNORECASE).strip()
+                out[clean_name] = sn
+                out[normalize_ap_name(clean_name)] = sn
             current = None
     return out
 
@@ -322,6 +320,7 @@ def parse_client_detail(text: str) -> dict:
     return out
 
 
+# Numero massimo di client interrogati singolarmente per non bloccare la pagina.
 # Un comando per client: oltre questa soglia il refresh del tab durerebbe piu'
 # di quanto il dato resta valido. I client in eccesso restano senza RSSI/SNR,
 # il bottone Diagnostica li copre uno per uno.
@@ -372,9 +371,29 @@ def overview(device: dict) -> dict:
             except Exception:
                 serials = {}
             for ap in aps:
-                serial = serials.get(ap.get("name", ""))
+                name = ap.get("name", "")
+                serial = (serials.get(name)
+                          or serials.get(normalize_ap_name(name))
+                          or serials.get(name.split('.')[0])
+                          or "")
                 if serial:
                     ap["serial"] = serial
+        if platform == "iosxe":
+            for ap in aps:
+                if ap.get("serial"):
+                    continue
+                name = ap.get("name", "")
+                if not name or not _AP_NAME_RE.match(name):
+                    continue
+                try:
+                    inv_out = _send(conn, f"show ap name {name} inventory", 15)
+                    m = re.search(r'\bSN\s*:\s*(\S+)', inv_out, re.IGNORECASE)
+                    if m:
+                        sn = m.group(1).split(',')[0].strip().strip('"')
+                        if sn and sn.upper() not in ("N/A", "NONE", ""):
+                            ap["serial"] = sn
+                except Exception:
+                    continue
         if platform == "aireos":
             # Canale e larghezza di canale non stanno in 'show ap summary':
             # l'auto-RF delle radio e' l'unico posto che li stampa. La 2.4 GHz

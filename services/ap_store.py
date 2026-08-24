@@ -66,8 +66,25 @@ def record_aps(wlc_ip: str, tenant: str, aps: list) -> int:
             name = normalize_ap_name(ap.get("name", ""))
             if not name or not serial:
                 continue
-            store[name] = {"serial": serial, "model": (ap.get("model") or "").strip(),
-                           "wlc_ip": wlc_ip, "tenant": tenant, "seen_at": seen_at}
+            ip = (ap.get("ip") or "").strip()
+            mac = (ap.get("mac") or "").strip()
+            entry = {
+                "serial": serial,
+                "model": (ap.get("model") or "").strip(),
+                "ip": ip,
+                "mac": mac,
+                "wlc_ip": wlc_ip,
+                "tenant": tenant,
+                "seen_at": seen_at,
+            }
+            store[name] = entry
+            if ip:
+                store[f"ip:{ip}"] = entry
+            # Also index stripped short names (e.g. "gc-ap01" -> "ap01")
+            parts = name.split("-")
+            if len(parts) > 1 and parts[-1]:
+                store.setdefault(parts[-1], entry)
+                store.setdefault("-".join(parts[1:]), entry)
             written += 1
         tmp = _path() + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -76,21 +93,56 @@ def record_aps(wlc_ip: str, tenant: str, aps: list) -> int:
     return written
 
 
-def lookup_in(store: dict, ap_name: str, tenant: Optional[str] = None) -> Optional[dict]:
-    """Resolve an AP name against an already-loaded store dict (see
+def lookup_in(store: dict, ap_name: str, tenant: Optional[str] = None, ip: Optional[str] = None) -> Optional[dict]:
+    """Resolve an AP name or IP against an already-loaded store dict (see
     read_all()), optionally scoped to a tenant.
 
-    Passing a tenant requires the stored entry's tenant to match, so an AP
-    name that collides across two tenants never hands one customer another's
-    serial. Passing None keeps the name-only match for other callers.
+    Passing a tenant requires the stored entry's tenant to match (or be
+    Generale/unscoped), so an AP name that collides across two distinct tenants
+    never hands one customer another's serial.
     """
-    entry = store.get(normalize_ap_name(ap_name))
-    if entry is None:
-        return None
-    if tenant is not None and entry.get("tenant") != tenant:
-        return None
-    return entry
+    def _allowed(ent: Optional[dict]) -> bool:
+        if ent is None:
+            return False
+        if tenant is None:
+            return True
+        ent_t = ent.get("tenant")
+        if ent_t == tenant or ent_t in ("Generale", "", None) or tenant in ("Generale", "", None):
+            return True
+        return False
+
+    # 1. Exact normalized name
+    norm = normalize_ap_name(ap_name)
+    entry = store.get(norm)
+    if _allowed(entry):
+        return entry
+
+    # 2. Match by IP if provided
+    if ip:
+        ip_entry = store.get(f"ip:{ip.strip()}")
+        if _allowed(ip_entry):
+            return ip_entry
+
+    # 3. Match without prefix or suffix (e.g. "GC-AP04-VOLTA" matching "AP04-VOLTA")
+    parts = norm.split("-")
+    if len(parts) > 1:
+        for sub in ("-".join(parts[1:]), parts[-1]):
+            entry = store.get(sub)
+            if _allowed(entry):
+                return entry
+
+    # 4. Search in store for substring / suffix matches
+    clean_norm = norm.replace("-", "").replace("_", "")
+    for k, ent in store.items():
+        if k.startswith("ip:") or k.startswith("mac:"):
+            continue
+        clean_k = k.replace("-", "").replace("_", "")
+        if clean_k and (clean_k in clean_norm or clean_norm in clean_k):
+            if _allowed(ent):
+                return ent
+
+    return None
 
 
-def lookup(ap_name: str, tenant: Optional[str] = None) -> Optional[dict]:
-    return lookup_in(read_all(), ap_name, tenant)
+def lookup(ap_name: str, tenant: Optional[str] = None, ip: Optional[str] = None) -> Optional[dict]:
+    return lookup_in(read_all(), ap_name, tenant, ip=ip)

@@ -3935,92 +3935,158 @@
     </div>
   </div>
 
-  <!-- Export CSV Inventario: filtri + scelta colonne -->
+  <!-- Export CSV Inventario: filtri + scelta colonne + anteprima -->
   <div class="modal-overlay" id="deviceExportModal">
-    <div class="modal" style="width: 860px; max-width: 96%;">
+    <div class="modal" style="width: 960px; max-width: 96%; max-height: 90vh; display: flex; flex-direction: column;">
       <div class="modal-header">
         <h3 data-i18n="titleDeviceExport"><i class="fa-solid fa-file-csv" style="color: var(--primary);"></i> Esporta inventario CSV</h3>
         <i class="fa-solid fa-xmark modal-close" id="btnCloseDeviceExport"></i>
       </div>
 
-      <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descDeviceExport">
-        Scegli quali apparati esportare e quali informazioni includere. Nessuna casella spuntata in un filtro significa «tutti».
-      </p>
+      <div style="overflow-y: auto; flex: 1; padding-right: 4px;">
+        <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descDeviceExport">
+          Scegli quali apparati esportare e quali informazioni includere. Nessuna casella spuntata in un filtro significa «tutti».
+        </p>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
-        <div>
-          <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportFilters">Filtri</label>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px;">
-            <div>
-              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thGroup">Gruppo</div>
-              <div id="exportFilterGroups" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
+          <div>
+            <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportFilters">Filtri</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px;">
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thGroup">Gruppo</div>
+                <div id="exportFilterGroups" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportSites">Sede</div>
+                <div id="exportFilterSites" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thVendor">Vendor</div>
+                <div id="exportFilterVendors" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportRedundancy">Ridondanza</div>
+                <div id="exportFilterRedundancy" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
             </div>
-            <div>
-              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportSites">Sede</div>
-              <div id="exportFilterSites" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+          </div>
+
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportColumns">Colonne</label>
+              <button class="btn btn-secondary btn-small" id="btnExportColsToggle" style="width:auto; margin:0; font-size:11px; padding:2px 6px;" data-i18n="btnExportSelectAll">Tutte / nessuna</button>
             </div>
-            <div>
-              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thVendor">Vendor</div>
-              <div id="exportFilterVendors" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+            <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
+              <button class="btn btn-secondary btn-small" id="btnExportPresetDevDefault" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetDefault">Predefinito</button>
+              <button class="btn btn-secondary btn-small" id="btnExportPresetDevAll" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetAll">Tutte</button>
+              <button class="btn btn-secondary btn-small" id="btnExportPresetDevHw" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetHardware">Hardware &amp; Seriali</button>
+              <button class="btn btn-secondary btn-small" id="btnExportPresetDevNet" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetNetwork">Rete &amp; Sede</button>
             </div>
-            <div>
-              <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportRedundancy">Ridondanza</div>
-              <div id="exportFilterRedundancy" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-            </div>
+            <div id="exportColumnList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
           </div>
         </div>
 
-        <div>
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportColumns">Colonne</label>
-            <button class="btn btn-secondary btn-small" id="btnExportColsToggle" style="width:auto; margin:0; font-size:11px; padding:3px 8px;" data-i18n="btnExportSelectAll">Tutte / nessuna</button>
+        <p id="exportMemberHint" style="display:none; color:var(--warning); font-size:12px; margin:10px 0 0;" data-i18n="hintExportMembers">
+          Hai scelto colonne per singola unità (*): gli apparati in stack o in HA occuperanno una riga per unità fisica.
+        </p>
+
+        <!-- Live Preview Panel -->
+        <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;">
+              <i class="fa-solid fa-table" style="color:var(--primary);"></i>
+              <span data-i18n="lblExportPreview">Anteprima CSV</span>
+              <span id="deviceExportPreviewBadge" style="font-size:11px; font-weight:600; background:var(--surface-3); border:1px solid var(--border); border-radius:12px; padding:1px 8px; color:var(--text-muted);">0 righe</span>
+            </div>
+            <span id="deviceExportPreviewStatus" style="font-size:11px; color:var(--text-muted);"></span>
           </div>
-          <div id="exportColumnList" style="max-height:326px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px; margin-top:6px;"></div>
+          <div id="deviceExportPreviewContainer" style="max-height:160px; overflow:auto; border:1px solid var(--border); background:var(--surface-2); padding:4px;"></div>
         </div>
       </div>
 
-      <p id="exportMemberHint" style="display:none; color:var(--warning); font-size:12px; margin:12px 0 0;" data-i18n="hintExportMembers">
-        Hai scelto colonne per singola unità (*): gli apparati in stack o in HA occuperanno una riga per unità fisica.
-      </p>
-
-      <button class="btn btn-primary" id="btnRunDeviceExport"
-              style="margin-top:16px; background:var(--cta); color:var(--cta-text);" data-i18n="btnRunDeviceExport">
-        <i class="fa-solid fa-download"></i> Scarica CSV
-      </button>
+      <div class="modal-footer" style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-primary" id="btnRunDeviceExport"
+                style="background:var(--cta); color:var(--cta-text); width:auto; margin:0;" data-i18n="btnRunDeviceExport">
+          <i class="fa-solid fa-download"></i> Scarica CSV
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- Export CSV Classificazione: filtri + scelta colonne -->
+  <!-- Export CSV Classificazione: filtri + scelta colonne + anteprima -->
   <div class="modal-overlay" id="classificationExportModal">
-    <div class="modal" style="width: 720px; max-width: 96%;">
+    <div class="modal" style="width: 960px; max-width: 96%; max-height: 90vh; display: flex; flex-direction: column;">
       <div class="modal-header">
         <h3 data-i18n="titleClassificationExport"><i class="fa-solid fa-file-csv" style="color: var(--primary);"></i> Esporta classificazione CSV</h3>
         <i class="fa-solid fa-xmark modal-close" id="btnCloseClassificationExport"></i>
       </div>
-      <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descClassificationExport">
-        Nessuna casella spuntata in un filtro significa «tutti». Le colonne con * producono una riga per ogni collegamento o unità fisica. Filtrando la categoria del vicino gli altri collegamenti spariscono ma i dispositivi restano: spunta la casella per tenere solo quelli che hanno un vicino di quel tipo.
-      </p>
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
-        <div>
-          <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thGroup">Gruppo</div>
-          <div id="clsFilterGroups" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-          <div style="font-size:12px; font-weight:700; margin:10px 0 4px;" data-i18n="lblClsCategory">Categoria</div>
-          <div id="clsFilterCategories" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-          <div style="font-size:12px; font-weight:700; margin:10px 0 4px;" data-i18n="lblClsNeighbourCategory">Categoria vicino *</div>
-          <div id="clsFilterNeighbourCategories" style="max-height:150px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
-          <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:6px; cursor:pointer;">
-            <input type="checkbox" id="clsOnlyMatchingNeighbours"
-                   style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
-            <span data-i18n="lblClsOnlyMatchingNeighbours">Solo dispositivi con un vicino corrispondente</span>
-          </label>
+
+      <div style="overflow-y: auto; flex: 1; padding-right: 4px;">
+        <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 14px;" data-i18n="descClassificationExport">
+          Nessuna casella spuntata in un filtro significa «tutti». Le colonne con * producono una riga per ogni collegamento o unità fisica. Filtrando la categoria del vicino gli altri collegamenti spariscono ma i dispositivi restano: spunta la casella per tenere solo quelli che hanno un vicino di quel tipo.
+        </p>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
+          <div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="thGroup">Gruppo</div>
+                <div id="clsFilterGroups" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblClsCategory">Categoria dispositivo</div>
+                <div id="clsFilterCategories" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px;">
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblClsNeighbourSource">Espandi vicini solo per categoria *</div>
+                <div id="clsFilterNeighbourSourceCategories" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblClsNeighbourCategory">Categoria vicino *</div>
+                <div id="clsFilterNeighbourCategories" style="max-height:110px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+              </div>
+            </div>
+
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin-top:8px; cursor:pointer;">
+              <input type="checkbox" id="clsOnlyMatchingNeighbours"
+                     style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
+              <span data-i18n="lblClsOnlyMatchingNeighbours">Solo dispositivi con un vicino corrispondente</span>
+            </label>
+          </div>
+
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;" data-i18n="lblExportColumns">Colonne</label>
+              <button class="btn btn-secondary btn-small" id="btnClsColsToggle" style="width:auto; margin:0; font-size:11px; padding:2px 6px;" data-i18n="btnExportSelectAll">Tutte / nessuna</button>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;">
+              <button class="btn btn-secondary btn-small" id="btnExportPresetClsDefault" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetDefault">Predefinito</button>
+              <button class="btn btn-secondary btn-small" id="btnExportPresetClsAll" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetAll">Tutte</button>
+              <button class="btn btn-secondary btn-small" id="btnExportPresetClsAp" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetApNeighbours">AP e Vicini</button>
+              <button class="btn btn-secondary btn-small" id="btnExportPresetClsSerials" style="width:auto; margin:0; font-size:10px; padding:2px 6px;" data-i18n="btnPresetSerials">Seriali &amp; Stack</button>
+            </div>
+            <div id="clsColumnList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+          </div>
         </div>
-        <div>
-          <div style="font-size:12px; font-weight:700; margin-bottom:4px;" data-i18n="lblExportColumns">Colonne</div>
-          <div id="clsColumnList" style="max-height:310px; overflow-y:auto; border:1px solid var(--border); background:var(--surface-2); padding:6px;"></div>
+
+        <!-- Live Preview Panel -->
+        <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;">
+              <i class="fa-solid fa-table" style="color:var(--primary);"></i>
+              <span data-i18n="lblExportPreview">Anteprima CSV</span>
+              <span id="clsExportPreviewBadge" style="font-size:11px; font-weight:600; background:var(--surface-3); border:1px solid var(--border); border-radius:12px; padding:1px 8px; color:var(--text-muted);">0 righe</span>
+            </div>
+            <span id="clsExportPreviewStatus" style="font-size:11px; color:var(--text-muted);"></span>
+          </div>
+          <div id="clsExportPreviewContainer" style="max-height:160px; overflow:auto; border:1px solid var(--border); background:var(--surface-2); padding:4px;"></div>
         </div>
       </div>
-      <div class="modal-footer" style="margin-top:16px;">
-        <button class="btn btn-primary btn-small" id="btnRunClassificationExport" style="width:auto; margin:0;" data-i18n="btnExportClassification">Esporta CSV</button>
+
+      <div class="modal-footer" style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-primary" id="btnRunClassificationExport" style="width:auto; margin:0;" data-i18n="btnExportClassification">Esporta CSV</button>
       </div>
     </div>
   </div>

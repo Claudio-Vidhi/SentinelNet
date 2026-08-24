@@ -176,6 +176,7 @@ def assemble_classification(scope):
             "is_manual": bool(a.get("category")),
             "vendor": a.get("vendor") or n.get("vendor"),
             "model": a.get("model") or n.get("model") or "",
+            "serial": n.get("serial") or "",
             "ha_group": a.get("ha_group", ""),
             "version": n.get("version"),
             "vtp_domain": n.get("vtp_domain"),
@@ -227,6 +228,10 @@ _CLASSIFICATION_COLUMNS = {
     "neighbour_device": ("Neighbour Device", lambda n, l: l.get("device", "")),
     "neighbour_port":   ("Neighbour Port",   lambda n, l: l.get("port", "")),
     "neighbour_category": ("Neighbour Category", lambda n, l: l.get("category", "")),
+    "neighbour_subcategory": ("Neighbour Subcategory", lambda n, l: l.get("subcategory", "")),
+    "neighbour_ip":     ("Neighbour IP",     lambda n, l: l.get("ip", "")),
+    "neighbour_model":  ("Neighbour Model",  lambda n, l: l.get("model", "")),
+    "neighbour_serial": ("Neighbour Serial", lambda n, l: l.get("serial", "")),
     "member_index":     ("Member #",         lambda n, l: l.get("member_index", "")),
     "member_role":      ("Member Role",      lambda n, l: l.get("member_role", "")),
     "member_serial":    ("Member Serial",    lambda n, l: l.get("member_serial", "")),
@@ -237,8 +242,10 @@ _CLASSIFICATION_COLUMNS = {
 # device with redundant uplinks has more than one, and a joined cell cannot be
 # filtered or looked up in a spreadsheet -- the same reason _MEMBER_COLUMNS
 # explodes rows in the device export.
-_NEIGHBOUR_COLUMNS = frozenset(("neighbour_device", "neighbour_port",
-                                "neighbour_category"))
+_NEIGHBOUR_COLUMNS = frozenset((
+    "neighbour_device", "neighbour_port", "neighbour_category",
+    "neighbour_subcategory", "neighbour_ip", "neighbour_model", "neighbour_serial"
+))
 
 # A stack answers on one management IP but carries one serial per physical
 # unit, and the scan stores those on the redundancy group, not on the device:
@@ -251,15 +258,20 @@ _DEFAULT_CLASSIFICATION_COLUMNS = ["hostname", "ip", "tenant", "category", "stat
 
 
 def _neighbours_of(node_id: str, links: list, label_of: dict,
-                   category_of: dict) -> list:
-    """Neighbours of one node, each as {device, port, category}.
+                   category_of: dict, versions: Optional[dict] = None,
+                   ap_entries: Optional[dict] = None, nodes_by_id: Optional[dict] = None) -> list:
+    """Neighbours of one node, each as {device, port, category, subcategory, ip, model, serial}.
 
     The port reported is the NEIGHBOUR's own port -- the one you patch -- not
     the port on the device whose row this is. A link stores local_port for its
     source and remote_port for its target, so which one to read depends on
     which end this node sits at.
     """
+    from services import ap_store
     out = []
+    versions = versions or {}
+    ap_entries = ap_entries or {}
+    nodes_by_id = nodes_by_id or {}
     for link in links:
         if link.get("target") == node_id:
             other, port = link.get("source"), link.get("local_port")
@@ -267,8 +279,32 @@ def _neighbours_of(node_id: str, links: list, label_of: dict,
             other, port = link.get("target"), link.get("remote_port")
         else:
             continue
-        out.append({"device": label_of.get(other, other or ""), "port": port or "",
-                    "category": category_of.get(other, "")})
+
+        other_node = nodes_by_id.get(other) or {}
+        other_label = label_of.get(other, other or "")
+        other_cat = category_of.get(other, "")
+        other_subcat = other_node.get("subcategory", "")
+        other_ip = str(other_node.get("display_ip") or other_node.get("reported_ip")
+                        or other_node.get("ip") or (versions.get(other) or {}).get("ip", "") or "")
+
+        scan = (versions.get(other)
+                or (versions.get(other_ip) if other_ip else None)
+                or (versions.get(other_node.get("id")) if other_node else None)
+                or {})
+        entry = (ap_store.lookup_in(ap_entries, other_label, other_node.get("group"), ip=other_ip)
+                 or ap_store.lookup_in(ap_entries, other_label, other_node.get("group")))
+        other_serial = other_node.get("serial") or scan.get("serial") or (entry or {}).get("serial", "")
+        other_model = other_node.get("model") or scan.get("model") or (entry or {}).get("model", "")
+
+        out.append({
+            "device": other_label,
+            "port": port or "",
+            "category": other_cat,
+            "subcategory": other_subcat,
+            "ip": other_ip,
+            "model": other_model,
+            "serial": other_serial,
+        })
     return out
 
 
@@ -287,18 +323,15 @@ def export_classification_columns(current_user = Depends(get_current_user)):
     }
 
 
-@router.get("/api/export/classification")
-def export_classification_csv(
+def assemble_classification_rows(
+    current_user: dict,
     columns: str = "",
     groups: str = "",
     categories: str = "",
     neighbour_categories: str = "",
+    neighbour_source_categories: str = "",
     only_matching_neighbours: bool = False,
-    current_user = Depends(get_current_user),
 ):
-    import csv, io
-    from fastapi.responses import Response as FastResponse
-    from core.csv_safe import csv_cell
     from services import ap_store
     from redundancy import service as redundancy_service
 
@@ -323,47 +356,48 @@ def export_classification_csv(
     ap_entries = ap_store.read_all()
     label_of = {n["id"]: (n.get("label") or n["id"]) for n in data["nodes"]}
     category_of = {n["id"]: n.get("device_type", "") for n in data["nodes"]}
+    nodes_by_id = {n["id"]: n for n in data["nodes"]}
     explode = any(c in _NEIGHBOUR_COLUMNS for c in selected)
     badges = (redundancy_service.redundancy_badges_by_ip()
               if any(c in _MEMBER_COLUMNS for c in selected) else {})
     want_neighbour_categories = {v.strip()
                                  for v in neighbour_categories.split(",") if v.strip()}
+    want_neighbour_sources = {v.strip()
+                              for v in neighbour_source_categories.split(",") if v.strip()}
 
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([_CLASSIFICATION_COLUMNS[c][0] for c in selected])
+    headers = [_CLASSIFICATION_COLUMNS[c][0] for c in selected]
+    all_rows = []
+
     for node in nodes:
-        # Serial has two sources and one of them is a cache: an inventoried
-        # device carries it from the last scan, an access point only from
-        # whatever controller last reported it. The AP store lookup is
-        # scoped to the node's own tenant, so a name collision across
-        # tenants never hands one customer another's serial.
-        scan = versions.get(node["id"], {})
-        entry = (ap_store.lookup_in(ap_entries, node.get("label") or "", node.get("group"))
-                 if node.get("discovered") else None)
+        node_ip = str(node.get("display_ip") or node.get("reported_ip") or "")
+        scan = (versions.get(node["id"])
+                or (versions.get(node_ip) if node_ip else None)
+                or {})
+        entry = (ap_store.lookup_in(ap_entries, node.get("label") or node.get("id") or "", node.get("group"), ip=node_ip)
+                 or ap_store.lookup_in(ap_entries, node.get("label") or node.get("id") or "", node.get("group")))
         row_node = dict(node)
-        row_node["serial"] = scan.get("serial") or (entry or {}).get("serial", "")
+        row_node["serial"] = node.get("serial") or scan.get("serial") or (entry or {}).get("serial", "")
         row_node["serial_seen_at"] = (entry or {}).get("seen_at", "")
 
-        # A device with no links still gets its row: selecting a column must
-        # never make devices disappear from the export.
-        # Looked up with no neighbour column selected too, because
-        # only_matching_neighbours decides on the links alone.
-        neighbours = (_neighbours_of(node["id"], links, label_of, category_of)
-                      if (explode or only_matching_neighbours) else [])
-        # Two legitimate readings of a neighbour filter, so the caller picks:
-        # the default keeps every device and blanks the neighbour cells of the
-        # ones that have no match (a full device table, AP uplinks only), while
-        # only_matching_neighbours narrows the export to the devices that
-        # actually have such a neighbour.
-        if want_neighbour_categories:
+        node_cat = node.get("device_type", "")
+        should_explode_neighbours = (
+            (explode or only_matching_neighbours)
+            and (not want_neighbour_sources or node_cat in want_neighbour_sources)
+        )
+
+        neighbours = (_neighbours_of(node["id"], links, label_of, category_of,
+                                     versions=versions, ap_entries=ap_entries,
+                                     nodes_by_id=nodes_by_id)
+                      if should_explode_neighbours else [])
+
+        if want_neighbour_categories and should_explode_neighbours:
             neighbours = [x for x in neighbours
                           if x["category"] in want_neighbour_categories]
             if not neighbours and only_matching_neighbours:
                 continue
-        # Members and neighbours are two independent explosions: a stacked
-        # switch with two uplinks and four units gets every (uplink, unit)
-        # pair, so both the port and the serial stay in a cell of their own.
+        elif want_neighbour_sources and node_cat not in want_neighbour_sources and only_matching_neighbours:
+            continue
+
         members = [
             {"member_index": m.get("index", ""), "member_role": m.get("role", ""),
              "member_serial": m.get("serial", ""), "member_model": m.get("model", "")}
@@ -371,19 +405,80 @@ def export_classification_csv(
         ]
         for link in (neighbours or [{}]):
             for member in (members or [{}]):
-                writer.writerow([
-                    csv_cell(_CLASSIFICATION_COLUMNS[c][1](row_node, {**link, **member}))
+                all_rows.append([
+                    _CLASSIFICATION_COLUMNS[c][1](row_node, {**link, **member})
                     for c in selected
                 ])
 
+    return headers, all_rows
+
+
+@router.get("/api/export/classification")
+def export_classification_csv(
+    columns: str = "",
+    groups: str = "",
+    categories: str = "",
+    neighbour_categories: str = "",
+    neighbour_source_categories: str = "",
+    only_matching_neighbours: bool = False,
+    current_user = Depends(get_current_user),
+):
+    import csv, io
+    from fastapi.responses import Response as FastResponse
+    from core.csv_safe import csv_cell
+
+    headers, rows = assemble_classification_rows(
+        current_user=current_user,
+        columns=columns,
+        groups=groups,
+        categories=categories,
+        neighbour_categories=neighbour_categories,
+        neighbour_source_categories=neighbour_source_categories,
+        only_matching_neighbours=only_matching_neighbours,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for r in rows:
+        writer.writerow([csv_cell(val) for val in r])
+
     log_audit(f"Export CSV classificazione richiesto dall'utente "
-              f"'{current_user.get('sub')}' (colonne: {','.join(selected)}).")
+              f"'{current_user.get('sub')}' (colonne: {columns or ','.join(_DEFAULT_CLASSIFICATION_COLUMNS)}).")
     return FastResponse(
         content=output.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition":
                  "attachment; filename=sentinelnet-classification.csv"},
     )
+
+
+@router.get("/api/export/classification/preview")
+def preview_classification_export(
+    columns: str = "",
+    groups: str = "",
+    categories: str = "",
+    neighbour_categories: str = "",
+    neighbour_source_categories: str = "",
+    only_matching_neighbours: bool = False,
+    limit: int = 15,
+    current_user = Depends(get_current_user),
+):
+    headers, rows = assemble_classification_rows(
+        current_user=current_user,
+        columns=columns,
+        groups=groups,
+        categories=categories,
+        neighbour_categories=neighbour_categories,
+        neighbour_source_categories=neighbour_source_categories,
+        only_matching_neighbours=only_matching_neighbours,
+    )
+    safe_limit = max(1, min(limit, 100))
+    return {
+        "headers": headers,
+        "rows": rows[:safe_limit],
+        "total_rows": len(rows),
+    }
 
 @router.post("/api/device-categories")
 def create_device_category(payload: CategoryCreateSchema, current_user = Depends(require_operator)):

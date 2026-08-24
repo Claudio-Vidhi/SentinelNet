@@ -183,16 +183,32 @@ class SerialResolution(unittest.TestCase):
         self.assertTrue(row[1].startswith("2026-08-23"))
 
 
+def _preview(query="", user=None, ap_store_data=None):
+    from fastapi.testclient import TestClient
+    import app_server
+    from routers.deps import get_current_user
+
+    store = AP_STORE if ap_store_data is None else ap_store_data
+    app_server.app.dependency_overrides[get_current_user] = \
+        lambda: user or {"sub": "tester", "role": "admin"}
+    try:
+        with mock.patch("core.core_engine.generate_network_map", return_value=MAP), \
+             mock.patch("services.inventory_manager.get_device_categories", return_value=CATS), \
+             mock.patch("services.inventory_manager.get_all_vendors", return_value={}), \
+             mock.patch("services.inventory_manager.get_models", return_value={}), \
+             mock.patch("services.inventory_manager.get_detected_versions", return_value=VERSIONS), \
+             mock.patch("services.ap_store.read_all", return_value=store), \
+             mock.patch("redundancy.service.redundancy_badges_by_ip", return_value=BADGES), \
+             mock.patch("routers.catalog.log_audit"):
+            client = TestClient(app_server.app)
+            return client.get("/api/export/classification/preview" + query,
+                              headers={"X-Requested-With": "x"})
+    finally:
+        app_server.app.dependency_overrides.pop(get_current_user, None)
+
+
 class Scoping(unittest.TestCase):
     def test_a_scoped_user_never_sees_another_tenant(self):
-        # user_group_scope() does not read scope off the current_user dict: it
-        # looks the username up in user_manager (see tests/test_rbac_scope.py,
-        # where a scoped user is created with `groups=[...]`). This lightweight
-        # export test has no such user on record, so -- following the same
-        # pattern as tests/test_export_customizable.py's
-        # test_the_tenant_scope_still_wins_over_the_query -- the scope itself is
-        # mocked directly; the "groups" key on the user dict below mirrors the
-        # real record shape but is not what enforces the scoping here.
         with mock.patch("routers.catalog.user_group_scope", return_value={"ACME"}):
             res = _export("?columns=hostname,tenant",
                           user={"sub": "acme-op", "role": "operator", "groups": ["ACME"]})
@@ -200,6 +216,60 @@ class Scoping(unittest.TestCase):
 
     def test_an_unknown_column_is_rejected(self):
         self.assertEqual(400, _export("?columns=hostname,not_a_column").status_code)
+
+
+class AdvancedNeighbourAndPreview(unittest.TestCase):
+    def test_neighbour_serial_resolves_correctly(self):
+        # ap-lobby links to switch-01, whose serial is SW0000AAAA
+        rows = _rows(_export("?columns=hostname,neighbour_device,neighbour_serial"))[1:]
+        ap_row = next(r for r in rows if r[0] == "ap-lobby")
+        self.assertEqual(["switch-01", "SW0000AAAA"], ap_row[1:])
+
+        # switch-01 links to ap-lobby, whose serial in ap_store is FCW0000AAAA
+        sw_rows = [r for r in rows if r[0] == "switch-01"]
+        ap_link = next(r for r in sw_rows if r[1] == "ap-lobby")
+        self.assertEqual("FCW0000AAAA", ap_link[2])
+
+    def test_neighbour_source_categories_only_explodes_for_specified_category(self):
+        # Only APs should have their neighbours exploded; switches stay single rows
+        rows = _rows(_export("?columns=hostname,category,neighbour_device"
+                             "&neighbour_source_categories=ap"))[1:]
+        by_host = {}
+        for r in rows:
+            by_host.setdefault(r[0], []).append(r[2])
+
+        # ap-lobby has switch-01 neighbour
+        self.assertEqual(["switch-01"], by_host["ap-lobby"])
+        # switch-01 and switch-02 are switches, so their neighbour cells remain single empty rows
+        self.assertEqual([""], by_host["switch-01"])
+        self.assertEqual([""], by_host["switch-02"])
+
+    def test_preview_endpoint_returns_json(self):
+        res = _preview("?columns=hostname,ip&limit=2")
+        self.assertEqual(200, res.status_code)
+        data = res.json()
+        self.assertEqual(["Hostname", "IP"], data["headers"])
+        self.assertEqual(4, data["total_rows"])
+        self.assertEqual(2, len(data["rows"]))
+
+    def test_extract_serial_from_backup_cisco(self):
+        from core import core_engine
+        txt = ("hostname sw-01\n"
+               "--- SHOW INVENTORY ---\n"
+               "NAME: \"1\", DESCR: \"WS-C2960X-48FPD-L\"\n"
+               "PID: WS-C2960X-48FPD-L , VID: V01 , SN: FCW12345678\n")
+        self.assertEqual("FCW12345678", core_engine.extract_serial_from_backup(txt))
+
+    def test_extract_ap_serials_from_wlc_config(self):
+        from core import core_engine
+        txt = ("--- SHOW AP INVENTORY ALL ---\n"
+               "AP Name : ap-branch-01\n"
+               "PID: AIR-AP1852I-E-K9\n"
+               "SN : FOC98765432\n")
+        aps = core_engine.extract_ap_serials_from_config(txt)
+        self.assertEqual(1, len(aps))
+        self.assertEqual("ap-branch-01", aps[0]["name"])
+        self.assertEqual("FOC98765432", aps[0]["serial"])
 
 
 if __name__ == "__main__":
