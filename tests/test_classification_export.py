@@ -120,8 +120,21 @@ class ExportRows(unittest.TestCase):
             by_host.setdefault(r[0], []).append(r[1])
         # switch-01 links to an AP and to switch-02: only the AP link survives.
         self.assertEqual(["ap-lobby"], by_host["switch-01"])
-        # A device whose every neighbour is filtered out keeps its row, empty.
+        # By default the device list is untouched: a device with no AP
+        # neighbour keeps its row with the neighbour cells empty, so the export
+        # can still be a full device table carrying only the AP links.
+        self.assertEqual({"switch-01", "switch-02", "ap-lobby", "switch-lonely"},
+                         set(by_host))
         self.assertEqual([""], by_host["switch-02"])
+
+    def test_only_matching_neighbours_drops_the_devices_without_one(self):
+        """The other reading of the same filter, picked by the caller."""
+        rows = _rows(_export("?columns=hostname,neighbour_device"
+                             "&neighbour_categories=ap"
+                             "&only_matching_neighbours=true"))[1:]
+        # Only switch-01 has an AP neighbour: ap-lobby's own neighbour is a
+        # switch, switch-02 has only a switch, switch-lonely has no link.
+        self.assertEqual([["switch-01", "ap-lobby"]], rows)
 
     def test_member_columns_give_one_row_per_stack_unit(self):
         """A stack answers on one IP but carries a serial per physical unit:

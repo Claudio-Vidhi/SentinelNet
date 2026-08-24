@@ -2907,6 +2907,8 @@
         renderCheckList('clsFilterCategories', uniq('device_type'), prefs.categories);
         renderCheckList('clsFilterNeighbourCategories', uniq('device_type'),
                         prefs.neighbour_categories);
+        document.getElementById('clsOnlyMatchingNeighbours').checked =
+            !!prefs.only_matching_neighbours;
         renderCheckList('clsColumnList',
             clsExportColumns.map(c => ({
                 value: c.key, label: c.header + (c.explodes ? ' *' : '') })),
@@ -2920,11 +2922,16 @@
             categories: clsChecked('clsFilterCategories'),
             neighbour_categories: clsChecked('clsFilterNeighbourCategories'),
             columns: clsChecked('clsColumnList'),
+            only_matching_neighbours:
+                document.getElementById('clsOnlyMatchingNeighbours').checked,
         };
         if (!prefs.columns.length) { alert(i18n[currentLang].alertExportNoColumns); return; }
         localStorage.setItem(CLS_EXPORT_PREFS_KEY, JSON.stringify(prefs));
         const qs = new URLSearchParams();
-        for (const [k, v] of Object.entries(prefs)) if (v.length) qs.set(k, v.join(','));
+        for (const [k, v] of Object.entries(prefs)) {
+            if (Array.isArray(v)) { if (v.length) qs.set(k, v.join(',')); }
+            else if (v) qs.set(k, 'true');
+        }
         const res = await apiFetch('/api/export/classification?' + qs.toString());
         if (!res || !res.ok) { alert(i18n[currentLang].alertExportError); return; }
         const blob = await res.blob();

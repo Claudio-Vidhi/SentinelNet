@@ -293,6 +293,7 @@ def export_classification_csv(
     groups: str = "",
     categories: str = "",
     neighbour_categories: str = "",
+    only_matching_neighbours: bool = False,
     current_user = Depends(get_current_user),
 ):
     import csv, io
@@ -346,13 +347,20 @@ def export_classification_csv(
 
         # A device with no links still gets its row: selecting a column must
         # never make devices disappear from the export.
-        neighbours = _neighbours_of(node["id"], links, label_of, category_of) if explode else []
-        # Filtering neighbours never removes a device: a switch whose only
-        # neighbours are out of scope still gets its row, with the neighbour
-        # cells empty -- same rule as a device with no links at all.
+        # Looked up with no neighbour column selected too, because
+        # only_matching_neighbours decides on the links alone.
+        neighbours = (_neighbours_of(node["id"], links, label_of, category_of)
+                      if (explode or only_matching_neighbours) else [])
+        # Two legitimate readings of a neighbour filter, so the caller picks:
+        # the default keeps every device and blanks the neighbour cells of the
+        # ones that have no match (a full device table, AP uplinks only), while
+        # only_matching_neighbours narrows the export to the devices that
+        # actually have such a neighbour.
         if want_neighbour_categories:
             neighbours = [x for x in neighbours
                           if x["category"] in want_neighbour_categories]
+            if not neighbours and only_matching_neighbours:
+                continue
         # Members and neighbours are two independent explosions: a stacked
         # switch with two uplinks and four units gets every (uplink, unit)
         # pair, so both the port and the serial stay in a cell of their own.
