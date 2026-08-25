@@ -792,7 +792,7 @@ const LAZY_TAB_SCRIPTS = {
     'tab-wlc': ['/static/js/wlc.js'],
     // settings.js owns the CRUD of four tabs, not just Settings: opening any of
     // the other three cold left every control on it dead and its table empty.
-    'tab-settings': ['/static/js/settings.js', '/static/js/observability.js'],
+    'tab-settings': ['/static/js/settings.js', '/static/js/observability.js', '/static/js/cloud-backup.js'],
     'tab-sites': ['/static/js/settings.js'],
     'tab-users': ['/static/js/settings.js'],
     'tab-mcp': ['/static/js/settings.js'],

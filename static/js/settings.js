@@ -535,6 +535,9 @@
             loadObsSettings();
         }
         loadAppAdvSettings();
+        if (typeof loadCloudBackup === 'function') {
+            loadCloudBackup();
+        }
     }
 
     // --- IMPOSTAZIONI AVANZATE (sezione 'app', solo admin) ---

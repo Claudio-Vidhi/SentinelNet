@@ -37,6 +37,9 @@ declare var toggleTemplateEditor: any;
 declare var viewAuditReport: any;
 declare var viewAuditReportForId: any;
 
+// cloud-backup.js
+declare function loadCloudBackup(): Promise<void>;
+
 // core.js
 declare var _tenantIdentities: any;
 
