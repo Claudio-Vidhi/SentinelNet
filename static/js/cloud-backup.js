@@ -57,20 +57,46 @@
         const box = document.getElementById('cbStatusBox');
         if (!box) return;
         if (!st.enabled) {
-            box.textContent = i18n[currentLang].cbDisabled;
+            box.innerHTML =
+                `<div style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-muted);">` +
+                `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--lamp-idle); flex-shrink:0;"></span>` +
+                `<span>${escapeHtml(i18n[currentLang].cbDisabled)}</span>` +
+                `</div>`;
             return;
         }
         const hours = st.hours_since_success;
         const stale = hours === null || hours > (st.stale_after_hours || 48);
         const age = hours === null
             ? i18n[currentLang].cbNeverRan
-            : `${i18n[currentLang].cbStale}: ${Math.round(hours)} h`;
+            : `${Math.round(hours)} h`;
         const last = st.last_run || {};
+        const stateColor = stale ? 'var(--lamp-warn)' : 'var(--lamp-up)';
+        const stateInk = stale ? 'var(--lamp-warn-ink)' : 'var(--lamp-up-ink)';
+
         box.innerHTML =
-            `<div style="color:${stale ? 'var(--warning)' : 'var(--success)'}; font-weight:700;">${escapeHtml(age)}</div>` +
-            `<div>${escapeHtml(i18n[currentLang].cbPending)}: <strong>${escapeHtml(String(st.pending))}</strong></div>` +
-            `<div>${escapeHtml(i18n[currentLang].cbLastRun)}: ${last.ok ? 'ok' : escapeHtml(last.error || '—')}` +
-            ` · ${escapeHtml(String(last.uploaded || 0))} ↑ · ${escapeHtml(String(last.verified || 0))} ✓</div>`;
+            `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; font-size:12.5px;">` +
+            `  <div style="background:var(--surface); border:1px solid var(--border); padding:8px 12px; display:flex; align-items:center; gap:10px;">` +
+            `    <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${stateColor}; flex-shrink:0;"></span>` +
+            `    <div>` +
+            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(i18n[currentLang].cbStale)}</div>` +
+            `      <div style="font-weight:700; color:${stateInk}; font-family:var(--font-mono, 'Azeret Mono');">${escapeHtml(age)}</div>` +
+            `    </div>` +
+            `  </div>` +
+            `  <div style="background:var(--surface); border:1px solid var(--border); padding:8px 12px; display:flex; align-items:center; gap:10px;">` +
+            `    <i class="fa-solid fa-clock-rotate-left" style="color:var(--text-muted); font-size:13px;"></i>` +
+            `    <div>` +
+            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(i18n[currentLang].cbPending)}</div>` +
+            `      <div style="font-weight:700; font-family:var(--font-mono, 'Azeret Mono');">${escapeHtml(String(st.pending))}</div>` +
+            `    </div>` +
+            `  </div>` +
+            `  <div style="background:var(--surface); border:1px solid var(--border); padding:8px 12px; display:flex; align-items:center; gap:10px;">` +
+            `    <i class="fa-solid ${last.ok ? 'fa-circle-check' : 'fa-triangle-exclamation'}" style="color:${last.ok ? 'var(--lamp-up)' : 'var(--lamp-fault)'}; font-size:13px;"></i>` +
+            `    <div>` +
+            `      <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted);">${escapeHtml(i18n[currentLang].cbLastRun)}</div>` +
+            `      <div style="font-weight:600; font-size:12px; font-family:var(--font-mono, 'Azeret Mono');">${last.ok ? 'OK · ' + escapeHtml(String(last.uploaded || 0)) + ' ↑ · ' + escapeHtml(String(last.verified || 0)) + ' ✓' : escapeHtml(last.error || '—')}</div>` +
+            `    </div>` +
+            `  </div>` +
+            `</div>`;
     }
 
     function renderLoadError() {
