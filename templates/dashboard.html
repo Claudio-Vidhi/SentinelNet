@@ -560,7 +560,7 @@
                     <label for="trTelnetEnabled" style="min-width:80px; margin:0;">Telnet</label>
                   </div>
                   <input id="trTelnetPort" type="number" min="1" max="65535" value="23" style="width:90px;">
-                  <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger, #c0392b); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
+                  <div id="trTelnetWarn" data-i18n="lblTelnetWarn" style="grid-column:1 / -1; display:none; color: var(--danger); font-size: 12px;">Attenzione: Telnet trasmette le credenziali in chiaro.</div>
                   <div style="display:flex; align-items:center; gap:8px;">
                     <input type="checkbox" id="trNetconfEnabled" data-proto="netconf">
                     <label for="trNetconfEnabled" style="min-width:80px; margin:0;">NETCONF</label>
@@ -764,7 +764,9 @@
 
       <div class="panel">
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
+          <!-- Nessun Tenant preselezionato: il report si carica su scelta esplicita -->
           <select id="topologyGroupSelect" style="padding: 6px 12px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; outline: none; transition: var(--transition);">
+            <option value="" data-i18n="optSelectSite">Scegli un Tenant…</option>
             <option value="all" data-i18n="optFilterAll">Filtra per Sede: Tutte</option>
           </select>
           <button class="btn btn-danger btn-small" id="btnResetPortchannels" style="width: auto; margin: 0;" data-i18n="btnResetTopology">
@@ -838,7 +840,8 @@
 
           <!-- Vista "A livelli": suggerimento + azzeramento dei piani riassegnati a mano -->
           <span id="layeredResetWrap" style="display:none; align-items:center; gap:8px; padding-left:10px; border-left:1px solid var(--border);">
-            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare piano</span>
+            <span style="font-size:12px; color:var(--text-muted);" data-i18n="lblLayeredHint">Trascina in verticale per cambiare piano · click su un gruppo per aprirlo</span>
+            <button id="layeredCollapseBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredCollapse">Comprimi gruppi</button>
             <button id="layeredResetBtn" class="chip" style="width:auto; margin:0; padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" data-i18n="btnLayeredReset">Azzera piani</button>
           </span>
 
@@ -883,7 +886,10 @@
       </div>
 
       <div id="networkGraphWrapper" style="position: relative; flex-grow: 1; overflow: hidden;">
-        <div id="networkGraphContainer"></div>
+        <!-- La mappa è un canvas: senza queste due proprietà chi naviga da
+             tastiera non ha modo di scegliere un apparato. Frecce = nodo
+             precedente/successivo, Invio = apre il pannello. -->
+        <div id="networkGraphContainer" tabindex="0" role="application" aria-label="Mappa di rete" data-i18n-aria-label="lblNetworkMap"></div>
         <div class="network-legend" id="networkLegend">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
             <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="legendTitle">Legenda</span>
@@ -900,11 +906,11 @@
         </div>
 
         <!-- Sliding Node Inspector Drawer -->
-        <aside id="topologyNodeDrawer" class="topology-node-drawer" aria-label="Device Inspector">
+        <aside id="topologyNodeDrawer" class="topology-node-drawer" role="dialog" aria-labelledby="drawerNodeHostname" aria-label="Device Inspector">
           <div class="drawer-header">
             <div class="drawer-title-wrap">
               <span class="drawer-eyebrow" data-i18n="lblSelectedNode">Dispositivo Selezionato</span>
-              <h3 id="drawerNodeHostname" class="drawer-title">—</h3>
+              <h3 id="drawerNodeHostname" class="drawer-title" tabindex="-1">—</h3>
             </div>
             <button type="button" id="btnCloseNodeDrawer" class="drawer-close-btn" aria-label="Chiudi"><i class="fa-solid fa-xmark"></i></button>
           </div>
@@ -925,13 +931,13 @@
             </div>
             <!-- Vicini CDP/LLDP -->
             <div class="drawer-section">
-              <h4 class="drawer-section-title"><i class="fa-solid fa-diagram-project" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="lblDrawerNeighbors">Vicini &amp; Collegamenti</span></h4>
-              <div id="drawerNeighborList" class="drawer-list">—</div>
+              <h4 class="drawer-section-title"><i class="fa-solid fa-diagram-project" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="lblDrawerNeighbors">Vicini &amp; Collegamenti</span><span id="drawerNeighborCount" class="drawer-count"></span></h4>
+              <div id="drawerNeighborList" class="drawer-list drawer-list-scroll" tabindex="0" role="group" aria-label="Neighbors" data-i18n-aria-label="lblDrawerNeighbors">—</div>
             </div>
             <!-- Port-Channel & Links -->
             <div class="drawer-section">
-              <h4 class="drawer-section-title"><i class="fa-solid fa-network-wired" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="lblDrawerPortChannels">Port-Channel &amp; Interfacce</span></h4>
-              <div id="drawerPortChannelList" class="drawer-list">—</div>
+              <h4 class="drawer-section-title"><i class="fa-solid fa-network-wired" style="color:var(--primary); margin-right:6px;"></i><span data-i18n="lblDrawerPortChannels">Port-Channel &amp; Interfacce</span><span id="drawerPortChannelCount" class="drawer-count"></span></h4>
+              <div id="drawerPortChannelList" class="drawer-list drawer-list-scroll" tabindex="0" role="group" aria-label="Port-Channels" data-i18n-aria-label="lblDrawerPortChannels">—</div>
             </div>
             <!-- Active VLANs -->
             <div class="drawer-section">
@@ -940,6 +946,9 @@
             </div>
           </div>
           <div class="drawer-footer">
+            <!-- Compare solo se il nodo scelto sta dentro un gruppo aperto:
+                 su touch il doppio click non è una via praticabile. -->
+            <button type="button" id="drawerBtnCollapseGroup" class="btn btn-secondary btn-small" style="display:none; width:auto; margin:0;"><i class="fa-solid fa-compress"></i> <span data-i18n="btnLayeredCollapseOne">Richiudi gruppo</span></button>
             <button type="button" id="drawerBtnAnalyzer" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-file-code"></i> Config Analyzer</button>
             <button type="button" id="drawerBtnTriage" class="btn btn-primary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-stethoscope"></i> Triage SSH</button>
           </div>
@@ -1037,25 +1046,25 @@
       <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
         <div class="kpi">
           <h4 style="font-size:11px; text-transform:uppercase;" data-i18n="lblClusterTotal">Cluster Totali</h4>
-          <strong id="haKpiTotal" style="font-size:22px;">0</strong>
+          <strong id="haKpiTotal" style="font-size:var(--font-size-2xl);">0</strong>
         </div>
         <div class="kpi">
           <h4 style="font-size:11px; text-transform:uppercase; color:var(--success);" data-i18n="lblClusterHealthy">In Salute (Healthy)</h4>
-          <strong id="haKpiHealthy" style="font-size:22px; color:var(--success);">0</strong>
+          <strong id="haKpiHealthy" style="font-size:var(--font-size-2xl); color:var(--success);">0</strong>
         </div>
         <div class="kpi">
           <h4 style="font-size:11px; text-transform:uppercase; color:var(--warning);" data-i18n="lblClusterDegraded">Degradati</h4>
-          <strong id="haKpiDegraded" style="font-size:22px; color:var(--warning);">0</strong>
+          <strong id="haKpiDegraded" style="font-size:var(--font-size-2xl); color:var(--warning);">0</strong>
         </div>
         <div class="kpi">
           <h4 style="font-size:11px; text-transform:uppercase; color:var(--danger);" data-i18n="lblClusterCritical">Critici / Split-Brain</h4>
-          <strong id="haKpiCritical" style="font-size:22px; color:var(--danger);">0</strong>
+          <strong id="haKpiCritical" style="font-size:var(--font-size-2xl); color:var(--danger);">0</strong>
         </div>
       </div>
 
       <div class="panel">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-          <h3 style="margin:0; font-size:16px;" data-i18n="titleActiveRedundancyGroups"><i class="fa-solid fa-server"></i> Gruppi di Ridondanza Attivi</h3>
+          <h3 style="margin:0; font-size:var(--font-size-lg);" data-i18n="titleActiveRedundancyGroups"><i class="fa-solid fa-server"></i> Gruppi di Ridondanza Attivi</h3>
           <div style="display:flex; gap:8px; align-items:center;">
             <label for="haTenantFilter" style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em;" data-i18n="lblHaTenantFilter">Tenant</label>
             <select id="haTenantFilter" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:13px; cursor:pointer; outline:none;">
@@ -4054,7 +4063,7 @@
             <div style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;">
               <i class="fa-solid fa-table" style="color:var(--primary);"></i>
               <span data-i18n="lblExportPreview">Anteprima CSV</span>
-              <span id="deviceExportPreviewBadge" style="font-size:11px; font-weight:600; background:var(--surface-3); border:1px solid var(--border); border-radius:12px; padding:1px 8px; color:var(--text-muted);">0 righe</span>
+              <span id="deviceExportPreviewBadge" style="font-size:11px; font-weight:600; background:var(--surface-3); border:1px solid var(--border); border-radius:var(--radius-xl); padding:1px 8px; color:var(--text-muted);">0 righe</span>
             </div>
             <span id="deviceExportPreviewStatus" style="font-size:11px; color:var(--text-muted);"></span>
           </div>
@@ -4135,7 +4144,7 @@
             <div style="font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px;">
               <i class="fa-solid fa-table" style="color:var(--primary);"></i>
               <span data-i18n="lblExportPreview">Anteprima CSV</span>
-              <span id="clsExportPreviewBadge" style="font-size:11px; font-weight:600; background:var(--surface-3); border:1px solid var(--border); border-radius:12px; padding:1px 8px; color:var(--text-muted);">0 righe</span>
+              <span id="clsExportPreviewBadge" style="font-size:11px; font-weight:600; background:var(--surface-3); border:1px solid var(--border); border-radius:var(--radius-xl); padding:1px 8px; color:var(--text-muted);">0 righe</span>
             </div>
             <span id="clsExportPreviewStatus" style="font-size:11px; color:var(--text-muted);"></span>
           </div>

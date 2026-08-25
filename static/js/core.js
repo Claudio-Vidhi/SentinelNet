@@ -717,12 +717,15 @@ async function appInit() {
         // Popola tendina Filtro Gruppi in TAB 3
         const topoSelect = document.getElementById('topologyGroupSelect');
         if (topoSelect) {
-            const prevTopoFilter = topoSelect.value || 'all';
-            topoSelect.innerHTML = `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
+            // Default = nessuna scelta: il report Port-Channel resta vuoto
+            // finché l'utente non indica un Tenant.
+            const prevTopoFilter = topoSelect.value || '';
+            topoSelect.innerHTML = `<option value="">${i18n[currentLang].optSelectSite}</option>` +
+                `<option value="all">${i18n[currentLang].optFilterAll}</option>` +
                 Object.keys(globalGroups).map(g =>
                     `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
             topoSelect.value = prevTopoFilter;
-            if (topoSelect.selectedIndex === -1) topoSelect.value = 'all';
+            if (topoSelect.selectedIndex === -1) topoSelect.value = '';
         }
 
         // Popola tendina Filtro Gruppi in TAB 4

@@ -883,7 +883,7 @@ body {
     padding: 10px 16px;
     background: #0f172a;
     color: #ffffff;
-    border-radius: 4px;
+    border-radius: var(--radius);
     display: none;
     justify-content: space-between;
     align-items: center;

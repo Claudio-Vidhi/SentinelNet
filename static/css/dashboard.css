@@ -435,7 +435,15 @@ aside:focus-within::-webkit-scrollbar-thumb:hover { background: var(--primary); 
 aside { scrollbar-color: transparent transparent; }
 aside:hover, aside:focus-within { scrollbar-color: var(--border) transparent; }
 
-main { padding: 18px 20px 24px; gap: 0; }
+/* min-width: 0 non è cosmetico. `main` è una cella di griglia, e una cella di
+   griglia parte da `min-width: auto`: non si stringe sotto la larghezza
+   naturale del suo contenuto. Con una tabella larga (inventario, sedi) la
+   colonna cresceva oltre la finestra, `body { overflow-x: hidden }` tagliava
+   quello che sporgeva a destra e l'unico modo di leggerlo era rimpicciolire la
+   pagina. Azzerando il minimo, la cella si stringe e sono i contenitori
+   `.table-wrap` a scorrere, come previsto. */
+main { padding: 18px 20px 24px; gap: 0; min-width: 0; }
+main .tab-content, main .panel, main .hero { min-width: 0; }
 
 .aside-header {
   border-bottom: var(--seam) solid var(--border-strong);
@@ -568,7 +576,7 @@ main { padding: 18px 20px 24px; gap: 0; }
   text-transform: uppercase;
   line-height: 1.25;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-lift);
   transition: background var(--transition), color var(--transition), border-color var(--transition), transform var(--transition), box-shadow var(--transition);
 }
 .btn:hover { background: var(--surface-2); border-color: var(--text-soft); }
@@ -860,7 +868,7 @@ details[open] > div[id*="Menu"],
   display: block;
   font-family: var(--font-data);
   font-weight: 600;
-  font-size: clamp(18px, 1.8vw + 8px, 32px);
+  font-size: clamp(17px, 1.8vw + 8px, 30px);
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -907,7 +915,7 @@ details[open] > div[id*="Menu"],
   display: block;
   font-family: var(--font-data);
   font-weight: 600;
-  font-size: clamp(16px, 1.5vw + 8px, 26px);
+  font-size: clamp(15px, 1.5vw + 8px, 25px);
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -1226,7 +1234,11 @@ tr.row-dirty td:first-child { border-left: 2px solid var(--lamp-warn); }
 }
 
 #networkGraphContainer {
-  width: 100%; height: 600px; min-height: 300px;
+  /* Altezza legata alla finestra, non un 600px fisso: il pannello laterale sta
+     dentro questo riquadro, e su uno schermo alto restava alto 600px con le
+     ultime sezioni fuori vista, costringendo a rimpicciolire la pagina.
+     resize: vertical resta, chi vuole più mappa se la tira. */
+  width: 100%; height: calc(100vh - 300px); min-height: 460px;
   background-color: var(--surface-2);
   border-radius: 0;
   border: var(--seam) solid var(--border-strong);
@@ -1612,12 +1624,18 @@ details.mac-switch > summary:hover,
 .tab-content { display: none; flex-grow: 1; }
 .tab-content.active { display: flex; flex-direction: column; animation: fadeIn 160ms ease; }
 
+/* Chi chiede meno movimento non chiede meno informazione: le animazioni in
+   ciclo si fermano e gli spostamenti spariscono, ma un cambio di stato resta
+   percepibile con una dissolvenza breve invece di essere azzerato. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 80ms !important;
+    scroll-behavior: auto !important;
   }
+  /* Niente scorrimento del pannello: compare al suo posto, già aperto. */
+  .topology-node-drawer { transition: none !important; }
 }
 
 /* ---------------------------------------------------------------
@@ -1708,20 +1726,24 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   top: 0;
   right: 0;
   bottom: 0;
-  width: 350px;
+  /* 350px fissi erano stretti per valori monospace tipo un codice modello:
+     ogni valore andava a capo e il pannello cresceva in altezza. */
+  width: clamp(320px, 26vw, 420px);
   max-width: 90vw;
   background: var(--surface-2);
   border-left: 1px solid var(--border);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-float);
   display: flex;
   flex-direction: column;
   z-index: 55;
   transform: translateX(100%);
   transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  backdrop-filter: blur(12px);
 }
 .topology-node-drawer.open {
   transform: translateX(0);
+  /* La sfocatura costa anche a pannello chiuso, e il pannello sta sempre nel
+     DOM: si applica solo quando è davvero aperto. */
+  backdrop-filter: blur(12px);
 }
 .drawer-header {
   padding: 14px 18px;
@@ -1744,7 +1766,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 }
 .drawer-title {
   margin: 2px 0 0;
-  font-size: 16px;
+  font-size: var(--font-size-lg);
   font-family: var(--font-display);
   color: var(--text);
   white-space: nowrap;
@@ -1756,7 +1778,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--font-size-lg);
   padding: 6px;
   border-radius: var(--radius);
   display: flex;
@@ -1772,6 +1794,10 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   padding: 16px 18px;
   flex: 1 1 auto;
   overflow-y: auto;
+  /* Barra sempre visibile: senza, non si capiva che sotto c'era altro e si
+     finiva per rimpicciolire la pagina per vedere il resto. */
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1788,12 +1814,21 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   letter-spacing: 0.04em;
   color: var(--text-muted);
   margin: 0;
+  /* Il titolo resta visibile mentre si scorre l'elenco sotto: senza, dopo
+     qualche vicino non si sa più quale sezione si sta leggendo. */
+  position: sticky;
+  top: -16px;
+  background: var(--surface-2);
+  padding: 4px 0;
+  z-index: 2;
   display: flex;
   align-items: center;
 }
 .drawer-kpi-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Due colonne quando ci stanno, una sola su pannello stretto: meglio un
+     riquadro largo che un valore spezzato su tre righe. */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
 }
 .drawer-kpi {
@@ -1815,12 +1850,49 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   font-size: 12.5px;
   font-family: var(--font-data);
   color: var(--text);
-  word-break: break-all;
+  /* break-all spezzava a metà parola: "AIR-AP2802 / I-E-K9", "1 mi / n ago".
+     Va a capo tra le parole e taglia solo un token che da solo non ci sta. */
+  word-break: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 .drawer-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+/* Un apparato con 14 vicini spingeva Port-Channel e VLAN fuori dalla vista:
+   ogni elenco lungo scorre dentro di sé, così tutte le sezioni restano
+   raggiungibili senza cercarle a scorrimento. */
+.drawer-list-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+/* L'elenco scorre, quindi è raggiungibile da tastiera (tabindex nel template):
+   senza un contorno visibile chi naviga a tastiera non sa dove si trova. */
+.drawer-list-scroll:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* Schermo touch: la mappa si usa in piedi davanti al rack, con una mano. I
+   comandi della barra devono essere premibili, non centrati al pixel. */
+@media (pointer: coarse) {
+  .map-view-btn,
+  #layeredResetBtn,
+  #layeredCollapseBtn,
+  #networkGraphWrapper .chip {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .drawer-close-btn { min-width: 44px; min-height: 44px; }
+}
+.drawer-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-left: 6px;
 }
 .drawer-list-item {
   background: var(--surface-1);
@@ -1837,7 +1909,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 .drawer-tag {
   background: var(--surface-3);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   padding: 3px 7px;
   font-size: 11.5px;
   font-family: var(--font-data);
@@ -1909,7 +1981,7 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   border: 1px solid var(--border);
 }
 .pt-verdict-card.permit {
-  border-color: rgba(34, 197, 94, 0.4);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
   background: var(--lamp-up-wash);
 }
 .pt-verdict-card.deny {

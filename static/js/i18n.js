@@ -865,7 +865,10 @@ const i18n = {
         btnMapMinimal: "Nuova",
         btnMapLayered: "A livelli",
         btnLayeredReset: "Azzera piani",
-        lblLayeredHint: "Trascina in verticale per cambiare piano",
+        btnLayeredCollapse: "Comprimi gruppi",
+        btnLayeredCollapseOne: "Richiudi gruppo",
+        lblNetworkMap: "Mappa di rete",
+        lblLayeredHint: "Trascina in verticale per cambiare piano · click su un gruppo per aprirlo",
 
         // Tab 1
         invEyebrow: '<i class="fa-solid fa-server"></i> Inventario',
@@ -2618,7 +2621,10 @@ const i18n = {
         btnMapMinimal: "New",
         btnMapLayered: "Layered",
         btnLayeredReset: "Reset tiers",
-        lblLayeredHint: "Drag vertically to change tier",
+        btnLayeredCollapse: "Collapse groups",
+        btnLayeredCollapseOne: "Collapse group",
+        lblNetworkMap: "Network map",
+        lblLayeredHint: "Drag vertically to change tier · click a group to expand it",
 
         // Tab 1
         invEyebrow: '<i class="fa-solid fa-server"></i> Inventory',
@@ -3567,8 +3573,10 @@ function changeLanguage(lang) {
         }
         const topoSelect = document.getElementById('topologyGroupSelect');
         if (topoSelect) {
+            // options[0] è il segnaposto "nessun Tenant scelto", options[1] "Tutti".
             const prev = topoSelect.value;
-            topoSelect.options[0].text = i18n[lang].optFilterAll;
+            topoSelect.options[0].text = i18n[lang].optSelectSite;
+            if (topoSelect.options[1]) topoSelect.options[1].text = i18n[lang].optFilterAll;
             topoSelect.value = prev;
         }
         const interSelect = document.getElementById('interactiveGroupSelect');

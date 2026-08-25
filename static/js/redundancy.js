@@ -87,16 +87,16 @@
             // first group" to someone who just filtered would read as data loss.
             container.innerHTML = activeTenant ? `
                 <div class="panel" style="text-align:center; padding:40px;">
-                    <i class="fa-solid fa-filter-circle-xmark" style="font-size:36px; color:var(--text-muted); margin-bottom:12px;"></i>
-                    <h3 style="margin-bottom:8px; font-size:16px;">Nessun gruppo di ridondanza per il tenant «${escapeHtml(activeTenant)}»</h3>
+                    <i class="fa-solid fa-filter-circle-xmark" style="font-size:var(--font-size-4xl); color:var(--text-muted); margin-bottom:12px;"></i>
+                    <h3 style="margin-bottom:8px; font-size:var(--font-size-lg);">Nessun gruppo di ridondanza per il tenant «${escapeHtml(activeTenant)}»</h3>
                     <p style="color:var(--text-muted); font-size:13px; max-width:500px; margin:0 auto;">
                         Scegli «Tutti i tenant» per vedere gli altri cluster.
                     </p>
                 </div>
             ` : `
                 <div class="panel" style="text-align:center; padding:40px;">
-                    <i class="fa-solid fa-layer-group" style="font-size:36px; color:var(--text-muted); margin-bottom:12px;"></i>
-                    <h3 style="margin-bottom:8px; font-size:16px;">Nessun gruppo di ridondanza registrato</h3>
+                    <i class="fa-solid fa-layer-group" style="font-size:var(--font-size-4xl); color:var(--text-muted); margin-bottom:12px;"></i>
+                    <h3 style="margin-bottom:8px; font-size:var(--font-size-lg);">Nessun gruppo di ridondanza registrato</h3>
                     <p style="color:var(--text-muted); font-size:13px; max-width:500px; margin:0 auto 16px;">
                         Crea un gruppo per monitorare cluster HSRP, VRRP, FortiGate HA (FGCP), Cisco StackWise o coppie VPC/MLAG.
                     </p>
@@ -177,7 +177,7 @@
             const serialBadge = m.serial ? `
                 <div style="display:inline-flex; align-items:center; gap:4px; font-size:11px; margin-top:2px;">
                     <span style="color:var(--text-muted); font-size:10px; text-transform:uppercase; letter-spacing:.03em;"><i class="fa-solid fa-barcode" style="margin-right:2px; font-size:10px; opacity:0.8;"></i>S/N:</span>
-                    <code style="font-family:var(--font-code); font-size:11px; color:var(--text); background:var(--surface-2); padding:1px 5px; border-radius:3px; border:1px solid var(--border);">${escapeHtml(m.serial)}</code>
+                    <code style="font-family:var(--font-code); font-size:11px; color:var(--text); background:var(--surface-2); padding:1px 5px; border-radius:var(--radius); border:1px solid var(--border);">${escapeHtml(m.serial)}</code>
                 </div>
             ` : (isStack ? `
                 <div style="display:inline-flex; align-items:center; gap:4px; font-size:11px; margin-top:2px; color:var(--text-muted);">
