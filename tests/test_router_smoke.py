@@ -4,6 +4,7 @@ Smoke tests that actually execute handler bodies for every router.
 import importlib
 import pkgutil
 import unittest
+from unittest import mock
 from fastapi.testclient import TestClient
 
 import routers
@@ -61,11 +62,17 @@ class TestRouterSmoke(unittest.TestCase):
         self.assertTrue(routes, "app registered no routes")
 
     def test_endpoints_execute_without_server_error(self):
-        for method, path, body in SMOKE_ENDPOINTS:
-            with self.subTest(method=method, path=path):
-                fn = getattr(self.client, method)
-                resp = fn(path, json=body) if body is not None else fn(path)
-                self.assertNotEqual(resp.status_code, 500, f"{method.upper()} {path} raised a server error: {resp.text}")
+        # /api/cloud-backup/run would perform a real SFTP upload if ambient
+        # app_settings.json had the mirror enabled: never let a smoke test
+        # depend on that. Mock is harmless for every other endpoint here.
+        with mock.patch("services.cloud_backup.run_mirror",
+                        return_value={"ok": False, "error": "smoke test", "uploaded": 0,
+                                      "skipped": 0, "failed": 0, "verified": 0, "files": {}}):
+            for method, path, body in SMOKE_ENDPOINTS:
+                with self.subTest(method=method, path=path):
+                    fn = getattr(self.client, method)
+                    resp = fn(path, json=body) if body is not None else fn(path)
+                    self.assertNotEqual(resp.status_code, 500, f"{method.upper()} {path} raised a server error: {resp.text}")
 
     def test_ws_terminal_rejects_bad_token(self):
         with self.assertRaises(Exception):
