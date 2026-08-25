@@ -23,20 +23,25 @@ router = APIRouter(tags=["Cloud Backup"])
 
 
 class CloudBackupSettingsSchema(BaseModel):
-    enabled: bool = False
-    kind: str = "sftp"
-    host: str = ""
-    port: int = 22
-    username: str = ""
-    auth: str = "key"
-    key_path: str = ""
-    key_passphrase: str = ""
-    password: str = ""
-    remote_root: str = ""
-    host_key_fingerprint: str = ""
-    encrypt_payload: bool = False
-    run_after_backup: bool = True
-    stale_after_hours: int = 48
+    # All fields optional/unset-default: the PUT route merges with
+    # exclude_unset so it only applies what the client actually sent.
+    # A field with an always-emitted default (e.g. host_key_fingerprint="")
+    # would silently overwrite the stored value -- for host_key_fingerprint
+    # specifically, that unpins the host key (empty pin = trust-on-first-use).
+    enabled: bool | None = None
+    kind: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    auth: str | None = None
+    key_path: str | None = None
+    key_passphrase: str | None = None
+    password: str | None = None
+    remote_root: str | None = None
+    host_key_fingerprint: str | None = None
+    encrypt_payload: bool | None = None
+    run_after_backup: bool | None = None
+    stale_after_hours: int | None = None
 
 
 @router.get("/api/cloud-backup/settings")
@@ -49,9 +54,13 @@ def put_cloud_backup_settings(payload: CloudBackupSettingsSchema,
                               current_user=Depends(require_admin)):
     # Merge onto the currently stored config: settings.save() replaces the
     # whole section with exactly the keys it receives, so a partial payload
-    # would silently drop fields the client did not resend.
+    # would silently drop fields the client did not resend. exclude_unset
+    # applies only fields the client actually sent -- every field defaults
+    # to None, so an omitted field never overwrites the stored value with a
+    # schema default (host_key_fingerprint="" would otherwise unpin the host
+    # key, enabled=False would otherwise silently disable the mirror).
     cfg = dict(cb_settings.read())
-    cfg.update(payload.model_dump())
+    cfg.update(payload.model_dump(exclude_unset=True))
     errors = cb_settings.validate(cfg)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
@@ -98,7 +107,7 @@ def get_cloud_backup_status(current_user=Depends(get_current_user)):
 
 
 @router.get("/api/cloud-backup/remote")
-async def list_cloud_backup_remote(current_user=Depends(require_admin)):
+async def list_cloud_backup_remote(current_user=Depends(get_current_user)):
     """What the remote manifest holds, filtered to the caller's tenant scope.
     The first path segment is the tenant, by construction of the layout."""
     cfg = cb_settings.read()
