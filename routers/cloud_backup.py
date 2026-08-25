@@ -8,16 +8,20 @@ which host" is a security question.
 
 import asyncio
 import json
+import logging
 import posixpath
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from core import core_engine
 from routers.deps import get_current_user, require_admin, user_group_scope
 from security.security_manager import log_audit
 from services import cloud_backup
 from services.cloud_backup import settings as cb_settings
 from services.cloud_backup import sftp as cb_sftp
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Cloud Backup"])
 
@@ -103,7 +107,17 @@ async def run_cloud_backup(current_user=Depends(require_admin)):
 
 @router.get("/api/cloud-backup/status")
 def get_cloud_backup_status(current_user=Depends(get_current_user)):
-    return cloud_backup.status()
+    data = dict(cloud_backup.status())
+    # last_run.error is "<rel>: <exc>" for a per-file failure, i.e. a full
+    # <tenant>/<vendor>/<hostname>-<ip>.txt path. This route is open to any
+    # authenticated role and any scope, so only an admin sees the detail; the
+    # rest get a generic marker. Nothing is lost: the detail stays in the
+    # state file.
+    last_run = dict(data.get("last_run") or {})
+    if current_user.get("role") != "admin" and last_run.get("error"):
+        last_run["error"] = "errore nell'ultimo ciclo"
+    data["last_run"] = last_run
+    return data
 
 
 @router.get("/api/cloud-backup/remote")
@@ -111,7 +125,12 @@ async def list_cloud_backup_remote(current_user=Depends(get_current_user)):
     """What the remote manifest holds, filtered to the caller's tenant scope.
     The first path segment is the tenant, by construction of the layout."""
     cfg = cb_settings.read()
+    # Backups are written under sanitize_filename(group), so the raw group
+    # names of the scope have to be sanitized the same way before comparing:
+    # "Sede Milano" lands in the directory "Sede_Milano".
     scope = user_group_scope(current_user)
+    if scope is not None:
+        scope = {core_engine.sanitize_filename(g) for g in scope}
 
     def _fetch():
         target = cb_sftp.open_target(cfg)
@@ -125,7 +144,13 @@ async def list_cloud_backup_remote(current_user=Depends(get_current_user)):
     try:
         manifest = await asyncio.to_thread(_fetch)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Remoto non leggibile: {exc}")
+        # str(exc) carries the key_path for a missing key and both fingerprints
+        # for a host key mismatch; this route is open to any authenticated role.
+        logger.warning("cloud-backup remote listing failed: %s", exc)
+        detail = "Remoto non leggibile"
+        if current_user.get("role") == "admin":
+            detail = f"{detail}: {exc}"
+        raise HTTPException(status_code=502, detail=detail)
     files = manifest.get("files") or {}
     if scope is not None:
         files = {rel: meta for rel, meta in files.items() if rel.split("/")[0] in scope}

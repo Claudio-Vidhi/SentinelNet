@@ -3142,7 +3142,12 @@
             <input type="password" id="cbSecret" autocomplete="new-password" style="width:100%;"></label>
           <label style="font-size:12px; color:var(--text-muted);"><span data-i18n="cbLblRemoteRoot">Cartella remota</span>
             <input type="text" id="cbRemoteRoot" placeholder="/srv/backups/sentinelnet" style="width:100%;"></label>
+          <label style="font-size:12px; color:var(--text-muted);"><span data-i18n="cbLblFingerprint">Host key (SHA256)</span>
+            <input type="text" id="cbFingerprint" placeholder="SHA256:..." style="width:100%;"></label>
         </div>
+        <p style="margin:0 0 12px; font-size:11.5px; color:var(--text-muted); max-width:64ch;" data-i18n="cbFingerprintHelp">
+          Finche' il campo resta vuoto si accetta qualunque host key al primo collegamento. Esegui "Prova connessione", verifica l'impronta mostrata e salvala qui: da quel momento un host diverso viene rifiutato prima di inviare le credenziali.
+        </p>
         <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:4px;">
           <input type="checkbox" id="cbEncrypt" style="width:16px; height:16px;">
           <span data-i18n="cbLblEncrypt">Cifra i file prima di inviarli</span>

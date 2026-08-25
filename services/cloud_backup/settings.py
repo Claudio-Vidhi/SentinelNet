@@ -88,8 +88,14 @@ def validate(cfg: dict) -> list[str]:
         errors.append("port: fuori intervallo 1-65535")
     if not (cfg.get("username") or "").strip():
         errors.append("username: obbligatorio")
-    if not (cfg.get("remote_root") or "").strip():
+    remote_root = (cfg.get("remote_root") or "").strip()
+    if not remote_root:
         errors.append("remote_root: obbligatorio")
+    elif not remote_root.startswith("/"):
+        # ensure_dir() always builds an absolute path while put() writes
+        # relative to the SSH home: a relative root makes the two disagree and
+        # every upload fails with "No such file".
+        errors.append("remote_root: percorso assoluto obbligatorio (deve iniziare con /)")
     if cfg.get("auth") == "key" and not (cfg.get("key_path") or "").strip():
         errors.append("key_path: obbligatorio con autenticazione a chiave")
     if (cfg.get("auth") == "password" and not (cfg.get("password") or "").strip()

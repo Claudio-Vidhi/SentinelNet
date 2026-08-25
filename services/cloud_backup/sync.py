@@ -57,7 +57,8 @@ def plan_uploads(local: dict, known: dict) -> list[str]:
 def run_mirror(open_target=_open_target) -> dict:
     """One mirror pass. Returns the result dict, also recorded in state."""
     result: dict = {"started_at": _now(), "ok": False, "uploaded": 0, "skipped": 0,
-                    "failed": 0, "verified": 0, "error": None, "files": {}}
+                    "failed": 0, "verified": 0, "error": None, "files": {},
+                    "unverified": []}
     if not _run_lock.acquire(blocking=False):
         result["error"] = "a mirror cycle is already running"
         return result
@@ -95,12 +96,23 @@ def run_mirror(open_target=_open_target) -> dict:
                     result["error"] = result["error"] or f"{rel}: {exc}"
                     failed_rels.add(rel)
 
+            # A file whose upload failed must not be advertised with its new
+            # hash: the remote still holds the previous version. Republish the
+            # hash state says is offsite, and drop the entry only when there is
+            # no known previous version. No "size" is emitted for those entries
+            # -- state carries hashes only, and a wrong size is worse than none
+            # (the restore script verifies sha256 and ignores size).
+            manifest_files = {rel: {"sha256": entry["sha256"], "size": entry["size"],
+                                    "uploaded_at": _now()}
+                              for rel, entry in local.items() if rel not in failed_rels}
+            for rel in failed_rels:
+                previous = known.get(rel)
+                if previous:
+                    manifest_files[rel] = {"sha256": previous}
             manifest = {
                 "schema": 1, "updated_at": _now(), "source": "sentinelnet",
                 "encrypted": encrypt,
-                "files": {rel: {"sha256": entry["sha256"], "size": entry["size"],
-                                "uploaded_at": _now()}
-                          for rel, entry in local.items() if rel not in failed_rels},
+                "files": dict(sorted(manifest_files.items())),
             }
             manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
             restore_bytes = RESTORE_SCRIPT.encode("utf-8")
