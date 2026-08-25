@@ -71,7 +71,9 @@ class TestRouterParity(unittest.TestCase):
     # Percorsi NUOVI legittimi (funzionalità aggiunte dopo lo snapshot golden).
     ALLOWED_NEW_PREFIXES = ("/api/observability", "/api/settings/app", "/api/settings/netsec-audit", "/api/settings/flow-siem-preview", "/api/settings/audit-checklist", "/api/flow-siem", "/api/arp", "/api/ai", "/api/provisioner", "/api/mcp", "/api/sites", "/api/command-jobs", "/api/agent", "/api/fortigate/{ip}/firewall", "/api/fortigate/targets", "/api/identities", "/api/config-analyzer/convert", "/api/redundancy", "/api/netsec-audit", "/api/audit-checklist", "/api/incidents", "/api/settings/incidents", "/api/diagnose", "/api/fortigate/{ip}/system", "/api/fortigate/{ip}/vpn", "/api/fortigate/{ip}/sdwan", "/api/endpoints", "/api/settings/snmp-defaults", "/api/settings/ping-monitor", "/api/ping-monitor", "/api/settings/ui-variant", "/api/mac/port-control", "/api/wlc", "/api/scan-verify", "/api/version", "/api/reassign-device-site", "/api/policy-test", "/api/export/devices/columns", "/api/export/devices/preview", "/api/drift",
                           # Classification export (serial + neighbour columns), shipped in 0.12.0.
-                          "/api/export/classification")
+                          "/api/export/classification",
+                          # Offsite SFTP backup mirror (cloud-backup plan).
+                          "/api/cloud-backup")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -177,7 +179,9 @@ class TestFullParity(unittest.TestCase):
                     "/api/scan-verify", "/api/version", "/api/policy-test",
                     "/api/export/devices/columns", "/api/export/devices/preview", "/api/drift",
                     # Classification export (serial + neighbour columns), shipped in 0.12.0.
-                    "/api/export/classification")
+                    "/api/export/classification",
+                    # Offsite SFTP backup mirror (cloud-backup plan).
+                    "/api/cloud-backup")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
@@ -205,7 +209,10 @@ class TestFullParity(unittest.TestCase):
                     # ALLOWED_NEW_PREFIXES, come FlowRequest): il pacchetto
                     # testimone di una segnalazione piu' la regola che secondo
                     # la segnalazione lo intercetta.
-                    "ProofRequest")
+                    "ProofRequest",
+                    # Offsite SFTP backup mirror config (cloud-backup plan,
+                    # route already covered by NEW_PREFIXES).
+                    "CloudBackupSettingsSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.

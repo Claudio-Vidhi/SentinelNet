@@ -32,6 +32,9 @@ SMOKE_ENDPOINTS = [
     ("post", "/api/policy-test/192.0.2.1/trace", {"src_ip": "1.1.1.1", "dst_ip": "2.2.2.2"}),
     ("get", "/api/policy-test/192.0.2.1/examples", None),
     ("get", "/api/policy-test/192.0.2.1/findings", None),
+    ("get", "/api/cloud-backup/settings", None),
+    ("get", "/api/cloud-backup/status", None),
+    ("post", "/api/cloud-backup/run", None),
 ]
 
 class TestRouterSmoke(unittest.TestCase):
