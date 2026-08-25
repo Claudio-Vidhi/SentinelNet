@@ -27,6 +27,19 @@ class TestCloudBackupApi(unittest.TestCase):
                                 json={"username": name, "password": "Pass123!"})
             cls.tokens[name] = r.json().get("access_token", "")
 
+    def setUp(self):
+        # The routes go through the real app_settings store: without this the
+        # suite would leave enabled=True and a host in data/app_settings.json,
+        # and every triage cycle on the developer's machine would then try an
+        # outbound SFTP connect. Same pattern as test_cloud_backup_settings.
+        self.store = {}
+        patcher_get = mock.patch("core.app_settings.get_app_settings",
+                                 side_effect=lambda: dict(self.store))
+        patcher_save = mock.patch("core.app_settings.save_app_settings",
+                                  side_effect=self.store.update)
+        patcher_get.start(); patcher_save.start()
+        self.addCleanup(patcher_get.stop); self.addCleanup(patcher_save.stop)
+
     def _headers(self, who):
         return {"Authorization": f"Bearer {self.tokens[who]}",
                 "X-Requested-With": "SentinelNet"}
@@ -113,6 +126,68 @@ class TestCloudBackupApi(unittest.TestCase):
         files = r.json()["files"]
         self.assertIn("site-a/switch-01.cfg", files)
         self.assertNotIn("site-b/switch-02.cfg", files)
+
+    def test_remote_scope_matches_the_sanitized_directory_name(self):
+        # Backups land under sanitize_filename(group): "Sede Milano" becomes
+        # the directory "Sede_Milano". Comparing the raw group name would show
+        # the scoped user an empty listing for their own tenant.
+        try:
+            user_manager.create_user("cbspaced", "Pass123!", role="viewer",
+                                     groups=["Sede Milano"])
+        except Exception:
+            pass
+        r = self.client.post("/api/auth/login",
+                             json={"username": "cbspaced", "password": "Pass123!"})
+        headers = {"Authorization": f"Bearer {r.json().get('access_token', '')}",
+                   "X-Requested-With": "SentinelNet"}
+        manifest = {"updated_at": "2026-08-25T00:00:00Z", "encrypted": False,
+                    "files": {"Sede_Milano/cisco/switch-01.cfg": {"sha256": "sha256:aaa"},
+                              "site-b/switch-02.cfg": {"sha256": "sha256:bbb"}}}
+
+        class FakeTarget:
+            def get(self, path):
+                return json.dumps(manifest).encode("utf-8")
+
+            def close(self):
+                pass
+
+        with mock.patch("services.cloud_backup.sftp.open_target", return_value=FakeTarget()):
+            r = self.client.get("/api/cloud-backup/remote", headers=headers)
+        self.assertEqual(200, r.status_code)
+        files = r.json()["files"]
+        self.assertIn("Sede_Milano/cisco/switch-01.cfg", files)
+        self.assertNotIn("site-b/switch-02.cfg", files)
+
+    def test_status_hides_the_failing_file_path_from_a_non_admin(self):
+        detail = "site-a/cisco/switch-01-192.0.2.10.txt: permission denied"
+        with mock.patch("services.cloud_backup.status", return_value={
+                "enabled": True, "encrypt_payload": False, "pending": 0,
+                "hours_since_success": 1.0, "stale_after_hours": 48,
+                "last_success_at": None,
+                "last_run": {"ok": False, "error": detail, "uploaded": 0,
+                             "verified": 0}}):
+            viewer = self.client.get("/api/cloud-backup/status",
+                                     headers=self._headers("cbviewer"))
+            admin = self.client.get("/api/cloud-backup/status",
+                                    headers=self._headers("cbadmin"))
+        self.assertEqual(200, viewer.status_code)
+        self.assertNotIn("switch-01", viewer.text)
+        self.assertNotIn("192.0.2.10", viewer.text)
+        self.assertFalse(viewer.json()["last_run"]["ok"])
+        self.assertIn("switch-01", admin.text)
+
+    def test_remote_error_detail_is_generic_for_a_non_admin(self):
+        with mock.patch("services.cloud_backup.sftp.open_target",
+                        side_effect=HostKeyMismatch(
+                            "host key SHA256:aaa does not match pinned SHA256:bbb")):
+            viewer = self.client.get("/api/cloud-backup/remote",
+                                     headers=self._headers("cbviewer"))
+            admin = self.client.get("/api/cloud-backup/remote",
+                                    headers=self._headers("cbadmin"))
+        self.assertEqual(502, viewer.status_code)
+        self.assertNotIn("SHA256:", viewer.text)
+        self.assertEqual(502, admin.status_code)
+        self.assertIn("SHA256:", admin.text)
 
     def test_test_route_reports_fingerprint_on_success(self):
         class FakeTarget:

@@ -22,7 +22,7 @@ class TestCloudBackupUi(unittest.TestCase):
 
     def test_every_bound_id_exists_in_the_template(self):
         for element_id in ("cbEnabled", "cbHost", "cbPort", "cbUsername", "cbAuth",
-                           "cbKeyPath", "cbSecret", "cbRemoteRoot", "cbEncrypt",
+                           "cbKeyPath", "cbSecret", "cbRemoteRoot", "cbFingerprint", "cbEncrypt",
                            "cbRunAfterBackup", "cbBtnSave", "cbBtnTest", "cbBtnRun",
                            "cbStatusBox"):
             self.assertIn(f'id="{element_id}"', self.html, element_id)
@@ -36,7 +36,8 @@ class TestCloudBackupUi(unittest.TestCase):
 
     def test_strings_exist_in_both_languages(self):
         for key in ("cbTitle", "cbLblHost", "cbLblEncrypt", "cbEncryptWarning",
-                    "cbBtnTest", "cbStale", "cbPending"):
+                    "cbBtnTest", "cbStale", "cbPending", "cbLblFingerprint",
+                    "cbFingerprintHelp", "cbPinHint"):
             self.assertGreaterEqual(self.i18n.count(f"{key}:"), 2, key)
 
     def test_module_is_lazy_loaded_on_the_settings_tab(self):

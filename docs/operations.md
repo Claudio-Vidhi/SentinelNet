@@ -244,6 +244,23 @@ live process produces a stale backup without telling you.
 Restore: stop the process, put the directory back, restart. Migrations are
 forward-only and idempotent.
 
+## Pinning the mirror host key
+
+Until `Host key (SHA256)` is filled in, the first connection accepts whatever
+key the server presents - a redirected DNS record is then enough to hand the
+backup credential to someone else. Pin it once, at setup:
+
+1. Fill in host, user, authentication and remote folder (absolute path, it must
+   start with `/`), then Save.
+2. Press **Prova connessione / Test connection**. The toast reports the
+   fingerprint the server presented, and the field is filled in with it.
+3. Check that fingerprint against the server itself
+   (`ssh-keyscan -t ed25519 backup.example.net | ssh-keygen -lf -`), then Save.
+
+From then on a server presenting a different key is refused during the
+handshake, before any credential is sent. Rotating the server key means
+clearing the field, testing again and re-pinning.
+
 ## Restoring from the offsite mirror
 
 The mirror is write-only: the app never reads it back. Recovering is a manual,
