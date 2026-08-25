@@ -77,6 +77,8 @@ def run_triage_background(allowed_groups=None):
         triage_job["status"] = "complete"
         triage_job["current_device"] = ""
 
+    core_engine.maybe_mirror_offsite()
+
 @router.post("/api/run-triage")
 def run_triage(payload: TriageRunRequest = TriageRunRequest(),
                current_user = Depends(require_operator)):
