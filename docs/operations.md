@@ -244,6 +244,31 @@ live process produces a stale backup without telling you.
 Restore: stop the process, put the directory back, restart. Migrations are
 forward-only and idempotent.
 
+## Restoring from the offsite mirror
+
+The mirror is write-only: the app never reads it back. Recovering is a manual,
+documented procedure - verify it once, by hand, before you need it.
+
+1. Copy the archive locally:
+   `scp -r user@backup.example.net:/srv/backups/sentinelnet ./archive`
+2. Inspect `archive/_manifest.json`: `updated_at` is when the copy was last
+   refreshed, `encrypted` says whether the files are ciphertext.
+3. Rebuild the tree with the script shipped alongside it:
+
+   ```sh
+   python archive/restore.py --source archive --target ./restored
+   # encrypted archive:
+   python archive/restore.py --source archive --target ./restored --key-file fernet.key
+   ```
+
+4. Copy what you need back under `backup-config/<tenant>/<vendor>/`. Current
+   configs keep their name; previous versions live in `.history/` with their UTC
+   timestamp in the filename and are indexed by `<ip>-index.json`.
+
+The Fernet key for an encrypted archive is the one in this install's key store.
+Without it the copy cannot be read - which is why enabling encryption comes with
+backing that key up separately, offline.
+
 ---
 
 ## 8. Limits to know before scaling

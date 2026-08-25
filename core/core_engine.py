@@ -2408,3 +2408,24 @@ def invalidate_netmap_cache():
     _netmap_cache["by_filter"] = {}
     _pcreport_cache["by_filter"] = {}
 
+
+def maybe_mirror_offsite() -> None:
+    """Runs the offsite mirror after a backup cycle, when configured.
+
+    Imported lazily and never allowed to raise: the mirror is redundancy, and a
+    broken remote must not turn a successful backup collection into a failed
+    one. The failure is recorded in the mirror's own state and shown in its
+    status panel.
+    """
+    try:
+        from services import cloud_backup
+        from services.cloud_backup import settings as cb_settings
+        cfg = cb_settings.read()
+        if not (cfg.get("enabled") and cfg.get("run_after_backup")):
+            return
+        result = cloud_backup.run_mirror()
+        if not result.get("ok"):
+            logging.warning("[cloud_backup] mirror non riuscito: %s", result.get("error"))
+    except Exception as exc:
+        logging.warning("[cloud_backup] mirror non eseguito: %s", exc)
+
