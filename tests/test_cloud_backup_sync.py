@@ -122,6 +122,66 @@ class TestRunMirror(unittest.TestCase):
         result = sync.run_mirror(open_target=_boom)
         self.assertFalse(result["ok"])
 
+    def test_manifest_omits_a_file_that_failed_to_upload(self):
+        _write(self.root, "site-a/cisco/switch-02-192.0.2.11.txt", "hostname switch-02\n")
+        broken = os.path.normpath(
+            os.path.join(self.root, "site-a", "cisco", "switch-02-192.0.2.11.txt"))
+        real_open = open
+        calls = {"n": 0}
+
+        def flaky_open(path, *args, **kwargs):
+            # walk_local's read (to hash) must succeed so the file is still
+            # listed in `local`; only the later read-for-upload fails, so this
+            # exercises "upload failed" rather than "never seen".
+            if os.path.normpath(str(path)) == broken:
+                calls["n"] += 1
+                if calls["n"] == 2:
+                    raise OSError("simulated read failure")
+            return real_open(path, *args, **kwargs)
+
+        with mock.patch("builtins.open", side_effect=flaky_open):
+            result = sync.run_mirror(open_target=lambda cfg: self.target)
+        self.assertFalse(result["ok"])
+        manifest = json.loads(self.target.written["/srv/backups/_manifest.json"])
+        self.assertNotIn("site-a/cisco/switch-02-192.0.2.11.txt", manifest["files"])
+        self.assertIn("site-a/cisco/switch-01-192.0.2.10.txt", manifest["files"])
+
+
+class TestStatus(unittest.TestCase):
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        _write(self.root, "site-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
+        _write(self.root, "site-a/cisco/switch-02-192.0.2.11.txt", "hostname switch-02\n")
+        self.cfg = {"enabled": True, "encrypt_payload": False, "stale_after_hours": 48}
+        for p in [mock.patch("services.cloud_backup.sync.BACKUP_FOLDER", self.root),
+                  mock.patch("services.cloud_backup.settings.read",
+                             side_effect=lambda: dict(self.cfg)),
+                  mock.patch("services.cloud_backup.state.read", return_value={
+                      "last_run": {"ok": True}, "last_success_at": "2026-08-20T00:00:00Z"}),
+                  mock.patch("services.cloud_backup.state.known_hashes",
+                             return_value={"site-a/cisco/switch-01-192.0.2.10.txt": "sha256:known"}),
+                  mock.patch("services.cloud_backup.state.hours_since_success", return_value=5.0)]:
+            p.start(); self.addCleanup(p.stop)
+
+    def test_status_reports_keys_and_pending_count(self):
+        result = sync.status()
+        self.assertEqual(
+            {"enabled", "encrypt_payload", "last_run", "last_success_at",
+             "hours_since_success", "stale_after_hours", "pending"},
+            set(result))
+        self.assertTrue(result["enabled"])
+        self.assertEqual({"ok": True}, result["last_run"])
+        self.assertEqual("2026-08-20T00:00:00Z", result["last_success_at"])
+        self.assertEqual(5.0, result["hours_since_success"])
+        self.assertEqual(48, result["stale_after_hours"])
+        # switch-01 is known offsite, switch-02 is not: one pending.
+        self.assertEqual(1, result["pending"])
+
+    def test_status_defaults_stale_after_hours_when_unset(self):
+        del self.cfg["stale_after_hours"]
+        self.assertEqual(48, sync.status()["stale_after_hours"])
+
 
 if __name__ == "__main__":
     unittest.main()

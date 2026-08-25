@@ -37,5 +37,34 @@ class TestVerification(unittest.TestCase):
         self.assertEqual({}, result["files"])
 
 
+class ManifestDiscardingTarget(FakeTarget):
+    """Every real file lands; the manifest itself is accepted and discarded."""
+    def size(self, remote_path):
+        if remote_path.endswith(sync.MANIFEST_NAME):
+            return 0
+        return len(self.written.get(remote_path, b""))
+
+
+class TestManifestVerification(unittest.TestCase):
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        _write(self.root, "site-a/cisco/switch-01-192.0.2.10.txt", "hostname switch-01\n")
+        cfg = {"enabled": True, "kind": "sftp", "host": "backup.example.net", "port": 22,
+               "username": "sentinelnet", "auth": "password", "password": "s3cret",
+               "remote_root": "/srv/backups", "encrypt_payload": False,
+               "host_key_fingerprint": ""}
+        for p in [mock.patch("services.cloud_backup.sync.BACKUP_FOLDER", self.root),
+                  mock.patch("services.cloud_backup.settings.read", return_value=cfg),
+                  mock.patch("services.cloud_backup.state.known_hashes", return_value={}),
+                  mock.patch("services.cloud_backup.state.record_run")]:
+            p.start(); self.addCleanup(p.stop)
+
+    def test_a_discarded_manifest_fails_the_run_and_names_it(self):
+        result = sync.run_mirror(open_target=lambda cfg: ManifestDiscardingTarget())
+        self.assertFalse(result["ok"])
+        self.assertIn(sync.MANIFEST_NAME, result["error"])
+
+
 if __name__ == "__main__":
     unittest.main()
