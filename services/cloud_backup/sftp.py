@@ -2,8 +2,10 @@
 """SFTP transport. The only module here that imports paramiko.
 
 Two rules carry the security of the whole feature:
-  - the host key is pinned. AutoAddPolicy with no pin is how a redirected DNS
-    entry turns a backup into an exfiltration channel;
+  - the host key is pinned via a MissingHostKeyPolicy that runs before
+    authentication. Accepting an unpinned key after auth is how a redirected
+    DNS entry turns a backup into an exfiltration channel that already has
+    the operator's credential;
   - every upload lands on a temporary name and is renamed into place, so an
     interrupted transfer never leaves a truncated config looking current.
 """
@@ -20,9 +22,7 @@ class HostKeyMismatch(Exception):
 
 
 def _fingerprint(host_key) -> str:
-    b64 = host_key.get_base64()
-    b64 += "=" * (-len(b64) % 4)  # tolerate unpadded base64 from some clients
-    digest = hashlib.sha256(base64.b64decode(b64)).digest()
+    digest = hashlib.sha256(base64.b64decode(host_key.get_base64())).digest()
     return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
 
 
@@ -56,8 +56,15 @@ class SftpTarget:
     def put(self, data: bytes, remote_path: str) -> None:
         self.ensure_dir(posixpath.dirname(remote_path))
         tmp = remote_path + ".part"
-        with self._client.open(tmp, "wb") as fh:
-            fh.write(data)
+        try:
+            with self._client.open(tmp, "wb") as fh:
+                fh.write(data)
+        except Exception:
+            try:
+                self._client.remove(tmp)
+            except Exception:
+                pass
+            raise
         self._client.posix_rename(tmp, remote_path)
 
     def size(self, remote_path: str) -> int | None:
@@ -77,11 +84,29 @@ class SftpTarget:
             self._ssh.close()
 
 
+class _PinningPolicy(paramiko.MissingHostKeyPolicy):
+    """Paramiko calls missing_host_key() after key exchange but before
+    authentication, so raising here aborts the handshake before any
+    credential is sent. An empty pinned_fingerprint means trust-on-first-use:
+    accept, but still record the observed fingerprint for the caller."""
+
+    def __init__(self, pinned_fingerprint: str):
+        self.pinned_fingerprint = pinned_fingerprint
+        self.fingerprint = ""
+
+    def missing_host_key(self, client, hostname, key):
+        self.fingerprint = _fingerprint(key)
+        if self.pinned_fingerprint and self.pinned_fingerprint != self.fingerprint:
+            raise HostKeyMismatch(
+                f"host key {self.fingerprint} does not match pinned "
+                f"{self.pinned_fingerprint}")
+
+
 def open_target(cfg: dict) -> SftpTarget:
     """Connects with the operator's key or password. The key file is read,
     never created or rewritten."""
     ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.set_missing_host_key_policy(_PinningPolicy(cfg.get("host_key_fingerprint") or ""))
     kwargs = {
         "hostname": cfg["host"], "port": int(cfg.get("port") or 22),
         "username": cfg["username"], "timeout": 20, "allow_agent": False,
@@ -93,12 +118,6 @@ def open_target(cfg: dict) -> SftpTarget:
             kwargs["passphrase"] = cfg["key_passphrase"]
     else:
         kwargs["password"] = cfg.get("password") or ""
-    ssh.connect(**kwargs)
-    target = SftpTarget(ssh, ssh.open_sftp(),
-                        pinned_fingerprint=cfg.get("host_key_fingerprint") or "")
-    try:
-        target.verify_host_key()
-    except HostKeyMismatch:
-        target.close()
-        raise
-    return target
+    ssh.connect(**kwargs)  # raises HostKeyMismatch from the policy before auth on mismatch
+    return SftpTarget(ssh, ssh.open_sftp(),
+                       pinned_fingerprint=cfg.get("host_key_fingerprint") or "")
