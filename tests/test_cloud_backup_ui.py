@@ -47,6 +47,9 @@ class TestCloudBackupUi(unittest.TestCase):
     def test_global_is_declared(self):
         self.assertIn("loadCloudBackup", _read("types", "globals.d.ts"))
 
+    def test_settings_tab_calls_loadCloudBackup_on_open(self):
+        self.assertIn("loadCloudBackup()", _read("static", "js", "settings.js"))
+
 
 if __name__ == "__main__":
     unittest.main()

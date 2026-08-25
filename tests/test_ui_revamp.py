@@ -1673,9 +1673,10 @@ class TestSettingsTabRestyle(unittest.TestCase):
         self.assertIn(
             "class=\"nav-item requires-admin\" data-tab=\"tab-settings\"",
             html)
-        # The ping-monitor, observability and application panels stay
-        # admin-gated in-body (3 gates: one per admin-only concern).
-        self.assertEqual(self._tab(html).count("requires-admin"), 3)
+        # The ping-monitor, observability, application and cloud-backup
+        # panels stay admin-gated in-body (4 gates: one per admin-only
+        # concern).
+        self.assertEqual(self._tab(html).count("requires-admin"), 4)
         self.assertIn('class="panel requires-admin"', self._tab(html))
         # Every loader is also role-gated server-side of the render.
         self.assertIn("if (currentRole !== 'admin') return;", html)

@@ -3,6 +3,13 @@
 // Classic script, one shared global scope (see AGENTS.md).
 
 (function () {
+    // Set true only after the stored config has actually loaded into the
+    // form. Save must refuse to run before that: on a failed GET the form
+    // sits at its HTML defaults, and a PUT of those defaults would blank
+    // out the stored host/username/paths (the router only protects secrets
+    // from an accidental clear, not the rest of the fields).
+    let loaded = false;
+
     function fillForm(cfg) {
         document.getElementById('cbEnabled').checked = !!cfg.enabled;
         document.getElementById('cbHost').value = cfg.host || '';
@@ -56,19 +63,29 @@
         const last = st.last_run || {};
         box.innerHTML =
             `<div style="color:${stale ? 'var(--warning)' : 'var(--success)'}; font-weight:700;">${escapeHtml(age)}</div>` +
-            `<div>${escapeHtml(i18n[currentLang].cbPending)}: <strong>${st.pending}</strong></div>` +
+            `<div>${escapeHtml(i18n[currentLang].cbPending)}: <strong>${escapeHtml(String(st.pending))}</strong></div>` +
             `<div>${escapeHtml(i18n[currentLang].cbLastRun)}: ${last.ok ? 'ok' : escapeHtml(last.error || '—')}` +
-            ` · ${last.uploaded || 0} ↑ · ${last.verified || 0} ✓</div>`;
+            ` · ${escapeHtml(String(last.uploaded || 0))} ↑ · ${escapeHtml(String(last.verified || 0))} ✓</div>`;
+    }
+
+    function renderLoadError() {
+        const box = document.getElementById('cbStatusBox');
+        if (box) box.textContent = i18n[currentLang].cbErrGeneric;
+        showToast(i18n[currentLang].cbErrGeneric, 'error');
     }
 
     async function loadCloudBackup() {
+        loaded = false;
         const res = await apiFetch('/api/cloud-backup/settings');
-        if (res && res.ok) fillForm(await res.json());
+        if (!res || !res.ok) { renderLoadError(); return; }
+        fillForm(await res.json());
+        loaded = true;
         const st = await apiFetch('/api/cloud-backup/status');
         if (st && st.ok) renderStatus(await st.json());
     }
 
     document.getElementById('cbBtnSave')?.addEventListener('click', async () => {
+        if (!loaded) { showToast(i18n[currentLang].cbErrGeneric, 'error'); return; }
         const res = await apiFetch('/api/cloud-backup/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -79,21 +96,21 @@
             loadCloudBackup();
         } else {
             const body = res ? await res.json() : {};
-            showToast(body.detail || 'errore', 'error');
+            showToast(body.detail || i18n[currentLang].cbErrGeneric, 'error');
         }
     });
 
     document.getElementById('cbBtnTest')?.addEventListener('click', async () => {
         const res = await apiFetch('/api/cloud-backup/test', { method: 'POST' });
-        const data = (res && res.ok) ? await res.json() : { ok: false, error: 'HTTP' };
-        showToast(data.ok ? `${i18n[currentLang].cbTestOk} ${data.fingerprint}` : data.error,
+        const data = (res && res.ok) ? await res.json() : { ok: false, error: i18n[currentLang].cbErrHttp };
+        showToast(data.ok ? `${i18n[currentLang].cbTestOk} ${data.fingerprint}` : (data.error || i18n[currentLang].cbErrGeneric),
                   data.ok ? 'success' : 'error');
     });
 
     document.getElementById('cbBtnRun')?.addEventListener('click', async () => {
         const res = await apiFetch('/api/cloud-backup/run', { method: 'POST' });
-        const data = (res && res.ok) ? await res.json() : { ok: false, error: 'HTTP' };
-        showToast(data.ok ? i18n[currentLang].cbRunOk : data.error,
+        const data = (res && res.ok) ? await res.json() : { ok: false, error: i18n[currentLang].cbErrHttp };
+        showToast(data.ok ? i18n[currentLang].cbRunOk : (data.error || i18n[currentLang].cbErrGeneric),
                   data.ok ? 'success' : 'error');
         loadCloudBackup();
     });
