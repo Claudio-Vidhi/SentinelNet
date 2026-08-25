@@ -45,6 +45,97 @@ class TestLayeredMapView(unittest.TestCase):
         block = block[:block.index("\n        }")]
         self.assertNotIn("interSelect.value = 'all'", block)
 
+    def test_long_lists_scroll_inside_their_section(self):
+        # Con 14 vicini le sezioni sotto finivano fuori vista: ogni elenco
+        # lungo scorre da solo e i titoli restano appesi in alto.
+        css = open(os.path.join(_REPO_ROOT, "static", "css", "dashboard.css"),
+                   encoding="utf-8").read()
+        self.assertIn(".drawer-list-scroll", css)
+        self.assertIn('id="drawerNeighborList" class="drawer-list drawer-list-scroll"', self.html)
+        self.assertIn('id="drawerPortChannelList" class="drawer-list drawer-list-scroll"', self.html)
+        title = css[css.index(".drawer-section-title {"):]
+        self.assertIn("position: sticky", title[:title.index("}")])
+
+    def test_portchannels_and_vlans_are_fetched_when_missing(self):
+        # Le due sezioni dicevano "nessuno" solo perche' i dati non erano mai
+        # stati chiesti: il report aggregati e l'analisi della config.
+        self.assertIn("'/api/portchannels?group='", self.src)
+        self.assertIn("'/api/config-analyzer/'", self.src)
+        # La risposta di un nodo non deve finire nel pannello di un altro.
+        self.assertIn("token === drawerFetchToken && currentSelectedNodeId === nodeId", self.src)
+
+    def test_map_and_panel_are_reachable_from_the_keyboard(self):
+        # Vis.js disegna su canvas: senza questi appigli un apparato si sceglie
+        # solo col mouse e il pannello resta irraggiungibile.
+        # assertTrue e non assertIn: su un fallimento assertIn stamperebbe
+        # l'intero sorgente del modulo.
+        self.assertIn('id="networkGraphContainer" tabindex="0"', self.html)
+        self.assertTrue("'ArrowRight'" in self.src, "nessuna navigazione a frecce sulla mappa")
+        self.assertTrue("ev.key !== 'Escape'" in self.src, "Esc non chiude il pannello")
+        self.assertIn('role="dialog"', self.html)
+        self.assertIn('id="drawerNodeHostname" class="drawer-title" tabindex="-1"', self.html)
+        # Gli elenchi che scorrono devono poter ricevere il fuoco.
+        for element_id in ("drawerNeighborList", "drawerPortChannelList"):
+            block = self.html[self.html.index(f'id="{element_id}"'):]
+            block = block[:block.index(">")]
+            self.assertIn('tabindex="0"', block)
+
+    def test_group_and_tier_changes_do_not_refetch_the_map(self):
+        # Aprire un gruppo e' una scelta di disegno, non un dato nuovo: prima
+        # ogni click rifaceva due chiamate al backend.
+        self.assertTrue("function redrawInteractiveMap()" in self.src)
+        for fn in ("toggleLayeredGroup", "collapseAllLayeredGroups", "resetLayeredLevels"):
+            block = self.src[self.src.index(f"function {fn}("):]
+            block = block[:block.index("\n    }")]
+            self.assertIn("redrawInteractiveMap()", block, fn)
+            self.assertNotIn("loadInteractiveMap()", block, fn)
+
+    def test_map_area_follows_the_window_height(self):
+        # 600px fissi lasciavano le ultime sezioni del pannello fuori dal
+        # riquadro: l'unico modo di vederle era rimpicciolire la pagina.
+        css = open(os.path.join(_REPO_ROOT, "static", "css", "dashboard.css"),
+                   encoding="utf-8").read()
+        block = css[css.index("#networkGraphContainer {"):]
+        block = block[:block.index("}")]
+        self.assertIn("calc(100vh", block)
+        self.assertIn("min-height", block)
+        # Il ridimensionamento manuale resta.
+        self.assertIn("resize: vertical", block)
+
+    def test_kpi_values_do_not_break_mid_word(self):
+        # break-all spezzava "AIR-AP2802I-E-K9" e "1 min ago" a meta' parola.
+        css = open(os.path.join(_REPO_ROOT, "static", "css", "dashboard.css"),
+                   encoding="utf-8").read()
+        block = css[css.index(".drawer-kpi strong {"):]
+        block = block[:block.index("}")]
+        self.assertNotIn("word-break: break-all", block)
+        self.assertIn("overflow-wrap: anywhere", block)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_vlans_of_a_leaf_come_from_the_switch_port(self):
+        # Un access point non ha una config: le sue VLAN stanno sulla porta
+        # dello switch che lo alimenta.
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_drawer_vlans.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+    def test_portchannel_report_waits_for_a_tenant(self):
+        # Il report Port-Channel apriva il tab elencando TUTTI i tenant:
+        # nessuna sede preselezionata, nessuna chiamata al backend.
+        select = self.html[self.html.index('id="topologyGroupSelect"'):]
+        select = select[:select.index("</select>")]
+        self.assertIn('<option value="" data-i18n="optSelectSite"', select)
+        self.assertLess(select.index('value=""'), select.index('value="all"'))
+        block = self.src[self.src.index("async function loadPortchannelReport("):]
+        block = block[:block.index("try {")]
+        self.assertIn("if (!selectedGroup) {", block)
+        core = open(os.path.join(_REPO_ROOT, "static", "js", "core.js"),
+                    encoding="utf-8").read()
+        core_block = core[core.index("const topoSelect = document.getElementById('topologyGroupSelect')"):]
+        core_block = core_block[:core_block.index("\n        }")]
+        self.assertNotIn("topoSelect.value = 'all'", core_block)
+
     def test_drawer_fields_exist_and_are_filled(self):
         # Il pannello mostrava "—" quasi ovunque: i campi che il backend gia'
         # manda (sede, seriale, versione, VLAN mgmt, vicini) devono esserci
@@ -61,6 +152,52 @@ class TestLayeredMapView(unittest.TestCase):
         # Core, distribuzione e accesso sono tutti "switch": il piano deve
         # venire dai salti, altrimenti la vista torna piatta.
         harness = os.path.join(_REPO_ROOT, "tests", "js", "test_layered_levels.mjs")
+        proc = subprocess.run([shutil.which("node"), harness],
+                              capture_output=True, text=True, cwd=_REPO_ROOT)
+        self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)
+
+
+class TestWideContentFits(unittest.TestCase):
+    """Tabelle larghe: scorrono nel loro contenitore, non oltre la finestra."""
+
+    def test_main_can_shrink_below_its_content(self):
+        # `main` e' una cella di griglia: con il `min-width: auto` di default
+        # una tabella larga la faceva crescere oltre la finestra e
+        # `body { overflow-x: hidden }` tagliava il contenuto a destra.
+        css = open(os.path.join(_REPO_ROOT, "static", "css", "dashboard.css"),
+                   encoding="utf-8").read()
+        block = css[css.index("main { padding:"):]
+        block = block[:block.index("\n\n")]
+        self.assertIn("min-width: 0", block)
+        self.assertIn("main .tab-content, main .panel, main .hero { min-width: 0; }", css)
+        # Il contenitore delle tabelle deve poter scorrere in orizzontale.
+        wrap = css[css.index(".table-container, .table-wrap {"):]
+        self.assertIn("overflow-x: auto", wrap[:wrap.index("}")])
+
+
+class TestLayeredGroups(unittest.TestCase):
+    """Foglie dello stesso tipo sotto lo stesso padre: un riquadro solo."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.src = open(os.path.join(_REPO_ROOT, "static", "js", "topology.js"),
+                       encoding="utf-8").read()
+        cls.html = open(os.path.join(_REPO_ROOT, "templates", "dashboard.html"),
+                        encoding="utf-8").read()
+
+    def test_collapse_button_is_bound(self):
+        self.assertIn('id="layeredCollapseBtn"', self.html)
+        self.assertIn("getElementById('layeredCollapseBtn')", self.src)
+
+    def test_group_node_opens_instead_of_the_drawer(self):
+        # Un riquadro "8 × Access Point" non ha un ispettore da mostrare: il
+        # click deve aprirlo, non aprire il pannello laterale.
+        self.assertIn("id.startsWith(GROUP_PREFIX)", self.src)
+        self.assertIn("layeredGroupOfChild[p.nodes[0]]", self.src)
+
+    @unittest.skipUnless(shutil.which("node"), "node non disponibile")
+    def test_grouping_runs_for_real(self):
+        harness = os.path.join(_REPO_ROOT, "tests", "js", "test_layered_groups.mjs")
         proc = subprocess.run([shutil.which("node"), harness],
                               capture_output=True, text=True, cwd=_REPO_ROOT)
         self.assertEqual(0, proc.returncode, proc.stderr or proc.stdout)

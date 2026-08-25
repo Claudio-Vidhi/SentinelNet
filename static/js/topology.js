@@ -15,7 +15,7 @@
     // mostra solo il report Port-Channel; la topologia vive nella mappa 2D.
     async function loadTopology() {
         const groupSelect = document.getElementById('topologyGroupSelect');
-        const selectedGroup = groupSelect ? groupSelect.value : 'all';
+        const selectedGroup = groupSelect ? groupSelect.value : '';
         loadPortchannelReport(selectedGroup);
     }
 
@@ -44,8 +44,16 @@
     async function loadPortchannelReport(selectedGroup) {
         const box = document.getElementById("portchannelReport");
         if (!box) return;
+        // Nessun Tenant scelto: non si interroga il backend e non si stampa
+        // nulla. Aprire il tab elencando d'ufficio TUTTI i tenant mescolava
+        // reti di clienti diversi senza che nessuno l'avesse chiesto.
+        if (!selectedGroup) {
+            cachedPortchannelsData = null;
+            box.innerHTML = `<p style="color:var(--text-muted); font-size:13px;">${escapeHtml(currentLang === 'en' ? 'Choose a tenant to see its Port-Channels.' : 'Scegli un Tenant per vederne i Port-Channel.')}</p>`;
+            return;
+        }
         try {
-            const res = await apiFetch('/api/portchannels?group=' + encodeURIComponent(selectedGroup || 'all'));
+            const res = await apiFetch('/api/portchannels?group=' + encodeURIComponent(selectedGroup));
             if (!res || !res.ok) { box.innerHTML = ''; return; }
             const data = await res.json();
             cachedPortchannelsData = data;
@@ -125,6 +133,10 @@
     // al trascinamento verticale, che riassegna il piano del nodo mosso.
     let layeredAssigned = {};
     let layeredGroup = 'all';
+    // Membro → gruppo aperto che lo contiene: il doppio click su un membro
+    // richiude il suo gruppo.
+    let layeredGroupOfChild = {};
+    let lastRenderedNodeIds = [];
 
     // Generatore dinamico di schede SVG ad alta tecnologia per i nodi del network
     // Metadati per tipo di apparato: colore distintivo (feature: colori per tipo
@@ -168,7 +180,289 @@
     function resetLayeredLevels(group) {
         delete layeredLevels[group];
         saveLayeredLevels();
-        loadInteractiveMap();
+        redrawInteractiveMap();
+    }
+
+    // ===== Vista "A livelli": raggruppamento delle foglie =====
+    // Otto access point appesi allo stesso switch sono otto riquadri che dicono
+    // la stessa cosa. Le foglie dello stesso TIPO sotto lo STESSO padre
+    // diventano un riquadro solo; un click lo apre, un doppio click su un
+    // membro lo richiude. Solo apparati terminali: switch e router non si
+    // raggruppano mai, sono la struttura della mappa.
+    const GROUPABLE_TYPES = ['ap', 'phone', 'camera', 'pc', 'server'];
+    const GROUP_MIN = 3;
+    const GROUP_PREFIX = 'grp:';
+
+    // Gruppi aperti per Sede: {"<gruppo>": ["grp:<padre>:<tipo>", ...]}
+    let layeredExpanded = {};
+    try { layeredExpanded = JSON.parse(localStorage.getItem('layeredExpanded') || '{}'); } catch (e) { layeredExpanded = {}; }
+    function saveLayeredExpanded() { localStorage.setItem('layeredExpanded', JSON.stringify(layeredExpanded)); }
+    function toggleLayeredGroup(group, key) {
+        const arr = layeredExpanded[group] || (layeredExpanded[group] = []);
+        const idx = arr.indexOf(key);
+        if (idx === -1) arr.push(key); else arr.splice(idx, 1);
+        saveLayeredExpanded();
+        redrawInteractiveMap();
+    }
+    function collapseAllLayeredGroups(group) {
+        delete layeredExpanded[group];
+        saveLayeredExpanded();
+        redrawInteractiveMap();
+    }
+
+    // Sostituisce le foglie raggruppabili con un nodo aggregato. Restituisce i
+    // nodi/link da disegnare e, per i gruppi aperti, la mappa membro → gruppo
+    // (serve al doppio click per richiudere).
+    function groupLayeredLeaves(nodesData, linksData, group) {
+        const expanded = new Set(layeredExpanded[group] || []);
+        const degree = new Map();
+        const firstLink = new Map();
+        nodesData.forEach(n => degree.set(n.id, 0));
+        linksData.forEach(l => {
+            if (!degree.has(l.source) || !degree.has(l.target)) return;
+            degree.set(l.source, degree.get(l.source) + 1);
+            degree.set(l.target, degree.get(l.target) + 1);
+            if (!firstLink.has(l.source)) firstLink.set(l.source, l);
+            if (!firstLink.has(l.target)) firstLink.set(l.target, l);
+        });
+
+        const buckets = new Map();
+        nodesData.forEach(n => {
+            if (!GROUPABLE_TYPES.includes(n.device_type) || degree.get(n.id) !== 1) return;
+            const l = firstLink.get(n.id);
+            const parent = l.source === n.id ? l.target : l.source;
+            const key = `${GROUP_PREFIX}${parent}:${n.device_type}`;
+            const b = buckets.get(key) || { key, parent, type: n.device_type, members: [] };
+            b.members.push(n);
+            buckets.set(key, b);
+        });
+
+        const groupOfChild = {};
+        const collapsed = [];
+        buckets.forEach(b => {
+            if (b.members.length < GROUP_MIN) return;
+            b.members.forEach(m => { groupOfChild[m.id] = b.key; });
+            if (!expanded.has(b.key)) collapsed.push(b);
+        });
+        if (!collapsed.length) return { nodes: nodesData, links: linksData, groupOfChild };
+
+        const hidden = new Set();
+        collapsed.forEach(b => b.members.forEach(m => hidden.add(m.id)));
+        const nodes = nodesData.filter(n => !hidden.has(n.id));
+        const links = linksData.filter(l => !hidden.has(l.source) && !hidden.has(l.target));
+        collapsed.forEach(b => {
+            const parentNode = nodesData.find(n => n.id === b.parent) || {};
+            // Lo stato dell'aggregato è il peggiore dei membri: un gruppo "su"
+            // che nasconde un apparato giù sarebbe una bugia.
+            const statuses = b.members.map(m => m.status);
+            const status = statuses.includes('offline') ? 'offline'
+                : (statuses.includes('online') ? 'online' : (statuses[0] || 'discovered'));
+            nodes.push({
+                id: b.key,
+                label: `${b.members.length} × ${deviceTypeLabel(b.type)}`,
+                group: parentNode.group,
+                status: status,
+                device_type: b.type,
+                vendor: b.members[0] && b.members[0].vendor,
+                is_group: true,
+                member_count: b.members.length,
+                members: b.members,
+            });
+            links.push({ source: b.parent, target: b.key, kind: 'group',
+                         member_count: b.members.length });
+        });
+        return { nodes, links, groupOfChild };
+    }
+
+    // Analisi della configurazione per IP: una sola chiamata per apparato, il
+    // risultato serve solo a riempire la sezione VLAN del pannello.
+    const drawerAnalysisCache = new Map();
+    let drawerFetchToken = 0;
+
+    function renderDrawerPortChannels(ip, hostname, topNode) {
+        const pcListEl = document.getElementById('drawerPortChannelList');
+        if (!pcListEl) return;
+        let pcItems = [];
+        if (cachedPortchannelsData && cachedPortchannelsData.devices) {
+            const pcDev = cachedPortchannelsData.devices.find(d => d.ip === ip || d.hostname === hostname);
+            if (pcDev && pcDev.portchannels && pcDev.portchannels.length) pcItems = pcDev.portchannels;
+        }
+        if (!pcItems.length && topNode.portchannels && topNode.portchannels.length) {
+            pcItems = topNode.portchannels;
+        }
+        if (!pcItems.length) {
+            // Gli aggregati che la mappa conosce dai link valgono comunque:
+            // meglio dire "Po1 verso X" che "nessun Port-Channel".
+            pcItems = (cachedTopologyLinks || [])
+                .filter(l => l.is_portchannel && (l.source === topNode.id || l.target === topNode.id))
+                .map(l => {
+                    const mine = l.source === topNode.id;
+                    const other = (cachedTopologyNodes || []).find(n => n.id === (mine ? l.target : l.source));
+                    return {
+                        name: l.pc_name || 'LAG',
+                        members: (mine ? l.local_ports : l.remote_ports) || [],
+                        neighbor: (other && other.label) || (mine ? l.target : l.source),
+                    };
+                });
+        }
+        const pcCountEl = document.getElementById('drawerPortChannelCount');
+        if (pcCountEl) pcCountEl.textContent = pcItems.length ? `(${pcItems.length})` : '';
+        if (!pcItems.length) {
+            const noPcTxt = currentLang === 'en' ? 'No Port-Channels configured on this node.' : 'Nessun Port-Channel configurato su questo nodo.';
+            pcListEl.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(noPcTxt)}</div>`;
+            return;
+        }
+        const membersTxt = currentLang === 'en' ? 'Members' : 'Membri';
+        const towardTxt = currentLang === 'en' ? 'Toward' : 'Verso';
+        pcListEl.innerHTML = pcItems.map(pc => {
+            const members = (pc.members || pc.interfaces || []).map(shortIface).join(', ') || '—';
+            const neigh = (pc.neighbors && pc.neighbors.length) ? pc.neighbors.join(', ') : (pc.neighbor || '—');
+            // Lo stato dal vivo, quando il report ce l'ha: "2/2 su".
+            const live = (pc.live_total ? `${pc.live_up}/${pc.live_total} ${currentLang === 'en' ? 'up' : 'su'}` : 'LACP ACTIVE');
+            const allUp = !pc.live_total || pc.live_up === pc.live_total;
+            return `<div class="drawer-list-item">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <strong style="color:var(--primary); font-family:var(--font-data); font-size:12.5px;">${escapeHtml(shortIface(pc.name || 'Po'))}</strong>
+                    <span class="badge badge-${allUp ? 'success' : 'danger'}" style="font-size:10px;">${escapeHtml(live)}</span>
+                </div>
+                <div style="font-size:11.5px; color:var(--text-muted);">
+                    <span>${membersTxt}: <code style="font-size:11px;">${escapeHtml(members)}</code></span>
+                </div>
+                ${neigh !== '—' ? `<div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">
+                    <span>${towardTxt}: <strong>${escapeHtml(neigh)}</strong></span>
+                </div>` : ''}
+            </div>`;
+        }).join('');
+    }
+
+    // "GigabitEthernet1/0/4" e "Gi1/0/4" sono la stessa porta: il nome della
+    // config e quello annunciato da CDP/LLDP vanno confrontati abbreviati.
+    function ifaceKey(name) {
+        return shortIface(String(name || '')).toLowerCase().replace(/\s+/g, '');
+    }
+
+    // VLAN di una porta di accesso/trunk, dalla config dello switch che la
+    // ospita: è così che si sa in quale VLAN vive un apparato che una config
+    // propria non ce l'ha (access point, telefono, telecamera).
+    function vlansFromSwitchPort(analysis, portName) {
+        if (!analysis || !portName) return [];
+        const key = ifaceKey(portName);
+        const iface = (analysis.interfaces || []).find(i => ifaceKey(i.name) === key);
+        if (!iface) return [];
+        const tags = [];
+        if (iface.access_vlan) tags.push(`${iface.access_vlan} (access)`);
+        if (iface.voice_vlan) tags.push(`${iface.voice_vlan} (voice)`);
+        if (iface.trunk_native) tags.push(`${iface.trunk_native} (native)`);
+        String(iface.trunk_allowed || '').split(',')
+            .map(v => v.trim()).filter(Boolean)
+            .forEach(v => tags.push(v));
+        return tags;
+    }
+
+    function renderDrawerVlans(ip, topNode, dev, analysis, fromPort) {
+        const vlanEl = document.getElementById('drawerVlanTags');
+        if (!vlanEl) return;
+        let tags = [];
+        let source = '';
+        if (analysis && Array.isArray(analysis.vlans) && analysis.vlans.length) {
+            // "10 (Data)" — id e nome dalla configurazione; l'SVI marca le VLAN
+            // che questo apparato instrada, non solo commuta.
+            tags = analysis.vlans.map(v => `${v.id}${v.name ? ` (${v.name})` : ''}${v.svi ? ' ⇢' : ''}`);
+        }
+        if (!tags.length && fromPort && fromPort.tags.length) {
+            tags = fromPort.tags;
+            source = `${currentLang === 'en' ? 'from' : 'da'} ${fromPort.neighbor} · ${shortIface(fromPort.port)}`;
+        }
+        if (!tags.length && Array.isArray(topNode.vlans) && topNode.vlans.length) {
+            tags = topNode.vlans;
+        }
+        if (!tags.length && dev.VLANs) {
+            tags = Array.isArray(dev.VLANs) ? dev.VLANs : String(dev.VLANs).split(',').map(s => s.trim()).filter(Boolean);
+        }
+        if (!tags.length && topNode.mgmt_vlan) tags = [`${topNode.mgmt_vlan} (mgmt)`];
+        if (!tags.length && topNode.vtp_domain) tags = [`VTP: ${topNode.vtp_domain}`];
+        vlanEl.innerHTML = (tags.length
+            ? tags.map(v => `<span class="drawer-tag">${escapeHtml(String(v))}</span>`).join('')
+            : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(currentLang === 'en' ? 'Default / Trunk' : 'Default / Trunk')}</span>`)
+            + (source ? `<div style="width:100%; font-size:11px; color:var(--text-muted); margin-top:4px;">${escapeHtml(source)}</div>` : '');
+    }
+
+    // Riempie le due sezioni che dipendono dal backend. Il token evita che la
+    // risposta di un nodo finisca nel pannello di un altro nodo scelto nel
+    // frattempo.
+    async function fillDrawerFromBackend(nodeId, ip, hostname, topNode, dev) {
+        const token = ++drawerFetchToken;
+        const stillCurrent = () => token === drawerFetchToken && currentSelectedNodeId === nodeId;
+
+        if (!cachedPortchannelsData) {
+            const sel = document.getElementById('interactiveGroupSelect');
+            try {
+                const res = await apiFetch('/api/portchannels?group=' + encodeURIComponent(sel ? sel.value : 'all'));
+                if (res && res.ok) cachedPortchannelsData = await res.json();
+            } catch (_) {}
+            if (stillCurrent()) renderDrawerPortChannels(ip, hostname, topNode);
+        }
+
+        // Le VLAN si leggono dalla configurazione salvata.
+        const analysis = await fetchAnalysis(ip);
+        if (analysis && (analysis.vlans || []).length) {
+            if (stillCurrent()) renderDrawerVlans(ip, topNode, dev, analysis);
+            return;
+        }
+
+        // Un access point (o un telefono, o una telecamera) una config non ce
+        // l'ha: le sue VLAN sono scritte sulla porta dello switch che lo
+        // alimenta, ed è quella che va letta.
+        const uplink = (cachedTopologyLinks || [])
+            .filter(l => l.source === nodeId || l.target === nodeId)
+            .map(l => {
+                const mine = l.source === nodeId;
+                const otherId = mine ? l.target : l.source;
+                const ports = (mine ? l.remote_ports : l.local_ports) || [mine ? l.remote_port : l.local_port];
+                return { otherId, port: (ports || []).filter(Boolean)[0] };
+            })
+            .find(u => u.port && /^\d{1,3}(\.\d{1,3}){3}$/.test(u.otherId));
+        if (!uplink) return;
+        const upAnalysis = await fetchAnalysis(uplink.otherId);
+        const tags = vlansFromSwitchPort(upAnalysis, uplink.port);
+        if (!tags.length || !stillCurrent()) return;
+        const other = (cachedTopologyNodes || []).find(n => n.id === uplink.otherId);
+        renderDrawerVlans(ip, topNode, dev, null,
+                          { tags, neighbor: (other && other.label) || uplink.otherId, port: uplink.port });
+    }
+
+    // In cache va la PROMESSA, non il risultato: due click ravvicinati sullo
+    // stesso nodo facevano ripartire due volte l'analisi del backup lato
+    // server, perché il risultato arrivava solo dopo l'await.
+    function fetchAnalysis(ip) {
+        if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return Promise.resolve(null);
+        let pending = drawerAnalysisCache.get(ip);
+        if (!pending) {
+            pending = apiFetch('/api/config-analyzer/' + encodeURIComponent(ip))
+                .then(res => (res && res.ok) ? res.json() : null)
+                .catch(() => null);
+            drawerAnalysisCache.set(ip, pending);
+        }
+        return pending;
+    }
+
+    function groupHint() {
+        return currentLang === 'en' ? 'click to expand' : 'click per aprire';
+    }
+
+    // Tooltip dell'aggregato: i membri, con il loro indirizzo quando c'è.
+    function groupTooltip(n) {
+        const container = document.createElement("div");
+        const rows = (n.members || []).map(m => {
+            const addr = m.display_ip || (String(m.id).includes('.') ? m.id : '');
+            return `<div style="font-size:11px; color:var(--text-muted);">${escapeHtml(m.label || m.id)}${addr ? ` · ${escapeHtml(addr)}` : ''}</div>`;
+        }).join('');
+        container.innerHTML = `<div style="background:var(--surface-2); border:1px solid var(--border); padding:10px 12px; max-width:260px;">
+            <div style="font-weight:700; font-size:12px; margin-bottom:6px;">${escapeHtml(n.label)}</div>
+            ${rows}
+            <div style="font-size:10.5px; color:var(--text-muted); margin-top:6px;">${escapeHtml(currentLang === 'en' ? 'Click to expand · double-click a member to collapse' : 'Click per aprire · doppio click su un membro per richiudere')}</div>
+        </div>`;
+        return container;
     }
 
     // Piano di ogni nodo: BFS dalle radici (firewall, poi router, altrimenti il
@@ -613,14 +907,27 @@
         container.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); font-size:14px; gap:8px;"><i class="fa-solid fa-diagram-project"></i>${escapeHtml(txt)}</div>`;
     }
 
-    async function loadInteractiveMap() {
+    // Ultimo payload disegnato: aprire un gruppo o cambiare piano è una scelta
+    // di disegno, non un dato nuovo. Prima ogni click rifaceva due chiamate al
+    // backend e ricostruiva la scheda SVG di ogni nodo.
+    let lastMapPayload = null;
+    let lastMapGroup = null;
+    function redrawInteractiveMap() {
+        const sel = document.getElementById('interactiveGroupSelect');
+        const same = lastMapPayload && lastMapGroup === (sel ? sel.value : '');
+        return loadInteractiveMap({ fromCache: same });
+    }
+
+    async function loadInteractiveMap(opts) {
         const groupSelect = document.getElementById('interactiveGroupSelect');
         const selectedGroup = groupSelect ? groupSelect.value : '';
         if (!selectedGroup) { showMapPlaceholder(); return; }
+        const fromCache = !!(opts && opts.fromCache) && lastMapPayload
+                          && lastMapGroup === selectedGroup;
 
         // Sync fresh live reachability from ping monitor when available
         try {
-            const pmRes = await apiFetch('/api/ping-monitor/status');
+            const pmRes = fromCache ? null : await apiFetch('/api/ping-monitor/status');
             if (pmRes && pmRes.ok) {
                 const pm = await pmRes.json();
                 if (pm.devices && pm.devices.length) {
@@ -636,9 +943,14 @@
             }
         } catch (_) {}
 
-        const res = await apiFetch("/api/network-map?group=" + encodeURIComponent(selectedGroup));
-        if (!res || !res.ok) return;
-        const data = await res.json();
+        let data = lastMapPayload;
+        if (!fromCache) {
+            const res = await apiFetch("/api/network-map?group=" + encodeURIComponent(selectedGroup));
+            if (!res || !res.ok) return;
+            data = await res.json();
+            lastMapPayload = data;
+            lastMapGroup = selectedGroup;
+        }
         cachedTopologyNodes = data.nodes || [];
         cachedTopologyLinks = data.links || [];
 
@@ -653,7 +965,7 @@
 
         // Filtra i nodi: terminali (server/telefoni/PC) e access point sono nascosti
         // di default, lasciando in mappa solo switch e router.
-        const filteredNodesData = data.nodes.filter(n => {
+        let filteredNodesData = data.nodes.filter(n => {
             // I dispositivi scoperti (CDP/LLDP) si vedono solo col toggle "Mostra
             // Scoperti". La visibilità per TIPO è governata dal selettore Categorie.
             if (n.status === 'discovered' && !showDiscovered) return false;
@@ -664,7 +976,7 @@
 
         // Mantieni solo i link i cui due estremi sono ancora visibili
         const validNodeIds = new Set(filteredNodesData.map(n => n.id));
-        const filteredLinksData = data.links.filter(l => validNodeIds.has(l.source) && validNodeIds.has(l.target));
+        let filteredLinksData = data.links.filter(l => validNodeIds.has(l.source) && validNodeIds.has(l.target));
 
         // La nuova mappa minimalista riusa gli STESSI dati e filtri: cambia solo la
         // resa grafica. I Port-Channel qui sono visibili di default (etichetta
@@ -683,11 +995,25 @@
         }
         minimalOverlayData = null;
 
-        // Piani della vista "A livelli" (ignorati dalle altre viste).
-        layeredAssigned = getMapView() === 'layered'
-            ? computeLayeredLevels(filteredNodesData, filteredLinksData, selectedGroup)
-            : {};
+        // Piani della vista "A livelli" (ignorati dalle altre viste). I piani si
+        // calcolano sulla topologia VERA, prima di comprimere le foglie: il
+        // nodo aggregato eredita poi il piano dei suoi membri.
         layeredGroup = selectedGroup;
+        layeredGroupOfChild = {};
+        if (getMapView() === 'layered') {
+            layeredAssigned = computeLayeredLevels(filteredNodesData, filteredLinksData, selectedGroup);
+            const grouped = groupLayeredLeaves(filteredNodesData, filteredLinksData, selectedGroup);
+            layeredGroupOfChild = grouped.groupOfChild;
+            grouped.nodes.forEach(n => {
+                if (n.is_group) {
+                    layeredAssigned[n.id] = Math.min(...n.members.map(m => layeredAssigned[m.id] || 0));
+                }
+            });
+            filteredNodesData = grouped.nodes;
+            filteredLinksData = grouped.links;
+        } else {
+            layeredAssigned = {};
+        }
 
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
@@ -708,8 +1034,11 @@
             return {
                 id: n.id,
                 shape: "image",
-                image: createNodeSvg(n.label, n.id, n.device_type, effectiveStatus, n.is_boundary, resolvedVendor, vtp, stack),
-                title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
+                // Sull'aggregato al posto dell'IP va l'invito ad aprirlo: la sua
+                // chiave "grp:<padre>:<tipo>" non è un indirizzo. Il tooltip
+                // elenca i membri, così si sa cosa c'è dentro senza aprirlo.
+                image: createNodeSvg(n.label, n.is_group ? groupHint() : n.id, n.device_type, effectiveStatus, n.is_boundary, resolvedVendor, vtp, stack),
+                title: n.is_group ? groupTooltip(n) : createNodeTooltip(n, scan, resolvedVendor),
                 // Fix B: la card SVG cresce di 22px per ogni fascia (STACK, VTP); il
                 // nodo vis.js deve crescere di conseguenza, altrimenti l'immagine più
                 // alta viene ridotta in scala e il testo torna illeggibile.
@@ -726,6 +1055,22 @@
 
         // Trasforma archi filtrati per Vis.js con indicazioni di porta super leggibili ed eleganti
         const edges = filteredLinksData.map(l => {
+            // Cavo verso un aggregato di foglie: non è un collegamento fisico,
+            // quindi tratteggiato e senza etichette di porta.
+            if (l.kind === 'group') {
+                return {
+                    from: l.source,
+                    to: l.target,
+                    label: `×${l.member_count}`,
+                    dashes: [4, 4],
+                    font: { color: cssVar('--text-muted', '#8d9bb0'), size: 11, strokeWidth: 0,
+                            background: cssVar('--surface-2', '#181e23') },
+                    color: { color: hexToRgba(cssVar('--text-soft', '#8d9bb0'), 0.55), highlight: cssVar('--text-soft', '#c4bdf7') },
+                    width: 2,
+                    arrows: { to: { enabled: false } },
+                    kind: 'group'
+                };
+            }
             if (l.kind === 'redundancy_heartbeat') {
                 return {
                     from: l.source,
@@ -941,6 +1286,9 @@
             options = Object.assign({}, options, { physics: false });
         }
 
+        // Ordine dei nodi disegnati: lo usa la navigazione da tastiera per
+        // passare da un apparato al successivo senza toccare il mouse.
+        lastRenderedNodeIds = nodes.map(nd => nd.id);
         const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
         if (networkInstance) networkInstance.destroy();
         networkInstance = new vis.Network(container, graphData, options);
@@ -974,13 +1322,29 @@
                 dragFrom = null;
                 if (!steps) return;
                 setLayeredLevel(layeredGroup, id, Math.max(0, (layeredAssigned[id] || 0) + steps));
-                loadInteractiveMap();
+                redrawInteractiveMap();
             });
         }
-        // Eventi di selezione nodo: apre il pannello ispettore laterale (Node Drawer)
+        // Eventi di selezione nodo: apre il pannello ispettore laterale (Node Drawer).
+        // Sull'aggregato di foglie il click apre il gruppo invece del pannello:
+        // un riquadro "8 × Access Point" non ha un ispettore da mostrare.
         networkInstance.on('selectNode', p => {
-            if (p.nodes && p.nodes.length) openTopologyNodeDrawer(p.nodes[0]);
+            if (!p.nodes || !p.nodes.length) return;
+            const id = String(p.nodes[0]);
+            if (getMapView() === 'layered' && id.startsWith(GROUP_PREFIX)) {
+                toggleLayeredGroup(layeredGroup, id);
+                return;
+            }
+            openTopologyNodeDrawer(p.nodes[0]);
         });
+        // Doppio click su un membro di un gruppo aperto: lo richiude.
+        if (getMapView() === 'layered') {
+            networkInstance.on('doubleClick', p => {
+                if (!p.nodes || !p.nodes.length) return;
+                const key = layeredGroupOfChild[p.nodes[0]];
+                if (key) toggleLayeredGroup(layeredGroup, key);
+            });
+        }
         networkInstance.on('deselectNode', () => {
             closeTopologyNodeDrawer();
         });
@@ -1126,66 +1490,19 @@
                         </div>
                     </div>`;
                 });
+            const neighCountEl = document.getElementById('drawerNeighborCount');
+            if (neighCountEl) neighCountEl.textContent = rows.length ? `(${rows.length})` : '';
             neighEl.innerHTML = rows.length
                 ? rows.join('')
                 : `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(currentLang === 'en' ? 'No adjacency discovered for this node.' : 'Nessuna adiacenza rilevata su questo nodo.')}</div>`;
         }
 
-        // Port-Channels
-        const pcListEl = document.getElementById('drawerPortChannelList');
-        if (pcListEl) {
-            let pcItems = [];
-            if (cachedPortchannelsData && cachedPortchannelsData.devices) {
-                const pcDev = cachedPortchannelsData.devices.find(d => d.ip === ip || d.hostname === hostname);
-                if (pcDev && pcDev.portchannels && pcDev.portchannels.length) {
-                    pcItems = pcDev.portchannels;
-                }
-            }
-            if (!pcItems.length && topNode.portchannels && topNode.portchannels.length) {
-                pcItems = topNode.portchannels;
-            }
-
-            if (pcItems.length > 0) {
-                pcListEl.innerHTML = pcItems.map(pc => {
-                    const members = (pc.members || pc.interfaces || []).map(shortIface).join(', ') || '—';
-                    const neigh = (pc.neighbors && pc.neighbors.length) ? pc.neighbors.join(', ') : (pc.neighbor || '—');
-                    return `<div class="drawer-list-item">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <strong style="color:var(--primary); font-family:var(--font-data); font-size:12.5px;">${escapeHtml(pc.name || 'Po')}</strong>
-                            <span class="badge badge-success" style="font-size:10px;">LACP ACTIVE</span>
-                        </div>
-                        <div style="font-size:11.5px; color:var(--text-muted);">
-                            <span>Membri: <code style="font-size:11px;">${escapeHtml(members)}</code></span>
-                        </div>
-                        ${neigh !== '—' ? `<div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">
-                            <span>Verso: <strong>${escapeHtml(neigh)}</strong></span>
-                        </div>` : ''}
-                    </div>`;
-                }).join('');
-            } else {
-                const noPcTxt = currentLang === 'en' ? 'No Port-Channels configured on this node.' : 'Nessun Port-Channel configurato su questo nodo.';
-                pcListEl.innerHTML = `<div style="font-size:12px; color:var(--text-muted);">${escapeHtml(noPcTxt)}</div>`;
-            }
-        }
-
-        // Active VLANs
-        const vlanEl = document.getElementById('drawerVlanTags');
-        if (vlanEl) {
-            let vlans = [];
-            if (topNode.vlans && Array.isArray(topNode.vlans) && topNode.vlans.length) {
-                vlans = topNode.vlans;
-            } else if (dev.VLANs) {
-                vlans = Array.isArray(dev.VLANs) ? dev.VLANs : String(dev.VLANs).split(',').map(s => s.trim()).filter(Boolean);
-            } else if (topNode.vtp_domain) {
-                vlans = [`VTP: ${topNode.vtp_domain}`];
-            }
-
-            if (vlans.length > 0) {
-                vlanEl.innerHTML = vlans.map(v => `<span class="drawer-tag">${escapeHtml(String(v))}</span>`).join('');
-            } else {
-                vlanEl.innerHTML = `<span style="font-size:12px; color:var(--text-muted);">${currentLang === 'en' ? 'Default / Trunk' : 'Default / Trunk'}</span>`;
-            }
-        }
+        renderDrawerPortChannels(ip, hostname, topNode);
+        renderDrawerVlans(ip, topNode, dev);
+        // Port-Channel e VLAN non viaggiano con la mappa: si leggono dal report
+        // aggregati e dalla configurazione. Finché non arrivano le due sezioni
+        // dicevano "nessuno" per apparati che invece ne hanno.
+        fillDrawerFromBackend(nodeId, ip, hostname, topNode, dev);
 
         // Action buttons
         const btnAnalyzer = document.getElementById('drawerBtnAnalyzer');
@@ -1201,7 +1518,21 @@
             };
         }
 
+        // Richiudi il gruppo: unica via praticabile su touch, dove il doppio
+        // click su un membro non è un gesto.
+        const btnCollapseGrp = document.getElementById('drawerBtnCollapseGroup');
+        if (btnCollapseGrp) {
+            const key = layeredGroupOfChild[nodeId];
+            btnCollapseGrp.style.display = key ? '' : 'none';
+            btnCollapseGrp.onclick = key ? () => { closeTopologyNodeDrawer(); toggleLayeredGroup(layeredGroup, key); } : null;
+        }
+
         drawer.classList.add('open');
+        // Il pannello è un dialogo: il fuoco ci entra, così chi naviga da
+        // tastiera legge quello che è appena comparso invece di restare sulla
+        // mappa. Alla chiusura il fuoco torna da dove è arrivato.
+        const titleEl = document.getElementById('drawerNodeHostname');
+        if (titleEl && document.activeElement !== titleEl) titleEl.focus({ preventScroll: true });
     }
 
     function closeTopologyNodeDrawer() {
@@ -1211,6 +1542,31 @@
     }
 
     document.getElementById('btnCloseNodeDrawer')?.addEventListener('click', closeTopologyNodeDrawer);
+
+    // ===== Tastiera sulla mappa =====
+    // Vis.js disegna su canvas: senza questi tasti un apparato si può scegliere
+    // solo col mouse, e il pannello resta irraggiungibile. Frecce = nodo
+    // precedente/successivo, Invio = apri, Esc = chiudi.
+    function focusMapNode(step) {
+        if (!networkInstance) return;
+        const ids = lastRenderedNodeIds;
+        if (!ids.length) return;
+        const cur = ids.indexOf(currentSelectedNodeId);
+        const next = ids[(cur + step + ids.length) % ids.length];
+        networkInstance.selectNodes([next]);
+        networkInstance.focus(next, { scale: networkInstance.getScale(), animation: false });
+        openTopologyNodeDrawer(next);
+    }
+    document.getElementById('networkGraphContainer')?.addEventListener('keydown', ev => {
+        if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') { ev.preventDefault(); focusMapNode(1); }
+        else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') { ev.preventDefault(); focusMapNode(-1); }
+        else if (ev.key === 'Enter' && currentSelectedNodeId) { ev.preventDefault(); openTopologyNodeDrawer(currentSelectedNodeId); }
+    });
+    document.getElementById('topologyNodeDrawer')?.addEventListener('keydown', ev => {
+        if (ev.key !== 'Escape') return;
+        closeTopologyNodeDrawer();
+        document.getElementById('networkGraphContainer')?.focus({ preventScroll: true });
+    });
 
     // Separazione AABB dei riquadri dopo un trascinamento: il nodo mosso viene
     // spinto fuori da ogni riquadro intersecato lungo l'asse di minima
@@ -2424,7 +2780,7 @@
                     ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface-3); border:1px solid var(--border); border-radius:9999px; padding:1px 8px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger); margin-left:3px;"></i>`:''}</span>`).join('')}</div>` : '';
                 return `<div class="category-card">
                     ${delBtn}
-                    <div style="font-size:24px; font-weight:800; color:${color}; font-family:var(--font-data); line-height:1.1;">${n}</div>
+                    <div style="font-size:var(--font-size-2xl); font-weight:800; color:${color}; font-family:var(--font-data); line-height:1.1;">${n}</div>
                     <div style="font-size:12.5px; font-weight:600; color:var(--text); margin-top:4px;">${escapeHtml(c.label)}</div>
                     ${subChips}
                 </div>`;
@@ -3227,6 +3583,10 @@
     document.getElementById('layeredResetBtn')?.addEventListener('click', () => {
         const g = document.getElementById('interactiveGroupSelect');
         resetLayeredLevels(g ? g.value : 'all');
+    });
+    document.getElementById('layeredCollapseBtn')?.addEventListener('click', () => {
+        const g = document.getElementById('interactiveGroupSelect');
+        collapseAllLayeredGroups(g ? g.value : 'all');
     });
     document.getElementById('toggleMinimalHover')?.addEventListener('change', (e) => {
         localStorage.setItem('minimalHoverInfo', e.target.checked ? '1' : '0');

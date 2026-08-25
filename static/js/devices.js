@@ -936,7 +936,7 @@
 
         const icon = document.createElement('i');
         icon.className = 'fa-solid fa-circle-check';
-        icon.style.cssText = 'color:var(--success, #10b981); font-size:16px; flex-shrink:0;';
+        icon.style.cssText = 'color:var(--success); font-size:var(--font-size-lg); flex-shrink:0;';
         el.appendChild(icon);
 
         const text = document.createElement('span');

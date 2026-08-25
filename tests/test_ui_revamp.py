@@ -537,8 +537,13 @@ class TestMapTabRestyle(unittest.TestCase):
         self.assertGreaterEqual(tab_html.count('class="panel"'), 2)
         # view-toggle buttons carry the .chip class alongside their existing marker class
         self.assertIn('class="map-view-btn chip"', tab_html)
-        # vis-network render target untouched: still a bare div, no restyle wrapper classes on it
-        self.assertIn('<div id="networkGraphContainer"></div>', tab_html)
+        # vis-network render target untouched: no restyle wrapper classes on it.
+        # Gli attributi di accessibilita' (tabindex/role/aria-label) SONO ammessi:
+        # il canvas altrimenti non e' raggiungibile da tastiera.
+        target = tab_html[tab_html.index('<div id="networkGraphContainer"'):]
+        target = target[:target.index('>') + 1]
+        self.assertNotIn('class=', target)
+        self.assertIn('tabindex="0"', target)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
