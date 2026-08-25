@@ -16,6 +16,7 @@ the manifest says the archive is encrypted. Requires only Python 3 (plus the
 `cryptography` package for an encrypted archive).
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -53,15 +54,32 @@ def main():
             decrypt = Fernet(fh.read().strip()).decrypt
 
     written = failed = 0
-    for rel in sorted(manifest.get("files") or {}):
+    target_abs = os.path.abspath(args.target)
+    files = manifest.get("files") or {}
+    for rel in sorted(files):
+        if os.path.isabs(rel) or ".." in rel.split("/"):
+            print("FAILED %s: unsafe path in manifest" % rel, file=sys.stderr)
+            failed += 1
+            continue
         remote_rel = rel + ".enc" if encrypted else rel
         src = os.path.join(args.source, *remote_rel.split("/"))
         dst = os.path.join(args.target, *rel.split("/"))
+        dst_abs = os.path.abspath(dst)
+        if os.path.commonpath([target_abs, dst_abs]) != target_abs:
+            print("FAILED %s: escapes --target" % rel, file=sys.stderr)
+            failed += 1
+            continue
         try:
             with open(src, "rb") as fh:
                 data = fh.read()
             if decrypt is not None:
                 data = decrypt(data)
+            expected = files[rel].get("sha256")
+            if expected:
+                expected = expected.split(":", 1)[-1]
+                actual = hashlib.sha256(data).hexdigest()
+                if actual != expected:
+                    raise ValueError("checksum mismatch")
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             with open(dst, "wb") as fh:
                 fh.write(data)

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """The uploaded restore.py must rebuild the archive with no import from this
 repo: whoever finds that folder in three years has only Python."""
+import hashlib
 import json
 import os
 import subprocess
@@ -13,9 +14,10 @@ from services.cloud_backup.restore_template import RESTORE_SCRIPT
 
 class TestRestoreScript(unittest.TestCase):
 
-    def _archive(self, encrypted=False, key=None):
+    def _archive(self, encrypted=False, key=None, sha256=None, rel=None):
         root = tempfile.mkdtemp()
-        rel = "site-a/cisco/switch-01-192.0.2.10.txt"
+        if rel is None:
+            rel = "site-a/cisco/switch-01-192.0.2.10.txt"
         clear = b"hostname switch-01\n"
         body = clear
         rel_remote = rel
@@ -27,9 +29,11 @@ class TestRestoreScript(unittest.TestCase):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as fh:
             fh.write(body)
+        if sha256 is None:
+            sha256 = "sha256:" + hashlib.sha256(clear).hexdigest()
         with open(os.path.join(root, "_manifest.json"), "w", encoding="utf-8") as fh:
             json.dump({"schema": 1, "encrypted": encrypted,
-                       "files": {rel: {"sha256": "sha256:x", "size": len(clear)}}}, fh)
+                       "files": {rel: {"sha256": sha256, "size": len(clear)}}}, fh)
         script = os.path.join(root, "restore.py")
         with open(script, "w", encoding="utf-8") as fh:
             fh.write(RESTORE_SCRIPT)
@@ -67,6 +71,44 @@ class TestRestoreScript(unittest.TestCase):
                               capture_output=True, text=True)
         self.assertNotEqual(0, proc.returncode)
         self.assertIn("--key-file", proc.stdout + proc.stderr)
+
+    def test_a_checksum_mismatch_is_reported_and_not_written(self):
+        root, script, rel, _clear = self._archive(sha256="sha256:" + "0" * 64)
+        out = tempfile.mkdtemp()
+        proc = subprocess.run([sys.executable, script, "--source", root, "--target", out],
+                              capture_output=True, text=True)
+        self.assertNotEqual(0, proc.returncode)
+        self.assertIn(rel, proc.stdout + proc.stderr)
+        self.assertFalse(os.path.exists(os.path.join(out, *rel.split("/"))))
+
+    def test_a_manifest_path_escaping_target_is_rejected(self):
+        # Everything lives under one owned base dir, so "escaped outside
+        # --target" can be checked precisely without touching (or colliding
+        # with) anything ambient in the real filesystem's temp folder.
+        base = tempfile.mkdtemp()
+        root = os.path.join(base, "source")
+        out = os.path.join(base, "target")
+        os.makedirs(root)
+        os.makedirs(out)
+        clear = b"hostname switch-01\n"
+        evil_rel = "../evil.txt"  # one level above --target, still inside base
+        # No file is planted at the traversal location: the script must
+        # reject the manifest entry before it ever tries to read a source
+        # file, purely on the unsafe relative path.
+        with open(os.path.join(root, "_manifest.json"), "w", encoding="utf-8") as fh:
+            json.dump({"schema": 1, "encrypted": False,
+                       "files": {evil_rel: {"sha256": "sha256:" + hashlib.sha256(clear).hexdigest(),
+                                             "size": len(clear)}}}, fh)
+        script = os.path.join(root, "restore.py")
+        with open(script, "w", encoding="utf-8") as fh:
+            fh.write(RESTORE_SCRIPT)
+        outside = os.path.join(base, "evil.txt")
+        self.assertFalse(os.path.exists(outside))
+        proc = subprocess.run([sys.executable, script, "--source", root, "--target", out],
+                              capture_output=True, text=True)
+        self.assertNotEqual(0, proc.returncode)
+        self.assertEqual([], os.listdir(out))
+        self.assertFalse(os.path.exists(outside))
 
     def test_the_script_does_not_import_this_repo(self):
         for forbidden in ("services.", "core.", "security."):
