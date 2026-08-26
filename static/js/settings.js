@@ -430,6 +430,29 @@
         }
     }
 
+    async function inviteUser() {
+        const email = document.getElementById('inviteEmail').value.trim();
+        const role = document.getElementById('inviteRole').value;
+        if (!email) {
+            showToast(currentLang === 'en' ? 'Enter an email address.'
+                                           : 'Inserisci un indirizzo email.', 'error');
+            return;
+        }
+        const res = await apiFetch('/api/users/invite', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, role })
+        });
+        if (res && res.ok) {
+            document.getElementById('inviteEmail').value = '';
+            showToast(currentLang === 'en' ? `Invitation sent to ${email}.`
+                                           : `Invito inviato a ${email}.`, 'success');
+        } else if (res) {
+            const e = await res.json().catch(() => ({}));
+            showToast(e.detail || (currentLang === 'en' ? 'Invitation failed.'
+                                                        : "Invio dell'invito fallito."), 'error');
+        }
+    }
+
     async function saveUserGroups(username) {
         const details = document.querySelector(`#usersTableBody details[data-u="${CSS.escape(username)}"]`);
         if (!details) return;
@@ -970,6 +993,7 @@
     });
 
     document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
+    document.getElementById('btnInviteUser')?.addEventListener('click', inviteUser);
     document.getElementById('btnCreateSite')?.addEventListener('click', createSite);
     document.getElementById('newSiteMode')?.addEventListener('change', onNewSiteModeChange);
     document.getElementById('smtpBtnSave')?.addEventListener('click', saveSmtpSettings);

@@ -80,7 +80,9 @@ class TestRouterParity(unittest.TestCase):
                           # Recupero password via email: richiesta del link, sua
                           # redenzione e indirizzo di recupero dell'utente.
                           "/api/auth/forgot-password", "/api/auth/reset-password",
-                          "/api/users/email")
+                          "/api/users/email",
+                          # Inviti utente via email: emissione e accettazione.
+                          "/api/users/invite", "/api/auth/accept-invite")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -195,7 +197,9 @@ class TestFullParity(unittest.TestCase):
                     # Recupero password via email: richiesta del link, sua
                     # redenzione e indirizzo di recupero dell'utente.
                     "/api/auth/forgot-password", "/api/auth/reset-password",
-                    "/api/users/email")
+                    "/api/users/email",
+                    # Inviti utente via email: emissione e accettazione.
+                    "/api/users/invite", "/api/auth/accept-invite")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
@@ -232,7 +236,9 @@ class TestFullParity(unittest.TestCase):
                     "SmtpSettingsSchema", "SmtpTestSchema",
                     # Corpi del recupero password via email (rotte gia' in
                     # NEW_PREFIXES).
-                    "ForgotPasswordSchema", "ResetPasswordSchema", "UserEmailSchema")
+                    "ForgotPasswordSchema", "ResetPasswordSchema", "UserEmailSchema",
+                    # Corpi degli inviti utente (rotte gia' in NEW_PREFIXES).
+                    "InviteUserSchema", "AcceptInviteSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.

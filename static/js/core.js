@@ -350,16 +350,22 @@ async function checkAuthRequirements() {
     const login = document.getElementById('loginSection');
 
     const resetPw = document.getElementById('resetPwSection');
+    const acceptInvite = document.getElementById('acceptInviteSection');
 
     if (changePw) changePw.style.display = 'none';
     if (resetPw) resetPw.style.display = 'none';
+    if (acceptInvite) acceptInvite.style.display = 'none';
 
-    // Arrivo dal link ricevuto via email: si sceglie la password prima di
+    // Arrivo da un link ricevuto via email: si sceglie la password prima di
     // qualunque altra schermata, senza interrogare lo stato del setup.
-    if (new URLSearchParams(window.location.search).get('reset_token') && resetPw) {
+    const emailParams = new URLSearchParams(window.location.search);
+    const landing = emailParams.get('reset_token') ? resetPw
+                  : emailParams.get('invite_token') ? acceptInvite
+                  : null;
+    if (landing) {
         if (wiz) wiz.style.display = 'none';
         if (login) login.style.display = 'none';
-        resetPw.style.display = 'block';
+        landing.style.display = 'block';
         if (overlay) overlay.style.display = 'flex';
         return false;
     }
@@ -547,6 +553,48 @@ document.getElementById('btnSubmitResetPw')?.addEventListener('click', async () 
     } else {
         const d = await res.json().catch(() => ({}));
         errDiv.innerText = d.detail || i18n[currentLang].rpFailed;
+        errDiv.style.display = 'block';
+    }
+});
+
+// Creazione dell'account dal link di invito: username e ruolo vengono
+// dall'invito, qui si sceglie solo la password.
+document.getElementById('btnSubmitAcceptInvite')?.addEventListener('click', async () => {
+    const token = new URLSearchParams(window.location.search).get('invite_token');
+    const np = document.getElementById('aiNewPass')?.value.trim() || '';
+    const cp = document.getElementById('aiConfirmPass')?.value.trim() || '';
+    const errDiv = document.getElementById('loginError');
+    errDiv.style.display = 'none';
+
+    if (np.length < 8) { errDiv.innerText = i18n[currentLang].alertPassTooShort; errDiv.style.display = 'block'; return; }
+    if (np !== cp) { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
+
+    const res = await fetch('/api/auth/accept-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password: np }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        errDiv.innerText = d.detail || i18n[currentLang].aiFailed;
+        errDiv.style.display = 'block';
+        return;
+    }
+    // Via il token dalla barra degli indirizzi: resta nella cronologia.
+    window.history.replaceState({}, document.title, window.location.pathname);
+    const login = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: d.username, password: np }),
+    });
+    document.getElementById('acceptInviteSection').style.display = 'none';
+    if (login.ok) {
+        document.getElementById('authOverlay').style.display = 'none';
+        appInit();
+    } else {
+        document.getElementById('loginSection').style.display = 'block';
+        errDiv.innerText = i18n[currentLang].aiDone;
+        errDiv.style.color = 'var(--success)';
         errDiv.style.display = 'block';
     }
 });
