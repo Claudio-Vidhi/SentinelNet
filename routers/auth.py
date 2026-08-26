@@ -34,6 +34,9 @@ class UserCreateSchema(BaseModel):
     password: str
     role: str = "viewer"
     groups: List[str] = []
+    # Indirizzo di recupero, opzionale: senza, il reset via email non e'
+    # disponibile per l'account e resta il break-glass da CLI.
+    email: str = ""
 
 class UserDeleteSchema(BaseModel):
     username: str
@@ -179,8 +182,12 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
     groups = [g for g in payload.groups if g in valid_groups]
     # Gli account creati da un amministratore devono cambiare la password al
     # primo accesso: la password iniziale è nota all'amministratore.
+    email = payload.email.strip()
+    if email and "@" not in email:
+        raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
     if not user_manager.create_user(payload.username.strip(), payload.password,
-                                    payload.role, groups, must_change_password=True):
+                                    payload.role, groups, must_change_password=True,
+                                    email=email):
         raise HTTPException(status_code=400, detail="Utente già esistente.")
     log_audit(
         f"Utente '{payload.username}' (ruolo: {payload.role}, sedi: "
@@ -260,4 +267,119 @@ def set_user_tabs_ep(payload: UserTabsSchema, current_user = Depends(require_adm
         f"Tab visibili di '{payload.username}' impostate a {payload.allowed_tabs or 'tutte'} "
         f"da '{current_user.get('sub')}'."
     )
+    return {"status": "success"}
+
+
+# --- RECUPERO PASSWORD VIA EMAIL ---
+
+class ForgotPasswordSchema(BaseModel):
+    username: str
+
+class ResetPasswordSchema(BaseModel):
+    token: str
+    new_password: str
+
+class UserEmailSchema(BaseModel):
+    username: str
+    email: str = ""
+
+# Risposta identica in ogni esito: esistenza dell'account, presenza di un
+# indirizzo e stato del server di posta non devono essere deducibili da chi
+# non è ancora autenticato.
+_FORGOT_GENERIC = ("Se l'account esiste ed ha un indirizzo email configurato, "
+                   "riceverà le istruzioni per reimpostare la password.")
+
+
+@router.post("/api/auth/forgot-password")
+def forgot_password(payload: ForgotPasswordSchema, request: Request):
+    """Invia il link di reimpostazione all'indirizzo REGISTRATO dell'utente.
+
+    Non esiste un indirizzo di ripiego: senza email sull'account il recupero
+    via posta non è disponibile e resta il break-glass da CLI. Spedire a un
+    mittente condiviso consegnerebbe il token a chiunque legga quella casella.
+    """
+    from core.app_settings import BaseUrlError, resolve_base_url
+    from security import password_reset
+    from services import mailer
+
+    # Limite di frequenza sull'IP sorgente: l'endpoint non è autenticato ed è
+    # sia un oracolo di generazione token sia un amplificatore di posta.
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"forgot-password:{client_ip}"
+    if is_locked_out(rate_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Troppe richieste di recupero. Riprova più tardi.")
+    record_failed_attempt(rate_key)
+
+    username = payload.username.strip()
+    email = user_manager.get_email(username)
+    if (not email
+            or user_manager.get_role(username) is None
+            or user_manager.is_disabled(username)):
+        log_audit(f"Richiesta di recupero password non evasa per '{username}' "
+                  f"(account assente, disabilitato o senza email).")
+        return {"status": "success", "message": _FORGOT_GENERIC}
+
+    try:
+        base_url = resolve_base_url()
+    except BaseUrlError as e:
+        # Configurazione incompleta: è un errore dell'installazione, non una
+        # informazione sull'account, quindi si registra e si risponde generico.
+        log_audit(f"Recupero password non inviato per '{username}': {e}")
+        return {"status": "success", "message": _FORGOT_GENERIC}
+
+    token = password_reset.issue(username)
+    try:
+        mailer.send_email(
+            email,
+            "SentinelNet - Reimpostazione password",
+            "È stata richiesta la reimpostazione della password del tuo "
+            f"account SentinelNet '{username}'.\n\n"
+            "Apri questo link per scegliere una nuova password "
+            f"(valido {password_reset.TTL_SECONDS // 60} minuti):\n"
+            f"{base_url}/?reset_token={token}\n\n"
+            "Se non hai richiesto tu la reimpostazione, ignora questo "
+            "messaggio: la password attuale resta valida.\n",
+        )
+        log_audit(f"Link di reimpostazione password inviato per l'utente '{username}'.")
+    except mailer.MailerError as e:
+        log_audit(f"Invio del link di reimpostazione fallito per '{username}': {e}")
+    return {"status": "success", "message": _FORGOT_GENERIC}
+
+
+@router.post("/api/auth/reset-password")
+def reset_password(payload: ResetPasswordSchema):
+    """Consuma un token di reimpostazione e imposta la nuova password."""
+    from security import password_reset
+
+    pw_err = user_manager.password_error(payload.new_password)
+    if pw_err:
+        raise HTTPException(status_code=400, detail=pw_err)
+
+    username = password_reset.consume(payload.token)
+    if not username:
+        raise HTTPException(status_code=400,
+                            detail="Link di reimpostazione non valido o scaduto.")
+    if user_manager.get_role(username) is None or user_manager.is_disabled(username):
+        raise HTTPException(status_code=403, detail="Account non disponibile.")
+
+    if not user_manager.reset_password_break_glass(username, payload.new_password):
+        raise HTTPException(status_code=400, detail="Aggiornamento della password fallito.")
+    # Il token è bruciato: chi rientra sblocca anche il lockout accumulato.
+    reset_failed_attempts(username)
+    log_audit(f"Password reimpostata via email per l'utente '{username}'.")
+    return {"status": "success"}
+
+
+@router.post("/api/users/email")
+def set_user_email(payload: UserEmailSchema, current_user = Depends(require_admin)):
+    """Imposta o rimuove ("" rimuove) l'indirizzo di recupero di un utente."""
+    email = payload.email.strip()
+    if email and "@" not in email:
+        raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
+    if not user_manager.set_email(payload.username, email):
+        raise HTTPException(status_code=404, detail="Utente non trovato.")
+    log_audit(f"Indirizzo email dell'utente '{payload.username}' "
+              f"{'impostato' if email else 'rimosso'} da '{current_user.get('sub')}'.")
     return {"status": "success"}

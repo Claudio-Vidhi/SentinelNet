@@ -94,6 +94,38 @@ def list_local_ips() -> list:
     ips.discard("127.0.0.1")
     return ["0.0.0.0", "127.0.0.1"] + sorted(ips)
 
+class BaseUrlError(RuntimeError):
+    """Raised when no reachable base URL can be determined."""
+
+
+def resolve_base_url() -> str:
+    """Public base URL of this installation, without trailing slash.
+
+    Links mailed to a user (password reset, invites) must never be built from
+    the request's Host header: it is attacker-controlled, and a poisoned value
+    mails a working token to somebody else's server. The value comes from
+    configuration only.
+
+    Order: env SENTINELNET_BASE_URL > app_settings 'app.app_base_url' >
+    the configured bind host and port. A wildcard bind (0.0.0.0) names no
+    reachable host, so it raises instead of guessing.
+    """
+    explicit = (os.environ.get("SENTINELNET_BASE_URL")
+                or _app_adv_setting("app_base_url") or "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+
+    host = resolve_bind_host()
+    if host in ("0.0.0.0", "::"):
+        raise BaseUrlError(
+            "Impossibile costruire l'indirizzo pubblico: il server è in ascolto "
+            "su tutte le interfacce. Impostare 'app_base_url' nelle impostazioni "
+            "avanzate (es. https://sentinelnet.example.com)."
+        )
+    scheme = "https" if _app_adv_setting("ssl_certfile") else "http"
+    return f"{scheme}://{host}:{effective_port()}"
+
+
 def resolve_bind_host() -> str:
     """Bind host resolution order: env SENTINELNET_HOST >
     app_settings.json 'host' > '127.0.0.1'."""

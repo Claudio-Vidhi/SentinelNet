@@ -1720,7 +1720,7 @@ class TestSettingsTabRestyle(unittest.TestCase):
         # The general card mixes three concerns; each field declares the
         # subsection it renders under. Presentation only -- saveAppAdvSettings()
         # still posts one combined payload to /api/settings/app.
-        self.assertEqual(html.count("grp: 'appAdvGrpServer'"), 4)
+        self.assertEqual(html.count("grp: 'appAdvGrpServer'"), 5)
         self.assertEqual(html.count("grp: 'appAdvGrpRetention'"), 5)
         self.assertIn("subhead('appAdvGrpStartup', 'Avvio')", html)
         self.assertIn("const L = i18n[currentLang];", html)

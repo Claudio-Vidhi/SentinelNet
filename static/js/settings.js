@@ -400,6 +400,9 @@
 
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
                 <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}${disabledBadge}</td>
+                <td><input type="text" value="${escapeHtml(u.email || '')}" placeholder="${currentLang === 'en' ? 'none' : 'assente'}"
+                       data-action="save-user-email" data-username="${escapeHtml(u.username)}"
+                       style="font-size:12px; padding:4px 8px; width:190px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); outline:none;"></td>
                 <td><select data-action="change-user-role" data-username="${escapeHtml(u.username)}"
                        style="font-size:12px; padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
                     ${roleOptions}
@@ -409,6 +412,22 @@
                 <td style="white-space:nowrap;">${toggleBtn}<button data-action="delete-user" data-username="${escapeHtml(u.username)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
             </tr>`;
         }).join('');
+    }
+
+    // L'indirizzo serve solo al recupero password: senza, quell'account puo'
+    // essere riaperto unicamente con il break-glass da CLI.
+    async function saveUserEmail(username, email) {
+        const res = await apiFetch('/api/users/email', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, email })
+        });
+        if (res && res.ok) {
+            showToast(currentLang === 'en' ? 'Email updated.' : 'Email aggiornata.', 'success');
+        } else if (res) {
+            const e = await res.json().catch(() => ({}));
+            showToast(e.detail || (currentLang === 'en' ? 'Update failed.' : 'Aggiornamento fallito.'), 'error');
+            loadUsers();
+        }
     }
 
     async function saveUserGroups(username) {
@@ -462,17 +481,19 @@
         const username = document.getElementById('newUserName').value.trim();
         const password = document.getElementById('newUserPass').value;
         const role     = document.getElementById('newUserRole').value;
+        const email    = document.getElementById('newUserEmail').value.trim();
         if (!username || !password) {
             alert(currentLang === 'en' ? 'Username and password are required.' : 'Username e password obbligatori.');
             return;
         }
         const res = await apiFetch('/api/users', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, role })
+            body: JSON.stringify({ username, password, role, email })
         });
         if (res && res.ok) {
             document.getElementById('newUserName').value = '';
             document.getElementById('newUserPass').value = '';
+            document.getElementById('newUserEmail').value = '';
             loadUsers();
         } else if (res) {
             const e = await res.json();
@@ -644,6 +665,7 @@
         { key: 'ssl_certfile',          type: 'text',   lbl: 'lblAppSslCert',   grp: 'appAdvGrpServer' },
         { key: 'ssl_keyfile',           type: 'text',   lbl: 'lblAppSslKey',    grp: 'appAdvGrpServer' },
         { key: 'cors_origins',          type: 'text',   lbl: 'lblAppCors',      grp: 'appAdvGrpServer' },
+        { key: 'app_base_url',          type: 'text',   lbl: 'lblAppBaseUrl',   grp: 'appAdvGrpServer' },
         { key: 'retention_flows_days',  type: 'number', lbl: 'lblAppRetFlows',  grp: 'appAdvGrpRetention' },
         { key: 'retention_syslog_days', type: 'number', lbl: 'lblAppRetSyslog', grp: 'appAdvGrpRetention' },
         { key: 'retention_events_days', type: 'number', lbl: 'lblAppRetEvents', grp: 'appAdvGrpRetention' },
@@ -920,6 +942,11 @@
         const role = e.target.closest('[data-action="change-user-role"]');
         if (role && role.dataset.username) {
             changeUserRole(role.dataset.username, role.value);
+            return;
+        }
+        const mail = e.target.closest('[data-action="save-user-email"]');
+        if (mail && mail.dataset.username) {
+            saveUserEmail(mail.dataset.username, mail.value.trim());
             return;
         }
     });

@@ -129,6 +129,22 @@ transmitted in clear text.
 Starting a second time while SentinelNet is already running does not fail on
 the busy port: it opens the interface of the running instance and exits.
 
+### Password recovery by email
+
+Optional, and off until an SMTP server is configured under **Settings → Mail
+server**. Each account can carry a recovery address, set from the Users tab;
+an account without one simply cannot use this path — the link is never sent to
+a fallback address such as the SMTP sender.
+
+The link is built from the configured public base URL (`SENTINELNET_BASE_URL`,
+or *Public base URL* in the advanced settings), never from the request's `Host`
+header. When the server binds to `0.0.0.0` and no base URL is configured, no
+mail is sent: there is no reachable host name to put in the link.
+
+Tokens are single-use, valid 15 minutes, and held in memory only — restarting
+the server invalidates any pending link. The reply to a recovery request is
+identical whether or not the account exists.
+
 ### Emergency administrator recovery (break-glass)
 
 When every administrator account is locked out or disabled, reset one from the
