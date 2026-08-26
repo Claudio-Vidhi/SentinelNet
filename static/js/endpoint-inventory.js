@@ -35,6 +35,8 @@ async function endpointsSearch() {
     const q = ((document.getElementById('epFilterQ') || {}).value || '').trim();
     const tenant = locTenant();
     const staleDays = parseInt((document.getElementById('epFilterStale') || {}).value, 10) || 7;
+    const fromVal = ((document.getElementById('epFilterFrom') || {}).value || '').trim();
+    const toVal = ((document.getElementById('epFilterTo') || {}).value || '').trim();
 
     host.innerHTML = `<div class="panel" style="padding:26px; text-align:center; color:var(--text-muted); font-size:13px;">
         <i class="fa-solid fa-circle-notch fa-spin" style="margin-right:8px;"></i>${escapeHtml(en ? 'Loading…' : 'Caricamento…')}</div>`;
@@ -42,6 +44,12 @@ async function endpointsSearch() {
     const params = new URLSearchParams({ stale_days: String(staleDays) });
     if (q) params.set('q', q);
     if (tenant && tenant !== 'all') params.set('tenant', tenant);
+    if (fromVal) {
+        try { params.set('frm', new Date(fromVal).toISOString()); } catch (e) { params.set('frm', fromVal); }
+    }
+    if (toVal) {
+        try { params.set('to', new Date(toVal).toISOString()); } catch (e) { params.set('to', toVal); }
+    }
 
     const res = await apiFetch('/api/endpoints/list?' + params.toString());
     if (!res || !res.ok) {
@@ -74,17 +82,25 @@ function endpointsRender(d) {
 
     const host = document.getElementById('epResults');
     if (!host) return;
+
+    const en = currentLang === 'en';
+    const retentionBanner = d.outside_retention
+        ? `<div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:color-mix(in srgb, var(--danger) 12%, transparent); border:1px solid color-mix(in srgb, var(--danger) 35%, transparent); color:var(--danger); font-size:12px;">
+            <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
+                en ? `The requested start date is outside the retention window (${d.retention_days} days).` : `La data iniziale richiesta è fuori dal periodo di retention (${d.retention_days} giorni).`)}</div>`
+        : '';
+
     if (!_epRows.length) {
-        host.innerHTML = `<div class="panel" style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;">
+        host.innerHTML = retentionBanner + `<div class="panel" style="padding:28px; text-align:center; color:var(--text-muted); font-size:13px;">
             <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(L.epEmpty)}</div>`;
         return;
     }
 
-    const banner = _epTruncated
+    const banner = (_epTruncated
         ? `<div style="padding:10px 12px; margin-bottom:10px; border-radius:0; background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 35%, transparent); color:var(--warning); font-size:12px;">
             <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${escapeHtml(
                 L.epTruncated.replace('{shown}', String(_epRows.length)).replace('{total}', String(d.total)))}</div>`
-        : '';
+        : '') + retentionBanner;
 
     // Le tre azioni esistono gia' altrove: qui si rendono solo raggiungibili
     // dalla riga. stopPropagation non serve piu' grazie alla delegazione.
@@ -341,5 +357,14 @@ document.getElementById('epFilterStale')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') endpointsApplyFilters();
 });
 document.getElementById('btnEpFilter')?.addEventListener('click', endpointsApplyFilters);
+document.getElementById('btnEpResetTime')?.addEventListener('click', () => {
+    const f = document.getElementById('epFilterFrom');
+    const t = document.getElementById('epFilterTo');
+    if (f) f.value = '';
+    if (t) t.value = '';
+    endpointsApplyFilters();
+});
+document.getElementById('epFilterFrom')?.addEventListener('change', endpointsApplyFilters);
+document.getElementById('epFilterTo')?.addEventListener('change', endpointsApplyFilters);
 document.getElementById('btnEpExportCsv')?.addEventListener('click', () => endpointsExport('csv'));
 document.getElementById('btnEpExportJson')?.addEventListener('click', () => endpointsExport('json'));

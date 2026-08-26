@@ -1709,6 +1709,16 @@ body:not(.role-admin) .requires-admin { display: none !important; }
   #tab-ai .ai-profile-form { border-left: 0; padding-left: 0; border-top: var(--seam) solid var(--border); padding-top: 14px; }
 }
 
+@media (max-width: 768px) {
+  .topbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .topbar > div { justify-content: space-between; }
+  .filterbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .filterbar > div, .filterbar input, .filterbar select, .filterbar button { width: 100% !important; }
+  .diag-form { grid-template-columns: 1fr !important; }
+  #homeVerdicts { grid-template-columns: 1fr; }
+  #commandPaletteModal > div { width: 96%; max-height: 85vh; }
+}
+
 @media (max-width: 620px) {
   .panel { padding: 12px 14px 14px; }
   .panel > h3:first-child { margin: -12px -14px 12px; padding: 8px 14px; }
@@ -1991,4 +2001,99 @@ body:not(.role-admin) .requires-admin { display: none !important; }
 .pt-verdict-card.unknown {
   border-color: rgba(245, 158, 11, 0.4);
   background: var(--lamp-warn-wash);
+}
+
+/* --- TOP CHROME & VERDICT CARDS & COMMAND PALETTE --- */
+.topbar {
+  transition: background var(--transition), border-color var(--transition);
+}
+.verdict-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+.verdict-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--cta);
+  box-shadow: var(--shadow-card);
+}
+.verdict-card.state-ok {
+  border-left: 4px solid var(--success) !important;
+}
+.verdict-card.state-warn {
+  border-left: 4px solid var(--warning) !important;
+}
+.verdict-card.state-crit {
+  border-left: 4px solid var(--danger) !important;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.status-badge.ok {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+.status-badge.warn {
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+.status-badge.crit {
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.cmd-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  transition: background var(--transition);
+}
+.cmd-item:hover, .cmd-item.selected {
+  background: var(--surface-3);
+}
+.cmd-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cmd-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cmd-item-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.cmd-item-badge {
+  font-size: 10.5px;
+  font-family: var(--font-code);
+  padding: 2px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.cmd-group-header {
+  padding: 6px 16px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  background: var(--surface-1);
 }

@@ -90,15 +90,27 @@ const i18n = {
         // Sidebar nav groups
 
         // Tabs
-        tabHome: '<i class="fa-solid fa-table-cells-large"></i> Home',
+        tabHome: '<i class="fa-solid fa-gauge-high"></i> Situazione',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabRedundancy: '<i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)',
         tabWlc: '<i class="fa-solid fa-wifi"></i> Cisco WLC',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
-        // Operations Home
+        // Topbar & Navigation & Shortcuts
+        lblGlobalTenant: "Tenant:",
+        btnSearchPalette: "Cerca comandi o apparati...",
+        titleShortcuts: "Scorciatoie da tastiera (?)",
+        titleShortcutsModal: "Scorciatoie da tastiera",
+        // Operations Home / Situazione
         homeEyebrow: '<i class="fa-solid fa-grip"></i> Operazioni',
-        homeTitle: "Panoramica operativa",
-        homeSubtitle: "Stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.",
+        homeTitle: "Situazione operativa",
+        homeSubtitle: "Verdetti di postura e stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.",
+        verdictReachTitle: "Connettività & Raggiungibilità",
+        verdictBackupTitle: "Stato Backup",
+        verdictCveTitle: "Vulnerabilità CVE",
+        verdictDriftTitle: "Config Drift",
+        verdictEvidence: "Mostra evidenze",
+        epFilterFrom: "Da (data/ora)",
+        epFilterTo: "A (data/ora)",
         homeOpenInventory: '<i class="fa-solid fa-list-check"></i> Apri inventario',
         homeRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale',
         homeStatDevices: "Dispositivi totali",
@@ -1931,15 +1943,27 @@ const i18n = {
         // Sidebar nav groups
 
         // Tabs
-        tabHome: '<i class="fa-solid fa-table-cells-large"></i> Home',
+        tabHome: '<i class="fa-solid fa-gauge-high"></i> Situazione',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabRedundancy: '<i class="fa-solid fa-layer-group"></i> High Availability (HA)',
         tabWlc: '<i class="fa-solid fa-wifi"></i> Cisco WLC',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
-        // Operations Home
+        // Topbar & Navigation & Shortcuts
+        lblGlobalTenant: "Tenant:",
+        btnSearchPalette: "Search commands or devices...",
+        titleShortcuts: "Keyboard shortcuts (?)",
+        titleShortcutsModal: "Keyboard shortcuts",
+        // Operations Home / Situazione
         homeEyebrow: '<i class="fa-solid fa-grip"></i> Operations',
-        homeTitle: "Operations overview",
-        homeSubtitle: "Real-time state of the network fleet. Open the inventory or launch a global triage from here.",
+        homeTitle: "Operational Posture",
+        homeSubtitle: "Real-time state and posture verdicts of the network fleet. Open the inventory or launch a global triage from here.",
+        verdictReachTitle: "Reachability & Connectivity",
+        verdictBackupTitle: "Backup Posture",
+        verdictCveTitle: "CVE Vulnerabilities",
+        verdictDriftTitle: "Config Drift",
+        verdictEvidence: "Show evidence",
+        epFilterFrom: "From (date/time)",
+        epFilterTo: "To (date/time)",
         homeOpenInventory: '<i class="fa-solid fa-list-check"></i> Open inventory',
         homeRunTriage: '<i class="fa-solid fa-bolt-lightning"></i> Run global triage',
         homeStatDevices: "Total devices",

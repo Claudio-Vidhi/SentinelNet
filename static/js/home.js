@@ -142,6 +142,7 @@ async function loadHome() {
     // Cartiglio del disegno: revisione = istante dell'ultima lettura.
     setText('homeOnelineRev', new Date().toLocaleString(currentLang === 'en' ? 'en-GB' : 'it-IT'));
 
+    renderHomeVerdicts(devs);
     renderFleetOneline(devs);
 
     const body = document.getElementById('homeAttentionBody');
@@ -169,6 +170,174 @@ async function loadHome() {
 
     if (currentRole === 'admin') loadHomeAnomalies();
     else renderEventStripDenied();
+}
+
+function renderHomeVerdicts(devs) {
+    const en = currentLang === 'en';
+
+    // 1. Raggiungibilità
+    let online = 0, offline = 0, authFailed = 0;
+    const reachEvidences = [];
+    devs.forEach(d => {
+        const scan = globalVersions[d.IP] || {};
+        if (d.icmp_reachable === false || scan.status === 'unknown') {
+            return;
+        }
+        if (scan.status === 'online') {
+            online++;
+        } else if (scan.status === 'auth_failed') {
+            authFailed++;
+            reachEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Auth Failed' : 'Autenticazione fallita'}`);
+        } else {
+            offline++;
+            reachEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Unreachable' : 'Non raggiungibile'}`);
+        }
+    });
+
+    const vReach = document.getElementById('verdictReachability');
+    const bReach = document.getElementById('badgeReachability');
+    const sReach = document.getElementById('summaryReachability');
+    const eReach = document.getElementById('evidenceReachability');
+    const ebReach = document.getElementById('evidenceReachBody');
+    if (vReach && bReach && sReach) {
+        vReach.className = 'panel verdict-card ' + (offline > 0 ? 'state-crit' : (authFailed > 0 ? 'state-warn' : 'state-ok'));
+        bReach.className = 'status-badge ' + (offline > 0 ? 'crit' : (authFailed > 0 ? 'warn' : 'ok'));
+        bReach.textContent = offline > 0 ? 'CRIT' : (authFailed > 0 ? 'WARN' : 'OK');
+        if (offline > 0 || authFailed > 0) {
+            sReach.textContent = en
+                ? `${offline} device(s) unreachable, ${authFailed} authentication error(s).`
+                : `${offline} apparati non raggiungibili, ${authFailed} errori di credenziali.`;
+            if (eReach && ebReach) {
+                eReach.style.display = '';
+                ebReach.innerHTML = reachEvidences.map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
+            }
+        } else {
+            sReach.textContent = en
+                ? `All ${online} measurable devices are online and responsive.`
+                : `Tutti i ${online} apparati misurabili sono online e raggiungibili.`;
+            if (eReach) eReach.style.display = 'none';
+        }
+    }
+
+    // 2. Backup
+    let noBackup = 0, staleBackup = 0;
+    const backupEvidences = [];
+    const nowSec = Date.now() / 1000;
+    devs.forEach(d => {
+        const scan = globalVersions[d.IP] || {};
+        const bTs = scan.backup_timestamp || scan.last_backup;
+        if (!bTs) {
+            noBackup++;
+            backupEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Never backed up' : 'Nessun backup registrato'}`);
+        } else if ((nowSec - bTs) > 7 * 86400) {
+            staleBackup++;
+            backupEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Backup older than 7 days' : 'Backup obsoleto (> 7 giorni)'}`);
+        }
+    });
+
+    const vBackup = document.getElementById('verdictBackup');
+    const bBackup = document.getElementById('badgeBackup');
+    const sBackup = document.getElementById('summaryBackup');
+    const eBackup = document.getElementById('evidenceBackup');
+    const ebBackup = document.getElementById('evidenceBackupBody');
+    if (vBackup && bBackup && sBackup) {
+        const hasBackupIssue = noBackup > 0 || staleBackup > 0;
+        vBackup.className = 'panel verdict-card ' + (hasBackupIssue ? 'state-warn' : 'state-ok');
+        bBackup.className = 'status-badge ' + (hasBackupIssue ? 'warn' : 'ok');
+        bBackup.textContent = hasBackupIssue ? 'WARN' : 'OK';
+        if (hasBackupIssue) {
+            sBackup.textContent = en
+                ? `${noBackup + staleBackup} device(s) without recent backup (> 7 days).`
+                : `${noBackup + staleBackup} apparati senza backup recente (< 7 giorni).`;
+            if (eBackup && ebBackup) {
+                eBackup.style.display = '';
+                ebBackup.innerHTML = backupEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
+            }
+        } else {
+            sBackup.textContent = en
+                ? `All devices have recent configuration backups saved.`
+                : `Tutti gli apparati dispongono di backup aggiornato.`;
+            if (eBackup) eBackup.style.display = 'none';
+        }
+    }
+
+    // 3. CVE Vulnerabilità
+    let critCves = 0;
+    const cveEvidences = [];
+    devs.forEach(d => {
+        const scan = globalVersions[d.IP] || {};
+        const cves = scan.cves || scan.cve_count || 0;
+        if (typeof cves === 'number' && cves > 0) {
+            critCves += cves;
+            cveEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${cves} CVE`);
+        } else if (Array.isArray(cves) && cves.length > 0) {
+            critCves += cves.length;
+            cveEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${cves.length} CVE`);
+        }
+    });
+
+    const vCve = document.getElementById('verdictCve');
+    const bCve = document.getElementById('badgeCve');
+    const sCve = document.getElementById('summaryCve');
+    const eCve = document.getElementById('evidenceCve');
+    const ebCve = document.getElementById('evidenceCveBody');
+    if (vCve && bCve && sCve) {
+        const hasCve = critCves > 0;
+        vCve.className = 'panel verdict-card ' + (hasCve ? 'state-warn' : 'state-ok');
+        bCve.className = 'status-badge ' + (hasCve ? 'warn' : 'ok');
+        bCve.textContent = hasCve ? 'WARN' : 'OK';
+        if (hasCve) {
+            sCve.textContent = en
+                ? `${critCves} known CVE vulnerabilities detected across fleet.`
+                : `Rilevate ${critCves} vulnerabilità CVE note nella flotta.`;
+            if (eCve && ebCve) {
+                eCve.style.display = '';
+                ebCve.innerHTML = cveEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
+            }
+        } else {
+            sCve.textContent = en
+                ? `No unmitigated critical CVE vulnerabilities detected.`
+                : `Nessuna criticità CVE non mitigata rilevata.`;
+            if (eCve) eCve.style.display = 'none';
+        }
+    }
+
+    // 4. Config Drift
+    let driftCount = 0;
+    const driftEvidences = [];
+    devs.forEach(d => {
+        const scan = globalVersions[d.IP] || {};
+        if (scan.drift || scan.has_drift) {
+            driftCount++;
+            driftEvidences.push(`${d.Hostname || d.IP} (${d.IP}) — ${en ? 'Config drift detected' : 'Discrepanza di configurazione'}`);
+        }
+    });
+
+    const vDrift = document.getElementById('verdictDrift');
+    const bDrift = document.getElementById('badgeDrift');
+    const sDrift = document.getElementById('summaryDrift');
+    const eDrift = document.getElementById('evidenceDrift');
+    const ebDrift = document.getElementById('evidenceDriftBody');
+    if (vDrift && bDrift && sDrift) {
+        const hasDrift = driftCount > 0;
+        vDrift.className = 'panel verdict-card ' + (hasDrift ? 'state-warn' : 'state-ok');
+        bDrift.className = 'status-badge ' + (hasDrift ? 'warn' : 'ok');
+        bDrift.textContent = hasDrift ? 'WARN' : 'OK';
+        if (hasDrift) {
+            sDrift.textContent = en
+                ? `${driftCount} device(s) have configuration drift from baseline.`
+                : `${driftCount} apparati presentano drift rispetto all'archivio.`;
+            if (eDrift && ebDrift) {
+                eDrift.style.display = '';
+                ebDrift.innerHTML = driftEvidences.slice(0, 10).map(e => `<div>• ${escapeHtml(e)}</div>`).join('');
+            }
+        } else {
+            sDrift.textContent = en
+                ? `All running configurations match authorized backups.`
+                : `Tutte le configurazioni attive risultano allineate.`;
+            if (eDrift) eDrift.style.display = 'none';
+        }
+    }
 }
 
 // Una bay per tenant: e' l'estate a essere indicizzata. Lo stato della bay e'

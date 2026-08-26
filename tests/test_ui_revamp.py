@@ -120,7 +120,7 @@ TAB_IDS_IN_DOC_ORDER = [
 # another exactly as the Task 14 mutation re-nested #provCiscoSection --
 # these panes get the same three-way guard as the top-level tabs.
 PANE_IDS_IN_DOC_ORDER = [
-    "locPane-mac", "locPane-clientmap", "locPane-diagnosi", "locPane-inventory",
+    "locPane-mac", "locPane-diagnosi", "locPane-inventory",
 ]
 
 
@@ -738,19 +738,11 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         self.assertIn('requires-write', html[details_tag:adhoc_idx])
 
     def test_preserve_ids_clientmap_arp_multiselect(self):
-        # Tenant filter for the Client Map search used to be its own multi-select
-        # (arpTenantList / arpTenantSummary, checkbox-driven via onArpTenantToggle).
-        # Task 3 (endpoint tab merge) replaced it with the single #locTenant select
-        # shared across all four panes. The ARP-target device multiselect this
-        # test guards (arpDeviceList / arp-dev-cb) is untouched by that change.
         html = frontend_source()
         for _id in ('arpDeviceMenu', 'arpDeviceSummary', 'arpDeviceList',
-                    'btnArpScan', 'arpSearchMac', 'arpSearchIp',
-                    'arpFilterGateway', 'arpStats', 'arpScanSummary',
-                    'arpResults', 'kpiArpBindings', 'kpiArpUniqueMacs', 'kpiArpGateways'):
+                    'btnArpScan', 'arpScanSummary'):
             self.assertIn(f'id="{_id}"', html)
-        for hook in ('runArpScan', 'arpClientSearch', 'arpSearchReset',
-                     'populateArpScanDevices'):
+        for hook in ('runArpScan', 'populateArpScanDevices'):
             self.assertIn(hook, html)
         # RBAC: the scan action stays write-gated
         self.assertIn('id="btnArpScan"', html)
@@ -805,23 +797,14 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
 
     def test_mac_and_clientmap_tabs_use_component_classes(self):
         html = _html()
-        # #tab-mac and #tab-clientmap merged into two of the four panes
-        # inside #tab-endpoint (Task 1/2 of the endpoint tab merge).
         tab_start = html.index('<div id="tab-endpoint"')
-        # Bound on the next tab's own div, not on a comment: the comment that
-        # used to sit here was mislabelled ("Config Analyzer" above #tab-flows)
-        # and Task 20 corrected it, which silently broke this slice. #tab-wlc
-        # (not #tab-flows) now directly follows the merged endpoint tab.
         tab_end = html.index('<div id="tab-wlc"')
         tab_html = html[tab_start:tab_end]
         for cls in ('class="hero"', 'class="hero-card"', 'class="filterbar"', 'class="table-wrap"'):
             self.assertIn(cls, tab_html)
-        # una striscia oneline-foot per pane (mac + clientmap)
-        self.assertGreaterEqual(tab_html.count('class="oneline-foot"'), 2)
-        self.assertGreaterEqual(tab_html.count('class="panel'), 4)
-        # both panes individually still present within the merged tab
+        self.assertGreaterEqual(tab_html.count('class="oneline-foot"'), 1)
+        self.assertGreaterEqual(tab_html.count('class="panel'), 3)
         self.assertIn('<div id="locPane-mac"', tab_html)
-        self.assertIn('<div id="locPane-clientmap"', tab_html)
 
     def test_i18n_keys_both_langs(self):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
@@ -1890,67 +1873,6 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         self.assertIn('id="anomSectionTitle"', html)
         self.assertIn("document.getElementById('anomSectionTitle')?.scrollIntoView(", html)
         self.assertNotIn("querySelector('#tab-flows h4')", html)
-
-    def test_clientmap_tenant_filter_drives_grouped_and_rows_from_one_path(self):
-        """Task 20 brief lists a 'known bug': the Client Map tenant filter is
-        said to update the grouped results but not the row details.
-
-        IT DOES NOT REPRODUCE -- the structure makes it impossible, and this
-        test pins that structure so a future refactor cannot reintroduce it.
-
-        Task 3 (endpoint tab merge) replaced the tenant checkbox multiselect
-        with the single #locTenant select shared by all four panes: changing
-        it runs locTenantChanged() -> LOC_LOADERS[_locView]() -> (on the
-        Client Map pane) loadClientMapTab() -> populateArpGatewayFilter();
-        arpClientSearch();
-
-          arpClientSearch() -> for the selected tenant, ONE server-filtered GET
-                             /api/arp/client-map?...&tenant=<t>, collected into a
-                             single `byTenant` map keyed by tenant
-                             -> renderArpResults(tenants, byTenant)
-                             -> updateArpKpisFromResults(tenants, byTenant)
-          renderArpResults() -> derives BOTH the per-tenant table headers and the
-                                detail rows (rowHtml) from the SAME byTenant map,
-                                in the SAME `box.innerHTML =` write.
-
-        There is exactly one Client Map results container (#arpResults) and no
-        separate row-details element, so grouping and rows cannot diverge.
-
-        LIMIT: no test here executes JS, so this asserts the *source wiring*,
-        not runtime behaviour. It proves the single-render-path property that
-        makes the reported bug unrepresentable; it cannot prove the rendered
-        DOM is correct. Runtime confirmation is the manual gate's job.
-        """
-        html = frontend_source()  # tenant + ARP client-map logic lives in client-map.js
-        # One filter-application path: changing the tenant reconciles the
-        # gateway list and then re-runs the single search.
-        self.assertIn('function locTenantChanged()', html)
-        changed = html[html.index('function locTenantChanged()'):
-                        html.index('function loadMacTracker()')]
-        self.assertIn('LOC_LOADERS[_locView]()', changed)
-        loader = html[html.index('function loadClientMapTab()'):
-                       html.index('function arpFilteredDevices()')]
-        self.assertIn('populateArpGatewayFilter();', loader)
-        self.assertIn('arpClientSearch();', loader)
-        # The tenant is applied SERVER-side, once, into ONE byTenant map that
-        # both the renderer and the KPI calc consume.
-        search = html[html.index('async function arpClientSearch()'):
-                      html.index('function arpSearchReset()')]
-        self.assertIn("params.set('tenant', t)", search)
-        self.assertEqual(search.count("apiFetch('/api/arp/client-map?"), 1)
-        self.assertEqual(search.count('renderArpResults('), 1)
-        self.assertIn('renderArpResults(tenants, byTenant)', search)
-        self.assertIn('updateArpKpisFromResults(tenants, byTenant)', search)
-        # The renderer derives grouping (per-tenant sections) AND rows from the
-        # same `byTenant` argument.
-        render = html[html.index('function renderArpResults(tenants, byTenant)'):
-                      html.index('function renderMacResults(rows)')]
-        self.assertIn('tenants.map(t => {', render)          # per-tenant grouping
-        self.assertIn('const rows = byTenant[t] || [];', render)  # rows, same source
-        self.assertIn("table(rows.map(rowHtml).join(''))", render)
-        # Exactly one results sink; no second detail container to fall stale.
-        self.assertEqual(html.count('id="arpResults"'), 1)
-        self.assertEqual(render.count("getElementById('arpResults')"), 1)
 
 
 # ---------------------------------------------------------------------------

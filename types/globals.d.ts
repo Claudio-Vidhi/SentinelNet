@@ -121,6 +121,12 @@ declare var _vwVendor: any;
 // identifier is declared twice.
 interface Window {
     loadAssetOnce: any;      // core.js
+    globalSelectedTenant: any; // core.js
+    globalDeviceContext: any; // core.js
+    setGlobalDeviceContext: any; // core.js
+    clearGlobalDeviceContext: any; // core.js
+    openCommandPalette: any; // core.js
+    closeCommandPalette: any; // core.js
     trafState: any;          // observability.js, read by flow-analytics.js
     _vwLoaded: any;          // threat-intel.js, first-load flag
     webkitAudioContext: any; // legacy Safari fallback in devices.js
