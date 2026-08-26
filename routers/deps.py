@@ -101,7 +101,7 @@ def assert_group_allowed(current_user, group):
     if scope is not None and group not in scope:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Site '{group}' is not allowed for your profile."
+            detail=f"Group '{group}' is not allowed for your profile."
         )
 
 

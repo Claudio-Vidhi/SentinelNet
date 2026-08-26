@@ -248,7 +248,7 @@ def snmp_defaults_set(payload: SnmpDefaultSchema,
     if scope is not None and payload.tenant not in scope:
         raise HTTPException(
             status_code=403,
-            detail=f"Site '{payload.tenant}' is not allowed for your profile.")
+            detail=f"Group '{payload.tenant}' is not allowed for your profile.")
     set_tenant_community(payload.tenant, payload.community)
     log_audit(f"Community SNMP predefinita del tenant '{payload.tenant}' "
               f"{'impostata' if payload.community else 'rimossa'} da "
