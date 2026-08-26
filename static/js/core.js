@@ -892,6 +892,9 @@ async function appInit() {
             if (interSelect.selectedIndex === -1) interSelect.value = '';
         }
 
+        // Popola la tendina globale dei Tenant nella barra superiore
+        populateGlobalTenantSelect();
+
         // Popola Tabella Dispositivi tramite la nuova funzione autonoma filtrabile
         renderDeviceTable();
 
@@ -1334,5 +1337,325 @@ document.getElementById('identitiesTableBody')?.addEventListener('click', (e) =>
     else if (act === 'delete-identity') deleteIdentity(btn.dataset.id);
 });
 
+// --- GLOBAL TENANT SELECTOR ---
+window.globalSelectedTenant = 'all';
+
+function populateGlobalTenantSelect() {
+    const sel = document.getElementById('globalTenantSelect');
+    if (!sel) return;
+    const cur = window.globalSelectedTenant || sel.value || 'all';
+    const groups = Object.keys(globalGroups || {});
+    const L = i18n[currentLang] || {};
+    sel.innerHTML = `<option value="all">${L.optFilterAll || 'Tutti'}</option>` +
+        groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+    sel.value = groups.includes(cur) ? cur : 'all';
+    window.globalSelectedTenant = sel.value;
+}
+
+document.getElementById('globalTenantSelect')?.addEventListener('change', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const val = target.value;
+    window.globalSelectedTenant = val;
+    const fSel = document.getElementById('filterGroupSelect');
+    if (fSel instanceof HTMLSelectElement) { fSel.value = val; renderDeviceTable(); }
+    const locSel = document.getElementById('locTenant');
+    if (locSel instanceof HTMLSelectElement) { locSel.value = val; if (typeof locTenantChanged === 'function') locTenantChanged(); }
+    const topSel = document.getElementById('topologyGroupSelect');
+    if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
+    window.dispatchEvent(new CustomEvent('globalTenantChanged', { detail: { tenant: val } }));
+});
+
+// --- GLOBAL DEVICE CONTEXT CHIP ---
+window.globalDeviceContext = null;
+
+function setGlobalDeviceContext(ctx) {
+    if (!ctx || !ctx.ip) {
+        clearGlobalDeviceContext();
+        return;
+    }
+    window.globalDeviceContext = ctx;
+    const chip = document.getElementById('globalDeviceChip');
+    const label = document.getElementById('globalDeviceChipLabel');
+    if (chip && label) {
+        label.textContent = `${ctx.name || ctx.ip} · ${ctx.ip}`;
+        chip.style.display = 'inline-flex';
+    }
+    window.dispatchEvent(new CustomEvent('globalDeviceContextChanged', { detail: ctx }));
+}
+
+function clearGlobalDeviceContext() {
+    window.globalDeviceContext = null;
+    const chip = document.getElementById('globalDeviceChip');
+    if (chip) chip.style.display = 'none';
+    window.dispatchEvent(new CustomEvent('globalDeviceContextChanged', { detail: null }));
+}
+
+document.getElementById('btnRemoveDeviceContext')?.addEventListener('click', () => {
+    clearGlobalDeviceContext();
+});
+
+// --- COMMAND PALETTE (Ctrl+K) & SHORTCUTS ---
+let _cmdSelectedIdx = 0;
+let _cmdItems = [];
+
+function buildCommandPaletteItems(query = '') {
+    const q = query.trim().toLowerCase();
+    const items = [];
+    const en = currentLang === 'en';
+
+    // 1. Viste / Schede
+    const navItems = [
+        { id: 'tab-home', title: en ? 'Overview / Posture' : 'Situazione', desc: en ? 'Fleet posture verdicts and unifilar schema' : 'Verdetti di postura e schema unifilare flotta', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-incidents', title: en ? 'Incidents' : 'Incidenti', desc: en ? 'Correlated security and operational incidents' : 'Incidenti operativi e correlazione allarmi', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-flows', title: en ? 'Traffic / Observability' : 'Traffico & Osservabilità', desc: en ? 'Top talkers, anomalies, and flow analytics' : 'Top talker, anomalie e analisi flussi', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-endpoint', title: en ? 'Endpoint Inventory & MAC Tracker' : 'Endpoint Inventory & Tracker MAC', desc: en ? 'Discovered endpoints, MAC tracking, client diagnosis' : 'Inventario client scoperti, storico MAC e diagnosi', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-ai', title: 'AI Assistant', desc: en ? 'Network assistant and config generation' : 'Assistente di rete e generatore config', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-devices', title: 'Network Inventory', desc: en ? 'Device list, credentials, and actions' : 'Elenco apparati, credenziali e azioni', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-map', title: en ? 'Topology' : 'Topologia', desc: en ? 'L2/L3 topology and Port-channels' : 'Mappa L2/L3 e port-channel', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-categories', title: en ? 'Categories & Devices' : 'Dispositivi & Categorie', desc: en ? 'Hardware models, roles, and categories' : 'Modelli hardware, ruoli e categorie', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-security', title: 'Threat Intel (NVD NIST)', desc: en ? 'CVE vulnerabilities across devices' : 'Vulnerabilità CVE apparati', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-config', title: 'Config Analyzer', desc: en ? 'Configuration parsing and interface checks' : 'Analisi configurazioni e porte', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-netsec-audit', title: 'NetSec Audit', desc: en ? 'Firewall and security audit rules' : 'Audit di sicurezza e conformità firewall', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-policy-test', title: en ? 'Policy & Routing Validation' : 'Validazione Policy & Routing', desc: en ? 'Policy trace and routing verification' : 'Tracciamento policy e verifica routing', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-config-drift', title: 'Config Drift', desc: en ? 'Running config vs backup diffs' : 'Discrepanze tra running-config e backup', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-provisioning', title: 'Provisioning', desc: en ? 'Add new devices and manage identities' : 'Aggiunta nuovi apparati e profili identità', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-import', title: en ? 'CSV Import' : 'Importazione CSV', desc: en ? 'Bulk import devices from CSV' : 'Importazione massiva apparati da CSV', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-users', title: en ? 'Users' : 'Utenti', desc: en ? 'Manage local user accounts and roles' : 'Gestione account e ruoli locali', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-groups', title: en ? 'Tenant Management' : 'Gestione Tenant', desc: en ? 'Configure tenants and SNMP defaults' : 'Configurazione tenant e default SNMP', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-sites', title: en ? 'Sites' : 'Sedi', desc: en ? 'Physical sites and site agents' : 'Sedi fisiche e agenti di sede', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-mcp', title: en ? 'Integrations & MCP' : 'Integrazioni & MCP', desc: en ? 'MCP servers and external integrations' : 'Server MCP e integrazioni esterne', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-settings', title: en ? 'Settings' : 'Impostazioni', desc: en ? 'App settings, ping monitor, SMTP, SSO' : 'Impostazioni app, ping monitor, SMTP, SSO', group: en ? 'Views' : 'Viste' },
+        { id: 'tab-fortigate', title: 'Fortigate Management', desc: en ? 'Firewall policies, address objects, sessions' : 'Policy firewall, oggetti indirizzo, sessioni', group: en ? 'Facets' : 'Sfaccettature' },
+        { id: 'tab-wlc', title: 'Cisco WLC', desc: en ? 'Access points, SSIDs, and WLAN clients' : 'Access point, SSID e client wireless', group: en ? 'Facets' : 'Sfaccettature' },
+        { id: 'tab-redundancy', title: en ? 'High Availability (HA)' : 'Alta Affidabilità (HA)', desc: en ? 'Redundancy pairs and failover state' : 'Coppie di ridondanza e stato failover', group: en ? 'Facets' : 'Sfaccettature' },
+    ];
+
+    navItems.forEach(item => {
+        if (!q || item.title.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q)) {
+            items.push({
+                type: 'tab',
+                tabId: item.id,
+                title: item.title,
+                desc: item.desc,
+                group: item.group,
+                icon: 'fa-table-columns',
+                action: () => switchTab(item.id)
+            });
+        }
+    });
+
+    // 2. Apparati
+    (globalDevices || []).forEach(d => {
+        const h = (d.Hostname || '').toLowerCase();
+        const ip = (d.IP || '').toLowerCase();
+        const t = (d.Group || '').toLowerCase();
+        if (!q || h.includes(q) || ip.includes(q) || t.includes(q)) {
+            items.push({
+                type: 'device',
+                title: `${d.Hostname || d.IP} (${d.IP})`,
+                desc: `Tenant: ${d.Group || '—'} · ${d.Site || 'central'}`,
+                group: en ? 'Devices' : 'Dispositivi',
+                icon: 'fa-server',
+                action: () => {
+                    setGlobalDeviceContext({ ip: d.IP, name: d.Hostname || d.IP, tenant: d.Group || '' });
+                    switchTab('tab-devices');
+                }
+            });
+        }
+    });
+
+    // 3. Azioni rapide
+    const quickActions = [
+        { title: en ? 'Run Global Triage' : 'Avvia Triage Globale', desc: en ? 'Execute triage check across all devices' : 'Esegui triage su tutti i dispositivi', icon: 'fa-bolt-lightning', action: () => { const b = document.getElementById('btnHomeRunTriage'); if (b) b.click(); } },
+        { title: en ? 'Run MAC Scan' : 'Avvia MAC Scan', desc: en ? 'Collect MAC address table from switches' : 'Raccogli tabella MAC dagli switch', icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
+        { title: en ? 'Run ARP Collection' : 'Raccogli ARP (gateway L3)', desc: en ? 'Collect ARP bindings from gateways' : 'Raccogli binding ARP dai gateway L3', icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
+        { title: en ? 'Add New Device' : 'Aggiungi Nuovo Dispositivo', desc: en ? 'Open provisioning form for new device' : 'Apri form di provisioning nuovo apparato', icon: 'fa-circle-plus', action: () => switchTab('tab-provisioning') },
+        { title: en ? 'Toggle Theme' : 'Alterna Tema Chiaro / Scuro', desc: en ? 'Switch dark/light theme' : 'Cambia tema scuro/chiaro', icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
+    ];
+
+    quickActions.forEach(a => {
+        if (!q || a.title.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q)) {
+            items.push({
+                type: 'action',
+                title: a.title,
+                desc: a.desc,
+                group: en ? 'Quick Actions' : 'Azioni Rapide',
+                icon: a.icon,
+                action: a.action
+            });
+        }
+    });
+
+    return items;
+}
+
+function renderCommandPalette(items) {
+    const host = document.getElementById('cmdPaletteResults');
+    if (!host) return;
+    _cmdItems = items;
+    if (_cmdSelectedIdx >= items.length) _cmdSelectedIdx = Math.max(0, items.length - 1);
+
+    if (!items.length) {
+        host.innerHTML = `<div style="padding:24px; text-align:center; color:var(--text-muted); font-size:13px;">
+            <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${escapeHtml(currentLang === 'en' ? 'No matching commands or devices found.' : 'Nessun comando o apparato trovato.')}</div>`;
+        return;
+    }
+
+    let html = '';
+    let curGroup = '';
+    items.forEach((item, idx) => {
+        if (item.group !== curGroup) {
+            curGroup = item.group;
+            html += `<div class="cmd-group-header">${escapeHtml(curGroup)}</div>`;
+        }
+        const isSel = idx === _cmdSelectedIdx;
+        html += `<div class="cmd-item ${isSel ? 'selected' : ''}" data-cmd-idx="${idx}">
+            <div class="cmd-item-left">
+                <i class="fa-solid ${item.icon}" style="color:var(--primary); font-size:13px; width:16px; text-align:center;"></i>
+                <div>
+                    <div class="cmd-item-title">${escapeHtml(item.title)}</div>
+                    <div class="cmd-item-desc">${escapeHtml(item.desc)}</div>
+                </div>
+            </div>
+            <span class="cmd-item-badge">${escapeHtml(item.type.toUpperCase())}</span>
+        </div>`;
+    });
+    host.innerHTML = html;
+
+    const selEl = host.querySelector('.cmd-item.selected');
+    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
+}
+
+function openCommandPalette() {
+    const modal = document.getElementById('commandPaletteModal');
+    const input = document.getElementById('cmdPaletteInput');
+    if (!modal || !input) return;
+    _cmdSelectedIdx = 0;
+    if (input instanceof HTMLInputElement) input.value = '';
+    modal.style.display = 'flex';
+    renderCommandPalette(buildCommandPaletteItems(''));
+    input.focus();
+}
+
+function closeCommandPalette() {
+    const modal = document.getElementById('commandPaletteModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function openShortcutsModal() {
+    const modal = document.getElementById('shortcutsModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeShortcutsModal() {
+    const modal = document.getElementById('shortcutsModal');
+    if (modal) modal.style.display = 'none';
+}
+
+document.getElementById('btnOpenCommandPalette')?.addEventListener('click', openCommandPalette);
+document.getElementById('btnOpenShortcuts')?.addEventListener('click', openShortcutsModal);
+document.getElementById('btnCloseShortcuts')?.addEventListener('click', closeShortcutsModal);
+
+document.getElementById('commandPaletteModal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeCommandPalette();
+});
+document.getElementById('shortcutsModal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeShortcutsModal();
+});
+
+document.getElementById('cmdPaletteInput')?.addEventListener('input', (e) => {
+    const target = e.target;
+    const val = (target instanceof HTMLInputElement) ? target.value : '';
+    _cmdSelectedIdx = 0;
+    renderCommandPalette(buildCommandPaletteItems(val));
+});
+
+document.getElementById('cmdPaletteInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _cmdSelectedIdx = Math.min(_cmdItems.length - 1, _cmdSelectedIdx + 1);
+        renderCommandPalette(_cmdItems);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _cmdSelectedIdx = Math.max(0, _cmdSelectedIdx - 1);
+        renderCommandPalette(_cmdItems);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (_cmdItems[_cmdSelectedIdx]) {
+            const act = _cmdItems[_cmdSelectedIdx].action;
+            closeCommandPalette();
+            if (typeof act === 'function') act();
+        }
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeCommandPalette();
+    }
+});
+
+document.getElementById('cmdPaletteResults')?.addEventListener('click', (e) => {
+    const itemEl = e.target instanceof Element ? e.target.closest('[data-cmd-idx]') : null;
+    if (!itemEl) return;
+    const idx = parseInt(itemEl.getAttribute('data-cmd-idx') || '0', 10);
+    if (_cmdItems[idx]) {
+        const act = _cmdItems[idx].action;
+        closeCommandPalette();
+        if (typeof act === 'function') act();
+    }
+});
+
+// Global Shortcuts
+document.addEventListener('keydown', (e) => {
+    const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+    const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const modal = document.getElementById('commandPaletteModal');
+        if (modal && modal.style.display === 'flex') closeCommandPalette();
+        else openCommandPalette();
+        return;
+    }
+
+    if (e.key === 'Escape') {
+        const cmdModal = document.getElementById('commandPaletteModal');
+        if (cmdModal && cmdModal.style.display === 'flex') {
+            closeCommandPalette();
+            return;
+        }
+        const scModal = document.getElementById('shortcutsModal');
+        if (scModal && scModal.style.display === 'flex') {
+            closeShortcutsModal();
+            return;
+        }
+        if (window.globalDeviceContext) {
+            clearGlobalDeviceContext();
+            return;
+        }
+    }
+
+    if (!isInput) {
+        if (e.key === '?') {
+            e.preventDefault();
+            openShortcutsModal();
+            return;
+        }
+        if (e.key === '/') {
+            e.preventDefault();
+            openCommandPalette();
+            return;
+        }
+        if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            toggleTheme();
+            return;
+        }
+    }
+});
+
 window.loadAssetOnce = loadAssetOnce;
+window.setGlobalDeviceContext = setGlobalDeviceContext;
+window.clearGlobalDeviceContext = clearGlobalDeviceContext;
+window.openCommandPalette = openCommandPalette;
+window.closeCommandPalette = closeCommandPalette;
 

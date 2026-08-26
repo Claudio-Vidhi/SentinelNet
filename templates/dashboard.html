@@ -260,10 +260,12 @@
     </div>
 
     <nav class="sidenav">
-      <div class="nav-group"><h3 data-i18n="navInvestigate">Indaga</h3>
-        <button class="nav-item active" data-tab="tab-home">
-          <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-table-cells-large"></i> Home</span>
+      <div style="padding: 0 0 10px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border);">
+        <button class="nav-item active" data-tab="tab-home" style="font-weight: 700; font-size: 13.5px;">
+          <span class="nav-left" data-i18n="tabHome"><i class="fa-solid fa-gauge-high" style="color:var(--primary);"></i> Situazione</span>
         </button>
+      </div>
+      <div class="nav-group"><h3 data-i18n="navInvestigate">Indaga</h3>
         <button id="navIncidents" class="nav-item requires-admin" data-tab="tab-incidents">
           <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-timeline"></i> Incidenti</span>
           <span class="preview-badge">preview</span>
@@ -285,17 +287,8 @@
         <button class="nav-item" data-tabs="tab-map tab-map-interactive" data-tab="tab-map">
           <span class="nav-left" data-i18n="tabTopologyGroup"><i class="fa-solid fa-circle-nodes"></i> Topologia</span>
         </button>
-        <button id="navRedundancy" class="nav-item" data-tab="tab-redundancy">
-          <span class="nav-left" data-i18n="tabRedundancy"><i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)</span>
-        </button>
         <button class="nav-item" data-tab="tab-categories">
           <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
-        </button>
-        <button id="navFortigate" class="nav-item requires-admin" data-tab="tab-fortigate">
-          <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
-        </button>
-        <button id="navWlc" class="nav-item" data-tab="tab-wlc">
-          <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navAssess">Valuta</h3>
@@ -348,18 +341,110 @@
 
   <!-- Area Centrale Principale -->
   <main>
+    <!-- Top Chrome Bar -->
+    <header id="appTopBar" class="topbar" style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; padding:8px 14px; background:var(--surface); border:1px solid var(--border); border-radius:0; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <!-- Global Tenant Selector -->
+        <div style="display:inline-flex; align-items:center; gap:6px;">
+          <i class="fa-solid fa-building-user" style="color:var(--text-muted); font-size:12px;"></i>
+          <label for="globalTenantSelect" style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:0;" data-i18n="lblGlobalTenant">Tenant:</label>
+          <select id="globalTenantSelect" style="padding:4px 8px; font-size:12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer;">
+            <option value="all" data-i18n="optFilterAll">Tutti</option>
+          </select>
+        </div>
+
+        <!-- Global Device Context Chip -->
+        <div id="globalDeviceChip" style="display:none; align-items:center; gap:6px; padding:3px 8px; font-size:12px; background:color-mix(in srgb, var(--primary) 15%, transparent); border:1px solid var(--primary); color:var(--text); border-radius:0;">
+          <i class="fa-solid fa-server" style="color:var(--primary); font-size:11px;"></i>
+          <span id="globalDeviceChipLabel" style="font-family:var(--font-code); font-weight:600;"></span>
+          <button type="button" id="btnRemoveDeviceContext" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:0 2px; font-size:11px;" title="Rimuovi filtro dispositivo">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px;">
+        <!-- Command Palette Trigger Button -->
+        <button type="button" id="btnOpenCommandPalette" class="btn btn-secondary btn-small" style="width:auto; margin:0; padding:4px 10px; font-size:12px; display:inline-flex; align-items:center; gap:8px; border-color:var(--border-strong);">
+          <i class="fa-solid fa-magnifying-glass" style="font-size:11px; color:var(--text-muted);"></i>
+          <span data-i18n="btnSearchPalette">Cerca comandi o apparati...</span>
+          <kbd style="font-family:var(--font-code); font-size:10px; padding:1px 5px; background:var(--surface-2); border:1px solid var(--border); border-radius:2px; color:var(--text-muted);">Ctrl+K</kbd>
+        </button>
+
+        <!-- Shortcuts trigger -->
+        <button type="button" id="btnOpenShortcuts" class="btn btn-secondary btn-small" style="width:auto; margin:0; padding:4px 8px; font-size:12px;" title="Scorciatoie da tastiera (?)" data-i18n-title="titleShortcuts">
+          <i class="fa-solid fa-keyboard"></i>
+        </button>
+      </div>
+    </header>
+
     <!-- TAB 0: Operations Home (landing) -->
     <div id="tab-home" class="tab-content active">
       <!-- Cartiglio: come su un disegno tecnico, l'intestazione dice cosa si sta
            guardando e porta il comando primario. -->
       <div class="hero-card" style="display:flex; align-items:flex-end; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:14px;">
         <div style="min-width:0;">
-          <h2 data-i18n="homeTitle">Panoramica operativa</h2>
-          <p data-i18n="homeSubtitle">Stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
+          <h2 data-i18n="homeTitle">Situazione operativa</h2>
+          <p data-i18n="homeSubtitle">Verdetti di postura e stato in tempo reale della flotta di rete. Da qui apri l'inventario o avvia un triage globale.</p>
         </div>
         <div class="split-footer" style="margin-top:0;">
           <button class="btn btn-primary" style="width:auto;" data-switch-tab="tab-devices" data-i18n="homeOpenInventory"><i class="fa-solid fa-list-check"></i> Apri inventario</button>
           <button class="btn btn-secondary requires-write" id="btnHomeRunTriage" style="width:auto;" data-i18n="homeRunTriage"><i class="fa-solid fa-bolt-lightning"></i> Avvia triage globale</button>
+        </div>
+      </div>
+
+      <!-- 4 Structured Verdicts: Raggiungibilità, Backup, CVE, Config Drift -->
+      <div id="homeVerdicts" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:14px;">
+        <!-- Verdict 1: Raggiungibilità -->
+        <div class="panel verdict-card" id="verdictReachability" style="margin-bottom:0; padding:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictReachTitle">Connettività & Raggiungibilità</span>
+            <span class="status-badge ok" id="badgeReachability">OK</span>
+          </div>
+          <p id="summaryReachability" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
+          <details id="evidenceReachability" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
+            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceReachBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          </details>
+        </div>
+
+        <!-- Verdict 2: Backup -->
+        <div class="panel verdict-card" id="verdictBackup" style="margin-bottom:0; padding:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictBackupTitle">Stato Backup</span>
+            <span class="status-badge ok" id="badgeBackup">OK</span>
+          </div>
+          <p id="summaryBackup" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
+          <details id="evidenceBackup" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
+            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceBackupBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          </details>
+        </div>
+
+        <!-- Verdict 3: CVE Vulnerabilità -->
+        <div class="panel verdict-card" id="verdictCve" style="margin-bottom:0; padding:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictCveTitle">Vulnerabilità CVE</span>
+            <span class="status-badge ok" id="badgeCve">OK</span>
+          </div>
+          <p id="summaryCve" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
+          <details id="evidenceCve" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
+            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceCveBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          </details>
+        </div>
+
+        <!-- Verdict 4: Config Drift -->
+        <div class="panel verdict-card" id="verdictDrift" style="margin-bottom:0; padding:14px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <span style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--text-muted);" data-i18n="verdictDriftTitle">Config Drift</span>
+            <span class="status-badge ok" id="badgeDrift">OK</span>
+          </div>
+          <p id="summaryDrift" style="font-size:13px; font-weight:600; margin:0 0 6px;">Caricamento...</p>
+          <details id="evidenceDrift" style="display:none; margin-top:8px; font-size:12px; color:var(--text-muted);">
+            <summary style="cursor:pointer; font-weight:600;" data-i18n="verdictEvidence">Mostra evidenze</summary>
+            <div id="evidenceDriftBody" style="margin-top:6px; padding:6px; background:var(--surface-2); border:1px solid var(--border);"></div>
+          </details>
         </div>
       </div>
 
@@ -1262,7 +1347,6 @@
 
       <div id="locPills" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
         <button type="button" class="ca-pill active" id="locPill-mac" data-loc-view="mac" data-i18n="tabMacTracker">Tracker MAC</button>
-        <button type="button" class="ca-pill" id="locPill-clientmap" data-loc-view="clientmap" data-i18n="tabClientMap">Client Map</button>
         <button type="button" class="ca-pill" id="locPill-diagnosi" data-loc-view="diagnosi" data-i18n="tabDiagnosi">Diagnosi Client</button>
         <button type="button" class="ca-pill" id="locPill-inventory" data-loc-view="inventory" data-i18n="tabEndpoints">Endpoint Inventory</button>
       </div>
@@ -1305,6 +1389,27 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Raccolta ARP L3 -->
+      <div class="panel" style="margin-bottom:18px;">
+        <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</h3>
+        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <details id="arpDeviceMenu" style="position:relative;">
+              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
+                <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
+                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
+              </summary>
+              <div id="arpDeviceList" style="position:absolute; top:110%; left:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:var(--shadow-float);"></div>
+            </details>
+          </div>
+          <button class="btn btn-primary btn-small requires-write" id="btnArpScan" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
+            <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
+          </button>
+        </div>
+        <div id="arpScanSummary" style="display:none; margin-top:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px;"></div>
       </div>
 
       <!-- Comandi ad-hoc per apparati non ordinari (es. C8000V bridge-domain) -->
@@ -1373,70 +1478,12 @@
         <div id="macResults"></div>
       </div>
       </div>
-      <div id="locPane-clientmap" class="loc-pane" style="display:none;">
-      <div class="oneline-foot" style="margin-bottom:18px;">
-        <span><span data-i18n="arpKpiBindingsLabel">Binding MAC↔IP</span> <b id="kpiArpBindings">&mdash;</b></span>
-        <span><span data-i18n="arpKpiUniqueLabel">MAC Univoci</span> <b id="kpiArpUniqueMacs">&mdash;</b></span>
-        <span><span data-i18n="arpKpiGatewaysLabel">Gateway</span> <b id="kpiArpGateways">&mdash;</b></span>
-      </div>
-
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</h3>
-        <!-- Selezione ESPLICITA dei gateway target (multi-select a checkbox): non esiste
-             una modalità "spara su tutti", l'utente sceglie sempre i gateway specifici o
-             il tenant; questo evita raccolte ARP indiscriminate su apparati non previsti. -->
-        <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
-          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <details id="arpDeviceMenu" style="position:relative;">
-              <summary style="list-style:none; cursor:pointer; padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; display:inline-flex; align-items:center; gap:6px;">
-                <i class="fa-solid fa-list-check" style="color:var(--text-muted);"></i>
-                <span id="arpDeviceSummary" data-i18n="optMacAllDevices">Tutti i dispositivi</span>
-                <i class="fa-solid fa-chevron-down" style="font-size:10px; color:var(--text-muted);"></i>
-              </summary>
-              <div id="arpDeviceList" style="position:absolute; top:110%; right:0; z-index:60; min-width:250px; max-height:300px; overflow:auto; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:8px; box-shadow:var(--shadow-float);"></div>
-            </details>
-          </div>
-          <button class="btn btn-primary btn-small requires-write" id="btnArpScan" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);" data-i18n="btnArpScan">
-            <i class="fa-solid fa-satellite-dish"></i> Raccogli ARP (gateway L3)
-          </button>
-        </div>
-        <div id="arpScanSummary" style="display:none; margin-top:14px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:12px;"></div>
-      </div>
-
-      <div class="panel">
-        <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleArpSearchPanel">Cerca binding MAC ↔ IP</h3>
-        <div class="filterbar" style="align-items:flex-end; margin-top:0;">
-          <div>
-            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblMacSearch">MAC (anche parziale / OUI)</label>
-            <input id="arpSearchMac" class="ui-input" type="text" placeholder="aa:bb:cc / aabb.ccdd.eeff" style="width:200px;">
-          </div>
-          <div>
-            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpIp">IP (anche prefisso)</label>
-            <input id="arpSearchIp" class="ui-input" type="text" placeholder="10.0.0." style="width:140px;">
-          </div>
-          <div>
-            <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;" data-i18n="lblArpFilterGateway">Gateway</label>
-            <select id="arpFilterGateway" class="ui-input" style="width:200px; cursor:pointer;">
-              <option value="" data-i18n="optArpAllGateways">Tutti i gateway</option>
-            </select>
-          </div>
-          <button class="btn btn-primary btn-small" id="btnArpSearch" style="width:auto; margin:0;" data-i18n="btnMacSearchGo">
-            <i class="fa-solid fa-magnifying-glass"></i> Cerca
-          </button>
-          <button class="btn btn-secondary btn-small" id="btnArpSearchReset" style="width:auto; margin:0;" data-i18n="btnMacReset">
-            <i class="fa-solid fa-rotate-left"></i> Reset
-          </button>
-          <span id="arpStats" class="chip" style="margin-left:auto;"></span>
-        </div>
-
-        <div id="arpResults" style="margin-top:14px;"></div>
-      </div>
-      </div>
       <div id="locPane-diagnosi" class="loc-pane" style="display:none;">
       <div class="panel" style="margin-bottom:16px;">
         <h3 style="font-size:15px; margin-bottom:12px;">
           <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i>
           <span data-i18n="titleDiagnosi"></span>
+          <span class="preview-badge" style="background:color-mix(in srgb, var(--warning) 15%, transparent); border-color:var(--warning); color:var(--warning); margin-left:8px;" title="Non ancora validato su hardware reale. I risultati possono essere incompleti.">preview</span>
         </h3>
         <div class="diag-form" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
@@ -1495,7 +1542,7 @@
           <i class="fa-solid fa-boxes-stacked" style="color:var(--primary);"></i>
           <span data-i18n="titleEndpoints"></span>
         </h3>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; align-items:end;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
             <label for="epFilterQ" data-i18n="epFilterQ"></label>
             <input id="epFilterQ" type="text" style="padding-left:12px; font-size:13px;">
@@ -1505,9 +1552,22 @@
             <input id="epFilterStale" type="number" min="1" max="3650" value="7"
                    style="padding-left:12px; font-size:13px;">
           </div>
-          <button class="btn btn-secondary" id="btnEpFilter" style="width:auto;">
-            <i class="fa-solid fa-magnifying-glass"></i>
-          </button>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterFrom" data-i18n="epFilterFrom">Da (data/ora)</label>
+            <input id="epFilterFrom" type="datetime-local" style="padding:6px 8px; font-size:12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="epFilterTo" data-i18n="epFilterTo">A (data/ora)</label>
+            <input id="epFilterTo" type="datetime-local" style="padding:6px 8px; font-size:12px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text);">
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn btn-secondary" id="btnEpFilter" style="width:auto;">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+            <button class="btn btn-secondary" id="btnEpResetTime" style="width:auto;" title="Azzera intervallo temporale">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
           <button class="btn btn-secondary" id="btnEpExportCsv" style="width:auto;" data-i18n="epExportCsv"></button>
           <button class="btn btn-secondary" id="btnEpExportJson" style="width:auto;" data-i18n="epExportJson"></button>
         </div>
@@ -4668,6 +4728,39 @@
       </div>
       <div style="flex:1; overflow:hidden; position:relative; background:#ffffff;">
         <iframe id="auditReportFrame" style="width:100%; height:100%; border:none; display:block; background:#ffffff;"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale Command Palette (Ctrl+K) -->
+  <div id="commandPaletteModal" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:10000; display:none; align-items:flex-start; justify-content:center; padding-top:12vh;">
+    <div style="background:var(--surface); border:1px solid var(--border-strong); box-shadow:var(--shadow-float); width:90%; max-width:620px; max-height:75vh; display:flex; flex-direction:column; overflow:hidden;">
+      <div style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--surface-2);">
+        <i class="fa-solid fa-magnifying-glass" style="color:var(--primary); font-size:15px;"></i>
+        <input id="cmdPaletteInput" type="text" placeholder="Cerca tab, apparati (IP/hostname), comandi..." style="flex:1; background:none; border:none; color:var(--text); font-size:14px; outline:none;" autocomplete="off">
+        <kbd style="font-family:var(--font-code); font-size:11px; padding:2px 6px; background:var(--surface); border:1px solid var(--border); border-radius:2px; color:var(--text-muted);">ESC</kbd>
+      </div>
+      <div id="cmdPaletteResults" style="flex:1; overflow-y:auto; padding:8px 0; max-height:420px;"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 16px; border-top:1px solid var(--border); background:var(--surface-2); font-size:11px; color:var(--text-muted);">
+        <span><kbd>↑</kbd> <kbd>↓</kbd> Naviga &nbsp;·&nbsp; <kbd>↵</kbd> Seleziona &nbsp;·&nbsp; <kbd>ESC</kbd> Chiudi</span>
+        <span style="font-family:var(--font-code);">SentinelNet</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale Scorciatoie da Tastiera (?) -->
+  <div id="shortcutsModal" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:10000; display:none; align-items:center; justify-content:center;">
+    <div style="background:var(--surface); border:1px solid var(--border-strong); box-shadow:var(--shadow-float); width:90%; max-width:500px; padding:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-keyboard" style="color:var(--primary); margin-right:8px;"></i> <span data-i18n="titleShortcutsModal">Scorciatoie da tastiera</span></h3>
+        <button type="button" id="btnCloseShortcuts" style="background:none; border:none; color:var(--text-muted); font-size:16px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr auto; gap:10px; font-size:13px; align-items:center;">
+        <span>Apri Command Palette</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">Ctrl+K / ⌘K</kbd>
+        <span>Apri questo promemoria scorciatoie</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">?</kbd>
+        <span>Focus sul filtro di ricerca</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">/</kbd>
+        <span>Chiudi modale / Rimuovi contesto apparato</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">Esc</kbd>
+        <span>Alterna tema chiaro / scuro</span> <kbd style="font-family:var(--font-code); padding:2px 6px; background:var(--surface-2); border:1px solid var(--border);">T</kbd>
       </div>
     </div>
   </div>

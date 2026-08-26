@@ -18,7 +18,7 @@ os.environ.setdefault("SENTINELNET_DATA_DIR",
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-VIEWS = ("mac", "clientmap", "diagnosi", "inventory")
+VIEWS = ("mac", "diagnosi", "inventory")
 
 
 def _read(*parts):
@@ -78,14 +78,9 @@ class TestPanesHoldTheContent(unittest.TestCase):
         return self.html[start:rest if rest != -1 else len(self.html)]
 
     def test_each_pane_holds_its_own_panels(self):
-        # macScanGroup/arpTenantMenu/epFilterTenant were the four per-pane
-        # tenant controls Task 3 replaced with the single #locTenant; the
-        # markers here moved to other pane-specific ids that Task 3 leaves
-        # untouched.
         self.assertIn('id="macDeviceMenu"', self._pane("mac"))
         self.assertIn('id="kpiMacSightings"', self._pane("mac"))
-        self.assertIn('id="arpDeviceMenu"', self._pane("clientmap"))
-        self.assertIn('id="kpiArpBindings"', self._pane("clientmap"))
+        self.assertIn('id="arpDeviceMenu"', self._pane("mac"))
         self.assertIn('id="diagClientInput"', self._pane("diagnosi"))
         self.assertIn('id="epFilterQ"', self._pane("inventory"))
 

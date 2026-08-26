@@ -7,15 +7,13 @@
 // bottoni di riga) vivono in core.js: chiamata cross-modulo a runtime,
 // nessun cambio di comportamento.
 
-// The endpoint group is one tab with four panes. Each pane loads on its first
-// activation, not when the tab opens: opening Endpoint must not fire three
-// collections at once.
+// The endpoint group is one tab with three panes: Tracker MAC, Diagnosi, and Inventory.
+// Each pane loads on its first activation, not when the tab opens.
 let _locView = 'mac';
-const _locLoaded = { mac: false, clientmap: false, diagnosi: false, inventory: false };
+const _locLoaded = { mac: false, diagnosi: false, inventory: false };
 
 const LOC_LOADERS = {
     mac: () => loadMacTracker(),
-    clientmap: () => loadClientMapTab(),
     diagnosi: () => diagnosiTabShown(),
     inventory: () => loadEndpointsTab(),
 };
@@ -23,7 +21,6 @@ const LOC_LOADERS = {
 // Title and description belong to the pane, not to four separate heroes.
 const LOC_HEADINGS = {
     mac:        ['titleMacTracker', 'descMacTracker'],
-    clientmap:  ['titleClientMap', 'descClientMap'],
     diagnosi:   ['titleDiagnosi', 'descDiagnosi'],
     inventory:  ['titleEndpoints', 'descEndpoints'],
 };
@@ -35,7 +32,7 @@ function locTenant() {
 }
 
 // Same fill as the old per-pane tenant selects (fillGroupSel), but only once:
-// the four panes shared one tenant list, no reason to rebuild it per pane.
+// the panes share one tenant list, no reason to rebuild it per pane.
 let _locTenantFilled = false;
 function populateLocTenant() {
     const sel = document.getElementById('locTenant');
@@ -55,13 +52,13 @@ function locSwitchView(view) {
         _locTenantFilled = true;
         populateLocTenant();
     }
-    for (const v of ['mac', 'clientmap', 'diagnosi', 'inventory']) {
+    for (const v of ['mac', 'diagnosi', 'inventory']) {
         const pane = document.getElementById('locPane-' + v);
         const pill = document.getElementById('locPill-' + v);
         if (pane) pane.style.display = (v === view) ? '' : 'none';
         if (pill) pill.classList.toggle('active', v === view);
     }
-    const [titleKey, descKey] = LOC_HEADINGS[view];
+    const [titleKey, descKey] = LOC_HEADINGS[view] || LOC_HEADINGS.mac;
     const title = document.getElementById('locTitle');
     const desc = document.getElementById('locDesc');
     const L = i18n[currentLang] || {};
@@ -83,6 +80,7 @@ function locTenantChanged() {
 
     function loadMacTracker() {
         populateMacScanDevices();
+        populateArpScanDevices();
         loadMacOverrides();
         refreshMacStats(true);
         macSearch();
