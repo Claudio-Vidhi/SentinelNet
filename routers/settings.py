@@ -331,3 +331,73 @@ def test_smtp_settings(payload: SmtpTestSchema,
     log_audit(f"Email di test SMTP inviata a '{payload.to.strip()}' "
               f"da '{current_user.get('sub')}'.")
     return {"status": "success"}
+
+
+class SsoSettingsSchema(BaseModel):
+    enabled: bool = False
+    provider_name: str = "Single Sign-On"
+    client_id: str = ""
+    # Vuoto = mantieni il segreto gia' salvato (non torna mai dall'API).
+    client_secret: str = ""
+    issuer_url: str = ""
+    default_role: str = "viewer"
+    admin_group: str = ""
+    operator_group: str = ""
+    auto_provision: bool = False
+    sync_roles: bool = False
+
+
+@router.get("/api/settings/sso")
+def get_sso_settings(current_user = Depends(require_admin)):
+    from security import sso
+    cfg = sso.get_config()
+    return {
+        "enabled": cfg["enabled"],
+        "provider_name": cfg["provider_name"],
+        "client_id": cfg["client_id"],
+        "has_client_secret": bool(cfg["client_secret_enc"]),
+        "issuer_url": cfg["issuer_url"],
+        "default_role": cfg["default_role"],
+        "admin_group": cfg["admin_group"],
+        "operator_group": cfg["operator_group"],
+        "auto_provision": cfg["auto_provision"],
+        "sync_roles": cfg["sync_roles"],
+    }
+
+
+@router.post("/api/settings/sso")
+def set_sso_settings(payload: SsoSettingsSchema, current_user = Depends(require_admin)):
+    from security import sso, user_manager
+    if payload.default_role not in user_manager.VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Ruolo predefinito non valido.")
+    issuer = payload.issuer_url.strip().rstrip("/")
+    # Il discovery e le chiavi di firma arrivano da questo URL: su HTTP
+    # semplice chiunque sia sul percorso puo' sostituirli.
+    if issuer and not issuer.startswith("https://"):
+        raise HTTPException(status_code=400,
+                            detail="L'URL dell'issuer deve usare HTTPS.")
+    if payload.enabled and (not issuer or not payload.client_id.strip()):
+        raise HTTPException(status_code=400,
+                            detail="Per attivare il Single Sign-On servono issuer URL e client ID.")
+
+    current = sso.get_config()
+    secret_enc = current["client_secret_enc"]
+    if payload.client_secret:
+        secret_enc = crypto_vault.encrypt_password(payload.client_secret)
+
+    sso.save_config({
+        "enabled": payload.enabled,
+        "provider_name": payload.provider_name.strip() or "Single Sign-On",
+        "client_id": payload.client_id.strip(),
+        "client_secret_enc": secret_enc,
+        "issuer_url": issuer,
+        "default_role": payload.default_role,
+        "admin_group": payload.admin_group.strip(),
+        "operator_group": payload.operator_group.strip(),
+        "auto_provision": payload.auto_provision,
+        "sync_roles": payload.sync_roles,
+    })
+    log_audit(f"Impostazioni SSO aggiornate da '{current_user.get('sub')}' "
+              f"(issuer='{issuer}', attivo={payload.enabled}, "
+              f"provisioning automatico={payload.auto_provision}).")
+    return {"status": "success"}

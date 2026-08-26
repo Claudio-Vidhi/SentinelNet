@@ -82,7 +82,10 @@ class TestRouterParity(unittest.TestCase):
                           "/api/auth/forgot-password", "/api/auth/reset-password",
                           "/api/users/email",
                           # Inviti utente via email: emissione e accettazione.
-                          "/api/users/invite", "/api/auth/accept-invite")
+                          "/api/users/invite", "/api/auth/accept-invite",
+                          # Single Sign-On OIDC: configurazione, avvio del login e
+                          # ritorno dall'identity provider.
+                          "/api/settings/sso", "/api/auth/sso")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -199,7 +202,10 @@ class TestFullParity(unittest.TestCase):
                     "/api/auth/forgot-password", "/api/auth/reset-password",
                     "/api/users/email",
                     # Inviti utente via email: emissione e accettazione.
-                    "/api/users/invite", "/api/auth/accept-invite")
+                    "/api/users/invite", "/api/auth/accept-invite",
+                    # Single Sign-On OIDC: configurazione, avvio del login e
+                    # ritorno dall'identity provider.
+                    "/api/settings/sso", "/api/auth/sso")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
@@ -238,7 +244,9 @@ class TestFullParity(unittest.TestCase):
                     # NEW_PREFIXES).
                     "ForgotPasswordSchema", "ResetPasswordSchema", "UserEmailSchema",
                     # Corpi degli inviti utente (rotte gia' in NEW_PREFIXES).
-                    "InviteUserSchema", "AcceptInviteSchema")
+                    "InviteUserSchema", "AcceptInviteSchema",
+                    # Configurazione SSO (rotta gia' in NEW_PREFIXES).
+                    "SsoSettingsSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.

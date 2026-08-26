@@ -583,6 +583,84 @@
             loadCloudBackup();
         }
         loadSmtpSettings();
+        loadSsoSettings();
+    }
+
+    // --- IMPOSTAZIONI: Single Sign-On OIDC (solo admin) ---
+
+    let ssoLoaded = false;
+
+    function renderSsoStatus(cfg) {
+        const box = document.getElementById('ssoStatusBox');
+        if (!box) return;
+        if (!cfg.enabled) {
+            box.textContent = currentLang === 'en'
+                ? 'Disabled: only local accounts can sign in.'
+                : 'Disattivato: si entra solo con gli account locali.';
+            return;
+        }
+        const provisioning = cfg.auto_provision
+            ? (currentLang === 'en' ? 'accounts created on first sign-in'
+                                    : 'account creati al primo accesso')
+            : (currentLang === 'en' ? 'existing accounts only'
+                                    : 'solo account gia\' esistenti');
+        box.textContent = `${cfg.issuer_url} · ${cfg.client_id} · ${provisioning}`;
+    }
+
+    async function loadSsoSettings() {
+        if (currentRole !== 'admin') return;
+        const res = await apiFetch('/api/settings/sso');
+        if (!res || !res.ok) return;
+        const cfg = await res.json();
+        document.getElementById('ssoEnabled').checked = !!cfg.enabled;
+        document.getElementById('ssoIssuerUrl').value = cfg.issuer_url || '';
+        document.getElementById('ssoProviderName').value = cfg.provider_name || '';
+        document.getElementById('ssoClientId').value = cfg.client_id || '';
+        document.getElementById('ssoAdminGroup').value = cfg.admin_group || '';
+        document.getElementById('ssoOperatorGroup').value = cfg.operator_group || '';
+        document.getElementById('ssoDefaultRole').value = cfg.default_role || 'viewer';
+        document.getElementById('ssoAutoProvision').checked = !!cfg.auto_provision;
+        document.getElementById('ssoSyncRoles').checked = !!cfg.sync_roles;
+        const secret = document.getElementById('ssoClientSecret');
+        secret.value = '';
+        secret.placeholder = cfg.has_client_secret
+            ? (currentLang === 'en' ? 'stored - leave empty to keep'
+                                    : 'salvato - lascia vuoto per mantenerlo')
+            : '';
+        renderSsoStatus(cfg);
+        ssoLoaded = true;
+    }
+
+    async function saveSsoSettings() {
+        if (!ssoLoaded) {
+            showToast(currentLang === 'en' ? 'Settings not loaded yet.'
+                                           : 'Impostazioni non ancora caricate.', 'error');
+            return;
+        }
+        const res = await apiFetch('/api/settings/sso', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled: document.getElementById('ssoEnabled').checked,
+                issuer_url: document.getElementById('ssoIssuerUrl').value.trim(),
+                provider_name: document.getElementById('ssoProviderName').value.trim(),
+                client_id: document.getElementById('ssoClientId').value.trim(),
+                client_secret: document.getElementById('ssoClientSecret').value,
+                admin_group: document.getElementById('ssoAdminGroup').value.trim(),
+                operator_group: document.getElementById('ssoOperatorGroup').value.trim(),
+                default_role: document.getElementById('ssoDefaultRole').value,
+                auto_provision: document.getElementById('ssoAutoProvision').checked,
+                sync_roles: document.getElementById('ssoSyncRoles').checked,
+            })
+        });
+        if (res && res.ok) {
+            showToast(currentLang === 'en' ? 'SSO settings saved.'
+                                           : 'Impostazioni SSO salvate.', 'success');
+            loadSsoSettings();
+        } else if (res) {
+            const e = await res.json().catch(() => ({}));
+            showToast(e.detail || (currentLang === 'en' ? 'Save failed.'
+                                                        : 'Salvataggio fallito.'), 'error');
+        }
     }
 
     // --- IMPOSTAZIONI: server di posta SMTP (solo admin) ---
@@ -998,6 +1076,7 @@
     document.getElementById('newSiteMode')?.addEventListener('change', onNewSiteModeChange);
     document.getElementById('smtpBtnSave')?.addEventListener('click', saveSmtpSettings);
     document.getElementById('smtpBtnTest')?.addEventListener('click', sendSmtpTest);
+    document.getElementById('ssoBtnSave')?.addEventListener('click', saveSsoSettings);
     document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
     document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
     document.getElementById('mcpPreviewToggle')?.addEventListener('change', (e) => {
