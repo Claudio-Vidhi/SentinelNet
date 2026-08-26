@@ -76,7 +76,11 @@ class TestRouterParity(unittest.TestCase):
                           "/api/cloud-backup",
                           # Server di posta: prerequisito del recupero password
                           # via email e degli inviti utente.
-                          "/api/settings/smtp")
+                          "/api/settings/smtp",
+                          # Recupero password via email: richiesta del link, sua
+                          # redenzione e indirizzo di recupero dell'utente.
+                          "/api/auth/forgot-password", "/api/auth/reset-password",
+                          "/api/users/email")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -187,7 +191,11 @@ class TestFullParity(unittest.TestCase):
                     "/api/cloud-backup",
                     # Server di posta: prerequisito del recupero password
                     # via email e degli inviti utente.
-                    "/api/settings/smtp")
+                    "/api/settings/smtp",
+                    # Recupero password via email: richiesta del link, sua
+                    # redenzione e indirizzo di recupero dell'utente.
+                    "/api/auth/forgot-password", "/api/auth/reset-password",
+                    "/api/users/email")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
@@ -221,7 +229,10 @@ class TestFullParity(unittest.TestCase):
                     "CloudBackupSettingsSchema",
                     # Configurazione del server di posta e destinatario
                     # dell'email di prova (rotte gia' in NEW_PREFIXES).
-                    "SmtpSettingsSchema", "SmtpTestSchema")
+                    "SmtpSettingsSchema", "SmtpTestSchema",
+                    # Corpi del recupero password via email (rotte gia' in
+                    # NEW_PREFIXES).
+                    "ForgotPasswordSchema", "ResetPasswordSchema", "UserEmailSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.
@@ -291,6 +302,10 @@ class TestFullParity(unittest.TestCase):
                                "SubnetScanRequest", "AiGenerateConfigSchema",
                                "SiteSchema", "SiteUpdateSchema",
                                "SwitchProvisionSSHSchema", "FortiGateProvisionSchema",
+                               # Campo 'email' opzionale (default ""): indirizzo
+                               # di recupero password. Puramente additivo, un
+                               # client che lo omette crea l'utente come prima.
+                               "UserCreateSchema",
                                "VendorSchema")
 
     @classmethod

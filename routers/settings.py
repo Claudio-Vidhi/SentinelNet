@@ -19,6 +19,9 @@ _APP_ADV_ENV = {
     "ssl_certfile": "SENTINELNET_SSL_CERTFILE",
     "ssl_keyfile": "SENTINELNET_SSL_KEYFILE",
     "cors_origins": "SENTINELNET_CORS_ORIGINS",
+    # Indirizzo pubblico usato nei link inviati per email (recupero password):
+    # non si ricava mai dall'header Host della richiesta, che e' del chiamante.
+    "app_base_url": "SENTINELNET_BASE_URL",
     "no_browser": "SENTINELNET_NO_BROWSER",
     "retention_flows_days": "SENTINELNET_OBS_RETENTION_FLOWS_DAYS",
     "retention_syslog_days": "SENTINELNET_OBS_RETENTION_SYSLOG_DAYS",

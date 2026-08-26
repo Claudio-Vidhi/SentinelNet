@@ -106,6 +106,52 @@
         <button class="btn btn-primary" id="btnLogin" data-i18n="btnLogin">
           <i class="fa-solid fa-right-to-bracket"></i> Autenticati
         </button>
+
+        <div style="text-align:center; margin-top:14px;">
+          <a href="#" id="linkForgotPassword" style="font-size:12.5px; color:var(--text-muted); text-decoration:underline;" data-i18n="linkForgotPassword">Password dimenticata?</a>
+        </div>
+
+        <!-- Richiesta del link di reimpostazione: l'esito e' sempre lo stesso,
+             non rivela se l'account esiste. -->
+        <div id="forgotPwBox" style="display:none; margin-top:14px; text-align:left; border-top:1px solid var(--border); padding-top:14px;">
+          <div class="form-group" style="text-align:left;">
+            <label data-i18n="lblForgotUser">Username dell'account</label>
+            <div class="input-wrapper">
+              <i class="fa-solid fa-envelope"></i>
+              <input id="forgotPwUser" type="text" placeholder="Username" data-i18n-placeholder="loginUserPl">
+            </div>
+          </div>
+          <button class="btn btn-secondary" id="btnSendForgotPw" data-i18n="btnSendForgotPw">
+            <i class="fa-solid fa-paper-plane"></i> Invia il link di recupero
+          </button>
+          <div id="forgotPwMsg" style="display:none; font-size:12.5px; margin-top:10px; text-align:center;"></div>
+        </div>
+      </div>
+
+      <!-- Sezione raggiunta dal link ricevuto via email (?reset_token=...) -->
+      <div id="resetPwSection" style="display: none;">
+        <h2 style="text-align: center;" data-i18n="rpTitle">Reimposta la Password</h2>
+        <p style="text-align: center;" data-i18n="rpSubtitle">Scegli una nuova password per il tuo account. Il link vale una sola volta.</p>
+
+        <div class="form-group" style="text-align: left;">
+          <label data-i18n="lblNewPass">Nuova Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="rpNewPass" type="password" placeholder="Minimo 8 caratteri" data-i18n-placeholder="cpwPassPl">
+          </div>
+        </div>
+
+        <div class="form-group" style="text-align: left; margin-bottom: 25px;">
+          <label data-i18n="lblConfirmPass">Conferma Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="rpConfirmPass" type="password" placeholder="Ripeti la nuova password" data-i18n-placeholder="cpwConfirmPl">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btnSubmitResetPw" style="background: var(--cta); color: var(--cta-text);" data-i18n="btnSubmitResetPw">
+          <i class="fa-solid fa-key"></i> Imposta la nuova password
+        </button>
       </div>
 
       <!-- Sezione Cambio Password obbligatorio al primo accesso -->
@@ -2381,6 +2427,7 @@
             <thead>
               <tr>
                 <th data-i18n="thUserName">Username</th>
+                <th data-i18n="thUserEmail">Email di recupero</th>
                 <th data-i18n="thUserRole">Ruolo / Privilegio</th>
                 <th data-i18n="thUserGroups">Sedi visibili / gestibili</th>
                 <th data-i18n="thUserTabs">Tab dashboard visibili</th>
@@ -2394,10 +2441,14 @@
 
       <div class="panel">
         <h3 style="font-size: 15px; margin-bottom: 12px;" data-i18n="titleAddUser"><i class="fa-solid fa-user-plus" style="color:var(--primary);"></i> Nuovo Utente</h3>
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:10px; align-items:end;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap:10px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblNewUserName">Username</label>
             <input id="newUserName" type="text" placeholder="es. mario.rossi" data-i18n-placeholder="phNewUserName" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblNewUserEmail">Email (opzionale)</label>
+            <input id="newUserEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label data-i18n="lblNewUserPass">Password</label>

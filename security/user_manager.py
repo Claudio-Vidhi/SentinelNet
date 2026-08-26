@@ -47,7 +47,7 @@ def get_role(username: str):
     return user.get("role", "admin")
 
 def create_user(username: str, password: str, role: str = "viewer", groups=None,
-                must_change_password: bool = False) -> bool:
+                must_change_password: bool = False, email: str = "") -> bool:
     if role not in VALID_ROLES:
         role = "viewer"
     users = get_users()
@@ -61,6 +61,9 @@ def create_user(username: str, password: str, role: str = "viewer", groups=None,
         "role": role,
         # Elenco delle sedi/gruppi visibili e gestibili. Lista vuota = tutte.
         "groups": list(groups) if groups else [],
+        # Indirizzo per il recupero password. Vuoto = recupero via email non
+        # disponibile per questo account (resta il break-glass da CLI).
+        "email": (email or "").strip(),
         # Tab dashboard visibili all'utente. Lista vuota = tutte (come per "groups").
         "allowed_tabs": [],
         "disabled": False,
@@ -104,6 +107,7 @@ def list_users() -> list:
         {
             "username": u,
             "role": d.get("role", "admin"),
+            "email": d.get("email", ""),
             "groups": d.get("groups", []),
             "allowed_tabs": d.get("allowed_tabs", []),
             "disabled": d.get("disabled", False),
@@ -216,5 +220,21 @@ def reset_password_break_glass(username: str, new_password: str) -> bool:
     users[username]["hashed_password"] = hashed.decode('utf-8')
     users[username]["must_change_password"] = True
     users[username]["disabled"] = False
+    _save_users(users)
+    return True
+
+
+def get_email(username: str) -> str:
+    """Recovery address of the user, or "" when none is on file."""
+    user = get_users().get(username)
+    return (user or {}).get("email", "") or ""
+
+
+def set_email(username: str, email: str) -> bool:
+    """Sets or clears ("" clears) the recovery address. False if no such user."""
+    users = get_users()
+    if username not in users:
+        return False
+    users[username]["email"] = (email or "").strip()
     _save_users(users)
     return True

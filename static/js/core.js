@@ -349,7 +349,20 @@ async function checkAuthRequirements() {
     const wiz = document.getElementById('wizardSection');
     const login = document.getElementById('loginSection');
 
+    const resetPw = document.getElementById('resetPwSection');
+
     if (changePw) changePw.style.display = 'none';
+    if (resetPw) resetPw.style.display = 'none';
+
+    // Arrivo dal link ricevuto via email: si sceglie la password prima di
+    // qualunque altra schermata, senza interrogare lo stato del setup.
+    if (new URLSearchParams(window.location.search).get('reset_token') && resetPw) {
+        if (wiz) wiz.style.display = 'none';
+        if (login) login.style.display = 'none';
+        resetPw.style.display = 'block';
+        if (overlay) overlay.style.display = 'flex';
+        return false;
+    }
 
     try {
         // Interroga lo stato del setup/utenti nel sistema
@@ -468,6 +481,75 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
 // Password nota all'utente al momento del cambio obbligatorio (usata come
 // vecchia password per l'endpoint /api/auth/change-password).
 let pendingOldPass = '';
+
+// Recupero password: richiesta del link via email
+document.getElementById('linkForgotPassword')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const box = document.getElementById('forgotPwBox');
+    if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('btnSendForgotPw')?.addEventListener('click', async () => {
+    const userEl = document.getElementById('forgotPwUser');
+    const msgEl = document.getElementById('forgotPwMsg');
+    const username = userEl ? userEl.value.trim() : '';
+    if (!msgEl) return;
+    if (!username) {
+        msgEl.textContent = i18n[currentLang].fpNeedUser;
+        msgEl.style.color = 'var(--danger)';
+        msgEl.style.display = 'block';
+        return;
+    }
+    try {
+        const res = await fetch('/api/auth/forgot-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username }),
+        });
+        const d = await res.json().catch(() => ({}));
+        // 200 e 429 dicono entrambi quello che l'utente puo' sapere: il
+        // messaggio del server non distingue mai un account esistente.
+        msgEl.textContent = d.message || d.detail || i18n[currentLang].fpSent;
+        msgEl.style.color = res.ok ? 'var(--success)' : 'var(--danger)';
+        msgEl.style.display = 'block';
+    } catch (err) {
+        msgEl.textContent = String(err);
+        msgEl.style.color = 'var(--danger)';
+        msgEl.style.display = 'block';
+    }
+});
+
+// Scelta della nuova password dal link ricevuto via email
+document.getElementById('btnSubmitResetPw')?.addEventListener('click', async () => {
+    const token = new URLSearchParams(window.location.search).get('reset_token');
+    const np = document.getElementById('rpNewPass')?.value.trim() || '';
+    const cp = document.getElementById('rpConfirmPass')?.value.trim() || '';
+    const errDiv = document.getElementById('loginError');
+    errDiv.style.display = 'none';
+
+    if (np.length < 8) { errDiv.innerText = i18n[currentLang].alertPassTooShort; errDiv.style.display = 'block'; return; }
+    if (np !== cp) { errDiv.innerText = i18n[currentLang].alertPassMismatch; errDiv.style.display = 'block'; return; }
+
+    const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, new_password: np }),
+    });
+    if (res.ok) {
+        // Via il token dalla barra degli indirizzi prima di mostrare il login:
+        // resta nella cronologia del browser e non serve piu' a niente.
+        window.history.replaceState({}, document.title, window.location.pathname);
+        document.getElementById('resetPwSection').style.display = 'none';
+        document.getElementById('loginSection').style.display = 'block';
+        errDiv.innerText = i18n[currentLang].rpDone;
+        errDiv.style.color = 'var(--success)';
+        errDiv.style.display = 'block';
+    } else {
+        const d = await res.json().catch(() => ({}));
+        errDiv.innerText = d.detail || i18n[currentLang].rpFailed;
+        errDiv.style.display = 'block';
+    }
+});
 
 // Cambio password obbligatorio al primo accesso
 document.getElementById('btnChangePass').addEventListener('click', async () => {
