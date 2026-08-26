@@ -370,14 +370,15 @@ def record_arp_entries(rows, source_ip: str, source_name: str = "",
             vlan = str(r.get("vlan") or "")
             iface = expand_iface((r.get("interface") or "").strip())
             existing = c.execute(
-                "SELECT id FROM arp_entries WHERE mac=? AND ip=? AND source_ip=?",
+                "SELECT id, tenant FROM arp_entries WHERE mac=? AND ip=? AND source_ip=?",
                 (mac, ip, source_ip)).fetchone()
             if existing:
+                new_tenant = tenant if tenant else (existing["tenant"] or "")
                 c.execute("""UPDATE arp_entries
                              SET last_seen=?, seen_count=seen_count+1, vlan=?,
                                  interface=?, source_name=?, source_type=?, tenant=?, site=?
                              WHERE id=?""",
-                          (now, vlan, iface, source_name, source_type, tenant,
+                          (now, vlan, iface, source_name, source_type, new_tenant,
                            site, existing["id"]))
                 n_upd += 1
             else:
@@ -392,7 +393,8 @@ def record_arp_entries(rows, source_ip: str, source_name: str = "",
 
 
 def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: Optional[str] = None,
-               tenants=None, limit: int = 500) -> list:
+               tenants=None, frm: Optional[str] = None, to: Optional[str] = None,
+               limit: int = 500) -> list:
     """Search MAC<->IP bindings. mac also accepts fragments (like search)."""
     init_db()
     q = ["SELECT * FROM arp_entries WHERE 1=1"]
@@ -418,6 +420,12 @@ def search_arp(mac: Optional[str] = None, ip: Optional[str] = None, source_ip: O
             return []
         q.append("AND tenant IN (%s)" % ",".join("?" * len(tenants)))
         args.extend(list(tenants))
+    if frm:
+        q.append("AND last_seen >= ?")
+        args.append(frm)
+    if to:
+        q.append("AND first_seen <= ?")
+        args.append(to)
     q.append("ORDER BY last_seen DESC LIMIT ?")
     args.append(max(1, min(5000, limit)))
     with _connect() as c:
@@ -579,26 +587,52 @@ def _access_positions_for(macs, tenants=None) -> dict:
 
 
 def client_map(mac: Optional[str] = None, ip: Optional[str] = None, tenants=None,
-               limit: int = 500, source_ip: Optional[str] = None) -> list:
+               limit: int = 500, source_ip: Optional[str] = None,
+               frm: Optional[str] = None, to: Optional[str] = None) -> list:
     """Unified client view: MAC<->IP binding (gateway ARP) enriched with the
     last known physical position (switch/port from the MAC table, uplinks
-    excluded). Answers 'what IP does this MAC have and which port is it
-    attached to'. source_ip filters by source gateway."""
+    excluded). Returns one row per client (MAC, tenant)."""
     entries = search_arp(mac=mac, ip=ip, source_ip=source_ip,
-                         tenants=tenants, limit=limit)
-    best = _access_positions_for((e["mac"] for e in entries), tenants=tenants)
-    # Client type: certain ONLY if assigned in the "Devices and categories"
-    # tab (assignments per IP); otherwise generic "client". Never inherit
-    # source_type, which describes the gateway, not the client.
+                         tenants=tenants, frm=frm, to=to, limit=max(limit * 4, 1000))
+    if not entries:
+        return []
+
+    # In live mode (no frm/to specified), filter to only current bindings:
+    # A binding is current when its last_seen equals the newest last_seen
+    # among rows sharing its (mac, tenant, source_ip).
+    if frm is None and to is None:
+        max_ls_by_src: dict = {}
+        for e in entries:
+            k = (e["mac"], e.get("tenant") or "", e.get("source_ip") or "")
+            ls = e.get("last_seen") or ""
+            if k not in max_ls_by_src or ls > max_ls_by_src[k]:
+                max_ls_by_src[k] = ls
+        entries = [e for e in entries
+                   if (e.get("last_seen") or "") == max_ls_by_src.get(
+                       (e["mac"], e.get("tenant") or "", e.get("source_ip") or ""))]
+
+    # Group by (mac, tenant) to return ONE row per client
+    clients_map: dict = {}
+    for e in entries:
+        ckey = (e["mac"], e.get("tenant") or "")
+        clients_map.setdefault(ckey, []).append(e)
+
+    best = _access_positions_for((k[0] for k in clients_map.keys()), tenants=tenants)
     from services import inventory_manager
     assignments = inventory_manager.get_category_assignments()
+
     out = []
-    for e in entries:
-        access = best.get((e["mac"], e["tenant"]))  # per-tenant join: same MAC, same tenant
-        assigned = assignments.get(
-            inventory_manager._akey(e["tenant"], e["ip"])) or {}
+    for (cmac, ctenant), grp in clients_map.items():
+        grp.sort(key=lambda x: x.get("last_seen") or "", reverse=True)
+        primary = grp[0]
+        ips = list(dict.fromkeys(b["ip"] for b in grp if b.get("ip")))
+        access = best.get((cmac, ctenant))
+        assigned = next((assignments[k] for k in
+                         (inventory_manager._akey(ctenant, cip) for cip in ips)
+                         if assignments.get(k)), {})
         out.append({
-            **e,
+            **primary,
+            "ips": ips,
             "client_type": assigned.get("category") or "client",
             "switch_ip": access.get("switch_ip") if access else "",
             "switch_name": access.get("switch_name") if access else "",
@@ -606,7 +640,9 @@ def client_map(mac: Optional[str] = None, ip: Optional[str] = None, tenants=None
             "port_vlan": access.get("vlan") if access else "",
             "port_last_seen": access.get("last_seen") if access else "",
         })
-    return out
+
+    out.sort(key=lambda x: x.get("last_seen") or "", reverse=True)
+    return out[:limit]
 
 
 def arp_stats(tenants=None) -> dict:
@@ -699,7 +735,8 @@ def _inventory_stamp() -> tuple:
 def endpoint_inventory(tenants=None, site: Optional[str] = None,
                        switch_ip: Optional[str] = None, vlan: Optional[str] = None,
                        q: Optional[str] = None, stale_days: int = 7,
-                       limit: int = 2000) -> dict:
+                       limit: int = 2000,
+                       frm: Optional[str] = None, to: Optional[str] = None) -> dict:
     """One endpoint per (MAC, tenant), from already-collected data.
 
     It starts from ``mac_sightings`` — the L2 truth, every MAC ever seen —
@@ -722,6 +759,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
     init_db()
     tenant_list = list(tenants) if tenants is not None else None
     empty = {"results": [], "total": 0, "truncated": False,
+             "outside_retention": False, "retention_days": get_retention_days(),
              "counts": {"endpoints": 0, "switches": 0, "vlans": 0,
                         "stale": 0, "new": 0, "no_ip": 0, "random": 0}}
     # [] = "no tenant visible", which is not None = "no restriction".
@@ -729,7 +767,7 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         return empty
 
     cache_key = (tuple(sorted(tenant_list)) if tenant_list is not None else None,
-                 site, switch_ip, vlan, q, stale_days, limit, _inventory_stamp())
+                 site, switch_ip, vlan, q, stale_days, limit, frm, to, _inventory_stamp())
     hit = _INVENTORY_CACHE.get(cache_key)
     if hit is not None:
         return copy.deepcopy(hit)
@@ -751,6 +789,12 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         where.append("(mac LIKE ? OR oui_vendor LIKE ? OR switch_name LIKE ? "
                      "OR interface LIKE ?)")
         args.extend(["%" + q + "%"] * 4)
+    if frm:
+        where.append("last_seen >= ?")
+        args.append(frm)
+    if to:
+        where.append("first_seen <= ?")
+        args.append(to)
     clause = (" WHERE " + " AND ".join(where)) if where else ""
 
     with _connect() as c:
@@ -775,12 +819,18 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
     with _connect() as c:
         for i in range(0, len(macs), CHUNK):
             batch = macs[i:i + CHUNK]
-            sql = ("SELECT mac, ip, tenant FROM arp_entries WHERE mac IN (%s)"
+            sql = ("SELECT mac, ip, tenant, source_ip, last_seen, first_seen FROM arp_entries WHERE mac IN (%s)"
                    % ",".join("?" * len(batch)))
             a = list(batch)
             if tenant_list is not None:
                 sql += " AND tenant IN (%s)" % ",".join("?" * len(tenant_list))
                 a.extend(tenant_list)
+            if frm:
+                sql += " AND last_seen >= ?"
+                a.append(frm)
+            if to:
+                sql += " AND first_seen <= ?"
+                a.append(to)
             for r in c.execute(sql, a).fetchall():
                 arp.setdefault((r["mac"], r["tenant"] or ""), []).append(dict(r))
 
@@ -798,7 +848,21 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
                     for s in access}
         best = access[0] if access else {}
 
-        ips = sorted({b["ip"] for b in arp.get((mac, tenant), []) if b.get("ip")})
+        raw_arp = arp.get((mac, tenant), [])
+        if frm is None and to is None:
+            # Current bindings: newest scan wins per (mac, tenant, source_ip)
+            max_ls_src: dict = {}
+            for b in raw_arp:
+                sip = b.get("source_ip") or ""
+                bls = b.get("last_seen") or ""
+                if sip not in max_ls_src or bls > max_ls_src[sip]:
+                    max_ls_src[sip] = bls
+            cur_arp = [b for b in raw_arp if (b.get("last_seen") or "") == max_ls_src.get(b.get("source_ip") or "")]
+        else:
+            cur_arp = raw_arp
+
+        cur_arp.sort(key=lambda b: (b.get("last_seen") or "", b.get("ip") or ""), reverse=True)
+        ips = list(dict.fromkeys(b["ip"] for b in cur_arp if b.get("ip")))
         first_seen = min(s["first_seen"] for s in grp)
         last_seen = max(s["last_seen"] for s in grp)
         info = ep_kb.classify_mac(mac) or {}
@@ -856,8 +920,16 @@ def endpoint_inventory(tenants=None, site: Optional[str] = None,
         "random": sum(1 for e in results if "RANDOM" in e["flags"]),
     }
     cap = max(1, min(20000, limit))
+    ret_days = get_retention_days()
+    outside_retention = False
+    if frm:
+        f_age = _age_days(frm, now)
+        if f_age is not None and f_age > ret_days:
+            outside_retention = True
+
     out = {"results": results[:cap], "total": total,
-           "truncated": total > cap, "counts": counts}
+           "truncated": total > cap, "counts": counts,
+           "outside_retention": outside_retention, "retention_days": ret_days}
 
     # Una versione nuova dei dati rende inutili TUTTE le voci vecchie: si
     # svuota invece di far crescere il dizionario di referti gia' scaduti.
