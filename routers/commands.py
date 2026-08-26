@@ -348,7 +348,7 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         return
 
     await websocket.accept()
-    await websocket.send_text(f"Inizializzazione sessione terminale...\r\n[Connessione SSH a {ip}...]\r\n")
+    await websocket.send_text(f"[1/3] Risoluzione apparato e credenziali ({ip})...\r\n")
 
     # 1. Recupero delle credenziali attuali
     devices = inventory_manager.get_all_devices()
@@ -391,6 +391,8 @@ async def ws_terminal(websocket: WebSocket, ip: str):
             f"'{cli_kind}': il terminale interattivo supporta solo SSH.\r\n")
         await websocket.close()
         return
+
+    await websocket.send_text(f"[2/3] Connessione SSH a {username}@{ip}:{ssh_port}...\r\n")
 
     client = paramiko.SSHClient()
     _prepare_host_keys(client)
@@ -448,10 +450,11 @@ async def ws_terminal(websocket: WebSocket, ip: str):
         with contextlib.suppress(WebSocketDisconnect):
             await websocket.send_text(f"\r\n[Errore Connessione] {_ssh_failure_hint(e)}\r\n")
             await websocket.close()
-        return
+            return
 
     # 5. Connessione riuscita, apriamo la shell interattiva!
     if connected:
+        await websocket.send_text(f"[3/3] Allocazione shell PTY... [Pronto]\r\n\r\n")
         chan = client.invoke_shell()
         chan.settimeout(0.0)
 
