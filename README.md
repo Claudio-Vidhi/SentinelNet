@@ -145,6 +145,18 @@ Tokens are single-use, valid 15 minutes, and held in memory only — restarting
 the server invalidates any pending link. The reply to a recovery request is
 identical whether or not the account exists.
 
+### User invitations by email
+
+With SMTP configured, an administrator can invite a colleague from the Users
+tab instead of choosing an initial password for them and passing it along. The
+invitee opens a link valid for 24 hours and picks their own password.
+
+The account is created only when the invitation is accepted — an invitation
+that is never accepted expires and leaves nothing behind. Username and role
+come from the invitation, not from the request that redeems it: the address
+invited becomes the username, and a redeemer cannot claim a role they were not
+offered.
+
 ### Emergency administrator recovery (break-glass)
 
 When every administrator account is locked out or disabled, reset one from the

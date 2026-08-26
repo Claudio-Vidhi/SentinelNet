@@ -154,6 +154,32 @@
         </button>
       </div>
 
+      <!-- Sezione raggiunta dal link di invito (?invite_token=...) -->
+      <div id="acceptInviteSection" style="display: none;">
+        <h2 style="text-align: center;" data-i18n="aiTitle">Completa la registrazione</h2>
+        <p style="text-align: center;" data-i18n="aiSubtitle">Scegli la password del tuo nuovo account. Username e privilegi sono quelli dell'invito che hai ricevuto.</p>
+
+        <div class="form-group" style="text-align: left;">
+          <label data-i18n="lblNewPass">Nuova Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="aiNewPass" type="password" placeholder="Minimo 8 caratteri" data-i18n-placeholder="cpwPassPl">
+          </div>
+        </div>
+
+        <div class="form-group" style="text-align: left; margin-bottom: 25px;">
+          <label data-i18n="lblConfirmPass">Conferma Password</label>
+          <div class="input-wrapper">
+            <i class="fa-solid fa-lock"></i>
+            <input id="aiConfirmPass" type="password" placeholder="Ripeti la nuova password" data-i18n-placeholder="cpwConfirmPl">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btnSubmitAcceptInvite" style="background: var(--cta); color: var(--cta-text);" data-i18n="btnSubmitAcceptInvite">
+          <i class="fa-solid fa-user-check"></i> Crea l'account ed entra
+        </button>
+      </div>
+
       <!-- Sezione Cambio Password obbligatorio al primo accesso -->
       <div id="changePwSection" style="display: none;">
         <h2 id="cpwTitle" style="text-align: center;" data-i18n="cpwTitle">Imposta la tua Password</h2>
@@ -2464,6 +2490,30 @@
           </div>
           <button class="btn btn-primary btn-small" id="btnCreateUser" style="margin:0; white-space:nowrap;" data-i18n="btnAddUser">
             <i class="fa-solid fa-plus"></i> Crea Utente
+          </button>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <h3 style="font-size: 15px; margin-bottom: 6px;" data-i18n="titleInviteUser"><i class="fa-solid fa-envelope-open-text" style="color:var(--primary);"></i> Invita per email</h3>
+        <p style="margin:0 0 12px; color:var(--text-muted); font-size:13px; max-width:78ch;" data-i18n="descInviteUser">
+          L'invitato sceglie la propria password da un link valido 24 ore: nessuna password iniziale da comunicare. L'account nasce solo quando l'invito viene accettato, con l'indirizzo come username. Richiede il server di posta configurato.
+        </p>
+        <div style="display:grid; grid-template-columns: 2fr 1fr auto; gap:10px; align-items:end;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblInviteEmail">Email</label>
+            <input id="inviteEmail" type="text" placeholder="mario.rossi@example.com" style="padding-left:12px;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label data-i18n="lblNewUserRole">Ruolo</label>
+            <select id="inviteRole" style="padding-left:12px;">
+              <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
+              <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
+              <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary btn-small" id="btnInviteUser" style="margin:0; white-space:nowrap;" data-i18n="btnInviteUser">
+            <i class="fa-solid fa-paper-plane"></i> Invia invito
           </button>
         </div>
       </div>

@@ -383,3 +383,85 @@ def set_user_email(payload: UserEmailSchema, current_user = Depends(require_admi
     log_audit(f"Indirizzo email dell'utente '{payload.username}' "
               f"{'impostato' if email else 'rimosso'} da '{current_user.get('sub')}'.")
     return {"status": "success"}
+
+
+# --- INVITI UTENTE VIA EMAIL ---
+
+class InviteUserSchema(BaseModel):
+    email: str
+    role: str = "viewer"
+
+class AcceptInviteSchema(BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/api/users/invite")
+def invite_user(payload: InviteUserSchema, current_user = Depends(require_admin)):
+    """Invia un invito: l'account viene creato solo quando l'invitato lo accetta.
+
+    Nessun utente a metà nel frattempo: un invito mai accettato scade e non
+    lascia niente dietro di sé.
+    """
+    from core.app_settings import BaseUrlError, resolve_base_url
+    from security import user_invite
+    from services import mailer
+
+    email = payload.email.strip()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
+    if payload.role not in user_manager.VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Ruolo non valido.")
+    # Lo username dell'account sarà l'indirizzo invitato: se esiste già, è
+    # l'amministratore a doverlo sapere subito, non l'invitato al momento
+    # dell'accettazione.
+    if user_manager.get_role(email) is not None:
+        raise HTTPException(status_code=400, detail="Esiste già un account con questo indirizzo.")
+
+    try:
+        base_url = resolve_base_url()
+    except BaseUrlError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    token = user_invite.issue(email, payload.role)
+    try:
+        mailer.send_email(
+            email,
+            "SentinelNet - Invito di accesso",
+            f"Sei stato invitato ad accedere a SentinelNet con ruolo "
+            f"'{payload.role}'.\n\n"
+            "Apri questo link per scegliere la tua password e completare la "
+            f"registrazione (valido {user_invite.TTL_SECONDS // 3600} ore):\n"
+            f"{base_url}/?invite_token={token}\n\n"
+            "Se non ti aspettavi questo invito, ignora il messaggio.\n",
+        )
+    except mailer.MailerError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    log_audit(f"Invito inviato a '{email}' (ruolo: {payload.role}) "
+              f"da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+
+@router.post("/api/auth/accept-invite")
+def accept_invite(payload: AcceptInviteSchema):
+    """Crea l'account dall'invito. Username e ruolo vengono dall'invito, non
+    dalla richiesta: l'invitato sceglie soltanto la propria password."""
+    from security import user_invite
+
+    pw_err = user_manager.password_error(payload.password)
+    if pw_err:
+        raise HTTPException(status_code=400, detail=pw_err)
+
+    invited = user_invite.consume(payload.token)
+    if not invited:
+        raise HTTPException(status_code=400, detail="Invito non valido o scaduto.")
+    email, role = invited
+
+    # La password è scelta dall'invitato: non c'è nessun cambio da imporre.
+    if not user_manager.create_user(email, payload.password, role,
+                                    must_change_password=False, email=email):
+        raise HTTPException(status_code=400, detail="Esiste già un account con questo indirizzo.")
+
+    log_audit(f"Account '{email}' (ruolo: {role}) creato dall'accettazione di un invito.")
+    return {"status": "success", "username": email}

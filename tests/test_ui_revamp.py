@@ -1364,8 +1364,8 @@ class TestUsersTabRestyle(unittest.TestCase):
         for cls in ('class="hero"', 'class="hero-card"',
                     'class="table-wrap"'):
             self.assertIn(cls, tab)
-        # users-table panel + create-user-form panel
-        self.assertEqual(tab.count('class="panel"'), 2)
+        # users-table panel + create-user-form panel + invite-by-email panel
+        self.assertEqual(tab.count('class="panel"'), 3)
         self.assertNotIn('table-container', tab)
 
     def test_i18n_keys_both_langs(self):
