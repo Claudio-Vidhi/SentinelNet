@@ -194,3 +194,27 @@ def set_role(username: str, role: str) -> bool:
     _save_users(users)
     return True
 
+
+def first_admin_username():
+    """First admin account in alphabetical order, or None if there is none.
+    Used by the break-glass CLI when no username is given."""
+    admins = sorted(u for u, d in get_users().items()
+                    if d.get("role", "admin") == "admin")
+    return admins[0] if admins else None
+
+def reset_password_break_glass(username: str, new_password: str) -> bool:
+    """Reimposta la password senza conoscere quella attuale (recupero da CLI).
+
+    Riabilita l'account e impone il cambio password al primo accesso: chi
+    esegue il recupero non deve restare in possesso di credenziali valide.
+    Ritorna False se l'utente non esiste.
+    """
+    users = get_users()
+    if username not in users:
+        return False
+    hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt(rounds=12))
+    users[username]["hashed_password"] = hashed.decode('utf-8')
+    users[username]["must_change_password"] = True
+    users[username]["disabled"] = False
+    _save_users(users)
+    return True

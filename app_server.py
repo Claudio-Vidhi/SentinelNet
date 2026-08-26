@@ -2,6 +2,7 @@
 import os
 import sys
 import asyncio
+import socket
 import threading
 import time
 import webbrowser
@@ -217,17 +218,91 @@ def open_browser(scheme: str = "http"):
     time.sleep(1.5)
     webbrowser.open(f"{scheme}://localhost:{PORT}/")
 
+
+def _port_in_use(host: str, port: int) -> bool:
+    """True when something already listens on host:port.
+
+    The listening port is the single-instance lock: a second launch would die
+    on "address already in use" anyway, so we detect it and hand the user over
+    to the instance that is already running.
+    """
+    probe = "127.0.0.1" if host == "0.0.0.0" else host
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        # ponytail: cannot tell our own server from a foreign one on the same
+        # port. Probe /api/version if that ever matters.
+        return s.connect_ex((probe, port)) == 0
+
+
+def reset_admin_cli(username=None) -> int:
+    """Break-glass recovery of an administrator password from the CLI.
+
+    The only way back in when the last admin is locked out or disabled. It
+    needs local access to users.json, i.e. the same privilege that would allow
+    editing that file by hand, so it adds no new trust assumption.
+    """
+    from getpass import getpass
+    from security import user_manager
+    from security.security_manager import log_audit
+
+    if not user_manager.has_any_user():
+        print("ERRORE: nessun utente registrato. Completare prima il setup iniziale.",
+              file=sys.stderr)
+        return 1
+
+    if username:
+        if user_manager.get_role(username) is None:
+            print(f"ERRORE: l'utente '{username}' non esiste.", file=sys.stderr)
+            return 1
+    else:
+        username = user_manager.first_admin_username()
+        if not username:
+            print("ERRORE: nessun amministratore trovato. Indicare l'account con --user.",
+                  file=sys.stderr)
+            return 1
+
+    print(f"Reimpostazione password di emergenza (break-glass) per '{username}'.")
+    if sys.stdin.isatty():
+        new_password = getpass("Nuova password: ")
+        if new_password != getpass("Conferma password: "):
+            print("ERRORE: le password non coincidono.", file=sys.stderr)
+            return 1
+    else:
+        new_password = sys.stdin.readline().rstrip("\n")
+
+    pw_err = user_manager.password_error(new_password)
+    if pw_err:
+        print(f"ERRORE: {pw_err}", file=sys.stderr)
+        return 1
+
+    if not user_manager.reset_password_break_glass(username, new_password):
+        print("ERRORE: aggiornamento dell'account non riuscito.", file=sys.stderr)
+        return 1
+
+    log_audit(f"Break-glass CLI: password reimpostata per l'utente '{username}'.")
+    print(f"Password di '{username}' reimpostata. L'account e' abilitato e al primo "
+          "accesso sara' obbligatorio impostare una nuova password.")
+    return 0
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="SentinelNet Server")
     parser.add_argument("--mcp", action="store_true", help="Esegui il server MCP su stdio")
     parser.add_argument("--no-browser", action="store_true", help="Non aprire il browser all'avvio")
+    parser.add_argument("--reset-admin", action="store_true",
+                        help="Reimposta da CLI la password di un amministratore (break-glass)")
+    parser.add_argument("--user", help="Account da reimpostare con --reset-admin "
+                                       "(default: primo amministratore)")
     args, _ = parser.parse_known_args()
 
     if args.mcp:
         from ai import mcp_server
         mcp_server.main()
         return
+
+    if args.reset_admin:
+        sys.exit(reset_admin_cli(args.user))
 
     if not os.path.exists("templates"): 
         os.makedirs("templates")
@@ -246,8 +321,18 @@ def main():
         print(f"ERRORE: {e}", file=sys.stderr)
         sys.exit(1)
 
+    scheme = "https" if ssl_certfile else "http"
+
+    # Istanza singola: un secondo avvio (doppio clic sul collegamento) apre
+    # l'interfaccia di quella gia' in esecuzione invece di morire sulla porta
+    # occupata.
+    if _port_in_use(host, port):
+        print(f"SentinelNet e' gia' in esecuzione su {host}:{port}: apro l'interfaccia.")
+        if not no_browser:
+            webbrowser.open(f"{scheme}://localhost:{port}/")
+        return
+
     if not no_browser:
-        scheme = "https" if ssl_certfile else "http"
         threading.Thread(target=open_browser, args=(scheme,), daemon=True).start()
 
     uvicorn.run(app, host=host, port=port, log_level="info",
