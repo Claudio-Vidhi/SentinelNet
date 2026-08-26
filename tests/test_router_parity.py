@@ -73,7 +73,10 @@ class TestRouterParity(unittest.TestCase):
                           # Classification export (serial + neighbour columns), shipped in 0.12.0.
                           "/api/export/classification",
                           # Offsite SFTP backup mirror (cloud-backup plan).
-                          "/api/cloud-backup")
+                          "/api/cloud-backup",
+                          # Server di posta: prerequisito del recupero password
+                          # via email e degli inviti utente.
+                          "/api/settings/smtp")
 
     def test_no_unexpected_new_paths(self):
         new = [p for p in self.current["paths"]
@@ -181,7 +184,10 @@ class TestFullParity(unittest.TestCase):
                     # Classification export (serial + neighbour columns), shipped in 0.12.0.
                     "/api/export/classification",
                     # Offsite SFTP backup mirror (cloud-backup plan).
-                    "/api/cloud-backup")
+                    "/api/cloud-backup",
+                    # Server di posta: prerequisito del recupero password
+                    # via email e degli inviti utente.
+                    "/api/settings/smtp")
     # Come NEW_PREFIXES, filtra entrambi i lati: copre anche FortigatePreviewSchema,
     # rimosso insieme al flag di preview /api/settings/fortigate-preview.
     NEW_SCHEMAS = ("DeviceSiteSchema", "GroupWrite", "MemberWrite", "AgentSyslogBatchSchema", "AgentSyslogItemSchema", "AgentConfigUpdateSchema", "AgentInventorySaveSchema", "AlertSuppressSchema", "VisioExportSchema", "FlowControlSchema", "AgentMacSchema", "AgentItemSchema", "AgentMacItemSchema", "NetSecAuditSchema", "ReportPdfSchema", "CreateEngagementRequest", "UpdateEngagementMetadataRequest", "UpdateItemAssessmentRequest", "AddEvidenceRequest", "TemplateItemRequest", "AiConversationSchema", "AiConversationUpdateSchema", "ClientDiagnosisSchema", "AgentArpSchema", "AgentArpCollection", "FortigatePreviewSchema",
@@ -212,7 +218,10 @@ class TestFullParity(unittest.TestCase):
                     "ProofRequest",
                     # Offsite SFTP backup mirror config (cloud-backup plan,
                     # route already covered by NEW_PREFIXES).
-                    "CloudBackupSettingsSchema")
+                    "CloudBackupSettingsSchema",
+                    # Configurazione del server di posta e destinatario
+                    # dell'email di prova (rotte gia' in NEW_PREFIXES).
+                    "SmtpSettingsSchema", "SmtpTestSchema")
     # v7: /anomalies ora restituisce INCIDENTI invece di singoli eventi
     # correlati. Parametri e forma della risposta restano quelli storici (li
     # consumano il tab Flussi e il tool MCP), è cambiata la descrizione.

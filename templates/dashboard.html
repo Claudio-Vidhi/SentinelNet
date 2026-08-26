@@ -3218,6 +3218,72 @@
         <!-- Telemetria stato -->
         <div id="cbStatusBox" style="background:var(--surface-2); border:1px solid var(--border); padding:10px 14px;">—</div>
       </article>
+
+      <!-- Ambito: server di posta (recupero password, inviti, notifiche) -->
+      <article class="panel requires-admin" id="smtpPanel" style="margin-top:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+          <div>
+            <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-envelope" style="color:var(--primary);"></i> <span data-i18n="smtpTitle">Server di posta (SMTP)</span></h3>
+            <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:68ch;" data-i18n="smtpDesc">
+              Usato per il recupero password e gli inviti utente. Senza SMTP il recupero resta possibile solo dalla riga di comando dell'host.
+            </p>
+          </div>
+          <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-2); border:1px solid var(--border); padding:6px 12px; border-radius:0;">
+            <input type="checkbox" id="smtpEnabled" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+            <span style="font-size:12.5px; font-weight:600;" data-i18n="smtpLblEnabled">Attivo</span>
+          </label>
+        </div>
+
+        <div style="background:var(--surface-2); border:1px solid var(--border); padding:14px; margin-bottom:14px;">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:12px;">
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblHost">Host</label>
+              <input type="text" id="smtpHost" placeholder="smtp.example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblPort">Porta</label>
+              <input type="number" id="smtpPort" value="587" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblTlsMode">Cifratura</label>
+              <select id="smtpTlsMode" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+                <option value="starttls" data-i18n="smtpTlsStarttls">STARTTLS (587)</option>
+                <option value="ssl" data-i18n="smtpTlsSsl">TLS implicito (465)</option>
+                <option value="none" data-i18n="smtpTlsNone">Nessuna (relay interno)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:12px;">
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblUsername">Utente</label>
+              <input type="text" id="smtpUsername" placeholder="sentinelnet@example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblPassword">Password</label>
+              <input type="password" id="smtpPassword" autocomplete="new-password" placeholder="••••••••" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="smtpLblFrom">Mittente</label>
+              <input type="text" id="smtpFromEmail" placeholder="sentinelnet@example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:flex-start; gap:8px; padding:8px 12px; background:var(--surface); border:1px solid var(--border); font-size:11.5px; color:var(--text-muted); line-height:1.45;">
+            <i class="fa-solid fa-shield-halved" style="color:var(--text-soft); margin-top:2px;"></i>
+            <span data-i18n="smtpTlsHelp">Con STARTTLS un server che non lo annuncia viene rifiutato invece di proseguire in chiaro. "Nessuna" e' ammessa solo per un relay interno senza utente: con le credenziali impostate l'invio si ferma.</span>
+          </div>
+        </div>
+
+        <!-- Pulsanti azione -->
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
+          <button type="button" id="smtpBtnSave" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="smtpBtnSave">Salva</span></button>
+          <input type="text" id="smtpTestTo" placeholder="verifica@example.com" style="width:220px; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+          <button type="button" id="smtpBtnTest" class="btn btn-secondary" style="width:auto; margin:0;"><i class="fa-solid fa-paper-plane"></i> <span data-i18n="smtpBtnTest">Invia email di prova</span></button>
+        </div>
+
+        <div id="smtpStatusBox" style="background:var(--surface-2); border:1px solid var(--border); padding:10px 14px;">—</div>
+      </article>
     </div>
 
     <!-- TAB: Flow SIEM Analytics (preview) -->
