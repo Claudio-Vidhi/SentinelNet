@@ -253,21 +253,45 @@ Also in this item:
 - `showToast('Errore di caricamento modulo', 'error')` in `core.js` is a
   hardcoded Italian string — route it through `i18n.js`.
 
-### 9. Retire the Client Map view; keep its route — S
+### 9. Retire the Client Map view — S, and it is a correctness item
 
-Client Map (MAC <-> IP) is superseded by Endpoint Inventory. **[corrected]** It
-is already a view pill inside Endpoint Localisation
+Client Map (MAC <-> IP) is superseded by Endpoint Inventory **and displays
+incorrect information** (confirmed in session). That makes this a correctness
+removal, not a tidy-up: a surface stating wrong facts is worse than no surface,
+because it spends the trust the rest of the product is built on.
+
+**[corrected]** It is already a view pill inside Endpoint Localisation
 (`templates/dashboard.html:1265`, `data-loc-view="clientmap"`), not a top-level
-tab, so removal costs nothing in the nav.
+tab, so removal costs nothing in the nav. `static/js/client-map.js` is ~870
+lines and mostly view code (`locSwitchView`, tenant pills, rendering).
 
-**Remove the view, not the endpoint.** `/api/arp/client-map` is a registered MCP
-tool (`ai/mcp_server.py:143`), and the ARP data behind it feeds
+**Remove the view. Keep the logic other tabs use.** The ARP data feeds
 `observability/correlator.py`, `observability/flowpath.py`,
 `observability/timeline.py` and Endpoint Inventory itself. Deleting the route
 would break four consumers to tidy one pill.
 
-Note `ui_tab_overlap_analysis.md`: `client-map.js` serves **both** MAC Tracker
-and Client Map. Confirm MAC Tracker's needs before deleting from that module.
+`ui_tab_overlap_analysis.md` notes `client-map.js` serves **both** MAC Tracker
+and Client Map — split the module rather than deleting it wholesale.
+
+#### Open: where is the wrongness?
+
+The join is **server-side**, in `mac_history.client_map()`, reached via
+`/api/arp/client-map` (`routers/arp.py:62`). The same endpoint is a registered
+MCP tool (`ai/mcp_server.py:148`).
+
+So the fix depends on which layer is at fault, and the two outcomes differ:
+
+- **Wrong rendering only** — deleting `client-map.js`'s view half resolves it
+  fully. Nothing else is affected.
+- **Wrong join in `mac_history.client_map()`** — deleting the view *hides* the
+  bug while the MCP tool keeps serving the same bad data to the AI assistant,
+  which will state it confidently and without a human eye on it. That is a
+  regression in everything except appearances, and it contradicts the product
+  principle that every conclusion ships its evidence.
+
+**Do not delete the view until this is answered.** If the join is at fault,
+quarantine or fix the MCP `client_map` tool in the same change; the endpoint
+must not outlive the surface that was making its errors visible.
 
 ### 10. `Preview` tag on single-client L2 + L3 reporting — S
 
