@@ -89,8 +89,13 @@ object across tab switches so the verbs act as lenses on it:
 
 ## Work items
 
-Sequenced by leverage per unit of effort. Items 1, 3, 5, 6, 9 and 10 are small
-and mutually independent — a shippable first pass, two of them deletions.
+Sequenced by leverage per unit of effort. Items 1, 3, 5, 6 and 10 are small and
+mutually independent — a shippable first pass.
+
+**Items 9 and 11 come first regardless of that ordering.** Item 9 turned out to
+be a correctness defect affecting Endpoint Inventory as well as Client Map, and
+item 11 is the other half of its fix. Cosmetic work on surfaces that state wrong
+facts is effort spent making a lie easier to read.
 
 ### 1. Tenant selector into persistent chrome — S
 
@@ -321,13 +326,42 @@ Two consequences worth stating plainly:
   The assignment lookup (`mac_history.py:826`) takes the first match over *any*
   IP in `ips`, stale ones included.
 
-#### The fix is not simply "newest wins"
+#### The fix: newest scan wins, per source
 
 A genuinely multi-homed or dual-stack host legitimately holds several IPs **at
-the same time**, and `MULTI-IP` is a true flag for it. The read side must
-separate *several IPs concurrently* from *one IP that changed over time* —
-which needs a recency window, not an ordering change. Deciding that window is a
-product call, not a code call, and it should be made before the fix is written.
+the same time**, and `MULTI-IP` is a true flag for it. So the rule cannot be
+"one IP per MAC". **Decided in session:**
+
+> A binding is **current** when its `last_seen` equals the newest `last_seen`
+> among rows sharing its `(mac, tenant, source_ip)`.
+
+Why this shape, and why it needs no tuning knob:
+
+- **Concurrent IPs survive.** One scan writes every binding it saw with the
+  same timestamp, so a dual-stack host keeps both rows and `MULTI-IP` stays
+  truthful.
+- **A changed IP drops out immediately**, at the very next scan, without
+  waiting for retention.
+- **Per `source_ip`**, so a client legitimately reachable through two gateways
+  keeps one current binding from each rather than one gateway silently winning.
+- No window to configure, therefore no wrong value to set and no quiet
+  reintroduction of the bug.
+
+Read-path changes this implies:
+
+- `endpoint_inventory()` must `SELECT last_seen` in its ARP query — today it
+  does not, which is why it *cannot* order by recency — and keep only current
+  rows when building `ips`.
+- `client_map()` must return **one row per client**, not per binding.
+- The `client_type` assignment lookup (`mac_history.py:826`) must consider only
+  current IPs, so a category is never inherited from an address the client no
+  longer holds.
+- `MULTI-IP` keeps its meaning: several *current* IPs, not several historical
+  ones.
+
+Regression test must cover: IP change (old drops), dual-stack (both survive),
+two gateways (one current each), and a MAC whose only binding is older than the
+newest scan of a *different* MAC (must not be wrongly excluded).
 
 Related, found in the same pass and **not** yet investigated: the UPDATE branch
 of `record_arp_entries()` writes `tenant=?` while `tenant` is not part of the
@@ -377,6 +411,49 @@ rather than inventing a second one.
 - **Write the exit condition down beside the flag**: *validated against real
   hardware*. A Preview tag with no stated way out is still there in four years,
   by which time users have learned to ignore it.
+
+### 11. Time-range filter — deliberate history instead of mixed history — M
+
+Proposed in session, and it is the other half of item 9's fix. Item 9 makes the
+default view show only what is **current**. This item gives the history back as
+something you **enter on purpose**.
+
+The bindings are not worthless — they are a real record of where a client was
+and when. They are only harmful when silently mixed into a view claiming to
+describe *now*. A range filter separates the two questions:
+
+- **Default — no range set:** current bindings only, per the rule in item 9.
+  This is the answer to "where is this client".
+- **Range set (date + hour, from/to):** every binding whose
+  `[first_seen, last_seen]` overlaps the window, with the mode stated on
+  screen. This is the answer to "where was this client on Tuesday afternoon".
+
+Applies to Endpoint Inventory, the ARP search, and client history — the same
+control, the same semantics, so the concept is learned once.
+
+Design constraints:
+
+- **The mode must be unmissable.** A historical view that looks like the live
+  one recreates exactly the confusion item 9 removes. When a range is active,
+  say so in the panel, not only in the control.
+- **Hour granularity, not just date.** A lease change and a port move both
+  happen inside a working day; a date-only filter cannot separate them.
+- **Bound the picker by `retention_days`.** Asking for a window older than
+  retention must say *"outside the retention window (N days)"* rather than
+  returning an empty table — principle 5, and otherwise the feature silently
+  lies about the past being empty.
+- **Reflect the range in the URL**, so a "this is what it looked like at 14:00"
+  link can be pasted into a ticket.
+- **The MCP tool takes the same parameter**, defaulting to current. The AI
+  assistant must be able to answer historical questions explicitly and must
+  never answer a present-tense question from historical rows.
+- **Add the range to the `endpoint_inventory` cache key.** `_inventory_stamp()`
+  versions the *data*, not the *question*; without the range in the key a past
+  query and a live query collide.
+
+Cheap corollary once this exists: a client's IP history becomes a legitimate
+answer rather than a symptom, so `client_history()` and the timeline gain a
+shared vocabulary with the inventory.
 
 ---
 
