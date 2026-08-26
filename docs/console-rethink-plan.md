@@ -273,25 +273,88 @@ would break four consumers to tidy one pill.
 `ui_tab_overlap_analysis.md` notes `client-map.js` serves **both** MAC Tracker
 and Client Map — split the module rather than deleting it wholesale.
 
-#### Open: where is the wrongness?
+#### Root cause: `arp_entries` keeps stale bindings and no read path filters them
 
-The join is **server-side**, in `mac_history.client_map()`, reached via
-`/api/arp/client-map` (`routers/arp.py:62`). The same endpoint is a registered
-MCP tool (`ai/mcp_server.py:148`).
+**Investigated and reproduced 2026-08-26.** The fault is in the shared data
+path, not in the view — and it affects **Endpoint Inventory too**, which
+invalidates the "Endpoint Inventory does it better" premise this item started
+from.
 
-So the fix depends on which layer is at fault, and the two outcomes differ:
+`record_arp_entries()` upserts on `(mac, ip, source_ip)`
+(`collectors/mac_history.py:373`). When a client changes IP — a new DHCP lease,
+a VLAN move — the new binding **INSERTs a new row**; the old row is never
+deleted and simply stops being updated. It survives until `prune()` removes it
+at the retention horizon. `arp_entries` is therefore an append-only *history*,
+and nothing in it marks which binding is **current**.
 
-- **Wrong rendering only** — deleting `client-map.js`'s view half resolves it
-  fully. Nothing else is affected.
-- **Wrong join in `mac_history.client_map()`** — deleting the view *hides* the
-  bug while the MCP tool keeps serving the same bad data to the AI assistant,
-  which will state it confidently and without a human eye on it. That is a
-  regression in everything except appearances, and it contradicts the product
-  principle that every conclusion ships its evidence.
+Both read paths treat every surviving row as equally valid:
 
-**Do not delete the view until this is answered.** If the join is at fault,
-quarantine or fix the MCP `client_map` tool in the same change; the endpoint
-must not outlive the surface that was making its errors visible.
+- **`endpoint_inventory()`** collects `ips = sorted({...})` over every row for
+  the MAC (`mac_history.py:800`). The ARP query above it does not even
+  `SELECT last_seen`, so it *cannot* order by recency.
+- **`client_map()`** returns one row **per binding**, not per client, so one
+  client with three historical IPs is three rows.
+
+Reproduction — one MAC, scan at `192.0.2.10` yesterday, scan at `192.0.2.11`
+today, everything else held constant:
+
+```
+arp_entries rows for one MAC after two scans: 2
+   ip=192.0.2.11   last_seen=2026-08-26T18:31:06+00:00
+   ip=192.0.2.10   last_seen=2026-08-25T18:31:06+00:00
+
+endpoint_inventory -> ips  : ['192.0.2.10', '192.0.2.11']
+endpoint_inventory -> flags: ['MULTI-IP', ...]
+first IP shown to the user : 192.0.2.10        <- the STALE one
+
+client_map rows for one client: 2              <- duplicate rows, one client
+```
+
+The scan *did* work. The write path is correct. The read paths are wrong.
+
+Two consequences worth stating plainly:
+
+- **The stale IP sorts first.** `sorted()` is lexicographic, so `192.0.2.10`
+  precedes `192.0.2.11`. The value the eye lands on is the obsolete one. This
+  is why the surface "shows info wrong" while a scan appears to have succeeded.
+- **`client_type` can be inherited from an address the client no longer holds.**
+  The assignment lookup (`mac_history.py:826`) takes the first match over *any*
+  IP in `ips`, stale ones included.
+
+#### The fix is not simply "newest wins"
+
+A genuinely multi-homed or dual-stack host legitimately holds several IPs **at
+the same time**, and `MULTI-IP` is a true flag for it. The read side must
+separate *several IPs concurrently* from *one IP that changed over time* —
+which needs a recency window, not an ordering change. Deciding that window is a
+product call, not a code call, and it should be made before the fix is written.
+
+Related, found in the same pass and **not** yet investigated: the UPDATE branch
+of `record_arp_entries()` writes `tenant=?` while `tenant` is not part of the
+upsert key. The same `(mac, ip, source_ip)` observed under a different tenant
+would overwrite the field. Tenant is an authorization boundary, so this needs
+its own verification.
+
+#### Open: sequencing
+
+Now that the fault is known to be server-side, deleting the view alone would
+*hide* the bug while `/api/arp/client-map` — a registered MCP tool
+(`ai/mcp_server.py:148`) — keeps serving the same stale bindings to the AI
+assistant, which will state them confidently with no human eye on the result.
+That contradicts the principle that every conclusion ships its evidence.
+
+Endpoint Inventory is affected by the same defect, so removing Client Map does
+not leave a correct surface behind.
+
+Revised order, and **this now precedes the cosmetic items**:
+
+1. Decide the recency window (product call).
+2. Fix the read paths in `mac_history` — `endpoint_inventory()` and
+   `client_map()` — with a regression test covering the IP-change scenario
+   reproduced above.
+3. Verify the `tenant` overwrite in `record_arp_entries()`.
+4. *Then* delete the Client Map view, as genuinely redundant rather than as a
+   way to stop seeing the bug.
 
 ### 10. `Preview` tag on single-client L2 + L3 reporting — S
 
