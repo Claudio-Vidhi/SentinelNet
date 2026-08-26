@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from core.app_settings import get_app_settings, save_app_settings, effective_port, list_local_ips, PORT
 from core import core_engine
+from security import crypto_vault
 from security.security_manager import log_audit
 from routers.deps import require_admin, get_current_user, user_group_scope
 from core import data_config
@@ -251,3 +252,79 @@ def snmp_defaults_set(payload: SnmpDefaultSchema,
               f"'{current_user.get('sub')}'.")
     return {"status": "success"}
 
+
+
+class SmtpSettingsSchema(BaseModel):
+    enabled: bool = False
+    host: str = ""
+    port: int = Field(default=587, ge=1, le=65535)
+    username: str = ""
+    # Vuota = mantieni la password gia' salvata: la UI non la riceve mai
+    # indietro, quindi non puo' rimandarla a ogni salvataggio.
+    password: str = ""
+    from_email: str = ""
+    tls_mode: str = Field(default="starttls")
+
+
+class SmtpTestSchema(BaseModel):
+    to: str
+
+
+@router.get("/api/settings/smtp")
+def get_smtp_settings(current_user = Depends(require_admin)):
+    """Configurazione SMTP. La password non esce mai: solo se c'e' o no."""
+    from services import mailer
+    cfg = mailer.get_config()
+    return {
+        "enabled": cfg["enabled"],
+        "host": cfg["host"],
+        "port": cfg["port"],
+        "username": cfg["username"],
+        "has_password": bool(cfg["password_enc"]),
+        "from_email": cfg["from_email"],
+        "tls_mode": cfg["tls_mode"],
+    }
+
+
+@router.post("/api/settings/smtp")
+def set_smtp_settings(payload: SmtpSettingsSchema,
+                      current_user = Depends(require_admin)):
+    from services import mailer
+    if payload.tls_mode not in mailer.TLS_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Modalita' TLS non valida: {', '.join(mailer.TLS_MODES)}.")
+
+    current = mailer.get_config()
+    password_enc = current["password_enc"]
+    if payload.password:
+        password_enc = crypto_vault.encrypt_password(payload.password)
+
+    mailer.save_config({
+        "enabled": payload.enabled,
+        "host": payload.host.strip(),
+        "port": payload.port,
+        "username": payload.username.strip(),
+        "password_enc": password_enc,
+        "from_email": payload.from_email.strip(),
+        "tls_mode": payload.tls_mode,
+    })
+    log_audit(f"Impostazioni SMTP aggiornate da '{current_user.get('sub')}' "
+              f"(host='{payload.host.strip()}', tls={payload.tls_mode}, "
+              f"attivo={payload.enabled}).")
+    return {"status": "success"}
+
+
+@router.post("/api/settings/smtp/test")
+def test_smtp_settings(payload: SmtpTestSchema,
+                       current_user = Depends(require_admin)):
+    """Invia un messaggio di prova con la configurazione SALVATA: prima si
+    salva, poi si prova, altrimenti si collauda qualcosa che non resta."""
+    from services import mailer
+    try:
+        mailer.send_test_email(payload.to.strip())
+    except mailer.MailerError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    log_audit(f"Email di test SMTP inviata a '{payload.to.strip()}' "
+              f"da '{current_user.get('sub')}'.")
+    return {"status": "success"}

@@ -538,6 +538,101 @@
         if (typeof loadCloudBackup === 'function') {
             loadCloudBackup();
         }
+        loadSmtpSettings();
+    }
+
+    // --- IMPOSTAZIONI: server di posta SMTP (solo admin) ---
+
+    // Come per la copia offsite: il salvataggio resta bloccato finche' la
+    // configurazione non e' entrata nel form, altrimenti un GET fallito
+    // salverebbe i default vuoti sopra a quella buona.
+    let smtpLoaded = false;
+
+    function renderSmtpStatus(cfg) {
+        const box = document.getElementById('smtpStatusBox');
+        if (!box) return;
+        if (!cfg.enabled) {
+            box.textContent = currentLang === 'en'
+                ? 'Disabled: password recovery by email is unavailable.'
+                : 'Disattivato: il recupero password via email non e\' disponibile.';
+            return;
+        }
+        const auth = cfg.username
+            ? `${cfg.username}${cfg.has_password ? '' : (currentLang === 'en' ? ' (no password)' : ' (senza password)')}`
+            : (currentLang === 'en' ? 'anonymous' : 'anonimo');
+        box.textContent = `${cfg.host}:${cfg.port} · ${cfg.tls_mode} · ${auth} · from ${cfg.from_email || '—'}`;
+    }
+
+    async function loadSmtpSettings() {
+        if (currentRole !== 'admin') return;
+        const res = await apiFetch('/api/settings/smtp');
+        if (!res || !res.ok) return;
+        const cfg = await res.json();
+        document.getElementById('smtpEnabled').checked = !!cfg.enabled;
+        document.getElementById('smtpHost').value = cfg.host || '';
+        document.getElementById('smtpPort').value = cfg.port || 587;
+        document.getElementById('smtpTlsMode').value = cfg.tls_mode || 'starttls';
+        document.getElementById('smtpUsername').value = cfg.username || '';
+        document.getElementById('smtpFromEmail').value = cfg.from_email || '';
+        // La password non torna mai dall'API: campo vuoto = mantieni quella salvata.
+        const pw = document.getElementById('smtpPassword');
+        pw.value = '';
+        pw.placeholder = cfg.has_password
+            ? (currentLang === 'en' ? 'stored - leave empty to keep'
+                                    : 'salvata - lascia vuoto per mantenerla')
+            : '';
+        renderSmtpStatus(cfg);
+        smtpLoaded = true;
+    }
+
+    async function saveSmtpSettings() {
+        if (!smtpLoaded) {
+            showToast(currentLang === 'en' ? 'Settings not loaded yet.'
+                                           : 'Impostazioni non ancora caricate.', 'error');
+            return;
+        }
+        const res = await apiFetch('/api/settings/smtp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled: document.getElementById('smtpEnabled').checked,
+                host: document.getElementById('smtpHost').value.trim(),
+                port: parseInt(document.getElementById('smtpPort').value, 10) || 587,
+                username: document.getElementById('smtpUsername').value.trim(),
+                password: document.getElementById('smtpPassword').value,
+                from_email: document.getElementById('smtpFromEmail').value.trim(),
+                tls_mode: document.getElementById('smtpTlsMode').value,
+            }),
+        });
+        if (res && res.ok) {
+            showToast(currentLang === 'en' ? 'SMTP settings saved.'
+                                           : 'Impostazioni SMTP salvate.', 'success');
+            loadSmtpSettings();
+        } else {
+            const d = res ? await res.json().catch(() => ({})) : {};
+            showToast(d.detail || (currentLang === 'en' ? 'Save failed.' : 'Salvataggio fallito.'), 'error');
+        }
+    }
+
+    async function sendSmtpTest() {
+        const to = document.getElementById('smtpTestTo').value.trim();
+        if (!to) {
+            showToast(currentLang === 'en' ? 'Enter a recipient address.'
+                                           : 'Inserisci un indirizzo destinatario.', 'error');
+            return;
+        }
+        const res = await apiFetch('/api/settings/smtp/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to }),
+        });
+        if (res && res.ok) {
+            showToast(currentLang === 'en' ? `Test message sent to ${to}.`
+                                           : `Email di prova inviata a ${to}.`, 'success');
+        } else {
+            const d = res ? await res.json().catch(() => ({})) : {};
+            showToast(d.detail || (currentLang === 'en' ? 'Send failed.' : 'Invio fallito.'), 'error');
+        }
     }
 
     // --- IMPOSTAZIONI AVANZATE (sezione 'app', solo admin) ---
@@ -850,6 +945,8 @@
     document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
     document.getElementById('btnCreateSite')?.addEventListener('click', createSite);
     document.getElementById('newSiteMode')?.addEventListener('change', onNewSiteModeChange);
+    document.getElementById('smtpBtnSave')?.addEventListener('click', saveSmtpSettings);
+    document.getElementById('smtpBtnTest')?.addEventListener('click', sendSmtpTest);
     document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
     document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
     document.getElementById('mcpPreviewToggle')?.addEventListener('change', (e) => {
