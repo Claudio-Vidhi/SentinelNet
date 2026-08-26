@@ -126,6 +126,25 @@ On first start a setup wizard asks you to create the local administrator
 account. Credentials are stored in `users.json` as bcrypt hashes and are never
 transmitted in clear text.
 
+Starting a second time while SentinelNet is already running does not fail on
+the busy port: it opens the interface of the running instance and exits.
+
+### Emergency administrator recovery (break-glass)
+
+When every administrator account is locked out or disabled, reset one from the
+machine that hosts the installation:
+
+```bash
+uv run app_server.py --reset-admin              # first administrator found
+uv run app_server.py --reset-admin --user NAME  # a specific account
+```
+
+The password is typed interactively and never appears in the shell history.
+The account is re-enabled and a password change is forced at the next login, so
+whoever ran the recovery keeps no usable credentials. Every reset is written to
+`audit.log`. The command needs local read/write access to `users.json` — the
+same privilege that would allow editing that file by hand.
+
 ### With Docker
 
 Configurations, credentials and backups are stored in a local `data` directory
