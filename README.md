@@ -157,6 +157,25 @@ come from the invitation, not from the request that redeems it: the address
 invited becomes the username, and a redeemer cannot claim a role they were not
 offered.
 
+### Single Sign-On (OpenID Connect)
+
+Optional, configured under **Settings -> Single Sign-On**. Local accounts keep
+working: SSO is added alongside them, so a provider outage never locks everyone
+out. The issuer must be HTTPS — discovery and the signing keys come from it.
+
+The flow is authorization code with PKCE. Every id_token is verified against
+the provider's published keys before any claim is used: signature, issuer,
+audience, expiry and the per-login nonce, accepting asymmetric algorithms only.
+
+Two switches default to off, deliberately:
+
+- *Create the account on first sign-in* — with it on, anyone the provider can
+  authenticate gets an account, which on a corporate directory is the whole
+  address book. Off, an unknown identity is refused and told to contact an
+  administrator.
+- *Realign the role on every sign-in* — with it on, IdP groups are the source
+  of truth and a role set locally is rewritten at the next login.
+
 ### Emergency administrator recovery (break-glass)
 
 When every administrator account is locked out or disabled, reset one from the

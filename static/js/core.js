@@ -386,6 +386,7 @@ async function checkAuthRequirements() {
             // Esiste già un amministratore: mostriamo la maschera di login standard
             if (wiz) wiz.style.display = 'none';
             if (login) login.style.display = 'block';
+            showSsoButtonIfEnabled();
             // La sessione vive nel cookie HttpOnly: la verifichiamo lato server.
             const me = await fetch('/api/auth/me');
             if (!me.ok) {
@@ -487,6 +488,25 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
 // Password nota all'utente al momento del cambio obbligatorio (usata come
 // vecchia password per l'endpoint /api/auth/change-password).
 let pendingOldPass = '';
+
+// Il pulsante SSO compare solo se l'installazione lo ha configurato: la rotta
+// pubblica dice se e con che nome, niente altro.
+async function showSsoButtonIfEnabled() {
+    const box = document.getElementById('ssoLoginBox');
+    if (!box) return;
+    try {
+        const res = await fetch('/api/auth/sso/config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        if (!cfg.enabled) { box.style.display = 'none'; return; }
+        const label = document.getElementById('ssoLoginBtnText');
+        if (label && cfg.provider_name) label.textContent = cfg.provider_name;
+        box.style.display = 'block';
+    } catch (e) {
+        // Nessun pulsante: si entra comunque con le credenziali locali.
+        console.debug('[sso] config non disponibile:', e);
+    }
+}
 
 // Recupero password: richiesta del link via email
 document.getElementById('linkForgotPassword')?.addEventListener('click', (e) => {

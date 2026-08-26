@@ -107,6 +107,18 @@
           <i class="fa-solid fa-right-to-bracket"></i> Autenticati
         </button>
 
+        <!-- Mostrato solo se il Single Sign-On e' configurato e attivo. -->
+        <div id="ssoLoginBox" style="display:none; margin-top:14px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; color:var(--text-muted); font-size:11px; text-transform:uppercase; letter-spacing:0.08em;">
+            <span style="flex:1; height:1px; background:var(--border);"></span>
+            <span data-i18n="ssoOr">oppure</span>
+            <span style="flex:1; height:1px; background:var(--border);"></span>
+          </div>
+          <a id="ssoLoginBtn" href="/api/auth/sso/login" class="btn btn-secondary" style="display:block; text-align:center; text-decoration:none;">
+            <i class="fa-solid fa-id-badge"></i> <span id="ssoLoginBtnText">Single Sign-On</span>
+          </a>
+        </div>
+
         <div style="text-align:center; margin-top:14px;">
           <a href="#" id="linkForgotPassword" style="font-size:12.5px; color:var(--text-muted); text-decoration:underline;" data-i18n="linkForgotPassword">Password dimenticata?</a>
         </div>
@@ -3384,6 +3396,97 @@
         </div>
 
         <div id="smtpStatusBox" style="background:var(--surface-2); border:1px solid var(--border); padding:10px 14px;">—</div>
+      </article>
+
+      <!-- Ambito: autenticazione aziendale (OpenID Connect) -->
+      <article class="panel requires-admin" id="ssoPanel" style="margin-top:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+          <div>
+            <h3 style="font-size:15px; margin-bottom:6px;"><i class="fa-solid fa-id-badge" style="color:var(--primary);"></i> <span data-i18n="ssoTitle">Single Sign-On (OpenID Connect)</span></h3>
+            <p style="margin:0; color:var(--text-muted); font-size:13px; max-width:68ch;" data-i18n="ssoDesc">
+              Autenticazione tramite l'identity provider aziendale. Gli account locali restano validi: il Single Sign-On si aggiunge, non sostituisce.
+            </p>
+          </div>
+          <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--surface-2); border:1px solid var(--border); padding:6px 12px; border-radius:0;">
+            <input type="checkbox" id="ssoEnabled" style="width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+            <span style="font-size:12.5px; font-weight:600;" data-i18n="ssoLblEnabled">Attivo</span>
+          </label>
+        </div>
+
+        <div style="background:var(--surface-2); border:1px solid var(--border); padding:14px; margin-bottom:14px;">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:12px;">
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblIssuer">Issuer URL</label>
+              <input type="text" id="ssoIssuerUrl" placeholder="https://idp.example.com" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblProviderName">Nome mostrato</label>
+              <input type="text" id="ssoProviderName" placeholder="Corporate SSO" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:12px;">
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblClientId">Client ID</label>
+              <input type="text" id="ssoClientId" placeholder="sentinelnet" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblClientSecret">Client secret</label>
+              <input type="password" id="ssoClientSecret" autocomplete="new-password" placeholder="••••••••" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px;">
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblAdminGroup">Gruppo -> admin</label>
+              <input type="text" id="ssoAdminGroup" placeholder="net-admins" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblOperatorGroup">Gruppo -> operator</label>
+              <input type="text" id="ssoOperatorGroup" placeholder="net-operators" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-muted); margin-bottom:4px;" data-i18n="ssoLblDefaultRole">Ruolo predefinito</label>
+              <select id="ssoDefaultRole" style="width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); color:var(--text); font-size:13px;">
+                <option value="viewer" data-i18n="roleViewer">Viewer (sola lettura)</option>
+                <option value="operator" data-i18n="roleOperator">Operator (operazioni)</option>
+                <option value="admin" data-i18n="roleAdmin">Admin (totale)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-bottom:16px;">
+          <div style="background:var(--surface-2); border:1px solid var(--border); padding:12px 14px;">
+            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
+              <input type="checkbox" id="ssoAutoProvision" style="margin-top:2px; width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+              <div>
+                <span style="font-size:13px; font-weight:600; color:var(--text);" data-i18n="ssoLblAutoProvision">Crea l'account al primo accesso</span>
+                <div style="margin-top:4px; font-size:11.5px; line-height:1.4; color:var(--lamp-warn-ink);" data-i18n="ssoAutoProvisionWarning">
+                  Con questa opzione chiunque l'identity provider sappia autenticare ottiene un account: su una directory aziendale e' l'intera rubrica. Lasciala spenta e invita le persone che devono entrare.
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <div style="background:var(--surface-2); border:1px solid var(--border); padding:12px 14px;">
+            <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
+              <input type="checkbox" id="ssoSyncRoles" style="margin-top:2px; width:16px; height:16px; accent-color:var(--primary); cursor:pointer;">
+              <div>
+                <span style="font-size:13px; font-weight:600; color:var(--text);" data-i18n="ssoLblSyncRoles">Allinea il ruolo ad ogni accesso</span>
+                <div style="margin-top:4px; font-size:11.5px; line-height:1.4; color:var(--text-muted);" data-i18n="ssoSyncRolesDesc">
+                  I gruppi dell'IdP diventano la fonte di verita': un ruolo cambiato qui viene riscritto al login successivo.
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px;">
+          <button type="button" id="ssoBtnSave" class="btn btn-primary" style="width:auto; margin:0;"><i class="fa-solid fa-floppy-disk"></i> <span data-i18n="ssoBtnSave">Salva</span></button>
+        </div>
+
+        <div id="ssoStatusBox" style="background:var(--surface-2); border:1px solid var(--border); padding:10px 14px;">—</div>
       </article>
     </div>
 

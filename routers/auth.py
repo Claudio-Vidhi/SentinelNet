@@ -465,3 +465,107 @@ def accept_invite(payload: AcceptInviteSchema):
 
     log_audit(f"Account '{email}' (ruolo: {role}) creato dall'accettazione di un invito.")
     return {"status": "success", "username": email}
+
+
+# --- SINGLE SIGN-ON (OIDC) ---
+
+def _sso_redirect_uri() -> str:
+    from core.app_settings import resolve_base_url
+    return resolve_base_url() + "/api/auth/sso/callback"
+
+
+@router.get("/api/auth/sso/config")
+def sso_public_config():
+    """Ciò che la schermata di login può sapere prima di autenticarsi: se il
+    pulsante va mostrato e come si chiama. Nient'altro esce da qui."""
+    from security import sso
+    cfg = sso.get_config()
+    if not cfg["enabled"] or not cfg["client_id"] or not cfg["issuer_url"]:
+        return {"enabled": False}
+    return {"enabled": True, "provider_name": cfg["provider_name"]}
+
+
+@router.get("/api/auth/sso/login")
+def sso_login():
+    """Avvia il flusso authorization code + PKCE verso l'IdP."""
+    from core.app_settings import BaseUrlError
+    from fastapi.responses import RedirectResponse
+    from security import sso
+
+    cfg = sso.get_config()
+    if not cfg["enabled"]:
+        raise HTTPException(status_code=400, detail="Single Sign-On non abilitato.")
+    try:
+        auth_url = sso.start_login(cfg, _sso_redirect_uri())
+    except (sso.SSOError, BaseUrlError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return RedirectResponse(auth_url, status_code=302)
+
+
+@router.get("/api/auth/sso/callback")
+def sso_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    """Ritorno dall'IdP: verifica, risoluzione dell'utente, sessione locale."""
+    from core.app_settings import BaseUrlError
+    from fastapi.responses import RedirectResponse
+    from security import crypto_vault, sso
+
+    if error:
+        raise HTTPException(status_code=401, detail=f"Accesso rifiutato dall'IdP: {error}")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Parametri 'code' o 'state' mancanti.")
+
+    cfg = sso.get_config()
+    if not cfg["enabled"]:
+        raise HTTPException(status_code=400, detail="Single Sign-On non abilitato.")
+
+    # Lo state è a uso singolo: se non è uno che abbiamo emesso noi, la
+    # richiesta non nasce da un login iniziato qui.
+    pending = sso.consume_state(state)
+    if not pending:
+        raise HTTPException(status_code=400, detail="Sessione di login scaduta o non valida.")
+    nonce, verifier = pending
+
+    client_secret = crypto_vault.decrypt_password(cfg["client_secret_enc"])
+    try:
+        redirect_uri = _sso_redirect_uri()
+        tokens = sso.exchange_code(cfg, code, verifier, redirect_uri, client_secret)
+        claims = sso.verify_id_token(cfg, tokens["id_token"], nonce)
+        username = sso.resolve_username(claims)
+    except (sso.SSOError, BaseUrlError) as e:
+        log_audit(f"Login SSO fallito: {e}")
+        raise HTTPException(status_code=401, detail=str(e)) from e
+
+    mapped_role = sso.resolve_role(cfg, claims)
+    existing_role = user_manager.get_role(username)
+
+    if existing_role is None:
+        if not cfg["auto_provision"]:
+            log_audit(f"Login SSO rifiutato per '{username}': nessun account locale "
+                      f"e provisioning automatico disattivato.")
+            raise HTTPException(
+                status_code=403,
+                detail="Nessun account SentinelNet per questa identità. "
+                       "Contatta un amministratore.")
+        # Password locale casuale e mai comunicata: l'accesso passa solo
+        # dall'IdP, ma l'account resta recuperabile col break-glass.
+        import secrets as _secrets
+        user_manager.create_user(username, _secrets.token_urlsafe(32), mapped_role,
+                                 must_change_password=False,
+                                 email=(claims.get("email") or "").strip())
+        role = mapped_role
+        log_audit(f"Account '{username}' (ruolo: {role}) creato automaticamente da login SSO.")
+    else:
+        if user_manager.is_disabled(username):
+            log_audit(f"Login SSO rifiutato per l'account disabilitato '{username}'.")
+            raise HTTPException(status_code=403, detail="Account disabilitato.")
+        role = mapped_role if cfg["sync_roles"] else existing_role
+        if cfg["sync_roles"] and mapped_role != existing_role:
+            user_manager.set_role(username, mapped_role)
+            log_audit(f"Ruolo di '{username}' allineato a '{mapped_role}' dai gruppi dell'IdP.")
+
+    access_token = create_access_token(data={"sub": username, "role": role})
+    reset_failed_attempts(username)
+    log_audit(f"Utente '{username}' (ruolo: {role}) autenticato via SSO.")
+    response = RedirectResponse("/", status_code=302)
+    _set_session_cookie(request, response, access_token)
+    return response
