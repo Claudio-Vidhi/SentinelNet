@@ -293,6 +293,10 @@ class TestFullParity(unittest.TestCase):
         ("get", "/api/flow-siem/facets"),
         # Inventory export: see TestRouterParity.ALLOWED_CHANGED_OPERATIONS.
         ("get", "/api/export/devices"),
+        # Added optional frm / to time range filtering.
+        ("get", "/api/arp/client-map"),
+        ("get", "/api/arp/search"),
+        ("get", "/api/endpoints/list"),
     )
 
     ALLOWED_ADDED_OPERATIONS = (

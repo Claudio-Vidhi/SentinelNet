@@ -37,6 +37,7 @@ def endpoints_list(tenant: Optional[str] = None, site: Optional[str] = None,
                    switch: Optional[str] = None, vlan: Optional[str] = None,
                    q: Optional[str] = None, stale_days: int = 7,
                    limit: int = 2000,
+                   frm: Optional[str] = None, to: Optional[str] = None,
                    current_user = Depends(get_current_user)):
     """Gli endpoint scoperti, uno per (MAC, tenant).
 
@@ -46,7 +47,8 @@ def endpoints_list(tenant: Optional[str] = None, site: Optional[str] = None,
     return mac_history.endpoint_inventory(
         tenants=_scope(current_user, tenant), site=site or None,
         switch_ip=switch or None, vlan=vlan or None, q=(q or "").strip() or None,
-        stale_days=max(1, min(3650, stale_days)), limit=limit)
+        stale_days=max(1, min(3650, stale_days)), limit=limit,
+        frm=frm or None, to=to or None)
 
 
 @router.get("/api/endpoints/ports")

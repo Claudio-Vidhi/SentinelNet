@@ -127,7 +127,9 @@ TOOLS = {
         "Search the historical MAC address table across all switches. All "
         "filters optional.",
         _obj({"mac": _S, "vlan": _S, "interface": _S,
-              "switch": {**_S, "description": "Switch IP"}}),
+              "switch": {**_S, "description": "Switch IP"},
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
         lambda a: api("GET", "/api/mac/search",
                       params={k: v for k, v in a.items() if v}),
     ),
@@ -136,7 +138,9 @@ TOOLS = {
         "ARP tables of the L3 gateways (L3 switches or firewalls, whichever "
         "routes the VLAN). Search by MAC (full or fragment) or IP prefix.",
         _obj({"mac": {**_S, "description": "MAC address or fragment"},
-              "ip": {**_S, "description": "IP address or prefix"}}),
+              "ip": {**_S, "description": "IP address or prefix"},
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
         lambda a: api("GET", "/api/arp/search",
                       params={k: v for k, v in a.items() if v}),
     ),
@@ -144,8 +148,19 @@ TOOLS = {
         "Unified client view: MAC + current IP (from the routing gateway's "
         "ARP) + access switch/port (from the MAC table). Answers 'who is "
         "10.0.0.5 and which port is it attached to'.",
-        _obj({"mac": _S, "ip": _S}),
+        _obj({"mac": _S, "ip": _S,
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
         lambda a: api("GET", "/api/arp/client-map",
+                      params={k: v for k, v in a.items() if v}),
+    ),
+    "endpoint_inventory": (
+        "Endpoint inventory: one entry per (MAC, tenant) with current or historical "
+        "IPs, access switch/port, VLAN, vendor, classification, and flags.",
+        _obj({"tenant": _S, "switch": _S, "vlan": _S, "q": _S,
+              "frm": {**_S, "description": "From ISO timestamp (optional)"},
+              "to": {**_S, "description": "To ISO timestamp (optional)"}}),
+        lambda a: api("GET", "/api/endpoints/list",
                       params={k: v for k, v in a.items() if v}),
     ),
     "arp_scan": (

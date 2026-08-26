@@ -65,14 +65,14 @@ class _Base(unittest.TestCase):
                  tenant, site, _iso(first_days), _iso(last_days)))
 
     def _arp(self, mac=MAC_A, ip="192.0.2.10", tenant="sede-a",
-             source_ip="192.0.2.254"):
+             source_ip="192.0.2.254", first_days=10, last_days=0):
         with mac_history._lock, mac_history._connect() as c:
             c.execute(
                 """INSERT INTO arp_entries
                    (mac, ip, vlan, interface, source_ip, source_name,
                     source_type, tenant, site, first_seen, last_seen, seen_count)
                    VALUES (?,?,'','',?,'gw','firewall',?,'central',?,?,1)""",
-                (mac, ip, source_ip, tenant, _iso(10), _iso(0)))
+                (mac, ip, source_ip, tenant, _iso(first_days), _iso(last_days)))
 
     def _infra_mac(self, mac=MAC_INFRA, switch_ip="192.0.2.1",
                    interface="Vlan10"):
@@ -110,12 +110,68 @@ class TestRollup(_Base):
 
     def test_gli_ip_arrivano_dall_arp_dello_stesso_tenant(self):
         self._sighting(tenant="sede-a")
-        self._arp(ip="192.0.2.10", tenant="sede-a")
-        self._arp(ip="192.0.2.11", tenant="sede-a")
+        self._arp(ip="192.0.2.10", tenant="sede-a", last_days=0)
+        self._arp(ip="192.0.2.11", tenant="sede-a", last_days=0)
 
         out = mac_history.endpoint_inventory()
 
-        self.assertEqual(out["results"][0]["ips"], ["192.0.2.10", "192.0.2.11"])
+        self.assertEqual(set(out["results"][0]["ips"]), {"192.0.2.10", "192.0.2.11"})
+
+    def test_ip_cambiato_scarta_ip_vecchio(self):
+        """Quando un client riceve un nuovo IP (DHCP o cambio VLAN), la scansione
+        piu' recente scarta immediatamente l'IP vecchio."""
+        self._sighting()
+        self._arp(ip="192.0.2.10", last_days=2)
+        self._arp(ip="192.0.2.11", last_days=0)
+
+        out = mac_history.endpoint_inventory()
+
+        self.assertEqual(out["results"][0]["ips"], ["192.0.2.11"])
+        self.assertNotIn("MULTI-IP", out["results"][0]["flags"])
+
+    def test_dual_stack_conserva_entrambi(self):
+        """Due IP visti nella stessa scansione (es. IPv4 + IPv6) sono entrambi
+        attuali e attivano legittimamente MULTI-IP."""
+        self._sighting()
+        self._arp(ip="192.0.2.10", last_days=0)
+        self._arp(ip="2001:db8::1", last_days=0)
+
+        out = mac_history.endpoint_inventory()
+
+        self.assertEqual(set(out["results"][0]["ips"]), {"192.0.2.10", "2001:db8::1"})
+        self.assertIn("MULTI-IP", out["results"][0]["flags"])
+
+    def test_due_gateway_conservano_uno_ciascuno(self):
+        """Due gateway diversi che vedono lo stesso client conservano la scansione
+        piu' recente di ciascun gateway."""
+        self._sighting()
+        self._arp(ip="192.0.2.10", source_ip="192.0.2.254", last_days=0)
+        self._arp(ip="192.0.2.20", source_ip="192.0.2.253", last_days=0)
+
+        out = mac_history.endpoint_inventory()
+
+        self.assertEqual(set(out["results"][0]["ips"]), {"192.0.2.10", "192.0.2.20"})
+
+    def test_time_range_restituisce_storico(self):
+        """Con filtro temporale attivo, vengono restituiti anche gli IP storici."""
+        self._sighting()
+        self._arp(ip="192.0.2.10", first_days=10, last_days=5)
+        self._arp(ip="192.0.2.11", first_days=4, last_days=0)
+
+        out = mac_history.endpoint_inventory(frm=_iso(8), to=_iso(4))
+
+        self.assertIn("192.0.2.10", out["results"][0]["ips"])
+
+    def test_client_map_una_riga_per_client(self):
+        """client_map() torna una riga per client (MAC, tenant) con solo i binding attuali."""
+        self._sighting()
+        self._arp(ip="192.0.2.10", last_days=5)
+        self._arp(ip="192.0.2.11", last_days=0)
+
+        cm = mac_history.client_map()
+
+        self.assertEqual(len(cm), 1)
+        self.assertEqual(cm[0]["ips"], ["192.0.2.11"])
 
     def test_la_posizione_e_l_ultima_di_accesso(self):
         self._sighting(switch_ip="192.0.2.1", interface="GigabitEthernet1/0/4",
@@ -539,13 +595,12 @@ class TestTabFrontend(unittest.TestCase):
         self.assertIn('data-loc-view="inventory"', self.src)
 
     def test_e_la_quarta_sorella_del_gruppo_client(self):
-        """Le altre tre pillole devono stare nello stesso gruppo #locPills,
-        altrimenti si raggiunge solo da una direzione."""
+        """Le tre pillole devono stare nello stesso gruppo #locPills."""
         self.assertIn('data-tabs="tab-endpoint"', self.src)
         pills_start = self.src.index('id="locPills"')
         pills_end = self.src.index('</div>', pills_start)
         pills_html = self.src[pills_start:pills_end]
-        for view in ("mac", "clientmap", "diagnosi", "inventory"):
+        for view in ("mac", "diagnosi", "inventory"):
             self.assertIn(f'id="locPill-{view}"', pills_html)
             self.assertIn(f'data-loc-view="{view}"', pills_html)
 
