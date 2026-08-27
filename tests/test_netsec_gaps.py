@@ -4,7 +4,6 @@ Unit tests for newly implemented NetSec capability gaps:
 - WLC UI and routing
 - FortiGate targeted session delete
 - Switch port control
-- Flow SIEM shun IP
 - Observability log pruning
 """
 
@@ -28,15 +27,6 @@ class TestNetSecGaps(TestCase):
             token = r.json().get("access_token")
             if token:
                 cls.client.headers.update({"Authorization": f"Bearer {token}", "X-Requested-With": "SentinelNet"})
-
-    def test_flow_siem_shun_ip(self):
-        resp = self.client.post("/api/flow-siem/shun-ip", json={"ip": "192.0.2.100", "reason": "Test shun"})
-        self.assertEqual(resp.status_code, 200)
-        self.assertTrue(resp.json().get("shunned"))
-
-        get_resp = self.client.get("/api/flow-siem/shun-list")
-        self.assertEqual(get_resp.status_code, 200)
-        self.assertIn("192.0.2.100", get_resp.json().get("shunned_ips", {}))
 
     def test_observability_prune_logs(self):
         resp = self.client.post("/api/observability/prune-logs", json={"days": 15})

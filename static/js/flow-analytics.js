@@ -199,7 +199,6 @@
         facetBox.innerHTML =
             renderSection('Top Sorgenti IP', _flowSiemFacets.top_src_ips, 'fa-network-wired', 'src_ip') +
             renderSection('Top Destinazioni IP', _flowSiemFacets.top_dst_ips, 'fa-server', 'dst_ip') +
-            renderSection('Threat Flags SIEM', _flowSiemFacets.threat_flags, 'fa-triangle-exclamation', 'threat_flag') +
             renderSection('Stato Azione', _flowSiemFacets.actions, 'fa-shield-halved', 'action');
     }
 
@@ -218,7 +217,7 @@
         if (!tbody) return;
 
         if (!_flowSiemData.length) {
-            tbody.innerHTML = `<tr><td colspan="7" style="padding:20px; text-align:center; color:var(--text-muted);">${currentLang==='en'?'No matching flow events.':'Nessun evento di flusso corrispondente.'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--text-muted);">${currentLang==='en'?'No matching flow events.':'Nessun evento di flusso corrispondente.'}</td></tr>`;
             return;
         }
 
@@ -250,9 +249,8 @@
                 <td style="padding:6px 8px;">${e.proto ? `<span class="badge">${escapeHtml(e.proto)}</span>` : dash}</td>
                 <td style="padding:6px 8px; font-weight:700; color:${actionCol};">${escapeHtml(e.action || 'N/D')}</td>
                 <td style="padding:6px 8px; font-family:var(--font-code);">${volume}</td>
-                <td style="padding:6px 8px;"><span class="badge" style="background:${isDeny ? 'color-mix(in srgb, var(--danger) 15%, transparent)' : 'var(--surface-3)'}; color:${isDeny ? 'var(--danger)' : 'var(--text)'};">${escapeHtml(e.threat_flag)}</span></td>
             </tr>
-            ${isSelected ? `<tr style="background:var(--surface-2);"><td colspan="7" style="padding:12px;">
+            ${isSelected ? `<tr style="background:var(--surface-2);"><td colspan="6" style="padding:12px;">
                 <div style="font-family:var(--font-code); font-size:11px; background:var(--surface); padding:10px; border-radius:0; border:1px solid var(--border); margin-bottom:8px;">
                     <strong>Raw SIEM Flow Event Payload (JSON):</strong>
                     <pre style="margin:4px 0 0; white-space:pre-wrap;">${escapeHtml(JSON.stringify(e, null, 2))}</pre>

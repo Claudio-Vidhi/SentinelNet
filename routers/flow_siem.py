@@ -19,20 +19,20 @@ chiave primaria di ``syslog_events``, quindi stabile.
 """
 
 import time
-from typing import Optional, Dict
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from core import db
 from observability import fieldmap
-from routers.deps import get_current_user, require_operator, user_group_scope
+from routers.deps import get_current_user, user_group_scope
 
 router = APIRouter(prefix="/api/flow-siem", tags=["Flow SIEM"])
 
 MAX_LIMIT = 500
 
-# src_ip/dst_ip/proto/threat_flag non sono colonne: nascono da _to_event() sul
+# src_ip/dst_ip/proto non sono colonne: nascono da _to_event() sul
 # corpo del messaggio, quindi il filtro non e' esprimibile in SQL e resta in
 # Python. Per questo la lettura procede a lotti finche' non ha abbastanza
 # corrispondenze, invece di filtrare un unico blocco di righe recenti: con un
@@ -44,7 +44,7 @@ MAX_SCAN = 20000
 # Serve perche' la ricerca libera guarda TUTTI i campi: cliccare un IP fra le
 # sorgenti restituiva anche le righe in cui quell'IP e' la destinazione, e con
 # quelle piu' numerose le righe volute finivano fuori dalla prima pagina.
-_FILTER_FIELDS = ("src_ip", "dst_ip", "action", "threat_flag", "proto",
+_FILTER_FIELDS = ("src_ip", "dst_ip", "action", "proto",
                   "device_ip", "tenant")
 
 _PROTO_NUM = fieldmap.PROTO_NUM
@@ -98,20 +98,6 @@ def _is_deny(action: Optional[str]) -> bool:
     return fieldmap.is_security_action(action)
 
 
-def _threat_flag(dst_ip: Optional[str], is_deny: bool,
-                 severity: Optional[int], nbytes: Optional[int]) -> str:
-    """Etichetta derivata SOLO da dati reali dell'evento."""
-    if is_deny:
-        return "BLOCKED_TRAFFIC"
-    if severity is not None and severity <= 3:
-        return "HIGH_SEVERITY"
-    if nbytes and nbytes > 1_000_000:
-        return "HIGH_VOLUME_TRANSFER"
-    if dst_ip in ("8.8.8.8", "1.1.1.1"):
-        return "EXTERNAL_DNS"
-    return "NORMAL"
-
-
 def _to_event(row: dict) -> dict:
     """Riga di syslog_events -> evento SIEM. Nessun campo inventato: cio' che
     il messaggio non contiene resta None e la UI mostra un trattino."""
@@ -143,7 +129,6 @@ def _to_event(row: dict) -> dict:
         "bytes": nbytes,
         "action": (action_raw or "").upper() or None,
         "is_deny": deny,
-        "threat_flag": _threat_flag(dst, deny, severity, nbytes),
         "message": message,
     }
 
@@ -205,7 +190,7 @@ async def get_flow_siem_events(
             return True
         return needle in " ".join(
             str(v) for v in (e["src_ip"], e["dst_ip"], e["action"], e["proto"],
-                             e["device_ip"], e["tenant"], e["threat_flag"],
+                             e["device_ip"], e["tenant"],
                              e["message"]) if v).lower()
 
     wanted = offset + limit
@@ -291,7 +276,7 @@ async def get_flow_siem_facets(
     tenant: Optional[str] = Query(None),
     current_user=Depends(get_current_user),
 ):
-    """Conteggi aggregati reali (top sorgenti/destinazioni, azioni, threat)."""
+    """Conteggi aggregati reali (top sorgenti/destinazioni, azioni)."""
     cutoff = int(time.time()) - _window_to_seconds(window)
     clause, params = _tenant_filter(current_user, tenant=tenant, table_alias="s")
 
@@ -308,14 +293,13 @@ async def get_flow_siem_facets(
             LIMIT 2000""",
         (cutoff, *params)) or []
 
-    src_counts, dst_counts, threat_counts, action_counts = {}, {}, {}, {}
+    src_counts, dst_counts, action_counts = {}, {}, {}
     for r in rows:
         e = _to_event(dict(r))
         if e["src_ip"]:
             src_counts[e["src_ip"]] = src_counts.get(e["src_ip"], 0) + 1
         if e["dst_ip"]:
             dst_counts[e["dst_ip"]] = dst_counts.get(e["dst_ip"], 0) + 1
-        threat_counts[e["threat_flag"]] = threat_counts.get(e["threat_flag"], 0) + 1
         label = "DENY" if e["is_deny"] else (e["action"] or "N/D")
         action_counts[label] = action_counts.get(label, 0) + 1
 
@@ -327,7 +311,6 @@ async def get_flow_siem_facets(
     return {
         "top_src_ips": top_n(src_counts),
         "top_dst_ips": top_n(dst_counts),
-        "threat_flags": top_n(threat_counts),
         "actions": top_n(action_counts, 6),
         "events_considered": len(rows),
     }
@@ -367,27 +350,3 @@ async def suppress_flow_siem_alert(payload: AlertSuppressSchema,
 
     return {"status": "success", "event_id": payload.event_id,
             "suppressed": True}
-
-
-class ShunIpSchema(BaseModel):
-    ip: str
-    reason: Optional[str] = "Traffic anomaly or threat shun requested"
-
-_SHUNNED_IPS: Dict[str, dict] = {}
-
-
-@router.post("/shun-ip")
-def shun_ip(payload: ShunIpSchema, current_user=Depends(require_operator)):
-    """Registra un IP nella lista di shun temporaneo."""
-    _SHUNNED_IPS[payload.ip] = {
-        "ts": int(time.time()),
-        "reason": payload.reason,
-        "by": (current_user or {}).get("sub", "operator")
-    }
-    return {"status": "success", "ip": payload.ip, "shunned": True, "details": _SHUNNED_IPS[payload.ip]}
-
-
-@router.get("/shun-list")
-def get_shun_list(current_user=Depends(get_current_user)):
-    """Elenco IP attualmente in lista shun."""
-    return {"shunned_ips": _SHUNNED_IPS}
