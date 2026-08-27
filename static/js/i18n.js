@@ -908,6 +908,7 @@ const i18n = {
         thSite: "Sede",
         thVendor: "Vendor",
         thFirmware: "Firmware",
+        thTools: "Strumenti",
         thActions: "Azioni / Utility",
 
         // Tab 2
@@ -1446,6 +1447,7 @@ const i18n = {
         // --- Tab Incidenti (preview) ---
         navInvestigate: "Indaga",
         navInventory: "Inventario",
+        navDeviceTools: "Strumenti Apparati",
         navAssess: "Valuta",
         navChange: "Modifica",
         navAdminister: "Amministra",
@@ -2762,6 +2764,7 @@ const i18n = {
         thSite: "Site",
         thVendor: "Vendor",
         thFirmware: "Firmware",
+        thTools: "Tools",
         thActions: "Actions / Utilities",
 
         // Tab 2
@@ -3298,6 +3301,7 @@ const i18n = {
         // --- Tab Incidenti (preview) ---
         navInvestigate: "Investigate",
         navInventory: "Inventory",
+        navDeviceTools: "Device Tools",
         navAssess: "Assess",
         navChange: "Change",
         navAdminister: "Administer",
