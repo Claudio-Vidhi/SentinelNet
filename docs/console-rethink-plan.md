@@ -580,16 +580,65 @@ This contradicts the project's own rule, stated in `observability/fieldmap.py`:
 normaliser refuses to invent values; this router invents one and renders it as
 fact.
 
-Fix direction, cheapest first:
+**The API already carries the answer.** `_vlan_for()`
+(`routers/observability.py:494`) returns `(vlan, is_real)`, and every node and
+edge already ships `vlan_real` alongside `vlan`. The backend knows the value is
+fabricated; the frontend receives that flag and renders the number regardless.
+So this is a rendering fix plus two leaks, not a redesign.
 
-- **Show nothing when the VLAN is unknown** — an em dash, not a hash. The
-  synthetic value can stay internal if the flowgraph needs a stable grouping
-  key, but a grouping key must never surface in a column that claims to report
-  observed state.
-- If a placeholder must be visible, it cannot be numeric. `—` or `n/d` cannot
-  be mistaken for a VLAN ID; `443` can.
-- A dim asterisk with a hover tooltip is not sufficient disclosure for a
-  fabricated value, and it is invisible on the NOC-wall and rack-side scenes.
+**Keep `_synthetic_vlan()`.** It is load-bearing: the flowgraph uses the value
+to cluster nodes, and removing it would break grouping for every IP without an
+ARP binding. It stays an internal layout key. What changes is that it stops
+being reported as observed state.
+
+##### Fix specification
+
+**1. Top Talkers VLAN cell — `static/js/observability.js`**
+
+Render the VLAN only when `vlan_real` is true; otherwise an em dash. Delete the
+`*` disclosure span at line 1136 and the inline one at 1121 — once nothing
+fabricated is displayed, there is nothing left to disclose.
+
+```
+vlan_real === true   ->  "10"
+vlan_real === false  ->  "—"
+```
+
+Applies to every place the flowgraph VLAN is rendered, not only Top Talkers:
+grep `vlan_real` and treat each hit.
+
+**2. Tenant summary VLAN list — `routers/observability.py:541-543`**
+
+`tenant_vlans` is built from `node_vlan[ip][0]` without checking the flag, so
+fabricated VLANs enter the reported list. The `else` branch is worse — with no
+nodes it returns `[_synthetic_vlan(tenant_name)]`, a list whose only element is
+invented.
+
+- Filter to `node_vlan[ip][1] is True`.
+- Replace the fallback with `[]`. No nodes means no visible VLANs, which is a
+  true statement; a synthesised one is not.
+
+**3. "Visible VLANs" count — `static/js/observability.js:1122`**
+
+Counts `t.vlans.length`, which today includes fabricated entries. Once (2)
+filters the list this follows automatically — verify rather than edit.
+
+##### Acceptance
+
+- A flow whose IP has **no** ARP binding shows `—` in the VLAN column, and the
+  tenant summary does not list a VLAN for it.
+- A flow whose IP **has** an ARP binding still shows its real VLAN.
+- The flowgraph still groups unbound nodes together — i.e. `_synthetic_vlan()`
+  is still doing its layout job, unchanged.
+- A tenant with zero visible nodes reports `Visible VLANs: 0`, not `1`.
+- No `*` disclosure marker remains anywhere in the Traffic views.
+
+##### Why not just make the asterisk louder
+
+Because the value is still fabricated. A stronger marker on an invented VLAN ID
+asks the user to remember which numbers are real — exactly the cognitive load
+the product exists to remove. It also fails the NOC-wall and rack-side scenes,
+where a hover tooltip cannot be reached at all.
 
 #### 14b. Duplicate tenant control — item 1, half-migrated
 
@@ -597,7 +646,22 @@ The Traffic panel carries an `ALL TENANTS` button while the new global top bar
 already shows the tenant selector. Two controls for one authorization boundary,
 disagreeing in vocabulary, on one screen. This is exactly the duplication item 1
 exists to remove — the global selector shipped, the per-panel ones did not all
-come out. Audit every panel for leftovers rather than fixing this one.
+come out.
+
+##### Fix specification
+
+- **Audit, do not spot-fix.** `ui_tab_overlap_analysis.md` counted 11 tenant
+  selectors before item 1; grep every panel for a tenant control and list what
+  survives. Fixing only the one that was noticed leaves the rest to be
+  rediscovered one screenshot at a time.
+- **The global selector is the only writer.** Panels read scope; they never own
+  a control that sets it.
+- **"All tenants" is a value of the global selector**, not a separate button.
+  An unscoped admin selects it there; a scoped user must not be offered it at
+  all, since it would imply access they do not have.
+- **Acceptance:** exactly one tenant control exists in the DOM on every tab;
+  changing it re-filters the active panel; `tests/js/` covers the set
+  semantics, and a scoped user is never offered a scope wider than their own.
 
 #### 14c. Unspecified
 
