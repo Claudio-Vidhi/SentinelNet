@@ -1,6 +1,10 @@
 # Console Rethink — UX/IA Implementation Plan
 
-> **Status**: plan only — no code changed on this branch.
+> **Status**: implemented on this branch, except item 7 (deferred by design).
+> Items 9 and 11 shipped first, in the order this document prescribes:
+> `d61010a` (recency rule + time range), `0d99635` (group error strings),
+> `2e13142` (topbar, palette, verdicts, endpoint unification, Client Map pill
+> removed), `82ac580` (SSH step streaming), `0911372` (0.20.0 -> 0.21.0).
 > Branch: `feat/console-rethink`, cut from `Dev` on 2026-08-26.
 > Companion analysis: `docs/ui_tab_overlap_analysis.md` (the inventory this plan acts on).
 > Design authority: `DESIGN.md`. Product context: `PRODUCT.md`.
@@ -18,7 +22,9 @@ The nav organises by **verb** (Indaga / Inventario / Valuta / Modifica /
 Amministra). Users think in **objects** — confirmed in session: tenant first,
 then device. That split is correct, but only if the object has somewhere to
 live. Today it does not, so every panel re-asks: `ui_tab_overlap_analysis.md`
-counts **11 separate tenant selectors**.
+counts 11 separate tenant selectors in its pre-merge baseline, corrected to
+**10** by its own A3 addendum (2026-08-11); a strict count of tenant `<select>`
+elements at this commit is **8**. The argument holds at any of the three.
 
 Four structural defects follow from it:
 
@@ -99,7 +105,7 @@ facts is effort spent making a lie easier to read.
 
 ### 1. Tenant selector into persistent chrome — S
 
-Replace the 11 per-panel selectors with one control in the top bar.
+Replace the per-panel selectors with one control in the top bar.
 
 - Multi-select: scope is a **set**, never a scalar. Both personas need it — the
   MSP for fleet-wide sweeps, the in-house admin across departments.
@@ -308,7 +314,7 @@ because it spends the trust the rest of the product is built on.
 
 **[corrected]** It is already a view pill inside Endpoint Localisation
 (`templates/dashboard.html:1265`, `data-loc-view="clientmap"`), not a top-level
-tab, so removal costs nothing in the nav. `static/js/client-map.js` is ~870
+tab, so removal costs nothing in the nav. `static/js/client-map.js` is ~800
 lines and mostly view code (`locSwitchView`, tenant pills, rendering).
 
 **Remove the view. Keep the logic other tabs use.** The ARP data feeds
@@ -336,7 +342,7 @@ and nothing in it marks which binding is **current**.
 Both read paths treat every surviving row as equally valid:
 
 - **`endpoint_inventory()`** collects `ips = sorted({...})` over every row for
-  the MAC (`mac_history.py:800`). The ARP query above it does not even
+  the MAC (`mac_history.py:801`). The ARP query above it does not even
   `SELECT last_seen`, so it *cannot* order by recency.
 - **`client_map()`** returns one row **per binding**, not per client, so one
   client with three historical IPs is three rows.
@@ -364,7 +370,8 @@ Two consequences worth stating plainly:
   precedes `192.0.2.11`. The value the eye lands on is the obsolete one. This
   is why the surface "shows info wrong" while a scan appears to have succeeded.
 - **`client_type` can be inherited from an address the client no longer holds.**
-  The assignment lookup (`mac_history.py:826`) takes the first match over *any*
+  The assignment lookup (`mac_history.py:828`; :826 is its comment) takes the
+  first match over *any*
   IP in `ips`, stale ones included.
 
 #### The fix: newest scan wins, per source
@@ -394,7 +401,7 @@ Read-path changes this implies:
   does not, which is why it *cannot* order by recency — and keep only current
   rows when building `ips`.
 - `client_map()` must return **one row per client**, not per binding.
-- The `client_type` assignment lookup (`mac_history.py:826`) must consider only
+- The `client_type` assignment lookup (`mac_history.py:828`) must consider only
   current IPs, so a category is never inherited from an address the client no
   longer holds.
 - `MULTI-IP` keeps its meaning: several *current* IPs, not several historical
@@ -410,7 +417,7 @@ upsert key. The same `(mac, ip, source_ip)` observed under a different tenant
 would overwrite the field. Tenant is an authorization boundary, so this needs
 its own verification.
 
-#### Open: sequencing
+#### Sequencing — done in this order
 
 Now that the fault is known to be server-side, deleting the view alone would
 *hide* the bug while `/api/arp/client-map` — a registered MCP tool
@@ -423,13 +430,22 @@ not leave a correct surface behind.
 
 Revised order, and **this now precedes the cosmetic items**:
 
-1. Decide the recency window (product call).
-2. Fix the read paths in `mac_history` — `endpoint_inventory()` and
-   `client_map()` — with a regression test covering the IP-change scenario
-   reproduced above.
-3. Verify the `tenant` overwrite in `record_arp_entries()`.
-4. *Then* delete the Client Map view, as genuinely redundant rather than as a
-   way to stop seeing the bug.
+1. ~~Decide the recency window (product call).~~ **Decided** — the rule above
+   ("newest scan wins, per source"). No window, therefore no knob.
+2. ~~Fix the read paths in `mac_history`.~~ **Done** (`d61010a`): both
+   `endpoint_inventory()` and `client_map()` filter to current bindings in live
+   mode; `tests/test_endpoint_inventory.py` pins all four mandated scenarios.
+3. Verify the `tenant` overwrite in `record_arp_entries()` — **partially
+   mitigated, still open.** `d61010a` added `new_tenant = tenant if tenant else
+   existing["tenant"]` (`mac_history.py:376`), so an *empty* tenant no longer
+   clobbers a set one. A scan carrying a *different, non-empty* tenant still
+   overwrites the field, because `tenant` is not part of the upsert key. Tenant
+   is an authorization boundary; this needs its own change, not this one.
+4. ~~*Then* delete the Client Map view.~~ **Done** (`2e13142`), after the read
+   paths were correct — redundant by then, not a way to stop seeing the bug.
+   `client-map.js` stays: MAC Tracker and the pane switching share it. The
+   `/api/arp/client-map` route and its MCP tool stay too, now serving current
+   bindings.
 
 ### 10. `Preview` tag on single-client L2 + L3 reporting — S
 
@@ -730,6 +746,6 @@ Frontend specifics that apply to most items here:
 
 ## Versioning
 
-Items 1–10 are new features and architectural UI change: **MINOR** bump when the
+Items 1–11 are new features and architectural UI change: **MINOR** bump when the
 first lands. `core/version.py` is the single source of truth; `pyproject.toml`
 must match. This plan document alone changes no version.
