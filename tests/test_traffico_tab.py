@@ -48,8 +48,7 @@ class TestTrafficoStructure(unittest.TestCase):
     # Ogni pill ha il suo pane: una pill senza pane e' un pulsante che non apre
     # niente, un pane senza pill e' contenuto irraggiungibile.
     PILLS = ["overview", "flows", "search", "anomalies"]
-    HEADER = ["trafWindow", "trafMetric", "trafTenantBtn", "trafTenantDropdown",
-              "trafTenantAll", "trafTenantList", "trafAutoRefresh",
+    HEADER = ["trafWindow", "trafMetric", "trafAutoRefresh",
               "trafHideTelemetry", "trafLastUpdate"]
 
     @classmethod

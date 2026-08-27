@@ -538,9 +538,9 @@ async def obs_flowgraph(
     tenant_node_ids = [ip for ip in top_ids
                        if node_tenant.get(ip) == tenant_name] \
         if tenant_name else top_ids
-    tenant_vlans = sorted({node_vlan[ip][0] for ip in tenant_node_ids}) \
-        if tenant_node_ids else \
-        ([_synthetic_vlan(tenant_name)] if tenant_name else [])
+    tenant_vlans = sorted({node_vlan[ip][0] for ip in tenant_node_ids
+                           if node_vlan[ip][1] is True}) \
+        if tenant_node_ids else []
     tenant_summary = {
         "name": tenant_name,
         "vlans": tenant_vlans,

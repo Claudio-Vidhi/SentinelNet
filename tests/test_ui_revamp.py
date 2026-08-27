@@ -1734,15 +1734,13 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # I controlli di finestra/metrica/tenant sono passati all'header unico
         # del tab (prefisso traf*): erano triplicati, uno per pannello.
         for _id in ('flowsTableHead', 'flowsTableBody', 'anomTableBody',
-                    'trafWindow', 'trafMetric', 'trafTenantBtn',
-                    'trafTenantDropdown', 'trafTenantAll', 'trafTenantList',
+                    'trafWindow', 'trafMetric',
                     'trafAutoRefresh', 'trafLastUpdate', 'flowsObsBanner',
                     'flowsAiNote', 'flowsSourceChips', 'flowsColsBtn',
                     'flowsColsDropdown', 'anomStatus', 'anomIpFilterChip',
                     'flowDetailPanel', 'flowDetailPanelBody'):
             self.assertIn(f'id="{_id}"', html)
         for hook in ('flowsTabShown', 'loadTopTalkers', 'loadAnomalies',
-                     'toggleTrafTenantDropdown', 'toggleTrafTenantAll',
                      'toggleFlowsColsDropdown', 'analyzeFlowsWithAi',
                      'clearAnomIpFilter', 'closeFlowDetailPanel'):
             self.assertIn(hook, html)
