@@ -686,6 +686,143 @@ come out.
 distinguished from a data gap — a listener not configured, or a window with no
 traffic in it, both of which look like a broken panel.
 
+### 15. Incidents revamp — alarms that see state, not only logs — L
+
+Confirmed in session: the tab is weak on **detection** (real failures raise
+nothing), **triage** (one rule drowns the rest) and **comprehension** (an
+incident does not say what to do). Delivery is *not* a problem — nobody asked
+for email or push, so none is proposed. The tab is still nav-marked `(preview)`;
+item 10's exit condition applies here too.
+
+#### Diagnosis: the engine is log-driven, and every miss is a state failure
+
+`observability/rules.py` consumes syslog events. The four classes reported as
+missed are all things no log announces:
+
+| Missed class | Why a log rule cannot see it |
+| :--- | :--- |
+| Device or site unreachable | A dead device stops sending logs. The signal is **absence**, and absence never arrives as an event. |
+| WAN / ISP degradation | The link is up. Nothing logs "this got slow"; loss and jitter are measurements, not messages. |
+| Client-affecting service failures | DHCP pool exhaustion, DNS not resolving, wrong VLAN, PoE budget — state to be observed, not events emitted. |
+| HA / redundancy drift | Being out of sync is a **comparison between two states**, not an event either member emits. |
+
+These are not five missing rules. They are a missing *class* of detection: the
+current engine can only react to what arrives.
+
+#### Approach: expectations evaluated on a schedule, beside the log engine
+
+The pattern already exists in this tree — `/interfaces/expected`
+(`routers/incidents.py:177`) declares what should be true and alarms on
+violation, scoped to interfaces. Generalise that concept; do not invent one.
+
+- A **new scheduled evaluator** reads current state and compares it against
+  declared expectations, emitting into the **existing incident model**
+  (`event_id`, `tenant`, `entity_key`, `severity`, confidence, roles).
+- `rules.py` stays event-driven and **untouched**. Two producers, one incident
+  model, one tab.
+- Because an expectation is checked on a timer, **absence is detected
+  natively** — the dead-device case that log rules structurally cannot reach.
+
+Rejected alternatives, recorded so they are not revisited:
+
+- *Unify everything into one condition engine.* Cleaner conceptually, but it
+  rewrites working detection in order to fix detection that does not exist yet.
+  Risk concentrated in the part that currently works.
+- *More log rules.* Cannot address any of the four classes above, by
+  construction.
+
+#### The expectations
+
+Each is a declaration with a source already available in the tree:
+
+| Expectation | Source | Violation |
+| :--- | :--- | :--- |
+| Device reachable | existing polling / site agent heartbeat | no successful contact within N intervals |
+| Site reachable | agent check-in, `site_manager` | agent silent past its interval |
+| HA pair healthy and in sync | `redundancy` module | member down, or config out of sync |
+| WAN within quality budget | flow data + latency samples | loss or latency over threshold, sustained |
+| Service answering | light probe (DHCP, DNS) | probe fails N consecutive times |
+
+**Every expectation is per-tenant and per-site**, and evaluation respects
+`user_group_scope` like every other read path.
+
+#### Noise: demote `_high_severity_log` from producer to evidence
+
+It fires on any syslog at or above a severity threshold. Vendors log routine
+events at high severity, so it is a firehose with a filter, not a pattern. It
+stops raising incidents of its own and instead **enriches** incidents raised by
+something else. A severity threshold alone never earns an alarm.
+
+The other four rules — blocked traffic, config change, interface down,
+interface flapping — were reported as *not* noisy. Leave them alone.
+
+#### Comprehension: verdict, evidence, next check
+
+An incident states, in this order:
+
+1. **Verdict** — one sentence in plain language: what is wrong and what it
+   affects. Not a rule name, not a metric.
+2. **Evidence** — what was observed, with timestamps and the source, plus the
+   existing confidence score. This is the product's core promise; an incident
+   without it is "AI detected anomaly" in different clothing.
+3. **Next check** — the one thing to look at. Where possible a link that opens
+   the relevant panel with the device or client already selected (item 2's
+   context chip is exactly this).
+
+The narrative endpoint (`routers/incidents.py:397`) already exists for prose;
+it must sit **after** the deterministic verdict and evidence, never replace
+them. ADR-0006 keeps AI out of the decision path.
+
+#### Presentation in the tab
+
+- **Group by entity, not by event.** Fifteen alarms about one switch are one
+  incident with fifteen pieces of evidence. This is what makes a list scannable
+  at 07:00.
+- **Sort by "needs a human", not by time.** Severity and confidence together;
+  a high-confidence device-down outranks a low-confidence anomaly from a minute
+  ago.
+- **An expectation violation shows what was expected.** *"switch-01 has not
+  answered since 04:12; expected every 5 min"* explains itself; *"device
+  unreachable"* does not.
+- **Resolved incidents disappear from the default view but stay queryable** —
+  reuse item 11's time-range semantics rather than inventing a second history
+  filter.
+- The four Situazione verdicts (item 3) are the roll-up of this tab. They must
+  agree: a red verdict with an empty Incidents list is a bug in one of them.
+
+#### Traps specific to this item
+
+- **A flapping expectation is worse than no expectation.** Every check needs a
+  consecutive-failure count and a cooldown before it raises, or the platform
+  becomes the noise it was built to remove.
+- **Do not alarm on the absence of the collector.** If the poller itself dies,
+  every expectation "fails" at once. Detect that condition and report *one*
+  incident about the collector, never a storm about the estate.
+- **A device intentionally offline is not an incident.** Suppressions already
+  exist (`_visible_suppressions`); expectations must honour them, and a planned
+  maintenance window must be expressible.
+- **Probes are traffic on a customer network.** Keep them light, spaced, and
+  documented; a DHCP probe that consumes a lease is a defect, not a check.
+
+#### Acceptance
+
+- Unplugging a lab device raises **one** device-unreachable incident within the
+  declared interval, and it clears by itself when the device returns.
+- Stopping the collector raises one collector incident, not one per device.
+- `_high_severity_log` raises zero incidents and still appears as evidence on
+  incidents raised by other producers.
+- Every incident renders verdict, evidence and next check, and the next check
+  opens the right panel scoped to the right entity.
+- A scoped user sees incidents only for their tenants.
+
+#### Open before implementation
+
+- Which expectations ship first — reachability alone is most of the value and
+  is the cheapest to source.
+- Evaluation interval, and whether it is global or per-expectation.
+- Whether WAN quality thresholds are per-tenant (an MSP's customers will not
+  share one budget).
+
 ---
 
 ## Traps
