@@ -175,6 +175,47 @@ Touches `LAZY_TAB_SCRIPTS` in `core.js` — a module binding controls in another
 tab needs an entry for that tab too, or the tab is dead when opened cold.
 `tests/test_lazy_tab_scripts.py` checks both halves; do not narrow its scope.
 
+#### Status: half done — the demotion shipped, the replacement did not
+
+The three tabs are gone from the sidebar (23 -> 20) and their panels are intact:
+`LAZY_TAB_SCRIPTS` still maps all three, the dispatch still fires, and
+`tests/test_lazy_tab_scripts.py` passes. They are registered in the command
+palette under a *Facets* group.
+
+**But the palette is currently their only entry point.** A grep for
+`data-switch-tab="tab-fortigate|tab-wlc|tab-redundancy"` or a `switchTab` call
+from a device row returns nothing. That contradicts this plan's own trap: *the
+palette serves people who know the name, it does nothing for discovery.* An
+engineer who used the FortiGate tab yesterday finds it gone with no visible way
+back — a regression in perception even though nothing is broken.
+
+Constraint that shapes the fix: **there is no device detail view yet.**
+`tab-devices` has no detail panel, so "put the facets on the device page" means
+building the page first.
+
+#### Decision: ship B now, keep A as the target
+
+**B — capability chip on the inventory row (S, do this).** Each device row gains
+a *Strumenti* column carrying a chip per capability its type supports:
+`FortiGate` and `HA` on a FortiGate, `WLC` on a controller, nothing on a plain
+switch. The chip opens the existing panel with the device pre-selected.
+
+- One template plus one module. Panels, lazy map and dispatch stay untouched.
+- Closes the regression immediately rather than when the detail view lands.
+- **Not throwaway:** the device-type -> capability mapping it introduces is
+  exactly what A needs later to decide which facet tabs to render.
+- Chips are `data-action` plus a delegated listener, never inline `onclick`.
+- Labels need `it` and `en` entries in `i18n.js`.
+
+**A — facet tabs inside device detail (L, the target).** Selecting a device
+shows `Panoramica | Config | Interfacce` plus vendor-conditional `FortiGate` /
+`WLC` / `HA`. This is item 5 as originally written, and where the context chip
+from item 2 naturally lands. It waits for the device detail view.
+
+**Required either way:** the destination panel must state which device it is
+showing. Someone arriving by palette today lands on a surface that never names
+its subject, which is what makes that route feel broken rather than fast.
+
 ### 6. Rename `Gruppi`; fix the error string — S
 
 - `Gruppi` -> **Tenant** (MSP) or **Reparti** (in-house); pick one neutral term.
@@ -454,6 +495,50 @@ Design constraints:
 Cheap corollary once this exists: a client's IP history becomes a legitimate
 answer rather than a symptom, so `client_history()` and the timeline gain a
 shared vocabulary with the inventory.
+
+### 12. Resolved domain names — an extension of the FortiGate log path — S
+
+Today a flow row shows `192.0.2.50` where the FortiGate GUI shows
+`192.0.2.50 (github.com)`. The name is not missing from the wire; it is missing
+from the allowlist.
+
+**This is not a new subsystem.** Everything needed already exists:
+
+- `routers/fortigate.py:66-70` already fetches FortiGate logs by category,
+  building `log/{device}/{type}/{subtype}` with
+  `forward | local | virus | webfilter | ips | ...`.
+- `observability/fieldmap.py:19-20` already parses `subtype` and `eventtype`,
+  and `normalize.py:178` already carries `subtype` through.
+
+Two changes:
+
+1. **Widen `_KV_RE`** (`observability/fieldmap.py:19`) to capture `hostname`,
+   `dstname` and `qname` alongside the existing keys, and return them from
+   `extract()`. FortiOS emits `hostname=` / `dstname=` on inspected sessions.
+2. **Request the `dns` subtype** in the log fetch, and keep `qname` plus the
+   answered address.
+
+Coverage, honestly stated:
+
+| Source | Covers | Note |
+| :--- | :--- | :--- |
+| `hostname` / `dstname` on forward logs | inspected sessions only | needs webfilter, appctrl or SSL inspection; plain policy traffic carries no name |
+| `dns` subtype logs (`qname` + answer) | everything the client actually resolved | the real answer, and the pipeline already accepts it |
+| FQDN address objects (`fortigate_service.py:459`) | names configured as objects | already collected, narrow coverage |
+
+**The mapping is time-bound and many-to-one — treat it like the ARP bindings.**
+CDNs and shared hosting put dozens of names on one address, and a resolution
+expires. Store *which client resolved which name, and when*; never a global
+reverse map, or a name gets attributed to a client that never asked for it.
+That is the same defect as item 9 in a different table, so it reuses item 11's
+range semantics rather than inventing its own.
+
+Display rule: the name is an annotation, never a replacement. Show
+`192.0.2.50 (github.com)`, keep the address sortable and copyable, and say
+nothing when no resolution is known rather than guessing from reverse DNS.
+
+(GeoIP country flags in the FortiGate GUI are a separate dataset and are not
+part of this item.)
 
 ---
 
