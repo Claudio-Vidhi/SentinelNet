@@ -184,8 +184,9 @@
     let aiAttachTopFlowsOnce = false;
     let aiAttachFlowKeysOnce = null;                  // 11.3: tuple dei flussi selezionati da allegare una sola volta
     let _flowsRawData = [];                           // cache rows from last fetch
-    let _flowsSelectedTenants = new Set();             // selected tenant names
+    let _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
     let _flowsAllTenantsChecked = true;                // "Tutti" checkbox state
+    let _deviceContextIp = null;                       // IP from global device context chip
     let _flowsSelectedKeys = new Set();                // selected flow keys (tuple string, survives filter/refresh)
     let _flowPanelFlow = null;                         // flow object currently shown in the detail panel
     let _anomIpFilter = null;                          // {src, dst} client-side filter for the anomalies table
@@ -496,7 +497,6 @@
                 _flowsSyslogData = (await res.json()).events || [];
                 document.getElementById('trafLastUpdate').textContent =
                     (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
-                rebuildFlowsTenantList(_flowsSyslogData);
                 renderFlowsThead();
                 renderSyslogTable();
                 renderSyslogAllSection();
@@ -520,10 +520,6 @@
                 _flowsSyslogData = (sres && sres.ok) ? ((await sres.json()).events || []) : [];
             }
 
-            // Rebuild tenant checkbox list from distinct tenants in fetched data
-            // (in modo "all" include anche i tenant presenti solo nel syslog)
-            rebuildFlowsTenantList(_flowsSource === 'all' ? flows.concat(_flowsSyslogData) : flows);
-
             // Render filtered table
             renderFlowsTable();
             loadFlowGraph(w);
@@ -538,89 +534,6 @@
         if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps';
         if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' Kbps';
         return Math.round(bps) + ' bps';
-    }
-
-    function rebuildFlowsTenantList(flows) {
-        // Extract distinct tenants from flows, maintaining order of appearance
-        const tenants = [...new Set(flows.map(f => f.tenant))].sort();
-        const listDiv = document.getElementById('trafTenantList');
-        if (!listDiv) return;
-
-        // Preserve checked state for tenants that still exist
-        const newSelected = new Set();
-        for (const t of tenants) {
-            if (_flowsSelectedTenants.has(t) || _flowsAllTenantsChecked) {
-                newSelected.add(t);
-            }
-        }
-        _flowsSelectedTenants = newSelected;
-
-        // Update checkbox list
-        listDiv.innerHTML = tenants.map(t => `
-            <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer;">
-                <input type="checkbox" class="flows-tenant-cb" value="${escapeHtml(t)}"
-                       ${newSelected.has(t) ? 'checked' : ''} style="accent-color:var(--primary);">
-                <span>${escapeHtml(t)}</span>
-            </label>
-        `).join('');
-
-        // Update "Tutti" checkbox state
-        const allCheckbox = document.getElementById('trafTenantAll');
-        if (allCheckbox) {
-            allCheckbox.checked = tenants.length > 0 && tenants.every(t => newSelected.has(t));
-            _flowsAllTenantsChecked = allCheckbox.checked;
-        }
-
-        // Update button label
-        updateFlowsTenantButtonLabel(tenants.length);
-    }
-
-    function updateFlowsTenantSelection() {
-        const checkboxes = Array.from(document.querySelectorAll('#trafTenantList input[type="checkbox"]'));
-        const selected = new Set(checkboxes.filter(cb => cb.checked).map(cb => cb.value));
-        _flowsSelectedTenants = selected;
-
-        // Update "Tutti" checkbox
-        const allCheckbox = document.getElementById('trafTenantAll');
-        const totalTenants = checkboxes.length;
-        const checkedCount = checkboxes.filter(cb => cb.checked).length;
-        if (allCheckbox) {
-            allCheckbox.checked = checkedCount === totalTenants;
-            _flowsAllTenantsChecked = allCheckbox.checked;
-        }
-
-        updateFlowsTenantButtonLabel(totalTenants);
-        renderFlowsTable();
-    }
-
-    function toggleTrafTenantAll() {
-        const allCheckbox = document.getElementById('trafTenantAll');
-        const checkboxes = Array.from(document.querySelectorAll('#trafTenantList input[type="checkbox"]'));
-        const shouldCheck = allCheckbox.checked;
-        checkboxes.forEach(cb => cb.checked = shouldCheck);
-        _flowsSelectedTenants = shouldCheck ? new Set(checkboxes.map(cb => cb.value)) : new Set();
-        _flowsAllTenantsChecked = shouldCheck;
-        updateFlowsTenantButtonLabel(checkboxes.length);
-        renderFlowsTable();
-    }
-
-    function updateFlowsTenantButtonLabel(totalTenants) {
-        const btn = document.getElementById('trafTenantBtn');
-        if (!btn) return;
-        const L = i18n[currentLang];
-        let label = 'Tenants';
-        if (totalTenants === 0) {
-            label = 'Tenants';
-        } else if (_flowsSelectedTenants.size === 0) {
-            label = L.lblNoTenant || 'Nessun tenant';
-        } else if (_flowsSelectedTenants.size === totalTenants) {
-            label = L.optArpAllTenants || 'Tutti i tenant';
-        } else {
-            label = `${_flowsSelectedTenants.size} tenant`;
-        }
-        btn.textContent = label;
-        // Re-add icon
-        btn.innerHTML = `<i class="fa-solid fa-filter"></i> ${label}`;
     }
 
     // Chiave di selezione del flusso: per tupla, non per indice riga, così la
@@ -690,9 +603,14 @@
         const hlTitle = escapeHtml(L.titleHighlightTopology || 'Evidenzia nella topologia');
 
         // Filter by selected tenants
-        const filtered = _flowsRawData.length === 0 ? []
+        let filtered = _flowsRawData.length === 0 ? []
             : _flowsSelectedTenants.size === 0 ? []
             : _flowsRawData.filter(f => _flowsSelectedTenants.has(f.tenant));
+
+        // Filter by device context chip (exporter IP)
+        if (_deviceContextIp) {
+            filtered = filtered.filter(f => f.exporter_ip === _deviceContextIp);
+        }
 
         // Selection may reference flows no longer present (e.g. window change); prune lazily.
         const filteredKeys = new Set(filtered.map(flowKey));
@@ -827,21 +745,6 @@
         _anomIpFilter = null;
         loadAnomalies();
     }
-
-    function toggleTrafTenantDropdown() {
-        const dropdown = document.getElementById('trafTenantDropdown');
-        if (!dropdown) return;
-        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-    }
-
-    // Close dropdown on outside click
-    document.addEventListener('click', function(e) {
-        const dropdown = document.getElementById('trafTenantDropdown');
-        const btn = document.getElementById('trafTenantBtn');
-        if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
-            dropdown.style.display = 'none';
-        }
-    });
 
     // Mappatura IP → nodo topologia: i nodi Vis.js usano l'IP del device come
     // id (vedi loadInteractiveMap: n.id confrontato con globalDevices[].IP).
@@ -1062,14 +965,6 @@
             const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}${telemetryParam()}`);
             if (!res || !res.ok) return;
             _fgData = await res.json();
-            // Disclosure: qualunque nodo/arco con VLAN non reale (fallback
-            // sintetico, nessun binding ARP noto per l'IP) attiva l'avviso
-            // in UI — mai spacciare un valore inventato per un tag 802.1Q reale.
-            if (_fgData.tenant) {
-                _fgData.tenant.vlan_disclosure =
-                    (_fgData.nodes || []).some(n => n.vlan_real === false) ||
-                    (_fgData.edges || []).some(e => e.vlan_real === false);
-            }
             renderFlowGraphKpis();
             renderFlowGraphTenant();
             renderFlowGraphProtocols();
@@ -1118,7 +1013,7 @@
         const tt = t.top_talker;
         box.innerHTML = `
             <div><b>${escapeHtml(L.thFlTenant || 'Tenant')}</b>: ${escapeHtml(t.name)}</div>
-            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}${t.vlan_disclosure ? ` <span title="${escapeHtml(L.hintVlanSynthetic || '')}" style="cursor:help; color:var(--text-muted);">*</span>` : ''}</div>
+            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}</div>
             <div><b>${escapeHtml(L.lblVisibleVlans || 'Visible VLANs')}</b>: ${(t.vlans || []).length}</div>
             <div><b>${escapeHtml(L.lblFlowsShown || 'Flows shown')}</b>: ${t.flows_shown}</div>
             <div><b>${escapeHtml(L.lblTopTalker || 'Top talker')}</b>: ${tt ? `${escapeHtml(tt.src)} → ${escapeHtml(tt.dst)} (${escapeHtml(fmtRate(tt.rate_bps))})` : '—'}</div>`;
@@ -1128,12 +1023,6 @@
         // Archi visibili nelle due tabelle: l'intera finestra (il grafo
         // click-to-filter è stato rimosso insieme al canvas force-directed).
         return (_fgData && _fgData.edges) || [];
-    }
-
-    function _fgVlanMark(realFlag) {
-        if (realFlag !== false) return '';
-        const L = i18n[currentLang];
-        return ` <span title="${escapeHtml(L.hintVlanSynthetic || '')}" style="cursor:help; color:var(--text-muted);">*</span>`;
     }
 
     function renderFlowGraphProtocols() {
@@ -1166,7 +1055,7 @@
             <tr style="border-top:1px solid var(--border);">
                 <td style="padding:6px 8px;">${escapeHtml(e.src)}</td>
                 <td>${escapeHtml(e.dst)}</td>
-                <td>${escapeHtml(String(e.vlan))}${_fgVlanMark(e.vlan_real)}</td>
+                <td>${e.vlan_real === false ? '—' : escapeHtml(String(e.vlan))}</td>
                 <td>${escapeHtml(fmtRate(e.rate_bps))}</td>
             </tr>`).join('');
     }
@@ -1648,8 +1537,6 @@
     window.trafSetWindow = trafSetWindow;
     window.trafSetMetric = trafSetMetric;
     window.trafRefresh = trafRefresh;
-    window.toggleTrafTenantDropdown = toggleTrafTenantDropdown;
-    window.toggleTrafTenantAll = toggleTrafTenantAll;
     window.setObsChartType = setObsChartType;
     window.loadObsProtocolDist = loadObsProtocolDist;
     window.openObsInspectModal = openObsInspectModal;
@@ -1703,12 +1590,6 @@
         }
     });
 
-    document.getElementById('trafTenantList')?.addEventListener('change', (e) => {
-        if (e.target.closest('.flows-tenant-cb')) {
-            updateFlowsTenantSelection();
-        }
-    });
-
     document.getElementById('flowDetailPanelBody')?.addEventListener('click', (e) => {
         const hl = e.target.closest('[data-action="detail-hl-topo"]');
         if (hl && hl.dataset.ip) {
@@ -1746,8 +1627,6 @@
     // Static event listeners for Traffic / Flows / Observability tab
     document.getElementById('trafWindow')?.addEventListener('change', (e) => trafSetWindow(e.target.value));
     document.getElementById('trafMetric')?.addEventListener('change', (e) => trafSetMetric(e.target.value));
-    document.getElementById('trafTenantBtn')?.addEventListener('click', toggleTrafTenantDropdown);
-    document.getElementById('trafTenantAll')?.addEventListener('change', toggleTrafTenantAll);
     document.getElementById('btnTrafRefresh')?.addEventListener('click', trafRefresh);
     document.getElementById('trafHideTelemetry')?.addEventListener('change', (e) => setFlowsHideTelemetry(e.target.checked));
     document.getElementById('btnAnalyzeFlowsAi')?.addEventListener('click', analyzeFlowsWithAi);
@@ -1797,6 +1676,23 @@
             }
         }, 800);
     }
+    // Listen for global tenant changes and update the traffic filter.
+    window.addEventListener('globalTenantChanged', (/** @type {CustomEvent} */ e) => {
+        const tenant = e.detail && e.detail.tenant;
+        if (tenant && tenant !== 'all') {
+            _flowsSelectedTenants = new Set([tenant]);
+        } else {
+            _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
+        }
+        trafRefresh();
+    });
+
+    // Listen for device context changes: filter flows by exporter IP.
+    window.addEventListener('globalDeviceContextChanged', (/** @type {CustomEvent} */ e) => {
+        _deviceContextIp = (e.detail && e.detail.ip) || null;
+        trafRefresh();
+    });
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', obsWidgetBoot);
     } else {
