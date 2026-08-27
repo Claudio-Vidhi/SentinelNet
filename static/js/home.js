@@ -527,12 +527,12 @@ document.getElementById('homeAttentionBody')?.addEventListener('click', (e) => {
 
 document.getElementById('homeAnomSummary')?.addEventListener('click', async (e) => {
     if (e.target.closest('[data-action="open-traffico-anomalies"]')) {
-        // observability.js owns openTrafficoAnomalies and is lazy-loaded with
-        // the Flows tab. Calling it bare from Home was a ReferenceError until
-        // the user had opened Flows once, i.e. a silently dead button;
-        // switching tab first is what loads the module.
-        const nav = document.querySelector('[data-tabs="tab-flows"]');
-        await switchTab('tab-flows', nav || undefined);
-        window.openTrafficoAnomalies?.();
+        // Un'anomalia E' un incidente: stesso id, stessa coda, e la
+        // transizione di stato scrive comunque su /api/incidents. Portava
+        // alla copia dentro Traffico passando da tab-flows solo per caricare
+        // il modulo che la mostrava. Ora va alla coda vera, senza il rimbalzo
+        // e senza dipendere da observability.js.
+        const nav = document.querySelector('.nav-item[data-tab="tab-incidents"]');
+        await switchTab('tab-incidents', nav || undefined);
     }
 });
