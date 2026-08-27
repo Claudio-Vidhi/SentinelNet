@@ -68,7 +68,7 @@ def arp_client_map(mac: Optional[str] = None, ip: Optional[str] = None,
                    frm: Optional[str] = None, to: Optional[str] = None,
                    current_user = Depends(get_current_user)):
     """Vista client unificata: MAC + IP (dal gateway che ruota la VLAN) +
-    switch/porta di accesso (dalla MAC table). Risponde a 'chi è 10.0.0.5
+    switch/porta di accesso (dalla MAC table). Risponde a 'chi è 192.0.2.10
     e a quale porta è attaccato'. tenant/source_ip restringono la vista
     (sempre dentro lo scope dell'utente)."""
     tenants = user_group_scope(current_user)
