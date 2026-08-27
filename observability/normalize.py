@@ -146,6 +146,29 @@ def _from_flows(conn, now: int) -> int:
 
 # --- ADAPTER: SYSLOG ---------------------------------------------------------
 
+def _syslog_attrs(row, fields: dict, action) -> dict:
+    """attrs of a syslog event.
+
+    The resolved name is an annotation, never a replacement for the address,
+    and it is only present when the log actually carried one: an absent key
+    means "not known", which the view renders as nothing rather than guessing.
+    FortiOS puts the destination name in ``dstname`` on inspected sessions and
+    in ``hostname`` on some subtypes; DNS logs carry the queried name in
+    ``qname``.
+    """
+    attrs = {"action": action, "message": (row["message"] or "")[:1024],
+             "src_port": fields["src_port"],
+             "policy_id": fields["policy_id"],
+             "subtype": fields["subtype"],
+             "exporter_ip": row["exporter_ip"]}
+    dst_name = fields.get("dstname") or fields.get("hostname")
+    if dst_name:
+        attrs["dst_name"] = dst_name
+    if fields.get("qname"):
+        attrs["qname"] = fields["qname"]
+    return attrs
+
+
 def _from_syslog(conn, now: int) -> int:
     # Primo giro: si guarda solo LOOKBACK_S indietro (niente backfill dello
     # storico). Dopo, il cursore sull'id monotono basta da solo.
@@ -172,11 +195,7 @@ def _from_syslog(conn, now: int) -> int:
               src_ip=fields["src_ip"], dst_ip=fields["dst_ip"],
               dst_port=fields["dst_port"], protocol=fields["protocol"],
               metrics={"bytes": fields["bytes"]} if fields["bytes"] else {},
-              attrs={"action": action, "message": (r["message"] or "")[:1024],
-                     "src_port": fields["src_port"],
-                     "policy_id": fields["policy_id"],
-                     "subtype": fields["subtype"],
-                     "exporter_ip": r["exporter_ip"]},
+              attrs=_syslog_attrs(r, fields, action),
               dedup_key=f"syslog:{r['id']}")
         last_id = max(last_id, r["id"])
     if rows:
