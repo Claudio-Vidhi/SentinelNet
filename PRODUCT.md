@@ -33,23 +33,44 @@ syslog, SNMP), and single-client L2+L3 diagnosis — all reachable from one
 browser console.
 
 The objective, taken from `docs/principles.md`: help the engineer understand
-**what happened, why it happened, and what to investigate next**, instead of
-presenting raw telemetry. Success is measured as reduced MTTD and MTTR.
+**what is up, what changed, and what is degraded**, instead of presenting raw
+telemetry. Success is measured as reduced MTTD and MTTR.
 
 ## Positioning
 
-Not a NetFlow collector and not another monitoring dashboard. Three things a
-neighboring product could not truthfully copy:
+**A status and management console, not a SIEM.** SentinelNet reports the state
+of the network and of the firewalls, and helps manage them. It does not hunt
+threats, score anomalies or investigate intrusions — mature products already do
+that, and duplicating them adds weight without adding value. When a firewall
+denies traffic, the firewall is the authority on that; SentinelNet does not
+mirror its verdicts.
 
-- **Deterministic correlation.** Independent sources are normalized into one
-  event model and correlated by inspectable Python rules. No AI sits in the
-  decision path (ADR-0006).
-- **Every conclusion ships its evidence.** An incident carries its supporting
-  evidence, a confidence score and the reasoning path. "AI detected anomaly" is
-  a defect, not an output.
+This is a scope boundary, not a gap. Anything that reads as threat detection is
+out; anything that reads as **operational security** is core:
+
+- **Firewall management** — policy inspection, address objects, sessions,
+  provisioning.
+- **Policy and configuration audit** — rule hygiene, drift against backups,
+  compliance checklists.
+- **Vulnerability triage** — firmware versions against the NIST NVD database.
+- **Status of the estate** — reachability, redundancy health, link quality,
+  configuration backups.
+
+Three things a neighboring product could not truthfully copy:
+
+- **Deterministic reporting.** Independent sources are normalized into one event
+  model and evaluated by inspectable Python rules. No AI sits in the decision
+  path (ADR-0006).
+- **Every conclusion ships its evidence.** A finding carries what was observed,
+  when, and from which source. "AI detected anomaly" is a defect, not an output.
 - **Self-hosted with nothing leaving the estate.** Windows executable or
   container, local SQLite, credentials encrypted at rest. Customer network state
   never reaches a vendor cloud.
+
+**One question, one surface, one collector.** Before a panel is added, name the
+question it answers and check that nothing already answers it; before a
+collector is added, check whether an existing one already learns the same fact.
+See item 16 of `docs/console-rethink-plan.md`.
 
 ## Operating Context
 
