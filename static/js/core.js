@@ -991,7 +991,7 @@ async function ensureTabScripts(tabId) {
         await Promise.all(scripts.map(loadAssetOnce));
     } catch (e) {
         console.error('[lazy]', e);
-        showToast('Errore di caricamento modulo', 'error');
+        showToast((i18n[currentLang] || {}).toastModuleLoadError || 'Errore di caricamento modulo', 'error');
     }
 }
 
@@ -1338,24 +1338,40 @@ document.getElementById('identitiesTableBody')?.addEventListener('click', (e) =>
 });
 
 // --- GLOBAL TENANT SELECTOR ---
+// Lo scope vive nell'URL: incollare un link a un collega e' l'handoff piu'
+// comune, e senza il tenant nella query arriva silenziosamente su un'altra
+// vista. L'URL e' anche cio' che fa sopravvivere lo scope a un reload.
 window.globalSelectedTenant = 'all';
+
+function tenantFromUrl() {
+    return new URLSearchParams(window.location.search).get('tenant') || '';
+}
+
+function reflectTenantInUrl(tenant) {
+    const params = new URLSearchParams(window.location.search);
+    if (tenant && tenant !== 'all') params.set('tenant', tenant);
+    else params.delete('tenant');
+    const qs = params.toString();
+    window.history.replaceState({}, document.title,
+        window.location.pathname + (qs ? '?' + qs : ''));
+}
 
 function populateGlobalTenantSelect() {
     const sel = document.getElementById('globalTenantSelect');
     if (!sel) return;
-    const cur = window.globalSelectedTenant || sel.value || 'all';
+    const cur = tenantFromUrl() || window.globalSelectedTenant || sel.value || 'all';
     const groups = Object.keys(globalGroups || {});
     const L = i18n[currentLang] || {};
     sel.innerHTML = `<option value="all">${L.optFilterAll || 'Tutti'}</option>` +
         groups.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
     sel.value = groups.includes(cur) ? cur : 'all';
     window.globalSelectedTenant = sel.value;
+    reflectTenantInUrl(sel.value);
+    if (sel.value !== 'all') applyGlobalTenant(sel.value);
 }
 
-document.getElementById('globalTenantSelect')?.addEventListener('change', (e) => {
-    const target = e.target;
-    if (!(target instanceof HTMLSelectElement)) return;
-    const val = target.value;
+// Propaga lo scope ai selettori che i pannelli leggono ancora.
+function applyGlobalTenant(val) {
     window.globalSelectedTenant = val;
     const fSel = document.getElementById('filterGroupSelect');
     if (fSel instanceof HTMLSelectElement) { fSel.value = val; renderDeviceTable(); }
@@ -1364,6 +1380,13 @@ document.getElementById('globalTenantSelect')?.addEventListener('change', (e) =>
     const topSel = document.getElementById('topologyGroupSelect');
     if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
     window.dispatchEvent(new CustomEvent('globalTenantChanged', { detail: { tenant: val } }));
+}
+
+document.getElementById('globalTenantSelect')?.addEventListener('change', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    reflectTenantInUrl(target.value);
+    applyGlobalTenant(target.value);
 });
 
 // --- GLOBAL DEVICE CONTEXT CHIP ---

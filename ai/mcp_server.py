@@ -147,7 +147,7 @@ TOOLS = {
     "client_map": (
         "Unified client view: MAC + current IP (from the routing gateway's "
         "ARP) + access switch/port (from the MAC table). Answers 'who is "
-        "10.0.0.5 and which port is it attached to'.",
+        "192.0.2.10 and which port is it attached to'.",
         _obj({"mac": _S, "ip": _S,
               "frm": {**_S, "description": "From ISO timestamp (optional)"},
               "to": {**_S, "description": "To ISO timestamp (optional)"}}),

@@ -152,6 +152,25 @@ class TestRollup(_Base):
 
         self.assertEqual(set(out["results"][0]["ips"]), {"192.0.2.10", "192.0.2.20"})
 
+    def test_mac_vecchio_non_escluso_da_scansione_di_altro_mac(self):
+        """La recency e' per (MAC, tenant, source_ip), mai globale: un client
+        visto solo giorni fa conserva il suo binding anche se un altro MAC e'
+        stato scansionato adesso. Il filtro non deve mai confrontare fra MAC."""
+        self._sighting(mac=MAC_A)
+        self._sighting(mac=MAC_RANDOM)
+        self._arp(mac=MAC_A, ip="192.0.2.10", last_days=3)
+        self._arp(mac=MAC_RANDOM, ip="192.0.2.11", last_days=0)
+
+        out = mac_history.endpoint_inventory()
+        ips = {r["mac"]: r["ips"] for r in out["results"]}
+
+        self.assertEqual(ips[MAC_A], ["192.0.2.10"])
+        self.assertEqual(ips[MAC_RANDOM], ["192.0.2.11"])
+
+        cm = {r["mac"]: r["ips"] for r in mac_history.client_map()}
+        self.assertEqual(cm[MAC_A], ["192.0.2.10"])
+        self.assertEqual(cm[MAC_RANDOM], ["192.0.2.11"])
+
     def test_time_range_restituisce_storico(self):
         """Con filtro temporale attivo, vengono restituiti anche gli IP storici."""
         self._sighting()
