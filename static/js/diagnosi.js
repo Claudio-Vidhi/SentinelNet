@@ -215,6 +215,14 @@ function renderDiagnosi(d, dest) {
         ? `<span class="badge" style="color:var(--success);">${escapeHtml(en ? 'complete' : 'completo')}</span>`
         : `<span class="badge" style="color:var(--warning);" title="${escapeHtml(en ? 'Some sections could not be answered — see below' : 'Alcune sezioni non hanno risposta — vedi sotto')}">${escapeHtml(en ? 'partial' : 'parziale')}</span>`;
 
+    // Il referto viene screenshottato e incollato nei ticket, dove il badge
+    // sull'intestazione del pannello non arriva: la riserva viaggia con il
+    // risultato, non con la schermata. Cade quando la diagnosi e' validata su
+    // hardware reale.
+    const previewBadge = `<span class="preview-badge" title="${escapeHtml(en
+        ? 'Not yet validated against real hardware. Results may be incomplete.'
+        : 'Non ancora validato su hardware reale. I risultati possono essere incompleti.')}">preview</span>`;
+
     const position = _diagCard('fa-location-dot', en ? 'Position' : 'Posizione', s.position, p =>
         _kv('MAC', p.mac) + _kv('IP', p.ip) +
         _kv(en ? 'Tenant / site' : 'Tenant / sede', `${p.tenant || '—'} / ${p.site || '—'}`) +
@@ -336,6 +344,7 @@ function renderDiagnosi(d, dest) {
         <div class="panel" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; padding:12px 16px;">
             <span style="font-family:var(--font-code); font-size:14px; color:var(--primary);">${escapeHtml(d.client)}</span>
             ${badge}
+            ${previewBadge}
             <div style="flex:1; min-width:20px;"></div>
             <button data-action="rerun-diagnosi" class="btn btn-secondary btn-small" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> ${escapeHtml(en ? 'Re-run' : 'Rilancia')}</button>
         </div>
