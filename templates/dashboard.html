@@ -291,6 +291,17 @@
           <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
         </button>
       </div>
+      <div class="nav-group"><h3 data-i18n="navDeviceTools">Strumenti Apparati</h3>
+        <button id="navFortigate" class="nav-item requires-admin" data-tab="tab-fortigate">
+          <span class="nav-left" data-i18n="tabFgtManagement"><i class="fa-solid fa-shield-halved"></i> Fortigate Management</span>
+        </button>
+        <button id="navWlc" class="nav-item" data-tab="tab-wlc">
+          <span class="nav-left" data-i18n="tabWlc"><i class="fa-solid fa-wifi"></i> Cisco WLC</span>
+        </button>
+        <button id="navRedundancy" class="nav-item" data-tab="tab-redundancy">
+          <span class="nav-left" data-i18n="tabRedundancy"><i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)</span>
+        </button>
+      </div>
       <div class="nav-group"><h3 data-i18n="navAssess">Valuta</h3>
         <button class="nav-item" data-tab="tab-security">
           <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-virus"></i> Threat Intel (NVD NIST)</span>
@@ -628,6 +639,7 @@
                 <th data-i18n="thIp">Indirizzo IP</th>
                 <th data-i18n="thVendor">Vendor</th>
                 <th data-i18n="thFirmware">Firmware</th>
+                <th data-i18n="thTools">Strumenti</th>
                 <th data-i18n="thActions">Azioni / Utility</th>
               </tr>
             </thead>
@@ -858,9 +870,9 @@
     <div id="tab-groups" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr;">
         <div class="hero-card">
-          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleGroupsRegistry">Anagrafica Gruppi, Clienti e Sedi Locali</h2>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:25px; letter-spacing:-.03em;" data-i18n="titleGroupsRegistry">Anagrafica Tenant e Clienti</h2>
           <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:64ch;" data-i18n="descGroupsRegistry">
-            I gruppi organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un gruppo sposta i dispositivi associati nel gruppo Generale.
+            I Tenant organizzano logicamente la topologia dei tuoi asset. L'eliminazione di un Tenant sposta i dispositivi associati nel Tenant Generale.
           </p>
         </div>
       </div>
@@ -1483,7 +1495,7 @@
         <h3 style="font-size:15px; margin-bottom:12px;">
           <i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i>
           <span data-i18n="titleDiagnosi"></span>
-          <span class="preview-badge" style="background:color-mix(in srgb, var(--warning) 15%, transparent); border-color:var(--warning); color:var(--warning); margin-left:8px;" title="Non ancora validato su hardware reale. I risultati possono essere incompleti.">preview</span>
+          <span class="preview-badge" style="background:color-mix(in srgb, var(--warning) 15%, transparent); border-color:var(--warning); color:var(--warning); margin-left:8px;" title="Non ancora validato su hardware reale. I risultati possono essere incompleti. Rimosso dopo validazione su hardware reale.">preview</span>
         </h3>
         <div class="diag-form" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end;">
           <div class="form-group" style="margin-bottom:0;">
@@ -1714,20 +1726,6 @@
           <option value="bytes" data-i18n="optByBytes">Per byte</option>
           <option value="packets" data-i18n="optByPackets">Per pacchetti</option>
         </select>
-        <div style="position:relative; display:inline-block;">
-          <button id="trafTenantBtn" class="btn" style="padding:6px 12px;">
-            <i class="fa-solid fa-filter"></i> Tenants
-          </button>
-          <div id="trafTenantDropdown" style="display:none; position:absolute; top:100%; left:0; background:var(--surface-2); border:1px solid var(--border); border-radius:0; min-width:220px; max-height:300px; overflow-y:auto; z-index:1000; box-shadow:var(--shadow-lift);">
-            <div style="padding:8px;">
-              <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; font-weight:500;">
-                <input type="checkbox" id="trafTenantAll" style="accent-color:var(--primary);">
-                <span data-i18n="optArpAllTenants">Tutti i tenant</span>
-              </label>
-              <div id="trafTenantList" style="margin-top:6px;"></div>
-            </div>
-          </div>
-        </div>
         <button id="btnTrafRefresh" class="btn" style="width:auto; margin:0;"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
         <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
           <input type="checkbox" id="trafAutoRefresh" checked style="accent-color:var(--primary);">
