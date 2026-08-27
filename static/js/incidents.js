@@ -488,6 +488,12 @@
                     : '';
                 const attrs = (e.ref && e.ref.attrs && Object.keys(e.ref.attrs).length)
                     ? JSON.stringify(e.ref.attrs) : '';
+                // Il nome risolto e' la chiave piu' leggibile di attrs: sepolto
+                // nel dump JSON non lo legge nessuno. Sale in chiaro, e resta
+                // un'annotazione dell'indirizzo, non un sostituto. Assente
+                // quando il log non portava il nome: non si deduce nulla.
+                const evAttrs = (e.ref && e.ref.attrs) || {};
+                const resolved = evAttrs.dst_name || evAttrs.qname || '';
                 // Un'evidenza ritrattata resta visibile, barrata: la timeline
                 // racconta anche cosa si era concluso e perché non regge più.
                 const retracted = e.status === 'retracted';
@@ -513,6 +519,8 @@
                                 <i class="fa-solid fa-rotate-left"></i> ${escapeHtml(why)}</div>` : ''}
                     ${prov ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;" title="${L('incProvTitle')}">
                                 <i class="fa-solid fa-fingerprint"></i> ${escapeHtml(prov)}</div>` : ''}
+                    ${resolved ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                                <i class="fa-solid fa-globe"></i> ${escapeHtml(resolved)}</div>` : ''}
                     ${attrs ? `<div style="font-family:var(--font-code); font-size:11px; color:var(--text-muted); margin-top:2px; word-break:break-all;">${escapeHtml(attrs)}</div>` : ''}
                 </div>`;
             }).join('') + '</div>';
