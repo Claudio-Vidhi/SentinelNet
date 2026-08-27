@@ -380,7 +380,6 @@ class TestHomeTab(unittest.TestCase):
             self.assertIn(f'id="{eid}"', html)
         # Home wires only to REAL endpoints
         self.assertIn('/api/local-devices', js)
-        self.assertIn('/api/observability/anomalies', js)
         # startGroupTriage('all') moved to static/js/devices.js -- frontend_source()
         # concatenates dashboard.html + all static js/css.
         js = frontend_source()
@@ -1733,16 +1732,16 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         html = frontend_source()
         # I controlli di finestra/metrica/tenant sono passati all'header unico
         # del tab (prefisso traf*): erano triplicati, uno per pannello.
-        for _id in ('flowsTableHead', 'flowsTableBody', 'anomTableBody',
+        for _id in ('flowsTableHead', 'flowsTableBody',
                     'trafWindow', 'trafMetric',
                     'trafAutoRefresh', 'trafLastUpdate', 'flowsObsBanner',
                     'flowsAiNote', 'flowsSourceChips', 'flowsColsBtn',
-                    'flowsColsDropdown', 'anomStatus', 'anomIpFilterChip',
+                    'flowsColsDropdown',
                     'flowDetailPanel', 'flowDetailPanelBody'):
             self.assertIn(f'id="{_id}"', html)
-        for hook in ('flowsTabShown', 'loadTopTalkers', 'loadAnomalies',
+        for hook in ('flowsTabShown', 'loadTopTalkers',
                      'toggleFlowsColsDropdown', 'analyzeFlowsWithAi',
-                     'clearAnomIpFilter', 'closeFlowDetailPanel'):
+                     'closeFlowDetailPanel'):
             self.assertIn(hook, html)
         # Ids created only by JS (never literal in the static markup).
         for _id in ('flowsSelectAll',):
@@ -1752,8 +1751,6 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         tag_end = html.index('>', idx)
         self.assertIn('requires-write', html[html.rindex('<button', 0, idx):tag_end])
         self.assertIn('data-action="detail-ai-flow"', html)
-        # Anomaly transitions stay write-gated.
-        self.assertIn('data-action="anom-transition"', html)
 
     def test_source_filter_chips_and_column_toggle_survive(self):
         # FLOWS_SOURCES/renderFlowsSourceChips/renderSyslogTable moved to
@@ -1779,11 +1776,6 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         html = frontend_source()
         for ep in ('/api/observability/top?window=',
                    '/api/observability/syslog?window=',
-                   '/api/observability/anomalies?status=',
-                   # La transizione va sulla rotta degli incidenti: l'id di
-                   # un'anomalia e' l'id del suo incidente, e l'alias sotto
-                   # /observability e' deprecato.
-                   '/api/incidents/${id}/status',
                    '/api/observability/health'):
             self.assertIn(ep, html)
 
@@ -1828,26 +1820,13 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         # aggiungono istogramma, query, faccette e registro della Ricerca.
         # Il pannello "Dettaglio Flussi" inline non c'e' piu': era la terza
         # copia della stessa ripartizione per protocollo.
-        self.assertEqual(tab.count('<div class="panel"'), 8)
+        self.assertEqual(tab.count('<div class="panel"'), 7)
         self.assertEqual(tab.count('<div class="panel" style="margin-bottom:18px;"'), 5)
         # All tables wrapped: flows, syslog-in-all-sources, protocol breakdown,
-        # top talkers, correlated anomalies.
-        self.assertEqual(tab.count('class="table-wrap"'), 5)
+        # top talkers. The anomalies table left with its pane.
+        self.assertEqual(tab.count('class="table-wrap"'), 4)
         self.assertIn('class="filterbar"', tab)
-        self.assertIn('id="anomIpFilterChip" class="chip"', tab)
-        # Severity/status badges use the component status/chip classes.
-        # sevBadge/statusBadge live inside loadAnomalies(), which moved to
-        # static/js/observability.js.
         html = frontend_source()
-        # Severity buckets mirror sevColor() in the syslog table: 0-3 bad,
-        # 4 warn, 5+ neutral .chip. 5+ is "medio" (_SEVERITY_KIND in
-        # observability/correlator.py), so it must NOT render as .status ok --
-        # a medium anomaly badged green would read as healthy.
-        self.assertIn('s <= 3 ? `<span class="status bad">${s}</span>`', html)
-        self.assertIn('s <= 4 ? `<span class="status warn">${s}</span>`', html)
-        self.assertIn(': `<span class="chip">${s}</span>`', html)
-        self.assertNotIn('<span class="status ok">${s}</span>', html)
-        self.assertIn('`<span class="status ok">${escapeHtml(st)}</span>`', html)
         # Flussi Live non e' piu' in preview: la voce di menu non porta badge.
         nav = html[html.index('data-tab="tab-flows"'):]
         self.assertNotIn('<span class="preview-badge">preview</span>', nav[:400])
@@ -1856,21 +1835,10 @@ class TestLiveFlowsTabRestyle(unittest.TestCase):
         html = frontend_source()  # Task 3: i18n dict e' in static/js/i18n.js
         for key in ("tabFlows:", "titleFlows:", "descFlows:", "flowsEyebrow:",
                     "titleFlowDetail:", "titleClose:", "titleHighlightTopology:",
-                    "titleCorrelatedAnomalies:", "chipAllSources:", "msgNoFlows:",
-                    "msgNoSyslog:", "msgNoAnomalies:"):
+                    "chipAllSources:", "msgNoFlows:",
+                    "msgNoSyslog:"):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
 
-    def test_anomalies_scroll_anchor_is_explicit(self):
-        """jumpToAnomaliesForFlow() used to scroll via `#tab-flows h4`, i.e. the
-        FIRST h4 in the tab -- which was the anomalies heading only by accident of
-        source order. The restyle promotes that heading to <h3> inside a .panel,
-        which would have silently made the selector match nothing (`?.` swallows
-        it) and killed the flow-detail -> anomalies jump. Anchor it to an id."""
-        # jumpToAnomaliesForFlow() moved to static/js/observability.js.
-        html = frontend_source()
-        self.assertIn('id="anomSectionTitle"', html)
-        self.assertIn("document.getElementById('anomSectionTitle')?.scrollIntoView(", html)
-        self.assertNotIn("querySelector('#tab-flows h4')", html)
 
 
 # ---------------------------------------------------------------------------

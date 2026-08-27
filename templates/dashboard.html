@@ -1749,7 +1749,6 @@
         <button type="button" class="ca-pill active" id="trafPill-overview" data-traf-view="overview" data-i18n="trafPillOverview">Panoramica</button>
         <button type="button" class="ca-pill" id="trafPill-flows" data-traf-view="flows" data-i18n="trafPillFlows">Flussi</button>
         <button type="button" class="ca-pill" id="trafPill-search" data-traf-view="search" data-i18n="trafPillSearch">Ricerca</button>
-        <button type="button" class="ca-pill" id="trafPill-anomalies" data-traf-view="anomalies" data-i18n="trafPillAnomalies">Anomalie</button>
       </div>
 
       <div id="trafPane-overview" class="traf-pane">
@@ -1907,37 +1906,6 @@
             </table>
           </div>
         </div>
-      </div>
-      </div>
-      <div id="trafPane-anomalies" class="traf-pane" style="display:none;">
-      <div class="panel">
-      <h3 id="anomSectionTitle" style="margin:0 0 10px; font-size:17px;" data-i18n="titleCorrelatedAnomalies">Correlated anomalies</h3>
-      <div class="filterbar" style="gap:10px; align-items:center; margin-top:0;">
-        <select id="anomStatus" style="padding:6px 12px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text);">
-          <option value="new" data-i18n="optAnomNew">Nuove</option>
-          <option value="ack" data-i18n="optAnomAck">Prese in carico</option>
-          <option value="resolved" data-i18n="optAnomResolved">Risolte</option>
-          <option value="all" data-i18n="optAnomAll">Tutte</option>
-        </select>
-        <button id="btnRefreshAnomalies" class="btn"><i class="fa-solid fa-rotate"></i> <span data-i18n="btnRefresh">Aggiorna</span></button>
-        <span id="anomIpFilterChip" class="chip" style="display:none; text-transform:none; letter-spacing:normal;">
-          <span></span>
-          <a href="javascript:void(0)" id="lnkClearAnomIpFilter" data-i18n-title="titleRemoveFilter" title="Rimuovi filtro"><i class="fa-solid fa-xmark"></i></a>
-        </span>
-      </div>
-      <div class="table-wrap" style="max-height:320px;">
-        <table style="width:100%; border-collapse:collapse;">
-          <thead style="position:sticky; top:0; background:var(--surface-2);">
-            <tr style="font-size:12px; text-align:left;">
-              <th style="padding:8px;" data-i18n="thSlWhen">Quando</th><th data-i18n="thFlTenant">Sede</th><th data-i18n="thAnomKind">Tipo</th><th data-i18n="thFlSrc">Sorgente</th>
-              <th data-i18n="thFlDst">Destinazione</th><th data-i18n="thAnomSwitchPort">Porta switch</th><th>Sev</th><th data-i18n="thStatus">Stato</th><th data-i18n="thActions">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="anomTableBody">
-            <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);" data-i18n="msgNoAnomalies">Nessuna anomalia.</td></tr>
-          </tbody>
-        </table>
-      </div>
       </div>
       </div>
     </div>

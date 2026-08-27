@@ -47,7 +47,7 @@ class TestTrafficoStructure(unittest.TestCase):
 
     # Ogni pill ha il suo pane: una pill senza pane e' un pulsante che non apre
     # niente, un pane senza pill e' contenuto irraggiungibile.
-    PILLS = ["overview", "flows", "search", "anomalies"]
+    PILLS = ["overview", "flows", "search"]
     HEADER = ["trafWindow", "trafMetric", "trafAutoRefresh",
               "trafHideTelemetry", "trafLastUpdate"]
 
@@ -107,17 +107,16 @@ class TestTrafficoStructure(unittest.TestCase):
 
     def test_the_moved_panels_live_inside_their_pane(self):
         # Spostare un pannello fuori dal suo pane lo renderebbe visibile in
-        # tutte e quattro le viste.
+        # tutte e tre le viste.
         for pane, ids in (
             ("overview", ("fgKpiStrip", "fgTalkersTableBody", "obsProtocolCanvas",
                           "fgProtoTableBody", "fgTenantSummary", "flowsObsBanner")),
             ("flows", ("flowsTableBody", "flowsSourceChips", "flowsSyslogAllSection")),
             ("search", ("flowSiemHistCanvas", "flowSiemQueryInput", "flowSiemTableBody",
                         "flowSiemFacets")),
-            ("anomalies", ("anomTableBody", "anomStatus")),
         ):
             start = self.html.index(f'id="trafPane-{pane}"')
-            end = self.html.index('id="trafPane-', start + 10) if pane != "anomalies" \
+            end = self.html.index('id="trafPane-', start + 10) if pane != "search" \
                 else self.html.index('id="flowDetailPanel"', start)
             body = self.html[start:end]
             for element_id in ids:

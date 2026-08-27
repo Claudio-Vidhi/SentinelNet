@@ -175,7 +175,7 @@
         }
     }
 
-    // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
+    // --- FLUSSI LIVE (fase 5): top talker -----------------------------------
     // showToast: MOVED to static/js/core.js
 
     // Autenticazione via cookie HttpOnly (apiFetch): nessun token lato JS.
@@ -189,7 +189,6 @@
     let _deviceContextIp = null;                       // IP from global device context chip
     let _flowsSelectedKeys = new Set();                // selected flow keys (tuple string, survives filter/refresh)
     let _flowPanelFlow = null;                         // flow object currently shown in the detail panel
-    let _anomIpFilter = null;                          // {src, dst} client-side filter for the anomalies table
 
     // --- Filtro per origine dati + colonne dinamiche (flussi vs syslog) ---
     const FLOWS_SOURCES = ['all', 'netflow', 'ipfix', 'sflow', 'syslog'];
@@ -228,13 +227,12 @@
         overview:  () => { loadTopTalkers(); loadObsProtocolDist(); },
         flows:     () => loadTopTalkers(),
         search:    () => loadFlowSiemTab(),
-        anomalies: () => loadAnomalies(),
     };
 
     function trafSwitchView(view) {
         if (!document.getElementById('trafPane-' + view)) return;
         _trafView = view;
-        for (const v of ['overview', 'flows', 'search', 'anomalies']) {
+        for (const v of ['overview', 'flows', 'search']) {
             const pane = document.getElementById('trafPane-' + v);
             const pill = document.getElementById('trafPill-' + v);
             if (pane) pane.style.display = (v === view) ? '' : 'none';
@@ -682,9 +680,6 @@
                 <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.dst_ip)}">
                     <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show destination in topology' : 'Mostra destinazione in topologia'}
                 </button>
-                <button class="btn" style="text-align:left;" data-action="detail-anomalies">
-                    <i class="fa-solid fa-triangle-exclamation"></i> ${en ? 'See anomalies for this flow' : 'Vedi anomalie di questo flusso'}
-                </button>
                 <button class="btn requires-write" style="text-align:left;" data-action="detail-ai-flow" title="${en ? 'Send ONLY this flow to the AI assistant (identifiers; totals re-derived server-side)' : 'Invia SOLO questo flusso all\'assistente AI (identificatori; totali ri-derivati dal server)'}">
                     <i class="fa-solid fa-robot"></i> ${L.btnAnalyzeAi || 'Analizza con AI'}
                 </button>
@@ -725,25 +720,6 @@
         } catch (e) {
             box.textContent = currentLang === 'en' ? 'Client-map lookup unavailable.' : 'Ricerca client-map non disponibile.';
         }
-    }
-
-    // Salta alla tabella anomalie filtrata per gli IP src/dst del flusso.
-    function jumpToAnomaliesForFlow() {
-        const f = _flowPanelFlow;
-        if (!f) return;
-        _anomIpFilter = { src: f.src_ip, dst: f.dst_ip };
-        closeFlowDetailPanel();
-        const statusSel = document.getElementById('anomStatus');
-        if (statusSel) statusSel.value = 'all';
-        loadAnomalies();
-        // Ancora esplicita: il vecchio selettore '#tab-flows h4' puntava alla prima
-        // h4 del tab (il titolo anomalie) e si rompe appena cambia la gerarchia.
-        document.getElementById('anomSectionTitle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function clearAnomIpFilter() {
-        _anomIpFilter = null;
-        loadAnomalies();
     }
 
     // Mappatura IP → nodo topologia: i nodi Vis.js usano l'IP del device come
@@ -806,15 +782,15 @@
             ? (selected
                 ? `Analyze the ${flows.length} selected attached network flows: `
                   + 'spot anomalous top talkers, possible exfiltration or scans, '
-                  + 'and correlate with the open anomalies.'
+                  + 'and correlate with the open incidents.'
                 : 'Analyze the attached network flows: spot anomalous top talkers, '
-                  + 'possible exfiltration or scans, and correlate with the open anomalies.')
+                  + 'possible exfiltration or scans, and correlate with the open incidents.')
             : (selected
                 ? `Analizza i ${flows.length} flussi di rete selezionati e allegati: `
                   + 'individua top talker anomali, possibili esfiltrazioni o scansioni, '
-                  + 'e correla con le anomalie aperte.'
+                  + 'e correla con gli incidenti aperti.'
                 : 'Analizza i flussi di rete allegati: individua i top talker anomali, '
-                  + 'possibili esfiltrazioni o scansioni, e correla con le anomalie aperte.');
+                  + 'possibili esfiltrazioni o scansioni, e correla con gli incidenti aperti.');
         input.focus();
     }
 
@@ -832,125 +808,8 @@
         await _prepareFlowAiChat([f]);
     }
 
-    async function loadAnomalies() {
-        const tbody = document.getElementById('anomTableBody');
-        const status = document.getElementById('anomStatus').value;
-        // The window comes from the tab header like every other view. It used
-        // to be a hardcoded 7d, so this panel silently showed a week while the
-        // rest of the tab showed the selected range.
-        const res = await apiFetch(`/api/observability/anomalies?status=${encodeURIComponent(status)}&window=${encodeURIComponent(trafState.window)}&limit=100`);
-        if (!res || !res.ok) return;
-        let rows = (await res.json()).anomalies || [];
 
-        // Filtro client-side per IP src/dst del flusso, impostato dal pannello dettaglio flussi.
-        const chip = document.getElementById('anomIpFilterChip');
-        if (_anomIpFilter) {
-            const { src, dst } = _anomIpFilter;
-            rows = rows.filter(a => a.src_ip === src || a.dst_ip === src || a.src_ip === dst || a.dst_ip === dst);
-            if (chip) {
-                chip.style.display = 'inline-flex';
-                chip.querySelector('span').textContent = `${currentLang === 'en' ? 'Filtered by flow' : 'Filtrato per flusso'}: ${src} / ${dst}`;
-            }
-        } else if (chip) {
-            chip.style.display = 'none';
-        }
 
-        const en = currentLang === 'en';
-        if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">${i18n[currentLang].msgNoAnomalies || 'Nessuna anomalia.'}</td></tr>`;
-            return;
-        }
-        // Severità = severità syslog (0-7, più bassa = più grave), stessa scala
-        // usata da renderSyslogTable(): <=3 grave, 4 attenzione, oltre informativa.
-        // Mirrors sevColor() in the syslog table: 0-3 critico/alto, 4 warning,
-        // 5+ is "medio" (see _SEVERITY_KIND in observability/correlator.py) --
-        // neutral, NOT ok/green. A medium anomaly must not read as healthy.
-        const sevBadge = s => s == null ? '—'
-            : s <= 3 ? `<span class="status bad">${s}</span>`
-            : s <= 4 ? `<span class="status warn">${s}</span>`
-            : `<span class="chip">${s}</span>`;
-        // new = da lavorare, ack = presa in carico, resolved = chiusa.
-        const statusBadge = st => st === 'resolved' ? `<span class="status ok">${escapeHtml(st)}</span>`
-            : st === 'ack' ? `<span class="chip">${escapeHtml(st)}</span>`
-            : `<span class="status warn">${escapeHtml(st)}</span>`;
-        tbody.innerHTML = rows.map(a => {
-            const when = new Date(a.created_ts * 1000).toLocaleString();
-            const actions = [];
-            const lblAck = en ? 'Acknowledge' : 'Prendi in carico';
-            const lblResolve = en ? 'Resolve' : 'Risolvi';
-            if (a.status === 'new') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" data-action="anom-transition" data-id="${a.id}" data-from="new" data-to="ack">${lblAck}</button>`);
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" data-action="anom-transition" data-id="${a.id}" data-from="new" data-to="resolved">${lblResolve}</button>`);
-            } else if (a.status === 'ack') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" data-action="anom-transition" data-id="${a.id}" data-from="ack" data-to="resolved">${lblResolve}</button>`);
-            }
-            // The id this route returns IS the incident id: /api/observability/
-            // anomalies reads FROM incidents. The two surfaces are one queue,
-            // so the link costs nothing but the anchor.
-            if (a.id != null) {
-                actions.push(`<button class="btn" style="font-size:11px; padding:3px 8px;" title="${en ? 'Open the incident' : 'Apri l\'incidente'}" data-action="anom-open-incident" data-id="${Number(a.id)}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>`);
-            }
-            return `<tr style="font-size:12px; border-top:1px solid var(--border);">
-                <td style="padding:6px 8px;">${when}</td>
-                <td>${escapeHtml(a.tenant)}</td>
-                <td>${escapeHtml(a.kind || '—')}</td>
-                <td>${escapeHtml(a.src_ip || '—')}</td>
-                <td>${escapeHtml(a.dst_ip || '—')}</td>
-                <td>${escapeHtml(a.switch_port || '—')}</td>
-                <td>${sevBadge(a.severity)}</td>
-                <td>${statusBadge(a.status)}</td>
-                <td style="display:flex; gap:4px;">${actions.join('')}</td>
-            </tr>`;
-        }).join('');
-    }
-
-    // Anomaly row -> the incident it belongs to. The Incidenti tab is
-    // admin-only, so a viewer gets told rather than sent to an empty tab.
-    async function anomOpenIncident(id) {
-        const nav = document.getElementById('navIncidents');
-        if (!nav || nav.offsetParent === null) {
-            showToast(currentLang === 'en'
-                ? 'The Incidents tab is not available for your role.'
-                : 'Il tab Incidenti non e\' disponibile per il tuo ruolo.', 'warning');
-            return;
-        }
-        // switchTab is async: it lazy-loads incidents.js and then calls that
-        // tab's own loadIncidentsTab(). Calling incidents.js functions before
-        // awaiting it hit a ReferenceError whenever the Incidents tab had not
-        // been opened yet in this session, so the first click on an anomaly's
-        // incident button did nothing at all.
-        await switchTab('tab-incidents', nav);
-        window.openIncident?.(id);
-    }
-
-    // Home counts the anomalies, Traffico shows them. One queue, one table.
-    function openTrafficoAnomalies() {
-        const nav = document.querySelector('[data-tabs="tab-flows"]');
-        switchTab('tab-flows', nav || undefined);
-        const status = document.getElementById('anomStatus');
-        if (status) status.value = 'new';
-        flowsTabShown();
-        trafSwitchView('anomalies');
-    }
-
-    // L'id di un'anomalia e' l'id del suo incidente: la transizione va sulla
-    // rotta degli incidenti. Quella sotto /observability e' un alias deprecato.
-    async function anomTransition(id, fromStatus, toStatus) {
-        const res = await apiFetch(`/api/incidents/${id}/status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from_status: fromStatus, status: toStatus })
-        });
-        if (res && res.ok) {
-            loadAnomalies();
-        } else if (res && res.status === 409) {
-            const err = await res.json().catch(() => ({}));
-            showToast(err.detail || (currentLang === 'en' ? 'Status changed in the meantime: reloading.' : 'Stato cambiato nel frattempo: ricarico.'), 'warning');
-            loadAnomalies();
-        } else if (res) {
-            showToast(currentLang === 'en' ? 'Operation failed.' : 'Operazione non riuscita.', 'error');
-        }
-    }
 
     // --- FLOW GRAPH (Task 3: Live Flows — grafo, KPI, riepilogo, tabelle) ---
 
@@ -1529,8 +1388,6 @@
     // Expose functions globally for UI
     window.loadObsHealth = loadObsHealth;
     window.pruneObsLogs = pruneObsLogs;
-    window.anomOpenIncident = anomOpenIncident;
-    window.openTrafficoAnomalies = openTrafficoAnomalies;
     window.trafSelectedTenants = () => new Set(_flowsSelectedTenants);
     window.trafState = trafState;
     window.trafSwitchView = trafSwitchView;
@@ -1597,25 +1454,9 @@
             closeFlowDetailPanel();
             return;
         }
-        if (e.target.closest('[data-action="detail-anomalies"]')) {
-            jumpToAnomaliesForFlow();
-            return;
-        }
         if (e.target.closest('[data-action="detail-ai-flow"]')) {
             analyzeSingleFlowWithAi();
             return;
-        }
-    });
-
-    document.getElementById('anomTableBody')?.addEventListener('click', (e) => {
-        const trBtn = e.target.closest('[data-action="anom-transition"]');
-        if (trBtn && trBtn.dataset.id) {
-            anomTransition(Number(trBtn.dataset.id), trBtn.dataset.from, trBtn.dataset.to);
-            return;
-        }
-        const incBtn = e.target.closest('[data-action="anom-open-incident"]');
-        if (incBtn && incBtn.dataset.id) {
-            anomOpenIncident(Number(incBtn.dataset.id));
         }
     });
 
@@ -1639,9 +1480,6 @@
     document.getElementById('btnChartTypeTrend')?.addEventListener('click', () => setObsChartType('trend'));
     document.getElementById('btnObsInspectModal')?.addEventListener('click', () => openObsInspectModal('all'));
     document.getElementById('flowsColsBtn')?.addEventListener('click', toggleFlowsColsDropdown);
-    document.getElementById('anomStatus')?.addEventListener('change', loadAnomalies);
-    document.getElementById('btnRefreshAnomalies')?.addEventListener('click', loadAnomalies);
-    document.getElementById('lnkClearAnomIpFilter')?.addEventListener('click', clearAnomIpFilter);
     document.getElementById('btnCloseFlowDetail')?.addEventListener('click', closeFlowDetailPanel);
 
     document.getElementById('syslogDetailModal')?.addEventListener('click', (e) => {
