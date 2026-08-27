@@ -843,6 +843,68 @@ Consequences to carry into the schema:
   it is displayed. An inherited value that looks like a deliberate one is the
   same class of defect as item 14a.
 
+### 16. Scope correction — status platform, not a SIEM — L (mostly deletion)
+
+Decided in session. SentinelNet **collects and reports**; it does not compete
+with SIEM or XDR products that already exist and do it better. The goal is
+**general network status and firewall status**: what is up, what changed, what
+is degraded. Not threat detection.
+
+This retires work rather than adding it.
+
+#### What this cancels
+
+- **Deny-burst detection.** Investigated after a deliberate test produced 172
+  blocked sessions and no alert. The cause is structural: `_blocked_traffic`
+  (`observability/rules.py:183`) requires a corroborating `flow.aggregate`
+  within `match_delta_s + 60`, and a *denied* session exports no flow — the
+  volume column reads `—` on every row. The rule asks for evidence that the
+  block itself prevents from existing. `_high_severity_log` does not catch it
+  either: `max_severity` defaults to 3 while FortiGate denies log at notice or
+  warning. **Under this scope correction that is correct behaviour, not a
+  defect.** The firewall already reports its own denies; mirroring them is
+  duplicated weight.
+- **Threat-flag surfaces** that restate what the firewall already shows.
+- Item 15's **security framing**. The expectation model survives intact — device
+  reachable, HA in sync, WAN within budget, service answering are all *status*,
+  which is exactly this scope. Only the detection ambition around it drops.
+
+#### The measured weight
+
+At this commit: **26 `tab-content` panels behind 23 nav items, 9 subtab bars,
+9 tenant `<select>` elements.** Three panels are reachable only by subtab or
+palette. The repetition is real and countable.
+
+#### Reduction candidates, evidence first
+
+Ordered by weight removed per unit of risk. Each needs confirming before it is
+cut — this section proposes, it does not authorise.
+
+| Candidate | Evidence | Removes |
+| :--- | :--- | :--- |
+| Traffic *Search* and *Anomalies* views | SIEM-shaped: event hunting and anomaly scoring. Out of scope by this decision | 2 panes, an anomaly path, the AI analyse button on them |
+| Duplicate tenant selectors | 9 exist, 1 authoritative, 8 synced followers (`applyGlobalTenant`) | 8 controls and their populate/sync code |
+| Duplicate subtab bars | 9 copies of the same chrome | one shared renderer instead of nine |
+| Overlapping collection paths | MAC scan, ARP collection, triage and ping monitor each answer "is this device alive" separately | one status source the rest read |
+| `client-map.js` dual role | Serves both MAC Tracker and the retired Client Map (`ui_tab_overlap_analysis.md`) | the dead half of an ~870-line module |
+| Orphan panels | 26 panels behind 23 nav items | 3 surfaces nothing points at |
+
+#### The rule that keeps it from growing back
+
+**One question, one surface, one collector.** Before adding a panel, name the
+question it answers and check that nothing already answers it. Before adding a
+collector, check whether an existing one already learns the same fact.
+
+That is also the honest test for the existing tree: every candidate above is a
+place where the same question is answered twice.
+
+#### Tension to resolve
+
+`PRODUCT.md` currently claims deterministic correlation and incidents that ship
+evidence, which reads as a detection product. This decision narrows that to
+status. **Update `PRODUCT.md` in the same change** — a positioning document that
+disagrees with the plan sends the next contributor the wrong way.
+
 ---
 
 ## Traps
