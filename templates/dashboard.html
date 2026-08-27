@@ -1371,6 +1371,9 @@
         <span><span data-i18n="macKpiRetentionLabel">Retention (giorni)</span> <b id="kpiMacRetention">&mdash;</b></span>
       </div>
 
+      <!-- MAC e ARP sono due meta' della stessa raccolta: si lanciano insieme,
+           si leggono insieme. Due pannelli separati li facevano sembrare due
+           funzioni distinte, con la seconda quasi invisibile sotto la prima. -->
       <div class="panel" style="margin-bottom:18px;">
         <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleMacScanPanel">Scansione MAC</h3>
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
@@ -1401,11 +1404,9 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Raccolta ARP L3 -->
-      <div class="panel" style="margin-bottom:18px;">
-        <h3 style="margin:0 0 10px; font-size:17px;" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</h3>
+        <!-- Raccolta ARP L3: stessa scheda, riga separata da un filetto. -->
+        <h3 style="margin:18px 0 10px; padding-top:16px; border-top:1px solid var(--border); font-size:17px;" data-i18n="titleArpCollectPanel">Raccolta ARP (gateway L3)</h3>
         <div class="filterbar" style="justify-content:space-between; align-items:center; margin-top:0;">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <details id="arpDeviceMenu" style="position:relative;">
