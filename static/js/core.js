@@ -1014,6 +1014,9 @@ async function switchTab(tabId, clickedBtn) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.getElementById(tabId).classList.add('active');
+    // Show a skeleton while the lazy module loads so the panel does not read as broken.
+    const tabEl = document.getElementById(tabId);
+    if (tabEl) tabEl.classList.add('tab-loading');
     // Se chiamato senza pulsante (es. dopo import CSV) evidenzia comunque la tab corretta.
     // I sotto-tab passano solo il tabId: la voce di nav che li raggruppa si
     // dichiara con data-tabs, così una sola voce resta attiva per piu' tab.
@@ -1025,6 +1028,7 @@ async function switchTab(tabId, clickedBtn) {
     }
 
     await ensureTabScripts(tabId);
+    if (tabEl) tabEl.classList.remove('tab-loading');
 
     if (tabId === 'tab-home') {
         loadHome();
@@ -1379,6 +1383,17 @@ function applyGlobalTenant(val) {
     if (locSel instanceof HTMLSelectElement) { locSel.value = val; if (typeof locTenantChanged === 'function') locTenantChanged(); }
     const topSel = document.getElementById('topologyGroupSelect');
     if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
+    // Sync remaining per-panel selectors: set value and fire change so the
+    // panel's own handler reacts (re-fetches data, etc.).
+    for (const sid of ['ptTenantSelect', 'driftTenantSelect', 'haTenantFilter',
+                       'wlcTenantSelect', 'aiAttachTenant', 'genCfgTenant',
+                       'identTenant']) {
+        const sel = document.getElementById(sid);
+        if (sel instanceof HTMLSelectElement && val !== 'all') {
+            sel.value = val;
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
     window.dispatchEvent(new CustomEvent('globalTenantChanged', { detail: { tenant: val } }));
 }
 
@@ -1428,7 +1443,14 @@ function buildCommandPaletteItems(query = '') {
     const en = currentLang === 'en';
 
     // 1. Viste / Schede
+    // Device tools lead the list: they no longer have a nav entry, so the
+    // palette is their only route until the capability chips land on the
+    // inventory rows. Last in the array they sat below the fold with an
+    // empty query, which is the same as not being there.
     const navItems = [
+        { id: 'tab-fortigate', title: 'Fortigate Management', desc: en ? 'Firewall policies, address objects, sessions' : 'Policy firewall, oggetti indirizzo, sessioni', group: en ? 'Device Tools' : 'Strumenti Apparati' },
+        { id: 'tab-wlc', title: 'Cisco WLC', desc: en ? 'Access points, SSIDs, and WLAN clients' : 'Access point, SSID e client wireless', group: en ? 'Device Tools' : 'Strumenti Apparati' },
+        { id: 'tab-redundancy', title: en ? 'High Availability (HA)' : 'Alta Affidabilità (HA)', desc: en ? 'Redundancy pairs and failover state' : 'Coppie di ridondanza e stato failover', group: en ? 'Device Tools' : 'Strumenti Apparati' },
         { id: 'tab-home', title: en ? 'Overview / Posture' : 'Situazione', desc: en ? 'Fleet posture verdicts and unifilar schema' : 'Verdetti di postura e schema unifilare flotta', group: en ? 'Views' : 'Viste' },
         { id: 'tab-incidents', title: en ? 'Incidents' : 'Incidenti', desc: en ? 'Correlated security and operational incidents' : 'Incidenti operativi e correlazione allarmi', group: en ? 'Views' : 'Viste' },
         { id: 'tab-flows', title: en ? 'Traffic / Observability' : 'Traffico & Osservabilità', desc: en ? 'Top talkers, anomalies, and flow analytics' : 'Top talker, anomalie e analisi flussi', group: en ? 'Views' : 'Viste' },
@@ -1449,9 +1471,6 @@ function buildCommandPaletteItems(query = '') {
         { id: 'tab-sites', title: en ? 'Sites' : 'Sedi', desc: en ? 'Physical sites and site agents' : 'Sedi fisiche e agenti di sede', group: en ? 'Views' : 'Viste' },
         { id: 'tab-mcp', title: en ? 'Integrations & MCP' : 'Integrazioni & MCP', desc: en ? 'MCP servers and external integrations' : 'Server MCP e integrazioni esterne', group: en ? 'Views' : 'Viste' },
         { id: 'tab-settings', title: en ? 'Settings' : 'Impostazioni', desc: en ? 'App settings, ping monitor, SMTP, SSO' : 'Impostazioni app, ping monitor, SMTP, SSO', group: en ? 'Views' : 'Viste' },
-        { id: 'tab-fortigate', title: 'Fortigate Management', desc: en ? 'Firewall policies, address objects, sessions' : 'Policy firewall, oggetti indirizzo, sessioni', group: en ? 'Facets' : 'Sfaccettature' },
-        { id: 'tab-wlc', title: 'Cisco WLC', desc: en ? 'Access points, SSIDs, and WLAN clients' : 'Access point, SSID e client wireless', group: en ? 'Facets' : 'Sfaccettature' },
-        { id: 'tab-redundancy', title: en ? 'High Availability (HA)' : 'Alta Affidabilità (HA)', desc: en ? 'Redundancy pairs and failover state' : 'Coppie di ridondanza e stato failover', group: en ? 'Facets' : 'Sfaccettature' },
     ];
 
     navItems.forEach(item => {
