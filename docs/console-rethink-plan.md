@@ -540,6 +540,72 @@ nothing when no resolution is known rather than guessing from reverse DNS.
 (GeoIP country flags in the FortiGate GUI are a separate dataset and are not
 part of this item.)
 
+### 13. Colour the config diff — S
+
+The config diff renders additions and removals in the same colour, so the only
+signal is the leading `-` / `+` character. A diff is scanned, not read; the
+colour is what makes a change visible before it is parsed.
+
+- Removed lines red, added lines green, context unchanged in body colour.
+- **Colour is the second signal, never the only one.** Keep the `-` / `+`
+  glyph, so the diff still reads for a colour-blind user and survives copy and
+  paste into a ticket. Roughly 8% of male users cannot rely on red/green.
+- Take the hues from `DESIGN.md` semantic tokens, not new literals, and verify
+  both themes: the light rendition is where contrast fails first.
+- Tint the row background lightly rather than only the glyph — a full-width
+  band is what makes a block of changes readable at a glance.
+- The diff already redacts secrets (`***REDACTED***`); make sure the colour
+  pass does not reintroduce the raw value by rendering a pre-redaction string.
+
+### 14. Traffic tab defects — M
+
+Reported as "many things do not work properly". Two are confirmed from the
+code; the rest need specifics before they can be listed.
+
+#### 14a. The VLAN column shows fabricated numbers — correctness
+
+`_synthetic_vlan()` (`routers/observability.py:401`) returns
+`100 + sha1(tenant)[:2] % 900` — a deterministic hash of the **tenant name**,
+in the range 100–999 — whenever no ARP binding is known for an IP. Top Talkers
+then renders it in the `VLAN` column beside genuinely observed VLANs, marked
+only by a dim `*` in `--text-muted` with a tooltip
+(`static/js/observability.js:1121`).
+
+The result is a number that looks exactly like a real VLAN ID sitting in a
+column labelled VLAN. An engineer reads it and goes looking for that VLAN on
+the switch. It does not exist.
+
+This contradicts the project's own rule, stated in `observability/fieldmap.py`:
+*"Ciò che il messaggio non contiene resta None: nessun valore inventato."* The
+normaliser refuses to invent values; this router invents one and renders it as
+fact.
+
+Fix direction, cheapest first:
+
+- **Show nothing when the VLAN is unknown** — an em dash, not a hash. The
+  synthetic value can stay internal if the flowgraph needs a stable grouping
+  key, but a grouping key must never surface in a column that claims to report
+  observed state.
+- If a placeholder must be visible, it cannot be numeric. `—` or `n/d` cannot
+  be mistaken for a VLAN ID; `443` can.
+- A dim asterisk with a hover tooltip is not sufficient disclosure for a
+  fabricated value, and it is invisible on the NOC-wall and rack-side scenes.
+
+#### 14b. Duplicate tenant control — item 1, half-migrated
+
+The Traffic panel carries an `ALL TENANTS` button while the new global top bar
+already shows the tenant selector. Two controls for one authorization boundary,
+disagreeing in vocabulary, on one screen. This is exactly the duplication item 1
+exists to remove — the global selector shipped, the per-panel ones did not all
+come out. Audit every panel for leftovers rather than fixing this one.
+
+#### 14c. Unspecified
+
+"Many things" implies more than the two above. Each needs the symptom, the view
+(Overview / Flows / Search / Anomalies) and what was expected, or it cannot be
+distinguished from a data gap — a listener not configured, or a window with no
+traffic in it, both of which look like a broken panel.
+
 ---
 
 ## Traps
