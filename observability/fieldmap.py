@@ -17,7 +17,8 @@ from typing import Optional
 
 _KV_RE = re.compile(
     r'\b(srcip|dstip|srcport|dstport|proto|service|utmaction|action|'
-    r'policyid|subtype|eventtype|sentbyte|rcvdbyte)=(?:"([^"]*)"|(\S+))')
+    r'policyid|subtype|eventtype|sentbyte|rcvdbyte|hostname|dstname|qname)'
+    r'=(?:"([^"]*)"|(\S+))')
 _IP_RE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
 # ``utmaction`` è elencato a parte e non è coperto da ``action``: il ``\b``
 # iniziale impedisce di agganciare la coda di 'utmaction=' (fra 'm' e 'a' non
@@ -90,6 +91,9 @@ def extract(message: str) -> dict:
         # il sottotipo i due casi sono lo stesso DENY nella vista.
         "subtype": pairs.get("subtype") or pairs.get("eventtype"),
         "bytes": (sent + rcvd) or None,
+        "hostname": pairs.get("hostname"),
+        "dstname": pairs.get("dstname"),
+        "qname": pairs.get("qname"),
     }
 
 
