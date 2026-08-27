@@ -815,13 +815,33 @@ them. ADR-0006 keeps AI out of the decision path.
   opens the right panel scoped to the right entity.
 - A scoped user sees incidents only for their tenants.
 
-#### Open before implementation
+#### Decided
 
-- Which expectations ship first — reachability alone is most of the value and
-  is the cheapest to source.
-- Evaluation interval, and whether it is global or per-expectation.
-- Whether WAN quality thresholds are per-tenant (an MSP's customers will not
-  share one budget).
+**Reachability ships first, alone.** It carries most of the value, is the
+cheapest to source, and proves the evaluator end to end before any other
+expectation depends on it. Order after that: HA health, WAN quality, service
+probes. Do not build the second until the first has run against a real estate.
+
+**The interval is per-expectation, not global.** A reachability check and a WAN
+quality sample do not want the same cadence, and one global interval forces the
+slowest acceptable value on everything. Each expectation declares its own, with
+a sane default; the scheduler reads that value rather than owning it.
+
+**WAN quality thresholds are per-tenant.** An MSP's customers do not share one
+loss and latency budget — a rural site on radio backhaul and a fibre-connected
+office cannot be judged by the same number, and a global threshold means either
+constant false alarms on one or silence on the other. The threshold lives on the
+tenant, not in a global setting.
+
+Consequences to carry into the schema:
+
+- An expectation record needs `tenant`, `interval` and its own threshold fields.
+  A global default may seed a tenant's value but never overrides it.
+- The tenant settings surface gains a place to hold these. It is the same screen
+  that already holds SNMP defaults, so the concept is not new.
+- A tenant with no threshold set inherits the default and must **say so** where
+  it is displayed. An inherited value that looks like a deliberate one is the
+  same class of defect as item 14a.
 
 ---
 
