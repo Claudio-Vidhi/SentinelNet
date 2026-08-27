@@ -417,5 +417,43 @@ class TestEventsApi(_Base):
         self.assertEqual(r.json()["events"], [])
 
 
+class ResolvedNames(unittest.TestCase):
+    """Il nome risolto annota l'indirizzo, non lo sostituisce, e la chiave
+    manca del tutto quando il log non lo portava: 'non noto' non si inventa."""
+
+    @staticmethod
+    def _attrs(message):
+        row = {"message": message, "exporter_ip": "192.0.2.1"}
+        return normalize._syslog_attrs(row, fieldmap.extract(message), "accept")
+
+    def test_dstname_becomes_dst_name(self):
+        a = self._attrs('srcip=192.0.2.10 dstip=192.0.2.50 dstname="example.com"')
+        self.assertEqual(a["dst_name"], "example.com")
+
+    def test_hostname_is_the_fallback(self):
+        a = self._attrs('srcip=192.0.2.10 dstip=192.0.2.50 hostname="example.com"')
+        self.assertEqual(a["dst_name"], "example.com")
+
+    def test_dstname_wins_over_hostname(self):
+        a = self._attrs('dstname="a.example.com" hostname="b.example.com"')
+        self.assertEqual(a["dst_name"], "a.example.com")
+
+    def test_qname_kept_for_dns_logs(self):
+        a = self._attrs('subtype="dns" qname="example.com" dstip=192.0.2.50')
+        self.assertEqual(a["qname"], "example.com")
+        self.assertEqual(a["subtype"], "dns")
+
+    def test_absent_when_the_log_carried_no_name(self):
+        a = self._attrs("srcip=192.0.2.10 dstip=192.0.2.50 action=accept")
+        self.assertNotIn("dst_name", a)
+        self.assertNotIn("qname", a)
+
+    def test_existing_attrs_are_untouched(self):
+        a = self._attrs("srcip=192.0.2.10 dstip=192.0.2.50 srcport=1234 policyid=7")
+        self.assertEqual(a["src_port"], 1234)
+        self.assertEqual(a["policy_id"], "7")
+        self.assertEqual(a["exporter_ip"], "192.0.2.1")
+
+
 if __name__ == "__main__":
     unittest.main()
