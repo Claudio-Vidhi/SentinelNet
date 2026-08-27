@@ -1644,6 +1644,8 @@ const i18n = {
         titleLegend: "Legenda",
         titleBtnRefresh: "Aggiorna",
         titleDiagTraceroute: "Rileva il primo hop tramite traceroute",
+        // Esce quando la diagnosi e' validata su hardware reale.
+        titleDiagPreview: "Non ancora validato su hardware reale. I risultati possono essere incompleti.",
         phWlcSearch: "Cerca MAC, IP, AP, SSID...",
         titleObsInspect: "Ispeziona Dettagli Telemetria",
         phSiemQuery: "Ricerca libera (es. 10.0.1.45, DENY, TCP) oppure campo:valore (es. src_ip:10.0.1.45, action:DENY)",
@@ -3490,6 +3492,8 @@ const i18n = {
         titleLegend: "Legend",
         titleBtnRefresh: "Refresh",
         titleDiagTraceroute: "Detect first hop via traceroute",
+        // Drops when the diagnosis is validated against real hardware.
+        titleDiagPreview: "Not yet validated against real hardware. Results may be incomplete.",
         phWlcSearch: "Search MAC, IP, AP, SSID...",
         titleObsInspect: "Inspect Telemetry Details",
         phSiemQuery: "Free search (e.g. 10.0.1.45, DENY, TCP) or field:value (e.g. src_ip:10.0.1.45, action:DENY)",
