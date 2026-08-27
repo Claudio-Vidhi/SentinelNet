@@ -123,6 +123,40 @@
         setText('invKpiUnknown', unknown);
     }
 
+    function openDeviceFacet(facet, ip) {
+        const tabMap = { fortigate: 'tab-fortigate', wlc: 'tab-wlc', redundancy: 'tab-redundancy' };
+        const tabId = tabMap[facet];
+        if (!tabId) return;
+        switchTab(tabId);
+        // Pre-select the device after the tab's lazy module has loaded.
+        setTimeout(() => {
+            const selMap = { fortigate: 'fgtTargetSelect', wlc: 'wlcTargetSelect' };
+            const selId = selMap[facet];
+            if (selId) {
+                const sel = document.getElementById(selId);
+                if (sel instanceof HTMLSelectElement) {
+                    sel.value = ip;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        }, 200);
+    }
+
+    function _renderDeviceChips(d) {
+        const v = (d.Vendor || '').toLowerCase();
+        const L = i18n[currentLang] || {};
+        if (!v) return '<span style="color:var(--text-muted)">—</span>';
+        const chips = [];
+        if (v === 'fortinet') {
+            chips.push(`<button class="chip" data-action="open-facet" data-facet="fortigate" data-ip="${escapeHtml(d.IP)}" style="font-size:11px; padding:2px 8px; cursor:pointer; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); font-family:inherit;">FortiGate</button>`);
+            chips.push(`<button class="chip" data-action="open-facet" data-facet="redundancy" data-ip="${escapeHtml(d.IP)}" style="font-size:11px; padding:2px 8px; cursor:pointer; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); font-family:inherit;">HA</button>`);
+        }
+        if (v === 'cisco_wlc' || v === 'cisco_9800') {
+            chips.push(`<button class="chip" data-action="open-facet" data-facet="wlc" data-ip="${escapeHtml(d.IP)}" style="font-size:11px; padding:2px 8px; cursor:pointer; border:1px solid var(--border); border-radius:0; background:var(--surface-3); color:var(--text); font-family:inherit;">WLC</button>`);
+        }
+        return chips.length ? chips.join(' ') : '<span style="color:var(--text-muted)">—</span>';
+    }
+
     function renderDeviceTable() {
         updateInventoryKpis();
 
@@ -240,6 +274,7 @@
                             : "Vendor non impostato: backup e triage falliranno finche' non modifichi il dispositivo.")
                       }">${escapeHtml(currentLang === 'en' ? 'not set' : 'non impostato')}</span>`}</td>
                 <td style="white-space:nowrap;"><code>${escapeHtml(versionText)}</code></td>
+                <td style="white-space:nowrap;">${_renderDeviceChips(d)}</td>
                 <td class="actions-cell">
                     ${isViewer ? '<span style="color:var(--text-muted)">—</span>' : `
                     <button class="btn btn-secondary btn-small"
@@ -307,6 +342,7 @@
         else if (action === 'triage-device') triageSingleDevice(ip, btn);
         else if (action === 'rename-device') renameDevice(ip);
         else if (action === 'download-backup') downloadBackup(ip);
+        else if (action === 'open-facet') openDeviceFacet(btn.dataset.facet, ip);
     });
 
     document.getElementById('deviceTableBody')?.addEventListener('change', (e) => {

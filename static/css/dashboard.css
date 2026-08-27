@@ -1621,8 +1621,27 @@ details.mac-switch > summary:hover,
 .tab-content.active .oneline-bay:nth-child(4) .oneline-sw { animation-delay: 120ms; }
 .tab-content.active .oneline-bay:nth-child(5) .oneline-sw { animation-delay: 160ms; }
 
-.tab-content { display: none; flex-grow: 1; }
+.tab-content { display: none; flex-grow: 1; position: relative; }
 .tab-content.active { display: flex; flex-direction: column; animation: fadeIn 160ms ease; }
+
+/* Cold-tab skeleton: shows while the lazy module downloads. */
+.tab-content.tab-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.2s ease-in-out infinite;
+  border-radius: var(--radius);
+  z-index: 1;
+}
+@keyframes skeletonPulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-content.tab-loading::before { animation: none; }
+}
 
 /* Chi chiede meno movimento non chiede meno informazione: le animazioni in
    ciclo si fermano e gli spostamenti spariscono, ma un cambio di stato resta

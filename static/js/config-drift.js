@@ -132,6 +132,23 @@
         }
     }
 
+    function renderColouredDiff(text) {
+        if (!text) return '';
+        return text.split('\n').map(line => {
+            const escaped = escapeHtml(line);
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+                return `<div style="background:color-mix(in srgb, var(--success) 12%, transparent);">${escaped}</div>`;
+            }
+            if (line.startsWith('-') && !line.startsWith('---')) {
+                return `<div style="background:color-mix(in srgb, var(--danger) 12%, transparent);">${escaped}</div>`;
+            }
+            if (line.startsWith('@@')) {
+                return `<div style="color:var(--primary); font-weight:600;">${escaped}</div>`;
+            }
+            return `<div>${escaped}</div>`;
+        }).join('');
+    }
+
     async function showDriftDiff() {
         const fromSel = document.getElementById('driftFromVersionSelect');
         const toSel = document.getElementById('driftToVersionSelect');
@@ -148,7 +165,7 @@
             const data = await res.json();
             // Config diff text comes from device backups: attacker-influenced,
             // must be escaped like any other device-supplied string.
-            diffBox.innerHTML = escapeHtml(data.diff || '');
+            diffBox.innerHTML = renderColouredDiff(data.diff || '');
         } catch (e) {
             console.error('Config Drift: failed to load diff', e);
             showToast(i18n[currentLang].driftDiffLoadError + ': ' + e.message, 'error');
