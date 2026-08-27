@@ -1383,19 +1383,41 @@ function applyGlobalTenant(val) {
     if (locSel instanceof HTMLSelectElement) { locSel.value = val; if (typeof locTenantChanged === 'function') locTenantChanged(); }
     const topSel = document.getElementById('topologyGroupSelect');
     if (topSel instanceof HTMLSelectElement && val !== 'all') { topSel.value = val; }
-    // Sync remaining per-panel selectors: set value and fire change so the
+    // Sync remaining per-panel VIEW FILTERS: set value and fire change so the
     // panel's own handler reacts (re-fetches data, etc.).
     for (const sid of ['ptTenantSelect', 'driftTenantSelect', 'haTenantFilter',
-                       'wlcTenantSelect', 'aiAttachTenant', 'genCfgTenant',
-                       'identTenant']) {
+                       'wlcTenantSelect']) {
         const sel = document.getElementById(sid);
         if (sel instanceof HTMLSelectElement && val !== 'all') {
             sel.value = val;
             sel.dispatchEvent(new Event('change', { bubbles: true }));
         }
     }
+    // FORM FIELDS are not filters: they choose which tenant a config is
+    // generated for, or an identity assigned to. Pre-filling an untouched one
+    // is a convenience; overwriting a choice the user made themselves is data
+    // loss they never see. Only seed fields the user has not set, and never
+    // dispatch change on them — that fires the form's own side effects.
+    for (const sid of ['aiAttachTenant', 'genCfgTenant', 'identTenant']) {
+        const sel = document.getElementById(sid);
+        if (sel instanceof HTMLSelectElement && val !== 'all'
+            && sel.dataset.userSet !== '1') {
+            sel.value = val;
+        }
+    }
     window.dispatchEvent(new CustomEvent('globalTenantChanged', { detail: { tenant: val } }));
 }
+
+// A real user picking a tenant in a form marks it as theirs, so the global
+// selector stops seeding it. isTrusted separates a human change from the
+// synthetic ones dispatched above.
+document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!e.isTrusted || !(t instanceof HTMLSelectElement)) return;
+    if (['aiAttachTenant', 'genCfgTenant', 'identTenant'].includes(t.id)) {
+        t.dataset.userSet = '1';
+    }
+});
 
 document.getElementById('globalTenantSelect')?.addEventListener('change', (e) => {
     const target = e.target;
