@@ -135,20 +135,19 @@ class TestEntryPoints(unittest.TestCase):
 
 class TestTheTwoCountersAreDistinguishable(unittest.TestCase):
     """Both counters were labelled 'MAC Univoci' and both were correct: one
-    counts MACs seen in switch MAC tables, the other MACs with a known ARP
-    binding. The merge puts them in different panes, which hides the clash
-    instead of resolving it."""
+    counted MACs seen in switch MAC tables, the other MACs with a known ARP
+    binding. The ARP counter went with the Client Map search surface, so only
+    the switch-table one is left — it keeps the label that says which MACs it
+    counts, because the clash returns the moment a second MAC counter appears."""
 
-    def test_the_labels_differ_in_both_languages(self):
+    def test_the_label_says_which_macs_it_counts(self):
         src = _read("static", "js", "i18n.js")
         for line in src.splitlines():
-            if "macKpiUniqueLabel" in line or "arpKpiUniqueLabel" in line:
+            if "macKpiUniqueLabel" in line:
                 self.assertNotIn("MAC Univoci", line)
                 self.assertNotIn("Unique MACs", line)
         self.assertIn("MAC visti sugli switch", src)
         self.assertIn("MACs seen on switches", src)
-        self.assertIn("MAC con un IP noto", src)
-        self.assertIn("MACs with a known IP", src)
 
 
 if __name__ == "__main__":
