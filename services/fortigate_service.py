@@ -247,13 +247,6 @@ def get_ha_checksums(device: dict) -> dict:
     return api_get(device["IP"], "monitor/system/ha-checksums")
 
 
-def api_post(ip: str, path: str, json_body=None, params: Optional[dict] = None,
-             timeout: int = 60):
-    """POST su /api/v2/<path> con Bearer token. Solleva FortiGateError."""
-    return api_request(ip, "POST", path, params=params, json_body=json_body,
-                       timeout=timeout)
-
-
 def api_get_cmdb(ip: str, path: str, fmt: Optional[str] = None, flt: Optional[str] = None,
                  timeout: int = 30):
     """GET su un endpoint cmdb con proiezione dei campi (query `format`,
