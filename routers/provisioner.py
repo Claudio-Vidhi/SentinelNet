@@ -218,21 +218,6 @@ def provisioner_generate(payload: SwitchProvisionSchema, materialized: bool = Fa
     config_text = _with_placeholder_warning(switch_provisioner.build_config(cfg), "switch")
     return {"status": "success", "config": config_text, "materialized": materialized}
 
-@router.post("/api/provisioner/download")
-def provisioner_download(payload: SwitchProvisionSchema, materialized: bool = False,
-                         current_user = Depends(require_operator)):
-    """Genera la running-config e la restituisce come file .txt scaricabile."""
-    cfg = _provision_cfg(payload.dict(), materialized, current_user, "switch")
-    config_text = _with_placeholder_warning(switch_provisioner.build_config(cfg), "switch")
-    from fastapi.responses import Response as FastResponse
-    filename = f"{(payload.hostname or 'switch').strip()}-day0.txt"
-    log_audit(f"Config day-0 generata (download) per '{payload.hostname}' da '{current_user.get('sub')}'.")
-    return FastResponse(
-        content=config_text,
-        media_type="text/plain",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
-
 @router.post("/api/provisioner/push-ssh")
 def provisioner_push_ssh(payload: SwitchProvisionSSHSchema, current_user = Depends(require_admin)):
     """Genera la config e la applica via SSH (Netmiko) su un apparato raggiungibile."""
@@ -288,22 +273,6 @@ def fgt_provisioner_generate(payload: FortiGateProvisionSchema, materialized: bo
         fortigate_provisioner.build_config(cfg), "fortigate")
     log_audit(f"Config FortiGate day-0 generata per '{payload.hostname}' da '{current_user.get('sub')}'.")
     return {"status": "success", "config": config_text, "materialized": materialized}
-
-@router.post("/api/provisioner/fgt/download")
-def fgt_provisioner_download(payload: FortiGateProvisionSchema, materialized: bool = False,
-                             current_user = Depends(require_operator)):
-    """Genera la configurazione FortiOS e la restituisce come file .txt."""
-    cfg = _provision_cfg(payload.dict(), materialized, current_user, "FortiGate")
-    config_text = _with_placeholder_warning(
-        fortigate_provisioner.build_config(cfg), "fortigate")
-    from fastapi.responses import Response as FastResponse
-    filename = f"{(payload.hostname or 'fortigate').strip()}-day0.txt"
-    log_audit(f"Config FortiGate day-0 (download) per '{payload.hostname}' da '{current_user.get('sub')}'.")
-    return FastResponse(
-        content=config_text,
-        media_type="text/plain",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
 
 # ── Identita' tenant (profili credenziali riusabili) ────────────────────────
 from security import identity_manager
