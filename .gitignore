@@ -38,6 +38,7 @@ backup-config/
 # Logging
 error_log.txt
 audit.log
+*.log
 
 # PyInstaller / Compilation output
 build/
@@ -68,6 +69,8 @@ c_api_key.txt
 .env.*
 .DS_Store
 Thumbs.db
+*.tmp
+*.bak
 
 # Python tool caches
 .pytest_cache/
