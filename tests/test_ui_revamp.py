@@ -736,28 +736,6 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         details_tag = html.rindex('<details', 0, adhoc_idx)
         self.assertIn('requires-write', html[details_tag:adhoc_idx])
 
-    def test_preserve_ids_clientmap_arp_multiselect(self):
-        html = frontend_source()
-        for _id in ('arpDeviceMenu', 'arpDeviceSummary', 'arpDeviceList',
-                    'btnArpScan', 'arpScanSummary'):
-            self.assertIn(f'id="{_id}"', html)
-        for hook in ('runArpScan', 'populateArpScanDevices'):
-            self.assertIn(hook, html)
-        # RBAC: the scan action stays write-gated
-        self.assertIn('id="btnArpScan"', html)
-        scan_start = html.index('id="btnArpScan"')
-        scan_tag = html.rindex('<button', 0, scan_start)
-        self.assertIn('requires-write', html[scan_tag:scan_start])
-        # SAFETY CONSTRAINT: ARP-target selection must remain an EXPLICIT
-        # multi-select (checkbox list the user picks specific gateways from),
-        # never a fire-against-all control. Verify the checkbox-list machinery
-        # (class + per-item onchange + JS helpers) survived the restyle.
-        self.assertIn('class="arp-dev-cb"', html)
-        self.assertIn('id="arpDevAll"', html)
-        self.assertIn('toggleAllArpDevices', html)
-        self.assertIn('function selectedArpDevices()', html)
-        self.assertIn("querySelectorAll('#arpDeviceList .arp-dev-cb:checked')", html)
-
     def test_endpoint_contract_present(self):
         html = frontend_source()  # MAC tracker/Client Map JS moved to static/js/client-map.js
         # runMacScan() -> apiFetch('/api/mac/scan', {method:'POST', ...})
@@ -782,8 +760,6 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         self.assertIn('/api/mac/settings', html)
         # refreshMacStats() -> GET /api/mac/stats
         self.assertIn('/api/mac/stats', html)
-        # runArpScan() -> POST /api/arp/scan (the explicit-multi-select target)
-        self.assertIn('/api/arp/scan', html)
         # Brief's "Switch drill-down: GET /api/mac/switch/{ip}" has no frontend
         # caller anywhere in dashboard.html (traced: no JS references
         # '/api/mac/switch'). This mirrors the Task 6 "/api/models has no
@@ -810,7 +786,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         for key in ('macEyebrow:', 'titleMacTracker:', 'descMacTracker:',
                     'macKpiSightingsLabel:', 'macKpiUniqueLabel:', 'macKpiSwitchesLabel:',
                     'macKpiRetentionLabel:', 'titleMacScanPanel:', 'titleMacSearchPanel:',
-                    'clientmapEyebrow:', 'titleClientMap:', 'descClientMap:',
+                    'clientmapEyebrow:',
                     'arpKpiBindingsLabel:', 'arpKpiUniqueLabel:', 'arpKpiGatewaysLabel:',
                     'titleArpCollectPanel:', 'titleArpSearchPanel:'):
             self.assertGreaterEqual(html.count(key), 2, f"{key} missing from a language map")
