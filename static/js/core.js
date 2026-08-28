@@ -1533,6 +1533,7 @@ function buildCommandPaletteItems(query = '') {
     const quickActions = [
         { title: en ? 'Run Global Triage' : 'Avvia Triage Globale', desc: en ? 'Execute triage check across all devices' : 'Esegui triage su tutti i dispositivi', icon: 'fa-bolt-lightning', action: () => { const b = document.getElementById('btnHomeRunTriage'); if (b) b.click(); } },
         { title: en ? 'Run MAC Scan' : 'Avvia MAC Scan', desc: en ? 'Collect MAC address table from switches' : 'Raccogli tabella MAC dagli switch', icon: 'fa-satellite-dish', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnMacScan'); if (b) b.click(); } },
+        { title: en ? 'Run ARP Collection' : 'Raccogli ARP (gateway L3)', desc: en ? 'Collect ARP bindings from gateways' : 'Raccogli binding ARP dai gateway L3', icon: 'fa-network-wired', action: () => { switchTab('tab-endpoint'); if (typeof locSwitchView === 'function') locSwitchView('mac'); const b = document.getElementById('btnArpScan'); if (b) b.click(); } },
         { title: en ? 'Add New Device' : 'Aggiungi Nuovo Dispositivo', desc: en ? 'Open provisioning form for new device' : 'Apri form di provisioning nuovo apparato', icon: 'fa-circle-plus', action: () => switchTab('tab-provisioning') },
         { title: en ? 'Toggle Theme' : 'Alterna Tema Chiaro / Scuro', desc: en ? 'Switch dark/light theme' : 'Cambia tema scuro/chiaro', icon: 'fa-circle-half-stroke', action: () => toggleTheme() },
     ];

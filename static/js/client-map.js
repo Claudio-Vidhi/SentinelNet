@@ -1,9 +1,11 @@
 // static/js/client-map.js
-// Extracted from templates/dashboard.html: the MAC Address Tracker pane.
-// The Client Map (MAC <-> IP from the L3 gateways' ARP tables) half was
-// removed once Endpoint Inventory covered MAC <-> IP. showPortConfig/
-// closePortConfigModal (used by the row buttons) live in core.js:
-// cross-module call at runtime, no change in behavior.
+// Estratto da templates/dashboard.html: tab-mac (MAC Address Tracker) e
+// tab-clientmap (Client Map MAC <-> IP dalle ARP dei gateway L3). Le due
+// sezioni erano contigue nell'inline script originale e condividono lo
+// stesso pattern (multi-selezione device via checkbox, filtro tenant,
+// tabelle raggruppate). showPortConfig/closePortConfigModal (usati dai
+// bottoni di riga) vivono in core.js: chiamata cross-modulo a runtime,
+// nessun cambio di comportamento.
 
 // The endpoint group is one tab with three panes: Tracker MAC, Diagnosi, and Inventory.
 // Each pane loads on its first activation, not when the tab opens.
@@ -78,6 +80,7 @@ function locTenantChanged() {
 
     function loadMacTracker() {
         populateMacScanDevices();
+        populateArpScanDevices();
         loadMacOverrides();
         refreshMacStats(true);
         macSearch();
@@ -301,6 +304,246 @@ function locTenantChanged() {
         if (!iso) return '—';
         try { return new Date(iso).toLocaleString(currentLang==='en' ? 'en-US' : 'it-IT'); }
         catch (e) { return iso; }
+    }
+
+    // --- CLIENT MAP: MAC <-> IP dalle ARP dei gateway L3 ---
+
+    function loadClientMapTab() {
+        populateArpScanDevices();
+        populateArpGatewayFilter();
+        arpClientSearch();
+    }
+
+    // Dispositivi filtrati per il tenant selezionato.
+    function arpFilteredDevices() {
+        const group = locTenant();
+        let devs = globalDevices || [];
+        if (group && group !== 'all') devs = devs.filter(d => (d.Group || 'Generale') === group);
+        return devs;
+    }
+
+    // Multi-selezione dei gateway da interrogare (stesso pattern del MAC Tracker).
+    function populateArpScanDevices() {
+        const box = document.getElementById('arpDeviceList');
+        if (box) {
+            const L = i18n[currentLang];
+            const devs = arpFilteredDevices();
+            const head = `<label style="display:flex; align-items:center; gap:8px; padding:5px 6px; font-size:12px; cursor:pointer; border-bottom:1px solid var(--border); margin-bottom:4px;">
+                <input type="checkbox" id="arpDevAll" data-action="toggle-all-arp-devices" style="accent-color:var(--primary);">
+                <strong>${L.optMacAllDevices || 'Tutti i dispositivi'}</strong></label>`;
+            const items = devs.map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<label style="display:flex; align-items:center; gap:8px; padding:4px 6px; font-size:12px; cursor:pointer;">
+                    <input type="checkbox" class="arp-dev-cb" value="${escapeHtml(d.IP)}" data-action="update-arp-device-summary" style="accent-color:var(--primary);">
+                    <span style="font-family:var(--font-code);">${escapeHtml(d.IP)}</span>
+                    <span style="color:var(--text-muted);">${name}</span></label>`;
+            }).join('');
+            box.innerHTML = head + (items ||
+                `<div style="font-size:12px; color:var(--text-muted); padding:6px;">${L.msgAiNoDevices || 'Nessun dispositivo'}</div>`);
+        }
+        updateArpDeviceSummary();
+    }
+
+    function selectedArpDevices() {
+        return [...document.querySelectorAll('#arpDeviceList .arp-dev-cb:checked')].map(cb => cb.value);
+    }
+
+    function toggleAllArpDevices(on) {
+        document.querySelectorAll('#arpDeviceList .arp-dev-cb').forEach(cb => cb.checked = on);
+        updateArpDeviceSummary();
+    }
+
+    function updateArpDeviceSummary() {
+        const total = document.querySelectorAll('#arpDeviceList .arp-dev-cb').length;
+        const sel = selectedArpDevices().length;
+        const all = document.getElementById('arpDevAll');
+        if (all) all.checked = (total > 0 && sel === total);
+        const sum = document.getElementById('arpDeviceSummary');
+        if (sum) sum.textContent = (sel === 0)
+            ? (i18n[currentLang].optMacAllDevices || 'Tutti i dispositivi')
+            : `${sel} ${i18n[currentLang].lblAiDevSelected || 'selezionati'}`;
+    }
+
+    // Il filtro gateway elenca i device del tenant scelto nel filtro di vista.
+    function populateArpGatewayFilter() {
+        const sel = document.getElementById('arpFilterGateway');
+        if (!sel) return;
+        const cur = sel.value;
+        const L = i18n[currentLang];
+        const devs = arpFilteredDevices();
+        sel.innerHTML = `<option value="">${L.optArpAllGateways || 'Tutti i gateway'}</option>` +
+            devs.map(d => {
+                const name = d.Hostname ? ` — ${escapeHtml(d.Hostname)}` : '';
+                return `<option value="${escapeHtml(d.IP)}">${escapeHtml(d.IP)}${name}</option>`;
+            }).join('');
+        sel.value = [...sel.options].some(o => o.value === cur) ? cur : '';
+    }
+
+    async function runArpScan() {
+        const btn = document.getElementById('btnArpScan');
+        btn.disabled = true;
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ...';
+        try {
+            const payload = { group: locTenant() };
+            const ips = selectedArpDevices();
+            if (ips.length) payload.ips = ips;
+            const res = await apiFetch('/api/arp/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res) return;
+            const box = document.getElementById('arpScanSummary');
+            const en = currentLang === 'en';
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                box.style.display = 'block';
+                box.innerHTML = `<span style="color:var(--danger);">${escapeHtml(err.detail || (en ? 'ARP scan error' : 'Errore scansione ARP'))}</span>`;
+                return;
+            }
+            const d = await res.json();
+            const rows = Object.entries(d.devices || {}).map(([ip, r]) => {
+                const color = r.status === 'success' ? 'var(--success, #7bd88f)'
+                            : r.status === 'empty' ? 'var(--text-muted)' : 'var(--danger)';
+                const detail = r.status === 'success'
+                    ? (en ? `${r.entries} entries (${r.new} new, ${r.updated} updated)`
+                          : `${r.entries} entry (nuove ${r.new}, aggiornate ${r.updated})`)
+                    : escapeHtml(r.message || r.status);
+                return `<div>• <b>${escapeHtml(ip)}</b> — <span style="color:${color};">${r.status}</span>: ${detail}</div>`;
+            }).join('');
+            box.style.display = 'block';
+            box.innerHTML = `<b>${i18n[currentLang].titleArpScanSummary || 'Esito raccolta ARP'}</b>` +
+                `<div style="margin-top:6px;">${rows || '—'}</div>`;
+            arpClientSearch();
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = oldHtml;
+        }
+    }
+
+    // KPI e riepilogo calcolati lato client dai risultati già filtrati per tenant
+    // selezionati (nessuna chiamata separata a /api/arp/stats, che non è scopabile
+    // per tenant): "KPI contano solo i tenant selezionati".
+    function updateArpKpisFromResults(tenants, byTenant) {
+        let bindings = 0;
+        const macs = new Set();
+        const gws = new Set();
+        tenants.forEach(t => (byTenant[t] || []).forEach(r => {
+            bindings++;
+            if (r.mac) macs.add(String(r.mac).toLowerCase());
+            if (r.source_ip) gws.add(r.source_ip);
+        }));
+        const kB = document.getElementById('kpiArpBindings'); if (kB) kB.textContent = String(bindings);
+        const kM = document.getElementById('kpiArpUniqueMacs'); if (kM) kM.textContent = String(macs.size);
+        const kG = document.getElementById('kpiArpGateways'); if (kG) kG.textContent = String(gws.size);
+        const el = document.getElementById('arpStats');
+        if (el) el.innerText = (currentLang === 'en'
+            ? `${bindings} bindings · ${macs.size} MACs · ${gws.size} gateways`
+            : `${bindings} binding · ${macs.size} MAC · ${gws.size} gateway`);
+    }
+
+    async function arpClientSearch() {
+        const mac = document.getElementById('arpSearchMac').value.trim();
+        const ip = document.getElementById('arpSearchIp').value.trim();
+        const tenants = [locTenant()];
+        const gw = document.getElementById('arpFilterGateway')?.value || '';
+        const byTenant = {};
+        for (const t of tenants) {
+            const params = new URLSearchParams();
+            if (mac) params.set('mac', mac);
+            if (ip) params.set('ip', ip);
+            params.set('tenant', t);
+            if (gw) params.set('source_ip', gw);
+            const res = await apiFetch('/api/arp/client-map?' + params.toString());
+            byTenant[t] = (res && res.ok) ? (await res.json()).results || [] : [];
+        }
+        renderArpResults(tenants, byTenant);
+        updateArpKpisFromResults(tenants, byTenant);
+    }
+
+    function arpSearchReset() {
+        ['arpSearchMac', 'arpSearchIp'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+        const g = document.getElementById('arpFilterGateway'); if (g) { populateArpGatewayFilter(); g.value = ''; }
+        arpClientSearch();
+    }
+
+    // Una tabella separata per tenant, nell'ordine di selezione: mai unite in
+    // un'unica tabella, ognuna con la propria intestazione.
+    function renderArpResults(tenants, byTenant) {
+        const en = currentLang === 'en';
+        const box = document.getElementById('arpResults');
+        const totalRows = tenants.reduce((n, t) => n + (byTenant[t] || []).length, 0);
+        if (!totalRows) {
+            box.innerHTML = `<div style="padding:28px 16px; text-align:center; color:var(--text-muted); font-size:13px; border:1px solid var(--border); background:var(--surface-2);">
+                <i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${en
+                ? 'No MAC ↔ IP bindings. Run an ARP collection (and a MAC scan for port matching).'
+                : 'Nessun binding MAC ↔ IP. Esegui una raccolta ARP (e una MAC scan per il match della porta).'}</div>`;
+            return;
+        }
+        const th = (t) => `<th style="text-align:left; padding:9px 12px; font-size:10px; font-weight:600; font-family:var(--font-legend); letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); background:var(--surface-3); border-bottom:1px solid var(--border-strong); white-space:nowrap;">${t}</th>`;
+        const td = (t) => `<td style="padding:9px 12px; font-size:12.5px; border-bottom:1px solid var(--border); font-family:var(--font-data); white-space:nowrap;">${t}</td>`;
+        const header = en
+            ? [th('MAC'), th('IP'), th('VLAN'), th('Gateway (routes VLAN)'), th('Type'), th('Access switch'), th('Port'), th('Last seen'), th('')]
+            : [th('MAC'), th('IP'), th('VLAN'), th('Gateway (ruota la VLAN)'), th('Tipo'), th('Switch di accesso'), th('Porta'), th('Ultimo avvistamento'), th('')];
+        // Un MAC amministrato localmente e non riconducibile a un OUI di
+        // virtualizzazione può cambiare alla sessione successiva: il binding
+        // vale adesso, non identifica il dispositivo. Chi legge la tabella deve
+        // saperlo, altrimenti costruisce uno storico su un'identità che non c'è.
+        const macBadge = r => {
+            const info = r.mac_info;
+            if (!info) return '';
+            if (info.vendor_kind) return ` <span class="badge" style="font-size:9px;" title="${escapeHtml(info.oui)}">${escapeHtml(info.vendor_kind)}</span>`;
+            if (r.stable_identity === false) return ` <span class="badge" style="font-size:9px; color:var(--warning);" title="${en ? 'Locally administered: may change between sessions' : 'Amministrato localmente: può cambiare fra le sessioni'}">${en ? 'not stable' : 'non stabile'}</span>`;
+            return '';
+        };
+        const rowHtml = r => '<tr>' + [
+            td(`<code>${escapeHtml(r.mac)}</code>${macBadge(r)}`),
+            td(`<code>${escapeHtml(r.ip)}</code>`),
+            td(escapeHtml(r.vlan || '—')),
+            td(`<span title="${escapeHtml(r.source_type || '')}">${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip)}</span></span>`),
+            td(escapeHtml(r.client_type || 'client')),
+            td(r.switch_ip ? `${escapeHtml(r.switch_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.switch_ip)}</span>` : '—'),
+            td(escapeHtml(r.switch_port || '—') + (r.switch_ip && r.switch_port
+                ? `<button data-action="show-port-config" data-switch-ip="${escapeHtml(r.switch_ip)}" data-switch-port="${escapeHtml(r.switch_port)}" data-switch-name="${escapeHtml(r.switch_name || '')}" title="${escapeHtml(i18n[currentLang].btnPortConfig)}" style="margin-left:6px; border:none; background:none; color:var(--primary); cursor:pointer; font-size:12px;"><i class="fa-solid fa-file-lines"></i></button>`
+                : '')),
+            td(fmtMacTime(r.last_seen)),
+            // Diagnosi: la riga ha già IP e MAC, cioè tutto l'ingresso
+            // dell'endpoint. Si passa l'IP quando c'è (più preciso del MAC,
+            // che il servizio dovrebbe comunque risolvere).
+            td(`<button data-action="diagnose-client" data-target="${escapeHtml(r.ip || r.mac)}" title="${escapeHtml(i18n[currentLang].btnDiagnose)}" style="border:none; background:none; color:var(--primary); cursor:pointer; font-size:13px;"><i class="fa-solid fa-stethoscope"></i></button>`),
+        ].join('') + '</tr>';
+        const table = body => `<table style="width:100%; border-collapse:collapse; background:var(--surface-2);">` +
+            `<thead><tr>${header.join('')}</tr></thead><tbody>${body}</tbody></table>`;
+        box.innerHTML = tenants.map(t => {
+            const rows = byTenant[t] || [];
+            const body = rows.length
+                ? `<div class="table-container" style="border:none; margin:0; background:transparent;">${table(rows.map(rowHtml).join(''))}</div>`
+                : `<div style="padding:16px 14px; color:var(--text-muted); font-size:12px;"><i class="fa-solid fa-circle-info" style="margin-right:6px;"></i>${en ? 'No bindings for this tenant.' : 'Nessun binding per questo tenant.'}</div>`;
+            // 'all' is the sentinel locTenant() returns for "no tenant chosen" (the pane's
+            // default), not a real tenant name: label it via i18n instead of printing it raw.
+            const tenantLabel = t === 'all' ? i18n[currentLang].optFilterAll : escapeHtml(t);
+            const countLabel = en ? (rows.length === 1 ? 'binding' : 'bindings') : 'binding';
+            return `
+            <div style="margin-bottom:18px; border:1px solid var(--border-strong); background:var(--surface-2); overflow:hidden;">
+                <div style="padding:9px 14px; background:var(--surface-3); border-bottom:1px solid var(--border-strong); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                    <div style="display:flex; align-items:center; gap:9px;">
+                        <span style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--edge); color:var(--text);">
+                            <i class="fa-solid fa-building" style="font-size:11px;"></i>
+                        </span>
+                        <span style="font-family:var(--font-legend); font-weight:700; font-size:14px; letter-spacing:0.08em; text-transform:uppercase; color:var(--text);">
+                            ${tenantLabel}
+                        </span>
+                    </div>
+                    <span class="count-badge" style="font-family:var(--font-legend); font-size:11px; font-weight:600; letter-spacing:0.06em; padding:2px 8px; border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text);">
+                        ${rows.length} ${countLabel}
+                    </span>
+                </div>
+                ${body}
+            </div>`;
+        }).join('');
     }
 
     // Risultati raggruppati per switch: ogni host è un accordion collassato;
@@ -561,6 +804,30 @@ function locTenantChanged() {
         }
     });
 
+    document.getElementById('arpDeviceList')?.addEventListener('change', (e) => {
+        const allCb = e.target.closest('input[data-action="toggle-all-arp-devices"]');
+        if (allCb) {
+            toggleAllArpDevices(allCb.checked);
+            return;
+        }
+        const devCb = e.target.closest('input[data-action="update-arp-device-summary"]');
+        if (devCb) {
+            updateArpDeviceSummary();
+        }
+    });
+
+    document.getElementById('arpResults')?.addEventListener('click', (e) => {
+        const portBtn = e.target.closest('[data-action="show-port-config"]');
+        if (portBtn) {
+            showPortConfig(portBtn.dataset.switchIp, portBtn.dataset.switchPort, portBtn.dataset.switchName);
+            return;
+        }
+        const diagBtn = e.target.closest('[data-action="diagnose-client"]');
+        if (diagBtn) {
+            diagnoseClientInTab(diagBtn.dataset.target, '');
+        }
+    });
+
     document.getElementById('macResults')?.addEventListener('click', (e) => {
         const portBtn = e.target.closest('[data-action="show-port-config"]');
         if (portBtn) {
@@ -573,7 +840,7 @@ function locTenantChanged() {
         }
     });
 
-    // Static event listeners for the MAC Tracker pane
+    // Static event listeners for MAC Tracker & Client Map tabs
     document.getElementById('locTenant')?.addEventListener('change', locTenantChanged);
     document.getElementById('locPills')?.addEventListener('click', (e) => {
         const pill = e.target.closest('[data-loc-view]');
@@ -597,3 +864,7 @@ function locTenantChanged() {
     document.getElementById('macSearchSwitch')?.addEventListener('change', macSearch);
     document.getElementById('btnMacSearch')?.addEventListener('click', macSearch);
     document.getElementById('btnMacSearchReset')?.addEventListener('click', macSearchReset);
+    document.getElementById('btnArpScan')?.addEventListener('click', runArpScan);
+    document.getElementById('arpFilterGateway')?.addEventListener('change', arpClientSearch);
+    document.getElementById('btnArpSearch')?.addEventListener('click', arpClientSearch);
+    document.getElementById('btnArpSearchReset')?.addEventListener('click', arpSearchReset);
