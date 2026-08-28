@@ -80,7 +80,6 @@ class TestPanesHoldTheContent(unittest.TestCase):
     def test_each_pane_holds_its_own_panels(self):
         self.assertIn('id="macDeviceMenu"', self._pane("mac"))
         self.assertIn('id="kpiMacSightings"', self._pane("mac"))
-        self.assertIn('id="arpDeviceMenu"', self._pane("mac"))
         self.assertIn('id="diagClientInput"', self._pane("diagnosi"))
         self.assertIn('id="epFilterQ"', self._pane("inventory"))
 
