@@ -30,11 +30,6 @@ def get_groups_json() -> str:
         return GROUPS_JSON
     return data_config.get_path("groups.json")
 
-def get_version_data_file() -> str:
-    if VERSION_DATA_FILE != _DEFAULT_VERSION_DATA_FILE:
-        return VERSION_DATA_FILE
-    return data_config.get_path("detected_versions.json")
-
 def get_vendors_file() -> str:
     if VENDORS_FILE != _DEFAULT_VENDORS_FILE:
         return VENDORS_FILE
