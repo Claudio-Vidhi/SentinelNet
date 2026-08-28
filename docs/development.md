@@ -51,6 +51,9 @@ written in English.
 
 ## 3. Tests
 
+> **The test suite lives on the `Dev` branch.** This branch carries the
+> application only; clone or check out `Dev` to run the commands below.
+
 `unittest`. Each test sets a temporary `SENTINELNET_DATA_DIR` **before**
 importing project modules — that ordering is load-bearing, since
 `data_config.DATA_DIR` is resolved at import time.
