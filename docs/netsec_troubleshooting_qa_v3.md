@@ -61,7 +61,7 @@
   *(`POST /api/topology/reset` does exist — it is not the same route as `/api/topology/map`.)*
 - Removed in August 2026 and **no longer existing**: `POST /api/provisioner/fgt/push-ssh` and
   `POST /api/provisioner/fgt/push-serial`. SentinelNet no longer delivers a FortiGate day-0 config
-  — `/api/provisioner/fgt/generate` and `/fgt/download` remain and the operator applies the text
+  — only `/api/provisioner/fgt/generate` remains and the operator applies the text
   itself. The Cisco `POST /api/provisioner/push-ssh` and `/push-serial` are untouched and still work.
 
 ---
@@ -190,11 +190,12 @@ customer values.
 - **App Features Present**:
   - `GET /api/config-analyzer` ([routers/analyzer.py:52](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/analyzer.py#L52)),
     `GET /api/config-analyzer/{ip}` (L57), `POST /api/config-analyzer/convert` (L75, FortiOS ↔ PAN-OS)
-  - `POST /api/provisioner/fgt/generate`, `/fgt/download` (generation only — there is no FortiGate
-    push route); Cisco `/api/provisioner/generate`, `/download`, `/push-ssh`, `/push-serial`,
+  - `POST /api/provisioner/fgt/generate` (generation only — there is no FortiGate
+    push route); Cisco `/api/provisioner/generate`, `/push-ssh`, `/push-serial`,
     `GET /api/provisioner/serial-ports`
     ([routers/provisioner.py](file:///c:/Users/vidhi/dev_ved/SentinelNet/routers/provisioner.py)).
-    The two push routes are admin-gated (`require_admin`); generate/download are `require_operator`.
+    The two push routes are admin-gated (`require_admin`); generate is `require_operator`.
+    The browser downloads the generated config client-side from the `/generate` response.
   - Identity store for push credentials: `GET/POST /api/identities` (L316/L321),
     `PUT/DELETE /api/identities/{id}` (L331/L343), `POST /api/identities/{id}/assign` (L360).
     The same store backs the bastion login of a jump site (§7.2).
