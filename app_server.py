@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 
 from core import data_config
 from core import db
-from security import crypto_vault  # compat for test_observability_ui.py
+from security import crypto_vault  # noqa: F401 (compat: patched by tests as app_server.crypto_vault)
 
 from core.app_settings import (  # noqa: F401
     PORT, _app_adv_setting, get_app_settings, save_app_settings,
@@ -65,7 +65,7 @@ app = FastAPI(title="SentinelNet API", version=__version__, lifespan=lifespan)
 def get_app_version():
     return {"app": "SentinelNet", "version": __version__}
 
-from routers import deps as _deps_router  # not a router, but compat
+from routers import deps as _deps_router  # noqa: F401 (reimport contract, see routers/deps.py)
 from routers import fortigate as _fortigate_router
 from routers import wlc as _wlc_router
 from routers import observability as _observability_router

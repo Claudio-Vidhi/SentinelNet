@@ -474,7 +474,7 @@ class TestGroupsTabRestyle(unittest.TestCase):
         # rules ("restyle, not rewire" / don't fabricate wiring), relaxed to
         # asserting the handler function names exist server-side instead of
         # fabricating a UI table for them.
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         self.assertTrue(hasattr(routers.catalog, 'list_models'))
         self.assertTrue(hasattr(routers.catalog, 'create_model'))
         self.assertTrue(hasattr(routers.catalog, 'remove_model'))
@@ -523,7 +523,7 @@ class TestMapTabRestyle(unittest.TestCase):
         # Relaxed to asserting the handler exists server-side (same precedent as
         # /api/models in TestGroupsTabRestyle) rather than fabricating wiring.
         self.assertIn('/api/topology/reset', html)
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         self.assertTrue(hasattr(routers.topology, 'get_topology_adjacency'))
 
     def test_map_tabs_use_component_classes(self):
@@ -575,7 +575,7 @@ class TestTopologyTabRestyle(unittest.TestCase):
         # caller in dashboard.html -- traced exportVisioMap()/downloadTopology()
         # and neither hits it. Relaxed to the server-side handler name, same
         # precedent as TestMapTabRestyle.test_endpoint_contract_present above.
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         self.assertTrue(hasattr(routers.topology, 'get_topology_adjacency'))
         # exportVisioMap() posts to /api/map/export/vsdx -- traced the handler
         # in app_server.py: only a POST route exists (export_map_vsdx), there
@@ -637,7 +637,7 @@ class TestCategoriesTabRestyle(unittest.TestCase):
         # additionally assert the real server-side handler exists, per Task 6/7/8
         # precedent, rather than fabricating a GET wiring that doesn't exist.
         self.assertIn('"/api/device-categories"', html)
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         self.assertTrue(hasattr(routers.catalog, 'create_device_category'))
 
     def test_categories_tab_uses_component_classes(self):
@@ -791,7 +791,7 @@ class TestMacTrackerTabRestyle(unittest.TestCase):
         # to any control, so relax the assertion to the handler existing
         # server-side instead of fabricating a UI wiring that isn't there.
         self.assertNotIn('/api/mac/switch', html)
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         self.assertTrue(hasattr(routers.mac, 'mac_switch'))
 
     def test_mac_and_clientmap_tabs_use_component_classes(self):
@@ -859,7 +859,7 @@ class TestConfigAnalyzerTabRestyle(unittest.TestCase):
         # (showPortConfig -> apiFetch('/api/config-analyzer/' + switchIp)) for the
         # port-config deep-link, in addition to being consumed by mcp_server.py.
         self.assertIn("apiFetch('/api/config-analyzer/' + encodeURIComponent(switchIp))", html)
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         self.assertTrue(hasattr(routers.analyzer, 'config_analyzer_device'))
         self.assertTrue(hasattr(routers.analyzer, 'config_analyzer_all'))
         self.assertTrue(hasattr(routers.backup, 'download_backup'))
@@ -1312,7 +1312,7 @@ class TestUsersTabRestyle(unittest.TestCase):
         # single GET /api/users listing consumed by renderUsersTable(). Per
         # shared per-tab rules, relaxed to asserting the real POST routes
         # exist server-side rather than fabricating a GET call that isn't made.
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         routes = {(getattr(r, "path", ""), m) for r in _app_server.app.routes
                   for m in getattr(r, 'methods', set()) or set()}
         self.assertIn(('/api/users/groups', 'POST'), routes)
@@ -1402,7 +1402,7 @@ class TestSitesTabRestyle(unittest.TestCase):
         # ("do NOT fabricate UI"), this is reported rather than invented;
         # relaxed to asserting the real routes exist server-side by handler
         # name, and asserting no fabricated hook was added for them.
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         for fn in ('update_site_ep', 'site_command_ep', 'list_site_command_jobs_ep'):
             self.assertTrue(hasattr(routers.sites, fn), f"expected server route {fn} to exist")
         for hook in ('updateSite(', 'editSite(', 'runSiteCommand(', 'siteCommand(', 'commandJobs('):
@@ -1506,7 +1506,7 @@ class TestMcpTabRestyle(unittest.TestCase):
         # only mcp_server.py's own GET request against the running server.
         # Relax to the handler name rather than fabricating a UI wiring.
         self.assertNotIn('/api/mcp/tool-config', html)
-        import app_server as _app_server
+        import app_server as _app_server  # noqa: F401 (deliberate side-effect import)
         self.assertTrue(hasattr(routers.mcp, 'get_mcp_tool_config'))
         self.assertTrue(hasattr(routers.mcp, 'get_mcp_settings'))
         self.assertTrue(hasattr(routers.mcp, 'set_mcp_settings'))
