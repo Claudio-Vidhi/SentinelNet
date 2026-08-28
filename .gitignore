@@ -82,6 +82,22 @@ graphify-out/
 .graphifyignore
 CLAUDE.md
 
+# API keys & secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+*secret*.json
+apikey*
+*_api_key*
+.env.local
+credentials.json
+service-account*.json
+identities.json
+
+app_settings.json
+
 # Observability DB (runtime data, never commit)
 observability.db
 observability.db-wal
