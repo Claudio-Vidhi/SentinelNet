@@ -19,6 +19,21 @@ Canonical for this repo. `CLAUDE.md` and `.agents/AGENTS.md` point here.
   Italian: leave it alone. Mixed files are expected during migration — do not
   "fix" surrounding Italian comments as a drive-by.
 
+## Branches
+
+Only two branches matter: `Dev` and `master`. They carry the **same app
+features and the same fixes** — a change landing on one belongs on the other.
+
+- A new branch merges into `Dev` first. `Dev` → `master` after that, never
+  straight to `master`.
+- `master` is the public branch: it holds the product with dev-only files
+  stripped (`tests/`, `tests_data/`, `AGENTS.md`, `.claude/`, `.agents/`,
+  `scripts/dev/`, the dev-only `docs/` and helper scripts). That strip is the
+  *only* thing that may differ — never app code, never `.gitignore`.
+- So `master` carries no test suite. Verify on `Dev`, where the gate runs,
+  then port. Never `git merge --ff-only master` from `Dev`: master's history
+  contains those deletions, and fast-forwarding would wipe `Dev`'s tests.
+
 ## Software Versioning (SemVer)
 - Single source of truth is `core/version.py` (`__version__ = "X.Y.Z"`); `pyproject.toml` must match it. Update both.
 - **PATCH**: bug fixes, security patches, minor UI refinements.
