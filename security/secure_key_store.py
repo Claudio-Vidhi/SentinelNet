@@ -70,10 +70,6 @@ if _IS_WINDOWS:
         return _from_blob(out_blob)
 
 
-def dpapi_available() -> bool:
-    return _IS_WINDOWS
-
-
 def _atomic_write(path: str, data: bytes):
     tmp = path + ".tmp"
     with open(tmp, "wb") as f:
