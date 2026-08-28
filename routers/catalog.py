@@ -11,7 +11,8 @@ from services import inventory_manager
 from core import core_engine
 from security.security_manager import log_audit
 from routers.deps import (
-    get_current_user, require_operator, user_group_scope, filter_map_to_scope, assert_group_allowed
+    get_current_user, require_admin, require_operator, user_group_scope,
+    filter_map_to_scope, assert_group_allowed
 )
 
 router = APIRouter(tags=["Catalog"])
@@ -30,7 +31,6 @@ class GroupRenameSchema(BaseModel):
 
 class VendorSchema(BaseModel):
     name: str
-    euvd_term: str
     driver: Optional[str] = None
 
 class VendorDeleteSchema(BaseModel):
@@ -85,9 +85,13 @@ def create_group(group: GroupSchema, current_user = Depends(require_operator)):
     return {"status": "success", "message": "Gruppo creato"}
 
 @router.post("/api/groups/rename")
-def rename_group(payload: GroupRenameSchema, current_user = Depends(require_operator)):
-    """Rinomina una sede/gruppo (admin/operator) e riassegna i relativi apparati.
-    'Generale' non è rinominabile."""
+def rename_group(payload: GroupRenameSchema, current_user = Depends(require_admin)):
+    """Rinomina un tenant e riassegna i relativi apparati. 'Generale' non è
+    rinominabile.
+
+    Solo admin: rinominare un tenant riscrive l'assegnazione di TUTTI i suoi
+    apparati e cambia lo scope RBAC di chi vi è limitato. La creazione resta
+    operator (serve durante il provisioning, tab Provisioning)."""
     old = payload.old_name.strip()
     new = payload.new_name.strip()
     if not old or not new:
@@ -106,7 +110,8 @@ def rename_group(payload: GroupRenameSchema, current_user = Depends(require_oper
     return {"status": "success"}
 
 @router.post("/api/groups/delete")
-def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_operator)):
+def remove_group(payload: GroupDeleteSchema, current_user = Depends(require_admin)):
+    """Elimina un tenant. Solo admin: e' distruttivo e tocca lo scope RBAC."""
     group_name = payload.name
     assert_group_allowed(current_user, group_name)
     groups = inventory_manager.get_all_groups()
@@ -123,7 +128,7 @@ def list_vendors(current_user = Depends(get_current_user)):
 @router.post("/api/vendors")
 def create_vendor(v: VendorSchema, current_user = Depends(require_operator)):
     vendors = inventory_manager.get_all_vendors()
-    vendors[v.name.lower().strip()] = {"euvd_term": v.euvd_term, "driver": v.driver}
+    vendors[v.name.lower().strip()] = {"driver": v.driver}
     inventory_manager.save_vendors(vendors)
     log_audit(f"Vendor '{v.name}' aggiunto/aggiornato da '{current_user.get('sub')}'.")
     return {"status": "success"}
@@ -138,11 +143,10 @@ def delete_vendor(v: VendorDeleteSchema, current_user = Depends(require_operator
     log_audit(f"Vendor '{v.name}' eliminato da '{current_user.get('sub')}'.")
     return {"status": "success"}
 
-@router.get("/api/device-classification")
-def device_classification(current_user = Depends(get_current_user)):
-    """Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con
-    categoria, sede e conteggi per categoria. Usato dal pannello Dispositivi."""
-    scope = user_group_scope(current_user)
+def assemble_classification(scope):
+    """Build the classification rows shared by the tab endpoint and the CSV
+    export: network map filtered to scope, merged with manual category
+    assignments, plus per-category/per-group counts."""
     data = core_engine.generate_network_map(group_filter="all")
     data = filter_map_to_scope(data, scope)
 
@@ -154,6 +158,7 @@ def device_classification(current_user = Depends(get_current_user)):
     counts_by_group: dict = {}
     for n in data["nodes"]:
         a = assignments.get(n["id"], {})
+        red = n.get("redundancy") or {}
         dtype = n.get("device_type", "switch")
         group = n.get("group", "Generale")
         discovered = n.get("status") == "discovered"
@@ -171,12 +176,16 @@ def device_classification(current_user = Depends(get_current_user)):
             "is_manual": bool(a.get("category")),
             "vendor": a.get("vendor") or n.get("vendor"),
             "model": a.get("model") or n.get("model") or "",
+            "serial": n.get("serial") or "",
             "ha_group": a.get("ha_group", ""),
             "version": n.get("version"),
             "vtp_domain": n.get("vtp_domain"),
             "vtp_mode": n.get("vtp_mode"),
             "discovered": discovered,
             "name_options": n.get("name_options") or [],
+            # Badge stack (già calcolato da generate_network_map): unità fisiche
+            # dietro questo IP di management.
+            "stack": red if red.get("type") == "stack" else None,
         }
         nodes.append(node)
         counts_by_category[dtype] = counts_by_category.get(dtype, 0) + 1
@@ -185,11 +194,290 @@ def device_classification(current_user = Depends(get_current_user)):
     return {
         "categories": cats["categories"],
         "nodes": nodes,
+        "links": data.get("links", []),
         "counts_by_category": counts_by_category,
         "counts_by_group": counts_by_group,
         "vendors": sorted(inventory_manager.get_all_vendors().keys()),
         "models": inventory_manager.get_models(),
         "total": len(nodes),
+    }
+
+@router.get("/api/device-classification")
+def device_classification(current_user = Depends(get_current_user)):
+    """Elenco completo dei dispositivi (inventariati + scoperti via CDP/LLDP) con
+    categoria, sede e conteggi per categoria. Usato dal pannello Dispositivi."""
+    data = assemble_classification(user_group_scope(current_user))
+    # `links` is only needed by the export: adding it here would change the
+    # shape of this response, which the frontend and the OpenAPI snapshot rely on.
+    return {k: v for k, v in data.items() if k != "links"}
+
+
+_CLASSIFICATION_COLUMNS = {
+    "hostname":         ("Hostname",         lambda n, l: n.get("label") or n["id"]),
+    "ip":               ("IP",               lambda n, l: n.get("display_ip", "")),
+    "tenant":           ("Tenant",           lambda n, l: n.get("group", "")),
+    "category":         ("Category",         lambda n, l: n.get("device_type", "")),
+    "subcategory":      ("Subcategory",      lambda n, l: n.get("subcategory", "")),
+    "vendor":           ("Vendor",           lambda n, l: n.get("vendor", "")),
+    "model":            ("Model",            lambda n, l: n.get("model", "")),
+    "version":          ("Version",          lambda n, l: n.get("version") or ""),
+    "status":           ("Status",           lambda n, l: n.get("status", "")),
+    "discovered":       ("Discovered",       lambda n, l: "yes" if n.get("discovered") else "no"),
+    "serial":           ("Serial",           lambda n, l: n.get("serial", "")),
+    "serial_seen_at":   ("Serial Seen At",   lambda n, l: n.get("serial_seen_at", "")),
+    "neighbour_device": ("Neighbour Device", lambda n, l: l.get("device", "")),
+    "neighbour_port":   ("Neighbour Port",   lambda n, l: l.get("port", "")),
+    "neighbour_category": ("Neighbour Category", lambda n, l: l.get("category", "")),
+    "neighbour_subcategory": ("Neighbour Subcategory", lambda n, l: l.get("subcategory", "")),
+    "neighbour_ip":     ("Neighbour IP",     lambda n, l: l.get("ip", "")),
+    "neighbour_model":  ("Neighbour Model",  lambda n, l: l.get("model", "")),
+    "neighbour_serial": ("Neighbour Serial", lambda n, l: l.get("serial", "")),
+    "member_index":     ("Member #",         lambda n, l: l.get("member_index", "")),
+    "member_role":      ("Member Role",      lambda n, l: l.get("member_role", "")),
+    "member_serial":    ("Member Serial",    lambda n, l: l.get("member_serial", "")),
+    "member_model":     ("Member Model",     lambda n, l: l.get("member_model", "")),
+}
+
+# Asking for one of these columns means asking for one row per neighbour: a
+# device with redundant uplinks has more than one, and a joined cell cannot be
+# filtered or looked up in a spreadsheet -- the same reason _MEMBER_COLUMNS
+# explodes rows in the device export.
+_NEIGHBOUR_COLUMNS = frozenset((
+    "neighbour_device", "neighbour_port", "neighbour_category",
+    "neighbour_subcategory", "neighbour_ip", "neighbour_model", "neighbour_serial"
+))
+
+# A stack answers on one management IP but carries one serial per physical
+# unit, and the scan stores those on the redundancy group, not on the device:
+# without these columns the Serial cell of every stacked switch is empty.
+# Same rule as the device export -- one row per unit, never a joined cell.
+_MEMBER_COLUMNS = frozenset(("member_index", "member_role",
+                             "member_serial", "member_model"))
+
+_DEFAULT_CLASSIFICATION_COLUMNS = ["hostname", "ip", "tenant", "category", "status"]
+
+
+def _neighbours_of(node_id: str, links: list, label_of: dict,
+                   category_of: dict, versions: Optional[dict] = None,
+                   ap_entries: Optional[dict] = None, nodes_by_id: Optional[dict] = None) -> list:
+    """Neighbours of one node, each as {device, port, category, subcategory, ip, model, serial}.
+
+    The port reported is the NEIGHBOUR's own port -- the one you patch -- not
+    the port on the device whose row this is. A link stores local_port for its
+    source and remote_port for its target, so which one to read depends on
+    which end this node sits at.
+    """
+    from services import ap_store
+    out = []
+    versions = versions or {}
+    ap_entries = ap_entries or {}
+    nodes_by_id = nodes_by_id or {}
+    for link in links:
+        if link.get("target") == node_id:
+            other, port = link.get("source"), link.get("local_port")
+        elif link.get("source") == node_id:
+            other, port = link.get("target"), link.get("remote_port")
+        else:
+            continue
+
+        other_node = nodes_by_id.get(other) or {}
+        other_label = label_of.get(other, other or "")
+        other_cat = category_of.get(other, "")
+        other_subcat = other_node.get("subcategory", "")
+        other_ip = str(other_node.get("display_ip") or other_node.get("reported_ip")
+                        or other_node.get("ip") or (versions.get(other) or {}).get("ip", "") or "")
+
+        scan = (versions.get(other)
+                or (versions.get(other_ip) if other_ip else None)
+                or (versions.get(other_node.get("id")) if other_node else None)
+                or {})
+        entry = (ap_store.lookup_in(ap_entries, other_label, other_node.get("group"), ip=other_ip)
+                 or ap_store.lookup_in(ap_entries, other_label, other_node.get("group")))
+        other_serial = other_node.get("serial") or scan.get("serial") or (entry or {}).get("serial", "")
+        other_model = other_node.get("model") or scan.get("model") or (entry or {}).get("model", "")
+
+        out.append({
+            "device": other_label,
+            "port": port or "",
+            "category": other_cat,
+            "subcategory": other_subcat,
+            "ip": other_ip,
+            "model": other_model,
+            "serial": other_serial,
+        })
+    return out
+
+
+@router.get("/api/export/classification/columns")
+def export_classification_columns(current_user = Depends(get_current_user)):
+    """Available columns and defaults, so the UI does not duplicate the
+    registry."""
+    return {
+        "columns": [
+            {"key": k, "header": h,
+             "per_neighbour": k in _NEIGHBOUR_COLUMNS,
+             "explodes": k in _NEIGHBOUR_COLUMNS or k in _MEMBER_COLUMNS}
+            for k, (h, _) in _CLASSIFICATION_COLUMNS.items()
+        ],
+        "default": _DEFAULT_CLASSIFICATION_COLUMNS,
+    }
+
+
+def assemble_classification_rows(
+    current_user: dict,
+    columns: str = "",
+    groups: str = "",
+    categories: str = "",
+    neighbour_categories: str = "",
+    neighbour_source_categories: str = "",
+    only_matching_neighbours: bool = False,
+):
+    from services import ap_store
+    from redundancy import service as redundancy_service
+
+    selected = [c.strip() for c in columns.split(",") if c.strip()] \
+        or _DEFAULT_CLASSIFICATION_COLUMNS
+    unknown = [c for c in selected if c not in _CLASSIFICATION_COLUMNS]
+    if unknown:
+        raise HTTPException(status_code=400,
+                            detail=f"Colonne sconosciute: {', '.join(unknown)}")
+
+    data = assemble_classification(user_group_scope(current_user))
+    nodes, links = data["nodes"], data["links"]
+
+    want_groups = {v.strip() for v in groups.split(",") if v.strip()}
+    want_categories = {v.strip() for v in categories.split(",") if v.strip()}
+    if want_groups:
+        nodes = [n for n in nodes if n.get("group", "") in want_groups]
+    if want_categories:
+        nodes = [n for n in nodes if n.get("device_type", "") in want_categories]
+
+    versions = inventory_manager.get_detected_versions()
+    ap_entries = ap_store.read_all()
+    label_of = {n["id"]: (n.get("label") or n["id"]) for n in data["nodes"]}
+    category_of = {n["id"]: n.get("device_type", "") for n in data["nodes"]}
+    nodes_by_id = {n["id"]: n for n in data["nodes"]}
+    explode = any(c in _NEIGHBOUR_COLUMNS for c in selected)
+    badges = (redundancy_service.redundancy_badges_by_ip()
+              if any(c in _MEMBER_COLUMNS for c in selected) else {})
+    want_neighbour_categories = {v.strip()
+                                 for v in neighbour_categories.split(",") if v.strip()}
+    want_neighbour_sources = {v.strip()
+                              for v in neighbour_source_categories.split(",") if v.strip()}
+
+    headers = [_CLASSIFICATION_COLUMNS[c][0] for c in selected]
+    all_rows = []
+
+    for node in nodes:
+        node_ip = str(node.get("display_ip") or node.get("reported_ip") or "")
+        scan = (versions.get(node["id"])
+                or (versions.get(node_ip) if node_ip else None)
+                or {})
+        entry = (ap_store.lookup_in(ap_entries, node.get("label") or node.get("id") or "", node.get("group"), ip=node_ip)
+                 or ap_store.lookup_in(ap_entries, node.get("label") or node.get("id") or "", node.get("group")))
+        row_node = dict(node)
+        row_node["serial"] = node.get("serial") or scan.get("serial") or (entry or {}).get("serial", "")
+        row_node["serial_seen_at"] = (entry or {}).get("seen_at", "")
+
+        node_cat = node.get("device_type", "")
+        should_explode_neighbours = (
+            (explode or only_matching_neighbours)
+            and (not want_neighbour_sources or node_cat in want_neighbour_sources)
+        )
+
+        neighbours = (_neighbours_of(node["id"], links, label_of, category_of,
+                                     versions=versions, ap_entries=ap_entries,
+                                     nodes_by_id=nodes_by_id)
+                      if should_explode_neighbours else [])
+
+        if want_neighbour_categories and should_explode_neighbours:
+            neighbours = [x for x in neighbours
+                          if x["category"] in want_neighbour_categories]
+            if not neighbours and only_matching_neighbours:
+                continue
+        elif want_neighbour_sources and node_cat not in want_neighbour_sources and only_matching_neighbours:
+            continue
+
+        members = [
+            {"member_index": m.get("index", ""), "member_role": m.get("role", ""),
+             "member_serial": m.get("serial", ""), "member_model": m.get("model", "")}
+            for m in ((badges.get(node["id"]) or {}).get("members") or [])
+        ]
+        for link in (neighbours or [{}]):
+            for member in (members or [{}]):
+                all_rows.append([
+                    _CLASSIFICATION_COLUMNS[c][1](row_node, {**link, **member})
+                    for c in selected
+                ])
+
+    return headers, all_rows
+
+
+@router.get("/api/export/classification")
+def export_classification_csv(
+    columns: str = "",
+    groups: str = "",
+    categories: str = "",
+    neighbour_categories: str = "",
+    neighbour_source_categories: str = "",
+    only_matching_neighbours: bool = False,
+    current_user = Depends(get_current_user),
+):
+    import csv, io
+    from fastapi.responses import Response as FastResponse
+    from core.csv_safe import csv_cell
+
+    headers, rows = assemble_classification_rows(
+        current_user=current_user,
+        columns=columns,
+        groups=groups,
+        categories=categories,
+        neighbour_categories=neighbour_categories,
+        neighbour_source_categories=neighbour_source_categories,
+        only_matching_neighbours=only_matching_neighbours,
+    )
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    for r in rows:
+        writer.writerow([csv_cell(val) for val in r])
+
+    log_audit(f"Export CSV classificazione richiesto dall'utente "
+              f"'{current_user.get('sub')}' (colonne: {columns or ','.join(_DEFAULT_CLASSIFICATION_COLUMNS)}).")
+    return FastResponse(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=sentinelnet-classification.csv"},
+    )
+
+
+@router.get("/api/export/classification/preview")
+def preview_classification_export(
+    columns: str = "",
+    groups: str = "",
+    categories: str = "",
+    neighbour_categories: str = "",
+    neighbour_source_categories: str = "",
+    only_matching_neighbours: bool = False,
+    limit: int = 15,
+    current_user = Depends(get_current_user),
+):
+    headers, rows = assemble_classification_rows(
+        current_user=current_user,
+        columns=columns,
+        groups=groups,
+        categories=categories,
+        neighbour_categories=neighbour_categories,
+        neighbour_source_categories=neighbour_source_categories,
+        only_matching_neighbours=only_matching_neighbours,
+    )
+    safe_limit = max(1, min(limit, 100))
+    return {
+        "headers": headers,
+        "rows": rows[:safe_limit],
+        "total_rows": len(rows),
     }
 
 @router.post("/api/device-categories")

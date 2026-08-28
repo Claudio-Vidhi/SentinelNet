@@ -1,20 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Config Analyzer — analisi delle running-config Cisco IOS/IOS-XE raccolte come
-backup, per estrarne una vista strutturata (VLAN, Routing/VPN, ACL, Interfacce) +
-validazione incrociata degli oggetti (ACL/VLAN inutilizzati, riferimenti mancanti).
+"""Config Analyzer — analysis of the Cisco IOS/IOS-XE running-configs collected
+as backups, to extract a structured view (VLAN, Routing/VPN, ACL, Interfaces) +
+cross-validation of objects (unused ACLs/VLANs, missing references).
 
-Il modulo e' volutamente tollerante: non deve MAI sollevare eccezioni su config
-strane o parziali. La funzione centrale ``analyze_config`` e' pura (nessun I/O) ed
-e' quindi facilmente testabile; ``analyze_device``/``analyze_all`` aggiungono la
-lettura del backup piu' recente e lo scoping per sede/tenant.
+The module is deliberately tolerant: it must NEVER raise exceptions on strange
+or partial configs. The central function ``analyze_config`` is pure (no I/O)
+and is therefore easily testable; ``analyze_device``/``analyze_all`` add
+reading of the freshest backup and scoping by site/tenant.
 """
 
+import functools
 import os
 import re
+from typing import Any, Dict, List, Optional
 
-# Primitive di parsing firewall e utility IP: ora vivono nel package
-# fw_analyzers (analizzatori per-vendor). Reimportate qui per i converter e
-# per analyze_fortios_config, senza duplicazione.
+# Firewall parsing primitives and IP utilities: now live in the fw_analyzers
+# package (per-vendor analyzers). Re-imported here for the converters and for
+# analyze_fortios_config, without duplication.
 from fw_analyzers._ip import _mask_to_prefix, _ip_addr_to_cidr
 from fw_analyzers.fortios import (
     _forti_tokens, _forti_tree, _forti_get, _forti_set1, _forti_ip_cidr,
@@ -23,10 +25,10 @@ from fw_analyzers.panos import (
     _panos_tokens, _panos_lines, _panos_collect, _panos_attr, _panos_attr_all,
 )
 
-# --- Utility di basso livello ----------------------------------------------
+# --- Low-level utilities ----------------------------------------------
 
 def _expand_vlan_list(spec):
-    """Espande '10,20,30-35' in ['10','20','30','31',...]. Tollerante."""
+    """Expands '10,20,30-35' into ['10','20','30','31',...]. Tolerant."""
     out = []
     if not spec:
         return out
@@ -48,8 +50,8 @@ def _expand_vlan_list(spec):
 
 
 def running_config(content):
-    """Ritorna solo la parte 'running-config' del backup, tagliando le sezioni
-    appese (=== ... === e --- SHOW ... ---)."""
+    """Returns only the 'running-config' part of the backup, cutting off the
+    appended sections (=== ... === and --- SHOW ... ---)."""
     lines = []
     for ln in (content or '').splitlines():
         s = ln.strip()
@@ -62,10 +64,10 @@ def running_config(content):
 _SHOW_VLAN_ROW = re.compile(r'^(\d{1,4})\s+(\S+)\s+(?:active|act/\S+|suspended|sus/\S+)', re.I)
 
 def parse_show_vlan(content):
-    """VLAN apprese via VTP dalla sezione '--- SHOW VLAN ---' appesa al backup:
-    {vlan_id: nome}. Sugli access switch le VLAN sono definite sul VTP server,
-    non nella running-config locale: senza questa sezione risulterebbero
-    falsamente 'non definite'."""
+    """VLANs learned via VTP from the '--- SHOW VLAN ---' section appended to
+    the backup: {vlan_id: name}. On access switches VLANs are defined on the
+    VTP server, not in the local running-config: without this section they
+    would be falsely reported as 'undefined'."""
     out = {}
     m = re.search(r'--- SHOW VLAN ---\s*\n(.*?)(?=\n--- [A-Z]|\n===|\Z)',
                   content or '', re.DOTALL | re.IGNORECASE)
@@ -79,9 +81,10 @@ def parse_show_vlan(content):
 
 
 def parse_vtp_status(content):
-    """Estrae mode/domain dalla sezione '--- SHOW VTP STATUS ---' appesa al backup.
-    Ritorna {"mode": "server", "domain": "OLITALIA-VTP-DOM"} (mode minuscolo);
-    stringhe vuote se la sezione o le singole righe mancano."""
+    """Extracts mode/domain from the '--- SHOW VTP STATUS ---' section appended
+    to the backup. Returns {"mode": "server", "domain": "OLITALIA-VTP-DOM"}
+    (mode lowercased); empty strings if the section or individual lines are
+    missing."""
     out = {"mode": "", "domain": ""}
     m = re.search(r'--- SHOW VTP STATUS ---\s*\n(.*?)(?=\n--- [A-Z]|\n===|\Z)',
                   content or '', re.DOTALL | re.IGNORECASE)
@@ -98,9 +101,9 @@ def parse_vtp_status(content):
 
 
 def _iter_blocks(lines):
-    """Itera i blocchi top-level della config. Un blocco inizia su una riga a
-    colonna 0 (non '!', non vuota) e prosegue con le righe indentate seguenti.
-    Yields (header, [body_lines])."""
+    """Iterates the top-level blocks of the config. A block starts on a line at
+    column 0 (not '!', not empty) and continues with the following indented
+    lines. Yields (header, [body_lines])."""
     i = 0
     n = len(lines)
     while i < n:
@@ -122,10 +125,10 @@ def _iter_blocks(lines):
         yield header, body
 
 
-# --- Parsing dei singoli oggetti -------------------------------------------
+# --- Parsing of individual objects -------------------------------------------
 
 def _parse_interface(header, body):
-    """Estrae i campi di un blocco 'interface X'."""
+    """Extracts the fields of an 'interface X' block."""
     name = header.split(None, 1)[1].strip() if len(header.split(None, 1)) > 1 else ''
     iface = {
         "name": name, "description": "", "mode": "", "access_vlan": "",
@@ -150,7 +153,7 @@ def _parse_interface(header, body):
         elif low.startswith('switchport trunk allowed vlan '):
             has_switchport = True
             val = s.split('vlan', 1)[1].strip()
-            # 'add' per righe multiple
+            # 'add' on continuation lines
             val = val.replace('add ', '').strip()
             iface["trunk_allowed"] = (iface["trunk_allowed"] + ',' + val).strip(',') if iface["trunk_allowed"] else val
         elif low.startswith('switchport trunk native vlan '):
@@ -181,7 +184,7 @@ def _parse_interface(header, body):
             iface["shutdown"] = True
         elif low.startswith('channel-group '):
             iface["channel_group"] = s.split()[1] if len(s.split()) > 1 else ''
-    # Determinazione modo
+    # Mode determination
     nm = name.lower()
     if nm.startswith('vlan'):
         iface["mode"] = "svi"
@@ -201,7 +204,7 @@ def _parse_interface(header, body):
 
 
 def _parse_static_route(line):
-    """Parsa una riga 'ip route ...'. Ritorna dict o None."""
+    """Parses an 'ip route ...' line. Returns dict or None."""
     toks = line.split()
     # toks[0]=ip toks[1]=route
     rest = toks[2:]
@@ -251,11 +254,36 @@ def _parse_router_block(header, body):
     }, dist_refs
 
 
-# --- Analisi principale (pura, testabile) ----------------------------------
+# --- Main analysis (pure, testable) ----------------------------------
+
+def policy_findings(content, config_type='ios'):
+    """Shadowed / unreachable / any-any / route defects for a config.
+
+    Delegates to the ``services.policy_test`` engine instead of growing a
+    second overlap analysis here: the Policy & Routing tab answers exactly
+    this question, and two implementations of rule containment would drift
+    apart on the first wildcard nobody thought about.
+
+    Tolerant like the rest of this module: a parse failure yields no findings
+    rather than an exception, because a validation extra must never take down
+    an analysis that works without it.
+    """
+    try:
+        from services.policy_test import findings as pt_findings
+        if config_type == 'fortios':
+            from services.policy_test.fortios import parse_fortios_config
+            env = parse_fortios_config(content)
+        else:
+            from services.policy_test.ios import parse_ios_config
+            env = parse_ios_config(content)
+        return [f.to_dict() for f in pt_findings.analyze_policy_findings(env)]
+    except Exception:
+        return []
+
 
 def analyze_config(content):
-    """Analizza il testo di una running-config e ritorna la struttura del
-    contratto (senza i campi meta ip/hostname/tenant, aggiunti a valle)."""
+    """Analyzes the text of a running-config and returns the contract structure
+    (without the ip/hostname/tenant meta fields, added downstream)."""
     lines = running_config(content)
 
     interfaces = []
@@ -268,13 +296,13 @@ def analyze_config(content):
     acl_refs = []        # {"name","where","target","direction","context","routing"}
     vpn = []
 
-    access_use = {}      # vlan_id -> "IFACE (access)" (per undefined)
+    access_use = {}      # vlan_id -> "IFACE (access)" (for undefined)
     used_vlans = set()
 
     for header, body in _iter_blocks(lines):
         low = header.lower()
 
-        # --- Interfacce ---
+        # --- Interfaces ---
         if low.startswith('interface '):
             iface = _parse_interface(header, body)
             interfaces.append(iface)
@@ -287,7 +315,7 @@ def analyze_config(content):
                 if vid.isdigit():
                     svis[vid] = {"ip": iface["ip"], "shutdown": iface["shutdown"]}
                     used_vlans.add(vid)
-            # utilizzo VLAN
+            # VLAN usage
             if iface["access_vlan"]:
                 used_vlans.add(iface["access_vlan"])
                 access_use.setdefault(iface["access_vlan"], f"{nm} (access)")
@@ -296,7 +324,7 @@ def analyze_config(content):
                 access_use.setdefault(iface["voice_vlan"], f"{nm} (voice)")
             for v in _expand_vlan_list(iface["trunk_allowed"]):
                 used_vlans.add(v)
-            # riferimenti ACL su interfaccia
+            # ACL references on interface
             if iface["acl_in"]:
                 acl_refs.append({"name": iface["acl_in"], "where": "interface",
                                  "target": nm, "direction": "in",
@@ -305,7 +333,7 @@ def analyze_config(content):
                 acl_refs.append({"name": iface["acl_out"], "where": "interface",
                                  "target": nm, "direction": "out",
                                  "context": f"interface {nm} (out)", "routing": False})
-            # VRF forwarding sull'interfaccia
+            # VRF forwarding on interface
             for b in body:
                 s = b.strip().lower()
                 m = re.match(r'(?:ip\s+)?vrf forwarding (\S+)', s)
@@ -361,7 +389,7 @@ def analyze_config(content):
                     v["rd"] = bs[3:].strip()
             continue
 
-        # --- ACL numerati ---
+        # --- Numbered ACLs ---
         m = re.match(r'access-list (\d+) (.*)$', header.strip(), re.IGNORECASE)
         if m:
             num = m.group(1)
@@ -373,7 +401,7 @@ def analyze_config(content):
             acl["entries"].append({"seq": "", "action": action, "text": rest})
             continue
 
-        # --- ACL nominali ---
+        # --- Named ACLs ---
         m = re.match(r'ip access-list (standard|extended) (\S+)', low)
         if m:
             kind = "named-std" if m.group(1) == 'standard' else "named-ext"
@@ -436,8 +464,8 @@ def analyze_config(content):
                         "raw": "\n".join([header] + body)})
             continue
 
-        # --- snmp community con ACL / ip nat inside source list (righe singole) ---
-        # (gestite anche come header senza body)
+        # --- snmp community with ACL / ip nat inside source list (single lines) ---
+        # (also handled as headers without body)
         # snmp-server community <str> [RO|RW] [acl]
         mm = re.match(r'snmp-server community (\S+)(?:\s+(ro|rw))?(?:\s+(\S+))?', low)
         if mm and mm.group(3):
@@ -454,9 +482,9 @@ def analyze_config(content):
                              "routing": False})
             continue
 
-    # --- Costruzione vista VLAN ---
-    # VLAN apprese via VTP (sezione SHOW VLAN del backup): contano come definite
-    # e arricchiscono i nomi; nell'elenco entrano solo se usate localmente.
+    # --- VLAN view construction ---
+    # VLANs learned via VTP (SHOW VLAN section of the backup): count as defined
+    # and enrich the names; they enter the list only if used locally.
     vtp_vlans = parse_show_vlan(content)
     all_vids = set(vlan_defs) | set(svis) | {v for v in vtp_vlans if v in used_vlans}
     access_by_vlan = {}
@@ -476,7 +504,7 @@ def analyze_config(content):
             "trunk_ifaces": trunk_by_vlan.get(vid, []),
         })
 
-    # --- Validazione ---
+    # --- Validation ---
     defined_acls = set(acls)
     applied_names = {r["name"] for r in acl_refs}
     # applied per-acl
@@ -496,9 +524,9 @@ def analyze_config(content):
     route_acl_refs = [{"context": r["context"], "acl": r["name"]}
                       for r in acl_refs if r["routing"]]
 
-    # Definite = blocchi vlan locali + SVI + VTP; "non usate" solo tra quelle
-    # definite LOCALMENTE (segnalare le VLAN VTP non usate su un access switch
-    # sarebbe rumore: vivono sul server VTP).
+    # Defined = local vlan blocks + SVIs + VTP; "unused" only among those
+    # defined LOCALLY (reporting VTP VLANs unused on an access switch would be
+    # noise: they live on the VTP server).
     defined_vlans = all_vids | set(vtp_vlans)
     unused_vlans = sorted(
         [v for v in (set(vlan_defs) | set(svis))
@@ -527,21 +555,27 @@ def analyze_config(content):
             "unused_vlans": unused_vlans,
             "undefined_vlans": undefined_vlans,
             "route_acl_refs": route_acl_refs,
+            # An ACE that can never fire is a worse defect than an unused ACL:
+            # the ACL is applied, the intent is written down, and it silently
+            # does nothing.
+            "policy_findings": policy_findings(content, 'ios'),
         },
     }
 
 
-# --- Rilevamento tipo config (multi-vendor) ----------------------------------
+# --- Config type detection (multi-vendor) ----------------------------------
 
 _FORTIOS_VENDORS = {'fortinet', 'fortigate', 'fortios'}
 _WLC_AIREOS_VENDORS = {'cisco_wlc'}
 _PANOS_VENDORS = {'palo_alto', 'paloalto', 'panos', 'pan-os', 'palo alto'}
+_LINUX_VENDORS = {'linux', 'ubuntu', 'debian', 'rhel', 'redhat', 'centos',
+                  'rocky', 'almalinux', 'suse', 'proxmox'}
 
 
 def detect_config_type(content, device=None):
-    """Determina il tipo di configurazione: 'ios' | 'fortios' | 'wlc-aireos'.
-    Usa il campo Vendor dell'inventario se disponibile, altrimenti riconosce
-    il formato dal contenuto (sniffing). Tollerante: default 'ios'."""
+    """Determines the configuration type: 'ios' | 'fortios' | 'wlc-aireos'.
+    Uses the Vendor field from inventory if available, otherwise recognizes
+    the format from the content (sniffing). Tolerant: default 'ios'."""
     try:
         if device:
             vendor = (device.get('Vendor') or '').strip().lower()
@@ -551,41 +585,47 @@ def detect_config_type(content, device=None):
                 return 'wlc-aireos'
             if vendor in _PANOS_VENDORS:
                 return 'panos'
+            if vendor in _LINUX_VENDORS:
+                return 'linux'
             if vendor:
-                # cisco_9800 (IOS-XE) e altri: formato IOS
+                # cisco_9800 (IOS-XE) and others: IOS format
                 return 'ios'
         text = content or ''
         head = text[:4000]
-        # FortiOS: inizia con #config-version= e usa blocchi config/edit/next/end
+        # FortiOS: starts with #config-version= and uses config/edit/next/end blocks
         if '#config-version=' in head:
             return 'fortios'
         if re.search(r'^config system (global|interface)\b', text, re.MULTILINE):
             return 'fortios'
-        # PAN-OS (set-CLI): righe 'set deviceconfig ...' / 'set mgt-config ...'.
-        # NB: XML PAN-OS non e' supportato (v1) — solo formato 'set'.
+        # PAN-OS (set-CLI): lines 'set deviceconfig ...' / 'set mgt-config ...'.
+        # NB: PAN-OS XML is not supported (v1) — 'set' format only.
         if re.search(r'^set (deviceconfig|mgt-config) ', text, re.MULTILINE):
             return 'panos'
-        # AireOS 'show run-config commands': righe 'config sysname/wlan/interface ...'
+        # AireOS 'show run-config commands': lines 'config sysname/wlan/interface ...'
         if re.search(r'^config (sysname|wlan|interface|radius|mobility|network)\b',
                      text, re.MULTILINE):
             return 'wlc-aireos'
-        # AireOS 'show run-config' tabellare
+        # AireOS tabular 'show run-config'
         if re.search(r'^System Name\.{3,}', text, re.MULTILINE):
             return 'wlc-aireos'
+        # Linux: the markers are written by drivers/linux.py, so they are exact.
+        if re.search(r'^--- /etc/(os-release|ssh/sshd_config|fstab) ---',
+                     text, re.MULTILINE):
+            return 'linux'
     except Exception:
         pass
     return 'ios'
 
 
 # --- FortiOS ------------------------------------------------------------------
-# Le primitive _forti_tokens/_forti_tree/_forti_get/_forti_set1/_forti_ip_cidr
-# sono definite in fw_analyzers.fortios e reimportate in testa al modulo.
+# The primitives _forti_tokens/_forti_tree/_forti_get/_forti_set1/_forti_ip_cidr
+# are defined in fw_analyzers.fortios and re-imported at the top of the module.
 
 
 def analyze_fortios_config(content):
-    """Analizza una configurazione FortiOS (FortiGate). Pura, tollerante.
-    Ritorna interfacce, policy firewall, oggetti address/service, VIP, rotte
-    statiche, VPN, VLAN e i controlli di validazione specifici."""
+    """Analyzes a FortiOS (FortiGate) configuration. Pure, tolerant.
+    Returns interfaces, firewall policies, address/service objects, VIPs,
+    static routes, VPNs, VLANs and the specific validation checks."""
     root = _forti_tree(content)
 
     # --- Hostname ---
@@ -594,7 +634,7 @@ def analyze_fortios_config(content):
     if glob:
         hostname = _forti_set1(glob, 'hostname')
 
-    # --- Interfacce (+ VLAN) ---
+    # --- Interfaces (+ VLANs) ---
     interfaces = []
     vlans = []
     ifs = _forti_get(root, 'system interface')
@@ -616,7 +656,7 @@ def analyze_fortios_config(content):
                 vlans.append({"id": iface["vlanid"], "name": name,
                               "parent": iface["parent"], "ip": iface["ip"]})
 
-    # --- Policy firewall ---
+    # --- Firewall policies ---
     policies = []
     pol = _forti_get(root, 'firewall policy')
     if pol:
@@ -636,7 +676,7 @@ def analyze_fortios_config(content):
                 "logtraffic": _forti_set1(n, 'logtraffic', ''),
             })
 
-    # --- Oggetti address/service, gruppi, VIP ---
+    # --- Address/service objects, groups, VIPs ---
     def _names_of(section, extra=None):
         node = _forti_get(root, section)
         out = []
@@ -657,7 +697,7 @@ def analyze_fortios_config(content):
     vips = _names_of('firewall vip',
                      ['extip', 'mappedip', 'extintf', 'extport', 'mappedport'])
 
-    # --- Rotte statiche ---
+    # --- Static routes ---
     static_routes = []
     rst = _forti_get(root, 'router static')
     if rst:
@@ -671,7 +711,7 @@ def analyze_fortios_config(content):
                 "distance": _forti_set1(n, 'distance'),
             })
 
-    # --- VPN IPsec (nomi fase 1 / fase 2) ---
+    # --- IPsec VPN (phase 1 / phase 2 names) ---
     phase1 = []
     phase2 = []
     for sec in ('vpn ipsec phase1-interface', 'vpn ipsec phase1'):
@@ -683,7 +723,7 @@ def analyze_fortios_config(content):
         if node:
             phase2.extend(node["children"].keys())
 
-    # --- Validazione ---
+    # --- Validation ---
     any_any = []
     disabled_pol = []
     unlogged_pol = []
@@ -698,7 +738,7 @@ def analyze_fortios_config(content):
         if p['logtraffic'] == 'disable':
             unlogged_pol.append(label)
 
-    # Oggetti inutilizzati: definiti ma mai riferiti da policy / gruppi
+    # Unused objects: defined but never referenced by policies / groups
     used_addr = set()
     used_svc = set()
     for p in policies:
@@ -719,14 +759,14 @@ def analyze_fortios_config(content):
         g['name'] for g in addr_groups
         if g['name'].lower() not in used_addr and g['name'].lower() not in vip_names)
 
-    # Accesso di management insicuro (http/telnet in allowaccess)
+    # Insecure management access (http/telnet in allowaccess)
     insecure_mgmt = []
     for i in interfaces:
         bad = [a for a in i['allowaccess'] if a.lower() in ('http', 'telnet')]
         if bad:
             insecure_mgmt.append({"name": i['name'], "allowaccess": bad})
 
-    # Admin senza trusthost
+    # Admins without trusthost
     admins_no_trusthost = []
     adm = _forti_get(root, 'system admin')
     if adm:
@@ -734,7 +774,7 @@ def analyze_fortios_config(content):
             if not any(k.startswith('trusthost') for k in n["sets"]):
                 admins_no_trusthost.append(name)
 
-    # Logging: almeno una sezione 'log ... setting' con 'set status enable'
+    # Logging: at least one 'log ... setting' section with 'set status enable'
     logging_enabled = False
     for sec_name, node in root["children"].items():
         if re.match(r'^log\b.*\bsetting$', sec_name):
@@ -755,6 +795,7 @@ def analyze_fortios_config(content):
         "routing": {"static": static_routes},
         "vpn": {"phase1": phase1, "phase2": phase2},
         "validation": {
+            "policy_findings": policy_findings(content, 'fortios'),
             "any_any_policies": any_any,
             "disabled_policies": disabled_pol,
             "unlogged_policies": unlogged_pol,
@@ -771,9 +812,9 @@ def analyze_fortios_config(content):
 # --- Cisco WLC (AireOS) -------------------------------------------------------
 
 def analyze_wlc_config(content):
-    """Analizza la config di un WLC Cisco AireOS ('show run-config commands').
-    Tollera anche il formato IOS-XE (Catalyst 9800): in quel caso riusa il
-    parser IOS come base e aggiunge l'estrazione dei blocchi wlan. Pura."""
+    """Analyzes the config of a Cisco AireOS WLC ('show run-config commands').
+    Also tolerates the IOS-XE format (Catalyst 9800): in that case it reuses
+    the IOS parser as a base and adds extraction of the wlan blocks. Pure."""
     text = content or ''
     is_aireos = bool(re.search(
         r'^config (sysname|wlan|interface|radius|mobility|network)\b',
@@ -810,7 +851,7 @@ def analyze_wlc_config(content):
                         w["ssid"] = toks[5] if len(toks) > 5 else w["profile"]
                 elif re.match(r'config wlan (enable|disable) (\S+)', low):
                     m = re.match(r'config wlan (enable|disable) (\S+)', low)
-                    if m.group(2) != 'all':
+                    if m and m.group(2) != 'all':
                         _wlan(m.group(2))["enabled"] = (m.group(1) == 'enable')
                 elif low.startswith('config wlan interface '):
                     toks = s.split()
@@ -868,7 +909,7 @@ def analyze_wlc_config(content):
             except Exception:
                 continue
     else:
-        # IOS-XE (Catalyst 9800): base IOS + blocchi 'wlan <profile> <id> <ssid>'
+        # IOS-XE (Catalyst 9800): IOS base + 'wlan <profile> <id> <ssid>' blocks
         try:
             base = analyze_config(text)
         except Exception:
@@ -903,7 +944,7 @@ def analyze_wlc_config(content):
     wlan_list = sorted(wlans.values(),
                        key=lambda w: int(w["id"]) if w["id"].isdigit() else 0)
 
-    # --- Validazione ---
+    # --- Validation ---
     def _label(w):
         return f"{w['id']}" + (f" ({w['ssid']})" if w['ssid'] else '')
 
@@ -931,14 +972,14 @@ def analyze_wlc_config(content):
     return result
 
 
-# --- Config Converter (deterministico, FortiOS <-> PAN-OS) -------------------
-# Solo vendor firewall: il converter non gestisce piu' switch/router (ios).
+# --- Config Converter (deterministic, FortiOS <-> PAN-OS) -------------------
+# Firewall vendors only: the converter no longer handles switches/routers (ios).
 
 FIREWALL_VENDORS = {'fortios', 'panos'}
 
 
 def _prefix_to_mask(pfx):
-    """Da lunghezza prefisso (int) a mask dotted. '' se non valida."""
+    """From prefix length (int) to dotted mask. '' if not valid."""
     try:
         n = int(pfx)
         if not 0 <= n <= 32:
@@ -950,7 +991,7 @@ def _prefix_to_mask(pfx):
 
 
 def _cidr_split(cidr):
-    """'a.b.c.d/nn' -> ('a.b.c.d', 'mask dotted') oppure (None, None)."""
+    """'a.b.c.d/nn' -> ('a.b.c.d', 'dotted mask') or (None, None)."""
     if not cidr or '/' not in cidr:
         return None, None
     ip, _, pfx = cidr.partition('/')
@@ -959,8 +1000,8 @@ def _cidr_split(cidr):
 
 
 def _forti_render_stanza(section, key, node):
-    """Ricostruisce il testo di una stanza FortiOS (config/edit/set/next/end)
-    dal nodo dell'albero. Solo il livello 'sets' (sufficiente come stanza raw)."""
+    """Reconstructs the text of a FortiOS stanza (config/edit/set/next/end)
+    from a tree node. Only the 'sets' level (sufficient as a raw stanza)."""
     lines = [f'config {section}', f'    edit "{key}"']
     for k, vals in node["sets"].items():
         rendered = ' '.join(f'"{v}"' if (' ' in v or v == '') else v for v in vals)
@@ -969,12 +1010,12 @@ def _forti_render_stanza(section, key, node):
     return '\n'.join(lines)
 
 
-# Le primitive _panos_tokens/_panos_lines/_panos_collect/_panos_attr/
-# _panos_attr_all sono definite in fw_analyzers.panos e reimportate in testa.
+# The primitives _panos_tokens/_panos_lines/_panos_collect/_panos_attr/
+# _panos_attr_all are defined in fw_analyzers.panos and re-imported at the top.
 
 
 def _convert_fortios_to_panos(source_text):
-    """FortiOS -> PAN-OS (set-CLI), anteprima best-effort."""
+    """FortiOS -> PAN-OS (set-CLI), best-effort preview."""
     root = _forti_tree(source_text)
     mapped = []
     unmapped = []
@@ -1080,7 +1121,7 @@ def _convert_fortios_to_panos(source_text):
                 note = 'NAT abilitato: regola NAT creata come anteprima separata, verificare source-translation'
             mapped.append({"source": src, "target": '\n'.join(lines), "note": note})
 
-    # Ogni altra sezione non gestita -> unmapped (stanza raw)
+    # Any other unhandled section -> unmapped (raw stanza)
     for section, node in root["children"].items():
         if section in handled:
             continue
@@ -1094,13 +1135,13 @@ def _convert_fortios_to_panos(source_text):
 
 
 def _convert_panos_to_fortios(source_text):
-    """PAN-OS (set-CLI) -> FortiOS, anteprima best-effort."""
+    """PAN-OS (set-CLI) -> FortiOS, best-effort preview."""
     lines = _panos_lines(source_text)
     mapped = []
     unmapped = []
     consumed_raw = set()
 
-    # --- Interfacce L3 ---
+    # --- L3 interfaces ---
     iface_re = re.compile(r'^network\s+interface\s+ethernet\s+(\S+)\s+layer3\s+ip\s+(\S+)$', re.IGNORECASE)
     for toks, raw in lines:
         m = iface_re.match(' '.join(toks))
@@ -1147,9 +1188,9 @@ def _convert_panos_to_fortios(source_text):
         mapped.append({"source": raw, "target": target, "note": ''})
         consumed_raw.add(raw)
 
-    # --- Rotte statiche ---
+    # --- Static routes ---
     route = _panos_collect(lines, ('network', 'virtual-router'))
-    # struttura reale: network virtual-router <vr> routing-table ip static-route <name> ...
+    # actual structure: network virtual-router <vr> routing-table ip static-route <name> ...
     route_names = {}
     route_re = re.compile(
         r'^network\s+virtual-router\s+(\S+)\s+routing-table\s+ip\s+static-route\s+(\S+)\s+(destination|nexthop)\s+(?:ip-address\s+)?(\S+)$',
@@ -1205,7 +1246,7 @@ def _convert_panos_to_fortios(source_text):
         lines_out.extend(['    next', 'end'])
         mapped.append({"source": '\n'.join(entry["raw"]), "target": '\n'.join(lines_out), "note": note})
 
-    # --- Righe non riconosciute -> unmapped ---
+    # --- Unrecognized lines -> unmapped ---
     for _toks, raw in lines:
         if raw not in consumed_raw:
             unmapped.append(raw)
@@ -1213,10 +1254,10 @@ def _convert_panos_to_fortios(source_text):
 
 
 def convert_config(source_text, source_vendor, target_vendor):
-    """Conversione deterministica (preview) tra vendor firewall
-    ('fortios', 'panos'). Ritorna {"mapped": [{source,target,note}],
-    "unmapped": [str], "preview_text": str}. Solleva ValueError su vendor non
-    validi o coincidenti."""
+    """Deterministic conversion (preview) between firewall vendors
+    ('fortios', 'panos'). Returns {"mapped": [{source,target,note}],
+    "unmapped": [str], "preview_text": str}. Raises ValueError on invalid
+    or matching vendors."""
     sv = (source_vendor or '').strip().lower()
     tv = (target_vendor or '').strip().lower()
     if sv not in FIREWALL_VENDORS or tv not in FIREWALL_VENDORS:
@@ -1236,11 +1277,11 @@ def convert_config(source_text, source_vendor, target_vendor):
     return {"mapped": mapped, "unmapped": unmapped, "preview_text": preview_text}
 
 
-# --- I/O: lettura backup + scoping ------------------------------------------
+# --- I/O: backup reading + scoping ------------------------------------------
 
 def _find_freshest_backup(ip):
-    """Trova il file di backup piu' recente per l'IP dato. Ritorna
-    (path, tenant_folder) oppure (None, None)."""
+    """Finds the freshest backup file for the given IP. Returns
+    (path, tenant_folder) or (None, None)."""
     from core import core_engine
     best = None
     best_mtime = -1
@@ -1265,8 +1306,8 @@ def _find_freshest_backup(ip):
 
 
 def analyze_device(ip):
-    """Legge il backup piu' recente per l'IP e ritorna analisi + meta.
-    Ritorna None se non esiste alcun backup."""
+    """Reads the freshest backup for the IP and returns analysis + meta.
+    Returns None if no backup exists."""
     path, tenant_folder = _find_freshest_backup(ip)
     if not path:
         return None
@@ -1276,7 +1317,7 @@ def analyze_device(ip):
     except OSError:
         return None
 
-    # Lookup inventario prima dell'analisi: il Vendor guida il rilevamento tipo
+    # Inventory lookup before analysis: the Vendor drives type detection
     dev = None
     tenant = tenant_folder or ""
     try:
@@ -1292,26 +1333,43 @@ def analyze_device(ip):
 
     is_firewall = False
     firewall = None
+    server = None
+    result: Dict[str, Any]
     if config_type == 'fortios':
-        result = analyze_fortios_config(content)
+        result = dict(analyze_fortios_config(content))
         hostname = result.pop("hostname", "")
         is_firewall = True
         firewall = fw_analyzers.fortios.analyze(content)
     elif config_type == 'panos':
-        # PAN-OS: nessun analizzatore "generico" dedicato (le altre tab
-        # riusano il parser IOS in modo tollerante); il tab Firewall usa
-        # l'envelope a sezioni.
-        result = analyze_config(content)
+        # PAN-OS: no dedicated "generic" analyzer (the other tabs reuse the
+        # IOS parser in tolerant mode); the Firewall tab uses the sectioned
+        # envelope.
+        result = dict(analyze_config(content))
         m = re.search(r'^set deviceconfig system hostname (\S+)', content,
                       re.MULTILINE)
         hostname = m.group(1) if m else ""
         is_firewall = True
         firewall = fw_analyzers.panos.analyze(content)
     elif config_type == 'wlc-aireos':
-        result = analyze_wlc_config(content)
+        result = dict(analyze_wlc_config(content))
         hostname = result.pop("hostname", "")
+    elif config_type == 'linux':
+        # No VLANs, no ACLs, no interfaces in the Cisco sense: the "generic"
+        # result stays empty on purpose and all the content lives in the
+        # ``server`` envelope.
+        from ai import linux_analyzer
+        result = {
+            "vlans": [], "interfaces": [], "acls": [], "vpn": [],
+            "routing": {"static": [], "protocols": [], "vrfs": []},
+            "validation": {"unused_acls": [], "missing_acls": [],
+                           "unused_vlans": [], "undefined_vlans": [],
+                           "route_acl_refs": []},
+        }
+        server = linux_analyzer.analyze(content)
+        m = re.search(r'^\s*hostname (\S+)', content, re.MULTILINE)
+        hostname = m.group(1) if m else ""
     else:
-        result = analyze_config(content)
+        result = dict(analyze_config(content))
         hostname = ""
         m = re.search(r'^hostname (\S+)', content, re.MULTILINE)
         if m:
@@ -1322,23 +1380,60 @@ def analyze_device(ip):
         tenant = dev.get('Group', tenant) or tenant
         if not hostname:
             hostname = dev.get('Hostname', '') or ''
-        # Firewall non-FortiGate (es. rilevato dall'inventario/CDP): tab
-        # Firewall visibile ma senza il parsing dedicato (solo FortiGate).
+        # Non-FortiGate firewall (e.g. detected from inventory/CDP): Firewall
+        # tab visible but without dedicated parsing (FortiGate only).
         if not is_firewall and (dev.get('Type') or '').strip().lower() == 'firewall':
             is_firewall = True
 
     result["ip"] = ip
     result["hostname"] = hostname
     result["tenant"] = tenant
+    # Age of the displayed data. The backup was already chosen by mtime in
+    # _find_freshest_backup: here it is re-read instead of widening its
+    # signature, which has three callers unpacking two values.
+    try:
+        result["backup_ts"] = int(os.path.getmtime(path))
+    except OSError:
+        result["backup_ts"] = None
     result["config_type"] = config_type
     result["is_firewall"] = is_firewall
     result["firewall"] = firewall
+    result["server"] = server
     return result
 
 
+def _backup_mtime(ip):
+    """mtime of the freshest backup, or None. Memo invalidation key."""
+    path, _ = _find_freshest_backup(ip)
+    if not path:
+        return None
+    try:
+        return int(os.path.getmtime(path))
+    except OSError:
+        return None
+
+
+@functools.lru_cache(maxsize=128)
+def _analyze_device_at(ip, _mtime):
+    # _mtime is not used: it is in the signature so that a new backup produces
+    # a new key. The LRU cap is for backup rotation, which otherwise would make
+    # the keys grow without end.
+    return analyze_device(ip)
+
+
+def analyze_device_cached(ip):
+    """``analyze_device`` with memoization on (ip, backup mtime).
+
+    A single diagnosis re-reads the same backup at every hop of the chain and
+    at every candidate of the gateway derivation: parsing is the expensive
+    part, and the file does not change while responding.
+    """
+    return _analyze_device_at(ip, _backup_mtime(ip))
+
+
 def analyze_all(group_filter=None, allowed_groups=None):
-    """Analizza tutti i dispositivi in inventario che hanno un backup, applicando
-    lo scoping per sede (allowed_groups) ed un eventuale filtro di gruppo."""
+    """Analyzes all devices in inventory that have a backup, applying scoping
+    by site (allowed_groups) and an optional group filter."""
     from services import inventory_manager
     devices = []
     for dev in inventory_manager.get_all_devices():
@@ -1351,7 +1446,7 @@ def analyze_all(group_filter=None, allowed_groups=None):
         if group_filter and group_filter != 'all' and group != group_filter:
             continue
         try:
-            res = analyze_device(ip)
+            res = analyze_device_cached(ip)
         except Exception:
             res = None
         if res:

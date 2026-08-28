@@ -3,9 +3,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from security import crypto_vault
-from services import inventory_manager
-from core.core_engine import is_reachable, run_backup_and_triage
+from core.core_engine import is_reachable
 
 
 def parse_network(address: str) -> list[str]:
@@ -57,104 +55,47 @@ def _ping(ip: str) -> bool:
 
 def scan_subnet(
     address: str,
-    vendor_hint: str,
-    credentials: dict,
+    ports: list[int],
     max_workers: int = 50,
     progress_cb=None,
 ) -> list[dict]:
-    """
-    1. parse_network() to enumerate host IPs.
-    2. Ping all hosts concurrently; collect alive set.
-    3. For each alive IP: check port 22, then run run_backup_and_triage().
-    4. Return list of dicts with keys:
-         ip, reachable, ssh_ok, hostname, vendor, added.
+    """Discovery only: no credentials, no login, no vendor guessing.
 
-    credentials must contain: username, password, secret (plain text).
-    progress_cb, if given, is called with the number of hosts pinged so far.
+    1. parse_network() to enumerate host IPs.
+    2. For every host concurrently: ping, then a TCP connect per requested port.
+    3. Return the hosts that answered anything, sorted by IP:
+         {"ip": str, "alive": bool, "open_ports": list[int]}
+
+    A host that drops ICMP but has a port open still counts as found: firewalls
+    that discard ping are the norm, so a ping pre-filter would hide real devices.
+
+    ports is already validated by the caller (routers/scan.py); an empty list is
+    a legitimate ping-only sweep.
+
+    progress_cb, if given, is called as cb(done, len(hosts)) once per host.
     """
     hosts = parse_network(address)
+    ports = list(ports)
 
-    # Phase 1 — concurrent ping
-    alive: set[str] = set()
+    def _probe_host(ip: str) -> dict:
+        alive = _ping(ip)
+        # timeout=1 explicitly: is_reachable defaults to 2s, and this runs
+        # len(hosts) * len(ports) times.
+        open_ports = [p for p in ports if is_reachable(ip, p, timeout=1)]
+        return {"ip": ip, "alive": alive, "open_ports": open_ports}
+
+    found: list[dict] = []
+    done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        ping_futures = {pool.submit(_ping, ip): ip for ip in hosts}
-        done = 0
-        for fut in as_completed(ping_futures):
+        futures = [pool.submit(_probe_host, ip) for ip in hosts]
+        for fut in as_completed(futures):
+            row = fut.result()
             done += 1
-            if fut.result():
-                alive.add(ping_futures[fut])
             if progress_cb:
-                progress_cb(done)
+                progress_cb(done, len(hosts))
+            if row["alive"] or row["open_ports"]:
+                found.append(row)
 
-    # Seed result table for every host
-    results: dict[str, dict] = {
-        ip: {
-            "ip":        ip,
-            "reachable": ip in alive,
-            "ssh_ok":    False,
-            "hostname":  None,
-            "vendor":    vendor_hint,
-            "added":     False,
-        }
-        for ip in hosts
-    }
-
-    if not alive:
-        return list(results.values())
-
-    # Pre-encrypt once; get_device_credentials() calls decrypt_password internally
-    enc_password = crypto_vault.encrypt_password(credentials.get('password', ''))
-    enc_secret   = crypto_vault.encrypt_password(credentials.get('secret', ''))
-
-    def _triage(ip: str) -> tuple:
-        if not is_reachable(ip, port=22):
-            return ip, False, None, False
-
-        device = {
-            'IP':            ip,
-            'Vendor':        vendor_hint,
-            'Profile':       'custom',
-            'Username':      credentials.get('username', ''),
-            'Password':      enc_password,
-            'Enable Secret': enc_secret,
-            'Group':         'Discovered',
-        }
-        res      = run_backup_and_triage(device)
-        hostname = res.get('hostname')
-        return ip, True, hostname, False
-
-    # Phase 2 — SSH + triage on alive hosts
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        triage_futures = {pool.submit(_triage, ip): ip for ip in alive}
-        for fut in as_completed(triage_futures):
-            ip, ssh_ok, hostname, added = fut.result()
-            results[ip]['ssh_ok']   = ssh_ok
-            results[ip]['hostname'] = hostname
-            results[ip]['added']    = added
-
-    # Phase 3 — optional inventory registration
-    if credentials.get('auto_add'):
-        existing_ips = {d['IP'] for d in inventory_manager.get_all_devices()}
-        for r in results.values():
-            if not r['ssh_ok'] or r['ip'] in existing_ips:
-                continue
-            try:
-                inventory_manager.add_or_update_device(
-                    r['ip'],
-                    vendor_hint,
-                    'default',
-                    credentials.get('username', ''),
-                    credentials.get('password', ''),
-                    credentials.get('secret', ''),
-                    credentials.get('group', 'Discovered'),
-                )
-                if r.get('hostname'):
-                    inventory_manager.update_device_hostname(r['ip'], r['hostname'])
-                r['added'] = True
-            except Exception:
-                pass
-    else:
-        for r in results.values():
-            r['added'] = False
-
-    return list(results.values())
+    # as_completed yields in completion order; the table must not reshuffle.
+    found.sort(key=lambda r: ipaddress.IPv4Address(r["ip"]))
+    return found

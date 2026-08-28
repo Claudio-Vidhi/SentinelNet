@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Raccolta delle tabelle ARP dai gateway L3 per il matching MAC <-> IP.
+"""Collect ARP tables from L3 gateways for MAC <-> IP matching.
 
-Nel mondo reale il gateway di una VLAN può essere uno switch L3 (SVI), un
-firewall o un router: la tabella ARP autorevole sta su chi ruota la VLAN.
-Questo modulo interroga in modo best-effort TUTTI gli apparati L3-capable
-dell'inventario: chi non ruota nulla risponde con una ARP vuota o con un
-errore e viene semplicemente saltato.
+In the real world the gateway of a VLAN can be an L3 switch (SVI), a
+firewall or a router: the authoritative ARP table lives on whichever routes the VLAN.
+This module queries in best-effort fashion ALL the L3-capable devices
+of the inventory: whichever routes nothing responds with an empty ARP or with an
+error and is simply skipped.
 
-Trasporti:
-  - fortinet: fortigate_service.get_arp_table (REST API primaria, SSH fallback)
-  - altri vendor: comando ARP via SSH (Netmiko, device_type dal driver vendor)
+Transports:
+  - fortinet: fortigate_service.get_arp_table (REST API primary, SSH fallback)
+  - other vendors: ARP command via SSH (Netmiko, device_type from vendor driver)
 
-Output normalizzato: lista di {mac, ip, vlan, interface} pronta per
+Normalized output: list of {mac, ip, vlan, interface} ready for
 mac_history.record_arp_entries().
 """
 import re
@@ -19,7 +19,7 @@ import logging
 
 log = logging.getLogger("arp_collector")
 
-# Comando ARP per driver (default 'show arp' se non elencato).
+# ARP command per driver (default 'show arp' if not listed).
 ARP_COMMANDS = {
     "cisco_ios":      "show ip arp",
     "cisco_s300":     "show arp",
@@ -38,10 +38,10 @@ _VLAN_IF = re.compile(r'\b(?:vlan|vl)\s*(\d+)\b', re.I)
 
 
 def parse_arp_output(text: str) -> list:
-    """Parser generico riga-per-riga: estrae (ip, mac) da qualunque formato
-    ARP testuale (Cisco 'Internet 10.0.0.1 5 aabb.ccdd.eeff ARPA Vlan10',
-    FortiOS 'get system arp', HP, Juniper, PAN-OS...). L'interfaccia è
-    l'ultima parola della riga se non numerica; la VLAN è dedotta da 'VlanN'."""
+    """Generic line-by-line parser: extracts (ip, mac) from any textual
+    ARP format (Cisco 'Internet 10.0.0.1 5 aabb.ccdd.eeff ARPA Vlan10',
+    FortiOS 'get system arp', HP, Juniper, PAN-OS...). The interface is
+    the last word of the line if non-numeric; the VLAN is inferred from 'VlanN'."""
     out = []
     for line in (text or "").splitlines():
         mac_m = _MAC_ANY.search(line)
@@ -49,13 +49,13 @@ def parse_arp_output(text: str) -> list:
         if not mac_m or not ip_m:
             continue
         mac = mac_m.group(1)
-        # Scarta broadcast/incomplete
+        # Discard broadcast/incomplete
         if mac.lower().replace('-', ':').replace('.', '') in (
                 "ffffffffffff", "000000000000"):
             continue
         vlan_m = _VLAN_IF.search(line)
-        # Interfaccia: ultimo token non-numerico della riga (euristica valida
-        # per Cisco/FortiOS/HP; se sbaglia resta comunque il binding mac<->ip).
+        # Interface: last non-numeric token of the line (heuristic valid
+        # for Cisco/FortiOS/HP; if wrong the mac<->ip binding still holds).
         tokens = line.split()
         iface = tokens[-1] if tokens and not tokens[-1].isdigit() else ""
         if iface == mac or iface == ip_m.group(1):
@@ -67,7 +67,7 @@ def parse_arp_output(text: str) -> list:
 
 
 def _normalize_api_arp(data) -> list:
-    """Normalizza la risposta REST FortiOS monitor/network/arp
+    """Normalize the FortiOS REST response monitor/network/arp
     ([{ip, mac, interface, age}, ...])."""
     out = []
     for e in data if isinstance(data, list) else []:
@@ -81,9 +81,9 @@ def _normalize_api_arp(data) -> list:
 
 
 def collect_from_device(device: dict) -> dict:
-    """Raccoglie la tabella ARP di UN apparato. Ritorna
-    {"status", "source_type", "entries": [...]} — status 'error' se
-    l'apparato non risponde (il chiamante decide se è un problema)."""
+    """Collects the ARP table of ONE device. Returns
+    {"status", "source_type", "entries": [...]} — status 'error' if
+    the device does not respond (caller decides whether it's a problem)."""
     from core.core_engine import resolve_driver
     vendor = (device.get("Vendor") or "").lower()
 
@@ -112,7 +112,7 @@ def collect_from_device(device: dict) -> dict:
     command = ARP_COMMANDS.get(driver_name or "", "show arp")
     source_type = "firewall" if driver_name == "paloalto_panos" else "switch"
 
-    from netmiko import ConnectHandler
+    from core.net_ssh import ConnectHandler
     from core.core_engine import get_device_credentials
     username, password, secret = get_device_credentials(device)
     params = {"device_type": netmiko_type, "host": device["IP"],
@@ -125,15 +125,16 @@ def collect_from_device(device: dict) -> dict:
             except Exception:
                 pass
             output = conn.send_command(command, read_timeout=30)
+            output_str = output if isinstance(output, str) else str(output or "")
     except Exception as e:
         return {"status": "error", "source_type": source_type, "message": str(e)}
     return {"status": "success", "source_type": source_type,
-            "entries": parse_arp_output(output)}
+            "entries": parse_arp_output(output_str)}
 
 
 def collect_all(devices: list) -> dict:
-    """Raccoglie le ARP da tutti gli apparati indicati e le registra nel DB.
-    Ritorna il riepilogo per apparato + totali."""
+    """Collects ARP from all the listed devices and records them in the DB.
+    Returns the per-device summary + totals."""
     from collectors import mac_history
     summary = {"devices": {}, "total_new": 0, "total_updated": 0}
     for device in devices:

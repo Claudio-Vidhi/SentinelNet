@@ -28,7 +28,13 @@ _TABLES = {
     # tabella -> (colonna ts, filtro extra)
     "flow_aggregates": ("window_start", ""),
     "syslog_events": ("ts", ""),
-    "correlated_events": ("created_ts", " AND status = 'resolved'"),
+    # Il modello unificato è una proiezione: senza pruning crescerebbe per
+    # sempre anche dopo che le righe d'origine sono state eliminate.
+    "events": ("ts", ""),
+    # Le evidenze di un incidente seguono via ON DELETE CASCADE; qui si potano
+    # quelle rimaste orfane (regola scattata, incidente mai formato).
+    "evidence": ("ts", " AND incident_id IS NULL"),
+    "incidents": ("opened_ts", " AND status = 'resolved'"),
 }
 
 _running = False

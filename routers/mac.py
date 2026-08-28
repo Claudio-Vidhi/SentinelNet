@@ -4,7 +4,6 @@
 import os
 import time
 from typing import Optional, List, Dict
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from pydantic import BaseModel
@@ -39,154 +38,39 @@ _MAC_INFRA_TYPES = {"switch", "router"}
 
 # --- ENDPOINTS E HELPERS ---
 
-def _mac_uplink_ports(ip: str) -> dict:
-    """Porte locali dell'apparato che hanno un vicino CDP/LLDP: sono trunk/uplink,
-    quindi i MAC visti lì sono transito e non 'posizione' reale dell'host. Si
-    ricavano dal backup dell'apparato (già raccolto dal triage)."""
-    try:
-        content = None
-        for root, _dirs, files in os.walk(core_engine.BACKUP_FOLDER):
-            for f in files:
-                if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
-                    with open(os.path.join(root, f), encoding="utf-8", errors="ignore") as fh:
-                        content = fh.read()
-                    break
-            if content:
-                break
-        if not content:
-            return {}
-        out = {}
-        for n in core_engine.parse_cdp_lldp_neighbors(content):
-            lp = n.get("local_port")
-            if lp and lp != "Unknown":
-                name = n.get("neighbor_id") or n.get("neighbor_ip") or "Unknown"
-                out[lp] = name
-        return out
-    except Exception:
-        return {}
-
-def _mac_topology_uplinks():
-    """Ritorna (uplink_map, known_switches).
-
-    uplink_map: { switch_ip: { porta_normalizzata: etichetta_vicino } } — solo le
-                porte che vanno verso un altro apparato di rete (infrastruttura).
-    known_switches: insieme degli IP inventariati presenti in mappa (per cui la
-                topologia è autorevole: assenza di una porta = porta di accesso).
-    """
-    from collections import defaultdict
-    uplink_map: dict = defaultdict(dict)
-    known_switches: set = set()
-    try:
-        data = core_engine.generate_network_map(group_filter="all")
-    except Exception:
-        return uplink_map, known_switches
-
-    nodes = data.get("nodes", [])
-    node_type = {n["id"]: n.get("device_type") for n in nodes}
-    node_label = {n["id"]: (n.get("label") or n["id"]) for n in nodes}
-    known_switches = {n["id"] for n in nodes if n.get("group") != "Discovered"}
-
-    def add(sw, port, neigh_id):
-        if not port:
-            return
-        uplink_map[sw][core_engine._normalize_iface(port)] = node_label.get(neigh_id, neigh_id)
-
-    for l in data.get("links", []):
-        src, tgt = l.get("source"), l.get("target")
-        tgt_infra = node_type.get(tgt) in _MAC_INFRA_TYPES
-        src_infra = node_type.get(src) in _MAC_INFRA_TYPES
-        pc = l.get("pc_name")
-        # Le porte locali di src vanno verso tgt: sono uplink solo se tgt è infra.
-        if tgt_infra:
-            for p in l.get("local_ports", []):
-                add(src, p, tgt)
-            if pc:
-                add(src, pc, tgt)
-        if src_infra:
-            for p in l.get("remote_ports", []):
-                add(tgt, p, src)
-            if pc:
-                add(tgt, pc, src)
-    return uplink_map, known_switches
-
-def _reclassify_sightings(rows, uplink_map=None, known_switches=None):
-    """Ricalcola is_uplink/uplink_to di ogni avvistamento contro la topologia
-    globale. Per gli switch noti la topologia è autorevole; per gli switch senza
-    dati topologici si conserva il valore rilevato in raccolta (fallback)."""
-    if uplink_map is None or known_switches is None:
-        uplink_map, known_switches = _mac_topology_uplinks()
-    # MAC delle interfacce proprie degli switch: tali MAC sono infrastruttura
-    # ("switch-interface"), non endpoint. Si taggano, non si scartano.
-    if_macs = mac_history.get_switch_if_macs()
-    norm = core_engine._normalize_iface
-    for r in rows:
-        sw = r.get("switch_ip")
-        if sw in known_switches:
-            ups = uplink_map.get(sw, {})
-            ni = norm(r.get("interface") or "")
-            npc = norm(r.get("port_channel") or "") if r.get("port_channel") else ""
-            neigh = ups.get(ni) or (ups.get(npc) if npc else None)
-            r["is_uplink"] = bool(neigh)
-            r["uplink_to"] = neigh or ""
-        # else: switch senza topologia nota → mantiene is_uplink/uplink_to raccolti
-        r["is_uplink"] = bool(r.get("is_uplink"))
-        info = if_macs.get(r.get("mac"))
-        if info:
-            r["origin_type"] = "switch-interface"
-            r["origin_switch"] = info.get("switch_name") or info.get("switch_ip") or ""
-            r["origin_interface"] = info.get("interface") or ""
-        else:
-            r["origin_type"] = "endpoint"
-    return rows
-
-def _mac_collect_one(device: dict, transport=None) -> dict:
-    ip = device["IP"]
-    vendor = (device.get("Vendor") or "cisco").lower()
-    username, password, secret = core_engine.get_device_credentials(device)
-    try:
-        _, netmiko_type = core_engine.resolve_driver(vendor)
-    except Exception:
-        netmiko_type = "cisco_ios"
-    # Comando ad-hoc configurato per questo apparato (casi non ordinari).
-    ov = mac_history.get_override(ip) or {}
-    dev_transports = inventory_manager.parse_transports(device)
-    res = mac_collector.collect_mac_table(
-        ip, username, password, secret, device_type=netmiko_type,
-        uplink_ports=_mac_uplink_ports(ip), transport=transport,
-        cli_command=ov.get("command"), cli_format=ov.get("fmt"),
-        transports=dev_transports,
-    )
-    res["device"] = device
-    # Raccogli anche i MAC delle interfacce proprie dello switch (infrastruttura):
-    # servono a classificarli come "switch-interface" invece che endpoint. I
-    # fallimenti sono non fatali (lista vuota).
-    if not res.get("error"):
-        try:
-            ifres = mac_collector.collect_interface_macs(
-                ip, username, password, secret, device_type=netmiko_type,
-                transport=transport, transports=dev_transports,
-            )
-            res["if_macs"] = ifres.get("rows") or []
-        except Exception:
-            res["if_macs"] = []
-    else:
-        res["if_macs"] = []
-    return res
+# Classificazione uplink/accesso: vive in collectors/mac_history.py perche'
+# la leggono in due — questa tab e la diagnosi client — e finche' stava qui
+# la diagnosi usava il valore grezzo, con i Port-channel scambiati per porte
+# di accesso. Stessa riga, due verdetti diversi a seconda di chi la leggeva.
+_mac_topology_uplinks = mac_history.topology_uplinks
+_reclassify_sightings = mac_history.reclassify_sightings
 
 def _mac_group(rows):
-    """Raggruppa gli avvistamenti (già riclassificati) per MAC in
-    {mac, oui_vendor, origin[], transit[], status}. origin ordinato per recency."""
-    by_mac, order = {}, []
+    """Raggruppa gli avvistamenti (già riclassificati) per (MAC, tenant) in
+    {mac, tenant, oui_vendor, origin[], transit[], status}. origin ordinato per recency.
+
+    Il tenant fa parte della chiave perché un tenant è una rete a sé. Lo stesso
+    MAC in due sedi ha due posizioni ENTRAMBE vere, e contare le porte distinte
+    sull'insieme unito dichiarava "più porte d'accesso possibili" per un client
+    che in ogni sede sta su una porta sola — mandando a rifare una scansione per
+    riparare un problema che non esiste, e facendo attraversare le sedi alla
+    regola "la più recente è la più probabile".
+
+    ``ambiguous`` torna così a significare quello che dice: più porte plausibili
+    NELLA STESSA rete, il caso in cui un dato più fresco serve davvero.
+    """
+    by_key, order = {}, []
     for s in rows:
-        m = s["mac"]
-        if m not in by_mac:
-            order.append(m)
-            by_mac[m] = []
-        by_mac[m].append(s)
+        key = (s["mac"], s.get("tenant") or "")
+        if key not in by_key:
+            order.append(key)
+            by_key[key] = []
+        by_key[key].append(s)
 
     results = []
-    for m in order:
-        grp = by_mac[m]
+    for key in order:
+        m, tenant = key
+        grp = by_key[key]
         origin = [s for s in grp if not s.get("is_uplink")]
         transit = [s for s in grp if s.get("is_uplink")]
         # Ordina per ultimo avvistamento (più recente prima).
@@ -203,7 +87,7 @@ def _mac_group(rows):
         else:
             status = "resolved"
         oui = next((s["oui_vendor"] for s in grp if s.get("oui_vendor")), "")
-        entry = {"mac": m, "oui_vendor": oui, "origin": origin,
+        entry = {"mac": m, "tenant": tenant, "oui_vendor": oui, "origin": origin,
                  "transit": transit, "status": status,
                  "access_count": len(distinct)}
         # MAC di un'interfaccia propria di uno switch: infrastruttura, non endpoint.
@@ -244,39 +128,18 @@ def mac_scan(payload: MacScanSchema, current_user = Depends(require_operator)):
     if not targets:
         raise HTTPException(status_code=404, detail="Nessun dispositivo idoneo per la scansione MAC.")
 
-    # Raccolta in parallelo (I/O di rete), scrittura DB serializzata dopo.
-    from functools import partial
-    worker = partial(_mac_collect_one, transport=payload.transport)
-    with ThreadPoolExecutor(max_workers=min(8, len(targets))) as ex:
-        collected = list(ex.map(worker, targets))
-
-    results = []
-    for res in collected:
-        d = res["device"]
-        ip = d["IP"]
-        if res.get("error"):
-            results.append({"ip": ip, "error": res["error"], "count": 0})
-            continue
-        summ = mac_history.record_sightings(
-            res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
-            tenant=d.get("Group") or "Generale",
-            site=d.get("Site") or "central",
-        )
-        # Storicizza i MAC delle interfacce proprie dello switch (infrastruttura).
-        if res.get("if_macs"):
-            mac_history.record_switch_if_macs(
-                res["if_macs"], switch_ip=ip, switch_name=d.get("Hostname", ""),
-            )
-        results.append({"ip": ip, "method": res["method"], "count": len(res["rows"]), **summ})
-
-    pruned = mac_history.prune()
-    log_audit(f"MAC scan eseguita da '{current_user.get('sub')}' su {len(targets)} apparati (pruned: {pruned}).")
-    return {"scanned": len(targets), "results": results, "pruned": pruned}
+    # Raccolta in parallelo e storicizzazione: la sequenza vive nel collector,
+    # così la riscansione mirata della diagnosi client usa la stessa e non una
+    # copia che col tempo diverge (uplink, override, MAC di interfaccia).
+    out = mac_collector.collect_all(targets, transport=payload.transport)
+    log_audit(f"MAC scan eseguita da '{current_user.get('sub')}' su {len(targets)} apparati "
+              f"(pruned: {out['pruned']}).")
+    return out
 
 @router.get("/api/mac/search")
-def mac_search(mac: str = None, vlan: str = None, interface: str = None,
-               switch: str = None, frm: str = None, to: str = None,
-               tenant: str = None,
+def mac_search(mac: Optional[str] = None, vlan: Optional[str] = None, interface: Optional[str] = None,
+               switch: Optional[str] = None, frm: Optional[str] = None, to: Optional[str] = None,
+               tenant: Optional[str] = None,
                current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     if tenant:
@@ -293,10 +156,22 @@ def mac_search(mac: str = None, vlan: str = None, interface: str = None,
     return {"results": rows, "count": len(rows)}
 
 @router.get("/api/mac/locate")
-def mac_locate(mac: str, current_user = Depends(get_current_user)):
+def mac_locate(mac: str, tenant: Optional[str] = None,
+               current_user = Depends(get_current_user)):
+    """Dove è attaccato questo MAC, una risposta per tenant.
+
+    ``tenant`` RESTRINGE lo scoping dell'utente, non lo allarga: chi clicca
+    dentro uno switch di una sede riceve la risposta di quella sede e basta.
+    Un tenant fuori dal profilo è 403 e non un silenzioso "vabbè, glielo
+    mostro" — stessa regola di ``/api/mac/search``.
+    """
     if not mac or not mac.strip():
         raise HTTPException(status_code=400, detail="Parametro mac obbligatorio")
     scope = user_group_scope(current_user)
+    if tenant:
+        if scope is not None and tenant not in scope:
+            raise HTTPException(status_code=403, detail=f"Tenant '{tenant}' non consentito.")
+        scope = [tenant]
     sightings = mac_history.search(mac=mac, tenants=scope, limit=500)
     if not sightings:
         return {"status": "not_found", "origin": [], "transit": [], "results": []}
@@ -304,7 +179,8 @@ def mac_locate(mac: str, current_user = Depends(get_current_user)):
     results = _mac_group(sightings)
     if len(results) == 1:
         r = results[0]
-        return {"mac": r["mac"], "status": r["status"], "access_count": r["access_count"],
+        return {"mac": r["mac"], "tenant": r["tenant"], "status": r["status"],
+                "access_count": r["access_count"],
                 "origin": r["origin"], "transit": r["transit"],
                 "origin_type": r.get("origin_type"), "device_type": r.get("device_type"),
                 "origin_switch": r.get("origin_switch"), "origin_interface": r.get("origin_interface"),
@@ -317,7 +193,7 @@ def mac_switch(ip: str, current_user = Depends(get_current_user)):
     return {"results": mac_history.switch_table(ip, tenants=scope)}
 
 @router.get("/api/mac/stats")
-def mac_stats(tenant: str = None, current_user = Depends(get_current_user)):
+def mac_stats(tenant: Optional[str] = None, current_user = Depends(get_current_user)):
     scope = user_group_scope(current_user)
     if tenant:
         if scope is not None and tenant not in scope:
@@ -354,4 +230,74 @@ def mac_delete_override(payload: MacOverrideDeleteSchema, current_user = Depends
     mac_history.delete_override(payload.ip)
     log_audit(f"MAC override per '{payload.ip}' rimosso da '{current_user.get('sub')}'.")
     return {"status": "success"}
+
+
+class PortControlSchema(BaseModel):
+    ip: str
+    port: str
+    action: str = "shutdown"          # shutdown | no-shutdown
+    client_mac: Optional[str] = None  # obbligatorio per 'shutdown': vedi sotto
+
+
+@router.post("/api/mac/port-control")
+def mac_port_control(payload: PortControlSchema, current_user = Depends(require_admin)):
+    """Isolamento persistente di una porta di accesso (shutdown / no shutdown).
+
+    A differenza del bounce questa porta resta giù finché qualcuno non la
+    riaccende, quindi i cancelli sono gli stessi ma più stretti:
+
+    * ``require_admin`` — si entra in modalità di configurazione, come il bounce.
+    * **Uplink**: una porta che va verso un altro apparato non è la porta di un
+      client. Spegnerla non isola un endpoint, stacca un ramo intero di rete.
+    * **Freschezza**: la porta arriva da una MAC table scansionata a mano. Su un
+      dato vecchio la porta di oggi è di qualcun altro, e l'isolamento colpisce
+      l'utente sbagliato — per questo lo spegnimento vuole il ``client_mac`` e
+      lo verifica, mentre la riaccensione non chiede nulla: è la via di ritorno
+      e deve funzionare sempre, anche quando il resto non si sa più.
+    """
+    from services import client_diagnosis, port_action
+
+    device = assert_device_allowed(current_user, payload.ip)
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Device '{payload.ip}' non trovato o non consentito.")
+    if payload.action not in ("shutdown", "no-shutdown"):
+        raise HTTPException(status_code=400, detail="Azione non valida. Utilizzare 'shutdown' o 'no-shutdown'.")
+    port = payload.port.strip()
+
+    if payload.action == "shutdown":
+        uplinks, _known = mac_history.topology_uplinks()
+        neighbour = uplinks.get(payload.ip, {}).get(core_engine._normalize_iface(port))
+        if neighbour:
+            log_audit(f"Isolamento RIFIUTATO su '{payload.ip}' porta '{port}' da "
+                      f"'{current_user.get('sub')}': porta verso '{neighbour}', e' un uplink.")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"'{port}' va verso '{neighbour}': e' un uplink, non una porta "
+                       f"d'accesso. Spegnerla staccherebbe tutto quello che ci sta dietro.")
+        if not payload.client_mac:
+            raise HTTPException(
+                status_code=400,
+                detail="client_mac obbligatorio per lo spegnimento: senza il MAC non si "
+                       "puo' verificare che la porta sia ancora quella di quel client.")
+        pos = client_diagnosis.verify_port(payload.client_mac, payload.ip, port,
+                                           user_group_scope(current_user))
+        if not pos["ok"]:
+            log_audit(f"Isolamento RIFIUTATO su '{payload.ip}' porta '{port}' per il client "
+                      f"'{payload.client_mac}' (utente '{current_user.get('sub')}'): {pos['reason']}.")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=pos["reason"])
+
+    log_audit(f"Port control AVVIATO da '{current_user.get('sub')}' su '{payload.ip}' "
+              f"porta '{port}' -> '{payload.action}'.")
+    try:
+        res = port_action.set_admin_state(device, port, up=payload.action == "no-shutdown")
+    except port_action.PortActionError as e:
+        log_audit(f"Port control NON ESEGUITO su '{payload.ip}' porta '{port}': {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log_audit(f"Port control FALLITO su '{payload.ip}' porta '{port}': {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+    log_audit(f"Port control ESEGUITO su '{payload.ip}' porta '{port}' -> '{payload.action}'.")
+    return {"status": "success", "ip": payload.ip, "port": port,
+            "action": payload.action, "output": res.get("output", "")}
 

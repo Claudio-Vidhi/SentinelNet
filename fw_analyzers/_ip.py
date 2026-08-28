@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Utility IP di basso livello condivise dagli analizzatori firewall.
+"""Low-level IP utilities shared by the firewall analyzers.
 
-Modulo foglia (nessun import interno al progetto) per evitare import
-circolari: ``config_analyzer`` e i moduli ``fw_analyzers.*`` importano da qui.
+Leaf module (no internal project imports) to avoid circular imports:
+``config_analyzer`` and the ``fw_analyzers.*`` modules import from here.
 """
 
 
 def _mask_to_prefix(mask):
-    """Converte una subnet mask dotted (255.255.255.0) in lunghezza /nn.
-    Ritorna None se non e' una mask valida (es. gia' in forma /nn o wildcard)."""
+    """Converts a dotted subnet mask (255.255.255.0) to /nn length.
+    Returns None if it is not a valid mask (e.g. already in /nn form or a wildcard)."""
     try:
         parts = mask.split('.')
         if len(parts) != 4:
@@ -25,15 +25,15 @@ def _mask_to_prefix(mask):
 
 
 def _ip_addr_to_cidr(tokens):
-    """Da una lista di token tipo ['10.1.10.1', '255.255.255.0'] ricava
-    'a.b.c.d/nn'. Ritorna '' se non interpretabile."""
+    """From a list of tokens like ['10.1.10.1', '255.255.255.0'] derives
+    'a.b.c.d/nn'. Returns '' if not interpretable."""
     try:
         if len(tokens) >= 2:
             ip = tokens[0]
             pfx = _mask_to_prefix(tokens[1])
             if pfx is not None:
                 return f"{ip}/{pfx}"
-            # eventuale forma gia' /nn
+            # possibly already in /nn form
             if tokens[1].startswith('/'):
                 return f"{ip}{tokens[1]}"
         if len(tokens) == 1 and '/' in tokens[0]:

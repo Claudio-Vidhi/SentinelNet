@@ -1,28 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Router Backup. Estratto da app_server.py (fase 6.6)."""
+"""Router Backup & Vulnerability Search Proxy (NVD NIST API v2.0)."""
 
 import re
 import os
 import requests
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Response
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse, JSONResponse, Response
 
-from core import data_config
+from core import core_engine, data_config
 from services import inventory_manager
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, assert_device_allowed, user_group_scope
 
 router = APIRouter(tags=["Backup"])
 
-BASE_URL = "https://euvdservices.enisa.europa.eu"
-
-ENISA_SEARCH_PARAMS = {
-    "fromScore", "toScore", "fromEpss", "toEpss",
-    "fromDate", "toDate", "fromUpdatedDate", "toUpdatedDate",
-    "product", "vendor", "assigner", "exploited", "text", "page", "size",
-}
+NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
 
 # --- ENDPOINTS ---
@@ -78,41 +71,284 @@ def download_backup(ip_or_filename: str, current_user = Depends(require_operator
 
     raise HTTPException(status_code=404, detail="File di backup non trovato per questo dispositivo.")
 
+
 @router.get("/api/search")
 async def proxy_enisa_search(request: Request, current_user = Depends(get_current_user)):
     from urllib.parse import parse_qs, urlencode
+    import datetime
     raw = parse_qs(request.url.query, keep_blank_values=True)
-    # Inoltra solo i parametri documentati dall'API EUVD.
-    params = {k: v for k, v in raw.items() if k in ENISA_SEARCH_PARAMS}
 
-    if params.get("vendor"):
-        original = params["vendor"][0]
-        resolved = inventory_manager.resolve_euvd_term(original)
-        if resolved != original:
-            log_audit(f"EUVD vendor risolto: '{original}' → '{resolved}'")
-        params["vendor"] = [resolved]
+    vendor_val = raw.get("vendor", [""])[0].strip()
+    text_val = raw.get("text", [""])[0].strip()
+    cve_id = raw.get("cveId", raw.get("cve", [""]))[0].strip()
+    cve_ids = raw.get("cveIds", [""])[0].strip()
+    if not cve_id and text_val.upper().startswith("CVE-"):
+        cve_id = text_val.upper()
 
-    # 'size' è limitato a 100 dalla specifica API: lo vincoliamo a [1, 100].
-    if params.get("size"):
+    resolved_vendor = inventory_manager.resolve_euvd_term(vendor_val) if vendor_val else ""
+
+    nvd_params = {}
+
+    # NIST NVD v2.0 parameters
+    if cve_ids:
+        nvd_params["cveIds"] = cve_ids
+    elif cve_id and cve_id.upper().startswith("CVE-"):
+        nvd_params["cveId"] = cve_id.upper()
+    elif "cpeName" in raw and raw["cpeName"][0].strip():
+        nvd_params["cpeName"] = raw["cpeName"][0].strip()
+        if "isVulnerable" in raw and raw["isVulnerable"][0].lower() in ("true", "1", ""):
+            nvd_params["isVulnerable"] = ""
+    elif "virtualMatchString" in raw and raw["virtualMatchString"][0].strip():
+        nvd_params["virtualMatchString"] = raw["virtualMatchString"][0].strip()
+    else:
+        keywords = []
+        if resolved_vendor:
+            keywords.append(resolved_vendor)
+        if text_val:
+            clean_text = re.sub(r'[^\w\s\.\-]', ' ', text_val).strip()
+            if clean_text:
+                keywords.append(clean_text)
+        if keywords:
+            nvd_params["keywordSearch"] = " ".join(keywords)
+            if "keywordExactMatch" in raw and raw["keywordExactMatch"][0].lower() in ("true", "1", ""):
+                nvd_params["keywordExactMatch"] = ""
+
+        # NVD 120-day date window for queries without specific identifiers
+        now = datetime.datetime.now(datetime.timezone.utc)
+        from_date_str = raw.get("fromDate", raw.get("pubStartDate", [""]))[0].strip()
+        to_date_str = raw.get("toDate", raw.get("pubEndDate", [""]))[0].strip()
+
+        start_dt = None
+        end_dt = None
+
+        if from_date_str:
+            try:
+                start_dt = datetime.datetime.fromisoformat(from_date_str).replace(tzinfo=datetime.timezone.utc)
+                if to_date_str:
+                    end_dt = datetime.datetime.fromisoformat(to_date_str).replace(tzinfo=datetime.timezone.utc)
+                else:
+                    end_dt = min(start_dt + datetime.timedelta(days=119), now)
+            except Exception:
+                start_dt = now - datetime.timedelta(days=119)
+                end_dt = now
+        elif to_date_str:
+            try:
+                end_dt = datetime.datetime.fromisoformat(to_date_str).replace(tzinfo=datetime.timezone.utc)
+                start_dt = end_dt - datetime.timedelta(days=119)
+            except Exception:
+                start_dt = now - datetime.timedelta(days=119)
+                end_dt = now
+        else:
+            start_dt = now - datetime.timedelta(days=119)
+            end_dt = now
+
+        if start_dt and end_dt:
+            if (end_dt - start_dt).days > 120:
+                end_dt = start_dt + datetime.timedelta(days=119)
+            nvd_params["pubStartDate"] = start_dt.strftime("%Y-%m-%dT00:00:00.000")
+            nvd_params["pubEndDate"] = end_dt.strftime("%Y-%m-%dT23:59:59.000")
+
+    # Additional NVD v2.0 filter parameters
+    if "cweId" in raw and raw["cweId"][0].strip():
+        nvd_params["cweId"] = raw["cweId"][0].strip()
+
+    if "vulnStatuses" in raw and raw["vulnStatuses"][0].strip():
+        nvd_params["vulnStatuses"] = raw["vulnStatuses"][0].strip()
+
+    if "cveTag" in raw and raw["cveTag"][0].strip():
+        nvd_params["cveTag"] = raw["cveTag"][0].strip()
+
+    if "noRejected" in raw and raw["noRejected"][0].lower() in ("true", "1", ""):
+        nvd_params["noRejected"] = ""
+
+    if "hasKev" in raw or (raw.get("exploited", [""])[0].lower() in ("true", "1")):
+        nvd_params["hasKev"] = ""
+
+    if "hasCertAlerts" in raw and raw["hasCertAlerts"][0].lower() in ("true", "1", ""):
+        nvd_params["hasCertAlerts"] = ""
+
+    if "hasCertNotes" in raw and raw["hasCertNotes"][0].lower() in ("true", "1", ""):
+        nvd_params["hasCertNotes"] = ""
+
+    # Severity ratings
+    severity_param = raw.get("severity", raw.get("cvssV3Severity", [""]))[0].strip().upper()
+    if severity_param in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
+        nvd_params["cvssV3Severity"] = severity_param
+
+    if "cvssV4Severity" in raw and raw["cvssV4Severity"][0].strip().upper() in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
+        nvd_params["cvssV4Severity"] = raw["cvssV4Severity"][0].strip().upper()
+
+    # Pagination
+    results_per_page = 40
+    if "size" in raw or "resultsPerPage" in raw:
         try:
-            params["size"] = [str(max(1, min(100, int(params["size"][0]))))]
+            val_list = raw.get("resultsPerPage") or raw.get("size") or []
+            if val_list:
+                results_per_page = max(1, min(2000, int(val_list[0])))
         except ValueError:
-            params.pop("size", None)
+            pass
+    nvd_params["resultsPerPage"] = str(results_per_page)
 
-    target = f"{BASE_URL}/api/search"
-    if params:
-        target += f"?{urlencode(params, doseq=True)}"
+    start_index = 0
+    if "page" in raw:
+        try:
+            page_num = max(1, int(raw["page"][0]))
+            start_index = (page_num - 1) * results_per_page
+        except ValueError:
+            pass
+    elif "startIndex" in raw:
+        try:
+            start_index = max(0, int(raw["startIndex"][0]))
+        except ValueError:
+            pass
+    nvd_params["startIndex"] = str(start_index)
+
+    target_url = f"{NVD_BASE_URL}?{urlencode(nvd_params)}"
 
     try:
-        headers = {"User-Agent": "ThreatIntelDashboard/3.0"}
+        headers = {"User-Agent": "SentinelNet-NVD-Client/2.0"}
+        nvd_api_key = os.environ.get("NVD_API_KEY", "").strip()
+        if nvd_api_key:
+            headers["apiKey"] = nvd_api_key
+
         from fastapi.concurrency import run_in_threadpool
-        r = await run_in_threadpool(requests.get, target, headers=headers, timeout=15)
+        resp = await run_in_threadpool(requests.get, target_url, headers=headers, timeout=20)
 
-        return Response(
-            content=r.content,
-            status_code=r.status_code,
-            headers={"Content-Type": r.headers.get("Content-Type", "application/json")}
-        )
+        if resp.status_code != 200:
+            return JSONResponse(
+                status_code=resp.status_code,
+                content={"detail": f"NVD API HTTP {resp.status_code}", "items": [], "total": 0}
+            )
+
+        data = resp.json()
+        total = data.get("totalResults", 0)
+        vulnerabilities = data.get("vulnerabilities", [])
+
+        # If date window produced fewer than 5 results and user didn't specify strict dates,
+        # fetch the most recent slice across all time using startIndex
+        if len(vulnerabilities) < 5 and "pubStartDate" in nvd_params and not raw.get("fromDate") and not raw.get("toDate"):
+            fallback_params = dict(nvd_params)
+            fallback_params.pop("pubStartDate", None)
+            fallback_params.pop("pubEndDate", None)
+            fallback_params["resultsPerPage"] = "1"
+            fallback_params["startIndex"] = "0"
+            r0_url = f"{NVD_BASE_URL}?{urlencode(fallback_params)}"
+            r0_resp = await run_in_threadpool(requests.get, r0_url, headers=headers, timeout=20)
+            if r0_resp.status_code == 200:
+                tot_count = r0_resp.json().get("totalResults", 0)
+                if tot_count > 0:
+                    fallback_params["resultsPerPage"] = str(results_per_page)
+                    fallback_params["startIndex"] = str(max(0, tot_count - results_per_page))
+                    fb_url = f"{NVD_BASE_URL}?{urlencode(fallback_params)}"
+                    fb_resp = await run_in_threadpool(requests.get, fb_url, headers=headers, timeout=20)
+                    if fb_resp.status_code == 200:
+                        fb_data = fb_resp.json()
+                        total = fb_data.get("totalResults", 0)
+                        vulnerabilities = fb_data.get("vulnerabilities", [])
+
+        items = []
+        cve_ids = []
+        for elem in vulnerabilities:
+            cve = elem.get("cve", {})
+            cid = cve.get("id", "CVE-Unknown")
+            cve_ids.append(cid)
+
+            descriptions = cve.get("descriptions", [])
+            desc_text = "Nessuna descrizione disponibile."
+            for d in descriptions:
+                if d.get("lang") == "en":
+                    desc_text = d.get("value", "")
+                    break
+            if not desc_text and descriptions:
+                desc_text = descriptions[0].get("value", "")
+
+            metrics = cve.get("metrics", {})
+            base_score = None
+            severity = "MEDIUM"
+
+            cvss_v31 = metrics.get("cvssMetricV31", [])
+            cvss_v30 = metrics.get("cvssMetricV30", [])
+            cvss_v40 = metrics.get("cvssMetricV40", [])
+            cvss_v2 = metrics.get("cvssMetricV2", [])
+
+            active_metric = cvss_v31 or cvss_v30 or cvss_v40 or cvss_v2
+            if active_metric and isinstance(active_metric, list) and len(active_metric) > 0:
+                primary = next((m for m in active_metric if isinstance(m, dict) and m.get("type") == "Primary"), None)
+                if primary:
+                    m_obj = primary
+                else:
+                    m_obj = max(active_metric, key=lambda m: (m.get("cvssData", {}).get("baseScore", 0) or 0) if isinstance(m, dict) else 0)
+
+                cvss_data = m_obj.get("cvssData", {}) if isinstance(m_obj, dict) else {}
+                base_score = cvss_data.get("baseScore")
+                severity = cvss_data.get("baseSeverity") or (m_obj.get("baseSeverity") if isinstance(m_obj, dict) else None) or "MEDIUM"
+
+            published = cve.get("published", "")
+            cisa_k = bool(cve.get("cisaExploitAdd"))
+
+            refs = [r.get("url") for r in cve.get("references", []) if r.get("url")]
+
+            extracted_prods = []
+            for aff in cve.get("affected", []):
+                for ad in aff.get("affectedData", []):
+                    p = ad.get("product")
+                    if p and p not in extracted_prods:
+                        extracted_prods.append(p)
+
+            for config in cve.get("configurations", []):
+                for node in config.get("nodes", []):
+                    for cpe_match in node.get("cpeMatch", []):
+                        crit = cpe_match.get("criteria", "")
+                        parts = crit.split(":")
+                        if len(parts) >= 5:
+                            p = parts[4].replace("_", " ").title()
+                            if p and p not in ("*", "-") and p not in extracted_prods:
+                                extracted_prods.append(p)
+
+            cwes = []
+            for w in cve.get("weaknesses", []):
+                for d in w.get("description", []):
+                    v = d.get("value", "")
+                    if v.startswith("CWE-") and v not in ("CWE-Other", "CWE-noinfo") and v not in cwes:
+                        cwes.append(v)
+            cwe_str = ", ".join(cwes[:2]) if cwes else ""
+
+            prod_display = ", ".join(extracted_prods[:3]) if extracted_prods else (text_val or "—")
+
+            items.append({
+                "id": cid,
+                "cve": cid,
+                "cveId": cid,
+                "cwe": cwe_str or "",
+                "vendor": resolved_vendor or vendor_val or "—",
+                "product": prod_display,
+                "description": desc_text,
+                "summary": desc_text,
+                "score": base_score,
+                "baseScore": base_score,
+                "severity": str(severity).upper(),
+                "published": published,
+                "date": published,
+                "exploited": cisa_k,
+                "references": refs
+            })
+
+        if cve_ids:
+            try:
+                epss_url = f"https://api.first.org/data/v1/epss?cve={','.join(cve_ids[:100])}"
+                epss_resp = await run_in_threadpool(requests.get, epss_url, timeout=3)
+                if epss_resp.status_code == 200:
+                    epss_data = epss_resp.json().get("data", [])
+                    epss_map = {entry.get("cve"): float(entry.get("epss", 0)) for entry in epss_data if "cve" in entry}
+                    for it in items:
+                        if it["cve"] in epss_map:
+                            it["epss"] = epss_map[it["cve"]]
+            except Exception:
+                pass
+
+        items.sort(key=lambda x: x.get("published", ""), reverse=True)
+
+        return {"items": items, "total": total}
+
     except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
+        raise HTTPException(status_code=502, detail=f"Errore connessione NVD NIST: {str(e)}")

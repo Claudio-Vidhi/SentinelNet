@@ -7,5 +7,10 @@ class HpProcurveDriver(BaseDriver):
         match = re.search(r'Firmware revision\s+:\s+(\S+)', output, re.IGNORECASE)
         return match.group(1).strip() if match else "Unknown"
 
+    def get_serial(self):
+        output = self.connection.send_command("show system")
+        match = re.search(r'Serial Number\s*:\s*(\S+)', output, re.IGNORECASE)
+        return match.group(1).strip() if match else ""
+
     def get_backup_command(self):
         return "show run"

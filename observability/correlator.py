@@ -1,80 +1,58 @@
 # -*- coding: utf-8 -*-
-"""Motore di correlazione (fase 4.2): eventi di sicurezza syslog × flussi ×
-posizione fisica (MAC history) → ``correlated_events``.
+"""Correlation Engine: dal modello eventi unificato alle EVIDENZE.
 
-Criteri (Decisione #9, default precision-over-recall):
-- si parte dagli eventi syslog di sicurezza (action in _SECURITY_ACTIONS)
-  degli ultimi LOOKBACK_S secondi;
-- src/dst/porta vengono estratti dal messaggio (kv FortiGate: srcip/dstip/
-  dstport; Palo Alto: coppie IP nel CSV);
-- serve EVIDENZA DI FLUSSO corroborante: un bucket in ``flow_aggregates``
-  stesso tenant, stessi src/dst, entro ±MATCH_DELTA_S dall'evento — senza
-  flusso non si emette nulla;
-- arricchimento switch/porta best-effort via mac_history.client_map (uplink
-  già esclusi); assente → switch_port NULL;
-- MAI correlazione cross-tenant (tutte le query filtrano per tenant);
-- dedup_key deterministico sha256(tenant|kind|syslog_id|flow_tuple):
-  INSERT OR IGNORE sull'UNIQUE — le ri-esecuzioni non duplicano.
+Pipeline:
 
-Gira come task periodico (lifespan): letture su thread dedicato, scritture
-via il writer batch di db.py.
+    collectors → events (normalize) → REGOLE → evidence → incidents
+
+Questo modulo non produce più incidenti. Produce evidenze, ciascuna con un
+ruolo causale dichiarato dalla regola che l'ha prodotta e con la provenienza
+(``rule_id``, ``rule_version``, soglie effettive). L'incidente è la vista
+derivata, costruita da ``observability/incidents.py``.
+
+Il vantaggio della separazione: lo stesso insieme di evidenze alimenta motore
+incidenti, baseline, assistente AI e knowledge base senza duplicare la logica
+di correlazione.
+
+Legge SOLO ``events``: non sa più cosa sia un syslog, un flusso o uno snapshot
+REST. Una sorgente nuova entra scrivendo un adapter in ``normalize.py``.
+
+Gira come task periodico (lifespan), su thread dedicato con connessione propria.
 """
 
 import asyncio
 import hashlib
 import json
 import logging
-import re
 import time
+from typing import Optional
 
 from core import db
-from observability import metrics
+from observability import endpoints, metrics, normalize, rules, suppression
 
 logger = logging.getLogger("sentinelnet.obs")
 
 INTERVAL_S = 300          # un ciclo ogni 5 minuti
-LOOKBACK_S = 900          # eventi syslog degli ultimi 15 minuti
-MATCH_DELTA_S = 120       # ±120s fra evento e bucket di flusso (Decisione #9)
-MAX_EVENTS_PER_CYCLE = 500
-HIGH_SEVERITY_MAX = 3     # sev syslog 0-3 (emerg..error): emerge anche senza flusso
-
-_SECURITY_ACTIONS = ("deny", "denied", "blocked", "block", "drop",
-                     "reset-both", "reset-client", "reset-server", "sinkhole")
-
-_KV_RE = re.compile(r'(srcip|dstip|dstport)=(?:"([^"]*)"|(\S+))')
-_IP_RE = re.compile(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b")
-
-_SEVERITY_KIND = {0: "critico", 1: "critico", 2: "critico", 3: "alto",
-                  4: "medio", 5: "medio", 6: "informativo", 7: "informativo"}
+LOOKBACK_S = 900          # eventi normalizzati degli ultimi 15 minuti
+MAX_EVENTS_PER_CYCLE = 2000
 
 _INSERT_SQL = """
-INSERT OR IGNORE INTO correlated_events
-    (created_ts, tenant, kind, src_ip, dst_ip, switch_port, severity,
-     status, dedup_key, evidence_json)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)
+INSERT OR IGNORE INTO evidence
+    (created_ts, ts, tenant, event_id, entity_key, role, rule_id, rule_version,
+     params_json, weight, severity, src_ip, dst_ip, switch_port, summary,
+     attrs_json, dedup_key)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _running = False
 
 
-def _extract_endpoints(message: str):
-    """Estrae (src_ip, dst_ip, dst_port) dal messaggio syslog normalizzato."""
-    kv = {k: (v1 or v2) for k, v1, v2 in _KV_RE.findall(message or "")}
-    if kv.get("srcip") and kv.get("dstip"):
-        try:
-            port = int(kv["dstport"]) if kv.get("dstport") else None
-        except ValueError:
-            port = None
-        return kv["srcip"], kv["dstip"], port
-    # Palo Alto / generico: prime due IP distinte nel messaggio
-    ips = list(dict.fromkeys(_IP_RE.findall(message or "")))
-    if len(ips) >= 2:
-        return ips[0], ips[1], None
-    return None, None, None
-
-
-def _switch_port_for(src_ip: str, tenant: str):
+def _switch_port_for(src_ip: str, tenant: str) -> Optional[str]:
     """Posizione fisica best-effort del client (switch/porta), stesso tenant."""
+    if not endpoints.is_endpoint(src_ip):
+        # Multicast, broadcast, loopback: nessuna porta di switch da trovare.
+        # La query su mac_history sarebbe garantita a vuoto.
+        return None
     try:
         from collectors import mac_history
         entries = mac_history.client_map(ip=src_ip, tenants=[tenant], limit=1)
@@ -86,78 +64,134 @@ def _switch_port_for(src_ip: str, tenant: str):
     return None
 
 
-def correlate_once(now: int = None) -> int:
-    """Un ciclo di correlazione. Ritorna il numero di eventi emessi (accodati)."""
+def _insert_finding(conn, now, rule_id, version, params, f):
+    """Registra un'evidenza. Ritorna (id, quante_righe_nuove)."""
+    # La versione entra nella chiave: una regola nuova è una conclusione nuova,
+    # e deve poter riemettere la propria evidenza accanto a quella vecchia
+    # invece di essere scambiata per un doppione.
+    # ``f.key`` distingue più conclusioni della stessa regola sullo stesso
+    # evento (CPU e memoria dallo stesso snapshot). Vuoto per quasi tutte le
+    # regole, che dallo stesso evento traggono una conclusione sola.
+    dedup_key = hashlib.sha256(
+        f"{rule_id}|{version}|{f.event_id}|{f.role}|{f.entity_key}|{f.key or ''}"
+        .encode()).hexdigest()
+    switch_port = f.switch_port
+    if switch_port is None and f.role == "trigger" and f.src_ip:
+        switch_port = _switch_port_for(f.src_ip, f.tenant)
+    cur = conn.execute(_INSERT_SQL, (
+        now, f.ts, f.tenant, f.event_id, f.entity_key, f.role,
+        rule_id, version, json.dumps(params, ensure_ascii=False),
+        f.severity, f.src_ip, f.dst_ip, switch_port, f.summary,
+        json.dumps(f.attrs, ensure_ascii=False), dedup_key))
+    if cur.rowcount:
+        assert cur.lastrowid is not None   # garantito da sqlite3 dopo INSERT
+        return cur.lastrowid, 1
+    existing = conn.execute("SELECT id FROM evidence WHERE dedup_key = ?",
+                            (dedup_key,)).fetchone()
+    return (existing["id"] if existing else None), 0
+
+
+def _apply_retraction(conn, now, rule_id, version, params, r) -> int:
+    """Invalida le evidenze bersaglio ancora attive, registrando PRIMA il fatto
+    che giustifica la ritrattazione: senza il testimone la ritrattazione non
+    sarebbe spiegabile."""
+    targets = conn.execute(
+        """SELECT id FROM evidence
+           WHERE tenant = ? AND entity_key = ? AND rule_id = ?
+             AND status = 'active' AND ts >= ?""",
+        (r.tenant, r.entity_key, r.target_rule_id,
+         r.witness.ts - r.window_s)).fetchall()
+    if not targets:
+        return 0
+
+    witness_id, created = _insert_finding(conn, now, rule_id, version, params,
+                                          r.witness)
+    conn.execute(
+        f"""UPDATE evidence
+               SET status = 'retracted', retracted_by_evidence_id = ?,
+                   retracted_by_rule_id = ?, retracted_at = ?,
+                   retracted_reason = ?
+             WHERE id IN ({",".join("?" * len(targets))})""",
+        (witness_id, rule_id, now, r.reason, *[t["id"] for t in targets]))
+    logger.info("Regola %s ha ritrattato %d evidenze di %s (%s).",
+                rule_id, len(targets), r.target_rule_id, r.reason)
+    return created
+
+
+def correlate_once(now: Optional[int] = None) -> int:
+    """Un ciclo di correlazione. Ritorna il numero di evidenze emesse."""
     now = now or int(time.time())
+    # Prima si proietta ciò che le sorgenti hanno prodotto, poi si correla:
+    # le regole vedono un vocabolario solo.
+    normalize.normalize_once(now)
+
     conn = db.get_observability_connection()
     try:
-        placeholders = ",".join("?" * len(_SECURITY_ACTIONS))
-        # Candidati: azioni di sicurezza (regola precision-over-recall con
-        # evidenza di flusso) OPPURE alta severità (<= HIGH_SEVERITY_MAX), che
-        # emerge comunque, anche senza flusso e senza endpoint nel messaggio.
-        events = conn.execute(
-            f"""SELECT id, ts, tenant, severity, action, message
-                FROM syslog_events
-                WHERE ts >= ? AND (lower(coalesce(action,'')) IN ({placeholders})
-                                   OR severity <= ?)
-                ORDER BY ts DESC LIMIT ?""",
-            (now - LOOKBACK_S, *_SECURITY_ACTIONS, HIGH_SEVERITY_MAX,
-             MAX_EVENTS_PER_CYCLE)).fetchall()
+        # Due condizioni, non una: ``ts`` prende i fatti appena accaduti, ma
+        # alcune sorgenti descrivono finestre più larghe del ciclo — il
+        # baseline misura un'ora intera e la data all'inizio di quell'ora, che
+        # con il solo filtro su ``ts`` cadrebbe sempre fuori. ``ingested_ts``
+        # prende quindi anche ciò che è stato normalizzato adesso, comunque
+        # datato.
+        events = [dict(r) for r in conn.execute(
+            """SELECT id, ts, tenant, source, source_id, event_type, entity_type,
+                      entity_id, severity, device_ip, interface, src_ip, dst_ip,
+                      dst_port, protocol, metrics_json, attrs_json
+               FROM events
+               WHERE ts >= ? OR ingested_ts >= ?
+               ORDER BY ts ASC LIMIT ?""",
+            (now - LOOKBACK_S, now - LOOKBACK_S,
+             MAX_EVENTS_PER_CYCLE)).fetchall()]
 
+        produced = rules.evaluate(events)
         emitted = 0
-        for ev in events:
-            severity = ev["severity"] if ev["severity"] is not None else 4
-            src, dst, dport = _extract_endpoints(ev["message"])
-            flow = None
-            if src and dst:
-                # Evidenza di flusso corroborante: STESSO tenant, stessi endpoint,
-                # bucket entro ±MATCH_DELTA_S (bucket = 60s, quindi il confronto
-                # è sull'inizio finestra).
-                flow = conn.execute(
-                    """SELECT window_start, protocol, dst_port, total_bytes,
-                              total_packets
-                       FROM flow_aggregates
-                       WHERE tenant = ? AND src_ip = ? AND dst_ip = ?
-                         AND window_start BETWEEN ? AND ?
-                       ORDER BY window_start DESC LIMIT 1""",
-                    (ev["tenant"], src, dst,
-                     ev["ts"] - MATCH_DELTA_S - 60, ev["ts"] + MATCH_DELTA_S)).fetchone()
 
-            if flow is not None:
-                kind = f"traffico_bloccato_{_SEVERITY_KIND.get(severity, 'medio')}"
-                flow_tuple = (flow["window_start"], flow["protocol"], flow["dst_port"])
-                dedup_key = hashlib.sha256(
-                    f"{ev['tenant']}|{kind}|{ev['id']}|{src}|{dst}|{flow_tuple}"
-                    .encode()).hexdigest()
-                evidence = json.dumps({
-                    "syslog_id": ev["id"], "syslog_ts": ev["ts"],
-                    "action": ev["action"],
-                    "flow": {"window_start": flow["window_start"],
-                             "protocol": flow["protocol"],
-                             "dst_port": flow["dst_port"],
-                             "bytes": flow["total_bytes"],
-                             "packets": flow["total_packets"]},
-                }, ensure_ascii=False)
-            elif severity <= HIGH_SEVERITY_MAX:
-                # Alta severità senza flusso corroborante: evento standalone,
-                # dedup sul solo id syslog (un evento per riga).
-                kind = f"syslog_{_SEVERITY_KIND.get(severity, 'alto')}"
-                dedup_key = hashlib.sha256(
-                    f"{ev['tenant']}|{kind}|{ev['id']}".encode()).hexdigest()
-                evidence = json.dumps({
-                    "syslog_id": ev["id"], "syslog_ts": ev["ts"],
-                    "action": ev["action"], "message": ev["message"],
-                }, ensure_ascii=False)
-            else:
-                continue  # precision over recall: niente flusso, niente evento
-
-            switch_port = _switch_port_for(src, ev["tenant"]) if src else None
-            db.enqueue_write(_INSERT_SQL, (
-                now, ev["tenant"], kind, src, dst, switch_port,
-                severity, dedup_key, evidence))
-            emitted += 1
+        # DUE PASSATE, non una. Le ritrattazioni devono vedere anche le
+        # evidenze nate in questo stesso ciclo: se girassero mescolate
+        # all'ordine di dichiarazione delle regole, una regola potrebbe
+        # invalidare solo ciò che esisteva al giro precedente — e il caso
+        # interessante (il fatto che smonta la conclusione arriva nella stessa
+        # finestra) non funzionerebbe mai.
+        suppressed = 0
+        for rule_id, version, params, item in produced:
+            if isinstance(item, rules.Retraction):
+                continue
+            if not rules.declares_output(rule_id, item.role):
+                logger.warning(
+                    "Regola %s ha prodotto un ruolo '%s' non dichiarato in "
+                    "outputs: evidenza scartata.", rule_id, item.role)
+                continue
+            # Filtro in UN posto solo, non regola per regola: una manutenzione
+            # deve zittire tutto ciò che riguarda quell'apparato, non soltanto
+            # le regole a cui qualcuno si è ricordato di aggiungere il
+            # controllo. Si valuta sul tempo dell'EVENTO: una finestra di ieri
+            # notte copre i fatti di ieri notte anche se li rileggiamo adesso.
+            if suppression.active(item.tenant, item.entity_key,
+                                  item.interface, item.ts) is not None:
+                suppressed += 1
+                continue
+            emitted += _insert_finding(conn, now, rule_id, version,
+                                       params, item)[1]
+        for rule_id, version, params, item in produced:
+            if not isinstance(item, rules.Retraction):
+                continue
+            if not rules.declares_output(rule_id, "retraction"):
+                logger.warning(
+                    "Regola %s ha prodotto una ritrattazione non dichiarata in "
+                    "outputs: ignorata.", rule_id)
+                continue
+            emitted += _apply_retraction(conn, now, rule_id, version,
+                                         params, item)
+        conn.commit()
         metrics.set_gauge("last_correlation_ts", now)
-        metrics.inc("correlated_events_emitted", emitted)
+        metrics.inc("evidence_emitted", emitted)
+        if suppressed:
+            # Contato, non silenzioso: una soppressione sbagliata deve essere
+            # visibile da qualche parte, altrimenti spegne il motore senza
+            # che nessuno se ne accorga.
+            metrics.inc("findings_suppressed", suppressed)
+            logger.info("Correlazione: %d conclusioni soppresse da finestre "
+                        "dichiarate dall'operatore.", suppressed)
         return emitted
     finally:
         conn.close()
@@ -175,7 +209,13 @@ async def correlation_loop():
             try:
                 emitted = await asyncio.to_thread(correlate_once)
                 if emitted:
-                    logger.info("Correlazione: %d eventi emessi.", emitted)
+                    logger.info("Correlazione: %d evidenze emesse.", emitted)
+                from observability import incidents
+                linked = await asyncio.to_thread(incidents.group_once)
+                closed = await asyncio.to_thread(incidents.close_stale)
+                if linked or closed:
+                    logger.info("Incidenti: %d evidenze assegnate, %d chiusi.",
+                                linked, closed)
             finally:
                 _running = False
         except Exception as e:

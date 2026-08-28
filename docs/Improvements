@@ -1,0 +1,14 @@
+Improvements
+here a list of things that now I don't want to add from all Missing Features / Gaps from docs\netsec_troubleshooting_qa_v3.md:
+
+- Policy-Object Provisioning Form: no UI/API generating a single policy block from (src, dst, services, interfaces, action).
+- Transactional Push With Rollback: push exists (SSH/serial/REST) but no commit verification or auto-rollback on failure/connectivity loss.
+- 802.1X / RADIUS Telemetry: no RADIUS auth history (username, EAP method, posture) per MAC from Cisco ISE or FreeRADIUS.
+- Active OS Fingerprinting: discovery probes ports and ARP only; no Nmap-grade OS fingerprinting or banner-based device typing.
+- Shun IP UI: no dashboard button wired to /shun-ip.
+- ACL / Null-Route / BGP Flowspec Injection: no one-click block on routers.
+- Encrypted Traffic Analysis: L3/L4 + IPFIX/sFlow only; no TLS ClientHello SNI or JA3 extraction.
+
+here some ideas for docs\ui_tab_overlap_analysis.md:
+
+- for 	Traffico	#tab-flows (Flussi Live), #tab-flow-siem (Flow SIEM) --> we need to reimaging the structure to be more useful with data provided and more control for user , less clutter

@@ -28,7 +28,7 @@
                 <input id="obs_${l}_port" type="number" min="1" max="65535"
                        value="${lc.port != null ? lc.port : ''}"
                        placeholder="${OBS_DEFAULT_PORTS[l]}"
-                       style="width:100px; padding:6px 10px; border-radius:8px; border:1px solid var(--border);
+                       style="width:100px; padding:6px 10px; border-radius:0; border:1px solid var(--border);
                               background:var(--surface-3); color:var(--text); font-family:var(--font-code); font-size:12px;">
                 <span style="font-size:11px; color:var(--text-muted);">UDP · ${L.hintObsDefaultPort || 'porta predefinita'} ${OBS_DEFAULT_PORTS[l]}</span>
             </div>`;
@@ -46,15 +46,97 @@
                 <label data-i18n="lblObsApiPoll">Intervallo polling API (s)</label>
                 <input id="obs_api_poll_s" type="number" min="1" value="${d.api_poll_s != null ? d.api_poll_s : ''}" style="padding-left:12px;">
             </div>
+            <div class="form-group" style="max-width:280px;">
+                <label data-i18n="lblObsSnmpPoll">Intervallo polling SNMP (s)</label>
+                <input id="obs_snmp_poll_s" type="number" min="0" value="${d.snmp_poll_s != null ? d.snmp_poll_s : 0}" style="padding-left:12px;">
+                <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsSnmpPoll">0 = spento. Interroga solo gli apparati che hanno una community configurata nella loro scheda.</small>
+            </div>
+            <div class="form-group" style="max-width:280px;">
+                <label data-i18n="lblObsLinuxPoll">Intervallo polling host Linux (s)</label>
+                <input id="obs_linux_poll_s" type="number" min="0" value="${d.linux_poll_s != null ? d.linux_poll_s : 0}" style="padding-left:12px;">
+                <small style="color:var(--text-muted); font-size:11px;" data-i18n="hintObsLinuxPoll">0 = spento. Apre una sessione SSH non privilegiata verso gli host con vendor «linux» e ne rileva CPU, memoria e disco.</small>
+            </div>
             <div style="margin-top:10px; margin-bottom:2px; font-size:12px; color:var(--text-muted); text-transform:uppercase; font-weight:700;" data-i18n="lblObsListeners">Listener</div>
             <div style="margin-bottom:8px; font-size:12px; color:var(--text-muted);">${L.hintObsListeners || "Attiva un protocollo e indica la porta UDP su cui SentinelNet resta in ascolto, poi configura l'export dei dispositivi verso questo host su quella porta. Le modifiche ai listener vengono applicate subito, senza riavviare l'applicazione."}</div>
             ${listenerRows}
             <div style="margin-top:12px;">
-                <button class="btn btn-primary btn-small" onclick="saveObsSettings()" data-i18n="btnSave">
+                <button id="btnSaveObsSettings" class="btn btn-primary btn-small" data-action="save-obs-settings" data-i18n="btnSave">
                     <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
                 </button>
             </div>
-            <div id="obsSettingsError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>`;
+            <div id="obsSettingsError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>
+            <div id="obsHealthBox" style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border);"></div>`;
+        loadObsHealth();
+    }
+
+    // Stato della pipeline: finora esisteva solo come rotta, e per sapere se un
+    // listener era davvero in ascolto bisognava chiamarla a mano.
+    async function loadObsHealth() {
+        const box = document.getElementById('obsHealthBox');
+        if (!box) return;
+        const L = i18n[currentLang];
+        const en = currentLang === 'en';
+        const res = await apiFetch('/api/observability/health');
+        if (!res || !res.ok) { box.innerHTML = ''; return; }
+        const h = await res.json();
+        const listeners = h.listeners || {};
+        const badges = Object.keys(listeners).map(name => {
+            const active = listeners[name] && listeners[name].active;
+            return `<span class="status ${active ? 'ok' : 'warn'}" style="margin-right:6px;">
+                        <span class="led ${active ? 'led-success' : 'led-warning'}"></span>${escapeHtml(name)}
+                    </span>`;
+        }).join('') || `<span style="color:var(--text-muted); font-size:12px;">${escapeHtml(en ? 'no listener' : 'nessun listener')}</span>`;
+        const mb = (h.db_size_bytes || 0) / (1024 * 1024);
+        box.innerHTML = `
+            <h4 style="margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted);">
+                <i class="fa-solid fa-heart-pulse" style="color:var(--primary);"></i>
+                ${escapeHtml(L.obsHealthTitle || (en ? 'Pipeline health' : 'Stato della pipeline'))}
+            </h4>
+            <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:center; font-size:12px; margin-bottom:12px;">
+                <span>${escapeHtml(en ? 'Enabled' : 'Abilitata')}:
+                    <span class="status ${h.enabled ? 'ok' : 'warn'}">${h.enabled ? (en ? 'yes' : 'si') : 'no'}</span></span>
+                <span>${escapeHtml(en ? 'Listeners' : 'Listener')}: ${badges}</span>
+                <span>DB: <b>${mb.toFixed(1)} MB</b></span>
+                <span>${escapeHtml(en ? 'Schema' : 'Schema')}: <b>${escapeHtml(String(h.schema_version ?? '—'))}</b></span>
+            </div>
+            <p style="margin:0 0 8px; font-size:12px; color:var(--text-muted);">
+                ${escapeHtml(en
+                    ? 'A background job already prunes by the retention set below, per table. This is a one-off purge with a horizon of your choosing.'
+                    : 'Un job in background pota gia’ secondo la retention impostata piu’ sotto, tabella per tabella. Questa e’ una pulizia una-tantum con l’orizzonte che scegli.')}
+            </p>
+            <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                <div class="form-group" style="margin-bottom:0; max-width:170px;">
+                    <label for="obsPruneDays">${escapeHtml(L.obsPruneDays || (en ? 'Keep last (days)' : 'Conserva (giorni)'))}</label>
+                    <input id="obsPruneDays" type="number" min="1" max="3650" value="30" style="padding-left:12px;">
+                </div>
+                <button id="btnPruneObsLogs" class="btn btn-danger btn-small" style="width:auto; margin:0;" data-action="prune-obs-logs">
+                    <i class="fa-solid fa-broom"></i> ${escapeHtml(L.obsPruneRun || (en ? 'Purge older logs' : 'Elimina i log vecchi'))}
+                </button>
+            </div>`;
+    }
+
+    // Cancellazione definitiva: syslog_events e flow_aggregates oltre la soglia.
+    async function pruneObsLogs() {
+        const en = currentLang === 'en';
+        const days = parseInt(document.getElementById('obsPruneDays')?.value, 10);
+        if (!days || days < 1) {
+            showToast(en ? 'Enter a retention in days.' : 'Indica una retention in giorni.', 'warning');
+            return;
+        }
+        const question = en
+            ? `Permanently delete syslog events and flow aggregates older than ${days} days?`
+            : `Eliminare definitivamente eventi syslog e aggregati di flusso piu' vecchi di ${days} giorni?`;
+        if (!confirm(question)) return;
+        const res = await apiFetch('/api/observability/prune-logs', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ days })
+        });
+        if (!res || !res.ok) {
+            showToast(en ? 'Purge failed.' : 'Eliminazione non riuscita.', 'error');
+            return;
+        }
+        showToast(en ? 'Old logs purged.' : 'Log vecchi eliminati.', 'success');
+        loadObsHealth();
     }
 
     async function saveObsSettings() {
@@ -63,7 +145,9 @@
         const payload = {
             enabled: document.getElementById('obs_enabled').checked,
             bind: document.getElementById('obs_bind').value.trim(),
-            api_poll_s: parseInt(document.getElementById('obs_api_poll_s').value, 10)
+            api_poll_s: parseInt(document.getElementById('obs_api_poll_s').value, 10),
+            snmp_poll_s: parseInt(document.getElementById('obs_snmp_poll_s').value, 10) || 0,
+            linux_poll_s: parseInt(document.getElementById('obs_linux_poll_s').value, 10) || 0
         };
         OBS_LISTENERS.forEach(l => {
             payload[`${l}_enabled`] = document.getElementById(`obs_${l}_enabled`).checked;
@@ -91,7 +175,7 @@
         }
     }
 
-    // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
+    // --- FLUSSI LIVE (fase 5): top talker -----------------------------------
     // showToast: MOVED to static/js/core.js
 
     // Autenticazione via cookie HttpOnly (apiFetch): nessun token lato JS.
@@ -100,11 +184,11 @@
     let aiAttachTopFlowsOnce = false;
     let aiAttachFlowKeysOnce = null;                  // 11.3: tuple dei flussi selezionati da allegare una sola volta
     let _flowsRawData = [];                           // cache rows from last fetch
-    let _flowsSelectedTenants = new Set();             // selected tenant names
+    let _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
     let _flowsAllTenantsChecked = true;                // "Tutti" checkbox state
+    let _deviceContextIp = null;                       // IP from global device context chip
     let _flowsSelectedKeys = new Set();                // selected flow keys (tuple string, survives filter/refresh)
     let _flowPanelFlow = null;                         // flow object currently shown in the detail panel
-    let _anomIpFilter = null;                          // {src, dst} client-side filter for the anomalies table
 
     // --- Filtro per origine dati + colonne dinamiche (flussi vs syslog) ---
     const FLOWS_SOURCES = ['all', 'netflow', 'ipfix', 'sflow', 'syslog'];
@@ -120,6 +204,60 @@
     let _flowsSource = 'all';
     let _flowsSyslogData = [];
     let _flowsHiddenCols = new Set(JSON.parse(localStorage.getItem('sentinelnet_flows_hidden_cols') || '[]'));
+    // Traffico verso i collector (NetFlow/IPFIX/sFlow/Syslog/SNMP): sono flussi
+    // veri ma sono rumore di misura. Default spento: si nasconde solo se lo
+    // chiede l'utente, e resta a un click di distanza.
+    let _flowsHideTelemetry = localStorage.getItem('sentinelnet_flows_hide_telemetry') === '1';
+
+    // Single source of truth for the Traffico tab. Every view reads the window
+    // and the tenant from here: the tab used to carry three independent window
+    // selects (flows, protocol chart, SIEM), so a 15m top talker could sit next
+    // to a 24h chart with nothing on screen saying so.
+    const trafState = {
+        window: '1h',
+        metric: 'bytes',
+        autoRefresh: true,
+        hideTelemetry: _flowsHideTelemetry,
+    };
+    let _trafView = 'overview';
+
+    // Loader per vista: registrato dal task che porta dentro il contenuto.
+    // Cambiare pill carica solo la vista che si apre, non tutte e quattro.
+    const TRAF_LOADERS = {
+        overview:  () => { loadTopTalkers(); loadObsProtocolDist(); },
+        flows:     () => loadTopTalkers(),
+        search:    () => loadFlowSiemTab(),
+    };
+
+    function trafSwitchView(view) {
+        if (!document.getElementById('trafPane-' + view)) return;
+        _trafView = view;
+        for (const v of ['overview', 'flows', 'search']) {
+            const pane = document.getElementById('trafPane-' + v);
+            const pill = document.getElementById('trafPill-' + v);
+            if (pane) pane.style.display = (v === view) ? '' : 'none';
+            if (pill) pill.classList.toggle('active', v === view);
+        }
+        const loader = TRAF_LOADERS[view];
+        if (loader) loader();
+    }
+
+    function trafSetWindow(value) {
+        trafState.window = value;
+        trafRefresh();
+    }
+
+    function trafSetMetric(value) {
+        trafState.metric = value;
+        trafRefresh();
+    }
+
+    function trafRefresh() {
+        const loader = TRAF_LOADERS[_trafView];
+        if (loader) loader();
+    }
+
+    function telemetryParam() { return _flowsHideTelemetry ? '&exclude_telemetry=true' : ''; }
 
     function flowsColHidden(id) { return _flowsHiddenCols.has(id); }
 
@@ -130,9 +268,9 @@
         box.innerHTML = FLOWS_SOURCES.map(s => {
             const active = s === _flowsSource;
             const label = s === 'all' ? (L.chipAllSources || 'Tutte le origini') : FLOWS_SOURCE_LABELS[s];
-            return `<button class="btn btn-small" onclick="setFlowsSource('${s}')"
-                style="padding:5px 14px; border-radius:16px; font-size:12px;
-                       ${active ? 'background:var(--primary); color:#fff; border-color:var(--primary);' : ''}">${label}</button>`;
+            return `<button class="btn btn-small" data-action="set-flows-source" data-source="${s}"
+                style="padding:5px 14px; border-radius:0; font-size:12px;
+                       ${active ? 'background:var(--cta); color:var(--cta-text); border-color:var(--cta);' : ''}">${label}</button>`;
         }).join('');
         const colsBtn = document.getElementById('flowsColsBtn');
         if (colsBtn) colsBtn.style.display = _flowsSource === 'syslog' ? 'none' : '';
@@ -144,6 +282,14 @@
         loadTopTalkers();
     }
 
+    function setFlowsHideTelemetry(hide) {
+        _flowsHideTelemetry = !!hide;
+        trafState.hideTelemetry = _flowsHideTelemetry;
+        localStorage.setItem('sentinelnet_flows_hide_telemetry', _flowsHideTelemetry ? '1' : '0');
+        loadTopTalkers();          // ricarica anche il flowgraph e la KPI strip
+        loadObsProtocolDist();
+    }
+
     function toggleFlowsColsDropdown() {
         const dd = document.getElementById('flowsColsDropdown');
         if (!dd) return;
@@ -151,8 +297,8 @@
             const L = i18n[currentLang];
             dd.innerHTML = FLOW_TOGGLE_COLS.map(c => `
                 <label style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer; font-size:13px;">
-                    <input type="checkbox" ${flowsColHidden(c.id) ? '' : 'checked'}
-                           onchange="toggleFlowsCol('${c.id}', this.checked)" style="accent-color:var(--primary);">
+                    <input type="checkbox" class="flows-col-cb" data-col-id="${c.id}" ${flowsColHidden(c.id) ? '' : 'checked'}
+                           style="accent-color:var(--primary);">
                     <span>${escapeHtml(L[c.lbl] || c.id)}</span>
                 </label>`).join('');
             dd.style.display = 'block';
@@ -188,7 +334,7 @@
             return;
         }
         head.innerHTML = `<tr style="font-size:12px; text-align:left;">
-            <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" onclick="toggleFlowsSelectAll(this)" style="accent-color:var(--primary);" title="${escapeHtml(L.lnkSelectAll || 'Seleziona tutti')}"></th>
+            <th style="padding:8px;"><input type="checkbox" id="flowsSelectAll" style="accent-color:var(--primary);" title="${escapeHtml(L.lnkSelectAll || 'Seleziona tutti')}"></th>
             <th style="padding:8px;">#</th>
             ${flowsColHidden('tenant') ? '' : th(L.thFlTenant || 'Sede')}
             ${th(L.thFlSrc || 'Sorgente')}${th(L.thFlDst || 'Destinazione')}
@@ -222,7 +368,7 @@
         }
         const sevColor = s => s == null ? 'var(--text-muted)' : s <= 3 ? 'var(--danger)' : s <= 4 ? 'var(--warning)' : 'var(--text-muted)';
         tbody.innerHTML = rows.map((e, i) => `
-            <tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" onclick="showSyslogDetail(${i})" data-i18n-title="titleSyslogRowHint" title="${escapeHtml(L.titleSyslogRowHint || 'Clicca per il dettaglio')}">
+            <tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" data-action="show-syslog-detail" data-index="${i}" data-i18n-title="titleSyslogRowHint" title="${escapeHtml(L.titleSyslogRowHint || 'Clicca per il dettaglio')}">
                 <td style="padding:6px 8px; white-space:nowrap;">${new Date(e.ts * 1000).toLocaleString()}</td>
                 <td>${escapeHtml(e.tenant)}</td>
                 <td>${escapeHtml(e.device_ip || e.exporter_ip || '—')}</td>
@@ -256,7 +402,7 @@
             ${pairs.length ? `<h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">${currentLang === 'en' ? 'Parsed fields' : 'Campi'}</h4>
             <table style="width:100%; border-collapse:collapse; margin-bottom:14px;">${pairs.map(kvRow).join('')}</table>` : ''}
             <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin:0 0 6px;">Raw</h4>
-            <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; white-space:pre-wrap; word-break:break-all; font-family:var(--font-code); font-size:12px;">${escapeHtml(msg)}</pre>`;
+            <pre style="margin:0; padding:10px; background:var(--surface-2); border:1px solid var(--border); border-radius:0; white-space:pre-wrap; word-break:break-all; font-family:var(--font-code); font-size:12px;">${escapeHtml(msg)}</pre>`;
         document.getElementById('syslogDetailModal').style.display = 'flex';
     }
 
@@ -266,8 +412,14 @@
 
     function flowsTabShown() {
         renderFlowsSourceChips();
-        loadTopTalkers();
-        loadAnomalies();
+        // Header controls mirror trafState, not the other way round.
+        const teleCb = document.getElementById('trafHideTelemetry');
+        if (teleCb) teleCb.checked = trafState.hideTelemetry;
+        const winSel = document.getElementById('trafWindow');
+        if (winSel) winSel.value = trafState.window;
+        const metricSel = document.getElementById('trafMetric');
+        if (metricSel) metricSel.value = trafState.metric;
+        trafSwitchView(_trafView);
         startFlowsAutoRefresh();
         checkObsStatusBanner();
     }
@@ -303,8 +455,8 @@
         stopFlowsAutoRefresh();
         flowsRefreshTimer = setInterval(() => {
             const active = document.getElementById('tab-flows')?.classList.contains('active');
-            const auto = document.getElementById('flowsAutoRefresh')?.checked;
-            if (active && auto && !document.hidden) loadTopTalkers();
+            const auto = document.getElementById('trafAutoRefresh')?.checked;
+            if (active && auto && !document.hidden) trafRefresh();
         }, 30000);
     }
 
@@ -316,7 +468,7 @@
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden &&
             document.getElementById('tab-flows')?.classList.contains('active')) {
-            loadTopTalkers();
+            trafRefresh();
         }
     });
 
@@ -332,32 +484,31 @@
         flowsFetchInFlight = true;
         const tbody = document.getElementById('flowsTableBody');
         try {
-            const w = document.getElementById('flowsWindow').value;
-            const m = document.getElementById('flowsMetric').value;
+            const w = trafState.window;
+            const m = trafState.metric;
             if (_flowsSource === 'syslog') {
                 const res = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
                 if (!res || !res.ok) {
-                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">${currentLang === 'en' ? 'Error loading syslog events.' : 'Errore nel caricamento degli eventi syslog.'}</td></tr>`;
+                    if (res) tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; text-align:center; color:var(--danger);">${currentLang === 'en' ? 'Error loading syslog events.' : 'Errore nel caricamento degli eventi syslog.'}</td></tr>`;
                     return;
                 }
                 _flowsSyslogData = (await res.json()).events || [];
-                document.getElementById('flowsLastUpdate').textContent =
+                document.getElementById('trafLastUpdate').textContent =
                     (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
-                rebuildFlowsTenantList(_flowsSyslogData);
                 renderFlowsThead();
                 renderSyslogTable();
                 renderSyslogAllSection();
                 return;
             }
             const srcParam = _flowsSource === 'all' ? '' : `&source=${_flowsSource}`;
-            const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}`);
+            const res = await apiFetch(`/api/observability/top?window=${encodeURIComponent(w)}&metric=${encodeURIComponent(m)}&limit=100${srcParam}${telemetryParam()}`);
             if (!res || !res.ok) {
-                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger, #d9534f);">${currentLang === 'en' ? 'Error loading flows.' : 'Errore nel caricamento dei flussi.'}</td></tr>`;
+                if (res) tbody.innerHTML = `<tr><td colspan="10" style="padding:20px; text-align:center; color:var(--danger);">${currentLang === 'en' ? 'Error loading flows.' : 'Errore nel caricamento dei flussi.'}</td></tr>`;
                 return;
             }
             const flows = (await res.json()).flows || [];
             _flowsRawData = flows;                     // cache for filtering
-            document.getElementById('flowsLastUpdate').textContent =
+            document.getElementById('trafLastUpdate').textContent =
                 (currentLang === 'en' ? 'Updated: ' : 'Aggiornato: ') + new Date().toLocaleTimeString();
 
             // "Tutte le origini": il syslog non è un flusso, va caricato a parte
@@ -366,10 +517,6 @@
                 const sres = await apiFetch(`/api/observability/syslog?window=${encodeURIComponent(w)}&limit=200`);
                 _flowsSyslogData = (sres && sres.ok) ? ((await sres.json()).events || []) : [];
             }
-
-            // Rebuild tenant checkbox list from distinct tenants in fetched data
-            // (in modo "all" include anche i tenant presenti solo nel syslog)
-            rebuildFlowsTenantList(_flowsSource === 'all' ? flows.concat(_flowsSyslogData) : flows);
 
             // Render filtered table
             renderFlowsTable();
@@ -385,89 +532,6 @@
         if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps';
         if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' Kbps';
         return Math.round(bps) + ' bps';
-    }
-
-    function rebuildFlowsTenantList(flows) {
-        // Extract distinct tenants from flows, maintaining order of appearance
-        const tenants = [...new Set(flows.map(f => f.tenant))].sort();
-        const listDiv = document.getElementById('flowsTenantList');
-        if (!listDiv) return;
-
-        // Preserve checked state for tenants that still exist
-        const newSelected = new Set();
-        for (const t of tenants) {
-            if (_flowsSelectedTenants.has(t) || _flowsAllTenantsChecked) {
-                newSelected.add(t);
-            }
-        }
-        _flowsSelectedTenants = newSelected;
-
-        // Update checkbox list
-        listDiv.innerHTML = tenants.map(t => `
-            <label style="display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer;">
-                <input type="checkbox" value="${escapeHtml(t)}" onchange="updateFlowsTenantSelection()"
-                       ${newSelected.has(t) ? 'checked' : ''} style="accent-color:var(--primary);">
-                <span>${escapeHtml(t)}</span>
-            </label>
-        `).join('');
-
-        // Update "Tutti" checkbox state
-        const allCheckbox = document.getElementById('flowsTenantAll');
-        if (allCheckbox) {
-            allCheckbox.checked = tenants.length > 0 && tenants.every(t => newSelected.has(t));
-            _flowsAllTenantsChecked = allCheckbox.checked;
-        }
-
-        // Update button label
-        updateFlowsTenantButtonLabel(tenants.length);
-    }
-
-    function updateFlowsTenantSelection() {
-        const checkboxes = Array.from(document.querySelectorAll('#flowsTenantList input[type="checkbox"]'));
-        const selected = new Set(checkboxes.filter(cb => cb.checked).map(cb => cb.value));
-        _flowsSelectedTenants = selected;
-
-        // Update "Tutti" checkbox
-        const allCheckbox = document.getElementById('flowsTenantAll');
-        const totalTenants = checkboxes.length;
-        const checkedCount = checkboxes.filter(cb => cb.checked).length;
-        if (allCheckbox) {
-            allCheckbox.checked = checkedCount === totalTenants;
-            _flowsAllTenantsChecked = allCheckbox.checked;
-        }
-
-        updateFlowsTenantButtonLabel(totalTenants);
-        renderFlowsTable();
-    }
-
-    function toggleFlowsTenantAll() {
-        const allCheckbox = document.getElementById('flowsTenantAll');
-        const checkboxes = Array.from(document.querySelectorAll('#flowsTenantList input[type="checkbox"]'));
-        const shouldCheck = allCheckbox.checked;
-        checkboxes.forEach(cb => cb.checked = shouldCheck);
-        _flowsSelectedTenants = shouldCheck ? new Set(checkboxes.map(cb => cb.value)) : new Set();
-        _flowsAllTenantsChecked = shouldCheck;
-        updateFlowsTenantButtonLabel(checkboxes.length);
-        renderFlowsTable();
-    }
-
-    function updateFlowsTenantButtonLabel(totalTenants) {
-        const btn = document.getElementById('flowsTenantBtn');
-        if (!btn) return;
-        const L = i18n[currentLang];
-        let label = 'Tenants';
-        if (totalTenants === 0) {
-            label = 'Tenants';
-        } else if (_flowsSelectedTenants.size === 0) {
-            label = L.lblNoTenant || 'Nessun tenant';
-        } else if (_flowsSelectedTenants.size === totalTenants) {
-            label = L.optArpAllTenants || 'Tutti i tenant';
-        } else {
-            label = `${_flowsSelectedTenants.size} tenant`;
-        }
-        btn.textContent = label;
-        // Re-add icon
-        btn.innerHTML = `<i class="fa-solid fa-filter"></i> ${label}`;
     }
 
     // Chiave di selezione del flusso: per tupla, non per indice riga, così la
@@ -532,14 +596,19 @@
         if (_flowsSource === 'syslog') { renderSyslogTable(); renderSyslogAllSection(); return; }
         renderSyslogAllSection();
         const tbody = document.getElementById('flowsTableBody');
-        const m = document.getElementById('flowsMetric').value;
+        const m = trafState.metric;
         const L = i18n[currentLang];
         const hlTitle = escapeHtml(L.titleHighlightTopology || 'Evidenzia nella topologia');
 
         // Filter by selected tenants
-        const filtered = _flowsRawData.length === 0 ? []
+        let filtered = _flowsRawData.length === 0 ? []
             : _flowsSelectedTenants.size === 0 ? []
             : _flowsRawData.filter(f => _flowsSelectedTenants.has(f.tenant));
+
+        // Filter by device context chip (exporter IP)
+        if (_deviceContextIp) {
+            filtered = filtered.filter(f => f.exporter_ip === _deviceContextIp);
+        }
 
         // Selection may reference flows no longer present (e.g. window change); prune lazily.
         const filteredKeys = new Set(filtered.map(flowKey));
@@ -561,16 +630,16 @@
             const key = flowKey(f);
             const checked = _flowsSelectedKeys.has(key) ? 'checked' : '';
             const srcLabel = FLOWS_SOURCE_LABELS[f.source] || '—';
-            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" onclick="openFlowDetailPanelByKey('${escapeHtml(key)}', event)">
-                    <td style="padding:6px 8px;" onclick="event.stopPropagation();"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} onchange="toggleFlowRowSelect('${escapeHtml(key)}', this.checked)" style="accent-color:var(--primary);"></td>
+            return `<tr style="font-size:12px; border-top:1px solid var(--border); cursor:pointer;" data-action="open-flow-detail" data-key="${escapeHtml(key)}">
+                    <td style="padding:6px 8px;"><input type="checkbox" class="flow-row-check" data-key="${escapeHtml(key)}" ${checked} style="accent-color:var(--primary);"></td>
                     <td style="padding:6px 8px;">${rowNum++}</td>
                     ${flowsColHidden('tenant') ? '' : `<td>${escapeHtml(f.tenant)}</td>`}
-                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.src_ip)}')" title="${hlTitle}">${escapeHtml(f.src_ip)}</a></td>
-                    <td><a href="javascript:void(0)" onclick="event.stopPropagation(); highlightInTopology('${escapeHtml(f.dst_ip)}')" title="${hlTitle}">${escapeHtml(f.dst_ip)}</a></td>
+                    <td><a href="javascript:void(0)" data-action="flow-hl-topo" data-ip="${escapeHtml(f.src_ip)}" title="${hlTitle}">${escapeHtml(f.src_ip)}</a></td>
+                    <td><a href="javascript:void(0)" data-action="flow-hl-topo" data-ip="${escapeHtml(f.dst_ip)}" title="${hlTitle}">${escapeHtml(f.dst_ip)}</a></td>
                     ${flowsColHidden('proto') ? '' : `<td>${proto}/${f.dst_port ?? '—'}</td>`}
-                    ${flowsColHidden('source') ? '' : `<td><span style="font-size:11px; padding:2px 8px; border-radius:10px; background:var(--surface-3);">${srcLabel}</span></td>`}
+                    ${flowsColHidden('source') ? '' : `<td><span style="font-size:11px; padding:2px 8px; border-radius:0; background:var(--surface-3);">${srcLabel}</span></td>`}
                     <td><div style="display:flex; align-items:center; gap:8px;">
-                        <div style="flex:1; height:7px; background:var(--surface-3); border-radius:4px;"><div style="height:100%; width:${pct}%; background:var(--primary); border-radius:4px;"></div></div>
+                        <div style="flex:1; height:7px; background:var(--surface-3); border-radius:0;"><div style="height:100%; width:${pct}%; background:var(--primary); border-radius:0;"></div></div>
                         <span style="min-width:64px;">${fmtBytes(f.total_bytes)}</span></div></td>
                     ${flowsColHidden('packets') ? '' : `<td>${f.total_packets}</td>`}
                     ${flowsColHidden('flows') ? '' : `<td>${f.flow_count}</td>`}
@@ -597,24 +666,21 @@
         body.innerHTML = `
             <table style="width:100%; font-size:13px; border-collapse:collapse; margin-bottom:14px;">
                 ${row(L.thFlTenant || 'Sede', escapeHtml(f.tenant))}
-                ${row(L.thFlSrc || 'Sorgente', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.src_ip)}</a>`)}
-                ${row(L.thFlDst || 'Destinazione', `<a href="javascript:void(0)" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">${escapeHtml(f.dst_ip)}</a>`)}
+                ${row(L.thFlSrc || 'Sorgente', `<a href="javascript:void(0)" data-action="detail-hl-topo" data-ip="${escapeHtml(f.src_ip)}">${escapeHtml(f.src_ip)}</a>`)}
+                ${row(L.thFlDst || 'Destinazione', `<a href="javascript:void(0)" data-action="detail-hl-topo" data-ip="${escapeHtml(f.dst_ip)}">${escapeHtml(f.dst_ip)}</a>`)}
                 ${row(L.thFlProto || 'Proto/Porta', `${proto}/${f.dst_port ?? '—'}`)}
                 ${row(L.thFlTraffic || 'Traffico', fmtBytes(f.total_bytes))}
                 ${row(L.thFlPackets || 'Pacchetti', f.total_packets)}
                 ${row(en ? 'Aggregated flows' : 'Flussi aggregati', f.flow_count)}
             </table>
             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
-                <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.src_ip)}'); closeFlowDetailPanel();">
+                <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.src_ip)}">
                     <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show source in topology' : 'Mostra sorgente in topologia'}
                 </button>
-                <button class="btn" style="text-align:left;" onclick="highlightInTopology('${escapeHtml(f.dst_ip)}'); closeFlowDetailPanel();">
+                <button class="btn" style="text-align:left;" data-action="detail-hl-topo" data-ip="${escapeHtml(f.dst_ip)}">
                     <i class="fa-solid fa-diagram-project"></i> ${en ? 'Show destination in topology' : 'Mostra destinazione in topologia'}
                 </button>
-                <button class="btn" style="text-align:left;" onclick="jumpToAnomaliesForFlow()">
-                    <i class="fa-solid fa-triangle-exclamation"></i> ${en ? 'See anomalies for this flow' : 'Vedi anomalie di questo flusso'}
-                </button>
-                <button class="btn requires-write" style="text-align:left;" onclick="analyzeSingleFlowWithAi()" title="${en ? 'Send ONLY this flow to the AI assistant (identifiers; totals re-derived server-side)' : 'Invia SOLO questo flusso all\'assistente AI (identificatori; totali ri-derivati dal server)'}">
+                <button class="btn requires-write" style="text-align:left;" data-action="detail-ai-flow" title="${en ? 'Send ONLY this flow to the AI assistant (identifiers; totals re-derived server-side)' : 'Invia SOLO questo flusso all\'assistente AI (identificatori; totali ri-derivati dal server)'}">
                     <i class="fa-solid fa-robot"></i> ${L.btnAnalyzeAi || 'Analizza con AI'}
                 </button>
             </div>
@@ -645,7 +711,7 @@
                 return;
             }
             box.innerHTML = rows.map(r => `
-                <div style="padding:8px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+                <div style="padding:8px; border:1px solid var(--border); border-radius:0; margin-bottom:6px;">
                     <div><b>MAC</b>: <code>${escapeHtml(r.mac)}</code></div>
                     <div><b>Gateway</b>: ${escapeHtml(r.source_name || '')} <span style="color:var(--text-muted);">${escapeHtml(r.source_ip || '')}</span></div>
                     <div><b>${en ? 'Access switch' : 'Switch di accesso'}</b>: ${r.switch_ip ? `${escapeHtml(r.switch_name || '')} ${escapeHtml(r.switch_ip)}` : '—'}</div>
@@ -655,40 +721,6 @@
             box.textContent = currentLang === 'en' ? 'Client-map lookup unavailable.' : 'Ricerca client-map non disponibile.';
         }
     }
-
-    // Salta alla tabella anomalie filtrata per gli IP src/dst del flusso.
-    function jumpToAnomaliesForFlow() {
-        const f = _flowPanelFlow;
-        if (!f) return;
-        _anomIpFilter = { src: f.src_ip, dst: f.dst_ip };
-        closeFlowDetailPanel();
-        const statusSel = document.getElementById('anomStatus');
-        if (statusSel) statusSel.value = 'all';
-        loadAnomalies();
-        // Ancora esplicita: il vecchio selettore '#tab-flows h4' puntava alla prima
-        // h4 del tab (il titolo anomalie) e si rompe appena cambia la gerarchia.
-        document.getElementById('anomSectionTitle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function clearAnomIpFilter() {
-        _anomIpFilter = null;
-        loadAnomalies();
-    }
-
-    function toggleFlowsTenantDropdown() {
-        const dropdown = document.getElementById('flowsTenantDropdown');
-        if (!dropdown) return;
-        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-    }
-
-    // Close dropdown on outside click
-    document.addEventListener('click', function(e) {
-        const dropdown = document.getElementById('flowsTenantDropdown');
-        const btn = document.getElementById('flowsTenantBtn');
-        if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
-            dropdown.style.display = 'none';
-        }
-    });
 
     // Mappatura IP → nodo topologia: i nodi Vis.js usano l'IP del device come
     // id (vedi loadInteractiveMap: n.id confrontato con globalDevices[].IP).
@@ -750,15 +782,15 @@
             ? (selected
                 ? `Analyze the ${flows.length} selected attached network flows: `
                   + 'spot anomalous top talkers, possible exfiltration or scans, '
-                  + 'and correlate with the open anomalies.'
+                  + 'and correlate with the open incidents.'
                 : 'Analyze the attached network flows: spot anomalous top talkers, '
-                  + 'possible exfiltration or scans, and correlate with the open anomalies.')
+                  + 'possible exfiltration or scans, and correlate with the open incidents.')
             : (selected
                 ? `Analizza i ${flows.length} flussi di rete selezionati e allegati: `
                   + 'individua top talker anomali, possibili esfiltrazioni o scansioni, '
-                  + 'e correla con le anomalie aperte.'
+                  + 'e correla con gli incidenti aperti.'
                 : 'Analizza i flussi di rete allegati: individua i top talker anomali, '
-                  + 'possibili esfiltrazioni o scansioni, e correla con le anomalie aperte.');
+                  + 'possibili esfiltrazioni o scansioni, e correla con gli incidenti aperti.');
         input.focus();
     }
 
@@ -776,114 +808,26 @@
         await _prepareFlowAiChat([f]);
     }
 
-    async function loadAnomalies() {
-        const tbody = document.getElementById('anomTableBody');
-        const status = document.getElementById('anomStatus').value;
-        const res = await apiFetch(`/api/observability/anomalies?status=${encodeURIComponent(status)}&window=7d&limit=100`);
-        if (!res || !res.ok) return;
-        let rows = (await res.json()).anomalies || [];
 
-        // Filtro client-side per IP src/dst del flusso, impostato dal pannello dettaglio flussi.
-        const chip = document.getElementById('anomIpFilterChip');
-        if (_anomIpFilter) {
-            const { src, dst } = _anomIpFilter;
-            rows = rows.filter(a => a.src_ip === src || a.dst_ip === src || a.src_ip === dst || a.dst_ip === dst);
-            if (chip) {
-                chip.style.display = 'inline-flex';
-                chip.querySelector('span').textContent = `${currentLang === 'en' ? 'Filtered by flow' : 'Filtrato per flusso'}: ${src} / ${dst}`;
-            }
-        } else if (chip) {
-            chip.style.display = 'none';
-        }
 
-        const en = currentLang === 'en';
-        if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" style="padding:20px; text-align:center; color:var(--text-muted);">${i18n[currentLang].msgNoAnomalies || 'Nessuna anomalia.'}</td></tr>`;
-            return;
-        }
-        // Severità = severità syslog (0-7, più bassa = più grave), stessa scala
-        // usata da renderSyslogTable(): <=3 grave, 4 attenzione, oltre informativa.
-        // Mirrors sevColor() in the syslog table: 0-3 critico/alto, 4 warning,
-        // 5+ is "medio" (see _SEVERITY_KIND in observability/correlator.py) --
-        // neutral, NOT ok/green. A medium anomaly must not read as healthy.
-        const sevBadge = s => s == null ? '—'
-            : s <= 3 ? `<span class="status bad">${s}</span>`
-            : s <= 4 ? `<span class="status warn">${s}</span>`
-            : `<span class="chip">${s}</span>`;
-        // new = da lavorare, ack = presa in carico, resolved = chiusa.
-        const statusBadge = st => st === 'resolved' ? `<span class="status ok">${escapeHtml(st)}</span>`
-            : st === 'ack' ? `<span class="chip">${escapeHtml(st)}</span>`
-            : `<span class="status warn">${escapeHtml(st)}</span>`;
-        tbody.innerHTML = rows.map(a => {
-            const when = new Date(a.created_ts * 1000).toLocaleString();
-            const actions = [];
-            const lblAck = en ? 'Acknowledge' : 'Prendi in carico';
-            const lblResolve = en ? 'Resolve' : 'Risolvi';
-            if (a.status === 'new') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'ack')">${lblAck}</button>`);
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'new', 'resolved')">${lblResolve}</button>`);
-            } else if (a.status === 'ack') {
-                actions.push(`<button class="btn requires-write" style="font-size:11px; padding:3px 8px;" onclick="anomTransition(${a.id}, 'ack', 'resolved')">${lblResolve}</button>`);
-            }
-            return `<tr style="font-size:12px; border-top:1px solid var(--border);">
-                <td style="padding:6px 8px;">${when}</td>
-                <td>${escapeHtml(a.tenant)}</td>
-                <td>${escapeHtml(a.kind || '—')}</td>
-                <td>${escapeHtml(a.src_ip || '—')}</td>
-                <td>${escapeHtml(a.dst_ip || '—')}</td>
-                <td>${escapeHtml(a.switch_port || '—')}</td>
-                <td>${sevBadge(a.severity)}</td>
-                <td>${statusBadge(a.status)}</td>
-                <td style="display:flex; gap:4px;">${actions.join('')}</td>
-            </tr>`;
-        }).join('');
-    }
-
-    async function anomTransition(id, fromStatus, toStatus) {
-        const res = await apiFetch(`/api/observability/anomalies/${id}/status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from_status: fromStatus, status: toStatus })
-        });
-        if (res && res.ok) {
-            loadAnomalies();
-        } else if (res && res.status === 409) {
-            const err = await res.json().catch(() => ({}));
-            showToast(err.detail || (currentLang === 'en' ? 'Status changed in the meantime: reloading.' : 'Stato cambiato nel frattempo: ricarico.'), 'warning');
-            loadAnomalies();
-        } else if (res) {
-            showToast(currentLang === 'en' ? 'Operation failed.' : 'Operazione non riuscita.', 'error');
-        }
-    }
 
     // --- FLOW GRAPH (Task 3: Live Flows — grafo, KPI, riepilogo, tabelle) ---
 
     let _fgData = null;          // ultima risposta /flowgraph
-    let _fgSelectedNode = null;  // ip selezionato per filtrare le tabelle
     let _fgFetchInFlight = false;
 
     async function loadFlowGraph(window_) {
         if (_fgFetchInFlight) return;
         _fgFetchInFlight = true;
         try {
-            const w = window_ || document.getElementById('flowsWindow')?.value || '15m';
-            const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}`);
+            const w = window_ || trafState.window;
+            const res = await apiFetch(`/api/observability/flowgraph?window=${encodeURIComponent(w)}${telemetryParam()}`);
             if (!res || !res.ok) return;
             _fgData = await res.json();
-            _fgSelectedNode = null;
-            // Disclosure: qualunque nodo/arco con VLAN non reale (fallback
-            // sintetico, nessun binding ARP noto per l'IP) attiva l'avviso
-            // in UI — mai spacciare un valore inventato per un tag 802.1Q reale.
-            if (_fgData.tenant) {
-                _fgData.tenant.vlan_disclosure =
-                    (_fgData.nodes || []).some(n => n.vlan_real === false) ||
-                    (_fgData.edges || []).some(e => e.vlan_real === false);
-            }
             renderFlowGraphKpis();
             renderFlowGraphTenant();
             renderFlowGraphProtocols();
             renderFlowGraphTalkers();
-            fgStartSimulation();
         } finally {
             _fgFetchInFlight = false;
         }
@@ -895,8 +839,25 @@
         const L = i18n[currentLang];
         document.getElementById('fgKpiThroughput').textContent = fmtRate(d.kpi.throughput_bps);
         const tp = d.kpi.top_path;
-        document.getElementById('fgKpiTopPath').textContent = tp && tp.src
-            ? `${tp.src} → ${tp.dst} (${tp.pct}%)` : '—';
+        const topPathEl = document.getElementById('fgKpiTopPath');
+        if (topPathEl) {
+            if (tp && tp.src) {
+                topPathEl.innerHTML = `
+                    <div class="kpi-top-path" title="${escapeHtml(tp.src)} → ${escapeHtml(tp.dst)} (${escapeHtml(tp.pct)}%)">
+                        <div class="kpi-path-line">
+                            <span class="kpi-path-ip">${escapeHtml(tp.src)}</span>
+                            <span class="kpi-path-arrow"><i class="fa-solid fa-arrow-right"></i></span>
+                            <span class="kpi-path-ip">${escapeHtml(tp.dst)}</span>
+                        </div>
+                        <div class="kpi-path-sub">
+                            <span class="kpi-path-pct">(${escapeHtml(tp.pct)}%)</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                topPathEl.textContent = '—';
+            }
+        }
         document.getElementById('fgKpiTalkers').textContent = d.kpi.talkers;
         document.getElementById('fgKpiSpikes').textContent = d.kpi.spikes;
     }
@@ -911,46 +872,23 @@
         const tt = t.top_talker;
         box.innerHTML = `
             <div><b>${escapeHtml(L.thFlTenant || 'Tenant')}</b>: ${escapeHtml(t.name)}</div>
-            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}${t.vlan_disclosure ? ` <span title="${escapeHtml(L.hintVlanSynthetic || '')}" style="cursor:help; color:var(--text-muted);">*</span>` : ''}</div>
+            <div><b>${escapeHtml(L.thFgVlan || 'VLAN')}</b>: ${escapeHtml((t.vlans || []).join(', ') || '—')}</div>
             <div><b>${escapeHtml(L.lblVisibleVlans || 'Visible VLANs')}</b>: ${(t.vlans || []).length}</div>
             <div><b>${escapeHtml(L.lblFlowsShown || 'Flows shown')}</b>: ${t.flows_shown}</div>
             <div><b>${escapeHtml(L.lblTopTalker || 'Top talker')}</b>: ${tt ? `${escapeHtml(tt.src)} → ${escapeHtml(tt.dst)} (${escapeHtml(fmtRate(tt.rate_bps))})` : '—'}</div>`;
     }
 
     function _fgVisibleEdges() {
-        // Archi visibili nelle due tabelle: filtrati sul nodo selezionato
-        // (click sul grafo), altrimenti l'intera finestra.
-        let edges = (_fgData && _fgData.edges) || [];
-        if (_fgSelectedNode) {
-            edges = edges.filter(e => e.src === _fgSelectedNode || e.dst === _fgSelectedNode);
-        }
-        return edges;
-    }
-
-    function _fgVlanMark(realFlag) {
-        if (realFlag !== false) return '';
-        const L = i18n[currentLang];
-        return ` <span title="${escapeHtml(L.hintVlanSynthetic || '')}" style="cursor:help; color:var(--text-muted);">*</span>`;
+        // Archi visibili nelle due tabelle: l'intera finestra (il grafo
+        // click-to-filter è stato rimosso insieme al canvas force-directed).
+        return (_fgData && _fgData.edges) || [];
     }
 
     function renderFlowGraphProtocols() {
         const tbody = document.getElementById('fgProtoTableBody');
         if (!tbody) return;
-        // Non filtrato: intera finestra dei protocolli precalcolata dal backend.
-        // Filtrato (nodo selezionato): riaggregata client-side dagli archi
-        // visibili (il brief chiede di filtrare "le due tabelle" al click).
-        let rows;
-        if (_fgSelectedNode) {
-            const totals = {};
-            for (const e of _fgVisibleEdges()) {
-                const key = e.proto + '|' + (e.port == null ? '' : e.port);
-                const t = totals[key] || (totals[key] = { proto: e.proto, port: e.port, rate_bps: 0 });
-                t.rate_bps += e.rate_bps || 0;
-            }
-            rows = Object.values(totals).sort((a, b) => b.rate_bps - a.rate_bps);
-        } else {
-            rows = (_fgData && _fgData.protocols) || [];
-        }
+        // Intera finestra dei protocolli precalcolata dal backend.
+        const rows = (_fgData && _fgData.protocols) || [];
         if (!rows.length) {
             tbody.innerHTML = `<tr><td colspan="3" style="padding:10px; text-align:center; color:var(--text-muted);">—</td></tr>`;
             return;
@@ -976,195 +914,626 @@
             <tr style="border-top:1px solid var(--border);">
                 <td style="padding:6px 8px;">${escapeHtml(e.src)}</td>
                 <td>${escapeHtml(e.dst)}</td>
-                <td>${escapeHtml(String(e.vlan))}${_fgVlanMark(e.vlan_real)}</td>
+                <td>${e.vlan_real === false ? '—' : escapeHtml(String(e.vlan))}</td>
                 <td>${escapeHtml(fmtRate(e.rate_bps))}</td>
             </tr>`).join('');
     }
 
-    function fgFilterByNode(ip) {
-        _fgSelectedNode = (_fgSelectedNode === ip) ? null : ip;
-        renderFlowGraphTalkers();
-        renderFlowGraphProtocols();
-        fgDraw();
-    }
+    // --- PROTOCOL DISTRIBUTION CHART (DONUT, BAR, TREND) ---
+    let _obsChartType = 'donut';
+    let _obsProtocolData = null;
 
-    // --- Canvas: grafo force-directed vanilla (nessuna libreria) ---
-
-    let _fgNodes = [];   // {id, x, y, vx, vy, r, bytes, vlan}
-    let _fgEdges = [];
-    let _fgTicks = 0;
-    const FG_MAX_TICKS = 100;
-    let _fgAnimating = false;
-    let _fgHover = null;
-
-    function fgVlanColor(vlan) {
-        let hash = 0;
-        const s = String(vlan);
-        for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) | 0;
-        const hue = Math.abs(hash) % 360;
-        return `hsl(${hue}, 65%, 55%)`;
-    }
-
-    function fgStartSimulation() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas || !_fgData) return;
-        const w = canvas.clientWidth || canvas.width;
-        const h = canvas.clientHeight || canvas.height;
-        canvas.width = w; canvas.height = h;
-
-        const maxBytes = Math.max(1, ...(_fgData.nodes.map(n => n.bytes || 0)));
-        _fgNodes = _fgData.nodes.map(n => ({
-            id: n.id, bytes: n.bytes || 0, vlan: n.vlan,
-            r: 6 + 14 * Math.sqrt((n.bytes || 0) / maxBytes),
-            x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0,
-        }));
-        const byId = {};
-        _fgNodes.forEach(n => byId[n.id] = n);
-        const maxRate = Math.max(1, ...(_fgData.edges.map(e => e.rate_bps || 0)));
-        _fgEdges = _fgData.edges
-            .filter(e => byId[e.src] && byId[e.dst])
-            .map(e => ({
-                src: byId[e.src], dst: byId[e.dst], vlan: e.vlan, proto: e.proto,
-                rate_bps: e.rate_bps,
-                width: Math.max(1, Math.min(8, 1 + 7 * (e.rate_bps / maxRate))),
-            }));
-
-        _fgTicks = 0;
-        if (!_fgAnimating) {
-            _fgAnimating = true;
-            requestAnimationFrame(fgTick);
-        }
-        _fgCanvasBound = _fgCanvasBound || fgBindCanvasEvents();
-    }
-
-    let _fgCanvasBound = false;
-
-    function fgTick() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas) { _fgAnimating = false; return; }
-        const w = canvas.width, h = canvas.height;
-        if (_fgTicks < FG_MAX_TICKS) {
-            const REPULSION = 2500, SPRING = 0.02, IDEAL_LEN = 90, DAMP = 0.85;
-            for (let i = 0; i < _fgNodes.length; i++) {
-                const a = _fgNodes[i];
-                let fx = 0, fy = 0;
-                for (let j = 0; j < _fgNodes.length; j++) {
-                    if (i === j) continue;
-                    const b = _fgNodes[j];
-                    let dx = a.x - b.x, dy = a.y - b.y;
-                    let d2 = dx * dx + dy * dy || 0.01;
-                    const d = Math.sqrt(d2);
-                    const f = REPULSION / d2;
-                    fx += (dx / d) * f; fy += (dy / d) * f;
-                }
-                // Attrazione al centro per evitare deriva
-                fx += (w / 2 - a.x) * 0.002; fy += (h / 2 - a.y) * 0.002;
-                a.vx = (a.vx + fx) * DAMP; a.vy = (a.vy + fy) * DAMP;
+    function setObsChartType(type) {
+        _obsChartType = type;
+        ['donut', 'bar', 'trend'].forEach(t => {
+            const btn = document.getElementById('btnChartType' + t.charAt(0).toUpperCase() + t.slice(1));
+            if (!btn) return;
+            if (t === type) {
+                btn.style.background = 'var(--cta)';
+                btn.style.color = 'var(--cta-text)';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text)';
             }
-            for (const e of _fgEdges) {
-                let dx = e.dst.x - e.src.x, dy = e.dst.y - e.src.y;
-                const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
-                const f = SPRING * (d - IDEAL_LEN);
-                const fx = (dx / d) * f, fy = (dy / d) * f;
-                e.src.vx += fx; e.src.vy += fy;
-                e.dst.vx -= fx; e.dst.vy -= fy;
-            }
-            for (const n of _fgNodes) {
-                n.x = Math.min(w - n.r - 4, Math.max(n.r + 4, n.x + n.vx));
-                n.y = Math.min(h - n.r - 4, Math.max(n.r + 4, n.y + n.vy));
-            }
-            _fgTicks++;
-            fgDraw();
-            requestAnimationFrame(fgTick);
-        } else {
-            fgDraw();
-            _fgAnimating = false;
-        }
+        });
+        renderObsProtocolChart();
     }
 
-    function fgDraw() {
-        const canvas = document.getElementById('flowGraphCanvas');
+    async function loadObsProtocolDist() {
+        const card = document.getElementById('obsProtocolCard');
+        if (!card) return;
+        const win = trafState.window;
+        const res = await apiFetch(`/api/observability/protocol-distribution?window=${win}${telemetryParam()}`);
+        if (!res || !res.ok) return;
+        _obsProtocolData = await res.json();
+        renderObsProtocolChart();
+    }
+
+    function renderObsProtocolChart() {
+        if (!_obsProtocolData) return;
+        const canvas = document.getElementById('obsProtocolCanvas');
+        const statsBox = document.getElementById('obsProtocolStats');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const w = canvas.width, h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-        if (!_fgNodes.length) {
-            ctx.fillStyle = '#888';
-            ctx.font = '13px sans-serif';
-            const L = i18n[currentLang];
-            ctx.fillText(L.msgNoFlowGraphData || 'No data.', 12, 20);
+        const d = _obsProtocolData;
+        const totals = d.totals || {};
+
+        // Conduttori dello schema: il codice fasi del quadro, risolto in colori
+        // veri perche' questi valori finiscono anche in ctx.fillStyle su canvas.
+        const PROTO_COLORS = {
+            netflow: cssVar('--cond-a', '#5aa9e6'),
+            ipfix:   cssVar('--cond-c', '#63c88a'),
+            sflow:   cssVar('--cond-d', '#b98a5e'),
+            syslog:  cssVar('--cond-b', '#e0a03c')
+        };
+        const PROTO_LABELS = {
+            netflow: 'NetFlow',
+            ipfix: 'IPFIX',
+            sflow: 'sFlow',
+            syslog: 'Syslog'
+        };
+
+        if (_obsChartType === 'bar') {
+            canvas.style.display = 'none';
+            if (statsBox) {
+                statsBox.style.display = 'flex';
+                let totalBytes = 0;
+                let totalEvents = totals.syslog ? (totals.syslog.events || 0) : 0;
+                Object.keys(totals).forEach(k => {
+                    if (k !== 'syslog') totalBytes += (totals[k].bytes || 0);
+                });
+                
+                const protoKeys = ['netflow', 'ipfix', 'sflow', 'syslog'];
+                statsBox.innerHTML = protoKeys.map(k => {
+                    const col = PROTO_COLORS[k];
+                    const label = PROTO_LABELS[k];
+                    const item = totals[k] || {};
+                    let valStr = '0 B';
+                    let pct = 0;
+                    if (k === 'syslog') {
+                        valStr = `${item.events || 0} eventi`;
+                        pct = totalEvents > 0 ? Math.min(100, Math.round(((item.events || 0) / totalEvents) * 100)) : 0;
+                    } else {
+                        valStr = typeof fmtBytes === 'function' ? fmtBytes(item.bytes || 0) : `${item.bytes || 0} B`;
+                        pct = totalBytes > 0 ? Math.min(100, Math.round(((item.bytes || 0) / totalBytes) * 100)) : 0;
+                    }
+                    return `
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px;">
+                            <span style="font-weight:700; color:${col}; flex:1;">${label}</span>
+                            <span style="font-family:var(--font-code); color:var(--text); font-weight:600;">${valStr}</span>
+                            <span style="color:var(--text-muted); width:45px; text-align:right;">${pct}%</span>
+                        </div>
+                        <div style="width:100%; height:8px; background:var(--surface-3); border-radius:0; overflow:hidden;">
+                            <div style="width:100%; transform:scaleX(${pct / 100}); transform-origin:left; height:100%; background:${col}; border-radius:0; transition:transform .3s;"></div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
             return;
         }
-        for (const e of _fgEdges) {
-            const dim = _fgSelectedNode && e.src.id !== _fgSelectedNode && e.dst.id !== _fgSelectedNode;
-            ctx.strokeStyle = fgVlanColor(e.vlan);
-            ctx.globalAlpha = dim ? 0.15 : 0.75;
-            ctx.lineWidth = e.width;
-            ctx.beginPath();
-            ctx.moveTo(e.src.x, e.src.y);
-            ctx.lineTo(e.dst.x, e.dst.y);
-            ctx.stroke();
-        }
-        ctx.globalAlpha = 1;
-        for (const n of _fgNodes) {
-            const dim = _fgSelectedNode && n.id !== _fgSelectedNode;
-            ctx.globalAlpha = dim ? 0.35 : 1;
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-            ctx.fillStyle = fgVlanColor(n.vlan);
-            ctx.fill();
-            if (n.id === _fgSelectedNode) {
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = '#fff';
-                ctx.stroke();
-            }
-            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#eee';
-            ctx.font = '10px sans-serif';
-            ctx.fillText(n.id, n.x + n.r + 3, n.y + 3);
-        }
-        ctx.globalAlpha = 1;
-    }
 
-    function fgNodeAt(canvas, evt) {
+        canvas.style.display = 'block';
+        if (statsBox) statsBox.style.display = 'none';
+
+        // ResizeObserver to automatically adjust canvas resolution when tab becomes visible or resizes
+        if (typeof ResizeObserver !== 'undefined' && canvas && !canvas._hasObsResizeObserver) {
+            canvas._hasObsResizeObserver = true;
+            const ro = new ResizeObserver(() => {
+                if (canvas.offsetWidth > 0) {
+                    renderObsProtocolChart();
+                }
+            });
+            ro.observe(canvas.parentElement || canvas);
+        }
+
+        // Resize canvas to pixel ratio accurately
+        const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
-        const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
-        const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
-        for (const n of _fgNodes) {
-            const dx = x - n.x, dy = y - n.y;
-            if (dx * dx + dy * dy <= (n.r + 2) * (n.r + 2)) return n;
+        const parentRect = canvas.parentElement ? canvas.parentElement.getBoundingClientRect() : rect;
+        const width = Math.max(300, Math.round(rect.width || parentRect.width || 600));
+        const height = Math.max(180, Math.round(rect.height || parentRect.height || 230));
+
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+
+        ctx.clearRect(0, 0, width, height);
+
+        if (_obsChartType === 'donut') {
+            let totalVal = 0;
+            const items = [];
+            Object.keys(totals).forEach(k => {
+                const v = k === 'syslog' ? (totals[k].events || 0) : (totals[k].bytes || 0);
+                if (v > 0) {
+                    items.push({ key: k, val: v, color: PROTO_COLORS[k], label: PROTO_LABELS[k] });
+                    totalVal += v;
+                }
+            });
+
+            const cx = width > 500 ? width * 0.32 : width * 0.3;
+            const cy = height / 2;
+            const radius = Math.min(width * 0.22, height * 0.38);
+            const innerRadius = radius * 0.58;
+
+            if (items.length === 0 || totalVal === 0) {
+                ctx.fillStyle = '#888';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Nessun dato di telemetria nel periodo', width / 2, height / 2);
+                return;
+            }
+
+            let startAngle = -Math.PI / 2;
+            items.forEach(item => {
+                const sliceAngle = (item.val / totalVal) * (Math.PI * 2);
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle);
+                ctx.arc(cx, cy, innerRadius, startAngle + sliceAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = item.color;
+                ctx.fill();
+                startAngle += sliceAngle;
+            });
+
+            // Center total text
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Protocolli', cx, cy - 8);
+            ctx.font = '11px sans-serif';
+            ctx.fillStyle = '#888';
+            ctx.fillText(`${items.length} attivi`, cx, cy + 10);
+
+            // Render Legend on the right side
+            let lx = Math.max(220, width * 0.52);
+            let ly = Math.max(20, (height - (items.length * 28)) / 2);
+            items.forEach(item => {
+                ctx.fillStyle = item.color;
+                ctx.fillRect(lx, ly, 12, 12);
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                const pct = Math.round((item.val / totalVal) * 100);
+                const valStr = item.key === 'syslog' ? `${item.val} evt` : (typeof fmtBytes === 'function' ? fmtBytes(item.val) : `${item.val} B`);
+                ctx.fillText(`${item.label}: ${valStr} (${pct}%)`, lx + 20, ly - 1);
+                ly += 28;
+            });
+        } else if (_obsChartType === 'trend') {
+            const trend = d.trend || [];
+            if (trend.length === 0) {
+                ctx.fillStyle = '#888';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Nessun trend temporale disponibile nel periodo', width / 2, height / 2);
+                return;
+            }
+
+            const padding = { top: 38, right: 55, bottom: 35, left: 60 };
+            const graphW = width - padding.left - padding.right;
+            const graphH = height - padding.top - padding.bottom;
+
+            // Render Top Legend
+            let legX = padding.left;
+            const legY = 12;
+            const protoKeys = ['netflow', 'ipfix', 'sflow', 'syslog'];
+            protoKeys.forEach(k => {
+                ctx.fillStyle = PROTO_COLORS[k];
+                ctx.fillRect(legX, legY, 10, 10);
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#fff';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                const label = k === 'syslog' ? 'Syslog (Eventi)' : PROTO_LABELS[k] + ' (Bytes)';
+                ctx.fillText(label, legX + 14, legY - 1);
+                legX += ctx.measureText(label).width + 30;
+            });
+
+            // Find Max Values
+            let maxBytes = 1;
+            let maxSyslog = 1;
+            trend.forEach(pt => {
+                ['netflow', 'ipfix', 'sflow'].forEach(k => {
+                    if ((pt[k] || 0) > maxBytes) maxBytes = pt[k];
+                });
+                if ((pt.syslog || 0) > maxSyslog) maxSyslog = pt.syslog;
+            });
+
+            // Draw Background Gridlines & Y-Axis Ticks
+            const textColor = getComputedStyle(document.body).getPropertyValue('--text-muted') || '#888';
+            const borderColor = getComputedStyle(document.body).getPropertyValue('--border') || '#444';
+
+            ctx.lineWidth = 1;
+            ctx.font = '10px sans-serif';
+
+            [0, 0.5, 1.0].forEach(factor => {
+                const y = height - padding.bottom - (factor * graphH);
+                ctx.strokeStyle = factor === 0 ? borderColor : 'rgba(255,255,255,0.06)';
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+
+                // Left Y-Axis (Bytes)
+                ctx.fillStyle = textColor;
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                const bytesVal = Math.round(maxBytes * factor);
+                const bytesStr = typeof fmtBytes === 'function' ? fmtBytes(bytesVal) : `${bytesVal} B`;
+                ctx.fillText(bytesStr, padding.left - 8, y);
+
+                // Right Y-Axis (Syslog Events)
+                ctx.textAlign = 'left';
+                const evtVal = Math.round(maxSyslog * factor);
+                ctx.fillText(`${evtVal} evt`, width - padding.right + 8, y);
+            });
+
+            // Draw X-Axis Time Labels
+            const labelStep = Math.max(1, Math.floor(trend.length / 5));
+            trend.forEach((pt, i) => {
+                if (i % labelStep === 0 || i === trend.length - 1) {
+                    const x = padding.left + (i / Math.max(1, trend.length - 1)) * graphW;
+                    const dateObj = new Date(pt.ts * 1000);
+                    const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    ctx.fillStyle = textColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(timeStr, x, height - padding.bottom + 8);
+                }
+            });
+
+            // Draw Lines and Points for each protocol
+            protoKeys.forEach(k => {
+                const col = PROTO_COLORS[k];
+                const isSyslog = k === 'syslog';
+                const curMax = isSyslog ? maxSyslog : maxBytes;
+
+                ctx.strokeStyle = col;
+                ctx.fillStyle = col;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                const points = [];
+                trend.forEach((pt, i) => {
+                    const x = padding.left + (i / Math.max(1, trend.length - 1)) * graphW;
+                    const val = pt[k] || 0;
+                    const y = height - padding.bottom - ((val / curMax) * graphH);
+                    points.push({ x, y, val });
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+
+                // Draw Dots
+                points.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            });
         }
-        return null;
     }
 
-    function fgBindCanvasEvents() {
-        const canvas = document.getElementById('flowGraphCanvas');
-        if (!canvas) return false;
-        canvas.addEventListener('click', evt => {
-            const n = fgNodeAt(canvas, evt);
-            if (n) fgFilterByNode(n.id);
-            else { _fgSelectedNode = null; renderFlowGraphTalkers(); renderFlowGraphProtocols(); fgDraw(); }
-        });
-        canvas.addEventListener('mousemove', evt => {
-            const n = fgNodeAt(canvas, evt);
-            const tip = document.getElementById('fgTooltip');
-            if (!tip) return;
-            if (n) {
-                const totalRate = _fgEdges.filter(e => e.src.id === n.id || e.dst.id === n.id)
-                    .reduce((s, e) => s + (e.rate_bps || 0), 0);
-                tip.textContent = `${n.id} — ${fmtRate(totalRate)}`;
-                tip.style.left = (evt.clientX + 12) + 'px';
-                tip.style.top = (evt.clientY + 12) + 'px';
-                tip.style.display = 'block';
-                canvas.style.cursor = 'pointer';
-            } else {
-                tip.style.display = 'none';
-                canvas.style.cursor = 'default';
+    // --- INSPECTION MODAL & CLICK DRILL-DOWN ---
+    // Markup per la ripartizione telemetria (severità syslog, azioni, top
+    // device, breakdown L4 e top porte per protocollo). Riusata sia dal
+    // pannello inline "Dettaglio Flussi" sia dal modale di ispezione, così
+    // le due viste non divergono.
+    const OBS_PROTO_LABELS = { netflow: 'NetFlow', ipfix: 'IPFIX', sflow: 'sFlow', syslog: 'Syslog' };
+
+    function buildFlowTelemetryDetailHtml(protoKey = 'all') {
+        const bd = (_obsProtocolData && _obsProtocolData.breakdown) || {};
+        const totals = (_obsProtocolData && _obsProtocolData.totals) || {};
+        const windowStr = (_obsProtocolData && _obsProtocolData.window) || '24h';
+        const PROTO_LABELS = OBS_PROTO_LABELS;
+
+        let html = '';
+
+        if (protoKey === 'syslog' || protoKey === 'all') {
+            const slData = bd.syslog || {};
+            const sevs = slData.severity || {};
+            const actions = slData.actions || {};
+            const devices = slData.devices || {};
+            const totalSyslogEvts = totals.syslog ? (totals.syslog.events || 0) : 0;
+
+            const SEV_LABELS = {
+                '0': 'Emerg (0)', '1': 'Alert (1)', '2': 'Crit (2)', '3': 'Err (3)',
+                '4': 'Warn (4)', '5': 'Notice (5)', '6': 'Info (6)', '7': 'Debug (7)'
+            };
+            const SEV_COLORS = {
+                '0': 'var(--danger)', '1': 'var(--danger)', '2': 'var(--danger)', '3': 'var(--danger)',
+                '4': 'var(--warning)', '5': 'var(--info)', '6': 'var(--primary)', '7': 'var(--text-muted)'
+            };
+
+            let sevHtml = '';
+            Object.keys(sevs).sort().forEach(sev => {
+                const cnt = sevs[sev] || 0;
+                const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
+                sevHtml += `
+                <div style="margin-bottom:8px;">
+                    <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
+                        <span style="color:${SEV_COLORS[sev] || 'var(--text)'}; font-weight:700;">${SEV_LABELS[sev] || ('Sev ' + sev)}</span>
+                        <span>${cnt} eventi (${pct}%)</span>
+                    </div>
+                    <div style="width:100%; height:6px; background:var(--surface-3); border-radius:0; overflow:hidden;">
+                        <div style="width:${pct}%; height:100%; background:${SEV_COLORS[sev] || 'var(--primary)'};"></div>
+                    </div>
+                </div>`;
+            });
+
+            let actHtml = '';
+            let totalAct = Object.values(actions).reduce((a, b) => a + b, 0);
+            Object.keys(actions)
+                .sort((a, b) => (actions[b] || 0) - (actions[a] || 0))
+                .forEach(act => {
+                    const cnt = actions[act];
+                    const pct = totalAct > 0 ? Math.round((cnt / totalAct) * 100) : 0;
+                    actHtml += `<span class="badge" style="background:var(--surface-3); border:1px solid var(--border); font-size:11px; padding:3px 8px; border-radius:0; white-space:nowrap; display:inline-flex; align-items:center; gap:4px;">${escapeHtml(act)}: <strong>${cnt}</strong> <span style="color:var(--text-muted); font-size:10px;">(${pct}%)</span></span>`;
+                });
+
+            let devHtml = '';
+            Object.keys(devices)
+                .sort((a, b) => (devices[b] || 0) - (devices[a] || 0))
+                .forEach(dev => {
+                    const cnt = devices[dev];
+                    const pct = totalSyslogEvts > 0 ? Math.round((cnt / totalSyslogEvts) * 100) : 0;
+                    devHtml += `<li style="margin-bottom:4px;"><code>${escapeHtml(dev)}</code> — ${cnt} log (${pct}%)</li>`;
+                });
+
+            html += `
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px;">
+                <h4 style="margin:0 0 10px; font-size:14px; color:var(--warning); display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-list-check"></i> Syslog Event Breakdown (Finestra ${windowStr})
+                </h4>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">DISTRIBUZIONE SEVERITÀ (%)</div>
+                        ${sevHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessun evento</div>'}
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">AZIONI REGISTRATE (ACCEPT/DENY)</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:6px; max-height:150px; overflow-y:auto; padding:8px; background:var(--surface-1); border:1px solid var(--border); border-radius:0; margin-bottom:10px;">
+                            ${actHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessuna azione</div>'}
+                        </div>
+                        <div style="font-size:12px; font-weight:700; margin:12px 0 6px; color:var(--text-muted);">TOP SORGENTI DISPOSITIVI</div>
+                        <ul style="margin:0; padding-left:16px; font-size:12px; max-height:100px; overflow-y:auto;">${devHtml || '<li>—</li>'}</ul>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        ['netflow', 'ipfix', 'sflow'].forEach(p => {
+            if (protoKey === p || protoKey === 'all') {
+                const pData = bd[p] || {};
+                const l4Map = pData.l4 || {};
+                const portsMap = pData.ports || {};
+                const pTot = totals[p] || {};
+                const totalBytes = pTot.bytes || 0;
+
+                let l4Html = '';
+                Object.keys(l4Map).forEach(proto => {
+                    const b = l4Map[proto];
+                    const pct = totalBytes > 0 ? Math.round((b / totalBytes) * 100) : 0;
+                    l4Html += `
+                    <div style="margin-bottom:6px;">
+                        <div style="display:flex; justify-content:space-between; font-size:12px;">
+                            <span style="font-weight:700;">${proto}</span>
+                            <span>${typeof fmtBytes === 'function' ? fmtBytes(b) : b + ' B'} (${pct}%)</span>
+                        </div>
+                        <div style="width:100%; height:6px; background:var(--surface-3); border-radius:0; overflow:hidden;">
+                            <div style="width:${pct}%; height:100%; background:var(--primary);"></div>
+                        </div>
+                    </div>`;
+                });
+
+                let portsHtml = '';
+                Object.keys(portsMap).slice(0, 5).forEach(port => {
+                    const b = portsMap[port];
+                    const pct = totalBytes > 0 ? Math.round((b / totalBytes) * 100) : 0;
+                    portsHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0; border-bottom:1px dashed var(--border);">
+                        <span>${escapeHtml(port)}</span>
+                        <span><strong>${typeof fmtBytes === 'function' ? fmtBytes(b) : b + ' B'}</strong> (${pct}%)</span>
+                    </div>`;
+                });
+
+                html += `
+                <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:14px;">
+                    <h4 style="margin:0 0 10px; font-size:14px; color:var(--primary); display:flex; align-items:center; gap:6px;">
+                        <i class="fa-solid fa-network-wired"></i> Telemetria ${PROTO_LABELS[p]} (Flussi: ${pTot.flows || 0}, Pacchetti: ${pTot.packets || 0})
+                    </h4>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                        <div>
+                            <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">PROTOCOLLI L4 (PERCENTUALE BYTE)</div>
+                            ${l4Html || '<div style="color:var(--text-muted); font-size:12px;">Nessun dato di flusso</div>'}
+                        </div>
+                        <div>
+                            <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:var(--text-muted);">TOP PORTE DI DESTINAZIONE</div>
+                            ${portsHtml || '<div style="color:var(--text-muted); font-size:12px;">Nessun dato</div>'}
+                        </div>
+                    </div>
+                </div>`;
             }
         });
-        canvas.addEventListener('mouseleave', () => {
-            const tip = document.getElementById('fgTooltip');
-            if (tip) tip.style.display = 'none';
-        });
-        return true;
+
+        return html;
+    }
+
+    async function openObsInspectModal(protoKey = 'all') {
+        const modal = document.getElementById('obsInspectModal');
+        const title = document.getElementById('obsInspectTitle');
+        const body = document.getElementById('obsInspectBody');
+        if (!modal || !body) return;
+
+        if (!_obsProtocolData) {
+            await loadObsProtocolDist();
+        }
+
+        if (title) {
+            title.innerHTML = `<i class="fa-solid fa-magnifying-glass-chart" style="color:var(--primary);"></i> Ispezione Dettagliata Telemetria — ${protoKey === 'all' ? 'Tutti i Protocolli' : (OBS_PROTO_LABELS[protoKey] || protoKey)}`;
+        }
+
+        const html = buildFlowTelemetryDetailHtml(protoKey);
+        body.innerHTML = html || '<div style="padding:20px; text-align:center; color:var(--text-muted);">Nessun dettaglio disponibile per la finestra selezionata.</div>';
+        modal.style.display = 'flex';
+    }
+
+    function closeObsInspectModal() {
+        const modal = document.getElementById('obsInspectModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    // Expose functions globally for UI
+    window.loadObsHealth = loadObsHealth;
+    window.pruneObsLogs = pruneObsLogs;
+    window.trafSelectedTenants = () => new Set(_flowsSelectedTenants);
+    window.trafState = trafState;
+    window.trafSwitchView = trafSwitchView;
+    window.trafSetWindow = trafSetWindow;
+    window.trafSetMetric = trafSetMetric;
+    window.trafRefresh = trafRefresh;
+    window.setObsChartType = setObsChartType;
+    window.loadObsProtocolDist = loadObsProtocolDist;
+    window.openObsInspectModal = openObsInspectModal;
+    window.closeObsInspectModal = closeObsInspectModal;
+
+    // Delegated click and change event listeners
+    document.getElementById('flowsSourceChips')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="set-flows-source"]');
+        if (btn && btn.dataset.source) setFlowsSource(btn.dataset.source);
+    });
+
+    document.getElementById('flowsColsDropdown')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('.flows-col-cb');
+        if (cb && cb.dataset.colId) toggleFlowsCol(cb.dataset.colId, cb.checked);
+    });
+
+    document.getElementById('flowsTableHead')?.addEventListener('change', (e) => {
+        const all = e.target.closest('#flowsSelectAll');
+        if (all) toggleFlowsSelectAll(all);
+    });
+
+    document.getElementById('flowsTableBody')?.addEventListener('click', (e) => {
+        const sysRow = e.target.closest('tr[data-action="show-syslog-detail"]');
+        if (sysRow && sysRow.dataset.index != null) {
+            showSyslogDetail(Number(sysRow.dataset.index));
+            return;
+        }
+        const hlLink = e.target.closest('[data-action="flow-hl-topo"]');
+        if (hlLink && hlLink.dataset.ip) {
+            e.stopPropagation();
+            highlightInTopology(hlLink.dataset.ip);
+            return;
+        }
+        const flowRow = e.target.closest('tr[data-action="open-flow-detail"]');
+        if (flowRow && flowRow.dataset.key) {
+            openFlowDetailPanelByKey(flowRow.dataset.key, e);
+        }
+    });
+
+    document.getElementById('flowsTableBody')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('.flow-row-check');
+        if (cb && cb.dataset.key) {
+            toggleFlowRowSelect(cb.dataset.key, cb.checked);
+        }
+    });
+
+    document.getElementById('flowsSyslogAllBody')?.addEventListener('click', (e) => {
+        const sysRow = e.target.closest('tr[data-action="show-syslog-detail"]');
+        if (sysRow && sysRow.dataset.index != null) {
+            showSyslogDetail(Number(sysRow.dataset.index));
+        }
+    });
+
+    document.getElementById('flowDetailPanelBody')?.addEventListener('click', (e) => {
+        const hl = e.target.closest('[data-action="detail-hl-topo"]');
+        if (hl && hl.dataset.ip) {
+            highlightInTopology(hl.dataset.ip);
+            closeFlowDetailPanel();
+            return;
+        }
+        if (e.target.closest('[data-action="detail-ai-flow"]')) {
+            analyzeSingleFlowWithAi();
+            return;
+        }
+    });
+
+    document.getElementById('obsSettingsBody')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="save-obs-settings"]')) saveObsSettings();
+        if (e.target.closest('[data-action="prune-obs-logs"]')) pruneObsLogs();
+    });
+
+    // Static event listeners for Traffic / Flows / Observability tab
+    document.getElementById('trafWindow')?.addEventListener('change', (e) => trafSetWindow(e.target.value));
+    document.getElementById('trafMetric')?.addEventListener('change', (e) => trafSetMetric(e.target.value));
+    document.getElementById('btnTrafRefresh')?.addEventListener('click', trafRefresh);
+    document.getElementById('trafHideTelemetry')?.addEventListener('change', (e) => setFlowsHideTelemetry(e.target.checked));
+    document.getElementById('btnAnalyzeFlowsAi')?.addEventListener('click', analyzeFlowsWithAi);
+    document.getElementById('trafPills')?.addEventListener('click', (e) => {
+        const pill = e.target.closest('[data-traf-view]');
+        if (pill && pill.dataset.trafView) trafSwitchView(pill.dataset.trafView);
+    });
+    document.getElementById('btnChartTypeDonut')?.addEventListener('click', () => setObsChartType('donut'));
+    document.getElementById('btnChartTypeBar')?.addEventListener('click', () => setObsChartType('bar'));
+    document.getElementById('btnChartTypeTrend')?.addEventListener('click', () => setObsChartType('trend'));
+    document.getElementById('btnObsInspectModal')?.addEventListener('click', () => openObsInspectModal('all'));
+    document.getElementById('flowsColsBtn')?.addEventListener('click', toggleFlowsColsDropdown);
+    document.getElementById('btnCloseFlowDetail')?.addEventListener('click', closeFlowDetailPanel);
+
+    document.getElementById('syslogDetailModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'syslogDetailModal' || e.target.closest('#btnCloseSyslogDetail')) {
+            closeSyslogDetail();
+        }
+    });
+
+    document.getElementById('obsInspectModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'obsInspectModal' || e.target.closest('[data-action="close-obs-inspect-modal"]')) {
+            closeObsInspectModal();
+        }
+    });
+
+
+    // Attach click listener on canvas. Il modulo ora si carica lazy alla
+    // prima visita di tab-flows: di solito DOMContentLoaded e' gia' passato,
+    // quindi il boot va eseguito subito (stesso pattern di provisioning.js).
+    function obsWidgetBoot() {
+        setTimeout(() => {
+            // Pre-login l'overlay copre l'app: nessuna sessione esiste ancora,
+            // e il fetch protetto produrrebbe solo uno 401 inutile.
+            const overlay = document.getElementById('authOverlay');
+            if (overlay && overlay.style.display !== 'none') return;
+            loadObsProtocolDist();
+            const canvas = document.getElementById('obsProtocolCanvas');
+            if (canvas) {
+                canvas.style.cursor = 'pointer';
+                canvas.addEventListener('click', () => {
+                    openObsInspectModal('all');
+                });
+            }
+        }, 800);
+    }
+    // Listen for global tenant changes and update the traffic filter.
+    window.addEventListener('globalTenantChanged', (/** @type {CustomEvent} */ e) => {
+        const tenant = e.detail && e.detail.tenant;
+        if (tenant && tenant !== 'all') {
+            _flowsSelectedTenants = new Set([tenant]);
+        } else {
+            _flowsSelectedTenants = new Set(Object.keys(globalGroups || {}));
+        }
+        trafRefresh();
+    });
+
+    // Listen for device context changes: filter flows by exporter IP.
+    window.addEventListener('globalDeviceContextChanged', (/** @type {CustomEvent} */ e) => {
+        _deviceContextIp = (e.detail && e.detail.ip) || null;
+        trafRefresh();
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', obsWidgetBoot);
+    } else {
+        obsWidgetBoot();
     }
 

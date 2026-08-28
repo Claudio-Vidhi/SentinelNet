@@ -22,7 +22,7 @@ COPY . .
 # Imposta le variabili d'ambiente predefinite per il funzionamento in Docker
 ENV PYTHONUNBUFFERED=1 \
     SENTINELNET_HOST=0.0.0.0 \
-    SENTINELNET_PORT=8765 \
+    SENTINELNET_PORT=8000 \
     SENTINELNET_NO_BROWSER=true \
     SENTINELNET_DATA_DIR=/app/data
 
@@ -30,7 +30,7 @@ ENV PYTHONUNBUFFERED=1 \
 VOLUME /app/data
 
 # Espone la porta del server FastAPI
-EXPOSE 8765
+EXPOSE 8000
 
 # Comando per avviare l'applicazione
 CMD ["python", "app_server.py"]

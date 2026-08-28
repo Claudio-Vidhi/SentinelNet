@@ -1,0 +1,134 @@
+/* =====================================================================
+   SentinelNet — Impeccable UI Design 3: Titanium Frost
+   Sleek Scandinavian slate, frosted titanium hairline borders,
+   ice cyan status glows, ultra-clean high-legibility operations console.
+   ===================================================================== */
+:root[data-ui-variant="design-3"] {
+  --bg: #090d16;
+  --surface: #111827;
+  --surface-2: #1f2937;
+  --surface-3: #374151;
+  --border: rgba(148, 163, 184, 0.22);
+  --border-strong: #38bdf8;
+
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-soft: #cbd5e1;
+
+  --cta: #0284c7;
+  --cta-text: #ffffff;
+  --cta-press: #0369a1;
+
+  --primary: #38bdf8;
+  --lamp-up: #10b981;
+  --lamp-warn: #f59e0b;
+  --lamp-fault: #f43f5e;
+  --lamp-idle: #64748b;
+
+  --lamp-up-wash: rgba(16, 185, 129, 0.16);
+  --lamp-warn-wash: rgba(245, 158, 11, 0.16);
+  --lamp-fault-wash: rgba(244, 63, 94, 0.16);
+  --shadow-float: 0 20px 40px -10px rgba(2, 132, 199, 0.25);
+  --shadow-lift: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+
+  --card-border-radius: 12px;
+}
+
+/* --- GLOBAL BODY --- */
+:root[data-ui-variant="design-3"] body {
+  background: radial-gradient(circle at 50% -20%, #1e293b 0%, #090d16 80%) fixed !important;
+  color: #f8fafc;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* --- TITANIUM FROST PANELS & CARDS --- */
+:root[data-ui-variant="design-3"] .panel,
+:root[data-ui-variant="design-3"] .hero-card,
+:root[data-ui-variant="design-3"] .card,
+:root[data-ui-variant="design-3"] .kpi,
+:root[data-ui-variant="design-3"] .vuln-card,
+:root[data-ui-variant="design-3"] .modal {
+  border-radius: 12px !important;
+  border: 1px solid rgba(148, 163, 184, 0.25) !important;
+  background: rgba(17, 24, 39, 0.85) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-3"] .panel:hover,
+:root[data-ui-variant="design-3"] .hero-card:hover {
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 16px 36px rgba(2, 132, 199, 0.2) !important;
+}
+
+/* --- SIDEBAR & NAVIGATION --- */
+:root[data-ui-variant="design-3"] .sidenav {
+  background: rgba(11, 17, 28, 0.9) !important;
+  border-right: 1px solid rgba(148, 163, 184, 0.2) !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item {
+  border-radius: 8px !important;
+  margin: 3px 8px !important;
+  padding: 10px 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  color: #94a3b8 !important;
+  transition: all 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item .nav-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item .nav-left i {
+  width: 18px !important;
+  text-align: center !important;
+  color: #38bdf8 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item:hover {
+  background: rgba(56, 189, 248, 0.12) !important;
+  color: #f8fafc !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item.active {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4) !important;
+  font-weight: 600 !important;
+}
+
+:root[data-ui-variant="design-3"] .sidenav .nav-item.active .nav-left i {
+  color: #ffffff !important;
+}
+
+/* --- BUTTONS & CONTROLS --- */
+:root[data-ui-variant="design-3"] .btn-primary {
+  background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-3"] .btn-primary:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
+}
+
+:root[data-ui-variant="design-3"] th {
+  background: #1f2937 !important;
+  color: #38bdf8 !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+}

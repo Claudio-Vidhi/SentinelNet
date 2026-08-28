@@ -31,6 +31,10 @@ _retention_task: "asyncio.Task | None" = None
 _correlation_task: "asyncio.Task | None" = None
 _api_poller_task: "asyncio.Task | None" = None
 _api_poller_interval: int = 0
+_snmp_poller_task: "asyncio.Task | None" = None
+_snmp_poller_interval: int = 0
+_linux_poller_task: "asyncio.Task | None" = None
+_linux_poller_interval: int = 0
 
 
 def _listener_specs(cfg):
@@ -101,6 +105,8 @@ async def apply_obs_config(cfg):
     di background. Idempotente — richiamabile sia al boot (lifespan) sia a
     ogni salvataggio di config (endpoint), senza restart del processo."""
     global _retention_task, _correlation_task, _api_poller_task, _api_poller_interval
+    global _snmp_poller_task, _snmp_poller_interval
+    global _linux_poller_task, _linux_poller_interval
 
     await _apply_listeners(cfg)
 
@@ -114,8 +120,12 @@ async def apply_obs_config(cfg):
             _correlation_task = asyncio.create_task(correlator.correlation_loop(),
                                                      name="obs-correlation")
         desired_interval = int(cfg.get("api_poll_s", 0) or 0)
+        desired_snmp = int(cfg.get("snmp_poll_s", 0) or 0)
+        desired_linux = int(cfg.get("linux_poll_s", 0) or 0)
     else:
         desired_interval = 0
+        desired_snmp = 0
+        desired_linux = 0
 
     if desired_interval != _api_poller_interval or \
             (desired_interval > 0 and _api_poller_task is None):
@@ -128,17 +138,46 @@ async def apply_obs_config(cfg):
                 api_poller.poll_loop(desired_interval), name="obs-api-poller")
         _api_poller_interval = desired_interval
 
+    if desired_snmp != _snmp_poller_interval or \
+            (desired_snmp > 0 and _snmp_poller_task is None):
+        if _snmp_poller_task is not None:
+            _snmp_poller_task.cancel()
+            _snmp_poller_task = None
+        if desired_snmp > 0:
+            from observability.ingesters import snmp_poller
+            _snmp_poller_task = asyncio.create_task(
+                snmp_poller.poll_loop(desired_snmp), name="obs-snmp-poller")
+        _snmp_poller_interval = desired_snmp
+
+    if desired_linux != _linux_poller_interval or \
+            (desired_linux > 0 and _linux_poller_task is None):
+        if _linux_poller_task is not None:
+            _linux_poller_task.cancel()
+            _linux_poller_task = None
+        if desired_linux > 0:
+            from observability.ingesters import linux_poller
+            _linux_poller_task = asyncio.create_task(
+                linux_poller.poll_loop(desired_linux), name="obs-linux-poller")
+        _linux_poller_interval = desired_linux
+
 
 async def shutdown():
     """Ferma tutti i listener e i task di background (spegnimento app)."""
     global _retention_task, _correlation_task, _api_poller_task, _api_poller_interval
-    for task in (_retention_task, _correlation_task, _api_poller_task):
+    global _snmp_poller_task, _snmp_poller_interval
+    global _linux_poller_task, _linux_poller_interval
+    for task in (_retention_task, _correlation_task, _api_poller_task,
+                 _snmp_poller_task, _linux_poller_task):
         if task is not None:
             task.cancel()
     _retention_task = None
     _correlation_task = None
     _api_poller_task = None
     _api_poller_interval = 0
+    _snmp_poller_task = None
+    _snmp_poller_interval = 0
+    _linux_poller_task = None
+    _linux_poller_interval = 0
 
     for name in list(_handles):
         handle = _handles.pop(name)

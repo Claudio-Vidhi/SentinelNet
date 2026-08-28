@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [],
+    "deny": [
+      "Read(./q_api_key.txt)",
+      "Read(./g_api_key.txt)",
+      "Read(./c_api_key.txt)",
+      "Read(./*_api_key*)",
+      "Edit(./*_api_key*)",
+      "Write(./*_api_key*)",
+      "Read(./data/users.json)",
+      "Edit(./data/**)",
+      "Write(./data/**)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(chmod 777:*)",
+      "Bash(ssh:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/graphify-nudge.sh bash"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/graphify-nudge.sh read"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "ecc@ecc": true
+  }
+}

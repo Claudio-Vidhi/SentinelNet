@@ -1,0 +1,150 @@
+/* =====================================================================
+   Impeccable UI Design 2: Cyber Violet (Neon Dark SCADA Synthwave)
+   High-craft Cyberpunk Operations Console with perfectly aligned icons,
+   glowing neon borders, and crisp synthwave typography.
+   ===================================================================== */
+:root[data-ui-variant="design-2"] {
+  --bg: #090d16;
+  --surface: #121929;
+  --surface-2: #192338;
+  --surface-3: #222f4b;
+  --border: #2a3a5e;
+  --border-strong: #8b5cf6;
+
+  --text: #f5f3ff;
+  --text-muted: #a78bfa;
+  --text-soft: #c4b5fd;
+
+  --cta: #8b5cf6;
+  --cta-text: #ffffff;
+  --cta-press: #7c3aed;
+
+  --primary: #c084fc;
+  --lamp-up: #06b6d4;
+  --lamp-warn: #f59e0b;
+  --lamp-fault: #ec4899;
+  --lamp-idle: #64748b;
+
+  --lamp-up-wash: rgba(6, 182, 212, 0.2);
+  --lamp-warn-wash: rgba(245, 158, 11, 0.2);
+  --lamp-fault-wash: rgba(236, 72, 153, 0.2);
+  --shadow-float: 0 20px 40px -10px rgba(139, 92, 246, 0.35);
+  --shadow-lift: 0 10px 25px -5px rgba(139, 92, 246, 0.25);
+  --card-border-radius: 14px;
+}
+
+:root[data-ui-variant="design-2"] body {
+  background: radial-gradient(circle at 80% 20%, #1e113a 0%, #090d16 65%) fixed;
+  color: #f5f3ff;
+}
+
+:root[data-ui-variant="design-2"] .panel,
+:root[data-ui-variant="design-2"] .hero-card,
+:root[data-ui-variant="design-2"] .card,
+:root[data-ui-variant="design-2"] .kpi,
+:root[data-ui-variant="design-2"] .vuln-card,
+:root[data-ui-variant="design-2"] .modal {
+  border-radius: 14px !important;
+  border: 1px solid rgba(139, 92, 246, 0.35) !important;
+  background: rgba(18, 25, 41, 0.88) !important;
+  backdrop-filter: blur(14px) !important;
+  box-shadow: 0 8px 32px 0 rgba(139, 92, 246, 0.15) !important;
+  position: relative;
+}
+
+:root[data-ui-variant="design-2"] .panel::before,
+:root[data-ui-variant="design-2"] .hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #ec4899, #8b5cf6, #06b6d4);
+  border-radius: 14px 14px 0 0;
+}
+
+/* Sidebar & Navigation Alignment */
+:root[data-ui-variant="design-2"] .sidenav {
+  background: #0d1322 !important;
+  border-right: 1px solid rgba(139, 92, 246, 0.25) !important;
+}
+
+:root[data-ui-variant="design-2"] .sidenav .nav-item {
+  border-radius: 8px !important;
+  margin: 3px 8px !important;
+  padding: 10px 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  transition: all 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-2"] .sidenav .nav-item .nav-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+:root[data-ui-variant="design-2"] .sidenav .nav-item .nav-left i {
+  width: 18px !important;
+  text-align: center !important;
+  color: #c084fc !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+:root[data-ui-variant="design-2"] .sidenav .nav-item.active {
+  background: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 20px rgba(217, 70, 239, 0.45) !important;
+  font-weight: 600 !important;
+}
+
+:root[data-ui-variant="design-2"] .sidenav .nav-item.active .nav-left i {
+  color: #ffffff !important;
+}
+
+/* User Badge & Icon Alignment */
+:root[data-ui-variant="design-2"] .user-badge {
+  background: rgba(25, 35, 56, 0.8) !important;
+  border: 1px solid rgba(139, 92, 246, 0.3) !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+:root[data-ui-variant="design-2"] .user-badge #userBadgeLabel,
+:root[data-ui-variant="design-2"] .user-badge a {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+:root[data-ui-variant="design-2"] .user-badge i {
+  width: 16px !important;
+  text-align: center !important;
+}
+
+/* Buttons & Controls */
+:root[data-ui-variant="design-2"] .btn-primary {
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  box-shadow: 0 0 15px rgba(236, 72, 153, 0.4) !important;
+  transition: all 0.2s ease !important;
+}
+
+:root[data-ui-variant="design-2"] .btn-primary:hover {
+  box-shadow: 0 0 25px rgba(236, 72, 153, 0.7) !important;
+  transform: translateY(-1px) !important;
+}
+
+:root[data-ui-variant="design-2"] th {
+  background: #192338 !important;
+  color: #c084fc !important;
+}

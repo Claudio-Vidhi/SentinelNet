@@ -34,6 +34,9 @@ class UserCreateSchema(BaseModel):
     password: str
     role: str = "viewer"
     groups: List[str] = []
+    # Indirizzo di recupero, opzionale: senza, il reset via email non e'
+    # disponibile per l'account e resta il break-glass da CLI.
+    email: str = ""
 
 class UserDeleteSchema(BaseModel):
     username: str
@@ -179,8 +182,12 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
     groups = [g for g in payload.groups if g in valid_groups]
     # Gli account creati da un amministratore devono cambiare la password al
     # primo accesso: la password iniziale è nota all'amministratore.
+    email = payload.email.strip()
+    if email and "@" not in email:
+        raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
     if not user_manager.create_user(payload.username.strip(), payload.password,
-                                    payload.role, groups, must_change_password=True):
+                                    payload.role, groups, must_change_password=True,
+                                    email=email):
         raise HTTPException(status_code=400, detail="Utente già esistente.")
     log_audit(
         f"Utente '{payload.username}' (ruolo: {payload.role}, sedi: "
@@ -189,11 +196,22 @@ def create_user_ep(payload: UserCreateSchema, current_user = Depends(require_adm
     return {"status": "success"}
 
 @router.post("/api/users/delete")
-def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(require_admin)):
-    if payload.username == current_user.get("sub"):
-        raise HTTPException(status_code=400, detail="Non puoi eliminare il tuo stesso account.")
-    if user_manager.get_role(payload.username) == "admin" and user_manager.count_admins() <= 1:
-        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore.")
+def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(get_current_user)):
+    # Chiunque può cancellare il PROPRIO account; per quello di un altro serve
+    # il ruolo di amministratore. Niente docstring: FastAPI la pubblicherebbe
+    # come description nello schema OpenAPI, che il parity test tiene congelato.
+    #
+    # Il quorum resta l'unico altro limite, e qui smette di essere teorico:
+    # cancellare un altro amministratore presuppone di esserlo a propria volta,
+    # quindi ce ne sono sempre almeno due. È la cancellazione del proprio
+    # account che può davvero togliere l'ultimo amministratore utilizzabile.
+    if payload.username != current_user.get("sub") and current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient privileges for this operation."
+        )
+    if user_manager.is_last_active_admin(payload.username):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
     if not user_manager.delete_user(payload.username):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Utente '{payload.username}' eliminato da '{current_user.get('sub')}'.")
@@ -203,9 +221,8 @@ def delete_user_ep(payload: UserDeleteSchema, current_user = Depends(require_adm
 def set_user_role_ep(payload: UserRoleSchema, current_user = Depends(require_admin)):
     if payload.role not in user_manager.VALID_ROLES:
         raise HTTPException(status_code=400, detail="Ruolo non valido.")
-    if (user_manager.get_role(payload.username) == "admin"
-            and payload.role != "admin" and user_manager.count_admins() <= 1):
-        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore.")
+    if payload.role != "admin" and user_manager.is_last_active_admin(payload.username):
+        raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
     if not user_manager.set_role(payload.username, payload.role):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
     log_audit(f"Ruolo di '{payload.username}' impostato a '{payload.role}' da '{current_user.get('sub')}'.")
@@ -216,8 +233,7 @@ def disable_user_ep(payload: UserDisableSchema, current_user = Depends(require_a
     """Abilita/disabilita un utente. Un utente disabilitato non può autenticarsi."""
     if payload.disabled and payload.username == current_user.get("sub"):
         raise HTTPException(status_code=400, detail="Non puoi disabilitare il tuo stesso account.")
-    if (payload.disabled and user_manager.get_role(payload.username) == "admin"
-            and user_manager.count_active_admins() <= 1):
+    if payload.disabled and user_manager.is_last_active_admin(payload.username):
         raise HTTPException(status_code=400, detail="Deve restare almeno un amministratore attivo.")
     if not user_manager.set_disabled(payload.username, payload.disabled):
         raise HTTPException(status_code=404, detail="Utente non trovato.")
@@ -252,3 +268,304 @@ def set_user_tabs_ep(payload: UserTabsSchema, current_user = Depends(require_adm
         f"da '{current_user.get('sub')}'."
     )
     return {"status": "success"}
+
+
+# --- RECUPERO PASSWORD VIA EMAIL ---
+
+class ForgotPasswordSchema(BaseModel):
+    username: str
+
+class ResetPasswordSchema(BaseModel):
+    token: str
+    new_password: str
+
+class UserEmailSchema(BaseModel):
+    username: str
+    email: str = ""
+
+# Risposta identica in ogni esito: esistenza dell'account, presenza di un
+# indirizzo e stato del server di posta non devono essere deducibili da chi
+# non è ancora autenticato.
+_FORGOT_GENERIC = ("Se l'account esiste ed ha un indirizzo email configurato, "
+                   "riceverà le istruzioni per reimpostare la password.")
+
+
+@router.post("/api/auth/forgot-password")
+def forgot_password(payload: ForgotPasswordSchema, request: Request):
+    """Invia il link di reimpostazione all'indirizzo REGISTRATO dell'utente.
+
+    Non esiste un indirizzo di ripiego: senza email sull'account il recupero
+    via posta non è disponibile e resta il break-glass da CLI. Spedire a un
+    mittente condiviso consegnerebbe il token a chiunque legga quella casella.
+    """
+    from core.app_settings import BaseUrlError, resolve_base_url
+    from security import password_reset
+    from services import mailer
+
+    # Limite di frequenza sull'IP sorgente: l'endpoint non è autenticato ed è
+    # sia un oracolo di generazione token sia un amplificatore di posta.
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"forgot-password:{client_ip}"
+    if is_locked_out(rate_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Troppe richieste di recupero. Riprova più tardi.")
+    record_failed_attempt(rate_key)
+
+    username = payload.username.strip()
+    email = user_manager.get_email(username)
+    if (not email
+            or user_manager.get_role(username) is None
+            or user_manager.is_disabled(username)):
+        log_audit(f"Richiesta di recupero password non evasa per '{username}' "
+                  f"(account assente, disabilitato o senza email).")
+        return {"status": "success", "message": _FORGOT_GENERIC}
+
+    try:
+        base_url = resolve_base_url()
+    except BaseUrlError as e:
+        # Configurazione incompleta: è un errore dell'installazione, non una
+        # informazione sull'account, quindi si registra e si risponde generico.
+        log_audit(f"Recupero password non inviato per '{username}': {e}")
+        return {"status": "success", "message": _FORGOT_GENERIC}
+
+    token = password_reset.issue(username)
+    try:
+        mailer.send_email(
+            email,
+            "SentinelNet - Reimpostazione password",
+            "È stata richiesta la reimpostazione della password del tuo "
+            f"account SentinelNet '{username}'.\n\n"
+            "Apri questo link per scegliere una nuova password "
+            f"(valido {password_reset.TTL_SECONDS // 60} minuti):\n"
+            f"{base_url}/?reset_token={token}\n\n"
+            "Se non hai richiesto tu la reimpostazione, ignora questo "
+            "messaggio: la password attuale resta valida.\n",
+        )
+        log_audit(f"Link di reimpostazione password inviato per l'utente '{username}'.")
+    except mailer.MailerError as e:
+        log_audit(f"Invio del link di reimpostazione fallito per '{username}': {e}")
+    return {"status": "success", "message": _FORGOT_GENERIC}
+
+
+@router.post("/api/auth/reset-password")
+def reset_password(payload: ResetPasswordSchema):
+    """Consuma un token di reimpostazione e imposta la nuova password."""
+    from security import password_reset
+
+    pw_err = user_manager.password_error(payload.new_password)
+    if pw_err:
+        raise HTTPException(status_code=400, detail=pw_err)
+
+    username = password_reset.consume(payload.token)
+    if not username:
+        raise HTTPException(status_code=400,
+                            detail="Link di reimpostazione non valido o scaduto.")
+    if user_manager.get_role(username) is None or user_manager.is_disabled(username):
+        raise HTTPException(status_code=403, detail="Account non disponibile.")
+
+    if not user_manager.reset_password_break_glass(username, payload.new_password):
+        raise HTTPException(status_code=400, detail="Aggiornamento della password fallito.")
+    # Il token è bruciato: chi rientra sblocca anche il lockout accumulato.
+    reset_failed_attempts(username)
+    log_audit(f"Password reimpostata via email per l'utente '{username}'.")
+    return {"status": "success"}
+
+
+@router.post("/api/users/email")
+def set_user_email(payload: UserEmailSchema, current_user = Depends(require_admin)):
+    """Imposta o rimuove ("" rimuove) l'indirizzo di recupero di un utente."""
+    email = payload.email.strip()
+    if email and "@" not in email:
+        raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
+    if not user_manager.set_email(payload.username, email):
+        raise HTTPException(status_code=404, detail="Utente non trovato.")
+    log_audit(f"Indirizzo email dell'utente '{payload.username}' "
+              f"{'impostato' if email else 'rimosso'} da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+
+# --- INVITI UTENTE VIA EMAIL ---
+
+class InviteUserSchema(BaseModel):
+    email: str
+    role: str = "viewer"
+
+class AcceptInviteSchema(BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/api/users/invite")
+def invite_user(payload: InviteUserSchema, current_user = Depends(require_admin)):
+    """Invia un invito: l'account viene creato solo quando l'invitato lo accetta.
+
+    Nessun utente a metà nel frattempo: un invito mai accettato scade e non
+    lascia niente dietro di sé.
+    """
+    from core.app_settings import BaseUrlError, resolve_base_url
+    from security import user_invite
+    from services import mailer
+
+    email = payload.email.strip()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Indirizzo email non valido.")
+    if payload.role not in user_manager.VALID_ROLES:
+        raise HTTPException(status_code=400, detail="Ruolo non valido.")
+    # Lo username dell'account sarà l'indirizzo invitato: se esiste già, è
+    # l'amministratore a doverlo sapere subito, non l'invitato al momento
+    # dell'accettazione.
+    if user_manager.get_role(email) is not None:
+        raise HTTPException(status_code=400, detail="Esiste già un account con questo indirizzo.")
+
+    try:
+        base_url = resolve_base_url()
+    except BaseUrlError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    token = user_invite.issue(email, payload.role)
+    try:
+        mailer.send_email(
+            email,
+            "SentinelNet - Invito di accesso",
+            f"Sei stato invitato ad accedere a SentinelNet con ruolo "
+            f"'{payload.role}'.\n\n"
+            "Apri questo link per scegliere la tua password e completare la "
+            f"registrazione (valido {user_invite.TTL_SECONDS // 3600} ore):\n"
+            f"{base_url}/?invite_token={token}\n\n"
+            "Se non ti aspettavi questo invito, ignora il messaggio.\n",
+        )
+    except mailer.MailerError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    log_audit(f"Invito inviato a '{email}' (ruolo: {payload.role}) "
+              f"da '{current_user.get('sub')}'.")
+    return {"status": "success"}
+
+
+@router.post("/api/auth/accept-invite")
+def accept_invite(payload: AcceptInviteSchema):
+    """Crea l'account dall'invito. Username e ruolo vengono dall'invito, non
+    dalla richiesta: l'invitato sceglie soltanto la propria password."""
+    from security import user_invite
+
+    pw_err = user_manager.password_error(payload.password)
+    if pw_err:
+        raise HTTPException(status_code=400, detail=pw_err)
+
+    invited = user_invite.consume(payload.token)
+    if not invited:
+        raise HTTPException(status_code=400, detail="Invito non valido o scaduto.")
+    email, role = invited
+
+    # La password è scelta dall'invitato: non c'è nessun cambio da imporre.
+    if not user_manager.create_user(email, payload.password, role,
+                                    must_change_password=False, email=email):
+        raise HTTPException(status_code=400, detail="Esiste già un account con questo indirizzo.")
+
+    log_audit(f"Account '{email}' (ruolo: {role}) creato dall'accettazione di un invito.")
+    return {"status": "success", "username": email}
+
+
+# --- SINGLE SIGN-ON (OIDC) ---
+
+def _sso_redirect_uri() -> str:
+    from core.app_settings import resolve_base_url
+    return resolve_base_url() + "/api/auth/sso/callback"
+
+
+@router.get("/api/auth/sso/config")
+def sso_public_config():
+    """Ciò che la schermata di login può sapere prima di autenticarsi: se il
+    pulsante va mostrato e come si chiama. Nient'altro esce da qui."""
+    from security import sso
+    cfg = sso.get_config()
+    if not cfg["enabled"] or not cfg["client_id"] or not cfg["issuer_url"]:
+        return {"enabled": False}
+    return {"enabled": True, "provider_name": cfg["provider_name"]}
+
+
+@router.get("/api/auth/sso/login")
+def sso_login():
+    """Avvia il flusso authorization code + PKCE verso l'IdP."""
+    from core.app_settings import BaseUrlError
+    from fastapi.responses import RedirectResponse
+    from security import sso
+
+    cfg = sso.get_config()
+    if not cfg["enabled"]:
+        raise HTTPException(status_code=400, detail="Single Sign-On non abilitato.")
+    try:
+        auth_url = sso.start_login(cfg, _sso_redirect_uri())
+    except (sso.SSOError, BaseUrlError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return RedirectResponse(auth_url, status_code=302)
+
+
+@router.get("/api/auth/sso/callback")
+def sso_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    """Ritorno dall'IdP: verifica, risoluzione dell'utente, sessione locale."""
+    from core.app_settings import BaseUrlError
+    from fastapi.responses import RedirectResponse
+    from security import crypto_vault, sso
+
+    if error:
+        raise HTTPException(status_code=401, detail=f"Accesso rifiutato dall'IdP: {error}")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Parametri 'code' o 'state' mancanti.")
+
+    cfg = sso.get_config()
+    if not cfg["enabled"]:
+        raise HTTPException(status_code=400, detail="Single Sign-On non abilitato.")
+
+    # Lo state è a uso singolo: se non è uno che abbiamo emesso noi, la
+    # richiesta non nasce da un login iniziato qui.
+    pending = sso.consume_state(state)
+    if not pending:
+        raise HTTPException(status_code=400, detail="Sessione di login scaduta o non valida.")
+    nonce, verifier = pending
+
+    client_secret = crypto_vault.decrypt_password(cfg["client_secret_enc"])
+    try:
+        redirect_uri = _sso_redirect_uri()
+        tokens = sso.exchange_code(cfg, code, verifier, redirect_uri, client_secret)
+        claims = sso.verify_id_token(cfg, tokens["id_token"], nonce)
+        username = sso.resolve_username(claims)
+    except (sso.SSOError, BaseUrlError) as e:
+        log_audit(f"Login SSO fallito: {e}")
+        raise HTTPException(status_code=401, detail=str(e)) from e
+
+    mapped_role = sso.resolve_role(cfg, claims)
+    existing_role = user_manager.get_role(username)
+
+    if existing_role is None:
+        if not cfg["auto_provision"]:
+            log_audit(f"Login SSO rifiutato per '{username}': nessun account locale "
+                      f"e provisioning automatico disattivato.")
+            raise HTTPException(
+                status_code=403,
+                detail="Nessun account SentinelNet per questa identità. "
+                       "Contatta un amministratore.")
+        # Password locale casuale e mai comunicata: l'accesso passa solo
+        # dall'IdP, ma l'account resta recuperabile col break-glass.
+        import secrets as _secrets
+        user_manager.create_user(username, _secrets.token_urlsafe(32), mapped_role,
+                                 must_change_password=False,
+                                 email=(claims.get("email") or "").strip())
+        role = mapped_role
+        log_audit(f"Account '{username}' (ruolo: {role}) creato automaticamente da login SSO.")
+    else:
+        if user_manager.is_disabled(username):
+            log_audit(f"Login SSO rifiutato per l'account disabilitato '{username}'.")
+            raise HTTPException(status_code=403, detail="Account disabilitato.")
+        role = mapped_role if cfg["sync_roles"] else existing_role
+        if cfg["sync_roles"] and mapped_role != existing_role:
+            user_manager.set_role(username, mapped_role)
+            log_audit(f"Ruolo di '{username}' allineato a '{mapped_role}' dai gruppi dell'IdP.")
+
+    access_token = create_access_token(data={"sub": username, "role": role})
+    reset_failed_attempts(username)
+    log_audit(f"Utente '{username}' (ruolo: {role}) autenticato via SSO.")
+    response = RedirectResponse("/", status_code=302)
+    _set_session_cookie(request, response, access_token)
+    return response

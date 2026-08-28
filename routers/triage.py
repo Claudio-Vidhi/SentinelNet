@@ -2,6 +2,7 @@
 """Router Triage. Estratto da app_server.py (fase 6.6): percorsi, metodi,
 parametri e risposte identici al monolite."""
 
+import logging
 import threading
 from typing import Optional, List, Dict
 from concurrent.futures import ThreadPoolExecutor
@@ -9,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
-from services import inventory_manager
+from services import inventory_manager, site_manager
 from core import core_engine
 from security.security_manager import log_audit
 from routers.deps import get_current_user, require_operator, user_group_scope, assert_device_allowed, assert_group_allowed
@@ -75,6 +76,8 @@ def run_triage_background(allowed_groups=None):
     with triage_lock:
         triage_job["status"] = "complete"
         triage_job["current_device"] = ""
+
+    core_engine.maybe_mirror_offsite()
 
 @router.post("/api/run-triage")
 def run_triage(payload: TriageRunRequest = TriageRunRequest(),
@@ -144,10 +147,16 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
     elif scope is not None:
         devices = [d for d in devices if d.get('Group') in scope]
 
-    results: dict[str, bool] = {}
+    # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
+    # same tri-state vocabulary as services.ping_monitor / has_direct_path.
+    results: Dict[str, Optional[bool]] = {}
 
     def _ping(d):
-        results[d['IP']] = is_reachable(d['IP'], timeout=3)
+        if not site_manager.has_direct_path(d.get('Site')):
+            results[d['IP']] = None
+            return
+        from collectors.network_scanner import _ping as icmp_ping
+        results[d['IP']] = icmp_ping(d['IP'])
 
     max_workers = min(20, len(devices)) if devices else 1
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -164,9 +173,10 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
             if ip in data:
                 vendor = data[ip].get('vendor', vendor)
                 version = data[ip].get('version', version)
-            inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
-    except Exception:
-        pass
+            status = "unknown" if alive is None else ("online" if alive else "offline")
+            inventory_manager.update_version_inventory(ip, vendor, version, status)
+    except Exception as e:
+        logging.warning(f"Stato ping non persistito in detected_versions.json: {e}")
 
     log_audit(
         f"Ping check completato su {len(devices)} dispositivi "
@@ -176,7 +186,6 @@ def ping_check(payload: PingCheckRequest, current_user = Depends(require_operato
 
 @router.get("/api/ping/{ip}")
 def ping_single(ip: str, current_user = Depends(require_operator)):
-    from core.core_engine import is_reachable
     import re
     if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
         raise HTTPException(status_code=400, detail="IP non valido.")
@@ -184,7 +193,14 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
     _dev = next((d for d in inventory_manager.get_all_devices() if d['IP'] == ip), None)
     if _dev is not None:
         assert_group_allowed(current_user, _dev.get('Group', 'Generale'))
-    alive = is_reachable(ip, timeout=3)
+    # None = not measurable (jump site: ICMP cannot cross the bastion tunnel),
+    # same tri-state as ping_check above / services.ping_monitor.
+    alive: Optional[bool]
+    if _dev is not None and not site_manager.has_direct_path(_dev.get('Site')):
+        alive = None
+    else:
+        from collectors.network_scanner import _ping as icmp_ping
+        alive = icmp_ping(ip)
 
     # Aggiorna lo stato nel file detected_versions.json
     try:
@@ -199,10 +215,12 @@ def ping_single(ip: str, current_user = Depends(require_operator)):
             dev = next((d for d in devices if d["IP"] == ip), None)
             if dev:
                 vendor = dev.get("Vendor", vendor)
-        inventory_manager.update_version_inventory(ip, vendor, version, "online" if alive else "offline")
-    except Exception:
-        pass
+        status = "unknown" if alive is None else ("online" if alive else "offline")
+        inventory_manager.update_version_inventory(ip, vendor, version, status)
+    except Exception as e:
+        logging.warning(f"Stato ping non persistito per '{ip}': {e}")
 
-    log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {'raggiungibile' if alive else 'non raggiungibile'}.")
+    alive_txt = "non misurabile (sito jump)" if alive is None else ("raggiungibile" if alive else "non raggiungibile")
+    log_audit(f"Ping singolo verso '{ip}' eseguito dall'utente '{current_user.get('sub')}': {alive_txt}.")
     return {"ip": ip, "reachable": alive}
 

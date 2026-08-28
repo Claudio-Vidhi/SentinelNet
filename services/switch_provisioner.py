@@ -14,6 +14,8 @@ parametri; ``push_via_ssh``/``push_via_serial`` si occupano della consegna.
 
 import time
 
+from security import redaction
+
 ROLES = ("access", "distribution")
 
 
@@ -86,8 +88,12 @@ def build_config(cfg: dict) -> str:
     lines.append(f"hostname {hostname}")
     lines.append("!")
     lines.append("no ip domain-lookup")
-    if cfg.get("domain"):
-        lines.append(f"ip domain-name {cfg['domain']}")
+    ssh_only = cfg.get("ssh_only", True)
+    if cfg.get("domain") or ssh_only:
+        # 'crypto key generate rsa' below refuses to run without a domain name.
+        # Emitting it only when the operator typed one left the SSH-only path
+        # with no host key AND telnet already disabled: console-only device.
+        lines.append(f"ip domain-name {cfg.get('domain') or 'local'}")
     lines.append("no ip http server")
     lines.append("no ip http secure-server")
     if cfg.get("no_vstack", True):
@@ -98,9 +104,13 @@ def build_config(cfg: dict) -> str:
     sec("AUTENTICAZIONE LOCALE / ENABLE")
     if cfg.get("enable_secret"):
         lines.append(f"enable secret {cfg['enable_secret']}")
-    if cfg.get("admin_user"):
-        pwd = cfg.get("admin_password") or "changeme"
-        lines.append(f"username {cfg['admin_user']} privilege 15 secret {pwd}")
+    # No fallback password here on purpose: 'changeme' was a known credential
+    # pushed to real hardware whenever the field was left empty. The boundary
+    # (SwitchProvisionSchema) now rejects an empty user or password, so an
+    # absent one here means a direct caller, not an operator.
+    if cfg.get("admin_user") and cfg.get("admin_password"):
+        lines.append(
+            f"username {cfg['admin_user']} privilege 15 secret {cfg['admin_password']}")
     lines.append("aaa new-model")
 
     aaa_protocol = cfg.get("aaa_protocol") or "none"
@@ -137,7 +147,6 @@ def build_config(cfg: dict) -> str:
         lines.append("login on-failure log")
         lines.append("login on-success log")
 
-    ssh_only = cfg.get("ssh_only", True)
     if ssh_only:
         sec("SSH-ONLY MANAGEMENT")
         lines.append("crypto key generate rsa modulus 2048")
@@ -149,6 +158,14 @@ def build_config(cfg: dict) -> str:
     lines.append(f"vtp mode {cfg.get('vtp_mode', 'transparent')}")
 
     vlans = _expand_vlan_ids(cfg.get("vlans"))
+    # 'vtp mode transparent' above means a VLAN exists only if it is in the
+    # local database. An SVI or an access port pointed at a VLAN nobody
+    # declared comes up down/down — a day-0 switch with no management address,
+    # or a floor of ports in an inactive VLAN. Declare what we are about to use.
+    for vid, fallback_name in ((cfg.get("mgmt_vlan"), "MGMT"),
+                               (cfg.get("access_vlan"), "DATA")):
+        if vid and not any(int(v["id"]) == int(vid) for v in vlans):
+            vlans.append({"id": int(vid), "name": fallback_name})
     if vlans:
         sec("VLAN DATABASE")
         for v in vlans:
@@ -249,6 +266,11 @@ def build_config(cfg: dict) -> str:
         pc_id = cfg.get("uplink_pc_id")
         for rng in trunk_ports:
             lines.append(f"interface range {rng}")
+            # On 3560/3650/3750-class IOS a port whose trunk encapsulation is
+            # 'auto' rejects 'switchport mode trunk' outright, leaving every
+            # uplink an access port. 2960-class rejects this line harmlessly
+            # instead — the same tolerance 'no vstack' above relies on.
+            lines.append(" switchport trunk encapsulation dot1q")
             lines.append(" switchport mode trunk")
             if allowed:
                 lines.append(f" switchport trunk allowed vlan {allowed}")
@@ -289,12 +311,15 @@ def build_config(cfg: dict) -> str:
         lines.append("logging source-interface Vlan%s" % mgmt_vlan if mgmt_vlan else "logging on")
 
     snmpv3 = cfg.get("snmpv3") or {}
-    if snmpv3.get("user"):
+    # Both passphrases are required: 'authpass123'/'privpass123' used to be
+    # substituted on an empty field, shipping a known credential to the device.
+    # Emitting nothing is the safe half-answer; the boundary rejects the input.
+    if snmpv3.get("user") and snmpv3.get("auth_pass") and snmpv3.get("priv_pass"):
         sec("SNMPv3")
         group = snmpv3.get("group", "SNMP-GROUP")
         lines.append(f"snmp-server group {group} v3 priv")
-        auth_pass = snmpv3.get("auth_pass", "authpass123")
-        priv_pass = snmpv3.get("priv_pass", "privpass123")
+        auth_pass = snmpv3["auth_pass"]
+        priv_pass = snmpv3["priv_pass"]
         lines.append(
             f"snmp-server user {snmpv3['user']} {group} v3 auth sha {auth_pass} "
             f"priv aes 128 {priv_pass}"
@@ -322,15 +347,78 @@ def build_config(cfg: dict) -> str:
 # CONSEGNA: SSH (Netmiko) e CONSOLE/SERIALE (pyserial)
 # ---------------------------------------------------------------------------
 
+# IOS never raises on a rejected command: it answers on the same session and
+# carries on. Reporting 'success' on that meant a wrong interface range, or a
+# rejected hardening line, looked identical to a clean push.
+_CLI_ERRORS = ("% Invalid input", "% Incomplete command", "% Ambiguous command",
+               "% Bad", "% Unrecognized", "Command rejected")
+
+
+# Minutes the switch waits before rebooting into the saved config if this
+# session never gets far enough to cancel it. Long enough for a slow push,
+# short enough that an operator who cut the path is not stuck for an hour.
+RELOAD_GUARD_MINUTES = 10
+
+
+def _arm_reload(conn) -> bool:
+    """Schedule 'reload in N' so a push that cuts its own path self-recovers.
+
+    Returns whether it was armed: on a device that refuses the command there
+    is nothing to cancel later, and the push proceeds without the net rather
+    than failing over the safety measure itself.
+    """
+    try:
+        out = str(conn.send_command_timing(f"reload in {RELOAD_GUARD_MINUTES}"))
+        if "confirm" in out.lower() or "[yes/no]" in out.lower():
+            # 'System configuration has been modified. Save? [yes/no]' first,
+            # then 'Proceed with reload? [confirm]'. Never save here: saving is
+            # what the reload is supposed to undo.
+            if "yes/no" in out.lower():
+                out += str(conn.send_command_timing("no"))
+            conn.send_command_timing("\n")
+        return "%" not in out
+    except Exception:
+        return False
+
+
+def _push_result(output: str) -> dict:
+    """Turn a raw session transcript into a push result.
+
+    The transcript echoes every command back, so it also carries the secrets
+    that were just typed: it is redacted before leaving this function, which
+    is the single point every caller (router, MCP, tests) goes through.
+    """
+    rejected = [ln.strip() for ln in output.splitlines()
+                if any(err in ln for err in _CLI_ERRORS)]
+    return {
+        "status": "partial" if rejected else "success",
+        "output": redaction.redact(output),
+        "rejected": redaction.redact(rejected),
+    }
+
+
 def push_via_ssh(host: str, username: str, password: str, secret: str,
                   config_text: str, port: int = 22, save: bool = True,
-                  device_type: str = "cisco_ios") -> dict:
+                  device_type: str = "cisco_ios", site: str = "") -> dict:
     """Applica la config generata via SSH (Netmiko) su un apparato
-    raggiungibile e opzionalmente esegue 'write memory'."""
-    from netmiko import ConnectHandler
+    raggiungibile e opzionalmente esegue 'write memory'.
+
+    # A day-0 device is usually not in hosts.csv yet, so core.net_ssh cannot
+    # resolve its site from the inventory: `site` names it explicitly so a
+    # switch inside a jump site is reached through the bastion instead of
+    # being dialled directly and timing out.
+    """
+    from core.net_ssh import ConnectHandler
 
     commands = [ln for ln in config_text.splitlines()
                 if ln.strip() and not ln.strip().startswith("!")]
+    # A device we can already reach over SSH has RSA keys, so this line only
+    # ever asks '% They will be replaced ... [yes/no]:'. send_config_set does
+    # not answer prompts, so the rest of the config would be typed into that
+    # question — and replacing the key can drop the session carrying it. The
+    # console path keeps the line: there it is a genuine day-0 first key.
+    commands = [c for c in commands
+                if not c.strip().startswith("crypto key generate rsa")]
 
     device_params = {
         "device_type": device_type,
@@ -344,15 +432,26 @@ def push_via_ssh(host: str, username: str, password: str, secret: str,
         "banner_timeout": 15,
     }
     try:
-        with ConnectHandler(**device_params) as conn:
+        with ConnectHandler(site_id=site or None, **device_params) as conn:
             conn.enable()
+            # Rollback net. This config rewrites the access VLAN of the range
+            # we may be connected through, applies bpduguard, and replaces the
+            # default gateway: any of those can kill this session mid-push,
+            # after which save_config() never runs and the switch is left half
+            # configured and unreachable. An armed 'reload in' reboots it into
+            # the last saved config; it is cancelled once the push AND the save
+            # have both come back.
+            armed = _arm_reload(conn)
             output = conn.send_config_set(commands)
             if save:
                 try:
                     output += "\n" + conn.save_config()
                 except Exception as se:
                     output += f"\n[Salvataggio configurazione non riuscito: {se}]"
-            return {"status": "success", "output": output}
+                    return _push_result(output)   # leave the reload armed
+            if armed:
+                output += "\n" + str(conn.send_command_timing("reload cancel"))
+            return _push_result(output)
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -390,7 +489,7 @@ def push_via_serial(com_port: str, config_text: str, baudrate: int = 9600,
             send("end", 0.5)
             send("write memory", 1.0)
 
-        return {"status": "success", "output": "".join(log)}
+        return _push_result("".join(log))
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

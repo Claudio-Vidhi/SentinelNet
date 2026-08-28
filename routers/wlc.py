@@ -3,6 +3,7 @@
 Estratto da app_server.py (fase 2.3): percorsi e risposte identici al
 monolite. La logica resta in wlc_service.py."""
 
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from services import wlc_service
@@ -27,10 +28,21 @@ def _wlc_device(ip: str, current_user) -> dict:
     return device
 
 
-def _wlc_query(ip, current_user, service, mac=None):
+def _wlc_query(ip: str, current_user, service: str, mac: Optional[str] = None):
     device = _wlc_device(ip, current_user)
     try:
         return wlc_service.query(device, service, mac=mac)
+    except wlc_service.WlcError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/api/wlc/{ip}/overview")
+def wlc_overview(ip: str, current_user = Depends(get_current_user)):
+    """Tutto quello che serve al tab Live in una sola sessione SSH, gia'
+    strutturato (AP, client, WLAN, rogue AP)."""
+    device = _wlc_device(ip, current_user)
+    try:
+        return wlc_service.overview(device)
     except wlc_service.WlcError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -69,4 +81,7 @@ def wlc_diagnose_client(ip: str, mac: str, current_user = Depends(get_current_us
     WLAN + rogue AP), sezioni best-effort."""
     device = _wlc_device(ip, current_user)
     log_audit(f"Diagnosi client WiFi '{mac}' su WLC '{ip}' da '{current_user.get('sub')}'.")
-    return wlc_service.diagnose_wifi_client(device, mac)
+    try:
+        return wlc_service.diagnose_wifi_client(device, mac)
+    except wlc_service.WlcError as e:
+        raise HTTPException(status_code=502, detail=str(e))

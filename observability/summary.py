@@ -56,11 +56,11 @@ def top_flows_context(scope, window_s: int = 900, limit: int = 20,
                 ORDER BY b DESC LIMIT ?""",
             (cutoff, *params, *flow_params, limit)).fetchall()
         anomalies = conn.execute(
-            f"""SELECT created_ts, tenant, kind, src_ip, dst_ip, switch_port,
-                       severity
-                FROM correlated_events WHERE status != 'resolved'
-                  AND created_ts >= ?{clause}
-                ORDER BY created_ts DESC LIMIT 10""",
+            f"""SELECT opened_ts AS created_ts, tenant, cause_kind AS kind,
+                       title, severity, confidence, event_count
+                FROM incidents WHERE status != 'resolved'
+                  AND last_event_ts >= ?{clause}
+                ORDER BY last_event_ts DESC LIMIT 10""",
             (int(time.time()) - 86400, *params)).fetchall()
     finally:
         conn.close()
@@ -74,9 +74,9 @@ def top_flows_context(scope, window_s: int = 900, limit: int = 20,
         lines.append(f"- [{r['tenant']}] {r['src_ip']} → {r['dst_ip']} "
                      f"{proto}/{r['dst_port'] or '-'}: {r['b']} byte, {r['p']} pacchetti")
     if anomalies:
-        lines.append("\n## Anomalie correlate aperte (ultime 24h)")
+        lines.append("\n## Incidenti aperti (ultime 24h)")
         for a in anomalies:
-            port = f" — porta {a['switch_port']}" if a["switch_port"] else ""
-            lines.append(f"- [{a['tenant']}] {a['kind']} sev={a['severity']}: "
-                         f"{a['src_ip']} → {a['dst_ip']}{port}")
+            lines.append(f"- [{a['tenant']}] {a['title']} — causa {a['kind']} "
+                         f"(confidenza {a['confidence']}%, sev={a['severity']}, "
+                         f"{a['event_count']} evidenze)")
     return "\n".join(lines)

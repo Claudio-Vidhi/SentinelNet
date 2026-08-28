@@ -1,0 +1,11 @@
+{
+  "name": "sentinelnet-frontend-checks",
+  "private": true,
+  "description": "Solo tooling di verifica del frontend: nessun bundler, nessun artefatto servito.",
+  "scripts": {
+    "check": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2"
+  }
+}

@@ -1,16 +1,17 @@
-"""Raccolta della MAC address-table dagli apparati, trasporto pluggable.
+"""Collection of the MAC address-table from devices, pluggable transport.
 
-Ordine di preferenza (best-effort, con fallback automatico):
-  1. NETCONF  – modello Cisco-IOS-XE-matm-oper (Catalyst con switching).
-  2. NETCONF  – FDB via SMIv2 Q-BRIDGE-MIB (broad; da rifinire live sul C8000V
-                bridge-domain: hook già presente, si completa dopo validazione).
-  3. CLI      – 'show mac address-table' via Netmiko (fallback universale, unica
-                via per CBS/legacy senza NETCONF).
+Order of preference (best-effort, with automatic fallback):
+  1. NETCONF  – Cisco-IOS-XE-matm-oper model (Catalyst with switching).
+  2. NETCONF  – FDB via SMIv2 Q-BRIDGE-MIB (broad; to be refined live on the
+                C8000V bridge-domain: hook already present, completed after
+                validation).
+  3. CLI      – 'show mac address-table' via Netmiko (universal fallback, the
+                only path for CBS/legacy without NETCONF).
 
-Il modulo restituisce una lista normalizzata di avvistamenti
+The module returns a normalized list of sightings
   {mac, vlan, interface, port_channel, is_uplink, type}
-pronta per mac_history.record_sightings(). I trasporti (ncclient/netmiko) sono
-importati in modo lazy: l'app funziona anche se non installati.
+ready for mac_history.record_sightings(). The transports (ncclient/netmiko) are
+imported lazily: the app works even if they are not installed.
 """
 import re
 import logging
@@ -26,7 +27,7 @@ _HEX12 = re.compile(r'^[0-9a-fA-F]{12}$')
 
 
 def _localname(tag: str) -> str:
-    """Nome del tag senza namespace ('{ns}mac-addr' -> 'mac-addr')."""
+    """Tag name without namespace ('{ns}mac-addr' -> 'mac-addr')."""
     return tag.rsplit('}', 1)[-1] if '}' in tag else tag
 
 
@@ -35,26 +36,30 @@ def is_port_channel(port: str) -> bool:
 
 
 def expand_iface(name: str) -> str:
-    """Espande le abbreviazioni comuni ('Gi1/0/5' -> 'GigabitEthernet1/0/5')."""
+    """Expands common abbreviations ('Gi1/0/5' -> 'GigabitEthernet1/0/5')."""
     if not name:
         return ""
     name = name.strip()
     abbr = [
-        (r'^Gi(?=\d)', 'GigabitEthernet'), (r'^Te(?=\d)', 'TenGigabitEthernet'),
-        (r'^Fo(?=\d)', 'FortyGigE'), (r'^Twe(?=\d)', 'TwentyFiveGigE'),
-        (r'^Hu(?=\d)', 'HundredGigE'), (r'^Fa(?=\d)', 'FastEthernet'),
-        (r'^Eth(?=\d)', 'Ethernet'), (r'^Et(?=\d)', 'Ethernet'), (r'^Po(?=\d)', 'Port-channel'),
+        (r'^(?:GigabitEthernet|Gi)(?=\d)', 'GigabitEthernet'),
+        (r'^(?:TenGigabitEthernet|TenGigE|Te|XGi|10Ge)(?=\d)', 'TenGigabitEthernet'),
+        (r'^(?:TwentyFiveGigE|Twe|25Ge)(?=\d)', 'TwentyFiveGigE'),
+        (r'^(?:FortyGigabitEthernet|FortyGigE|Fo|40Ge)(?=\d)', 'FortyGigE'),
+        (r'^(?:HundredGigE|Hu|100Ge)(?=\d)', 'HundredGigE'),
+        (r'^(?:FastEthernet|Fa|fe)(?=\d)', 'FastEthernet'),
+        (r'^(?:Ethernet|Eth|Et|e)(?=\d)', 'Ethernet'),
+        (r'^(?:Port-channel|Port-Channel|Po)(?=\d)', 'Port-channel'),
     ]
     for pat, full in abbr:
-        if re.match(pat, name):
-            return re.sub(pat, full, name)
+        if re.match(pat, name, re.I):
+            return re.sub(pat, full, name, flags=re.I)
     return name
 
 
 # --- Parser NETCONF: Cisco-IOS-XE-matm-oper ---
 
 def parse_matm_oper(xml_text: str) -> list:
-    """Estrae gli avvistamenti dal modello matm-oper (namespace-agnostico)."""
+    """Extracts sightings from the matm-oper model (namespace-agnostic)."""
     out = []
     if not xml_text or 'matm' not in xml_text:
         return out
@@ -82,13 +87,13 @@ def parse_matm_oper(xml_text: str) -> list:
     return out
 
 
-# --- Parser standardizzati: OpenConfig FDB (vendor-neutral) ---
+# --- Standardized parsers: OpenConfig FDB (vendor-neutral) ---
 #
-# Modello standard 'openconfig-network-instance':
+# Standard model 'openconfig-network-instance':
 #   network-instances/network-instance/fdb/mac-table/entries/entry
 #     { mac-address, vlan, interface/interface-ref/state/interface }
-# Disponibile su IOS-XE (17.x) sia via NETCONF (XML) sia via RESTCONF (JSON):
-# è la via preferita perché indipendente dal vendor.
+# Available on IOS-XE (17.x) both via NETCONF (XML) and via RESTCONF (JSON):
+# it is the preferred path because it is vendor-independent.
 
 def _row_from(mac, vlan, iface, etype=""):
     iface = str(iface or "")
@@ -102,7 +107,7 @@ def _row_from(mac, vlan, iface, etype=""):
 
 
 def _json_mac_rows(data, mac_keys, iface_keys, vlan_keys) -> list:
-    """Estrattore JSON ricorsivo generico per FDB (OpenConfig / matm RESTCONF)."""
+    """Generic recursive JSON extractor for FDB (OpenConfig / matm RESTCONF)."""
     out = []
 
     def iface_of(o):
@@ -153,7 +158,7 @@ def parse_matm_oper_json(data) -> list:
 
 
 def parse_openconfig_fdb_xml(xml_text: str) -> list:
-    """OpenConfig FDB da risposta NETCONF (XML), namespace-agnostico."""
+    """OpenConfig FDB from a NETCONF response (XML), namespace-agnostic."""
     out = []
     if not xml_text or ('mac-table' not in xml_text and 'fdb' not in xml_text):
         return out
@@ -174,16 +179,16 @@ def parse_openconfig_fdb_xml(xml_text: str) -> list:
                 mac = t
             elif ln == 'vlan' and vlan is None:
                 vlan = t
-            elif ln == 'interface' and not iface:   # foglia interface-ref/state/interface
+            elif ln == 'interface' and not iface:   # interface-ref/state/interface leaf
                 iface = t
         if mac and iface:
             out.append(_row_from(mac, vlan, iface))
     return out
 
 
-# --- Parser CLI: 'show mac address-table' ---
+# --- CLI parser: 'show mac address-table' ---
 
-# Es.:  "  10    aabb.ccdd.eeff    DYNAMIC     Gi1/0/5"
+# E.g.:  "  10    aabb.ccdd.eeff    DYNAMIC     Gi1/0/5"
 _CLI_ROW = re.compile(
     r'^\s*(?P<vlan>\d+|All)\s+(?P<mac>[0-9a-fA-F]{4}[.:-][0-9a-fA-F]{4}[.:-][0-9a-fA-F]{4})'
     r'\s+(?P<type>\w+)\s+(?:\S+\s+)*?(?P<port>\S+)\s*$', re.I)
@@ -198,7 +203,7 @@ def parse_cli_mac_table(text: str) -> list:
         if not m:
             continue
         port = m.group('port')
-        # Scarta righe di sistema/non-endpoint (CPU, Router, Drop, ecc.).
+        # Discards system/non-endpoint rows (CPU, Router, Drop, etc.).
         if port.lower() in ('cpu', 'router', 'drop', 'switch', '-'):
             continue
         vlan = m.group('vlan')
@@ -212,11 +217,11 @@ def parse_cli_mac_table(text: str) -> list:
     return out
 
 
-# --- Parser CLI ad-hoc: 'show bridge-domain' (EVC/service-instance, es. C8000V) ---
+# --- Ad-hoc CLI parser: 'show bridge-domain' (EVC/service-instance, e.g. C8000V) ---
 #
-# Alcuni apparati non espongono la FDB come uno switch normale: sul Catalyst
-# 8000V un bridge-domain impara i MAC in 'show bridge-domain', non in
-# 'show mac address-table' (che lì mostra solo MAC di sistema/CPU). Formato:
+# Some devices do not expose the FDB like a normal switch: on the Catalyst
+# 8000V a bridge-domain learns MACs in 'show bridge-domain', not in
+# 'show mac address-table' (which there shows only system/CPU MACs). Format:
 #   Bridge-domain 10 (2 ports in all)
 #      AED MAC address    Policy  Tag       Age  Pseudoport
 #      0   F8B9.5AB2.ACEE forward dynamic   300  GigabitEthernet1.EFP10
@@ -242,8 +247,8 @@ def parse_bridge_domain_mac(text: str) -> list:
     return out
 
 
-# Parser generico best-effort: estrae qualsiasi MAC + interfaccia da output CLI
-# arbitrario (per comandi ad-hoc non previsti). VLAN non deducibile => vuota.
+# Generic best-effort parser: extracts any MAC + interface from arbitrary CLI
+# output (for unanticipated ad-hoc commands). VLAN not deducible => empty.
 _MAC_ANY = re.compile(r'([0-9A-Fa-f]{4}[.:-][0-9A-Fa-f]{4}[.:-][0-9A-Fa-f]{4}'
                       r'|[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})')
 _IFACE_TOK = re.compile(
@@ -264,7 +269,7 @@ def parse_cli_generic(text: str) -> list:
     return out
 
 
-# Registro dei formati CLI selezionabili per i comandi ad-hoc.
+# Registry of CLI formats selectable for ad-hoc commands.
 CLI_FORMATS = {
     "mac-address-table": parse_cli_mac_table,
     "bridge-domain": parse_bridge_domain_mac,
@@ -275,8 +280,8 @@ CLI_FORMATS = {
 # --- Post-processing: uplink + dedup ---
 
 def mark_uplinks(rows: list, uplink_ports) -> list:
-    """Marca come is_uplink gli avvistamenti su porte trunk/uplink (da CDP/LLDP):
-    un MAC visto su una dorsale è transito, non la sua 'posizione' reale."""
+    """Marks sightings on trunk/uplink ports as is_uplink (from CDP/LLDP):
+    a MAC seen on an uplink is transit, not its real 'location'."""
     ups = set()
     port_to_neighbor = {}
     if isinstance(uplink_ports, dict):
@@ -289,8 +294,8 @@ def mark_uplinks(rows: list, uplink_ports) -> list:
         u = (u or '').strip()
         if not u:
             continue
-        ups.add(u.lower())                    # forma abbreviata (es. 'gi1/0/9')
-        ups.add(expand_iface(u).lower())      # forma estesa (espansa dal raw)
+        ups.add(u.lower())                    # abbreviated form (e.g. 'gi1/0/9')
+        ups.add(expand_iface(u).lower())      # expanded form (expanded from raw)
         neigh = port_to_neighbor.get(u)
         if neigh:
             port_to_neighbor[u.lower()] = neigh
@@ -298,7 +303,7 @@ def mark_uplinks(rows: list, uplink_ports) -> list:
 
     for r in rows:
         iface = (r.get('interface') or '').lower()
-        base = iface.split('.')[0]   # sottinterfaccia/service-instance -> fisica
+        base = iface.split('.')[0]   # subinterface/service-instance -> physical
         is_up = iface in ups or base in ups
         r['is_uplink'] = is_up
         if is_up:
@@ -308,13 +313,13 @@ def mark_uplinks(rows: list, uplink_ports) -> list:
     return rows
 
 
-# --- Trasporti ---
+# --- Transports ---
 
 def collect_via_netconf(host, username, password, port=830, timeout=30):
-    """Ritorna la lista avvistamenti via NETCONF provando, nell'ordine:
-      1) Cisco-IOS-XE-matm-oper (Catalyst con switching);
+    """Returns the sightings list via NETCONF by trying, in order:
+      1) Cisco-IOS-XE-matm-oper (Catalyst with switching);
       2) OpenConfig network-instance FDB (standard, vendor-neutral).
-    Ritorna None se nessun modello dà risultati / ncclient non installato."""
+    Returns None if no model yields results / ncclient not installed."""
     try:
         from ncclient import manager
     except ImportError:
@@ -326,27 +331,29 @@ def collect_via_netconf(host, username, password, port=830, timeout=30):
          % NS_OPENCONFIG_NI, parse_openconfig_fdb_xml),
     ]
     try:
-        with manager.connect(host=host, port=port, username=username, password=password,
-                             hostkey_verify=False, allow_agent=False, look_for_keys=False,
-                             timeout=timeout, device_params={'name': 'iosxe'}) as m:
-            for flt, parser in attempts:
-                try:
-                    rows = parser(m.get(('subtree', flt)).data_xml)
-                    if rows:
-                        return rows
-                except Exception as e:
-                    log.info("NETCONF get fallito su %s: %s", host, e)
-            return None
+        conn = manager.connect(host=host, port=port, username=username, password=password,
+                               hostkey_verify=False, allow_agent=False, look_for_keys=False,
+                               timeout=timeout, device_params={'name': 'iosxe'})
+        if conn is not None:
+            with conn as m:
+                for flt, parser in attempts:
+                    try:
+                        rows = parser(m.get(('subtree', flt)).data_xml)
+                        if rows:
+                            return rows
+                    except Exception as e:
+                        log.info("NETCONF get fallito su %s: %s", host, e)
+        return None
     except Exception as e:
         log.info("NETCONF connessione fallita su %s: %s", host, e)
         return None
 
 
 def collect_via_restconf(host, username, password, port=443, timeout=15):
-    """Ritorna gli avvistamenti via RESTCONF (HTTPS), provando (Cisco-first):
-      1) Cisco-IOS-XE-matm-oper (Catalyst) — via primaria, specifica Cisco;
+    """Returns the sightings via RESTCONF (HTTPS), trying (Cisco-first):
+      1) Cisco-IOS-XE-matm-oper (Catalyst) — primary path, Cisco-specific;
       2) OpenConfig network-instance FDB (standard, vendor-neutral) — fallback.
-    Ritorna None se RESTCONF non è raggiungibile / nessun dato."""
+    Returns None if RESTCONF is unreachable / no data."""
     try:
         import requests
         import urllib3
@@ -360,13 +367,13 @@ def collect_via_restconf(host, username, password, port=443, timeout=15):
     s.verify = False
     s.headers.update({"Accept": "application/yang-data+json"})
     try:
-        # 1) Specifico Cisco: matm-oper via RESTCONF (Catalyst).
+        # 1) Cisco-specific: matm-oper via RESTCONF (Catalyst).
         r = s.get(base + "/data/Cisco-IOS-XE-matm-oper:matm-oper-data", timeout=timeout)
         if r.status_code == 200:
             rows = parse_matm_oper_json(r.json())
             if rows:
                 return rows
-        # 2) Fallback standard: OpenConfig FDB per network-instance.
+        # 2) Standard fallback: OpenConfig FDB for network-instance.
         r = s.get(base + "/data/openconfig-network-instance:network-instances/network-instance",
                   timeout=timeout)
         if r.status_code == 200:
@@ -390,11 +397,11 @@ def collect_via_restconf(host, username, password, port=443, timeout=15):
 
 def collect_via_cli(host, username, password, secret="", device_type="cisco_ios",
                     timeout=20, command=None, fmt=None):
-    """CLI via Netmiko. Di default 'show mac address-table'; per i casi non
-    ordinari si può passare un comando ad-hoc (es. 'show bridge-domain') con il
-    relativo formato di parsing (fmt in CLI_FORMATS)."""
+    """CLI via Netmiko. Defaults to 'show mac address-table'; for non-ordinary
+    cases an ad-hoc command can be passed (e.g. 'show bridge-domain') with the
+    related parsing format (fmt in CLI_FORMATS)."""
     try:
-        from netmiko import ConnectHandler
+        from core.net_ssh import ConnectHandler
     except ImportError:
         return None
     cmd = command or "show mac address-table"
@@ -409,28 +416,29 @@ def collect_via_cli(host, username, password, secret="", device_type="cisco_ios"
             except Exception:
                 pass
             out = conn.send_command(cmd, read_timeout=30)
-            return parser(out)
+            out_str = out if isinstance(out, str) else str(out or "")
+            return parser(out_str)
     except Exception as e:
         log.info("CLI mac-table fallito su %s: %s", host, e)
         return None
 
 
-# --- Raccolta MAC delle interfacce PROPRIE dello switch (infrastruttura) ---
+# --- MAC collection of the switch's OWN interfaces (infrastructure) ---
 #
-# Oltre alla FDB (MAC degli endpoint), è utile conoscere i MAC delle interfacce
-# dello switch stesso ('own' hardware address): compaiono anche loro nella scan e
-# vanno classificati come infrastruttura ("switch-interface"), non come endpoint.
-# Modello standard 'ietf-interfaces': interfaces-state/interface {name, phys-address}.
+# Beyond the FDB (endpoint MACs), it is useful to know the MACs of the switch's
+# own interfaces ('own' hardware address): they also appear in the scan and must
+# be classified as infrastructure ("switch-interface"), not as endpoints.
+# Standard model 'ietf-interfaces': interfaces-state/interface {name, phys-address}.
 
 NS_IETF_IF = "urn:ietf:params:xml:ns:yang:ietf-interfaces"
 
-# Es.:  "  Hardware is Ethernet, address is aabb.cc00.0300 (bia aabb.cc00.0300)"
+# E.g.:  "  Hardware is Ethernet, address is aabb.cc00.0300 (bia aabb.cc00.0300)"
 _IF_HDR = re.compile(r'^(\S+) is ', re.I)
 _IF_ADDR = re.compile(r'address is\s+([0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})', re.I)
 
 
 def parse_ietf_if_macs_xml(xml_text: str) -> list:
-    """Estrae le coppie (name, phys-address) da ietf-interfaces (XML NETCONF)."""
+    """Extracts the (name, phys-address) pairs from ietf-interfaces (NETCONF XML)."""
     out = []
     if not xml_text or 'interface' not in xml_text:
         return out
@@ -457,7 +465,7 @@ def parse_ietf_if_macs_xml(xml_text: str) -> list:
 
 
 def parse_ietf_if_macs_json(data) -> list:
-    """Estrae le coppie {interface, mac} da ietf-interfaces (JSON RESTCONF)."""
+    """Extracts the {interface, mac} pairs from ietf-interfaces (RESTCONF JSON)."""
     out = []
 
     def walk(o):
@@ -477,10 +485,10 @@ def parse_ietf_if_macs_json(data) -> list:
 
 
 def parse_cli_if_macs(text: str) -> list:
-    """Parsa 'show interfaces' in modo stateful: la riga di intestazione
-    interfaccia ('^<name> is ') fissa l'interfaccia corrente; la successiva
-    'address is <mac>' emette la coppia {interface, mac}. Il filtro
-    '| include address is' perderebbe il nome interfaccia: si parsa tutto."""
+    """Parses 'show interfaces' statefully: the interface header line
+    ('^<name> is ') sets the current interface; the following
+    'address is <mac>' emits the {interface, mac} pair. The filter
+    '| include address is' would lose the interface name: parse everything."""
     out = []
     cur = ""
     for line in (text or '').splitlines():
@@ -494,9 +502,9 @@ def parse_cli_if_macs(text: str) -> list:
 
 
 def collect_if_macs_via_netconf(host, username, password, port=830, timeout=30):
-    """MAC delle interfacce proprie via NETCONF (ietf-interfaces): prova prima
-    'interfaces-state' (operativo), poi 'interfaces' (config). None se ncclient
-    non installato o nessun dato."""
+    """Own-interface MACs via NETCONF (ietf-interfaces): tries
+    'interfaces-state' (operational) first, then 'interfaces' (config). None if
+    ncclient not installed or no data."""
     try:
         from ncclient import manager
     except ImportError:
@@ -507,26 +515,28 @@ def collect_if_macs_via_netconf(host, username, password, port=830, timeout=30):
         '<interfaces xmlns="%s"/>' % NS_IETF_IF,
     ]
     try:
-        with manager.connect(host=host, port=port, username=username, password=password,
-                             hostkey_verify=False, allow_agent=False, look_for_keys=False,
-                             timeout=timeout, device_params={'name': 'iosxe'}) as m:
-            for flt in attempts:
-                try:
-                    rows = parse_ietf_if_macs_xml(m.get(('subtree', flt)).data_xml)
-                    if rows:
-                        return rows
-                except Exception as e:
-                    log.info("NETCONF if-macs get fallito su %s: %s", host, e)
-            return None
+        conn = manager.connect(host=host, port=port, username=username, password=password,
+                               hostkey_verify=False, allow_agent=False, look_for_keys=False,
+                               timeout=timeout, device_params={'name': 'iosxe'})
+        if conn is not None:
+            with conn as m:
+                for flt in attempts:
+                    try:
+                        rows = parse_ietf_if_macs_xml(m.get(('subtree', flt)).data_xml)
+                        if rows:
+                            return rows
+                    except Exception as e:
+                        log.info("NETCONF if-macs get fallito su %s: %s", host, e)
+        return None
     except Exception as e:
         log.info("NETCONF if-macs connessione fallita su %s: %s", host, e)
         return None
 
 
 def collect_if_macs_via_restconf(host, username, password, port=443, timeout=15):
-    """MAC delle interfacce proprie via RESTCONF (ietf-interfaces). Prova con i
-    campi ristretti (name;phys-address), poi lo stato completo, poi la config.
-    None se non raggiungibile / nessun dato."""
+    """Own-interface MACs via RESTCONF (ietf-interfaces). Tries the restricted
+    fields (name;phys-address), then full state, then config. None if
+    unreachable / no data."""
     try:
         import requests
         import urllib3
@@ -557,9 +567,9 @@ def collect_if_macs_via_restconf(host, username, password, port=443, timeout=15)
 
 def collect_if_macs_via_cli(host, username, password, secret="", device_type="cisco_ios",
                             timeout=20):
-    """MAC delle interfacce proprie via CLI Netmiko ('show interfaces')."""
+    """Own-interface MACs via Netmiko CLI ('show interfaces')."""
     try:
-        from netmiko import ConnectHandler
+        from core.net_ssh import ConnectHandler
     except ImportError:
         return None
     params = {'device_type': device_type, 'host': host, 'username': username,
@@ -572,22 +582,23 @@ def collect_if_macs_via_cli(host, username, password, secret="", device_type="ci
             except Exception:
                 pass
             out = conn.send_command("show interfaces", read_timeout=30)
-            return parse_cli_if_macs(out)
+            out_str = out if isinstance(out, str) else str(out or "")
+            return parse_cli_if_macs(out_str)
     except Exception as e:
         log.info("CLI if-macs fallito su %s: %s", host, e)
         return None
 
 
 def _resolve_transport_plan(transports, netconf_port, restconf_port, device_type):
-    """Applica i trasporti dichiarati per-device (§11.6). Ritorna
+    """Applies the transports declared per-device (§11.6). Returns
     (nc_enabled, netconf_port, rc_enabled, restconf_port, cli_enabled, device_type).
-    transports=None => comportamento legacy (tutti i trasporti, porte di default)."""
+    transports=None => legacy behavior (all transports, default ports)."""
     if transports is None:
         return True, netconf_port, True, restconf_port, True, device_type
     nc_enabled = 'netconf' in transports
     rc_enabled = 'restconf' in transports
     cli_enabled = ('ssh' in transports) or ('telnet' in transports)
-    # Telnet solo se dichiarato e SSH assente → variante Netmiko '_telnet'.
+    # Telnet only if declared and SSH absent → Netmiko '_telnet' variant.
     if ('telnet' in transports) and ('ssh' not in transports) and not device_type.endswith('_telnet'):
         device_type = device_type + '_telnet'
     if nc_enabled and transports.get('netconf'):
@@ -600,9 +611,9 @@ def _resolve_transport_plan(transports, netconf_port, restconf_port, device_type
 def collect_interface_macs(host, username, password, secret="", device_type="cisco_ios",
                            netconf_port=830, restconf_port=443, transport=None,
                            transports=None) -> dict:
-    """Raccolta ad alto livello dei MAC delle interfacce proprie dello switch,
-    con fallback NETCONF -> RESTCONF -> CLI (stessa struttura di collect_mac_table).
-    Ritorna {rows, method, error}; 'rows' è list[{interface, mac}] (MAC grezzi)."""
+    """High-level collection of the switch's own interface MACs, with fallback
+    NETCONF -> RESTCONF -> CLI (same structure as collect_mac_table).
+    Returns {rows, method, error}; 'rows' is list[{interface, mac}] (raw MACs)."""
     want = (transport or "").strip().lower() or None
     (nc_enabled, netconf_port, rc_enabled, restconf_port,
      cli_enabled, device_type) = _resolve_transport_plan(
@@ -632,15 +643,16 @@ def collect_mac_table(host, username, password, secret="", device_type="cisco_io
                       uplink_ports=None, netconf_port=830, restconf_port=443,
                       transport=None, cli_command=None, cli_format=None,
                       transports=None) -> dict:
-    """Raccolta ad alto livello con fallback NETCONF -> RESTCONF -> CLI.
+    """High-level collection with fallback NETCONF -> RESTCONF -> CLI.
 
-    NETCONF e RESTCONF usano i modelli standardizzati (OpenConfig FDB) oltre a
-    Cisco matm-oper (via primaria); il CLI è l'ultima spiaggia (CBS/legacy).
-    'transport' (netconf|restconf|cli) forza un singolo trasporto; None = auto.
-    'transports' (§11.6): mappa {protocollo: porta|None} dichiarata per il
-    device — se fornita, si tentano SOLO i protocolli dichiarati, con le porte
-    dichiarate. None = comportamento legacy (tutti, porte di default).
-    Ritorna {rows, method, error}: 'rows' è già normalizzato e con is_uplink.
+    NETCONF and RESTCONF use the standardized models (OpenConfig FDB) in
+    addition to Cisco matm-oper (primary path); CLI is the last resort
+    (CBS/legacy).
+    'transport' (netconf|restconf|cli) forces a single transport; None = auto.
+    'transports' (§11.6): a {protocol: port|None} map declared for the device —
+    if provided, ONLY the declared protocols are tried, with the declared ports.
+    None = legacy behavior (all, default ports).
+    Returns {rows, method, error}: 'rows' is already normalized and with is_uplink.
     """
     want = (transport or "").strip().lower() or None
     (nc_enabled, netconf_port, rc_enabled, restconf_port,
@@ -667,3 +679,122 @@ def collect_mac_table(host, username, password, secret="", device_type="cisco_io
                 "error": "MAC-table non ottenibile (%s)." % scope}
     mark_uplinks(rows, uplink_ports)
     return {"rows": rows, "method": method, "error": None}
+
+
+def uplink_ports_from_backup(ip: str) -> dict:
+    """Local ports of the device that have a CDP/LLDP neighbor: these are
+    trunk/uplink, so MACs seen there are transit and not the host's real
+    'location'. They are derived from the device backup (already collected by
+    triage)."""
+    import os
+    from core import core_engine
+    try:
+        content = None
+        for root, _dirs, files in os.walk(core_engine.BACKUP_FOLDER):
+            for f in files:
+                if f.endswith(f"-{ip}.txt") or f.endswith(f"_{ip}.txt") or f == f"{ip}.txt":
+                    with open(os.path.join(root, f), encoding="utf-8", errors="ignore") as fh:
+                        content = fh.read()
+                    break
+            if content:
+                break
+        if not content:
+            return {}
+        out = {}
+        for n in core_engine.parse_cdp_lldp_neighbors(content):
+            lp = n.get("local_port")
+            if lp and lp != "Unknown":
+                name = n.get("neighbor_id") or n.get("neighbor_ip") or "Unknown"
+                out[lp] = name
+        return out
+    except Exception:
+        return {}
+
+
+def collect_one(device: dict, transport=None) -> dict:
+    """MAC-table of ONE device, with uplinks already marked. Writes nothing."""
+    from core import core_engine
+    from collectors import mac_history
+    from services import inventory_manager
+
+    ip = device["IP"]
+    vendor = (device.get("Vendor") or "cisco").lower()
+    username, password, secret = core_engine.get_device_credentials(device)
+    try:
+        _, netmiko_type = core_engine.resolve_driver(vendor)
+    except ValueError as e:
+        # Un vendor senza driver non e' un Cisco: partire lo stesso con i
+        # comandi IOS restituirebbe una MAC-table letta col parser sbagliato,
+        # cioe' dati inventati presentati come raccolta riuscita. Come fa
+        # arp_collector.collect_from_device, l'errore si propaga.
+        log.warning("MAC collection on %s: %s", ip, e)
+        return {"device": device, "error": str(e), "if_macs": []}
+    # Ad-hoc command configured for this device (non-ordinary cases).
+    ov = mac_history.get_override(ip) or {}
+    dev_transports = inventory_manager.parse_transports(device)
+    res = collect_mac_table(
+        ip, username, password, secret, device_type=netmiko_type,
+        uplink_ports=uplink_ports_from_backup(ip), transport=transport,
+        cli_command=ov.get("command"), cli_format=ov.get("fmt"),
+        transports=dev_transports,
+    )
+    res["device"] = device
+    # Also collect the MACs of the switch's own interfaces (infrastructure):
+    # needed to classify them as "switch-interface" instead of endpoints.
+    # Failures are non-fatal (empty list).
+    if not res.get("error"):
+        try:
+            ifres = collect_interface_macs(
+                ip, username, password, secret, device_type=netmiko_type,
+                transport=transport, transports=dev_transports,
+            )
+            res["if_macs"] = ifres.get("rows") or []
+        except Exception:
+            res["if_macs"] = []
+    else:
+        res["if_macs"] = []
+    return res
+
+
+def collect_all(devices: list, transport=None) -> dict:
+    """Collects AND persists the MAC-table of multiple devices.
+
+    Twin of ``arp_collector.collect_all``: collection and writing in the same
+    place. Previously the sequence lived inside the route, so anyone who needed
+    to re-scan for other reasons — a client diagnosis finding stale data —
+    would have had to redo it, uplinks and overrides included, or import a
+    router from a service.
+
+    Local imports: ``mac_history`` imports this module, so a module-level import
+    would be a cycle.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from functools import partial
+    from collectors import mac_history
+
+    if not devices:
+        return {"scanned": 0, "results": [], "pruned": 0}
+    worker = partial(collect_one, transport=transport)
+    with ThreadPoolExecutor(max_workers=min(8, len(devices))) as ex:
+        collected = list(ex.map(worker, devices))
+
+    results = []
+    for res in collected:
+        d = res["device"]
+        ip = d["IP"]
+        if res.get("error"):
+            results.append({"ip": ip, "error": res["error"], "count": 0})
+            continue
+        summ = mac_history.record_sightings(
+            res["rows"], switch_ip=ip, switch_name=d.get("Hostname", ""),
+            tenant=d.get("Group") or "Generale",
+            site=d.get("Site") or "central",
+        )
+        if res.get("if_macs"):
+            mac_history.record_switch_if_macs(
+                res["if_macs"], switch_ip=ip, switch_name=d.get("Hostname", ""),
+            )
+        results.append({"ip": ip, "method": res["method"],
+                        "count": len(res["rows"]), **summ})
+    return {"scanned": len(devices), "results": results,
+            "pruned": mac_history.prune()}

@@ -31,7 +31,7 @@
         const score = Number(vwPick(item, ['baseScore', 'cvssBaseScore', 'score', 'cvssScore', 'maxBaseScore']));
         const epssRaw = Number(vwPick(item, ['epss', 'epssScore', 'epssPercent']));
         const epss = (Number.isFinite(epssRaw) && epssRaw <= 1) ? epssRaw * 100 : epssRaw;
-        const date = vwPick(item, ['datePublished', 'published', 'publishedDate', 'date', 'created']);
+        const date = vwPick(item, ['datePublished', 'published', 'publishedDate', 'publicationDate', 'date_published', 'published_at', 'date', 'created']);
         const summary = vwPick(item, ['description', 'summary', 'title', 'details']);
 
         const nestedVendor = (Array.isArray(item.enisaIdVendor) && item.enisaIdVendor[0] && item.enisaIdVendor[0].vendor && item.enisaIdVendor[0].vendor.name) ? item.enisaIdVendor[0].vendor.name : '';
@@ -44,7 +44,6 @@
 
         const cveRaw = vwPick(item, ['cve', 'cveId', 'cveID', 'aliases']);
         const cve = String(cveRaw).split('\n').find(v => v.trim().startsWith('CVE-')) || String(cveRaw).split('\n')[0] || '';
-        const euvd = vwPick(item, ['id', 'euvdId', 'enisaId']);
         const exploitedRaw = vwPick(item, ['exploited', 'isExploited']);
         const exploited = typeof exploitedRaw === 'boolean' ? exploitedRaw : String(exploitedRaw).toLowerCase() === 'true';
         const rawReferences = item.references || item.links || item.externalReferences || [];
@@ -53,7 +52,6 @@
         return {
             raw: item,
             cve: cve || 'N/A',
-            euvd: euvd || '—',
             product: product || '—',
             vendor: vendor || '—',
             score: Number.isFinite(score) ? score : NaN,
@@ -66,8 +64,8 @@
         };
     }
 
-    // Popola i pulsanti vendor dal registro (solo vendor con euvd_term configurato)
-    // e avvia il primo caricamento sul primo vendor disponibile.
+    // Populate vendor buttons from every registered vendor (the server resolves
+    // the display name to its NVD term) and select the first available vendor.
     async function vwInit() {
         const btnWrap = document.getElementById('vwVendorBtns');
         if (!btnWrap) return;
@@ -75,19 +73,19 @@
             const res = await apiFetch('/api/vendors');
             if (!res || !res.ok) return;
             const vendors = await res.json();
-            const entries = Object.entries(vendors || {}).filter(([, v]) => v && v.euvd_term);
+            const entries = Object.entries(vendors || {});
             // Escape per il contesto stringa JS (dentro l'onclick single-quoted) PRIMA
             // di passare per escapeHtml (contesto attributo HTML) — stesso pattern di
             // analyzeTenant(tenant) più sopra: l'entity-encoding da solo non basta a
             // prevenire una breakout di stringa JS dentro l'attributo.
             const jsStr = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-            btnWrap.innerHTML = entries.map(([name, v], idx) =>
-                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(v.euvd_term)}" onclick="vwSelectVendor('${escapeHtml(jsStr(v.euvd_term))}', this)" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
+            btnWrap.innerHTML = entries.map(([name], idx) =>
+                `<button class="btn btn-secondary btn-small vw-vendor-btn${idx === 0 ? ' active' : ''}" data-term="${escapeHtml(name)}" data-action="vw-select-vendor" style="width:auto; margin:0;">${escapeHtml(name)}</button>`
             ).join('');
             if (entries.length) {
                 // Nessuna query EUVD automatica all'apertura: il fetch parte solo
                 // quando l'utente sceglie un vendor o preme aggiorna.
-                vwState.vendor = entries[0][1].euvd_term;
+                vwState.vendor = entries[0][0];
                 const statusEl = document.getElementById('vwStatus');
                 if (statusEl) statusEl.textContent = i18n[currentLang].vwStatusIdle;
             } else {
@@ -100,6 +98,13 @@
         }
     }
 
+    document.getElementById('vwVendorBtns')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="vw-select-vendor"]');
+        if (btn && btn.dataset.term) {
+            vwSelectVendor(btn.dataset.term, btn);
+        }
+    });
+
     function vwSelectVendor(term, btnEl) {
         window._vwVendor = term;
         vwState.vendor = term;
@@ -107,7 +112,42 @@
         vwFetch();
     }
 
-    // Interroga /api/search (proxy EUVD autenticato) con i filtri correnti.
+    function vwParseTimestamp(dateStr) {
+        if (!dateStr) return 0;
+        if (typeof dateStr === 'number') {
+            return dateStr < 1e11 ? dateStr * 1000 : dateStr;
+        }
+        const s = String(dateStr).trim();
+        if (!s) return 0;
+        if (/^\d+$/.test(s)) {
+            const n = parseInt(s, 10);
+            return n < 1e11 ? n * 1000 : n;
+        }
+        let t = Date.parse(s);
+        if (!isNaN(t)) return t;
+
+        const dmY = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+        if (dmY) {
+            const d = parseInt(dmY[1], 10);
+            const m = parseInt(dmY[2], 10) - 1;
+            const y = parseInt(dmY[3], 10);
+            t = new Date(y, m, d).getTime();
+            return isNaN(t) ? 0 : t;
+        }
+
+        const yMd = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+        if (yMd) {
+            const y = parseInt(yMd[1], 10);
+            const m = parseInt(yMd[2], 10) - 1;
+            const d = parseInt(yMd[3], 10);
+            t = new Date(y, m, d).getTime();
+            return isNaN(t) ? 0 : t;
+        }
+
+        return 0;
+    }
+
+    // Interroga /api/search (proxy NVD autenticato) con i filtri correnti.
     async function vwFetch() {
         const statusEl = document.getElementById('vwStatus');
         const bodyEl = document.getElementById('vwBody');
@@ -116,6 +156,8 @@
 
         const params = new URLSearchParams();
         if (vwState.vendor) params.set('vendor', vwState.vendor);
+        const selectedSev = document.getElementById('vwSeverity')?.value;
+        if (selectedSev) params.set('severity', selectedSev);
         const minScore = document.getElementById('vwMinScore').value;
         if (minScore) params.set('fromScore', minScore);
         params.set('size', '40');
@@ -130,7 +172,7 @@
             if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
             const payload = await res.json();
             const records = Array.isArray(payload) ? payload : Array.isArray(payload.items) ? payload.items : Array.isArray(payload.content) ? payload.content : [];
-            vwState.data = records.map(vwNormalize).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+            vwState.data = records.map(vwNormalize).sort((a, b) => vwParseTimestamp(b.date) - vwParseTimestamp(a.date));
             vwApplyTextFilter();
         } catch (err) {
             vwState.data = [];
@@ -140,31 +182,86 @@
         }
     }
 
-    // Filtro testuale lato client sulle righe già caricate (come euvd_dashboard: applySearchFilter()).
+    // Filtro testuale, severità, CVSS, EPSS, data ed exploitation lato client sulle righe già caricate.
     function vwApplyTextFilter() {
-        const q = (document.getElementById('vwText').value || '').trim().toLowerCase();
-        vwState.filtered = q
-            ? vwState.data.filter(r => [r.cve, r.euvd, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1)
-            : vwState.data;
+        const q = (document.getElementById('vwText')?.value || '').trim().toLowerCase();
+        const selectedSev = document.getElementById('vwSeverity')?.value;
+        const sevRanks = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+        const targetRank = selectedSev ? (sevRanks[selectedSev] || 0) : 0;
+        const minCvss = parseFloat(document.getElementById('vwMinScore')?.value);
+        const minEpss = parseFloat(document.getElementById('vwMinEpss')?.value);
+        const onlyExploited = !!document.getElementById('vwExploited')?.checked;
+        const fromDateVal = document.getElementById('vwFromDate')?.value;
+        const fromTs = fromDateVal ? vwParseTimestamp(fromDateVal) : 0;
+
+        vwState.filtered = vwState.data.filter(r => {
+            if (targetRank > 0) {
+                const rRank = sevRanks[r.severity] || 0;
+                if (rRank < targetRank) return false;
+            }
+            if (!isNaN(minCvss) && minCvss > 0) {
+                if (isNaN(r.score) || r.score < minCvss) return false;
+            }
+            if (!isNaN(minEpss) && minEpss > 0) {
+                if (isNaN(r.epss) || r.epss < minEpss) return false;
+            }
+            if (onlyExploited && !r.exploited) return false;
+            if (fromTs > 0 && vwParseTimestamp(r.date) < fromTs) return false;
+            if (q) {
+                return [r.cve, r.product, r.vendor, r.summary].join(' ').toLowerCase().indexOf(q) !== -1;
+            }
+            return true;
+        });
         vwRenderTable();
         const statusEl = document.getElementById('vwStatus');
         if (statusEl) statusEl.textContent = vwState.filtered.length + ' ' + i18n[currentLang].vwStatusRows;
     }
 
+    function applyThreatSeverityFilter() {
+        const selSev = document.getElementById('threatSeveritySelect')?.value || 'all';
+        const cards = document.querySelectorAll('#securityTriageContainer div[data-sev]');
+        const sevRanks = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+        const targetRank = selSev !== 'all' ? (sevRanks[selSev] || 0) : 0;
+
+        cards.forEach(card => {
+            const cardSev = (card.getAttribute('data-sev') || '').toUpperCase();
+            const cardRank = sevRanks[cardSev] || 0;
+            if (targetRank === 0 || cardRank >= targetRank) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
     function vwRenderTable() {
         const bodyEl = document.getElementById('vwBody');
         if (!bodyEl) return;
-        bodyEl.innerHTML = vwState.filtered.map((item, idx) => `
-            <tr data-idx="${idx}" style="cursor:pointer;" onclick="vwOpenDrawer(${idx})">
-                <td><div>${escapeHtml(item.cve)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.euvd)}</div></td>
-                <td><div>${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(item.vendor)}</div></td>
+        bodyEl.innerHTML = vwState.filtered.map((item, idx) => {
+            const ts = vwParseTimestamp(item.date);
+            const displayDate = ts > 0 ? new Date(ts).toLocaleDateString() : (item.date || '—');
+            const productHtml = item.product && item.product !== '—'
+                ? `<div style="font-weight:600;">${escapeHtml(item.product)}</div><div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">${escapeHtml(item.vendor)}</div>`
+                : `<div style="font-weight:600; text-transform:uppercase;">${escapeHtml(item.vendor)}</div>`;
+            return `
+            <tr data-action="vw-open-drawer" data-idx="${idx}" style="cursor:pointer;">
+                <td><div style="font-family:var(--font-code); font-weight:700;">${escapeHtml(item.cve)}</div></td>
+                <td>${productHtml}</td>
                 <td><span class="severity-pill severity-${item.severity}">${item.severity}</span></td>
-                <td>${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
-                <td>${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</td>
-                <td>${item.exploited ? '<span class="badge exploited">Exploited</span>' : '<span class="badge">—</span>'}</td>
-                <td>${item.date ? new Date(item.date).toLocaleDateString() : '—'}</td>
-            </tr>`).join('');
+                <td style="font-family:var(--font-code); font-weight:600;">${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</td>
+                <td style="font-family:var(--font-code);">${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</td>
+                <td>${item.exploited ? '<span class="badge" style="color:var(--danger); border-color:var(--danger); font-weight:700;">Exploited</span>' : '<span class="badge" style="opacity:0.4;">—</span>'}</td>
+                <td data-sort-value="${ts}">${escapeHtml(displayDate)}</td>
+            </tr>`;
+        }).join('');
     }
+
+    document.getElementById('vwBody')?.addEventListener('click', (e) => {
+        const row = e.target.closest('[data-action="vw-open-drawer"]');
+        if (row && row.dataset.idx != null) {
+            vwOpenDrawer(parseInt(row.dataset.idx, 10));
+        }
+    });
 
     // Apre il drawer laterale con i dettagli completi del record selezionato.
     function vwOpenDrawer(idx) {
@@ -179,12 +276,15 @@
                 : `<div>${escapeHtml(r)}</div>`).join('')
             : '<div style="color:var(--text-muted);">—</div>';
         drawer.innerHTML = `
-            <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" onclick="document.getElementById('vwDrawer').style.display='none';"><i class="fa-solid fa-xmark"></i></button>
-            <h3 style="margin:0 0 6px;">${escapeHtml(item.cve)} <span style="font-size:12px; color:var(--text-muted);">(${escapeHtml(item.euvd)})</span></h3>
-            <div style="margin-bottom:10px;"><span class="severity-pill severity-${item.severity}">${item.severity}</span>
-              <span style="margin-left:8px;">CVSS ${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</span>
-              <span style="margin-left:8px;">EPSS ${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</span></div>
-            <div style="margin-bottom:10px; color:var(--text-muted);">${escapeHtml(item.vendor)} · ${escapeHtml(item.product)}</div>
+            <button class="btn btn-secondary btn-small" style="width:auto; margin-bottom:14px;" data-action="vw-close-drawer"><i class="fa-solid fa-xmark"></i></button>
+            <h3 style="margin:0 0 6px; font-family:var(--font-code);">${escapeHtml(item.cve)}</h3>
+            <div style="margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span class="severity-pill severity-${item.severity}">${item.severity}</span>
+              <span style="font-weight:600;">CVSS ${Number.isFinite(item.score) ? item.score.toFixed(1) : '—'}</span>
+              <span style="color:var(--text-muted);">EPSS ${Number.isFinite(item.epss) ? item.epss.toFixed(1) + '%' : '—'}</span>
+              ${item.exploited ? '<span class="badge" style="color:var(--danger); border-color:var(--danger); font-weight:700;">Exploited</span>' : ''}
+            </div>
+            <div style="margin-bottom:10px; font-weight:600;">${escapeHtml(item.vendor)}${item.product && item.product !== '—' ? ' · ' + escapeHtml(item.product) : ''}</div>
             <div style="margin-bottom:14px; line-height:1.5;">${escapeHtml(item.summary)}</div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">${item.date ? new Date(item.date).toLocaleDateString() : '—'}</div>
             <div style="font-size:12px; word-break:break-all;">${refsHtml}</div>
@@ -192,7 +292,19 @@
         drawer.style.display = 'block';
     }
 
-    document.getElementById('vwText') && document.getElementById('vwText').addEventListener('input', vwApplyTextFilter);
+    document.getElementById('vwDrawer')?.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action="vw-close-drawer"]')) {
+            const drawer = document.getElementById('vwDrawer');
+            if (drawer) drawer.style.display = 'none';
+        }
+    });
+
+    document.getElementById('vwText')?.addEventListener('input', vwApplyTextFilter);
+    document.getElementById('vwSeverity')?.addEventListener('change', vwApplyTextFilter);
+    document.getElementById('vwMinScore')?.addEventListener('change', vwApplyTextFilter);
+    document.getElementById('vwMinEpss')?.addEventListener('input', vwApplyTextFilter);
+    document.getElementById('vwExploited')?.addEventListener('change', vwApplyTextFilter);
+    document.getElementById('vwFromDate')?.addEventListener('change', vwApplyTextFilter);
 
     // Parallelizzazione delle query ENISA tramite Promise.all (Ottimizzazione Performance)
     // Aperta la tab: prepara i controlli (sedi consentite) e avvia automaticamente la scansione.
@@ -236,15 +348,17 @@
 
         // ── SEZIONE 1: Dispositivi inventariati online ──────────────────────────
         if (onlineDevices.length === 0) {
-            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:8px; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
+            container.innerHTML += `<div style="padding: 20px; border: 1px solid var(--border); border-radius:0; text-align:center; color: var(--text-muted); margin-bottom: 20px;">
                 ${i18n[currentLang].noDevicesText}
             </div>`;
         } else {
             // Card SELEZIONABILI: la query EUVD parte SOLO quando l'utente sceglie
             // un singolo dispositivo (pulsante Analizza), non su tutti insieme.
             onlineDevices.forEach(d => {
-                const scan = data.detected_versions[d.IP];
+                const scan = data.detected_versions[d.IP] || {};
                 const safeIpId = d.IP.replace(/\./g, '-');
+                const model = d.Model || scan.model || 'Non Rilevato';
+                const modelLabel = model !== 'Non Rilevato' ? `<span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Modello: <code>${escapeHtml(model)}</code></span>` : '';
 
                 const devCard = document.createElement("div");
                 devCard.className = "vuln-card";
@@ -252,16 +366,17 @@
                 devCard.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
                         <div>
-                            <span style="font-size:18px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
+                            <span style="font-size:17px; font-weight:700;"><i class="fa-solid fa-server" style="color:var(--primary);"></i> ${d.IP}</span>
                             <span class="badge" style="margin-left: 10px;">${escapeHtml(d.Vendor.toUpperCase())}</span>
-                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version)}</code></span>
+                            ${modelLabel}
+                            <span style="color:var(--text-muted); margin-left: 10px; font-size:13px;">Firmware: <code>${escapeHtml(scan.version || 'Non Rilevata')}</code></span>
                         </div>
                         <div style="display:flex; align-items:center; gap:12px;">
                             <div id="status-${safeIpId}" style="font-size:13px; font-weight:700; color: var(--text-muted);"></div>
                             <button id="btn-mgd-${safeIpId}"
-                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version)}"
-                                onclick="runManagedVulnCheck(this.dataset.ip, this.dataset.vendor, this.dataset.version, this)"
-                                style="padding:8px 14px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
+                                data-action="run-managed-vuln-check"
+                                data-ip="${escapeHtml(d.IP)}" data-vendor="${escapeHtml(d.Vendor)}" data-version="${escapeHtml(scan.version || '')}" data-model="${escapeHtml(model)}"
+                                style="padding:8px 14px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; white-space:nowrap;">
                                 ${i18n[currentLang].btnAnalyzeVuln}
                             </button>
                         </div>
@@ -289,7 +404,7 @@
         const sectionHeader = document.createElement("div");
         sectionHeader.innerHTML = `
             <div style="border-top: 1px solid var(--border); margin: 25px 0 15px 0; padding-top: 20px;">
-                <h3 style="font-size:16px; margin-bottom:6px;">
+                <h3 style="font-size:17px; margin-bottom:6px;">
                     ${i18n[currentLang].discoveredNeighborsTitle}
                 </h3>
                 <p style="font-size:13px; color:var(--text-muted);">
@@ -313,7 +428,7 @@
             card.style.cssText = `
                 background: var(--surface-2);
                 border: 2px solid var(--border);
-                border-radius: 10px;
+                border-radius: 0;
                 padding: 14px;
                 cursor: pointer;
                 transition: all 0.2s ease;
@@ -325,18 +440,18 @@
                         <div style="font-weight:700; font-size:15px;">${escapeHtml(n.label)}</div>
                         <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-code);">${escapeHtml(n.id)}</div>
                     </div>
-                    <span style="font-size:11px; background:rgba(255,184,77,0.15); color:var(--warning); border:1px solid rgba(255,184,77,0.3); padding:3px 8px; border-radius:6px; font-weight:700;">DISCOVERED</span>
+                    <span style="font-size:11px; background:color-mix(in srgb, var(--warning) 15%, transparent); color:var(--warning); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); padding:3px 8px; border-radius:0; font-weight:700;">DISCOVERED</span>
                 </div>
                 <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px; line-height:1.4; max-height:38px; overflow:hidden;">
                     <code style="font-size:11px; color:var(--primary);">${escapeHtml(versionShort)}</code>
                 </div>
                 <button
                     id="btn-disc-${safeId}"
+                    data-action="run-discovered-vuln-check"
                     data-id="${escapeHtml(n.id)}" data-label="${escapeHtml(n.label)}"
                     data-version="${escapeHtml(n.version)}" data-vshort="${escapeHtml(versionShort)}"
                     data-vendor="${escapeHtml((n.vendor && n.vendor !== 'discovered') ? n.vendor : '')}"
-                    onclick="runDiscoveredVulnCheck(this.dataset.id, this.dataset.label, this.dataset.version, this.dataset.vshort, this.dataset.vendor, this)"
-                    style="width:100%; padding:8px; border-radius:7px; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                    style="width:100%; padding:8px; border-radius:0; border:none; background:var(--cta); color:var(--cta-text); font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
                     ${i18n[currentLang].btnAnalyzeVuln}
                 </button>
             `;
@@ -413,11 +528,13 @@
     }
 
     // Analisi vulnerabilità di UN singolo dispositivo gestito (scelto dall'utente).
-    async function runManagedVulnCheck(ip, vendor, version, btnEl) {
+    async function runManagedVulnCheck(ip, vendor, version, btnEl, model) {
         const safeIpId = ip.replace(/\./g, '-');
         btnEl.disabled = true;
         btnEl.innerHTML = i18n[currentLang].scanningEuvd;
-        await runEuvdQuery(safeIpId, vendor, version);
+        const validModel = (model && model !== 'Non Rilevato') ? model : '';
+        const queryText = (validModel ? (validModel + ' ' + (version || '')) : (version || '')).trim();
+        await runEuvdQuery(safeIpId, vendor, queryText);
         btnEl.disabled = false;
         btnEl.innerHTML = i18n[currentLang].btnRescan;
     }
@@ -469,8 +586,8 @@
                     const hideLabel = currentLang === 'en' ? 'Hide results' : 'Nascondi risultati';
                     resultsEl.innerHTML = `
                         <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:6px;">
-                            <button onclick="toggleVulnResults('${effectiveResultsId}', this)"
-                                style="padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+                            <button data-action="toggle-vuln-results" data-target="${effectiveResultsId}"
+                                style="padding:4px 10px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted); font-size:12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
                                 <i class="fa-solid fa-chevron-up"></i> ${hideLabel}
                             </button>
                         </div>
@@ -478,10 +595,7 @@
                     `;
                     const cardsEl = document.getElementById(`vulncards-${effectiveResultsId}`);
                     items.slice(0, 3).forEach((v, idx) => {
-                        const enisaId    = v.id || v.enisaId || "EUVD-Unknown";
-                        // Il CVE è dentro 'aliases' (stringa multi-riga: CVE/GHSA/...).
-                        const cveMatch   = /CVE-\d{4}-\d{3,}/i.exec(v.aliases || "");
-                        const cveId      = cveMatch ? cveMatch[0] : (v.cveId || v.cve || "N/A");
+                        const cveId = v.cveId || v.cve || v.id || "CVE-Unknown";
                         const description = v.description || v.summary || i18n[currentLang].descriptionNotAvailable;
                         // Il punteggio CVSS è nel campo 'baseScore' (numero, può essere 0).
                         const score      = (v.baseScore != null && v.baseScore !== "")
@@ -499,13 +613,12 @@
 
                         const exploitedFlag = (v.exploited === true || String(v.exploited).toLowerCase() === 'true') ? '1' : '0';
                         cardsEl.innerHTML += `
-                            <div data-sev="${severity.toLowerCase()}" data-exploited="${exploitedFlag}" style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size:13px;">
+                            <div data-sev="${severity.toLowerCase()}" data-exploited="${exploitedFlag}" style="background:var(--surface-3); border: 1px solid var(--border); padding: 12px; border-radius: 0; font-size:13px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
                                     <div style="display:flex; align-items:center; gap:8px;">
-                                        <strong style="color:var(--primary);">${escapeHtml(enisaId)}</strong>
-                                        <span style="color:var(--text-muted);">(CVE: ${escapeHtml(cveId)})</span>
-                                        <button onclick="toggleVulnDesc('${descId}', this)"
-                                            style="padding:2px 7px; border-radius:5px; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
+                                        <strong style="color:var(--primary);">${escapeHtml(cveId)}</strong>
+                                        <button data-action="toggle-vuln-desc" data-target="${descId}"
+                                            style="padding:2px 7px; border-radius:0; border:1px solid var(--border); background:transparent; color:var(--text-muted); font-size:11px; cursor:pointer; display:inline-flex; align-items:center; gap:3px;">
                                             <i class="fa-solid fa-chevron-up"></i>
                                         </button>
                                     </div>
@@ -527,3 +640,33 @@
             statusEl.innerHTML = `<span style="color: var(--danger);">${i18n[currentLang].errorScan}</span>`;
         }
     }
+
+    document.getElementById('securityTriageContainer')?.addEventListener('click', (e) => {
+        const mgdBtn = e.target.closest('[data-action="run-managed-vuln-check"]');
+        if (mgdBtn) {
+            runManagedVulnCheck(mgdBtn.dataset.ip, mgdBtn.dataset.vendor, mgdBtn.dataset.version, mgdBtn, mgdBtn.dataset.model);
+            return;
+        }
+        const discBtn = e.target.closest('[data-action="run-discovered-vuln-check"]');
+        if (discBtn) {
+            runDiscoveredVulnCheck(discBtn.dataset.id, discBtn.dataset.label, discBtn.dataset.version, discBtn.dataset.vshort, discBtn.dataset.vendor, discBtn);
+            return;
+        }
+        const resBtn = e.target.closest('[data-action="toggle-vuln-results"]');
+        if (resBtn && resBtn.dataset.target) {
+            toggleVulnResults(resBtn.dataset.target, resBtn);
+            return;
+        }
+        const descBtn = e.target.closest('[data-action="toggle-vuln-desc"]');
+        if (descBtn && descBtn.dataset.target) {
+            toggleVulnDesc(descBtn.dataset.target, descBtn);
+        }
+    });
+
+    // Static event listeners for Threat Intel tab
+    document.getElementById('tiTabMatcher')?.addEventListener('click', () => tiSwitchView('matcher'));
+    document.getElementById('tiTabWatch')?.addEventListener('click', () => tiSwitchView('watch'));
+    document.getElementById('threatGroupSelect')?.addEventListener('change', startThreatScan);
+    document.getElementById('threatSeveritySelect')?.addEventListener('change', applyThreatSeverityFilter);
+    document.getElementById('threatIncludeDiscovered')?.addEventListener('change', startThreatScan);
+    document.getElementById('vwRefresh')?.addEventListener('click', vwFetch);
